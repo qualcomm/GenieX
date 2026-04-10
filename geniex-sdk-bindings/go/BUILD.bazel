@@ -1,0 +1,10 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+# gazelle:prefix github.com/qcom-it-nexa-ai/GenieX/geniex-sdk-bindings/go
+
+go_library(
+    name = "go",
+    srcs = ["ml.go"],
+    importpath = "github.com/qcom-it-nexa-ai/GenieX/geniex-sdk-bindings/go",
+    visibility = ["//visibility:public"],
+)

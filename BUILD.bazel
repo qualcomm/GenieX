@@ -1,0 +1,13 @@
+load("@bazel_gazelle//:def.bzl", "gazelle")
+
+package(default_visibility = ["//visibility:public"])
+
+gazelle(
+    name = "gazelle",
+    command = "fix",
+)
+
+exports_files([
+    ".bazelrc",
+    "MODULE.bazel",
+])
