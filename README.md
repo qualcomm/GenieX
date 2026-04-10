@@ -65,24 +65,23 @@
 │                             #
 ├── geniex-sdk                # sdk for developers
 │   ├── build                 #
-│   │   ├── llama.cpp.bazel   #
-│   │   └── opencl.bazel      #
-│   ├── BUILD.bazel           #
+│   │   ├── llama.cpp.bazel   # build rules for llama.cpp third-party dependency
+│   │   └── opencl.bazel      # build rules for opencl third-party dependency
 │   ├── include               #
-│   ├── libs                  #
+│   ├── libs                  # pre-built library for different platforms
 │   ├── src                   #
 │   │   ├── ml.cpp            #
-│   │   └── plugins           #
+│   │   └── plugins           # plugin source code
 │   │       ├── geniex        #
 │   │       └── llama.cpp     #
-│   └── third-party           #
-│       ├── llama.cpp         #
-│       └── opencl            #
+│   ├── third-party           # third-party dependencies
+│   │   ├── llama.cpp         #
+│   │   └── opencl            #
+│   └── BUILD.bazel           #
 │                             #
 ├── geniex-sdk-bindings       # language bindings for geniex-sdk
 │   ├── android               #
 │   │   └── BUILD.bazel       #
-│   ├── BUILD.bazel           #
 │   ├── go                    #
 │   │   ├── BUILD.bazel       #
 │   │   ├── go.mod            #
