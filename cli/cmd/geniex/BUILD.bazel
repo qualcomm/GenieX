@@ -47,10 +47,15 @@ go_test(
         "version_test.go",
     ],
     embed = [":geniex_lib"],
+    gotags = ["sonic", "avx"],
 )
 
 go_binary(
     name = "geniex",
     embed = [":geniex_lib"],
+    gotags = ["sonic", "avx"],
+    gc_linkopts = [
+        "-X", "main.Version=$(VERSION)",
+    ],
     visibility = ["//visibility:public"],
 )
