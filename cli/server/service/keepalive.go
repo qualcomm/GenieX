@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
@@ -164,18 +164,18 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 	var t keepable
 	var e error
 	switch reflect.TypeFor[T]() {
-	case reflect.TypeFor[geniex_bridge.LLM]():
-		t, e = geniex_bridge.NewLLM(geniex_bridge.LlmCreateInput{
+	case reflect.TypeFor[geniex_sdk.LLM]():
+		t, e = geniex_sdk.NewLLM(geniex_sdk.LlmCreateInput{
 			ModelName: manifest.ModelName,
 			ModelPath: modelfile,
-			Config: geniex_bridge.ModelConfig{
+			Config: geniex_sdk.ModelConfig{
 				NCtx:       param.NCtx,
 				NGpuLayers: param.NGpuLayers,
 			},
 			PluginID: manifest.PluginId,
 			DeviceID: manifest.DeviceId,
 		})
-	case reflect.TypeFor[geniex_bridge.VLM]():
+	case reflect.TypeFor[geniex_sdk.VLM]():
 		var mmproj string
 		if manifest.MMProjFile.Name != "" {
 			mmproj = s.ModelfilePath(manifest.Name, manifest.MMProjFile.Name)
@@ -184,75 +184,75 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 		if manifest.TokenizerFile.Name != "" {
 			tokenizer = s.ModelfilePath(manifest.Name, manifest.TokenizerFile.Name)
 		}
-		t, e = geniex_bridge.NewVLM(geniex_bridge.VlmCreateInput{
+		t, e = geniex_sdk.NewVLM(geniex_sdk.VlmCreateInput{
 			ModelName:     manifest.ModelName,
 			ModelPath:     modelfile,
 			MmprojPath:    mmproj,
 			TokenizerPath: tokenizer,
-			Config: geniex_bridge.ModelConfig{
+			Config: geniex_sdk.ModelConfig{
 				NCtx:       param.NCtx,
 				NGpuLayers: param.NGpuLayers,
 			},
 			PluginID: manifest.PluginId,
 			DeviceID: manifest.DeviceId,
 		})
-	case reflect.TypeFor[geniex_bridge.Embedder]():
-		t, e = geniex_bridge.NewEmbedder(geniex_bridge.EmbedderCreateInput{
+	case reflect.TypeFor[geniex_sdk.Embedder]():
+		t, e = geniex_sdk.NewEmbedder(geniex_sdk.EmbedderCreateInput{
 			ModelName: manifest.ModelName,
 			ModelPath: modelfile,
 			PluginID:  manifest.PluginId,
 			DeviceID:  manifest.DeviceId,
 		})
-	case reflect.TypeFor[geniex_bridge.Reranker]():
-		t, e = geniex_bridge.NewReranker(geniex_bridge.RerankerCreateInput{
+	case reflect.TypeFor[geniex_sdk.Reranker]():
+		t, e = geniex_sdk.NewReranker(geniex_sdk.RerankerCreateInput{
 			ModelName: manifest.ModelName,
 			ModelPath: modelfile,
 			PluginID:  manifest.PluginId,
 			DeviceID:  manifest.DeviceId,
 		})
-	case reflect.TypeFor[geniex_bridge.TTS]():
-		t, e = geniex_bridge.NewTTS(geniex_bridge.TtsCreateInput{
+	case reflect.TypeFor[geniex_sdk.TTS]():
+		t, e = geniex_sdk.NewTTS(geniex_sdk.TtsCreateInput{
 			ModelName: manifest.ModelName,
 			ModelPath: modelfile,
 			PluginID:  manifest.PluginId,
 			DeviceID:  manifest.DeviceId,
 		})
-	case reflect.TypeFor[geniex_bridge.ASR]():
-		t, e = geniex_bridge.NewASR(geniex_bridge.AsrCreateInput{
+	case reflect.TypeFor[geniex_sdk.ASR]():
+		t, e = geniex_sdk.NewASR(geniex_sdk.AsrCreateInput{
 			ModelName: manifest.ModelName,
 			ModelPath: modelfile,
-			Config: geniex_bridge.ASRModelConfig{
+			Config: geniex_sdk.ASRModelConfig{
 				NCtx:       param.NCtx,
 				NGpuLayers: param.NGpuLayers,
 			},
 			PluginID: manifest.PluginId,
 			DeviceID: manifest.DeviceId,
 		})
-	case reflect.TypeFor[geniex_bridge.Diarize]():
-		t, e = geniex_bridge.NewDiarize(geniex_bridge.DiarizeCreateInput{
+	case reflect.TypeFor[geniex_sdk.Diarize]():
+		t, e = geniex_sdk.NewDiarize(geniex_sdk.DiarizeCreateInput{
 			ModelName: manifest.ModelName,
 			ModelPath: modelfile,
-			Config: geniex_bridge.DiarizeModelConfig{
+			Config: geniex_sdk.DiarizeModelConfig{
 				NCtx:       param.NCtx,
 				NGpuLayers: param.NGpuLayers,
 			},
 			PluginID: manifest.PluginId,
 			DeviceID: manifest.DeviceId,
 		})
-	case reflect.TypeFor[geniex_bridge.CV]():
-		t, e = geniex_bridge.NewCV(geniex_bridge.CVCreateInput{
+	case reflect.TypeFor[geniex_sdk.CV]():
+		t, e = geniex_sdk.NewCV(geniex_sdk.CVCreateInput{
 			ModelName: manifest.ModelName,
-			Config: geniex_bridge.CVModelConfig{
+			Config: geniex_sdk.CVModelConfig{
 				DetModelPath: modelfile,
 				RecModelPath: modelfile,
 			},
 			PluginID: manifest.PluginId,
 			DeviceID: manifest.DeviceId,
 		})
-	case reflect.TypeFor[geniex_bridge.ImageGen]():
+	case reflect.TypeFor[geniex_sdk.ImageGen]():
 		// For image generation models, use the model directory path instead of specific file
 		modelDir := s.ModelfilePath(manifest.Name, "")
-		t, e = geniex_bridge.NewImageGen(geniex_bridge.ImageGenCreateInput{
+		t, e = geniex_sdk.NewImageGen(geniex_sdk.ImageGenCreateInput{
 			ModelName: manifest.ModelName,
 			ModelPath: modelDir,
 			PluginID:  manifest.PluginId,

@@ -18,7 +18,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/server"
 )
 
@@ -52,11 +52,11 @@ func serve() *cobra.Command {
 
 	serveCmd.Run = func(cmd *cobra.Command, args []string) {
 		checkDependency()
-		geniex_bridge.Init()
+		geniex_sdk.Init()
 
 		server.Serve()
 
-		geniex_bridge.DeInit()
+		geniex_sdk.DeInit()
 	}
 
 	return serveCmd

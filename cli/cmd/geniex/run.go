@@ -34,7 +34,7 @@ import (
 	"github.com/openai/openai-go/v3/option"
 	"github.com/spf13/cobra"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/record"
@@ -182,7 +182,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 		ParseFile: manifest.ModelType == types.ModelTypeVLM,
 		Verbose:   verbose,
 		TestMode:  testMode,
-		Run: func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			if len(images) > 0 || len(audios) > 0 {
 				contents := make([]openai.ChatCompletionContentPartUnionParam, 0)
 				contents = append(contents, openai.ChatCompletionContentPartUnionParam{
@@ -244,7 +244,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 				option.WithHeaderAdd("GenieX-KeepCache", "true"))
 
 			var firstToken time.Time
-			var profileData geniex_bridge.ProfileData
+			var profileData geniex_sdk.ProfileData
 			for stream.Next() {
 				if firstToken.IsZero() {
 					firstToken = time.Now()
@@ -330,7 +330,7 @@ func runEmbeddings(manifest types.ModelManifest, quant string) error {
 		ParseFile: manifest.ModelType == types.ModelTypeVLM,
 		Verbose:   verbose,
 		TestMode:  testMode,
-		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			start := time.Now()
 
 			res, err := client.Embeddings.New(context.TODO(), openai.EmbeddingNewParams{
@@ -343,7 +343,7 @@ func runEmbeddings(manifest types.ModelManifest, quant string) error {
 			)
 
 			duration := time.Since(start).Microseconds()
-			profileData := geniex_bridge.ProfileData{
+			profileData := geniex_sdk.ProfileData{
 				TTFT:            duration,
 				PromptTime:      0,
 				DecodeTime:      duration,
@@ -413,10 +413,10 @@ func runReranking(manifest types.ModelManifest, quant string) error {
 		ParseFile: manifest.ModelType == types.ModelTypeVLM,
 		Verbose:   verbose,
 		TestMode:  testMode,
-		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			parsedPrompt := strings.Split(prompt, SEP)
 			if len(parsedPrompt) < 2 {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("parsed prompt failed, query and document are required for reranking")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("parsed prompt failed, query and document are required for reranking")
 			}
 
 			query := parsedPrompt[0]
@@ -436,7 +436,7 @@ func runReranking(manifest types.ModelManifest, quant string) error {
 			}, &res)
 
 			duration := time.Since(start).Microseconds()
-			profileData := geniex_bridge.ProfileData{
+			profileData := geniex_sdk.ProfileData{
 				TTFT:       duration,
 				PromptTime: 0,
 				DecodeTime: duration,
@@ -520,13 +520,13 @@ func runAudioSpeech(manifest types.ModelManifest, quant string) error {
 	processor := &common.Processor{
 		Verbose:  verbose,
 		TestMode: testMode,
-		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 
 			start := time.Now()
 
 			textToSynthesize := strings.TrimSpace(prompt)
 			if textToSynthesize == "" {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("prompt cannot be empty")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("prompt cannot be empty")
 			}
 
 			// Generate output filename if not specified
@@ -542,7 +542,7 @@ func runAudioSpeech(manifest types.ModelManifest, quant string) error {
 			})
 
 			duration := time.Since(start).Microseconds()
-			profileData := geniex_bridge.ProfileData{
+			profileData := geniex_sdk.ProfileData{
 				TTFT:       duration,
 				DecodeTime: duration,
 			}
@@ -600,18 +600,18 @@ func runAudioTranscription(manifest types.ModelManifest, quant string) error {
 		ParseFile: true,
 		Verbose:   verbose,
 		TestMode:  testMode,
-		Run: func(prompt string, _, audios []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(prompt string, _, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			if len(audios) == 0 {
-				return "", geniex_bridge.ProfileData{}, common.ErrNoAudio
+				return "", geniex_sdk.ProfileData{}, common.ErrNoAudio
 			}
 			if len(audios) > 1 {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("only one audio file is supported")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("only one audio file is supported")
 			}
 
 			// send request
 			file, err := os.Open(audios[0])
 			if err != nil {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("open audio file error: %s", err.Error())
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("open audio file error: %s", err.Error())
 			}
 			defer file.Close()
 
@@ -622,7 +622,7 @@ func runAudioTranscription(manifest types.ModelManifest, quant string) error {
 			})
 			duration := time.Since(start).Microseconds()
 
-			profileData := geniex_bridge.ProfileData{
+			profileData := geniex_sdk.ProfileData{
 				TTFT:       duration,
 				PromptTime: 0,
 				DecodeTime: duration,
@@ -696,25 +696,25 @@ func runAudioDiarize(manifest types.ModelManifest, quant string) error {
 		ParseFile: true,
 		Verbose:   verbose,
 		TestMode:  testMode,
-		Run: func(_ string, _, audios []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(_ string, _, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			if len(audios) == 0 {
-				return "", geniex_bridge.ProfileData{}, common.ErrNoAudio
+				return "", geniex_sdk.ProfileData{}, common.ErrNoAudio
 			}
 			if len(audios) > 1 {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("only one audio file is supported")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("only one audio file is supported")
 			}
 
 			// base64 encode audio
 			audioData, err := os.ReadFile(audios[0])
 			if err != nil {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("read audio file error: %s", err.Error())
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("read audio file error: %s", err.Error())
 			}
 			mimeType := http.DetectContentType(audioData)
 			b64Audio := base64.StdEncoding.EncodeToString(audioData)
 			audioStr := fmt.Sprintf("data:%s;base64,%s", mimeType, b64Audio)
 
 			// send request
-			res := geniex_bridge.DiarizeInferOutput{}
+			res := geniex_sdk.DiarizeInferOutput{}
 			err = client.Post(context.TODO(), "audio/diarize", map[string]any{
 				"model": name,
 				"audio": audioStr,
@@ -797,20 +797,20 @@ func runCV(manifest types.ModelManifest, quant string) error {
 		ParseFile: true,
 		Verbose:   verbose,
 		TestMode:  testMode,
-		Run: func(_ string, images, _ []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(_ string, images, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			start := time.Now()
 
 			if len(images) == 0 {
-				return "", geniex_bridge.ProfileData{}, common.ErrNoImage
+				return "", geniex_sdk.ProfileData{}, common.ErrNoImage
 			}
 			if len(images) > 1 {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("only one image is supported")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("only one image is supported")
 			}
 
 			// base64 encode image
 			imageData, err := os.ReadFile(images[0])
 			if err != nil {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("read image file error: %s", err.Error())
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("read image file error: %s", err.Error())
 			}
 			mimeType := http.DetectContentType(imageData)
 			b64Image := base64.StdEncoding.EncodeToString(imageData)
@@ -818,7 +818,7 @@ func runCV(manifest types.ModelManifest, quant string) error {
 
 			// send request
 			res := struct {
-				Results []geniex_bridge.CVResult `json:"results"`
+				Results []geniex_sdk.CVResult `json:"results"`
 			}{}
 			err = client.Post(context.TODO(), "cv", map[string]any{
 				"model": name,
@@ -826,7 +826,7 @@ func runCV(manifest types.ModelManifest, quant string) error {
 			}, &res)
 
 			duration := time.Since(start).Microseconds()
-			profileData := geniex_bridge.ProfileData{
+			profileData := geniex_sdk.ProfileData{
 				TTFT:       duration,
 				DecodeTime: duration,
 			}
@@ -890,12 +890,12 @@ func runImagesGenerations(manifest types.ModelManifest, quant string) error {
 	processor := &common.Processor{
 		Verbose:  verbose,
 		TestMode: testMode,
-		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			start := time.Now()
 
 			textPrompt := strings.TrimSpace(prompt)
 			if textPrompt == "" {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("prompt cannot be empty")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("prompt cannot be empty")
 			}
 
 			// Generate output filename if not specified
@@ -904,7 +904,7 @@ func runImagesGenerations(manifest types.ModelManifest, quant string) error {
 				outputFile = fmt.Sprintf("image_gen_output_%d.png", time.Now().Unix())
 			}
 			if !strings.HasSuffix(strings.ToLower(outputFile), ".png") {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("output file must have .png extension")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("output file must have .png extension")
 			}
 
 			res, err := client.Images.Generate(context.TODO(), openai.ImageGenerateParams{
@@ -916,7 +916,7 @@ func runImagesGenerations(manifest types.ModelManifest, quant string) error {
 			)
 
 			duration := time.Since(start).Microseconds()
-			profileData := geniex_bridge.ProfileData{
+			profileData := geniex_sdk.ProfileData{
 				DecodeTime: duration,
 			}
 			if err != nil {

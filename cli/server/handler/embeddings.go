@@ -21,7 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v3"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 	"github.com/qcom-it-nexa-ai/geniex/cli/server/service"
 )
@@ -49,13 +49,13 @@ func Embeddings(c *gin.Context) {
 
 	slog.Info("Embeddings request received", "param", param)
 
-	p, err := service.KeepAliveGet[geniex_bridge.Embedder](
+	p, err := service.KeepAliveGet[geniex_sdk.Embedder](
 		string(param.Model),
 		types.ModelParam{},
 		false,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 
@@ -78,15 +78,15 @@ func Embeddings(c *gin.Context) {
 	}
 
 	// Create embedder input
-	embedInput := geniex_bridge.EmbedderEmbedInput{
+	embedInput := geniex_sdk.EmbedderEmbedInput{
 		Texts:    texts,
-		Config:   &geniex_bridge.EmbeddingConfig{},
+		Config:   &geniex_sdk.EmbeddingConfig{},
 		TaskType: param.TaskType,
 	}
 
 	res, err := p.Embed(embedInput)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 

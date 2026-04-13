@@ -32,7 +32,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/logic"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/record"
@@ -243,8 +243,8 @@ func infer() *cobra.Command {
 			quant = sq
 		}
 
-		geniex_bridge.Init()
-		defer geniex_bridge.DeInit()
+		geniex_sdk.Init()
+		defer geniex_sdk.DeInit()
 
 		switch manifest.ModelType {
 		case types.ModelTypeLLM:
@@ -275,14 +275,14 @@ func infer() *cobra.Command {
 		switch err {
 		case nil:
 			os.Exit(0)
-		case geniex_bridge.ErrCommonNotSupport:
+		case geniex_sdk.ErrCommonNotSupport:
 			fmt.Println(render.GetTheme().Error.Sprint(`
 ⚠️ Oops. This model type is not supported yet.
 
 👉 Try these:
 - Check back later for updates.
 - See help in our discord or slack.`))
-		case geniex_bridge.ErrCommonModelLoad:
+		case geniex_sdk.ErrCommonModelLoad:
 			fmt.Println(render.GetTheme().Error.Sprint(`
 ⚠️ Oops. Model failed to load.
 
@@ -290,21 +290,21 @@ func infer() *cobra.Command {
 - Redownload the model.
 - Verify your system meets the model's requirements.
 - See help in our discord or slack.`))
-		case geniex_bridge.ErrCommonPluginLoad:
+		case geniex_sdk.ErrCommonPluginLoad:
 			fmt.Println(render.GetTheme().Error.Sprint(`
 ⚠️ Oops. Plugin failed to load.
 
 👉 Try these:
 - Ensure all plugin dependencies are correct.
 - See help in our discord or slack.`))
-		case geniex_bridge.ErrCommonPluginInvalid:
+		case geniex_sdk.ErrCommonPluginInvalid:
 			fmt.Println(render.GetTheme().Error.Sprint(`
 ⚠️ Oops. Plugin is invalid.
 
 👉 Try these:
 - This model may not be compatible with your system. Try another model.
 - See help in our discord or slack.`))
-		case geniex_bridge.ErrLlmTokenizationContextLength:
+		case geniex_sdk.ErrLlmTokenizationContextLength:
 			fmt.Println(render.GetTheme().Info.Sprintf("Context length exceeded, please start a new conversation"))
 		default:
 			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
@@ -394,7 +394,7 @@ func loadStopSequences() ([]string, error) {
 }
 
 func inferLLM(manifest *types.ModelManifest, quant string) error {
-	samplerConfig := &geniex_bridge.SamplerConfig{
+	samplerConfig := &geniex_sdk.SamplerConfig{
 		Temperature:       temperature,
 		TopP:              topP,
 		TopK:              topK,
@@ -417,12 +417,12 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
 
-	p, err := geniex_bridge.NewLLM(geniex_bridge.LlmCreateInput{
+	p, err := geniex_sdk.NewLLM(geniex_sdk.LlmCreateInput{
 		ModelName: manifest.ModelName,
 		ModelPath: modelfile,
 		PluginID:  manifest.PluginId,
 		DeviceID:  manifest.DeviceId,
-		Config: geniex_bridge.ModelConfig{
+		Config: geniex_sdk.ModelConfig{
 			NCtx:       nctx,
 			NGpuLayers: ngl,
 		},
@@ -434,9 +434,9 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 	}
 	defer p.Destroy()
 
-	var history []geniex_bridge.LlmChatMessage
+	var history []geniex_sdk.LlmChatMessage
 	if systemPrompt != "" {
-		history = append(history, geniex_bridge.LlmChatMessage{Role: geniex_bridge.LLMRoleSystem, Content: systemPrompt})
+		history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleSystem, Content: systemPrompt})
 	}
 
 	// Check if using token ID input mode
@@ -460,42 +460,42 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 		HideThink: hideThink,
 		Verbose:   verbose,
 		TestMode:  testMode,
-		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
-			var res geniex_bridge.LlmGenerateOutput
+		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
+			var res geniex_sdk.LlmGenerateOutput
 			var err error
 
 			if len(tokenIDs) > 0 {
 				// When using token IDs, skip chat template and use IDs directly
-				res, err = p.Generate(geniex_bridge.LlmGenerateInput{
+				res, err = p.Generate(geniex_sdk.LlmGenerateInput{
 					InputIDs: tokenIDs,
 					OnToken:  onToken,
-					Config: &geniex_bridge.GenerationConfig{
+					Config: &geniex_sdk.GenerationConfig{
 						MaxTokens:     maxTokens,
 						SamplerConfig: samplerConfig,
 					},
 				})
 				if err != nil {
-					return "", geniex_bridge.ProfileData{}, err
+					return "", geniex_sdk.ProfileData{}, err
 				}
 				// Clear tokenIDs after use so subsequent calls use normal mode
 				tokenIDs = nil
 			} else {
 				// Normal text prompt mode with chat template
-				history = append(history, geniex_bridge.LlmChatMessage{Role: geniex_bridge.LLMRoleUser, Content: prompt})
+				history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleUser, Content: prompt})
 
-				templateOutput, err := p.ApplyChatTemplate(geniex_bridge.LlmApplyChatTemplateInput{
+				templateOutput, err := p.ApplyChatTemplate(geniex_sdk.LlmApplyChatTemplateInput{
 					Messages:            history,
 					EnableThink:         enableThink,
 					AddGenerationPrompt: true,
 				})
 				if err != nil {
-					return "", geniex_bridge.ProfileData{}, err
+					return "", geniex_sdk.ProfileData{}, err
 				}
 
-				res, err = p.Generate(geniex_bridge.LlmGenerateInput{
+				res, err = p.Generate(geniex_sdk.LlmGenerateInput{
 					PromptUTF8: templateOutput.FormattedText,
 					OnToken:    onToken,
-					Config: &geniex_bridge.GenerationConfig{
+					Config: &geniex_sdk.GenerationConfig{
 						MaxTokens:     maxTokens,
 						Stop:          stopSequences,
 						SamplerConfig: samplerConfig,
@@ -503,10 +503,10 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 				})
 
 				if err != nil {
-					return "", geniex_bridge.ProfileData{}, err
+					return "", geniex_sdk.ProfileData{}, err
 				}
 
-				history = append(history, geniex_bridge.LlmChatMessage{Role: geniex_bridge.LLMRoleAssistant, Content: res.FullText})
+				history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleAssistant, Content: res.FullText})
 			}
 
 			return res.FullText, res.ProfileData, nil
@@ -536,12 +536,12 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 			},
 
 			SaveKVCache: func(path string) error {
-				_, err := p.SaveKVCache(geniex_bridge.LlmSaveKVCacheInput{Path: path})
+				_, err := p.SaveKVCache(geniex_sdk.LlmSaveKVCacheInput{Path: path})
 				return err
 			},
 
 			LoadKVCache: func(path string) error {
-				_, err := p.LoadKVCache(geniex_bridge.LlmLoadKVCacheInput{Path: path})
+				_, err := p.LoadKVCache(geniex_sdk.LlmLoadKVCacheInput{Path: path})
 				if err == nil {
 					history = nil
 				}
@@ -556,7 +556,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 }
 
 func inferVLM(manifest *types.ModelManifest, quant string) error {
-	samplerConfig := &geniex_bridge.SamplerConfig{
+	samplerConfig := &geniex_sdk.SamplerConfig{
 		Temperature:       temperature,
 		TopP:              topP,
 		TopK:              topK,
@@ -586,14 +586,14 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 	}
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
-	p, err := geniex_bridge.NewVLM(geniex_bridge.VlmCreateInput{
+	p, err := geniex_sdk.NewVLM(geniex_sdk.VlmCreateInput{
 		ModelName:     manifest.ModelName,
 		ModelPath:     modelfile,
 		MmprojPath:    mmprojfile,
 		TokenizerPath: tokenizerfile,
 		PluginID:      manifest.PluginId,
 		DeviceID:      manifest.DeviceId,
-		Config: geniex_bridge.ModelConfig{
+		Config: geniex_sdk.ModelConfig{
 			NCtx:       nctx,
 			NGpuLayers: ngl,
 		},
@@ -606,9 +606,9 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 	}
 	defer p.Destroy()
 
-	var history []geniex_bridge.VlmChatMessage
+	var history []geniex_sdk.VlmChatMessage
 	if systemPrompt != "" {
-		history = append(history, geniex_bridge.VlmChatMessage{Role: geniex_bridge.VlmRoleSystem, Contents: []geniex_bridge.VlmContent{{Type: geniex_bridge.VlmContentTypeText, Text: systemPrompt}}})
+		history = append(history, geniex_sdk.VlmChatMessage{Role: geniex_sdk.VlmRoleSystem, Contents: []geniex_sdk.VlmContent{{Type: geniex_sdk.VlmContentTypeText, Text: systemPrompt}}})
 	}
 
 	processor := &common.Processor{
@@ -616,30 +616,30 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 		HideThink: hideThink,
 		Verbose:   verbose,
 		TestMode:  testMode,
-		Run: func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
-			msg := geniex_bridge.VlmChatMessage{Role: geniex_bridge.VlmRoleUser}
-			msg.Contents = append(msg.Contents, geniex_bridge.VlmContent{Type: geniex_bridge.VlmContentTypeText, Text: prompt})
+		Run: func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
+			msg := geniex_sdk.VlmChatMessage{Role: geniex_sdk.VlmRoleUser}
+			msg.Contents = append(msg.Contents, geniex_sdk.VlmContent{Type: geniex_sdk.VlmContentTypeText, Text: prompt})
 			for _, image := range images {
-				msg.Contents = append(msg.Contents, geniex_bridge.VlmContent{Type: geniex_bridge.VlmContentTypeImage, Text: image})
+				msg.Contents = append(msg.Contents, geniex_sdk.VlmContent{Type: geniex_sdk.VlmContentTypeImage, Text: image})
 			}
 			for _, audio := range audios {
-				msg.Contents = append(msg.Contents, geniex_bridge.VlmContent{Type: geniex_bridge.VlmContentTypeAudio, Text: audio})
+				msg.Contents = append(msg.Contents, geniex_sdk.VlmContent{Type: geniex_sdk.VlmContentTypeAudio, Text: audio})
 			}
 
 			history = append(history, msg)
 
-			tmplOut, err := p.ApplyChatTemplate(geniex_bridge.VlmApplyChatTemplateInput{
+			tmplOut, err := p.ApplyChatTemplate(geniex_sdk.VlmApplyChatTemplateInput{
 				Messages:    history,
 				EnableThink: enableThink,
 			})
 			if err != nil {
-				return "", geniex_bridge.ProfileData{}, err
+				return "", geniex_sdk.ProfileData{}, err
 			}
 
-			res, err := p.Generate(geniex_bridge.VlmGenerateInput{
+			res, err := p.Generate(geniex_sdk.VlmGenerateInput{
 				PromptUTF8: tmplOut.FormattedText,
 				OnToken:    onToken,
-				Config: &geniex_bridge.GenerationConfig{
+				Config: &geniex_sdk.GenerationConfig{
 					MaxTokens:      maxTokens,
 					Stop:           stopSequences,
 					SamplerConfig:  samplerConfig,
@@ -649,13 +649,13 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 				},
 			})
 			if err != nil {
-				return "", geniex_bridge.ProfileData{}, err
+				return "", geniex_sdk.ProfileData{}, err
 			}
 
-			history = append(history, geniex_bridge.VlmChatMessage{
-				Role: geniex_bridge.VlmRoleAssistant,
-				Contents: []geniex_bridge.VlmContent{
-					{Type: geniex_bridge.VlmContentTypeText, Text: res.FullText},
+			history = append(history, geniex_sdk.VlmChatMessage{
+				Role: geniex_sdk.VlmRoleAssistant,
+				Contents: []geniex_sdk.VlmContent{
+					{Type: geniex_sdk.VlmContentTypeText, Text: res.FullText},
 				},
 			})
 
@@ -705,14 +705,14 @@ func inferEmbedder(manifest *types.ModelManifest, quant string) error {
 	spin := render.NewSpinner("loading embedding model...")
 	spin.Start()
 
-	embedderInput := geniex_bridge.EmbedderCreateInput{
+	embedderInput := geniex_sdk.EmbedderCreateInput{
 		ModelName: manifest.ModelName,
 		ModelPath: modelfile,
 		PluginID:  manifest.PluginId,
 		DeviceID:  manifest.DeviceId,
 	}
 
-	p, err := geniex_bridge.NewEmbedder(embedderInput)
+	p, err := geniex_sdk.NewEmbedder(embedderInput)
 	spin.Stop()
 
 	if err != nil {
@@ -725,16 +725,16 @@ func inferEmbedder(manifest *types.ModelManifest, quant string) error {
 		ParseFile: true,
 		Verbose:   verbose,
 		TestMode:  testMode,
-		Run: func(prompt string, images, _ []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
-			embedInput := geniex_bridge.EmbedderEmbedInput{
+		Run: func(prompt string, images, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
+			embedInput := geniex_sdk.EmbedderEmbedInput{
 				TaskType: taskType,
-				Config:   &geniex_bridge.EmbeddingConfig{},
+				Config:   &geniex_sdk.EmbeddingConfig{},
 			}
 
 			// Validate: image paths and text cannot be passed at the same time
 			trimmedPrompt := strings.TrimSpace(prompt)
 			if len(images) > 0 && trimmedPrompt != "" {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("cannot pass both image paths and text at the same time")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("cannot pass both image paths and text at the same time")
 			}
 
 			// Handle text or image inputs
@@ -743,7 +743,7 @@ func inferEmbedder(manifest *types.ModelManifest, quant string) error {
 			} else if trimmedPrompt != "" {
 				embedInput.Texts = []string{trimmedPrompt}
 			} else {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("must provide either text or image path")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("must provide either text or image path")
 			}
 
 			result, err := p.Embed(embedInput)
@@ -788,14 +788,14 @@ func inferReranker(manifest *types.ModelManifest, quant string) error {
 	spin := render.NewSpinner("loading reranker model...")
 	spin.Start()
 
-	rerankerInput := geniex_bridge.RerankerCreateInput{
+	rerankerInput := geniex_sdk.RerankerCreateInput{
 		ModelName: manifest.ModelName,
 		ModelPath: modelfile,
 		PluginID:  manifest.PluginId,
 		DeviceID:  manifest.DeviceId,
 	}
 
-	p, err := geniex_bridge.NewReranker(rerankerInput)
+	p, err := geniex_sdk.NewReranker(rerankerInput)
 	spin.Stop()
 
 	if err != nil {
@@ -808,20 +808,20 @@ func inferReranker(manifest *types.ModelManifest, quant string) error {
 	processor := &common.Processor{
 		Verbose:  verbose,
 		TestMode: testMode,
-		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			parsedPrompt := strings.Split(prompt, SEP)
 			if len(parsedPrompt) < 2 {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("parsed prompt failed, query and document are required for reranking")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("parsed prompt failed, query and document are required for reranking")
 			}
 			query := parsedPrompt[0]
 			document := parsedPrompt[1:]
 			fmt.Println(render.GetTheme().Info.Sprintf("Query: %s", query))
 			fmt.Println(render.GetTheme().Info.Sprintf("Processing %d documents", len(document)))
 
-			rerankInput := geniex_bridge.RerankerRerankInput{
+			rerankInput := geniex_sdk.RerankerRerankInput{
 				Query:     query,
 				Documents: document,
-				Config: &geniex_bridge.RerankConfig{
+				Config: &geniex_sdk.RerankConfig{
 					BatchSize:       int32(len(document)),
 					Normalize:       true,
 					NormalizeMethod: "softmax",
@@ -880,14 +880,14 @@ func inferTTS(manifest *types.ModelManifest, quant string) error {
 	spin := render.NewSpinner("loading TTS model...")
 	spin.Start()
 
-	ttsInput := geniex_bridge.TtsCreateInput{
+	ttsInput := geniex_sdk.TtsCreateInput{
 		ModelName: manifest.ModelName,
 		ModelPath: modelfile,
 		PluginID:  manifest.PluginId,
 		DeviceID:  manifest.DeviceId,
 	}
 
-	p, err := geniex_bridge.NewTTS(ttsInput)
+	p, err := geniex_sdk.NewTTS(ttsInput)
 	spin.Stop()
 
 	if err != nil {
@@ -908,10 +908,10 @@ func inferTTS(manifest *types.ModelManifest, quant string) error {
 	processor := &common.Processor{
 		Verbose:  verbose,
 		TestMode: testMode,
-		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			textToSynthesize := strings.TrimSpace(prompt)
 			if textToSynthesize == "" {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("prompt cannot be empty")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("prompt cannot be empty")
 			}
 
 			// Generate output filename if not specified
@@ -921,7 +921,7 @@ func inferTTS(manifest *types.ModelManifest, quant string) error {
 			}
 
 			// Create TTS config
-			ttsConfig := &geniex_bridge.TTSConfig{
+			ttsConfig := &geniex_sdk.TTSConfig{
 				Voice:      "af_heart",
 				Speed:      float32(speechSpeed),
 				SampleRate: 24000,
@@ -933,7 +933,7 @@ func inferTTS(manifest *types.ModelManifest, quant string) error {
 			}
 
 			// Synthesize speech
-			synthesizeInput := geniex_bridge.TtsSynthesizeInput{
+			synthesizeInput := geniex_sdk.TtsSynthesizeInput{
 				TextUTF8:   textToSynthesize,
 				Config:     ttsConfig,
 				OutputPath: outputFile,
@@ -941,7 +941,7 @@ func inferTTS(manifest *types.ModelManifest, quant string) error {
 
 			result, err := p.Synthesize(synthesizeInput)
 			if err != nil {
-				return "", geniex_bridge.ProfileData{}, err
+				return "", geniex_sdk.ProfileData{}, err
 			}
 
 			data := render.GetTheme().Success.Sprintf("✓ Audio saved: %s", result.Result.AudioPath)
@@ -967,14 +967,14 @@ func inferASR(manifest *types.ModelManifest, quant string) error {
 	spin := render.NewSpinner("loading ASR model...")
 	spin.Start()
 
-	asrInput := geniex_bridge.AsrCreateInput{
+	asrInput := geniex_sdk.AsrCreateInput{
 		ModelName: manifest.ModelName,
 		ModelPath: modelfile,
 		PluginID:  manifest.PluginId,
 		DeviceID:  manifest.DeviceId,
 		Language:  language,
 	}
-	p, err := geniex_bridge.NewASR(asrInput)
+	p, err := geniex_sdk.NewASR(asrInput)
 	spin.Stop()
 
 	if err != nil {
@@ -996,21 +996,21 @@ func inferASR(manifest *types.ModelManifest, quant string) error {
 		ParseFile: true,
 		Verbose:   verbose,
 		TestMode:  testMode,
-		Run: func(_ string, _, audios []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(_ string, _, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			if len(audios) == 0 {
-				return "", geniex_bridge.ProfileData{}, common.ErrNoAudio
+				return "", geniex_sdk.ProfileData{}, common.ErrNoAudio
 			}
 			if len(audios) > 1 {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("only one audio file is supported")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("only one audio file is supported")
 			}
 
-			asrConfig := &geniex_bridge.ASRConfig{
+			asrConfig := &geniex_sdk.ASRConfig{
 				Timestamps: "segment",
 				BeamSize:   5,
 				Stream:     false,
 			}
 
-			transcribeInput := geniex_bridge.AsrTranscribeInput{
+			transcribeInput := geniex_sdk.AsrTranscribeInput{
 				AudioPath: audios[0],
 				Language:  language,
 				Config:    asrConfig,
@@ -1020,7 +1020,7 @@ func inferASR(manifest *types.ModelManifest, quant string) error {
 
 			result, err := p.Transcribe(transcribeInput)
 			if err != nil {
-				return "", geniex_bridge.ProfileData{}, err
+				return "", geniex_sdk.ProfileData{}, err
 			}
 			onToken(result.Result.Transcript)
 			return result.Result.Transcript, result.ProfileData, nil
@@ -1042,7 +1042,7 @@ func inferASR(manifest *types.ModelManifest, quant string) error {
 		repl := common.Repl{
 			RecordImmediate: true,
 			Record: func() (*string, error) {
-				streamConfig := geniex_bridge.ASRStreamConfig{
+				streamConfig := geniex_sdk.ASRStreamConfig{
 					ChunkDuration:   4.0,
 					OverlapDuration: 3.5,
 					SampleRate:      16000,
@@ -1051,7 +1051,7 @@ func inferASR(manifest *types.ModelManifest, quant string) error {
 					Timestamps:      "segment",
 					BeamSize:        4,
 				}
-				_, err := p.StreamBegin(geniex_bridge.AsrStreamBeginInput{
+				_, err := p.StreamBegin(geniex_sdk.AsrStreamBeginInput{
 					StreamConfig: &streamConfig,
 					Language:     "en",
 					OnTranscription: func(text string, _ any) {
@@ -1067,10 +1067,10 @@ func inferASR(manifest *types.ModelManifest, quant string) error {
 					UserData: nil,
 				})
 				slog.Debug("ASR StreamBegin", "error", err)
-				if err != nil && !errors.Is(err, geniex_bridge.ErrCommonNotSupport) {
+				if err != nil && !errors.Is(err, geniex_sdk.ErrCommonNotSupport) {
 					return nil, err
 				}
-				defer p.StreamStop(geniex_bridge.AsrStreamStopInput{})
+				defer p.StreamStop(geniex_sdk.AsrStreamStopInput{})
 
 				// streaming not supported, fallback to file input
 				if err != nil {
@@ -1109,7 +1109,7 @@ func inferASR(manifest *types.ModelManifest, quant string) error {
 							break
 						}
 
-						if err := p.StreamPushAudio(geniex_bridge.AsrStreamPushAudioInput{
+						if err := p.StreamPushAudio(geniex_sdk.AsrStreamPushAudioInput{
 							AudioData: buffer[:n],
 						}); err != nil {
 							fmt.Println(render.GetTheme().Error.Sprintf("error pushing audio data: %s", err))
@@ -1139,13 +1139,13 @@ func inferDiarize(manifest *types.ModelManifest, quant string) error {
 	spin := render.NewSpinner("loading diarization model...")
 	spin.Start()
 
-	diarizeInput := geniex_bridge.DiarizeCreateInput{
+	diarizeInput := geniex_sdk.DiarizeCreateInput{
 		ModelName: manifest.ModelName,
 		ModelPath: modelfile,
 		PluginID:  manifest.PluginId,
 		DeviceID:  manifest.DeviceId,
 	}
-	p, err := geniex_bridge.NewDiarize(diarizeInput)
+	p, err := geniex_sdk.NewDiarize(diarizeInput)
 	spin.Stop()
 
 	if err != nil {
@@ -1158,20 +1158,20 @@ func inferDiarize(manifest *types.ModelManifest, quant string) error {
 		ParseFile: true,
 		Verbose:   verbose,
 		TestMode:  testMode,
-		Run: func(_ string, _, audios []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(_ string, _, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			if len(audios) == 0 {
-				return "", geniex_bridge.ProfileData{}, common.ErrNoAudio
+				return "", geniex_sdk.ProfileData{}, common.ErrNoAudio
 			}
 			if len(audios) > 1 {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("diarization only supports a single audio file, got %d files", len(audios))
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("diarization only supports a single audio file, got %d files", len(audios))
 			}
 
-			diarizeConfig := &geniex_bridge.DiarizeConfig{
+			diarizeConfig := &geniex_sdk.DiarizeConfig{
 				MinSpeakers: 0, // auto-detect
 				MaxSpeakers: 0, // no limit
 			}
 
-			inferInput := geniex_bridge.DiarizeInferInput{
+			inferInput := geniex_sdk.DiarizeInferInput{
 				AudioPath: audios[0],
 				Config:    diarizeConfig,
 			}
@@ -1180,7 +1180,7 @@ func inferDiarize(manifest *types.ModelManifest, quant string) error {
 
 			result, err := p.Infer(inferInput)
 			if err != nil {
-				return "", geniex_bridge.ProfileData{}, err
+				return "", geniex_sdk.ProfileData{}, err
 			}
 
 			// Format the diarization output
@@ -1241,10 +1241,10 @@ func inferCV(manifest *types.ModelManifest, quant string) error {
 	spin := render.NewSpinner("loading CV model...")
 	spin.Start()
 
-	cvInput := geniex_bridge.CVCreateInput{
+	cvInput := geniex_sdk.CVCreateInput{
 		ModelName: manifest.ModelName,
-		Config: geniex_bridge.CVModelConfig{
-			Capabilities: geniex_bridge.CVCapabilityOCR,
+		Config: geniex_sdk.CVModelConfig{
+			Capabilities: geniex_sdk.CVCapabilityOCR,
 			DetModelPath: modelfile,
 			RecModelPath: modelfile,
 		},
@@ -1252,7 +1252,7 @@ func inferCV(manifest *types.ModelManifest, quant string) error {
 		DeviceID: manifest.DeviceId,
 	}
 
-	p, err := geniex_bridge.NewCV(cvInput)
+	p, err := geniex_sdk.NewCV(cvInput)
 	spin.Stop()
 
 	if err != nil {
@@ -1265,22 +1265,22 @@ func inferCV(manifest *types.ModelManifest, quant string) error {
 		ParseFile: true,
 		Verbose:   verbose,
 		TestMode:  testMode,
-		Run: func(_ string, images, _ []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(_ string, images, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			if len(images) == 0 {
-				return "", geniex_bridge.ProfileData{}, common.ErrNoImage
+				return "", geniex_sdk.ProfileData{}, common.ErrNoImage
 			}
 			if len(images) > 1 {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("only one image file is supported")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("only one image file is supported")
 			}
 
-			inferInput := geniex_bridge.CVInferInput{
+			inferInput := geniex_sdk.CVInferInput{
 				InputImagePath: images[0],
 			}
 
 			result, err := p.Infer(inferInput)
 			slog.Debug("CV Infer result", "result", result, "error", err)
 			if err != nil {
-				return "", geniex_bridge.ProfileData{}, err
+				return "", geniex_sdk.ProfileData{}, err
 			}
 
 			onToken(render.GetTheme().Success.Sprintf("✓ CV inference completed successfully"))
@@ -1291,7 +1291,7 @@ func inferCV(manifest *types.ModelManifest, quant string) error {
 
 			if len(result.Results) == 0 {
 				onToken(render.GetTheme().Info.Sprintf("no output, skip generate output image\n"))
-				return data, geniex_bridge.ProfileData{}, nil
+				return data, geniex_sdk.ProfileData{}, nil
 			}
 
 			if len(result.Results) == 1 && reflect.ValueOf(result.Results[0].BBox).IsZero() {
@@ -1315,7 +1315,7 @@ func inferCV(manifest *types.ModelManifest, quant string) error {
 				if (cvResult.BBox.Width > 0 && cvResult.BBox.Height > 0) || len(cvResult.Mask) > 0 {
 					outputPath, err := logic.CVPostProcess(images[0], result.Results)
 					if err != nil {
-						return data, geniex_bridge.ProfileData{}, err
+						return data, geniex_sdk.ProfileData{}, err
 					}
 
 					onToken(render.GetTheme().Success.Sprintf("  Result drawn and saved to: %s\n", outputPath))
@@ -1323,7 +1323,7 @@ func inferCV(manifest *types.ModelManifest, quant string) error {
 				}
 			}
 
-			return data, geniex_bridge.ProfileData{}, nil
+			return data, geniex_sdk.ProfileData{}, nil
 		},
 	}
 
@@ -1353,7 +1353,7 @@ func inferImageGen(manifest *types.ModelManifest, _ string) error {
 
 	spin := render.NewSpinner("loading ImageGen model...")
 	spin.Start()
-	p, err := geniex_bridge.NewImageGen(geniex_bridge.ImageGenCreateInput{
+	p, err := geniex_sdk.NewImageGen(geniex_sdk.ImageGenCreateInput{
 		ModelName: manifest.ModelName,
 		ModelPath: modeldir,
 		PluginID:  manifest.PluginId,
@@ -1370,10 +1370,10 @@ func inferImageGen(manifest *types.ModelManifest, _ string) error {
 	processor := &common.Processor{
 		Verbose:  verbose,
 		TestMode: testMode,
-		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error) {
+		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			textPrompt := strings.TrimSpace(prompt)
 			if textPrompt == "" {
-				return "", geniex_bridge.ProfileData{}, fmt.Errorf("prompt cannot be empty")
+				return "", geniex_sdk.ProfileData{}, fmt.Errorf("prompt cannot be empty")
 			}
 
 			// Generate output filename if not specified
@@ -1382,21 +1382,21 @@ func inferImageGen(manifest *types.ModelManifest, _ string) error {
 				outputFile = fmt.Sprintf("imagegen_output_%d.png", time.Now().Unix())
 			}
 
-			result, err := p.Txt2Img(geniex_bridge.ImageGenTxt2ImgInput{
+			result, err := p.Txt2Img(geniex_sdk.ImageGenTxt2ImgInput{
 				PromptUTF8: textPrompt,
-				Config: &geniex_bridge.ImageGenerationConfig{
+				Config: &geniex_sdk.ImageGenerationConfig{
 					Prompts:         []string{textPrompt},
 					NegativePrompts: []string{"blurry, low quality, distorted"},
 					Height:          512,
 					Width:           512,
-					SamplerConfig: geniex_bridge.ImageSamplerConfig{
+					SamplerConfig: geniex_sdk.ImageSamplerConfig{
 						Method:        "ddim",
 						Steps:         20,
 						GuidanceScale: 7.5,
 						Eta:           0.0,
 						Seed:          42,
 					},
-					SchedulerConfig: geniex_bridge.SchedulerConfig{
+					SchedulerConfig: geniex_sdk.SchedulerConfig{
 						Type:              "ddim",
 						NumTrainTimesteps: 1000,
 						StepsOffset:       1,
@@ -1414,12 +1414,12 @@ func inferImageGen(manifest *types.ModelManifest, _ string) error {
 				OutputPath: outputFile,
 			})
 			if err != nil {
-				return "", geniex_bridge.ProfileData{}, err
+				return "", geniex_sdk.ProfileData{}, err
 			}
 
 			data := render.GetTheme().Success.Sprintf("✓ Image saved to: %s", result.OutputImagePath)
 			onToken(data)
-			return data, geniex_bridge.ProfileData{}, nil
+			return data, geniex_sdk.ProfileData{}, nil
 		},
 	}
 

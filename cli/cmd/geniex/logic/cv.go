@@ -33,10 +33,10 @@ import (
 	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 )
 
-func drawBBoxes(img *image.RGBA, results []geniex_bridge.CVResult) {
+func drawBBoxes(img *image.RGBA, results []geniex_sdk.CVResult) {
 	slog.Debug("Drawing bounding boxes on image", "num_results", len(results))
 
 	bounds := img.Bounds()
@@ -164,7 +164,7 @@ func drawMask(img *image.RGBA, mask []float32, maskColor *color.RGBA) {
 	wg.Wait()
 }
 
-func CVPostProcess(input string, results []geniex_bridge.CVResult) (string, error) {
+func CVPostProcess(input string, results []geniex_sdk.CVResult) (string, error) {
 	file, err := os.Open(input)
 	if err != nil {
 		slog.Error("Failed to open image", "error", err)

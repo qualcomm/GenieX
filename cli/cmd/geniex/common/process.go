@@ -27,7 +27,7 @@ import (
 
 	"github.com/bytedance/sonic"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 )
 
@@ -44,7 +44,7 @@ type Processor struct {
 	TestMode bool
 
 	GetPrompt func() (string, error)
-	Run       func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_bridge.ProfileData, error)
+	Run       func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error)
 
 	fsm      map[[2]any][2]any
 	fsmState int
@@ -265,7 +265,7 @@ func (p *Processor) fsmEvent(token string) {
 
 // print profile data
 
-func (p *Processor) printProfile(pd geniex_bridge.ProfileData) {
+func (p *Processor) printProfile(pd geniex_sdk.ProfileData) {
 	var text string
 
 	if p.Verbose {

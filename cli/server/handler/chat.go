@@ -33,7 +33,7 @@ import (
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/shared/constant"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 	"github.com/qcom-it-nexa-ai/geniex/cli/server/service"
@@ -128,12 +128,12 @@ func ChatCompletions(c *gin.Context) {
 }
 
 func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
-	messages := make([]geniex_bridge.LlmChatMessage, 0, len(param.Messages))
+	messages := make([]geniex_sdk.LlmChatMessage, 0, len(param.Messages))
 	for _, msg := range param.Messages {
 		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
 			for _, tc := range toolCalls {
-				messages = append(messages, geniex_bridge.LlmChatMessage{
-					Role: geniex_bridge.LLMRole(*msg.GetRole()),
+				messages = append(messages, geniex_sdk.LlmChatMessage{
+					Role: geniex_sdk.LLMRole(*msg.GetRole()),
 					Content: fmt.Sprintf(`<tool_call>{"name":"%s","arguments":"%s"}</tool_call>`,
 						tc.GetFunction().Name, tc.GetFunction().Arguments),
 				})
@@ -142,8 +142,8 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 		}
 
 		if toolResp := msg.GetToolCallID(); toolResp != nil {
-			messages = append(messages, geniex_bridge.LlmChatMessage{
-				Role:    geniex_bridge.LLMRole(*msg.GetRole()),
+			messages = append(messages, geniex_sdk.LlmChatMessage{
+				Role:    geniex_sdk.LLMRole(*msg.GetRole()),
 				Content: *msg.GetContent().AsAny().(*string),
 			})
 			continue
@@ -151,15 +151,15 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 
 		switch content := msg.GetContent().AsAny().(type) {
 		case *string:
-			messages = append(messages, geniex_bridge.LlmChatMessage{
-				Role:    geniex_bridge.LLMRole(*msg.GetRole()),
+			messages = append(messages, geniex_sdk.LlmChatMessage{
+				Role:    geniex_sdk.LLMRole(*msg.GetRole()),
 				Content: *content,
 			})
 
 		case *[]openai.ChatCompletionContentPartTextParam:
 			for _, ct := range *content {
-				messages = append(messages, geniex_bridge.LlmChatMessage{
-					Role:    geniex_bridge.LLMRole(*msg.GetRole()),
+				messages = append(messages, geniex_sdk.LlmChatMessage{
+					Role:    geniex_sdk.LLMRole(*msg.GetRole()),
 					Content: ct.Text,
 				})
 			}
@@ -167,8 +167,8 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 			for _, ct := range *content {
 				switch *ct.GetType() {
 				case "text":
-					messages = append(messages, geniex_bridge.LlmChatMessage{
-						Role:    geniex_bridge.LLMRole(*msg.GetRole()),
+					messages = append(messages, geniex_sdk.LlmChatMessage{
+						Role:    geniex_sdk.LLMRole(*msg.GetRole()),
 						Content: *ct.GetText(),
 					})
 				default:
@@ -181,8 +181,8 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 			for _, ct := range *content {
 				switch *ct.GetType() {
 				case "text":
-					messages = append(messages, geniex_bridge.LlmChatMessage{
-						Role:    geniex_bridge.LLMRole(*msg.GetRole()),
+					messages = append(messages, geniex_sdk.LlmChatMessage{
+						Role:    geniex_sdk.LLMRole(*msg.GetRole()),
 						Content: *ct.GetText(),
 					})
 				default:
@@ -209,7 +209,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 
 	samplerConfig := parseSamplerConfig(param)
 
-	p, err := service.KeepAliveGet[geniex_bridge.LLM](
+	p, err := service.KeepAliveGet[geniex_sdk.LLM](
 		string(param.Model),
 		types.ModelParam{NCtx: param.NCtx, NGpuLayers: param.Ngl},
 		c.GetHeader("GenieX-KeepCache") != "true",
@@ -218,7 +218,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 		c.JSON(http.StatusNotFound, map[string]any{"error": "model not found"})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 	if isWarmupRequest(param) {
@@ -226,14 +226,14 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 		return
 	}
 
-	formatted, err := p.ApplyChatTemplate(geniex_bridge.LlmApplyChatTemplateInput{
+	formatted, err := p.ApplyChatTemplate(geniex_sdk.LlmApplyChatTemplateInput{
 		Messages:            messages,
 		Tools:               tools,
 		EnableThink:         param.EnableThink,
 		AddGenerationPrompt: true,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 
@@ -243,7 +243,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 		dataCh := make(chan string)
 
 		var (
-			res   geniex_bridge.LlmGenerateOutput
+			res   geniex_sdk.LlmGenerateOutput
 			err   error
 			resWg sync.WaitGroup
 		)
@@ -251,7 +251,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 		resWg.Add(1)
 		go func() {
 			defer resWg.Done()
-			res, err = p.Generate(geniex_bridge.LlmGenerateInput{
+			res, err = p.Generate(geniex_sdk.LlmGenerateInput{
 				PromptUTF8: formatted.FormattedText,
 				OnToken: func(token string) bool {
 					if stopGen {
@@ -260,7 +260,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 					dataCh <- token
 					return true
 				},
-				Config: &geniex_bridge.GenerationConfig{
+				Config: &geniex_sdk.GenerationConfig{
 					MaxTokens:     int32(param.MaxCompletionTokens.Value),
 					SamplerConfig: samplerConfig,
 				},
@@ -287,7 +287,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 				resWg.Wait()
 
 				if err != nil {
-					c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+					c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 					return false
 				}
 
@@ -314,7 +314,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 
 				if err != nil {
 					slog.Error("Generation error", "error", err)
-					c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+					c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 					return false
 				}
 
@@ -366,16 +366,16 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 
 	} else {
 		// Blocking response mode
-		genOut, err := p.Generate(geniex_bridge.LlmGenerateInput{
+		genOut, err := p.Generate(geniex_sdk.LlmGenerateInput{
 			PromptUTF8: formatted.FormattedText,
-			Config: &geniex_bridge.GenerationConfig{
+			Config: &geniex_sdk.GenerationConfig{
 				MaxTokens:     int32(param.MaxCompletionTokens.Value),
 				SamplerConfig: samplerConfig,
 			},
 		},
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
 
@@ -409,29 +409,29 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 }
 
 func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
-	messages := make([]geniex_bridge.VlmChatMessage, 0, len(param.Messages))
+	messages := make([]geniex_sdk.VlmChatMessage, 0, len(param.Messages))
 	for _, msg := range param.Messages {
 		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
-			contents := make([]geniex_bridge.VlmContent, 0, len(toolCalls))
+			contents := make([]geniex_sdk.VlmContent, 0, len(toolCalls))
 			for _, tc := range toolCalls {
-				contents = append(contents, geniex_bridge.VlmContent{
-					Type: geniex_bridge.VlmContentTypeText,
+				contents = append(contents, geniex_sdk.VlmContent{
+					Type: geniex_sdk.VlmContentTypeText,
 					Text: fmt.Sprintf(`<tool_call>{"name":"%s","arguments":"%s"}</tool_call>`,
 						tc.GetFunction().Name, tc.GetFunction().Arguments),
 				})
 			}
-			messages = append(messages, geniex_bridge.VlmChatMessage{
-				Role:     geniex_bridge.VlmRole(*msg.GetRole()),
+			messages = append(messages, geniex_sdk.VlmChatMessage{
+				Role:     geniex_sdk.VlmRole(*msg.GetRole()),
 				Contents: contents,
 			})
 			continue
 		}
 
 		if toolResp := msg.GetToolCallID(); toolResp != nil {
-			messages = append(messages, geniex_bridge.VlmChatMessage{
-				Role: geniex_bridge.VlmRole(*msg.GetRole()),
-				Contents: []geniex_bridge.VlmContent{{
-					Type: geniex_bridge.VlmContentTypeText,
+			messages = append(messages, geniex_sdk.VlmChatMessage{
+				Role: geniex_sdk.VlmRole(*msg.GetRole()),
+				Contents: []geniex_sdk.VlmContent{{
+					Type: geniex_sdk.VlmContentTypeText,
 					Text: *msg.GetContent().AsAny().(*string),
 				}},
 			})
@@ -440,33 +440,33 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 
 		switch content := msg.GetContent().AsAny().(type) {
 		case *string:
-			messages = append(messages, geniex_bridge.VlmChatMessage{
-				Role: geniex_bridge.VlmRole(*msg.GetRole()),
-				Contents: []geniex_bridge.VlmContent{
-					{Type: geniex_bridge.VlmContentTypeText, Text: *msg.GetContent().AsAny().(*string)},
+			messages = append(messages, geniex_sdk.VlmChatMessage{
+				Role: geniex_sdk.VlmRole(*msg.GetRole()),
+				Contents: []geniex_sdk.VlmContent{
+					{Type: geniex_sdk.VlmContentTypeText, Text: *msg.GetContent().AsAny().(*string)},
 				},
 			})
 
 		case *[]openai.ChatCompletionContentPartTextParam:
-			contents := make([]geniex_bridge.VlmContent, 0, len(*content))
+			contents := make([]geniex_sdk.VlmContent, 0, len(*content))
 			for _, ct := range *content {
-				contents = append(contents, geniex_bridge.VlmContent{
-					Type: geniex_bridge.VlmContentTypeText,
+				contents = append(contents, geniex_sdk.VlmContent{
+					Type: geniex_sdk.VlmContentTypeText,
 					Text: ct.Text,
 				})
 			}
-			messages = append(messages, geniex_bridge.VlmChatMessage{
-				Role:     geniex_bridge.VlmRole(*msg.GetRole()),
+			messages = append(messages, geniex_sdk.VlmChatMessage{
+				Role:     geniex_sdk.VlmRole(*msg.GetRole()),
 				Contents: contents,
 			})
 
 		case *[]openai.ChatCompletionContentPartUnionParam:
-			contents := make([]geniex_bridge.VlmContent, 0, len(*content))
+			contents := make([]geniex_sdk.VlmContent, 0, len(*content))
 			for _, ct := range *content {
 				switch *ct.GetType() {
 				case "text":
-					contents = append(contents, geniex_bridge.VlmContent{
-						Type: geniex_bridge.VlmContentTypeText,
+					contents = append(contents, geniex_sdk.VlmContent{
+						Type: geniex_sdk.VlmContentTypeText,
 						Text: *ct.GetText(),
 					})
 				case "image_url":
@@ -477,8 +477,8 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 						return
 					}
 					defer os.Remove(file)
-					contents = append(contents, geniex_bridge.VlmContent{
-						Type: geniex_bridge.VlmContentTypeImage,
+					contents = append(contents, geniex_sdk.VlmContent{
+						Type: geniex_sdk.VlmContentTypeImage,
 						Text: file,
 					})
 				case "input_audio":
@@ -489,8 +489,8 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 						return
 					}
 					defer os.Remove(file)
-					contents = append(contents, geniex_bridge.VlmContent{
-						Type: geniex_bridge.VlmContentTypeAudio,
+					contents = append(contents, geniex_sdk.VlmContent{
+						Type: geniex_sdk.VlmContentTypeAudio,
 						Text: file,
 					})
 				default:
@@ -499,18 +499,18 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 					return
 				}
 			}
-			messages = append(messages, geniex_bridge.VlmChatMessage{
-				Role:     geniex_bridge.VlmRole(*msg.GetRole()),
+			messages = append(messages, geniex_sdk.VlmChatMessage{
+				Role:     geniex_sdk.VlmRole(*msg.GetRole()),
 				Contents: contents,
 			})
 
 		case *[]openai.ChatCompletionAssistantMessageParamContentArrayOfContentPartUnion:
-			contents := make([]geniex_bridge.VlmContent, 0, len(*content))
+			contents := make([]geniex_sdk.VlmContent, 0, len(*content))
 			for _, ct := range *content {
 				switch *ct.GetType() {
 				case "text":
-					contents = append(contents, geniex_bridge.VlmContent{
-						Type: geniex_bridge.VlmContentTypeText,
+					contents = append(contents, geniex_sdk.VlmContent{
+						Type: geniex_sdk.VlmContentTypeText,
 						Text: *ct.GetText(),
 					})
 				default:
@@ -520,8 +520,8 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 				}
 			}
 
-			messages = append(messages, geniex_bridge.VlmChatMessage{
-				Role:     geniex_bridge.VlmRole(*msg.GetRole()),
+			messages = append(messages, geniex_sdk.VlmChatMessage{
+				Role:     geniex_sdk.VlmRole(*msg.GetRole()),
 				Contents: contents,
 			})
 
@@ -542,7 +542,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 
 	samplerConfig := parseSamplerConfig(param)
 
-	p, err := service.KeepAliveGet[geniex_bridge.VLM](
+	p, err := service.KeepAliveGet[geniex_sdk.VLM](
 		string(param.Model),
 		types.ModelParam{NCtx: param.NCtx, NGpuLayers: param.Ngl},
 		c.GetHeader("GenieX-KeepCache") != "true",
@@ -551,7 +551,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 		c.JSON(http.StatusNotFound, map[string]any{"error": "model not found"})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 	if isWarmupRequest(param) {
@@ -560,22 +560,22 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 	}
 
 	// Format prompt using VLM chat template
-	formatted, err := p.ApplyChatTemplate(geniex_bridge.VlmApplyChatTemplateInput{
+	formatted, err := p.ApplyChatTemplate(geniex_sdk.VlmApplyChatTemplateInput{
 		Messages:    messages,
 		Tools:       tools,
 		EnableThink: param.EnableThink,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 	images := make([]string, 0)
 	audios := make([]string, 0)
 	for _, content := range messages[len(messages)-1].Contents {
 		switch content.Type {
-		case geniex_bridge.VlmContentTypeImage:
+		case geniex_sdk.VlmContentTypeImage:
 			images = append(images, content.Text)
-		case geniex_bridge.VlmContentTypeAudio:
+		case geniex_sdk.VlmContentTypeAudio:
 			audios = append(audios, content.Text)
 		}
 	}
@@ -586,7 +586,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 		dataCh := make(chan string)
 
 		var (
-			res   *geniex_bridge.VlmGenerateOutput
+			res   *geniex_sdk.VlmGenerateOutput
 			err   error
 			resWg sync.WaitGroup
 		)
@@ -594,7 +594,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 		resWg.Add(1)
 		go func() {
 			defer resWg.Done()
-			res, err = p.Generate(geniex_bridge.VlmGenerateInput{
+			res, err = p.Generate(geniex_sdk.VlmGenerateInput{
 				PromptUTF8: formatted.FormattedText,
 				OnToken: func(token string) bool {
 					if stopGen {
@@ -603,7 +603,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 					dataCh <- token
 					return true
 				},
-				Config: &geniex_bridge.GenerationConfig{
+				Config: &geniex_sdk.GenerationConfig{
 					MaxTokens:      int32(param.MaxCompletionTokens.Value),
 					SamplerConfig:  samplerConfig,
 					ImagePaths:     images,
@@ -634,7 +634,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 				resWg.Wait()
 
 				if err != nil {
-					c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+					c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 					return false
 				}
 
@@ -661,7 +661,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 
 				if err != nil {
 					slog.Error("Generation error", "error", err)
-					c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+					c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 					return false
 				}
 
@@ -713,9 +713,9 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 
 	} else {
 		// Blocking response mode
-		genOut, err := p.Generate(geniex_bridge.VlmGenerateInput{
+		genOut, err := p.Generate(geniex_sdk.VlmGenerateInput{
 			PromptUTF8: formatted.FormattedText,
-			Config: &geniex_bridge.GenerationConfig{
+			Config: &geniex_sdk.GenerationConfig{
 				MaxTokens:      int32(param.MaxCompletionTokens.Value),
 				SamplerConfig:  samplerConfig,
 				ImagePaths:     images,
@@ -725,7 +725,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 		},
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
 
@@ -758,7 +758,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 	}
 }
 
-func profile2Usage(p geniex_bridge.ProfileData) openai.CompletionUsage {
+func profile2Usage(p geniex_sdk.ProfileData) openai.CompletionUsage {
 	return openai.CompletionUsage{
 		CompletionTokens: p.GeneratedTokens,
 		PromptTokens:     p.PromptTokens,
@@ -766,9 +766,9 @@ func profile2Usage(p geniex_bridge.ProfileData) openai.CompletionUsage {
 	}
 }
 
-func parseSamplerConfig(param ChatCompletionRequest) *geniex_bridge.SamplerConfig {
+func parseSamplerConfig(param ChatCompletionRequest) *geniex_sdk.SamplerConfig {
 	// parse sampling parameters
-	samplerConfig := &geniex_bridge.SamplerConfig{
+	samplerConfig := &geniex_sdk.SamplerConfig{
 		Temperature:       float32(param.Temperature.Value),
 		TopP:              float32(param.TopP.Value),
 		TopK:              param.TopK,

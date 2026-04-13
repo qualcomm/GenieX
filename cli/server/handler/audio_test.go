@@ -22,7 +22,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 )
 
 func TestSpeechStreamSSE(t *testing.T) {
@@ -41,7 +41,7 @@ func TestSpeechStreamSSE(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	profile := geniex_bridge.ProfileData{
+	profile := geniex_sdk.ProfileData{
 		PromptTokens:    10,
 		GeneratedTokens: 20,
 	}
@@ -72,7 +72,7 @@ func TestSpeechStreamSSE_FileNotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 
-	speechStreamSSE(c, "/nonexistent/path.wav", geniex_bridge.ProfileData{})
+	speechStreamSSE(c, "/nonexistent/path.wav", geniex_sdk.ProfileData{})
 
 	if w.Code != 500 {
 		t.Errorf("expected 500, got %d", w.Code)

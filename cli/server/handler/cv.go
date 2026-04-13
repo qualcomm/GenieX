@@ -21,7 +21,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 	"github.com/qcom-it-nexa-ai/geniex/cli/server/service"
 	"github.com/qcom-it-nexa-ai/geniex/cli/server/utils"
@@ -33,7 +33,7 @@ type CVRequest struct {
 }
 
 type CVResponse struct {
-	Results []geniex_bridge.CVResult `json:"results"`
+	Results []geniex_sdk.CVResult `json:"results"`
 }
 
 func CV(c *gin.Context) {
@@ -48,13 +48,13 @@ func CV(c *gin.Context) {
 		"image", param.Image,
 	)
 
-	p, err := service.KeepAliveGet[geniex_bridge.CV](
+	p, err := service.KeepAliveGet[geniex_sdk.CV](
 		string(param.Model),
 		types.ModelParam{},
 		false,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 
@@ -70,11 +70,11 @@ func CV(c *gin.Context) {
 		return
 	}
 	defer os.Remove(file)
-	res, err := p.Infer(geniex_bridge.CVInferInput{
+	res, err := p.Infer(geniex_sdk.CVInferInput{
 		InputImagePath: file,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 	} else {
 		c.JSON(http.StatusOK, CVResponse{Results: res.Results})
 	}

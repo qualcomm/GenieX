@@ -21,7 +21,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/readline"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
@@ -64,7 +64,7 @@ func (r *Repl) GetPrompt() (string, error) {
 			r.LoadKVCache = func(path string) error { return notSupport }
 		}
 		if r.Record == nil {
-			r.Record = func() (*string, error) { return nil, geniex_bridge.ErrCommonNotSupport }
+			r.Record = func() (*string, error) { return nil, geniex_sdk.ErrCommonNotSupport }
 		}
 
 		// init readline
@@ -152,7 +152,7 @@ func (r *Repl) GetPrompt() (string, error) {
 			r.Reset()
 			err := r.LoadKVCache(fields[1])
 			if err != nil {
-				if errors.Is(err, geniex_bridge.ErrCommonNotSupport) {
+				if errors.Is(err, geniex_sdk.ErrCommonNotSupport) {
 					fmt.Println(render.GetTheme().Warning.Sprintf("Load conversation history is not supported for this model yet"))
 					fmt.Println()
 				} else {
@@ -170,7 +170,7 @@ func (r *Repl) GetPrompt() (string, error) {
 			}
 			err := r.SaveKVCache(fields[1])
 			if err != nil {
-				if errors.Is(err, geniex_bridge.ErrCommonNotSupport) {
+				if errors.Is(err, geniex_sdk.ErrCommonNotSupport) {
 					fmt.Println(render.GetTheme().Warning.Sprintf("Save conversation history is not supported for this model yet"))
 					fmt.Println()
 				} else {

@@ -22,7 +22,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 )
 
 var Version string
@@ -35,7 +35,7 @@ func version() *cobra.Command {
 	}
 
 	versionCmd.Run = func(cmd *cobra.Command, args []string) {
-		fmt.Println("GenieX Bridge Version: " + geniex_bridge.Version())
+		fmt.Println("GenieX Bridge Version: " + geniex_sdk.Version())
 		fmt.Println("GenieX CLI Version:    " + Version)
 	}
 

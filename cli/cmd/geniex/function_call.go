@@ -21,7 +21,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
@@ -72,8 +72,8 @@ func functionCall() *cobra.Command {
 			quant = sq
 		}
 
-		geniex_bridge.Init()
-		defer geniex_bridge.DeInit()
+		geniex_sdk.Init()
+		defer geniex_sdk.DeInit()
 
 		modelfile := s.ModelfilePath(manifest.Name, manifest.ModelFile[quant].Name)
 
@@ -117,10 +117,10 @@ func fcLLM(plugin, modelfile string) error {
 
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
-	p, err := geniex_bridge.NewLLM(geniex_bridge.LlmCreateInput{
+	p, err := geniex_sdk.NewLLM(geniex_sdk.LlmCreateInput{
 		ModelPath: modelfile,
 		PluginID:  plugin,
-		Config: geniex_bridge.ModelConfig{
+		Config: geniex_sdk.ModelConfig{
 			NCtx:       nctx,
 			NGpuLayers: ngl,
 		},
@@ -132,11 +132,11 @@ func fcLLM(plugin, modelfile string) error {
 	}
 	defer p.Destroy()
 
-	messages := make([]geniex_bridge.LlmChatMessage, len(prompt))
+	messages := make([]geniex_sdk.LlmChatMessage, len(prompt))
 	for i, p := range prompt {
-		messages[i] = geniex_bridge.LlmChatMessage{Role: geniex_bridge.LLMRoleUser, Content: p}
+		messages[i] = geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleUser, Content: p}
 	}
-	templateOutput, err := p.ApplyChatTemplate(geniex_bridge.LlmApplyChatTemplateInput{
+	templateOutput, err := p.ApplyChatTemplate(geniex_sdk.LlmApplyChatTemplateInput{
 		Messages:            messages,
 		EnableThink:         false, // disable thinking mode for function call mode
 		Tools:               tools,
@@ -146,9 +146,9 @@ func fcLLM(plugin, modelfile string) error {
 		fmt.Println(render.GetTheme().Error.Sprintf("apply chat template error: %s", err))
 		return err
 	}
-	res, err := p.Generate(geniex_bridge.LlmGenerateInput{
+	res, err := p.Generate(geniex_sdk.LlmGenerateInput{
 		PromptUTF8: templateOutput.FormattedText,
-		Config: &geniex_bridge.GenerationConfig{
+		Config: &geniex_sdk.GenerationConfig{
 			MaxTokens: 2048,
 		},
 	},
@@ -173,12 +173,12 @@ func fcVLM(plugin, modelfile, mmprojfile, tokenizerfile string) error {
 	}
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
-	p, err := geniex_bridge.NewVLM(geniex_bridge.VlmCreateInput{
+	p, err := geniex_sdk.NewVLM(geniex_sdk.VlmCreateInput{
 		ModelPath:     modelfile,
 		MmprojPath:    mmprojfile,
 		TokenizerPath: tokenizerfile,
 		PluginID:      plugin,
-		Config: geniex_bridge.ModelConfig{
+		Config: geniex_sdk.ModelConfig{
 			NCtx:       nctx,
 			NGpuLayers: ngl,
 		},
@@ -190,11 +190,11 @@ func fcVLM(plugin, modelfile, mmprojfile, tokenizerfile string) error {
 	}
 	defer p.Destroy()
 
-	messages := make([]geniex_bridge.VlmChatMessage, len(prompt))
+	messages := make([]geniex_sdk.VlmChatMessage, len(prompt))
 	for i, p := range prompt {
-		messages[i] = geniex_bridge.VlmChatMessage{Role: geniex_bridge.VlmRoleUser, Contents: []geniex_bridge.VlmContent{{Type: geniex_bridge.VlmContentTypeText, Text: p}}}
+		messages[i] = geniex_sdk.VlmChatMessage{Role: geniex_sdk.VlmRoleUser, Contents: []geniex_sdk.VlmContent{{Type: geniex_sdk.VlmContentTypeText, Text: p}}}
 	}
-	templateOutput, err := p.ApplyChatTemplate(geniex_bridge.VlmApplyChatTemplateInput{
+	templateOutput, err := p.ApplyChatTemplate(geniex_sdk.VlmApplyChatTemplateInput{
 		Messages:    messages,
 		EnableThink: false, // disable thinking mode for function call mode
 		Tools:       tools,
@@ -203,9 +203,9 @@ func fcVLM(plugin, modelfile, mmprojfile, tokenizerfile string) error {
 		fmt.Println(render.GetTheme().Error.Sprintf("apply chat template error: %s", err))
 		return err
 	}
-	res, err := p.Generate(geniex_bridge.VlmGenerateInput{
+	res, err := p.Generate(geniex_sdk.VlmGenerateInput{
 		PromptUTF8: templateOutput.FormattedText,
-		Config: &geniex_bridge.GenerationConfig{
+		Config: &geniex_sdk.GenerationConfig{
 			MaxTokens: 2048,
 		},
 	})

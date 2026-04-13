@@ -21,7 +21,7 @@ import (
 
 	"github.com/lmittmann/tint"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 )
 
@@ -46,7 +46,7 @@ func ApplyLogLevel() {
 		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 		return
 	case LogLevelTrace:
-		geniex_bridge.EnableBridgeLog(true)
+		geniex_sdk.EnableBridgeLog(true)
 		options.Level = slog.LevelDebug
 	case LogLevelDebug:
 		options.Level = slog.LevelDebug

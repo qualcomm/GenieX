@@ -27,7 +27,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v3"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 	"github.com/qcom-it-nexa-ai/geniex/cli/server/service"
 	"github.com/qcom-it-nexa-ai/geniex/cli/server/utils"
@@ -52,13 +52,13 @@ func Speech(c *gin.Context) {
 		"stream_format", param.StreamFormat,
 	)
 
-	audioSpeech, err := service.KeepAliveGet[geniex_bridge.TTS](
+	audioSpeech, err := service.KeepAliveGet[geniex_sdk.TTS](
 		param.Model,
 		types.ModelParam{},
 		c.GetHeader("GenieX-KeepCache") != "true",
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 
@@ -70,16 +70,16 @@ func Speech(c *gin.Context) {
 	outputPath := fmt.Sprintf("audio_speech_output_%d.wav", time.Now().UnixNano())
 	defer os.Remove(outputPath)
 	out, err := audioSpeech.Synthesize(
-		geniex_bridge.TtsSynthesizeInput{
+		geniex_sdk.TtsSynthesizeInput{
 			TextUTF8: param.Input,
-			Config: &geniex_bridge.TTSConfig{
+			Config: &geniex_sdk.TTSConfig{
 				Voice: string(param.Voice),
 				Speed: float32(param.Speed.Value),
 			},
 			OutputPath: outputPath,
 		})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 
@@ -90,7 +90,7 @@ func Speech(c *gin.Context) {
 	c.File(outputPath)
 }
 
-func speechStreamSSE(c *gin.Context, audioPath string, profile geniex_bridge.ProfileData) {
+func speechStreamSSE(c *gin.Context, audioPath string, profile geniex_sdk.ProfileData) {
 	f, err := os.Open(audioPath)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -149,13 +149,13 @@ func Transcriptions(c *gin.Context) {
 		"stream", stream,
 	)
 
-	p, err := service.KeepAliveGet[geniex_bridge.ASR](
+	p, err := service.KeepAliveGet[geniex_sdk.ASR](
 		string(param.Model),
 		types.ModelParam{},
 		false,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 
@@ -195,14 +195,14 @@ func Transcriptions(c *gin.Context) {
 	tmpFile.Close()
 	defer os.Remove(tmpFile.Name())
 
-	res, err := p.Transcribe(geniex_bridge.AsrTranscribeInput{
+	res, err := p.Transcribe(geniex_sdk.AsrTranscribeInput{
 		AudioPath: tmpFile.Name(),
 	})
 	result := openai.Transcription{
 		Text: res.Result.Transcript,
 	}
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 	} else {
 		c.JSON(http.StatusOK, result)
 	}
@@ -225,13 +225,13 @@ func Diarize(c *gin.Context) {
 		"audio", param.Audio,
 	)
 
-	p, err := service.KeepAliveGet[geniex_bridge.Diarize](
+	p, err := service.KeepAliveGet[geniex_sdk.Diarize](
 		string(param.Model),
 		types.ModelParam{},
 		false,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 
@@ -247,11 +247,11 @@ func Diarize(c *gin.Context) {
 		return
 	}
 	defer os.Remove(file)
-	res, err := p.Infer(geniex_bridge.DiarizeInferInput{
+	res, err := p.Infer(geniex_sdk.DiarizeInferInput{
 		AudioPath: file,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 	} else {
 		c.JSON(http.StatusOK, res)
 	}

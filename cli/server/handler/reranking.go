@@ -20,7 +20,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 	"github.com/qcom-it-nexa-ai/geniex/cli/server/service"
 )
@@ -51,13 +51,13 @@ func Reranking(c *gin.Context) {
 		"documents", param.Documents,
 	)
 
-	p, err := service.KeepAliveGet[geniex_bridge.Reranker](
+	p, err := service.KeepAliveGet[geniex_sdk.Reranker](
 		string(param.Model),
 		types.ModelParam{},
 		false,
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 
@@ -70,17 +70,17 @@ func Reranking(c *gin.Context) {
 		return
 	}
 
-	res, err := p.Rerank(geniex_bridge.RerankerRerankInput{
+	res, err := p.Rerank(geniex_sdk.RerankerRerankInput{
 		Query:     param.Query,
 		Documents: param.Documents,
-		Config: &geniex_bridge.RerankConfig{
+		Config: &geniex_sdk.RerankConfig{
 			BatchSize:       param.BatchSize,
 			Normalize:       param.Normalize,
 			NormalizeMethod: param.NormalizeMethod,
 		},
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 	} else {
 		c.JSON(http.StatusOK, RerankResponse{Result: res.Scores})
 	}

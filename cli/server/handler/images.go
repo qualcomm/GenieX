@@ -28,7 +28,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v3"
 
-	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 	"github.com/qcom-it-nexa-ai/geniex/cli/server/service"
 )
@@ -58,13 +58,13 @@ func ImageGenerations(c *gin.Context) {
 		return
 	}
 
-	imageGen, err := service.KeepAliveGet[geniex_bridge.ImageGen](
+	imageGen, err := service.KeepAliveGet[geniex_sdk.ImageGen](
 		param.Model,
 		types.ModelParam{},
 		c.GetHeader("GenieX-KeepCache") != "true",
 	)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_bridge.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 
@@ -87,19 +87,19 @@ func ImageGenerations(c *gin.Context) {
 		defer os.Remove(outputPath)
 		slog.Debug("Generating image", "index", i, "output_path", outputPath)
 
-		config := &geniex_bridge.ImageGenerationConfig{
+		config := &geniex_sdk.ImageGenerationConfig{
 			Prompts:         []string{param.Prompt},
 			NegativePrompts: []string{"blurry, low quality, distorted, low resolution"},
 			Height:          height,
 			Width:           width,
-			SamplerConfig: geniex_bridge.ImageSamplerConfig{
+			SamplerConfig: geniex_sdk.ImageSamplerConfig{
 				Method:        "ddim",
 				Steps:         20,
 				GuidanceScale: 7.5,
 				Eta:           0.0,
 				Seed:          int32(time.Now().UnixNano() % 1000000),
 			},
-			SchedulerConfig: geniex_bridge.SchedulerConfig{
+			SchedulerConfig: geniex_sdk.SchedulerConfig{
 				Type:              "ddim",
 				NumTrainTimesteps: 1000,
 				StepsOffset:       1,
@@ -115,13 +115,13 @@ func ImageGenerations(c *gin.Context) {
 			Strength: 1.0,
 		}
 
-		result, err := imageGen.Txt2Img(geniex_bridge.ImageGenTxt2ImgInput{
+		result, err := imageGen.Txt2Img(geniex_sdk.ImageGenTxt2ImgInput{
 			PromptUTF8: param.Prompt,
 			Config:     config,
 			OutputPath: outputPath,
 		})
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, map[string]any{"error": fmt.Sprintf("image generation failed: %v", err), "code": geniex_bridge.SDKErrorCode(err)})
+			c.JSON(http.StatusInternalServerError, map[string]any{"error": fmt.Sprintf("image generation failed: %v", err), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
 
