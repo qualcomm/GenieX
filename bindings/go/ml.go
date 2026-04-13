@@ -15,11 +15,11 @@
 package geniex
 
 /*
-#cgo linux LDFLAGS: -Wl,-rpath,'$ORIGIN' -Wl,-rpath,${SRCDIR}/../build
-#cgo darwin LDFLAGS: -Wl,-rpath,${SRCDIR}/../build
-
-#cgo CFLAGS: -I../build
-#cgo LDFLAGS: -L../build -lnexa_bridge
+// #cgo linux LDFLAGS: -Wl,-rpath,'$ORIGIN' -Wl,-rpath,${SRCDIR}/../build
+// #cgo darwin LDFLAGS: -Wl,-rpath,${SRCDIR}/../build
+//
+// #cgo CFLAGS: -I../build
+// #cgo LDFLAGS: -L../build -lnexa_bridge
 
 #include <stdlib.h>
 #include "ml.h"

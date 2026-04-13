@@ -11,10 +11,10 @@ go_library(
         "model.go",
         "reranking.go",
     ],
-    importpath = "github.com/qcom-it-nexa-ai/geniex/server/handler",
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/server/handler",
     visibility = ["//visibility:public"],
     deps = [
-        "//bindings/go:geniex_bridge",
+        "//bindings/go:geniex_sdk_go",
         "//cli/internal/store",
         "//cli/internal/types",
         "//cli/server/service",
@@ -33,7 +33,7 @@ go_test(
     srcs = ["audio_test.go"],
     embed = [":handler"],
     deps = [
-        "//bindings/go:geniex_bridge",
+        "//bindings/go:geniex_sdk_go",
         "@com_github_gin_gonic_gin//:gin",
     ],
 )

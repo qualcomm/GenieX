@@ -26,8 +26,8 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/shirou/gopsutil/disk"
 
-	"github.com/qcom-it-nexa-ai/geniex/internal/model_hub"
-	"github.com/qcom-it-nexa-ai/geniex/internal/types"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 // isBundlePath checks if a path is a macOS bundle (.mlmodelc or .mlpackage)

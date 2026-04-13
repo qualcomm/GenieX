@@ -20,9 +20,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/qcom-it-nexa-ai/geniex/internal/config"
-	"github.com/qcom-it-nexa-ai/geniex/internal/render"
-	"github.com/qcom-it-nexa-ai/geniex/server/service"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
+	"github.com/qcom-it-nexa-ai/geniex/cli/server/service"
 )
 
 // @Title		GenieX Server

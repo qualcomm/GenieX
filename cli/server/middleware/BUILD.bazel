@@ -7,7 +7,7 @@ go_library(
         "cors.go",
         "gil.go",
     ],
-    importpath = "github.com/qcom-it-nexa-ai/geniex/server/middleware",
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/server/middleware",
     visibility = ["//visibility:public"],
     deps = [
         "//cli/internal/config",

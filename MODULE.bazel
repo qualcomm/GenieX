@@ -14,7 +14,6 @@ bazel_dep(
     name = "rules_cc",
     version = "0.2.17",
 )
-
 bazel_dep(
     name = "platforms",
     version = "1.0.0",
@@ -47,6 +46,7 @@ use_repo(
     "com_github_lmittmann_tint",
     "com_github_mattn_go_runewidth",
     "com_github_openai_openai_go_v3",
+    "com_github_qcom_it_nexa_ai_geniex_bindings_go",
     "com_github_schollz_progressbar_v3",
     "com_github_shirou_gopsutil",
     "com_github_spf13_cobra",

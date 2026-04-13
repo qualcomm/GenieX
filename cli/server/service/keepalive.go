@@ -23,10 +23,10 @@ import (
 	"time"
 
 	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
-	"github.com/qcom-it-nexa-ai/geniex/internal/config"
-	"github.com/qcom-it-nexa-ai/geniex/internal/store"
-	"github.com/qcom-it-nexa-ai/geniex/internal/types"
-	"github.com/qcom-it-nexa-ai/geniex/server/utils"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
+	"github.com/qcom-it-nexa-ai/geniex/cli/server/utils"
 )
 
 // KeepAliveGet retrieves a model from the keepalive cache or creates it if not found

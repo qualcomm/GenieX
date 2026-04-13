@@ -26,10 +26,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v3"
+
 	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
-	"github.com/qcom-it-nexa-ai/geniex/internal/types"
-	"github.com/qcom-it-nexa-ai/geniex/server/service"
-	"github.com/qcom-it-nexa-ai/geniex/server/utils"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
+	"github.com/qcom-it-nexa-ai/geniex/cli/server/service"
+	"github.com/qcom-it-nexa-ai/geniex/cli/server/utils"
 )
 
 const speechSSEChunkSize = 4096

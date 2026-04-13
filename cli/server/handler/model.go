@@ -25,8 +25,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v3"
 
-	"github.com/qcom-it-nexa-ai/geniex/internal/store"
-	"github.com/qcom-it-nexa-ai/geniex/server/utils"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
+	"github.com/qcom-it-nexa-ai/geniex/cli/server/utils"
 )
 
 func ListModels(c *gin.Context) {

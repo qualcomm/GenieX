@@ -1,7 +1,13 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@rules_cc//cc:defs.bzl", "cc_import")
+
+alias(
+    name = "go",
+    actual = ":geniex_sdk_go",
+)
 
 go_library(
-    name = "geniex_go",
+    name = "geniex_sdk_go",
     srcs = [
         "asr.go",
         "common.go",
@@ -15,25 +21,39 @@ go_library(
         "tts.go",
         "vlm.go",
     ],
+    cdeps = [":nexa_bridge"],
     cgo = True,
-    clinkopts = [
-        "-Lbindings/build -lnexa_bridge",
-    ] + select({
-        "@io_bazel_rules_go//go/platform:android": [
-            "-Wl,-rpath,$$ORIGIN -Wl,-rpath,bindings/go/../build",
-        ],
-        "@io_bazel_rules_go//go/platform:darwin": [
-            "-Wl,-rpath,bindings/go/../build",
-        ],
-        "@io_bazel_rules_go//go/platform:ios": [
-            "-Wl,-rpath,bindings/go/../build",
-        ],
-        "@io_bazel_rules_go//go/platform:linux": [
-            "-Wl,-rpath,$$ORIGIN -Wl,-rpath,bindings/go/../build",
-        ],
-        "//conditions:default": [],
-    }),
-    copts = ["-Ibindings/build"],
     importpath = "github.com/qcom-it-nexa-ai/geniex/bindings/go",
     visibility = ["//visibility:public"],
 )
+
+cc_import(
+    name = "nexa_bridge",
+    hdrs = ["build/ml.h"],
+    includes = ["build"],
+    shared_library = "build/libnexa_bridge.so",
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "nexa_bridge_runtime",
+    srcs = glob(["build/**/*.so"]),
+    visibility = ["//visibility:public"],
+)
+
+# cc_library(
+#     name = "native_prebuilts",
+#     deps = [
+#         ":nexa_bridge",
+#     ],
+#     hdrs = ["build/ml.h"],
+#     includes = ["build"],
+#     visibility = ["//visibility:public"],
+# )
+#
+# filegroup(
+#     name = "native_runfiles",
+#     srcs = [":prebuilt_shared_libs"],
+#     visibility = ["//visibility:public"],
+# )
+#

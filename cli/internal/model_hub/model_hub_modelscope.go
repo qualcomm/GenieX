@@ -24,7 +24,7 @@ import (
 	"github.com/bytedance/sonic"
 	"resty.dev/v3"
 
-	"github.com/qcom-it-nexa-ai/geniex/internal/downloader"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/downloader"
 )
 
 const MS_ENDPOINT = "https://modelscope.cn"
