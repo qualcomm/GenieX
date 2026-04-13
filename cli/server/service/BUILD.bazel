@@ -9,10 +9,10 @@ go_library(
     importpath = "github.com/qcom-it-nexa-ai/geniex/server/service",
     visibility = ["//visibility:public"],
     deps = [
+        "//bindings/go:geniex_bridge",
         "//cli/internal/config",
         "//cli/internal/store",
         "//cli/internal/types",
         "//cli/server/utils",
-        "//bindings/go:geniex_bridge",
     ],
 )

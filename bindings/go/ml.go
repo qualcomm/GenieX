@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package geniex_bridge
+package geniex
 
 /*
 #cgo linux LDFLAGS: -Wl,-rpath,'$ORIGIN' -Wl,-rpath,${SRCDIR}/../build
