@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "middleware",
+    srcs = [
+        "auth.go",
+        "cors.go",
+        "gil.go",
+    ],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/server/middleware",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cli/internal/config",
+        "@com_github_gin_gonic_gin//:gin",
+    ],
+)

@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "handler",
+    srcs = [
+        "audio.go",
+        "chat.go",
+        "cv.go",
+        "embeddings.go",
+        "images.go",
+        "model.go",
+        "reranking.go",
+    ],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/server/handler",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cli/internal/store",
+        "//cli/internal/types",
+        "//cli/server/service",
+        "//cli/server/utils",
+        "//bindings/go:geniex_bridge",
+        "@com_github_bytedance_sonic//:sonic",
+        "@com_github_bytedance_sonic//ast",
+        "@com_github_gin_gonic_gin//:gin",
+        "@com_github_openai_openai_go_v3//:openai-go",
+        "@com_github_openai_openai_go_v3//packages/param",
+        "@com_github_openai_openai_go_v3//shared/constant",
+    ],
+)
+
+go_test(
+    name = "handler_test",
+    srcs = ["audio_test.go"],
+    embed = [":handler"],
+    deps = [
+        "//bindings/go:geniex_bridge",
+        "@com_github_gin_gonic_gin//:gin",
+    ],
+)

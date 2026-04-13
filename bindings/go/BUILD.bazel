@@ -1,0 +1,39 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "geniex_bridge",
+    srcs = [
+        "asr.go",
+        "common.go",
+        "cv.go",
+        "diarize.go",
+        "embedder.go",
+        "image_gen.go",
+        "llm.go",
+        "ml.go",
+        "reranker.go",
+        "tts.go",
+        "vlm.go",
+    ],
+    cgo = True,
+    clinkopts = [
+        "-Lbindings/build -lnexa_bridge",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "-Wl,-rpath,$$ORIGIN -Wl,-rpath,bindings/go/../build",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "-Wl,-rpath,bindings/go/../build",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "-Wl,-rpath,bindings/go/../build",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "-Wl,-rpath,$$ORIGIN -Wl,-rpath,bindings/go/../build",
+        ],
+        "//conditions:default": [],
+    }),
+    copts = ["-Ibindings/build"],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/bindings/go",
+    visibility = ["//visibility:public"],
+)

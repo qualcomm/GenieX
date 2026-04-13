@@ -1,8 +1,21 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "config",
-    srcs = ["config.go"],
-    importpath = "github.com/qcom-it-nexa-ai/GenieX/geniex-cli/internal/config",
+    srcs = [
+        "config.go",
+        "model_mapping.go",
+    ],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/internal/config",
     visibility = ["//geniex-cli:__subpackages__"],
+    deps = ["@com_github_spf13_viper//:viper"],
+)
+
+go_test(
+    name = "config_test",
+    srcs = [
+        "config_test.go",
+        "model_mapping_test.go",
+    ],
+    embed = [":config"],
 )

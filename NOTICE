@@ -1,0 +1,277 @@
+# Third-Party Licenses
+
+This document provides information about third-party libraries used in the GenieX-CLI project and their respective licenses. All libraries listed below are licensed under permissive open-source licenses (MIT, Apache 2.0, BSD, or equivalent) that are compatible with GenieX-CLI's Apache 2.0 license.
+
+---
+
+## Go Dependencies
+
+### gin-gonic/gin
+
+- **License**: MIT License
+- **URL**: https://github.com/gin-gonic/gin
+- **Description**: HTTP web framework written in Go
+
+### spf13/cobra
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/spf13/cobra
+- **Description**: Commander for modern Go CLI applications
+
+### spf13/viper
+
+- **License**: MIT License
+- **URL**: https://github.com/spf13/viper
+- **Description**: Go configuration with fangs
+
+### AWS SDK for Go v2
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/aws/aws-sdk-go-v2
+- **Description**: AWS SDK for the Go programming language
+- **Packages**: aws-sdk-go-v2, aws-sdk-go-v2/config, aws-sdk-go-v2/service/s3
+
+### bytedance/sonic
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/bytedance/sonic
+- **Description**: Blazingly fast JSON serializing & deserializing library
+
+### charmbracelet/huh
+
+- **License**: MIT License
+- **URL**: https://github.com/charmbracelet/huh
+- **Description**: Build terminal forms and prompts
+
+### charmbracelet/lipgloss
+
+- **License**: MIT License
+- **URL**: https://github.com/charmbracelet/lipgloss
+- **Description**: Style definitions for nice terminal layouts
+
+### charmbracelet/bubbletea
+
+- **License**: MIT License
+- **URL**: https://github.com/charmbracelet/bubbletea
+- **Description**: Powerful little TUI framework
+
+### dustin/go-humanize
+
+- **License**: MIT License
+- **URL**: https://github.com/dustin/go-humanize
+- **Description**: Formatters for units to human friendly sizes
+
+### gofrs/flock
+
+- **License**: BSD 3-Clause License
+- **URL**: https://github.com/gofrs/flock
+- **Description**: Thread-safe file locking library
+
+### chzyer/readline
+
+- **License**: MIT License
+- **URL**: https://github.com/chzyer/readline
+- **Description**: Pure Go readline library with support for command line editing and history
+
+### openai/openai-go
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/openai/openai-go
+- **Description**: OpenAI Go API library
+
+### schollz/progressbar
+
+- **License**: MIT License
+- **URL**: https://github.com/schollz/progressbar
+- **Description**: Simple command line progress bar
+
+### valyala/fasthttp
+
+- **License**: MIT License
+- **URL**: https://github.com/valyala/fasthttp
+- **Description**: Fast HTTP implementation for Go
+
+---
+
+## C/C++ Dependencies
+
+### ggml
+
+- **License**: MIT License
+- **Copyright**: Copyright (c) 2023-2024 The ggml authors
+- **URL**: https://github.com/ggml-org/ggml
+- **Description**: Tensor library for machine learning
+- **License File**: https://github.com/ggml-org/ggml/blob/master/LICENSE
+
+### pybind11
+
+- **License**: BSD 3-Clause License
+- **Copyright**: Copyright (c) 2016 Wenzel Jakob
+- **URL**: https://github.com/pybind/pybind11
+- **Description**: Seamless operability between C++11 and Python
+- **License File**: [geniex-bridge/third-party/pybind11/LICENSE](https://github.com/pybind/pybind11/blob/master/LICENSE)
+
+### xtensor
+
+- **License**: BSD 3-Clause License
+- **Copyright**: Copyright (c) 2016 Johan Mabille, Sylvain Corlay and Wolf Vollprecht, Copyright (c) 2016 QuantStack
+- **URL**: https://github.com/xtensor-stack/xtensor
+- **Description**: C++ tensors with broadcasting and lazy computing
+- **License File**: https://github.com/xtensor-stack/xtensor/blob/master/LICENSE
+
+### cpp-httplib
+
+- **License**: MIT License
+- **Copyright**: Copyright (c) 2017 yhirose
+- **URL**: https://github.com/yhirose/cpp-httplib
+- **Description**: C++ single-file header-only HTTP/HTTPS library
+- **Used in**: llama.cpp
+- **License File**: [geniex-bridge/third-party/llama.cpp/licenses/LICENSE-httplib](https://github.com/ggerganov/llama.cpp/blob/master/licenses/LICENSE-httplib)
+
+### nlohmann/json
+
+- **License**: MIT License
+- **Copyright**: Copyright (c) 2013-2025 Niels Lohmann
+- **URL**: https://github.com/nlohmann/json
+- **Description**: JSON for Modern C++
+- **Used in**: llama.cpp
+- **License File**: [geniex-bridge/third-party/llama.cpp/licenses/LICENSE-jsonhpp](https://github.com/ggerganov/llama.cpp/blob/master/licenses/LICENSE-jsonhpp)
+
+---
+
+## Python Dependencies
+
+### gradio
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/gradio-app/gradio
+- **Description**: Build machine learning web apps
+
+### requests
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/psf/requests
+- **Description**: HTTP library for Python
+
+### Flask
+
+- **License**: BSD 3-Clause License
+- **URL**: https://github.com/pallets/flask
+- **Description**: Lightweight WSGI web application framework
+
+### faiss-cpu
+
+- **License**: MIT License
+- **URL**: https://github.com/facebookresearch/faiss
+- **Description**: Library for efficient similarity search and clustering of dense vectors
+
+### sentence-transformers
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/UKPLab/sentence-transformers
+- **Description**: Compute dense vector representations for sentences and paragraphs
+
+### langchain
+
+- **License**: MIT License
+- **URL**: https://github.com/langchain-ai/langchain
+- **Description**: Building applications with LLMs through composability
+
+### pydantic
+
+- **License**: MIT License
+- **URL**: https://github.com/pydantic/pydantic
+- **Description**: Data validation using Python type hints
+
+### python-docx
+
+- **License**: MIT License
+- **URL**: https://github.com/python-openxml/python-docx
+- **Description**: Create and modify Word documents with Python
+
+### psutil
+
+- **License**: BSD 3-Clause License
+- **URL**: https://github.com/giampaolo/psutil
+- **Description**: Cross-platform library for process and system monitoring
+
+### openai
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/openai/openai-python
+- **Description**: Python library for the OpenAI API
+
+### mcp
+
+- **License**: MIT License
+- **URL**: https://github.com/modelcontextprotocol/python-sdk
+- **Description**: Model Context Protocol Python SDK
+
+---
+
+## Android/Java Dependencies (from bindings/android)
+
+### AndroidX Libraries
+
+- **License**: Apache License 2.0
+- **URL**: https://developer.android.com/jetpack/androidx
+- **Description**: Android Jetpack libraries
+- **Packages**: core-ktx, lifecycle-runtime-ktx, activity-compose, compose-bom, appcompat, constraintlayout
+
+### Kotlin Standard Library
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/JetBrains/kotlin
+- **Description**: Kotlin programming language standard library
+
+### AWS Android SDK S3
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/aws/aws-sdk-android
+- **Description**: AWS SDK for Android - S3 support
+
+### OkHttp
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/square/okhttp
+- **Description**: HTTP client for Android and Java
+
+### Gson
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/google/gson
+- **Description**: Java serialization/deserialization library to convert Java Objects into JSON
+
+### Glide
+
+- **License**: BSD, MIT, and Apache License 2.0 (Multi-license)
+- **URL**: https://github.com/bumptech/glide
+- **Description**: Fast and efficient image loading library for Android
+
+### Kotlinx Serialization
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/Kotlin/kotlinx.serialization
+- **Description**: Multiplatform serialization for Kotlin
+
+### Kotlinx Coroutines
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/Kotlin/kotlinx.coroutines
+- **Description**: Library support for Kotlin coroutines
+
+### Material Components for Android
+
+- **License**: Apache License 2.0
+- **URL**: https://github.com/material-components/material-components-android
+- **Description**: Modular and customizable Material Design UI components
+
+---
+
+## Summary
+
+All third-party libraries used in GenieX-CLI are licensed under permissive open-source licenses that allow for commercial and non-commercial use, modification, and distribution. The primary licenses used are:
+
+- **MIT License**: Highly permissive, allows almost unrestricted use
+- **Apache License 2.0**: Permissive license with patent grant and attribution requirements
+- **BSD 3-Clause License**: Permissive license with attribution requirements

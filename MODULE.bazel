@@ -1,5 +1,12 @@
 module(name = "geniex")
 
+# c deps
+
+bazel_dep(
+    name = "rules_cc",
+    version = "0.2.17",
+)
+
 # go deps
 
 bazel_dep(
@@ -14,10 +21,47 @@ bazel_dep(
 )
 
 go_deps = use_extension("@bazel_gazelle//:extensions.bzl", "go_deps")
-go_deps.from_file(go_mod = "//geniex-cli:go.mod")
+go_deps.from_file(go_mod = "//cli:go.mod")
 use_repo(
     go_deps,
+    "com_github_aws_aws_sdk_go_v2",
+    "com_github_aws_aws_sdk_go_v2_config",
+    "com_github_aws_aws_sdk_go_v2_service_s3",
+    "com_github_aws_smithy_go",
+    "com_github_bytedance_sonic",
+    "com_github_charmbracelet_huh",
+    "com_github_charmbracelet_huh_spinner",
+    "com_github_dustin_go_humanize",
+    "com_github_gin_gonic_gin",
+    "com_github_gofrs_flock",
+    "com_github_gookit_color",
+    "com_github_jedib0t_go_pretty_v6",
+    "com_github_lmittmann_tint",
+    "com_github_mattn_go_runewidth",
+    "com_github_openai_openai_go_v3",
+    "com_github_schollz_progressbar_v3",
+    "com_github_shirou_gopsutil",
     "com_github_spf13_cobra",
+    "com_github_spf13_pflag",
+    "com_github_spf13_viper",
+    "com_github_valyala_fasthttp",
+    "dev_resty_v3",
+    "org_golang_x_image",
+    "org_golang_x_sync",
+    "org_golang_x_sys",
+    "org_golang_x_term",
+)
+
+# python
+
+bazel_dep(
+    name = "rules_python",
+    version = "1.9.0",
 )
 
 # others
+
+bazel_dep(
+    name = "rules_license",
+    version = "1.0.0",
+)

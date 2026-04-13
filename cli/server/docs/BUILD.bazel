@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "docs",
+    srcs = ["swagger.go"],
+    embedsrcs = [
+        "swagger.yaml",
+        "ui/favicon-16x16.png",
+        "ui/favicon-32x32.png",
+        "ui/index.css",
+        "ui/index.html",
+        "ui/oauth2-redirect.html",
+        "ui/swagger-initializer.js",
+        "ui/swagger-ui-bundle.js",
+        "ui/swagger-ui-es-bundle-core.js",
+        "ui/swagger-ui-es-bundle.js",
+        "ui/swagger-ui-standalone-preset.js",
+        "ui/swagger-ui.css",
+        "ui/swagger-ui.js",
+    ],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/server/docs",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_gin_gonic_gin//:gin"],
+)

@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "downloader",
+    srcs = ["http.go"],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/internal/downloader",
+    visibility = ["//cli:__subpackages__"],
+    deps = ["@com_github_valyala_fasthttp//:fasthttp"],
+)

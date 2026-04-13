@@ -1,0 +1,7 @@
+load("@rules_python//python:defs.bzl", "py_binary")
+
+py_binary(
+    name = "cli_test",
+    srcs = ["test.py"],
+    main = "test.py",
+)

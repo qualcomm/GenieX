@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "server",
+    srcs = [
+        "route.go",
+        "server.go",
+    ],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/server",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cli/internal/config",
+        "//cli/internal/render",
+        "//cli/server/docs",
+        "//cli/server/handler",
+        "//cli/server/middleware",
+        "//cli/server/service",
+        "@com_github_gin_gonic_gin//:gin",
+    ],
+)
