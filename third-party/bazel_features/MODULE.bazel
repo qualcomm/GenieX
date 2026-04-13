@@ -1,0 +1,4 @@
+module(
+    name = "bazel_features",
+    version = "1.42.1",
+)

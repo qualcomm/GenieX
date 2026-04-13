@@ -1,0 +1,7 @@
+load("//licenses/spdx:license_kind.bzl", "license_kind")
+
+license_kind(
+    name = "Apache-2.0",
+    conditions = [],
+    long_name = "Apache License 2.0",
+)

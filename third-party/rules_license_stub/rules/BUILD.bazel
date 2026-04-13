@@ -1,0 +1,11 @@
+exports_files([
+    "license.bzl",
+    "license_impl.bzl",
+    "providers.bzl",
+])
+
+filegroup(
+    name = "license",
+    srcs = [],
+    visibility = ["//visibility:public"],
+)

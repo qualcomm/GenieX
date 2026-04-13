@@ -1,10 +1,30 @@
 module(name = "geniex")
 
+local_path_override(
+    module_name = "bazel_features",
+    path = "third-party/bazel_features",
+)
+
+local_path_override(
+    module_name = "rules_kotlin",
+    path = "third-party/rules_kotlin_stub",
+)
+
+local_path_override(
+    module_name = "rules_license",
+    path = "third-party/rules_license_stub",
+)
+
 # c deps
 
 bazel_dep(
     name = "rules_cc",
     version = "0.2.17",
+)
+
+bazel_dep(
+    name = "platforms",
+    version = "1.0.0",
 )
 
 # go deps
