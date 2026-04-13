@@ -9,6 +9,7 @@
 #include <windows.h>
 #endif
 
+#include "build_config.h"
 #include "embedding.h"
 #include "llama.h"
 #include "llm.h"
@@ -20,109 +21,118 @@
 namespace geniex {
 
 class LlamaPlugin : public Plugin {
-   public:
-    LlamaPlugin() {
-        GENIEX_LOG_TRACE("creating and initializing llama plugin");
-        llama_log_set(
-            [](ggml_log_level l, const char* t, void*) {
+public:
+  LlamaPlugin() {
+    GENIEX_LOG_TRACE("creating and initializing llama plugin");
+    llama_log_set(
+        [](ggml_log_level l, const char *t, void *) {
 #ifdef GENIEX_DEBUG
-                if (l < 1 || l > 4) return;
-#else   // GENIEX_DEBUG
-                if (l < 3 || l > 4) return;
-#endif  // GENIEX_DEBUG
-                std::string_view s = t ? t : "";
-                while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.remove_suffix(1);
-                GENIEX_LEVEL_LOG(static_cast<ml_LogLevel>(l - 1), "{}", s);
-            },
-            nullptr);
+          if (l < 1 || l > 4)
+            return;
+#else  // GENIEX_DEBUG
+          if (l < 3 || l > 4)
+            return;
+#endif // GENIEX_DEBUG
+          std::string_view s = t ? t : "";
+          while (!s.empty() && (s.back() == '\n' || s.back() == '\r'))
+            s.remove_suffix(1);
+          GENIEX_LEVEL_LOG(static_cast<ml_LogLevel>(l - 1), "{}", s);
+        },
+        nullptr);
 // Add geniex_android macro to control the loading of the plugin
 #ifdef GENIEX_DL
-        std::filesystem::path plugin_base_path;
+    std::filesystem::path plugin_base_path;
 #if defined(_WIN32)
-        // On Windows, use wide string API to properly handle Unicode paths
-        size_t required_size = 0;
-        _wgetenv_s(&required_size, nullptr, 0, L"GENIEX_PLUGIN_PATH");
-        if (required_size > 0) {
-            std::vector<wchar_t> env_buffer(required_size);
-            _wgetenv_s(&required_size, env_buffer.data(), required_size, L"GENIEX_PLUGIN_PATH");
-            if (env_buffer[0] != L'\0') {
-                plugin_base_path = std::filesystem::path(env_buffer.data());
-            }
-        }
-#else   // _WIN32
-        auto env_plugin_path = std::getenv("GENIEX_PLUGIN_PATH");
-        if (env_plugin_path) {
-            plugin_base_path = std::filesystem::path(env_plugin_path);
-        }
-#endif  // _WIN32
-        if (!plugin_base_path.empty()) {
-            auto path = (plugin_base_path / COMMON_LIB_RELATIVE_PATH).u8string();
-            GENIEX_LOG_DEBUG("Loading GGML backend from path: {}", path);
-            ggml_backend_load_all_from_path(path.c_str());
-        }
-#endif  // GENIEX_DL
+    // On Windows, use wide string API to properly handle Unicode paths
+    size_t required_size = 0;
+    _wgetenv_s(&required_size, nullptr, 0, L"GENIEX_PLUGIN_PATH");
+    if (required_size > 0) {
+      std::vector<wchar_t> env_buffer(required_size);
+      _wgetenv_s(&required_size, env_buffer.data(), required_size,
+                 L"GENIEX_PLUGIN_PATH");
+      if (env_buffer[0] != L'\0') {
+        plugin_base_path = std::filesystem::path(env_buffer.data());
+      }
+    }
+#else  // _WIN32
+    auto env_plugin_path = std::getenv("GENIEX_PLUGIN_PATH");
+    if (env_plugin_path) {
+      plugin_base_path = std::filesystem::path(env_plugin_path);
+    }
+#endif // _WIN32
+    if (!plugin_base_path.empty()) {
+      auto path =
+          (plugin_base_path / geniex::build_config::kCommonLibRelativePath)
+              .u8string();
+      GENIEX_LOG_DEBUG("Loading GGML backend from path: {}", path);
+      ggml_backend_load_all_from_path(path.c_str());
+    }
+#endif // GENIEX_DL
 
 #ifdef __ANDROID__
-        // Harcoding to use 4 hexagon devices for Hexagon to make GPT-OSS work
-        setenv("GGML_HEXAGON_NDEV", "4", 1);
-        GENIEX_LOG_DEBUG("Set GGML_HEXAGON_NDEV=4 for Hexagon backend");
-#endif  // __ANDROID__
+    // Harcoding to use 4 hexagon devices for Hexagon to make GPT-OSS work
+    setenv("GGML_HEXAGON_NDEV", "4", 1);
+    GENIEX_LOG_DEBUG("Set GGML_HEXAGON_NDEV=4 for Hexagon backend");
+#endif // __ANDROID__
 
-        llama_backend_init();
+    llama_backend_init();
+  }
+
+  ~LlamaPlugin() override { GENIEX_LOG_TRACE("destroying llama plugin"); }
+
+  int32_t get_device_list(const ml_GetDeviceListInput *input,
+                          ml_GetDeviceListOutput *output) override {
+    GENIEX_LOG_TRACE("getting device list");
+    if (!input || !output) {
+      return ML_ERROR_COMMON_INVALID_INPUT;
     }
 
-    ~LlamaPlugin() override { GENIEX_LOG_TRACE("destroying llama plugin"); }
-
-    int32_t get_device_list(const ml_GetDeviceListInput* input, ml_GetDeviceListOutput* output) override {
-        GENIEX_LOG_TRACE("getting device list");
-        if (!input || !output) {
-            return ML_ERROR_COMMON_INVALID_INPUT;
-        }
-
-        auto count = ggml_backend_dev_count();
-        auto ids   = (const char**)malloc(count * sizeof(const char*));
-        auto names = (const char**)malloc(count * sizeof(const char*));
-        if (!ids || !names) {
-            return ML_ERROR_COMMON_MEMORY_ALLOCATION;
-        }
-
-        for (size_t i = 0; i < count; ++i) {
-            auto* dev = ggml_backend_dev_get(i);
-            ids[i]    = ggml_backend_dev_name(dev);
-            names[i]  = ggml_backend_dev_description(dev);
-        }
-        GENIEX_LOG_TRACE("device count: {}", count);
-        output->device_ids   = ids;
-        output->device_names = names;
-        output->device_count = static_cast<int32_t>(count);
-        return ML_SUCCESS;
+    auto count = ggml_backend_dev_count();
+    auto ids = (const char **)malloc(count * sizeof(const char *));
+    auto names = (const char **)malloc(count * sizeof(const char *));
+    if (!ids || !names) {
+      return ML_ERROR_COMMON_MEMORY_ALLOCATION;
     }
 
-    ILlm* create_llm() override { return new geniex::LlamaLlm; }
+    for (size_t i = 0; i < count; ++i) {
+      auto *dev = ggml_backend_dev_get(i);
+      ids[i] = ggml_backend_dev_name(dev);
+      names[i] = ggml_backend_dev_description(dev);
+    }
+    GENIEX_LOG_TRACE("device count: {}", count);
+    output->device_ids = ids;
+    output->device_names = names;
+    output->device_count = static_cast<int32_t>(count);
+    return ML_SUCCESS;
+  }
 
-    IVlm* create_vlm() override { return new geniex::LlamaVlm; }
+  ILlm *create_llm() override { return new geniex::LlamaLlm; }
 
-    IEmbedding* create_embedding() override { return new geniex::LlamaCppEmbedding; }
+  IVlm *create_vlm() override { return new geniex::LlamaVlm; }
 
-    IReranker* create_reranker() override { return new geniex::LlamaCppReranker; }
+  IEmbedding *create_embedding() override {
+    return new geniex::LlamaCppEmbedding;
+  }
+
+  IReranker *create_reranker() override { return new geniex::LlamaCppReranker; }
 };
 
-}  // namespace geniex
+} // namespace geniex
 
 #ifdef GENIEX_STATIC
 
 #else
 
-ml_PluginId plugin_id() { return GENIEX_PLUGIN_ID_LLAMA_CPP; }
+ml_PluginId plugin_id() { return geniex::build_config::kPluginIdLlamaCpp; }
 
-geniex::Plugin* create_plugin() {
-    try {
-        GENIEX_LOG_TRACE("creating llama plugin");
-        return new geniex::LlamaPlugin;
-    } catch (const std::exception& e) {
-        GENIEX_LOG_ERROR("failed to create llama plugin: {}", e.what());
-        return nullptr;
-    }
+geniex::Plugin *create_plugin() {
+  try {
+    GENIEX_LOG_TRACE("creating llama plugin");
+    return new geniex::LlamaPlugin;
+  } catch (const std::exception &e) {
+    GENIEX_LOG_ERROR("failed to create llama plugin: {}", e.what());
+    return nullptr;
+  }
 }
 
 #endif

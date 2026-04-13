@@ -19,6 +19,20 @@ bazel_dep(
     version = "1.0.0",
 )
 
+new_local_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
+
+new_local_repository(
+    name = "llama_cpp_src",
+    path = "third-party/llama.cpp",
+    build_file = "//sdk:llama_cpp_external.BUILD.bazel",
+)
+
+new_local_repository(
+    name = "geniex_qairt_src",
+    path = "third-party/geniex-qairt",
+    build_file = "//sdk:geniex_qairt_external.BUILD.bazel",
+)
+
 # ============ go ============
 
 bazel_dep(

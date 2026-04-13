@@ -1,0 +1,29 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "headers",
+    hdrs = glob([
+        "common/**/*.h",
+        "common/**/*.hpp",
+        "ggml/include/**/*.h",
+        "ggml/include/**/*.hpp",
+        "include/**/*.h",
+        "include/**/*.hpp",
+        "src/**/*.h",
+        "src/**/*.hpp",
+        "tools/mtmd/**/*.h",
+        "tools/mtmd/**/*.hpp",
+        "vendor/**/*.h",
+        "vendor/**/*.hpp",
+    ], allow_empty = True),
+    includes = [
+        "common",
+        "ggml/include",
+        "include",
+        "src",
+        "tools/mtmd",
+        "vendor",
+    ],
+)

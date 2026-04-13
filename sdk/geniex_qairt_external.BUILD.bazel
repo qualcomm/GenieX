@@ -1,0 +1,13 @@
+package(default_visibility = ["//visibility:public"])
+
+filegroup(
+    name = "sources",
+    srcs = glob([
+        "**/*.h",
+        "**/*.hpp",
+        "**/*.c",
+        "**/*.cc",
+        "**/*.cpp",
+        "**/*.inc",
+    ], allow_empty = True),
+)

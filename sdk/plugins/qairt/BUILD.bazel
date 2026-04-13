@@ -1,4 +1,4 @@
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -19,24 +19,29 @@ filegroup(
     srcs = glob(["src/*.cpp"]),
 )
 
+filegroup(
+    name = "runtime_libs",
+    srcs = glob(["libs/**"]),
+)
+
+filegroup(
+    name = "third_party_sources",
+    srcs = ["@geniex_qairt_src//:sources"],
+)
+
 cc_library(
-    name = "plugin_lib",
+    name = "qairt_plugin",
     srcs = [":srcs"],
-    copts = COMMON_COPTS,
+    copts = COMMON_COPTS + [
+        "-DGENIEX_PLUGIN_ID_QAIRT=\"qairt\"",
+    ],
+    data = [":third_party_sources"],
     defines = [
-        "GENIEX_DL",
         "ML_SHARED",
     ],
+    tags = ["manual"],
     deps = [
         ":headers",
         "//sdk/include:headers",
-        "@llama_cpp_src//:headers",
     ],
-)
-
-cc_binary(
-    name = "geniex_plugin",
-    deps = [":plugin_lib"],
-    linkshared = True,
-    linkstatic = False,
 )

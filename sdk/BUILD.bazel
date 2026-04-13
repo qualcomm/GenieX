@@ -14,3 +14,23 @@ config_setting(
     name = "android",
     constraint_values = ["@platforms//os:android"],
 )
+
+genrule(
+    name = "runtime_artifacts",
+    srcs = [
+        "//sdk/plugins/llama_cpp:geniex_plugin",
+        "//sdk/src:libgeniex",
+    ],
+    outs = [
+        "out/cpu_gpu/libgeniex_plugin.so",
+        "out/libgeniex.so",
+        "out/qairt/README.txt",
+    ],
+    cmd = """
+set -euo pipefail
+mkdir -p $(@D)/out/cpu_gpu $(@D)/out/qairt
+cp -f $(location //sdk/src:libgeniex) $(@D)/out/libgeniex.so
+cp -f $(location //sdk/plugins/llama_cpp:geniex_plugin) $(@D)/out/cpu_gpu/libgeniex_plugin.so
+echo "qairt plugin target is defined in Bazel but not built by default." > $(@D)/out/qairt/README.txt
+""",
+)

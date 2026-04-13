@@ -26,6 +26,8 @@ MODEL_TESTS = [
     "vlm",
 ]
 
+MODEL_TEST_TARGETS = ["geniex_test_%s" % suite for suite in MODEL_TESTS]
+
 [
     cc_test(
         name = "geniex_test_%s" % suite,
@@ -58,4 +60,9 @@ cc_test(
         "//sdk/src:libgeniex_lib",
         "//sdk/tests:headers",
     ],
+)
+
+test_suite(
+    name = "all_tests",
+    tests = MODEL_TEST_TARGETS + ["geniex_test_version"],
 )
