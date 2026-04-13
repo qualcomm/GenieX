@@ -18,84 +18,72 @@
 ### Common Commands
 
 - `bazel query //...` list all targets in the workspace
-- `bazel run //geniex-cli/cmd/geniex-cli` build and run the geniex-cli target, will not build full project.
+- `bazel run //cli:geniex` build and run the CLI target, will not build full project.
 
 #### go tips
 
 - `bazel run //gazelle` update BUILD files from `go.mod`
 - `# gazelle:resolve go ://example.com //local/foo:go_default_library` resolve external go module to local bazel target
 
-## files
+## Code Structure
 
 ```
 .
-├── .github                   #
-│   ├── actions               # reusable actions, like env setup and s3 config
-│   │   ├── env.yml           #
-│   │   └── s3.yml            #
-│   ├── scripts               # reusable scripts used by workflows, like create github release
-│   │   └── release.js        #
-│   └── workflows             # github actions workflows, it's simple because we use bazel for everything
-│       ├── build.yml         #
-│       ├── lint.yml          #
-│       └── test.yml          #
-│                             #
-├── assets                    # assets files for release, doc, etc
-│   └── favicon.ico           #
-│                             #
-├── geniex                    # core library
-│   └── BUILD.bazel           #
-│                             #
-├── geniex-cli                # command line tool
-│   ├── cmd                   #
-│   │   └── geniex-cli        #
-│   │       ├── BUILD.bazel   #
-│   │       └── main.go       #
-│   ├── internal              #
-│   ├── release               #
-│   │   ├── docker.bazel      #
-│   │   └── msi.bazel         #
-│   ├── server                #
-│   ├── BUILD.bazel           #
-│   ├── go.mod                #
-│   └── go.sum                #
-│                             #
-├── geniex-proc               # pre/post processing library
-│   └── BUILD.bazel           #
-│                             #
-├── geniex-sdk                # sdk for developers
-│   ├── build                 #
-│   │   ├── llama.cpp.bazel   # build rules for llama.cpp third-party dependency
-│   │   └── opencl.bazel      # build rules for opencl third-party dependency
-│   ├── include               #
-│   ├── libs                  # pre-built library for different platforms
-│   ├── src                   #
-│   │   ├── ml.cpp            #
-│   │   └── plugins           # plugin source code
-│   │       ├── geniex        #
-│   │       └── llama.cpp     #
-│   ├── third-party           # third-party dependencies
-│   │   ├── llama.cpp         #
-│   │   └── opencl            #
-│   └── BUILD.bazel           #
-│                             #
-├── geniex-sdk-bindings       # language bindings for geniex-sdk
-│   ├── android               #
-│   │   └── BUILD.bazel       #
-│   ├── go                    #
-│   │   ├── BUILD.bazel       #
-│   │   ├── go.mod            #
-│   │   └── ml.go             #
-│   └── python                #
-│       └── BUILD.bazel       #
-│                             #
+├── .github/                  # GitHub workflows and configs
+│   ├── actions/              # reusable actions, like env setup and s3 config
+│   │   ├── env.yml
+│   │   └── s3.yml
+│   ├── scripts/              # reusable scripts used by workflows, like create github release
+│   │   └── release.js
+│   └── workflows/            # github actions workflows, it's simple because we use bazel for everything
+│       ├── build.yml
+│       ├── lint.yml
+│       └── test.yml
+│
+├── .vscode/                  # VS Code debug settings, AI agent rules, LLM prompts
+│
+├── sdk/                      # C API layer (entry for CLI and bindings)
+│   ├── include/              # public C API headers
+│   ├── libs/                 # resource .so files (QAIRT, Hexagon, utility libs)
+│   ├── src/                  # C API source, plugin loading, common utilities
+│   └── BUILD.bazel
+│
+├── third-party/              # third-party dependencies
+│   ├── geniex-proc/          # preprocessing and postprocessing repo
+│   ├── geniex-qairt/         # core runtime
+│   ├── llama.cpp/            # public version, not Qualcomm internal
+│   ├── pybind11/             # for Python binding
+│   └── jni/                  # for Java binding
+│
+├── bindings/                 # language bindings and packaging
+│   ├── python/               # pybind11 code and setup.py for Python package
+│   ├── android/              # JNI code and Maven files for Java package
+│   └── docker/               # Dockerfile and scripts for Docker build/release
+│
+├── cli/                      # command-line interface
+│   ├── main.go               # CLI entry point
+│   ├── server/               # CLI server components
+│   ├── go.mod
+│   └── go.sum
+│
+├── docs/                     # documentation (C API, CLI, Python, Maven, Docker)
+│
+├── scripts/                  # build, release, signing, file upload/download scripts
+│
+├── tests/                    # unit/integration tests for C API, Python, Java
+│   ├── qdc/                  # QDC device connection/testing scripts/configs
+│   ├── include/              # test headers
+│   └── src/                  # test source code
+│
 ├── BUILD.bazel               # root BUILD file
 ├── MODULE.bazel              # root MODULE file
-├── MODULE.bazel.lock         #
-└── README.md                 #
+├── MODULE.bazel.lock
+├── LICENSE
+└── README.md
 ```
 
 ## Notes
 
-- should we keep `dlopen` plugins? there are only two plugins now, and both exist on windows/linux arm64.
-- since we will open source all the code, maybe we can static link everything for simplicity.
+- All tutorials, cookbook and sample apps are in a separate repo [geniex-app](https://github.com/geniex-app).
+- Should we keep `dlopen` plugins? There are only two plugins now, and both exist on windows/linux arm64.
+- Since we will open source all the code, maybe we can static link everything for simplicity.
