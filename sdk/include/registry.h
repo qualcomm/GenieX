@@ -9,6 +9,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "build_config.h"
 #include "plugin/ICv.h"
 #include "plugin/IEmbedding.h"
 #include "plugin/IImageGen.h"
@@ -73,7 +74,7 @@ class Registry {
 
         // compact previous plugin id
         std::map<std::string, std::string> id_map = {
-            {"llama_cpp", GENIEX_PLUGIN_ID_LLAMA_CPP},
+            {"llama_cpp", build_config::kPluginIdLlamaCpp},
         };
         auto map_it = id_map.find(plugin_id);
         if (map_it != id_map.end()) {

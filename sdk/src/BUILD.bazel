@@ -1,0 +1,34 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+COMMON_COPTS = select({
+    "//sdk:windows": ["/std:c++17", "/utf-8"],
+    "//conditions:default": ["-std=c++17"],
+})
+
+COMMON_DEFINES = [
+    "GENIEX_DL",
+]
+
+cc_library(
+    name = "libgeniex_lib",
+    srcs = glob(["*.cpp"]),
+    copts = COMMON_COPTS,
+    defines = COMMON_DEFINES + [
+        "ML_BUILD",
+        "ML_SHARED",
+    ],
+    linkopts = select({
+        "//sdk:windows": [],
+        "//conditions:default": ["-ldl"],
+    }),
+    deps = ["//sdk/include:headers"],
+)
+
+cc_binary(
+    name = "libgeniex",
+    deps = [":libgeniex_lib"],
+    linkshared = True,
+    linkstatic = False,
+)

@@ -1,0 +1,4 @@
+module(
+    name = "rules_kotlin",
+    version = "1.9.6",
+)

@@ -7,6 +7,7 @@
 #include <string_view>  // IWYU pragma: keep
 #include <vector>
 
+#include "build_config.h"
 #include "doctest.h"
 #include "logging.h"
 #include "ml.h"
@@ -123,13 +124,13 @@ class TestRegistry {
 // Setup
 
 #define PLUGIN_DEF(plugin_name, plugin_id)                                                                    \
-    inline constexpr const char plugin_name##_str[] = plugin_id;                                              \
+    inline constexpr auto plugin_name##_str        = plugin_id;                                               \
     using plugin_name                               = std::integral_constant<const char*, plugin_name##_str>; \
     TYPE_TO_STRING(plugin_name);
 
 // plugin id map - using string literals for plugin IDs
-PLUGIN_DEF(llama_cpp, GENIEX_PLUGIN_ID_LLAMA_CPP);
-PLUGIN_DEF(qnn, GENIEX_PLUGIN_ID_QNN);
+PLUGIN_DEF(llama_cpp, geniex::build_config::kPluginIdLlamaCpp);
+PLUGIN_DEF(qnn, geniex::build_config::kPluginIdQnn);
 
 template <typename P>
 using SetupMap = std::map<ml_PluginId, std::vector<P>>;

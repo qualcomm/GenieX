@@ -15,6 +15,7 @@ void* _crypto_dummy = (void*)OpenSSL_version;
 #include <iostream>
 #endif
 
+#include "build_config.h"
 #include "logging.h"
 #include "registry.h"
 #include "utils.h"
@@ -29,11 +30,11 @@ using namespace geniex;
 static void setup_windows_dll_search_path() {
     auto core_dir = get_shared_lib_dir();
 
-    auto lib_dir = core_dir / COMMON_LIB_RELATIVE_PATH;
+    auto lib_dir = core_dir / build_config::kCommonLibRelativePath;
     if (!std::filesystem::exists(lib_dir)) {
         GENIEX_LOG_WARN(
             "{} subdirectory not found, skip adding DLL search directory; some runtime dependencies may not be found",
-            COMMON_LIB_RELATIVE_PATH);
+            build_config::kCommonLibRelativePath);
         return;
     }
 
@@ -137,7 +138,7 @@ void ml_free(void* ptr) {
 
 // Version
 
-constexpr const char* version = BRIDGE_VERSION;
+constexpr const char* version = build_config::kBridgeVersion;
 
 const char* ml_version() { return version; }
 
