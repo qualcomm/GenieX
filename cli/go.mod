@@ -1,8 +1,10 @@
-module github.com/qcom-it-nexa-ai/geniex
+module github.com/qcom-it-nexa-ai/geniex/cli
 
 go 1.24.1
 
 toolchain go1.24.3
+
+replace github.com/qcom-it-nexa-ai/geniex/bindings/go => ../bindings/go
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.39.6

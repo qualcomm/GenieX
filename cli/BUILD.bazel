@@ -4,5 +4,5 @@ exports_files(["go.mod"])
 
 alias(
     name = "cli",
-    actual = "cmd/cli",
+    actual = "//cli/cmd/geniex",
 )

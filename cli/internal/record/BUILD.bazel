@@ -6,6 +6,6 @@ go_library(
         "record.go",
         "stream_record.go",
     ],
-    importpath = "github.com/qcom-it-nexa-ai/geniex/internal/record",
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/record",
     visibility = ["//cli:__subpackages__"],
 )

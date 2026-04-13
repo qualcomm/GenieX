@@ -33,7 +33,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"resty.dev/v3"
 
-	"github.com/qcom-it-nexa-ai/geniex/internal/types"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 const ProgressSuffix = ".progress"

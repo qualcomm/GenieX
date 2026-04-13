@@ -12,26 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package middleware
+package common
 
 import (
-	"github.com/gin-gonic/gin"
-
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
+	"golang.org/x/sys/unix"
 )
 
-func CORS(c *gin.Context) {
-	h := c.Writer.Header()
-	h.Set("Access-Control-Allow-Origin", config.Get().Origins)
-	h.Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST")
-	h.Set("Access-Control-Allow-Headers", "Content-Type, GenieX-KeepCache")
-	h.Set("Access-Control-Allow-Credentials", "true")
-	h.Set("Access-Control-Max-Age", "86400")
-
-	if c.Request.Method == "OPTIONS" {
-		c.AbortWithStatus(204)
-		return
+func GetTerminalWidth() int {
+	fd := int(unix.Stdout)
+	ws, err := unix.IoctlGetWinsize(fd, unix.TIOCGWINSZ)
+	if err != nil {
+		return 80
 	}
-
-	c.Next()
+	return int(ws.Col)
 }

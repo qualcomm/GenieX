@@ -34,10 +34,10 @@ import (
 	"github.com/openai/openai-go/v3/shared/constant"
 
 	geniex_bridge "github.com/qcom-it-nexa-ai/geniex/bindings/go"
-	"github.com/qcom-it-nexa-ai/geniex/internal/store"
-	"github.com/qcom-it-nexa-ai/geniex/internal/types"
-	"github.com/qcom-it-nexa-ai/geniex/server/service"
-	"github.com/qcom-it-nexa-ai/geniex/server/utils"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
+	"github.com/qcom-it-nexa-ai/geniex/cli/server/service"
+	"github.com/qcom-it-nexa-ai/geniex/cli/server/utils"
 )
 
 type ChatCompletionNewParams openai.ChatCompletionNewParams

@@ -18,7 +18,7 @@ go_library(
         "ui/swagger-ui.css",
         "ui/swagger-ui.js",
     ],
-    importpath = "github.com/qcom-it-nexa-ai/geniex/server/docs",
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/server/docs",
     visibility = ["//visibility:public"],
     deps = ["@com_github_gin_gonic_gin//:gin"],
 )

@@ -6,10 +6,10 @@ go_library(
         "keepalive.go",
         "service.go",
     ],
-    importpath = "github.com/qcom-it-nexa-ai/geniex/server/service",
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/server/service",
     visibility = ["//visibility:public"],
     deps = [
-        "//bindings/go:geniex_bridge",
+        "//bindings/go:geniex_sdk_go",
         "//cli/internal/config",
         "//cli/internal/store",
         "//cli/internal/types",

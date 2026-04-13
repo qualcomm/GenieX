@@ -11,3 +11,8 @@ exports_files([
     ".bazelrc",
     "MODULE.bazel",
 ])
+
+
+
+# load("@io_bazel_rules_go//go:deps.bzl", "go_register_toolchains")
+# go_register_toolchains(version = "1.24.3")

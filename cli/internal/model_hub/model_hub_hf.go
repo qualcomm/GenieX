@@ -26,9 +26,9 @@ import (
 	"golang.org/x/sync/errgroup"
 	"resty.dev/v3"
 
-	"github.com/qcom-it-nexa-ai/geniex/internal/config"
-	"github.com/qcom-it-nexa-ai/geniex/internal/downloader"
-	"github.com/qcom-it-nexa-ai/geniex/internal/render"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/downloader"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 )
 
 const HF_ENDPOINT = "https://huggingface.co"

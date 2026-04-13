@@ -6,8 +6,8 @@ go_library(
         "config.go",
         "model_mapping.go",
     ],
-    importpath = "github.com/qcom-it-nexa-ai/geniex/internal/config",
-    visibility = ["//geniex-cli:__subpackages__"],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/config",
+    visibility = ["//cli:__subpackages__"],
     deps = ["@com_github_spf13_viper//:viper"],
 )
 

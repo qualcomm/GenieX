@@ -9,7 +9,7 @@ go_library(
         "manager.go",
         "model.go",
     ],
-    importpath = "github.com/qcom-it-nexa-ai/geniex/internal/store",
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/store",
     visibility = ["//cli:__subpackages__"],
     deps = [
         "//cli/internal/config",

@@ -1,0 +1,41 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "common",
+    srcs = [
+        "log.go",
+        "process.go",
+        "repl.go",
+        "util_darwin.go",
+        "util_linux.go",
+        "util_windows.go",
+    ],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//bindings/go:geniex_sdk_go",
+        "//cli/internal/config",
+        "//cli/internal/readline",
+        "//cli/internal/render",
+        "//cli/internal/store",
+        "@com_github_bytedance_sonic//:sonic",
+        "@com_github_lmittmann_tint//:tint",
+    ] + select({
+        "@io_bazel_rules_go//go/platform:android": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:darwin": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:ios": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:linux": [
+            "@org_golang_x_sys//unix",
+        ],
+        "@io_bazel_rules_go//go/platform:windows": [
+            "@org_golang_x_sys//windows",
+        ],
+        "//conditions:default": [],
+    }),
+)

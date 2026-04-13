@@ -6,7 +6,7 @@ go_library(
         "route.go",
         "server.go",
     ],
-    importpath = "github.com/qcom-it-nexa-ai/geniex/server",
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/server",
     visibility = ["//visibility:public"],
     deps = [
         "//cli/internal/config",

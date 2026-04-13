@@ -3,7 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "utils",
     srcs = ["common.go"],
-    importpath = "github.com/qcom-it-nexa-ai/geniex/server/utils",
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/server/utils",
     visibility = ["//visibility:public"],
     deps = ["@org_golang_x_image//webp"],
 )
