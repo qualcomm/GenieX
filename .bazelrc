@@ -2,4 +2,4 @@ common --enable_bzlmod --define=VERSION=unknown
 
 build --keep_going
 test --test_output=errors
-run --color=yes //cli --
+run --color=yes

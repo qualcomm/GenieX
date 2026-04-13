@@ -19,7 +19,7 @@
 
 - `bazel query //...` list all targets in the workspace
 - `bazel (build|run) --define=VERSION=XXXX [args]` build/run with version string
-- `bazel run [args]` build and run the CLI target, for example: `bazel run infer Qwen/Qwen3-0.6B-GGUF` is equal to `bazel run //cli/cmd/geniex -- infer Qwen/Qwen3-0.6B-GGUF`
+- `bazel run [args]` build and run the CLI target, for example: `bazel run //cli -- infer Qwen/Qwen3-0.6B-GGUF`
 
 #### go tips
 
