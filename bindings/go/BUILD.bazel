@@ -21,39 +21,8 @@ go_library(
         "tts.go",
         "vlm.go",
     ],
-    cdeps = [":nexa_bridge"],
+    cdeps = ["//sdk"],
     cgo = True,
     importpath = "github.com/qcom-it-nexa-ai/geniex/bindings/go",
     visibility = ["//visibility:public"],
 )
-
-cc_import(
-    name = "nexa_bridge",
-    hdrs = ["build/ml.h"],
-    includes = ["build"],
-    shared_library = "build/libnexa_bridge.so",
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "nexa_bridge_runtime",
-    srcs = glob(["build/**/*.so"]),
-    visibility = ["//visibility:public"],
-)
-
-# cc_library(
-#     name = "native_prebuilts",
-#     deps = [
-#         ":nexa_bridge",
-#     ],
-#     hdrs = ["build/ml.h"],
-#     includes = ["build"],
-#     visibility = ["//visibility:public"],
-# )
-#
-# filegroup(
-#     name = "native_runfiles",
-#     srcs = [":prebuilt_shared_libs"],
-#     visibility = ["//visibility:public"],
-# )
-#
