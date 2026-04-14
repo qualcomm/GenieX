@@ -6,7 +6,7 @@ This repository uses Bazel and Bazelisk for SDK and plugin builds.
 
 Install Bazelisk:
 
-- Windows: `winget install -e Bazel-Bazelisk`
+- Windows: `winget install -e --id Bazel.Bazelisk`
 - Linux: install `bazelisk` from your package manager, plus `cmake` and `ninja`
 
 Windows ARM64 builds also require:
