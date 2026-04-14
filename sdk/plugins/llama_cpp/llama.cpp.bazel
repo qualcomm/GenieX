@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")
+load("@//sdk/plugins/llama_cpp:artifacts.bzl", "WINDOWS_CMAKE_OUTS", "WINDOWS_RUNTIME_DLLS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -22,31 +23,7 @@ genrule(
         "@//sdk/plugins/llama_cpp:build_llama_cpp.bat",
         "@//sdk/cmake:arm64-windows-llvm.cmake",
     ],
-    outs = [
-        "common.lib",
-        "cpp-httplib.lib",
-        "ggml-base.dll",
-        "ggml-base.lib",
-        "ggml-cpu.dll",
-        "ggml-cpu.lib",
-        "ggml.dll",
-        "ggml.lib",
-        "ggml-opencl.dll",
-        "ggml-opencl.lib",
-        "ggml-hexagon.dll",
-        "ggml-hexagon.lib",
-        "libggml-htp-v68.so",
-        "libggml-htp-v69.so",
-        "libggml-htp-v73.so",
-        "libggml-htp-v75.so",
-        "libggml-htp-v79.so",
-        "libggml-htp-v81.so",
-        "libggml-htp.cat",
-        "llama.dll",
-        "llama.lib",
-        "mtmd.dll",
-        "mtmd.lib",
-    ],
+    outs = WINDOWS_CMAKE_OUTS,
     cmd_bash = "echo 'llama.cpp cmake_build is only wired for Windows currently' >&2; exit 1",
     cmd_bat = "$(location @//sdk/plugins/llama_cpp:build_llama_cpp.bat) $(location CMakeLists.txt) $(location @//sdk/cmake:arm64-windows-llvm.cmake) $(@D)",
 )
@@ -137,20 +114,5 @@ cc_import(
 
 filegroup(
     name = "runtime_dlls",
-    srcs = [
-        "ggml-base.dll",
-        "ggml-cpu.dll",
-        "ggml.dll",
-        "ggml-opencl.dll",
-        "ggml-hexagon.dll",
-        "libggml-htp-v68.so",
-        "libggml-htp-v69.so",
-        "libggml-htp-v73.so",
-        "libggml-htp-v75.so",
-        "libggml-htp-v79.so",
-        "libggml-htp-v81.so",
-        "libggml-htp.cat",
-        "llama.dll",
-        "mtmd.dll",
-    ],
+    srcs = WINDOWS_RUNTIME_DLLS,
 )

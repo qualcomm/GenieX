@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load(":artifacts.bzl", "WINDOWS_BACKEND_RUNTIME_FILES", "artifact_labels", "windows_copy_cmd")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -51,37 +52,9 @@ cc_library(
 
 genrule(
     name = "backend_runtime_files",
-    srcs = [
-        "@llama_cpp_src//:ggml-opencl.dll",
-        "@llama_cpp_src//:ggml-hexagon.dll",
-        "@llama_cpp_src//:libggml-htp-v68.so",
-        "@llama_cpp_src//:libggml-htp-v69.so",
-        "@llama_cpp_src//:libggml-htp-v73.so",
-        "@llama_cpp_src//:libggml-htp-v75.so",
-        "@llama_cpp_src//:libggml-htp-v79.so",
-        "@llama_cpp_src//:libggml-htp-v81.so",
-        "@llama_cpp_src//:libggml-htp.cat",
-    ],
-    outs = [
-        "ggml-opencl.dll",
-        "ggml-hexagon.dll",
-        "libggml-htp-v68.so",
-        "libggml-htp-v69.so",
-        "libggml-htp-v73.so",
-        "libggml-htp-v75.so",
-        "libggml-htp-v79.so",
-        "libggml-htp-v81.so",
-        "libggml-htp.cat",
-    ],
-    cmd_bat = "copy /Y \"$(location @llama_cpp_src//:ggml-opencl.dll)\" \"$(@D)\\ggml-opencl.dll\" >NUL && " +
-              "copy /Y \"$(location @llama_cpp_src//:ggml-hexagon.dll)\" \"$(@D)\\ggml-hexagon.dll\" >NUL && " +
-              "copy /Y \"$(location @llama_cpp_src//:libggml-htp-v68.so)\" \"$(@D)\\libggml-htp-v68.so\" >NUL && " +
-              "copy /Y \"$(location @llama_cpp_src//:libggml-htp-v69.so)\" \"$(@D)\\libggml-htp-v69.so\" >NUL && " +
-              "copy /Y \"$(location @llama_cpp_src//:libggml-htp-v73.so)\" \"$(@D)\\libggml-htp-v73.so\" >NUL && " +
-              "copy /Y \"$(location @llama_cpp_src//:libggml-htp-v75.so)\" \"$(@D)\\libggml-htp-v75.so\" >NUL && " +
-              "copy /Y \"$(location @llama_cpp_src//:libggml-htp-v79.so)\" \"$(@D)\\libggml-htp-v79.so\" >NUL && " +
-              "copy /Y \"$(location @llama_cpp_src//:libggml-htp-v81.so)\" \"$(@D)\\libggml-htp-v81.so\" >NUL && " +
-              "copy /Y \"$(location @llama_cpp_src//:libggml-htp.cat)\" \"$(@D)\\libggml-htp.cat\" >NUL",
+    srcs = artifact_labels("@llama_cpp_src//", WINDOWS_BACKEND_RUNTIME_FILES),
+    outs = WINDOWS_BACKEND_RUNTIME_FILES,
+    cmd_bat = windows_copy_cmd("@llama_cpp_src//", WINDOWS_BACKEND_RUNTIME_FILES),
 )
 
 cc_binary(
