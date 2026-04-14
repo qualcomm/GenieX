@@ -3,7 +3,7 @@
 	url = https://github.com/ggml-org/llama.cpp
 [submodule "third-party/geniex-qairt"]
 	path = third-party/geniex-qairt
-	url = https://github.com/qcom-it-nexa-ai/qnn-run
+	url = git@github.com:qcom-it-nexa-ai/qnn-run.git
 [submodule "third-party/geniex-proc"]
 	path = third-party/geniex-proc
-	url = https://github.com/qcom-it-nexa-ai/nexaproc
+	url = git@github.com:qcom-it-nexa-ai/nexaproc.git
