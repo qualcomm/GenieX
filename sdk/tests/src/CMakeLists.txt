@@ -5,7 +5,7 @@ if (GENIEX_PLUGIN_LLAMA_CPP)
     list(APPEND PLUGINS "llama_cpp")
 endif()
 if (GENIEX_PLUGIN_QNN)
-    list(APPEND PLUGINS "qnn")
+    list(APPEND PLUGINS "qairt")
 endif()
 
 

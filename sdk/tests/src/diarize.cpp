@@ -14,15 +14,15 @@
 
 namespace {
 
-#define PLUGINS(M) M(qnn)
+#define PLUGINS(M) M(qairt)
 using Param = std::tuple<std::string, std::string, std::string>;
 
 Setup<Param, ml_Diarize> setup_guard(
     SetupMap<Param>{
-        {qnn::value,
+        {qairt::value,
             {
-                {"Pyannote-NPU", "pyannote", "modelfiles/qnn/Pyannote-NPU/weights-1-2.nexa"},
-                // Add more qnn diarization models here as needed
+                {"Pyannote-NPU", "pyannote", "modelfiles/qairt/Pyannote-NPU/weights-1-2.nexa"},
+                // Add more qairt diarization models here as needed
             }},
     },
     [](ml_PluginId plugin, Param param) {

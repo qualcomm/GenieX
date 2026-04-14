@@ -8,8 +8,8 @@
 
 namespace {
 
-// rerank supported by llama_cpp and QNN in this repository profile
-#define PLUGINS(M) M(llama_cpp) M(qnn)
+// rerank supported by llama_cpp and QAIRT in this repository profile
+#define PLUGINS(M) M(llama_cpp) M(qairt)
 using Param = std::tuple<std::string, std::string, std::optional<std::string>>;
 
 Setup<Param, ml_Reranker> setup_guard(
@@ -21,7 +21,7 @@ Setup<Param, ml_Reranker> setup_guard(
               std::nullopt},
              // Add more llama_cpp models here as needed
          }},
-        {qnn::value,
+        {qairt::value,
          {
 #if defined(__ANDROID__)
              {"jina-rerank",
@@ -29,10 +29,10 @@ Setup<Param, ml_Reranker> setup_guard(
               "weights-1-4.nexa",
               std::nullopt},
 #elif defined(_WIN32)
-             {"jina-rerank", "modelfiles/qnn/jina-rerank-npu/weights-1-4.nexa",
+             {"jina-rerank", "modelfiles/qairt/jina-rerank-npu/weights-1-4.nexa",
               std::nullopt},
 #endif
-             // Add more qnn models here as needed
+             // Add more qairt models here as needed
          }},
     },
     [](ml_PluginId plugin, Param param) {

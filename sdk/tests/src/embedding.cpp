@@ -13,7 +13,7 @@
 
 namespace {
 
-#define PLUGINS(M) M(llama_cpp) M(qnn)
+#define PLUGINS(M) M(llama_cpp) M(qairt)
 using Param =
     std::tuple<std::string, std::string, std::string,
                std::optional<std::string>, std::optional<std::string>>;
@@ -27,7 +27,7 @@ Setup<Param, ml_Embedder> setup_guard(
               std::nullopt, std::nullopt},
              // Add more llama_cpp models here as needed
          }},
-        {qnn::value,
+        {qairt::value,
          std::vector<Param>{
 #if defined(__ANDROID__)
              {"embeddinggemma-300m-npu", "embed-gemma",
@@ -40,13 +40,13 @@ Setup<Param, ml_Embedder> setup_guard(
               std::nullopt, std::nullopt},
 #elif defined(_WIN32)
              {"embeddinggemma-300m-npu", "embed-gemma",
-              "modelfiles/qnn/embeddinggemma-300m-npu/weights-1-2.nexa",
+              "modelfiles/qairt/embeddinggemma-300m-npu/weights-1-2.nexa",
               std::nullopt, std::nullopt},
              {"EmbedNeural", "embedneural",
-              "modelfiles/qnn/EmbedNeural/weights-1-4.nexa", std::nullopt,
+              "modelfiles/qairt/EmbedNeural/weights-1-4.nexa", std::nullopt,
               std::nullopt},
 #else
-// QNN tests are not supported on this platform (Linux/other)
+// QAIRT tests are not supported on this platform (Linux/other)
 #endif
          }},
     },
@@ -91,7 +91,7 @@ Setup<Param, ml_Embedder> setup_guard(
       if (std::string(plugin) == "npu") {
         input.config.max_tokens = 1024;
         input.config.verbose = false;
-        // QNN paths will be injected by the plugin itself
+        // QAIRT paths will be injected by the plugin itself
       }
 
       int32_t res = ml_embedder_create(&input, &embedder);

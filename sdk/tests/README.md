@@ -43,8 +43,8 @@ Model weights needed for running tests are stored on huggingface. Before running
   - **Plugin filtering** with `-ts` or `--test-suite`:
 
     ```bash
-    .\build\tests\src\geniex_test_llm.exe --success -ts="qnn"              # Single plugin
-    .\build\tests\src\geniex_test_llm.exe --success -ts="qnn,llama_cpp"   # Multiple plugins
+    .\build\tests\src\geniex_test_llm.exe --success -ts="qairt"              # Single plugin
+    .\build\tests\src\geniex_test_llm.exe --success -ts="qairt,llama_cpp"   # Multiple plugins
     ```
 
   - **Subcase filtering** with `-sc` (include) or `-sce` (exclude) using wildcards:
@@ -70,10 +70,10 @@ Model weights needed for running tests are stored on huggingface. Before running
 
     ```bash
     # All phi3.5 tests
-    .\build\tests\src\geniex_test_llm.exe --success -ts="qnn" -sc="*phi3.5*"
+    .\build\tests\src\geniex_test_llm.exe --success -ts="qairt" -sc="*phi3.5*"
 
-    # GenerateJson test across all QNN models
-    .\build\tests\src\geniex_test_llm.exe --success -ts="qnn" -sc="*/GenerateJson"
+    # GenerateJson test across all QAIRT models
+    .\build\tests\src\geniex_test_llm.exe --success -ts="qairt" -sc="*/GenerateJson"
     ```
 
   - **List available tests**:
@@ -92,27 +92,27 @@ Model weights needed for running tests are stored on huggingface. Before running
 $env:GENIEX_PLUGIN_PATH="./build/out"
 $env:GENIEX_TOKEN="key/eyJhY2NvdW50Ijp7ImlkIjoiNDI1Y2JiNWQtNjk1NC00NDYxLWJiOWMtYzhlZjBiY2JlYzA2In0sInByb2R1Y3QiOnsiaWQiOiJkYjI4ZTNmYy1mMjU4LTQ4ZTctYmNkYi0wZmE4YjRkYTJhNWYifSwicG9saWN5Ijp7ImlkIjoiMmYyOWQyMjctNDVkZS00MzQ3LTg0YTItMjUwNTYwMmEzYzMyIiwiZHVyYXRpb24iOjMxMTA0MDAwMH0sInVzZXIiOnsiaWQiOiI3MGE2YzA4NS1jYjc3LTQ3YmEtOWUxNC1lNjFjYTA2ZThmZjUiLCJlbWFpbCI6ImFsYW40QG5leGE0YWkuY29tIn0sImxpY2Vuc2UiOnsiaWQiOiI4OTlhZGQ2NS1lOTI2LTQ2M2ItODllNi0xMjc0NzM3ZjA1MzYiLCJjcmVhdGVkIjoiMjAyNS0wOS0wNlQwMDo1MzozNi4yMDNaIiwiZXhwaXJ5IjoiMjAzNS0xMi0zMVQyMzo1OTo1OS4wMDBaIn19.BXoUHIEzFMuuZbBT7RvsKO9nTi5950C6kHO64blF7XBnfKvZ6ClA8a55tmszI1ZWdngzpNFTzMM5PV5euuzMCA=="
 
-# Run tests (QNN backend example)
-.\build\tests\src\geniex_test_asr.exe --test-suite="qnn" --success
-.\build\tests\src\geniex_test_embedding.exe --test-suite="qnn" --success
-.\build\tests\src\geniex_test_llm.exe --test-suite="qnn" --success
-.\build\tests\src\geniex_test_cv.exe --test-suite="qnn" --success
-.\build\tests\src\geniex_test_vlm.exe --test-suite="qnn" --success
+# Run tests (QAIRT backend example)
+.\build\tests\src\geniex_test_asr.exe --test-suite="qairt" --success
+.\build\tests\src\geniex_test_embedding.exe --test-suite="qairt" --success
+.\build\tests\src\geniex_test_llm.exe --test-suite="qairt" --success
+.\build\tests\src\geniex_test_cv.exe --test-suite="qairt" --success
+.\build\tests\src\geniex_test_vlm.exe --test-suite="qairt" --success
 ```
 
-### Linux (ARM64 with QNN)
+### Linux (ARM64 with QAIRT)
 
 ```bash
 # Set environment variables
 export GENIEX_PLUGIN_PATH="./build/out"
 export GENIEX_TOKEN="key/eyJhY2NvdW50Ijp7ImlkIjoiNDI1Y2JiNWQtNjk1NC00NDYxLWJiOWMtYzhlZjBiY2JlYzA2In0sInByb2R1Y3QiOnsiaWQiOiJkYjI4ZTNmYy1mMjU4LTQ4ZTctYmNkYi0wZmE4YjRkYTJhNWYifSwicG9saWN5Ijp7ImlkIjoiMmYyOWQyMjctNDVkZS00MzQ3LTg0YTItMjUwNTYwMmEzYzMyIiwiZHVyYXRpb24iOjMxMTA0MDAwMH0sInVzZXIiOnsiaWQiOiI3MGE2YzA4NS1jYjc3LTQ3YmEtOWUxNC1lNjFjYTA2ZThmZjUiLCJlbWFpbCI6ImFsYW40QG5leGE4YWkuY29tIn0sImxpY2Vuc2UiOnsiaWQiOiI4OTlhZGQ2NS1lOTI2LTQ2M2ItODllNi0xMjc0NzM3ZjA1MzYiLCJjcmVhdGVkIjoiMjAyNS0wOS0wNlQwMDo1MzozNi4yMDNaIiwiZXhwaXJ5IjoiMjAzNS0xMi0zMVQyMzo1OTo1OS4wMDBaIn19.BXoUHIEzFMuuZbBT7RvsKO9nTi5950C6kHO64blF7XBnfKvZ6ClA8a55tmszI1ZWdngzpNFTzMM5PV5euuzMCA=="
 
-# Run tests (QNN backend example)
-./build/tests/src/geniex_test_asr --test-suite="qnn" --success
-./build/tests/src/geniex_test_embedding --test-suite="qnn" --success
-./build/tests/src/geniex_test_llm --test-suite="qnn" --success
-./build/tests/src/geniex_test_cv --test-suite="qnn" --success
-./build/tests/src/geniex_test_vlm --test-suite="qnn" --success
+# Run tests (QAIRT backend example)
+./build/tests/src/geniex_test_asr --test-suite="qairt" --success
+./build/tests/src/geniex_test_embedding --test-suite="qairt" --success
+./build/tests/src/geniex_test_llm --test-suite="qairt" --success
+./build/tests/src/geniex_test_cv --test-suite="qairt" --success
+./build/tests/src/geniex_test_vlm --test-suite="qairt" --success
 ```
 
 ### Android NPU
@@ -133,13 +133,13 @@ export GENIEX_TOKEN="key/eyJhY2NvdW50Ijp7ImlkIjoiNDI1Y2JiNWQtNjk1NC00NDYxLWJiOWM
 
 chmod +x ./out/tests/*
 
-# For QNN test
-./out/tests/geniex_test_llm --test-suite="qnn" --success
-./out/tests/geniex_test_vlm --test-suite="qnn" --success
-./out/tests/geniex_test_asr --test-suite="qnn" --success
-./out/tests/geniex_test_cv --test-suite="qnn" --success
-./out/tests/geniex_test_embedding --test-suite="qnn" --success
-./out/tests/geniex_test_rerank --test-suite="qnn" --success
+# For QAIRT test
+./out/tests/geniex_test_llm --test-suite="qairt" --success
+./out/tests/geniex_test_vlm --test-suite="qairt" --success
+./out/tests/geniex_test_asr --test-suite="qairt" --success
+./out/tests/geniex_test_cv --test-suite="qairt" --success
+./out/tests/geniex_test_embedding --test-suite="qairt" --success
+./out/tests/geniex_test_rerank --test-suite="qairt" --success
 
 # For llama_cpp test, GenerateStream test case with one specific model on mobile device
 adb push test.txt /data/local/tmp/geniex/modelfiles/test.txt
@@ -211,7 +211,7 @@ TEST_CASE [enters] → Create model1 → TestName → Destroy → Create model2 
 
 ### Known Issues
 
-- **QNN Plugin**: May experience destructor hangs when rapidly switching between different models. This is a plugin-level issue in the QNN implementation's cleanup code.
+- **QAIRT Plugin**: May experience destructor hangs when rapidly switching between different models. This is a plugin-level issue in the QAIRT implementation's cleanup code.
 
 ## Adding New Backends
 

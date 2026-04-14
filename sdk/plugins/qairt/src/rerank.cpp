@@ -34,32 +34,13 @@ int32_t QnnReranker::create_impl(const ml_RerankerCreateInput* input) {
 
     std::string_view model_name(input->model_name);
 
-#if defined(__ANDROID__)
+    // jina-rerank is supported on all platforms (Android, Windows, Linux)
     if (model_name == "jina-rerank") {
         m_model_impl = std::unique_ptr<IReranker>(create_qnn_jina_rerank());
     } else {
         GENIEX_LOG_ERROR("Unsupported model name for npu Reranker implementation: {}", model_name);
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return ML_ERROR_COMMON_INVALID_INPUT;  // Validation error - use INVALID_INPUT
     }
-
-#elif defined(_WIN32)
-    if (model_name == "jina-rerank") {
-        m_model_impl = std::unique_ptr<IReranker>(create_qnn_jina_rerank());
-    } else {
-        GENIEX_LOG_ERROR("Unsupported model name for npu Reranker implementation: {}", model_name);
-        return ML_ERROR_COMMON_MODEL_LOAD;
-    }
-
-#elif defined(__linux__)
-    // Linux: jina-rerank is supported
-    if (model_name == "jina-rerank") {
-        m_model_impl = std::unique_ptr<IReranker>(create_qnn_jina_rerank());
-    } else {
-        GENIEX_LOG_ERROR("Unsupported model name for Linux npu Reranker implementation: {}", model_name);
-        return ML_ERROR_COMMON_MODEL_LOAD;
-    }
-
-#endif
 
     if (!m_model_impl) {
         GENIEX_LOG_ERROR("Failed to create specific model implementation");

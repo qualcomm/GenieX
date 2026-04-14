@@ -116,11 +116,10 @@ int32_t QnnAsr::stream_begin(const ml_AsrStreamBeginInput* input, ml_AsrStreamBe
         return ML_ERROR_COMMON_INVALID_INPUT;
     }
 
-    // fill default config
-    ml_AsrStreamBeginInput* mutable_input = const_cast<ml_AsrStreamBeginInput*>(input);
-    auto                    origin_config = input->stream_config;
+    ml_AsrStreamBeginInput processed_input = *input;
+    ml_ASRStreamConfig     default_config{};
+
     if (input->stream_config == nullptr) {
-        ml_ASRStreamConfig default_config{};
         default_config.chunk_duration   = 4.0f;
         default_config.overlap_duration = 3.5f;
         default_config.sample_rate      = 16000;
@@ -129,13 +128,11 @@ int32_t QnnAsr::stream_begin(const ml_AsrStreamBeginInput* input, ml_AsrStreamBe
         default_config.timestamps       = "segment";
         default_config.beam_size        = 4;
 
-        // inject qnn path
-        mutable_input->stream_config = &default_config;
+        processed_input.stream_config = &default_config;
+        GENIEX_LOG_DEBUG("Using default ASR streaming configuration");
     }
 
-    int32_t res                  = m_model_impl->stream_begin(input, output);
-    mutable_input->stream_config = origin_config;  // reset to avoid dangling pointer
-    return res;
+    return m_model_impl->stream_begin(&processed_input, output);
 }
 
 /**

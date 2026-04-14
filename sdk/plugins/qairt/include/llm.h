@@ -21,7 +21,27 @@ class QnnLlm : public ILlm {
     virtual int32_t reset() override;
     virtual int32_t save_kv_cache(const ml_KvCacheSaveInput*, ml_KvCacheSaveOutput*) override;
     virtual int32_t load_kv_cache(const ml_KvCacheLoadInput*, ml_KvCacheLoadOutput*) override;
+
+    /**
+     * @brief Apply chat template to format conversation messages
+     *
+     * @param input Message array to format
+     * @param output Formatted text output
+     *
+     * @note Memory ownership: output->formatted_text is allocated by this method
+     *       using malloc() and must be freed by the caller using ml_free()
+     */
     virtual int32_t apply_chat_template(const ml_LlmApplyChatTemplateInput*, ml_LlmApplyChatTemplateOutput*) override;
+
+    /**
+     * @brief Generate text from a prompt
+     *
+     * @param input Generation parameters and prompt
+     * @param output Generated text output
+     *
+     * @note Memory ownership: output->full_text is allocated by this method
+     *       using malloc() and must be freed by the caller using ml_free()
+     */
     virtual int32_t generate(const ml_LlmGenerateInput*, ml_LlmGenerateOutput*) override;
 
    protected:
@@ -32,43 +52,6 @@ class QnnLlm : public ILlm {
     std::string           m_lib_path;
 };
 
+ML_API ILlm* create_qairt_llm(const char* lib_path);
+
 }  // namespace geniex
-
-// export from qnn-run
-extern "C" {
-#if defined(__ANDROID__)
-// Android only supports liquid-sdk
-geniex::ILlm* create_qnn_qwen3_4b();
-geniex::ILlm* create_qnn_llama3_3b();
-geniex::ILlm* create_qnn_phi4();
-geniex::ILlm* create_qnn_phi3_5();
-geniex::ILlm* create_qnn_granite4();
-geniex::ILlm* create_qnn_liquid();
-geniex::ILlm* create_qnn_granite_nano();
-
-#elif defined(_WIN32)
-// Windows supports all LLM SDKs
-geniex::ILlm* create_qnn_qwen3_4b();
-geniex::ILlm* create_qnn_qwen3_8b();
-geniex::ILlm* create_qnn_llama3_3b();
-geniex::ILlm* create_qnn_phi4();
-geniex::ILlm* create_qnn_phi3_5();
-geniex::ILlm* create_qnn_granite4();
-geniex::ILlm* create_qnn_liquid();
-geniex::ILlm* create_qnn_granite_nano();
-geniex::ILlm* create_qnn_smolvla();
-geniex::ILlm* create_qnn_ministral3_3b();
-geniex::ILlm* create_qnn_hymt();
-
-#elif defined(__linux__)
-geniex::ILlm* create_qnn_qwen3_4b();
-geniex::ILlm* create_qnn_qwen3_8b();
-geniex::ILlm* create_qnn_llama3_3b();
-geniex::ILlm* create_qnn_phi4();
-geniex::ILlm* create_qnn_phi3_5();
-geniex::ILlm* create_qnn_granite4();
-geniex::ILlm* create_qnn_liquid();
-geniex::ILlm* create_qnn_granite_nano();
-
-#endif
-}

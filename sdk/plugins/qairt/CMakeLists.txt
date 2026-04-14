@@ -9,15 +9,16 @@ endif()
 copy_output(out/${GENIEX_PLUGIN_ID_QNN} geniex_npu)
 
 # Copy platform-specific libraries
-if(ANDROID)
-    add_custom_target(copy_output_qnn_libs ALL
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/libs/android-aarch64 ${CMAKE_BINARY_DIR}/out/${GENIEX_PLUGIN_ID_QNN}/)
-elseif(WIN32)
-    add_custom_target(copy_output_qnn_libs ALL
-        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/libs/windows-arm64/dll ${CMAKE_BINARY_DIR}/out/${GENIEX_PLUGIN_ID_QNN}/)
-elseif(UNIX) # Linux ARM64
-    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-        add_custom_target(copy_output_qnn_libs ALL
-            COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/libs/linux-aarch64 ${CMAKE_BINARY_DIR}/out/${GENIEX_PLUGIN_ID_QNN}/)
-    endif()
-endif()
+# Note: libs directory does not exist yet, uncomment when available
+#if(ANDROID)
+#    add_custom_target(copy_output_qnn_libs ALL
+#        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/libs/android-aarch64 ${CMAKE_BINARY_DIR}/out/${GENIEX_PLUGIN_ID_QNN}/)
+#elseif(WIN32)
+#    add_custom_target(copy_output_qnn_libs ALL
+#        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/libs/windows-arm64/dll ${CMAKE_BINARY_DIR}/out/${GENIEX_PLUGIN_ID_QNN}/)
+#elseif(UNIX) # Linux ARM64
+#    if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+#        add_custom_target(copy_output_qnn_libs ALL
+#            COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_LIST_DIR}/libs/linux-aarch64 ${CMAKE_BINARY_DIR}/out/${GENIEX_PLUGIN_ID_QNN}/)
+#    endif()
+#endif()

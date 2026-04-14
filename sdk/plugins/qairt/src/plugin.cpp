@@ -35,9 +35,12 @@ public:
 
   ~QairtPlugin() override {}
 
+  ILlm *create_llm() override {
+    return geniex::create_qairt_llm(m_lib_path.c_str());
+  }
+
 #if defined(__ANDROID__)
   // Android: LLM, VLM, ASR, CV, Embedding, and Rerank supported
-  ILlm *create_llm() override { return new geniex::QnnLlm(m_lib_path); }
   IVlm *create_vlm() override { return new geniex::QnnVlm(m_lib_path); }
   IAsr *create_asr() override { return new geniex::QnnAsr(m_lib_path); }
   ICv *create_cv() override { return new geniex::QnnCv(m_lib_path); }
@@ -51,7 +54,6 @@ public:
 #elif defined(_WIN32)
   // Windows: all features supported
   ICv *create_cv() override { return new geniex::QnnCv(m_lib_path); }
-  ILlm *create_llm() override { return new geniex::QnnLlm(m_lib_path); }
   IAsr *create_asr() override { return new geniex::QnnAsr(m_lib_path); }
   IVlm *create_vlm() override { return new geniex::QnnVlm(m_lib_path); }
   IEmbedding *create_embedding() override {
@@ -65,7 +67,6 @@ public:
   }
 
 #elif defined(__linux__)
-  ILlm *create_llm() override { return new geniex::QnnLlm(m_lib_path); }
   IVlm *create_vlm() override { return new geniex::QnnVlm(m_lib_path); }
   IAsr *create_asr() override { return new geniex::QnnAsr(m_lib_path); }
   ICv *create_cv() override { return new geniex::QnnCv(m_lib_path); }
@@ -109,7 +110,7 @@ private:
  *
  * @return GENIEX_PLUGIN_ID_QAIRT
  */
-ml_PluginId plugin_id() { return GENIEX_PLUGIN_ID_QAIRT; }
+ml_PluginId plugin_id() { return geniex::kQairtPluginId; }
 
 /**
  * @brief Create QAIRT plugin instance for Qualcomm NPU acceleration

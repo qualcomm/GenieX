@@ -130,7 +130,7 @@ class TestRegistry {
 
 // plugin id map - using string literals for plugin IDs
 PLUGIN_DEF(llama_cpp, geniex::build_config::kPluginIdLlamaCpp);
-PLUGIN_DEF(qnn, geniex::build_config::kPluginIdQnn);
+PLUGIN_DEF(qairt, geniex::build_config::kPluginIdQairt);
 
 template <typename P>
 using SetupMap = std::map<ml_PluginId, std::vector<P>>;

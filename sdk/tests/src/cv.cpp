@@ -11,13 +11,13 @@
 
 namespace {
 
-#define PLUGINS(M) M(qnn)
+#define PLUGINS(M) M(qairt)
 using Param =
     std::tuple<std::string, std::string, std::string, std::string, std::string>;
 
 Setup<Param, ml_CV> setup_guard(
     SetupMap<Param>{
-        {qnn::value,
+        {qairt::value,
          {
 #if defined(__ANDROID__)
              {"paddleocr-npu", "paddleocr",
@@ -50,33 +50,33 @@ Setup<Param, ml_CV> setup_guard(
               ""},
 #elif defined(_WIN32)
              {"paddleocr-npu", "paddleocr",
-              "modelfiles/qnn/paddleocr-npu/weights-1-1.nexa",
-              "modelfiles/qnn/paddleocr-npu/weights-1-1.nexa", ""},
+              "modelfiles/qairt/paddleocr-npu/weights-1-1.nexa",
+              "modelfiles/qairt/paddleocr-npu/weights-1-1.nexa", ""},
              {"yolov12-npu", "yolov12",
-              "modelfiles/qnn/yolov12-npu/weights-1-1.nexa",
-              "modelfiles/qnn/yolov12-npu/weights-1-1.nexa", ""},
+              "modelfiles/qairt/yolov12-npu/weights-1-1.nexa",
+              "modelfiles/qairt/yolov12-npu/weights-1-1.nexa", ""},
              {"rfdetr-npu", "rfdetr",
-              "modelfiles/qnn/rfdetr-npu/weights-1-1.nexa",
-              "modelfiles/qnn/rfdetr-npu/weights-1-1.nexa", ""},
+              "modelfiles/qairt/rfdetr-npu/weights-1-1.nexa",
+              "modelfiles/qairt/rfdetr-npu/weights-1-1.nexa", ""},
              {"RMBG-2.0-npu", "rmbg-v2",
-              "modelfiles/qnn/RMBG-2.0-npu/weights-1-1.nexa",
-              "modelfiles/qnn/RMBG-2.0-npu/weights-1-1.nexa", ""},
+              "modelfiles/qairt/RMBG-2.0-npu/weights-1-1.nexa",
+              "modelfiles/qairt/RMBG-2.0-npu/weights-1-1.nexa", ""},
              {"Real-ESRGAN-x4plus-npu", "realesrgan",
-              "modelfiles/qnn/Real-ESRGAN-x4plus-npu/weights-1-1.nexa",
-              "modelfiles/qnn/Real-ESRGAN-x4plus-npu/weights-1-1.nexa", ""},
+              "modelfiles/qairt/Real-ESRGAN-x4plus-npu/weights-1-1.nexa",
+              "modelfiles/qairt/Real-ESRGAN-x4plus-npu/weights-1-1.nexa", ""},
              {"table-transformer-detection-npu", "table-transformer",
-              "modelfiles/qnn/table-transformer-detection-npu/weights-1-1.nexa",
-              "modelfiles/qnn/table-transformer-detection-npu/weights-1-1.nexa",
+              "modelfiles/qairt/table-transformer-detection-npu/weights-1-1.nexa",
+              "modelfiles/qairt/table-transformer-detection-npu/weights-1-1.nexa",
               ""},
              {"depth-anything-v2-npu", "depth-anything-v2",
-              "modelfiles/qnn/depth-anything-v2-npu/weights-1-1.nexa",
-              "modelfiles/qnn/depth-anything-v2-npu/weights-1-1.nexa", ""},
+              "modelfiles/qairt/depth-anything-v2-npu/weights-1-1.nexa",
+              "modelfiles/qairt/depth-anything-v2-npu/weights-1-1.nexa", ""},
 #elif defined(__linux__)
              {"convnext-tiny-npu", "convnext",
-              "modelfiles/qnn/convnext-tiny-npu-IoT/weights-1-1.nexa",
-              "modelfiles/qnn/convnext-tiny-npu-IoT/weights-1-1.nexa", ""},
+              "modelfiles/qairt/convnext-tiny-npu-IoT/weights-1-1.nexa",
+              "modelfiles/qairt/convnext-tiny-npu-IoT/weights-1-1.nexa", ""},
 #endif
-             // Add more qnn models here as needed
+             // Add more qairt models here as needed
          }},
     },
     [](ml_PluginId plugin, Param param) {

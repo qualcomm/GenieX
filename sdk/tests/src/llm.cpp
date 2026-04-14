@@ -20,7 +20,7 @@ namespace {
 // Declare the list of plugins for this test file using an X-macro list
 #define PLUGINS(M)                                                             \
   M(llama_cpp)                                                                 \
-  M(qnn)
+  M(qairt)
 using Param = std::tuple<std::string, std::string, std::string,
                          std::optional<std::string>>;
 
@@ -28,7 +28,7 @@ using Param = std::tuple<std::string, std::string, std::string,
 // Add plugin name to set to enable that capability for the plugin
 struct PluginCapabilities {
   static inline const std::set<std::string> KV_CACHE = {"llama_cpp"};
-  static inline const std::set<std::string> JSON = {"qnn"};
+  static inline const std::set<std::string> JSON = {"qairt"};
   static inline const std::set<std::string> TOOL_CALL = {"llama_cpp"};
 
   static bool has_kv_cache(const std::string &plugin) {
@@ -63,7 +63,7 @@ Setup<Param, ml_LLM> setup_guard(
               "modelfiles/llama_cpp/Qwen3-0.6B-Q4_0.gguf", std::nullopt},
 #endif
          }},
-        {qnn::value,
+        {qairt::value,
          {
 #if defined(__ANDROID__)
              {"LFM2-1.2B-npu", "liquid-v2",
@@ -95,32 +95,32 @@ Setup<Param, ml_LLM> setup_guard(
               std::nullopt},
 #elif defined(_WIN32)
              {"Llama3.2-3B-NPU-Turbo", "llama3-3b",
-              "modelfiles/qnn/Llama3.2-3B-NPU-Turbo/weights-1-3.nexa",
+              "modelfiles/qairt/Llama3.2-3B-NPU-Turbo/weights-1-3.nexa",
               std::nullopt},
              {"Granite-4-Micro-NPU", "granite4",
-              "modelfiles/qnn/Granite-4-Micro-NPU/weights-1-3.nexa",
+              "modelfiles/qairt/Granite-4-Micro-NPU/weights-1-3.nexa",
               std::nullopt},
              {"phi4-mini-npu-turbo", "phi4",
-              "modelfiles/qnn/phi4-mini-npu-turbo/weights-1-3.nexa",
+              "modelfiles/qairt/phi4-mini-npu-turbo/weights-1-3.nexa",
               std::nullopt},
              {"Qwen3-4B-Thinking-2507-npu", "qwen3-4b",
-              "modelfiles/qnn/Qwen3-4B-Thinking-2507-npu/weights-1-3.nexa",
+              "modelfiles/qairt/Qwen3-4B-Thinking-2507-npu/weights-1-3.nexa",
               std::nullopt},
              {"jan-v1-4B-npu", "qwen3-4b",
-              "modelfiles/qnn/jan-v1-4B-npu/weights-1-3.nexa", std::nullopt},
+              "modelfiles/qairt/jan-v1-4B-npu/weights-1-3.nexa", std::nullopt},
              {"phi3.5-mini-npu", "phi3.5",
-              "modelfiles/qnn/phi3.5-mini-npu/weights-1-3.nexa", std::nullopt},
+              "modelfiles/qairt/phi3.5-mini-npu/weights-1-3.nexa", std::nullopt},
              {"Qwen3-8B-NPU", "qwen3-8b",
-              "modelfiles/qnn/Qwen3-8B-NPU/weights-1-5.nexa", std::nullopt},
+              "modelfiles/qairt/Qwen3-8B-NPU/weights-1-5.nexa", std::nullopt},
              {"Ministral-3-3B-npu", "ministral3-3b",
-              "modelfiles/qnn/Ministral-3-3B-NPU/weights-1-3.nexa",
+              "modelfiles/qairt/Ministral-3-3B-NPU/weights-1-3.nexa",
               std::nullopt},
              {"HY-MT1.5-1.8B-npu", "hy-mt",
-              "modelfiles/qnn/HY-MT1.5-1.8B-npu/weights-1-2.nexa",
+              "modelfiles/qairt/HY-MT1.5-1.8B-npu/weights-1-2.nexa",
               std::nullopt},
 #elif defined(__linux__)
              {"LFM2-1.2B-npu", "liquid-v2",
-              "modelfiles/qnn/LFM2-1.2B-npu/weights-1-2.nexa", std::nullopt},
+              "modelfiles/qairt/LFM2-1.2B-npu/weights-1-2.nexa", std::nullopt},
 #endif
          }},
     },
@@ -254,7 +254,7 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
 
   //     // Test reading input from file (Android NPU only)
   // #if defined(__ANDROID__)
-  //     if (plugin_name == "qnn") {
+  //     if (plugin_name == "qairt") {
   //         REGISTER_TEST(registry, GenerateFromFile,
   //             // Read prompt from test.txt file
   //             std::string test_file_path =

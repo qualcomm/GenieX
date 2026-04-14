@@ -18,6 +18,8 @@
 
 namespace geniex {
 
+inline constexpr const char* kQairtPluginId = "qairt";
+
 #if defined(_WIN32) || defined(__ANDROID__)
 /**
  * @brief Detect HTP (Hexagon Tensor Processor) architecture version via CDSP.
@@ -204,7 +206,7 @@ inline std::string fill_qnn_lib_path(std::string device_id = "",
   auto plugin_path = std::getenv("GENIEX_PLUGIN_PATH");
   if (plugin_path) {
     base_lib_path = (std::filesystem::path(plugin_path) /
-                     GENIEX_PLUGIN_ID_QAIRT / "htp-files")
+                     kQairtPluginId / "htp-files")
                         .string();
   }
 

@@ -159,125 +159,93 @@ int32_t QnnVlm::apply_chat_template(const ml_VlmApplyChatTemplateInput* input, m
 /**
  * @brief Generate VLM output with audio/image preprocessing
  *
- * Audio: concatenates and resamples multiple files into single 16kHz mono.
- * Images: model-specific resize (qwen3vl: aspect-ratio, omni-neural: pad).
+ * Preprocessing (model-specific):
+ * - Audio: Concatenates and resamples multiple files into single 16kHz mono
+ * - Images: qwen3vl uses aspect-ratio preserving resize, omni-neural uses resize+pad
+ *
+ * Falls back to original files if preprocessing fails (non-blocking errors).
  *
  * @param input Generation input with prompt, images, audio, config
  * @param output Generated text response
  * @return ML_SUCCESS or error code
  */
 int32_t QnnVlm::generate(const ml_VlmGenerateInput* input, ml_VlmGenerateOutput* output) {
-    if (!m_model_impl) {
-        return ML_ERROR_COMMON_INVALID_INPUT;
-    }
-    if (!input || !output) {
+    if (!m_model_impl || !input || !output || !input->config) {
         return ML_ERROR_COMMON_INVALID_INPUT;
     }
 
-    auto* mutable_input  = const_cast<ml_VlmGenerateInput*>(input);
-    auto* mutable_config = const_cast<ml_GenerationConfig*>(mutable_input->config);
+    ml_VlmGenerateInput processed_input = *input;
+    ml_GenerationConfig processed_config = *input->config;
+    processed_input.config = &processed_config;
 
-    ml_Path* original_audio_paths = nullptr;
-    int      original_audio_count = 0;
-    ml_Path* original_image_paths = nullptr;
-    int      original_image_count = 0;
+    std::vector<std::string> audio_paths_storage;
+    std::vector<std::string> image_paths_storage;
+    std::vector<ml_Path>     audio_paths_array;
+    std::vector<ml_Path>     image_paths_array;
 
-    std::vector<std::vector<char>> audio_buffers;
-    std::vector<std::vector<char>> image_buffers;
+    if (processed_config.audio_paths && processed_config.audio_count > 0) {
+        GENIEX_LOG_INFO("Preprocessing {} audio file(s)", processed_config.audio_count);
 
-    GENIEX_LOG_INFO("found {} audio(s) to process", mutable_config->audio_count);
-
-    // Multiple audio files → Single file
-    if (mutable_config->audio_paths && mutable_config->audio_count > 0) {
         try {
-            std::string new_audio_path =
-                geniex::image_utils::concat_and_resample_audio(mutable_config->audio_paths, mutable_config->audio_count);
+            std::string concatenated_audio = geniex::image_utils::concat_and_resample_audio(
+                processed_config.audio_paths,
+                processed_config.audio_count
+            );
 
-            // Only save original and allocate new if preprocessing succeeds
-            original_audio_paths = mutable_config->audio_paths;
-            original_audio_count = mutable_config->audio_count;
+            audio_paths_storage.push_back(std::move(concatenated_audio));
+            audio_paths_array.push_back(audio_paths_storage.back().c_str());
 
-            audio_buffers.emplace_back(new_audio_path.begin(), new_audio_path.end());
-            audio_buffers.back().push_back('\0');
+            processed_config.audio_paths = audio_paths_array.data();
+            processed_config.audio_count = 1;
 
-            mutable_config->audio_paths    = new ml_Path[1];
-            mutable_config->audio_paths[0] = audio_buffers.back().data();
-            mutable_config->audio_count    = 1;
-
-            GENIEX_LOG_INFO("concat and resample {} audios -> {}", original_audio_count, new_audio_path);
+            GENIEX_LOG_INFO("Audio preprocessing complete: {} files → {}",
+                input->config->audio_count, audio_paths_storage.back());
         } catch (const std::exception& e) {
-            GENIEX_LOG_WARN("Audio preprocessing failed ({}), proceeding with original audio files. Error: {}",
-                mutable_config->audio_count > 1 ? "concat/resample" : "resample",
+            GENIEX_LOG_WARN("Audio preprocessing failed, using original files. Error: {}",
                 fmt::to_string(e.what()));
-            // Keep original audio paths - no changes needed, original_audio_paths remains nullptr
         }
     }
 
-    GENIEX_LOG_INFO("found {} images to process", mutable_config->image_count);
+    if (processed_config.image_paths && processed_config.image_count > 0) {
+        GENIEX_LOG_INFO("Preprocessing {} image(s) for model: {}",
+            processed_config.image_count, m_model_name);
 
-    if (mutable_config->image_paths && mutable_config->image_count > 0) {
-        original_image_paths = mutable_config->image_paths;
-        original_image_count = mutable_config->image_count;
+        image_paths_array.reserve(processed_config.image_count);
 
-        mutable_config->image_paths = new ml_Path[original_image_count];
-        for (int i = 0; i < original_image_count; i++) {
-            std::string resized_image_path;
+        for (int i = 0; i < processed_config.image_count; i++) {
+            const char* original_path = processed_config.image_paths[i];
+            std::string processed_path;
 
-            // Skip resize if image_max_length is 0 or negative
-            if (mutable_config->image_max_length <= 0) {
-                GENIEX_LOG_INFO("Skipping image resize due to image_max_length: {} (model: {})",
-                    mutable_config->image_max_length,
-                    m_model_name);
-                resized_image_path = std::string(original_image_paths[i]);
+            if (processed_config.image_max_length <= 0) {
+                GENIEX_LOG_DEBUG("Skipping image {} resize (image_max_length: {})",
+                    i + 1, processed_config.image_max_length);
+                processed_path = original_path;
             } else {
-                auto image_max_length = mutable_config->image_max_length;
-
                 try {
                     if (m_model_name == "qwen3vl") {
-                        // For qwen3vl, use the new resize logic
-                        resized_image_path = resize_qwen3vl_image(original_image_paths[i], image_max_length);
+                        processed_path = resize_qwen3vl_image(original_path, processed_config.image_max_length);
                     } else {
-                        // For other models (omni-neural), use the original resize and pad logic
-                        resized_image_path = geniex::image_utils::resize_and_pad_image(original_image_paths[i]);
+                        processed_path = geniex::image_utils::resize_and_pad_image(original_path);
                     }
+
+                    GENIEX_LOG_DEBUG("Image {}/{}: {} -> {}",
+                        i + 1, processed_config.image_count, original_path, processed_path);
                 } catch (const std::exception& e) {
-                    GENIEX_LOG_WARN("Image {} preprocessing failed, proceeding with original file. Error: {}",
-                        i + 1,
-                        fmt::to_string(e.what()));
-                    // Use original image path
-                    resized_image_path = std::string(original_image_paths[i]);
+                    GENIEX_LOG_WARN("Image {} preprocessing failed, using original. Error: {}",
+                        i + 1, fmt::to_string(e.what()));
+                    processed_path = original_path;
                 }
             }
 
-            image_buffers.emplace_back(resized_image_path.begin(), resized_image_path.end());
-            image_buffers.back().push_back('\0');
-
-            mutable_config->image_paths[i] = image_buffers.back().data();
-
-            GENIEX_LOG_INFO("Processed image {}/{}: {} -> {} (model: {})",
-                i + 1,
-                original_image_count,
-                original_image_paths[i],
-                resized_image_path,
-                m_model_name);
+            image_paths_storage.push_back(std::move(processed_path));
+            image_paths_array.push_back(image_paths_storage.back().c_str());
         }
-        mutable_config->image_count = original_image_count;
+
+        processed_config.image_paths = image_paths_array.data();
+        processed_config.image_count = static_cast<int>(image_paths_array.size());
     }
 
-    int32_t result = m_model_impl->generate(mutable_input, output);
-
-    if (original_audio_paths) {
-        delete[] mutable_config->audio_paths;
-        mutable_config->audio_paths = original_audio_paths;
-        mutable_config->audio_count = original_audio_count;
-    }
-    if (original_image_paths) {
-        delete[] mutable_config->image_paths;
-        mutable_config->image_paths = original_image_paths;
-        mutable_config->image_count = original_image_count;
-    }
-
-    return result;
+    return m_model_impl->generate(&processed_input, output);
 }
 
 }  // namespace geniex

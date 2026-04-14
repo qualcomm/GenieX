@@ -13,7 +13,7 @@
 
 namespace {
 
-#define PLUGINS(M) M(llama_cpp) M(qnn)
+#define PLUGINS(M) M(llama_cpp) M(qairt)
 using Param = std::tuple<std::string, std::string, std::string, std::optional<std::string>, std::optional<std::string>>;
 
 Setup<Param, ml_VLM> setup_guard(
@@ -27,7 +27,7 @@ Setup<Param, ml_VLM> setup_guard(
                     std::nullopt},
                 // Add more llama_cpp models here as needed
             }},
-        {qnn::value,
+        {qairt::value,
             {
 #if defined(__ANDROID__)
                 {"OmniNeural-4B",
@@ -48,17 +48,17 @@ Setup<Param, ml_VLM> setup_guard(
 #elif defined(_WIN32)
                 {"OmniNeural-4B",
                     "omni-neural",
-                    "modelfiles/qnn/OmniNeural-4B/weights-1-8.nexa",
+                    "modelfiles/qairt/OmniNeural-4B/weights-1-8.nexa",
                     std::nullopt,
                     std::nullopt},
                 {"Qwen3-VL-4B-Instruct-NPU",
                     "qwen3vl",
-                    "modelfiles/qnn/Qwen3-VL-4B-Instruct-NPU/weights-1-4.nexa",
+                    "modelfiles/qairt/Qwen3-VL-4B-Instruct-NPU/weights-1-4.nexa",
                     std::nullopt,
                     std::nullopt},
-                {"AutoNeural", "auto-neural", "modelfiles/qnn/AutoNeural/weights-1-3.nexa", std::nullopt, std::nullopt},
+                {"AutoNeural", "auto-neural", "modelfiles/qairt/AutoNeural/weights-1-3.nexa", std::nullopt, std::nullopt},
 #elif defined(__linux__)
-                {"AutoNeural", "auto-neural", "modelfiles/qnn/AutoNeural/weights-1-3.nexa", std::nullopt, std::nullopt},
+                {"AutoNeural", "auto-neural", "modelfiles/qairt/AutoNeural/weights-1-3.nexa", std::nullopt, std::nullopt},
 #endif
             }},
     },
@@ -336,8 +336,8 @@ void register_vlm_tests(TestRegistry<ml_VLM>& registry) {
     REGISTER_TEST(registry, GenerateMultiRound, test_generate_multi_round(model, model_name););
     REGISTER_TEST(registry, GenerateWithSampling, test_generate_with_sampling(model, model_name););
 
-    // QNN-specific JSON test
-    if (std::is_same_v<PluginType, qnn>) {
+    // QAIRT-specific JSON test
+    if (std::is_same_v<PluginType, qairt>) {
         REGISTER_TEST(registry, GenerateJson, test_generate_json(model, model_name););
     }
 }

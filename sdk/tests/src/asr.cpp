@@ -16,14 +16,14 @@
 
 namespace {
 
-#define PLUGINS(M) M(qnn)
+#define PLUGINS(M) M(qairt)
 using Param =
     std::tuple<std::string, std::string, std::string,
                std::optional<std::string>, std::optional<std::string>>;
 
 Setup<Param, ml_ASR> setup_guard(
     SetupMap<Param>{
-        {qnn::value,
+        {qairt::value,
          {
 #if defined(__ANDROID__)
              {"parakeet-tdt-0.6b-v3-npu", "parakeet",
@@ -36,13 +36,13 @@ Setup<Param, ml_ASR> setup_guard(
               std::nullopt, std::nullopt},
 #elif defined(_WIN32)
              {"parakeet-tdt-0.6b-v3-npu", "parakeet",
-              "modelfiles/qnn/parakeet-tdt-0.6b-v3-npu/weights-1-5.nexa",
+              "modelfiles/qairt/parakeet-tdt-0.6b-v3-npu/weights-1-5.nexa",
               std::nullopt, std::nullopt},
              {"wav2vec2-base-960h-npu", "wav2vec2",
-              "modelfiles/qnn/wav2vec2-base-960h-npu/weights-1-1.nexa",
+              "modelfiles/qairt/wav2vec2-base-960h-npu/weights-1-1.nexa",
               std::nullopt, std::nullopt},
 #endif
-             // Add more qnn models here as needed
+             // Add more qairt models here as needed
          }},
     },
     [](ml_PluginId plugin, Param param) {
@@ -443,8 +443,8 @@ void register_asr_tests(TestRegistry<ml_ASR> &registry) {
   REGISTER_TEST(registry, AsrErrorHandling,
                 test_asr_error_handling(model, model_name););
 
-  // QNN-specific tests
-  if (std::is_same_v<PluginType, qnn>) {
+  // QAIRT-specific tests
+  if (std::is_same_v<PluginType, qairt>) {
     REGISTER_TEST(registry, AsrListSupportedLanguages,
                   test_asr_list_supported_languages(model, model_name););
     REGISTER_TEST(registry, AsrStreamingTranscription,
