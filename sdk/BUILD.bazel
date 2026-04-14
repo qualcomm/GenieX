@@ -1,8 +1,24 @@
 package(default_visibility = ["//visibility:public"])
 
 config_setting(
+    name = "windows_arm64",
+    constraint_values = [
+        "@platforms//os:windows",
+        "@platforms//cpu:arm64",
+    ],
+)
+
+config_setting(
     name = "windows",
     constraint_values = ["@platforms//os:windows"],
+)
+
+config_setting(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
 )
 
 config_setting(

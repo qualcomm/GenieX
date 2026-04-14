@@ -1,74 +1,63 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
-load("@rules_foreign_cc//foreign_cc:defs.bzl", "cmake")
 
 package(default_visibility = ["//visibility:public"])
+
+exports_files(["build_llama_cpp.bat"])
 
 COMMON_COPTS = select({
     "//sdk:windows": ["/std:c++17", "/utf-8"],
     "//conditions:default": ["-std=c++17"],
 })
 
+COMMON_DEFINES = select({
+    "//sdk:windows": [
+        "_CRT_SECURE_NO_WARNINGS",
+        "_WIN32_WINNT=0x0A00",
+        "WIN32_LEAN_AND_MEAN",
+        "NOMINMAX",
+    ],
+    "//conditions:default": [],
+}) + [
+    "GENIEX_DL",
+]
+
 cc_library(
     name = "headers",
     hdrs = glob(["include/*.h"]),
     includes = ["include"],
-    deps = ["//sdk/include:headers"],
-)
-
-filegroup(
-    name = "srcs",
-    srcs = glob(["src/*.cpp"]),
-)
-
-cmake(
-    name = "llama_cpp_foreign",
-    lib_source = "@llama_cpp_src//:srcs",
-    build_args = ["-j16"],
-    cache_entries = {
-        "BUILD_SHARED_LIBS": "ON",
-        "CMAKE_BUILD_TYPE": "Release",
-        "GGML_CCACHE": "OFF",
-        "LLAMA_BUILD_COMMON": "ON",
-        "LLAMA_BUILD_EXAMPLES": "OFF",
-        "LLAMA_BUILD_SERVER": "OFF",
-        "LLAMA_BUILD_TESTS": "OFF",
-        "LLAMA_BUILD_TOOLS": "OFF",
-    },
-    out_shared_libs = [
-        "libggml-base.so.0",
-        "libggml-cpu.so.0",
-        "libggml.so.0",
-        "libllama.so.0",
-    ],
-)
-
-cc_library(
-    name = "llama_cpp",
     deps = [
-        ":llama_cpp_foreign",
+        "//sdk/include:headers",
         "@llama_cpp_src//:headers",
     ],
 )
 
 cc_library(
     name = "plugin_lib",
-    srcs = [":srcs"],
+    srcs = glob(["src/*.cpp"]) + ["//sdk/src:srcs"],
     copts = COMMON_COPTS,
-    defines = [
-        "GENIEX_DL",
-        "ML_SHARED",
-    ],
+    defines = COMMON_DEFINES,
+    linkopts = select({
+        "//sdk:windows": ["Advapi32.lib", "ws2_32.lib"],
+        "//conditions:default": ["-ldl"],
+    }),
     deps = [
         ":headers",
-        ":llama_cpp",
-        "//sdk/include:headers",
-        "//sdk/src:geniex_lib",
+        "@llama_cpp_src//:common",
+        "@llama_cpp_src//:ggml",
+        "@llama_cpp_src//:llama",
+        "@llama_cpp_src//:mtmd",
     ],
 )
 
 cc_binary(
     name = "geniex_plugin",
+    data = ["@llama_cpp_src//:runtime_dlls"],
     deps = [":plugin_lib"],
     linkshared = True,
     linkstatic = False,
+)
+
+alias(
+    name = "geniex_llama_cpp",
+    actual = ":geniex_plugin",
 )
