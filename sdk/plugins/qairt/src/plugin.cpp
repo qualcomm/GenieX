@@ -5,7 +5,6 @@
 
 #include "build_config.h"
 #include "llm.h"
-#include "vlm.h"
 #include "logging.h"
 
 namespace geniex {
@@ -36,7 +35,47 @@ class QairtPlugin : public Plugin {
     }
 
     ILlm* create_llm() override { return new geniex::QairtLlm; }
-    IVlm* create_vlm() override { return new geniex::QairtVlm; }
+
+    IVlm* create_vlm() override {
+        GENIEX_LOG_WARN("QAIRT embedding is not available in this build");
+        return nullptr;
+        // return new geniex::QairtVlm;
+    }
+
+    IEmbedding* create_embedding() override {
+        GENIEX_LOG_WARN("QAIRT embedding is not available in this build");
+        return nullptr;
+    }
+
+    IReranker* create_reranker() override {
+        GENIEX_LOG_WARN("QAIRT reranker is not available in this build");
+        return nullptr;
+    }
+
+    IAsr* create_asr() override {
+        GENIEX_LOG_WARN("QAIRT ASR is not available in this build");
+        return nullptr;
+    }
+
+    ITts* create_tts() override {
+        GENIEX_LOG_WARN("QAIRT TTS is not available in this build");
+        return nullptr;
+    }
+
+    ICv* create_cv() override {
+        GENIEX_LOG_WARN("QAIRT CV is not available in this build");
+        return nullptr;
+    }
+
+    IImageGen* create_image_gen() override {
+        GENIEX_LOG_WARN("QAIRT image-gen is not available in this build");
+        return nullptr;
+    }
+
+    IDiarize* create_diarize() override {
+        GENIEX_LOG_WARN("QAIRT diarize is not available in this build");
+        return nullptr;
+    }
 };
 
 }  // namespace geniex
