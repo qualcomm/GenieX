@@ -58,10 +58,10 @@ set(COMMON_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 find_common_libs(GENIEX_COMMON_LIB_FILES)
 
 # Plugin IDs
-set(GENIEX_PLUGIN_ID_LLAMA_CPP "cpu_gpu")
+set(GENIEX_PLUGIN_ID_LLAMA_CPP "llama_cpp")
 add_compile_definitions(GENIEX_PLUGIN_ID_LLAMA_CPP="${GENIEX_PLUGIN_ID_LLAMA_CPP}")
 
-set(GENIEX_PLUGIN_ID_QAIRT "npu")
+set(GENIEX_PLUGIN_ID_QAIRT "qairt")
 add_compile_definitions(GENIEX_PLUGIN_ID_QAIRT="${GENIEX_PLUGIN_ID_QAIRT}")
 
 include(./cmake/llama_cpp.cmake)

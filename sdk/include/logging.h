@@ -1,6 +1,9 @@
 #pragma once
 
 #define FMT_HEADER_ONLY
+#ifndef FMT_USE_CONSTEVAL
+#define FMT_USE_CONSTEVAL 0
+#endif
 #include "external/fmt/core.h"
 #include "ml.h"
 

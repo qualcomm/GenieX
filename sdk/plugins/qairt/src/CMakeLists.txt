@@ -19,7 +19,12 @@ endforeach()
 
 target_include_directories(geniex_npu
     PUBLIC  ${COMMON_INCLUDE}
-    PRIVATE ../include/)
+    PRIVATE ../include/
+    PRIVATE ${GENIEX_QAIRT_DIR}/core/include
+    PRIVATE ${GENIEX_QAIRT_DIR}/models/qwen3
+    PRIVATE ${GENIEX_QAIRT_DIR}/models/phi4
+    PRIVATE ${GENIEX_QAIRT_DIR}/models/phi3_5
+    PRIVATE ${GENIEX_QAIRT_DIR}/models/granite4)
 
 target_link_libraries(geniex_npu PRIVATE geniex geniex_core)
 

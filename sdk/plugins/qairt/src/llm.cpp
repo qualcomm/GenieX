@@ -1,365 +1,309 @@
 #include "llm.h"
 
-#include <cstdlib>
+#include <algorithm>
 #include <cstring>
 #include <filesystem>
-#include <functional>
-#include <memory>
 #include <string>
-#include <string_view>
-#include <utility>
 #include <vector>
 
-#include "ml.h"
-#include "pipeline/llm_pipeline.h"
-
 #if defined(_WIN32)
-#include "granite4.h"
-#include "phi4.h"
-#include "qwen3.h"
+#include <windows.h>
+#define portable_strdup _strdup
+#else
+#define portable_strdup strdup
 #endif
 
-namespace {
+#include "logging.h"
+#include "model_registry.h"
+#include "pipeline/llm_pipeline.h"
+#include "types.h"
 
-char* DupCString(const std::string& value) {
-    auto* buffer = static_cast<char*>(std::malloc(value.size() + 1));
-    if (!buffer) {
-        return nullptr;
-    }
-    std::memcpy(buffer, value.c_str(), value.size() + 1);
-    return buffer;
-}
-
-struct ExtractedMessage {
-    std::string system_prompt;
-    std::string last_user_message;
-    bool has_system = false;
-};
-
-ExtractedMessage extract_last_user_message(const ml_LlmApplyChatTemplateInput* input) {
-    ExtractedMessage result;
-
-    for (int32_t i = 0; i < input->message_count; ++i) {
-        const char* role = input->messages[i].role;
-        const char* content = input->messages[i].content;
-
-        if (role && std::strcmp(role, "system") == 0 && !result.has_system) {
-            result.system_prompt = content ? content : "";
-            result.has_system = true;
-        } else if (role && std::strcmp(role, "user") == 0) {
-            result.last_user_message = content ? content : "";
-        }
-    }
-
-    return result;
-}
-
-class LlmFolderPathFiller {
-   public:
-    LlmFolderPathFiller(const ml_LlmCreateInput* value, const std::string& preset_lib_path = "") {
-        auto* mutable_value = const_cast<ml_LlmCreateInput*>(value);
-
-        if (!mutable_value->config.qnn_model_folder_path && mutable_value->model_path) {
-            model_path_ = std::filesystem::path(mutable_value->model_path).parent_path().string();
-            mutable_value->config.qnn_model_folder_path = model_path_.c_str();
-        }
-
-        if (!mutable_value->config.qnn_lib_folder_path && !preset_lib_path.empty()) {
-            lib_path_ = preset_lib_path;
-            mutable_value->config.qnn_lib_folder_path = lib_path_.c_str();
-        }
-    }
-
-   private:
-    std::string model_path_;
-    std::string lib_path_;
-};
-
-}  // namespace
+namespace fs = std::filesystem;
 
 namespace geniex {
 
-class PipelineLlm final : public ILlm {
-   public:
-    using ModelFactory = std::function<LLMModel()>;
+QairtLlm::~QairtLlm() = default;
 
-    PipelineLlm(std::string family_name,
-                std::string model_subdir,
-                ModelFactory model_factory,
-                std::vector<std::string> model_files,
-                bool needs_embedding)
-        : family_name_(std::move(family_name)),
-          model_subdir_(std::move(model_subdir)),
-          model_factory_(std::move(model_factory)),
-          model_files_(std::move(model_files)),
-          needs_embedding_(needs_embedding) {}
-
-    int32_t reset() override {
-        if (!ready_) {
-            return ML_ERROR_COMMON_NOT_INITIALIZED;
-        }
-        pipeline_.reset();
-        return ML_SUCCESS;
+// Parse .nexa filename: weights-{version}-{shard_count}.nexa
+// Returns shard_count, or 0 on failure.
+static int parse_nexa_shard_count(const std::string& filename) {
+    // Expected format: weights-X-Y.nexa
+    auto stem = fs::path(filename).stem().string();  // "weights-X-Y"
+    auto last_dash = stem.rfind('-');
+    if (last_dash == std::string::npos) return 0;
+    try {
+        return std::stoi(stem.substr(last_dash + 1));
+    } catch (...) {
+        return 0;
     }
+}
 
-    int32_t save_kv_cache(const ml_KvCacheSaveInput* input, ml_KvCacheSaveOutput*) override {
-        if (!ready_) {
-            return ML_ERROR_COMMON_NOT_INITIALIZED;
-        }
-        if (!input || !input->path) {
-            return ML_ERROR_COMMON_INVALID_INPUT;
-        }
+// Discover .bin model shards in a directory, sorted alphabetically.
+static std::vector<std::string> discover_bin_shards(const fs::path& dir) {
+    std::vector<std::string> bins;
+    if (!fs::exists(dir) || !fs::is_directory(dir)) return bins;
 
-        try {
-            pipeline_.saveKVCache(input->path);
-            return ML_SUCCESS;
-        } catch (const std::exception&) {
-            return ML_ERROR_COMMON_UNKNOWN;
+    for (const auto& entry : fs::directory_iterator(dir)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".bin") {
+            bins.push_back(entry.path().string());
         }
     }
+    std::sort(bins.begin(), bins.end());
+    return bins;
+}
 
-    int32_t load_kv_cache(const ml_KvCacheLoadInput* input, ml_KvCacheLoadOutput*) override {
-        if (!ready_) {
-            return ML_ERROR_COMMON_NOT_INITIALIZED;
-        }
-        if (!input || !input->path) {
-            return ML_ERROR_COMMON_INVALID_INPUT;
-        }
+// Find a file by name in the directory, return empty string if not found.
+static std::string find_file(const fs::path& dir, const std::string& filename) {
+    auto p = dir / filename;
+    return fs::exists(p) ? p.string() : std::string{};
+}
 
-        try {
-            pipeline_.loadKVCache(input->path);
-            return ML_SUCCESS;
-        } catch (const std::exception&) {
-            return ML_ERROR_COMMON_UNKNOWN;
-        }
-    }
-
-    int32_t apply_chat_template(const ml_LlmApplyChatTemplateInput* input, ml_LlmApplyChatTemplateOutput* output) override {
-        if (!ready_) {
-            return ML_ERROR_COMMON_NOT_INITIALIZED;
-        }
-        if (!input || !output || !input->messages || input->message_count <= 0) {
-            return ML_ERROR_COMMON_INVALID_INPUT;
-        }
-
-        auto extracted = extract_last_user_message(input);
-
-        if (extracted.last_user_message.empty()) {
-            return ML_ERROR_COMMON_INVALID_INPUT;
-        }
-
-        if (extracted.has_system && pipeline_.nPast() == 0) {
-            pipeline_.setSystemPrompt(extracted.system_prompt);
-        }
-
-        std::string formatted_prompt = pipeline_.applyChatTemplate(
-            extracted.last_user_message,
-            input->enable_thinking
-        );
-
-        output->formatted_text = DupCString(formatted_prompt);
-        if (!output->formatted_text && !formatted_prompt.empty()) {
-            return ML_ERROR_COMMON_UNKNOWN;
-        }
-
-        return ML_SUCCESS;
-    }
-
-    int32_t generate(const ml_LlmGenerateInput* input, ml_LlmGenerateOutput* output) override {
-        if (!ready_) {
-            return ML_ERROR_COMMON_NOT_INITIALIZED;
-        }
-        if (!input || !output || !input->prompt_utf8) {
-            return ML_ERROR_COMMON_INVALID_INPUT;
-        }
-        if (input->input_ids && input->input_ids_count > 0) {
-            return ML_ERROR_COMMON_INVALID_INPUT;
-        }
-
-        GenerationConfig generation_config;
-        if (input->config) {
-            generation_config.max_tokens = input->config->max_tokens > 0 ? input->config->max_tokens : generation_config.max_tokens;
-            if (input->config->sampler_config) {
-                generation_config.temperature = input->config->sampler_config->temperature > 0.0f
-                                                    ? input->config->sampler_config->temperature
-                                                    : generation_config.temperature;
-                generation_config.top_p = input->config->sampler_config->top_p > 0.0f
-                                              ? input->config->sampler_config->top_p
-                                              : generation_config.top_p;
-            }
-        }
-        generation_config.thinking_mode = enable_thinking_;
-
-        try {
-            auto result = pipeline_.generate(
-                input->prompt_utf8,
-                generation_config,
-                [input](const char* piece) {
-                    return !input->on_token || input->on_token(piece, input->user_data);
-                });
-            output->full_text = DupCString(result.full_text);
-            if (!output->full_text && !result.full_text.empty()) {
-                return ML_ERROR_COMMON_UNKNOWN;
-            }
-            return ML_SUCCESS;
-        } catch (const std::exception&) {
-            return ML_ERROR_COMMON_UNKNOWN;
-        }
-    }
-
-   protected:
-    int32_t create_impl(const ml_LlmCreateInput* input) override {
-        if (!input || !input->config.qnn_model_folder_path || !input->config.qnn_lib_folder_path) {
-            return ML_ERROR_COMMON_INVALID_INPUT;
-        }
-
-        const std::filesystem::path model_root(input->config.qnn_model_folder_path);
-        const std::filesystem::path model_dir = std::filesystem::exists(model_root / model_subdir_)
-                                                    ? (model_root / model_subdir_)
-                                                    : model_root;
-        const std::filesystem::path lib_dir(input->config.qnn_lib_folder_path);
-
-        QnnRuntimeConfig runtime_config;
-        runtime_config.backend_path = (lib_dir / "QnnHtp.dll").string();
-        runtime_config.system_lib_path = (lib_dir / "QnnSystem.dll").string();
-        runtime_config.extensions_path = (lib_dir / "QnnHtpNetRunExtensions.dll").string();
-
-        ModelConfig model_config;
-        for (const std::string& file_name : model_files_) {
-            model_config.model_paths.push_back((model_dir / file_name).string());
-        }
-        model_config.tokenizer_path = input->tokenizer_path ? input->tokenizer_path : (model_dir / "tokenizer.json").string();
-        model_config.htp_config_path = (model_dir / "htp_backend_ext_config.json").string();
-        if (needs_embedding_) {
-            model_config.embedding_path = (model_dir / "embed_tokens.npy").string();
-        }
-
-        enable_thinking_ = input->config.enable_thinking;
-        if (!pipeline_.create(family_name_, model_factory_(), runtime_config, model_config)) {
-            return ML_ERROR_COMMON_MODEL_LOAD;
-        }
-        if (input->config.system_prompt) {
-            pipeline_.setSystemPrompt(input->config.system_prompt);
-        }
-        ready_ = true;
-        return ML_SUCCESS;
-    }
-
-   private:
-    std::string              family_name_;
-    std::string              model_subdir_;
-    ModelFactory             model_factory_;
-    std::vector<std::string> model_files_;
-    bool                     needs_embedding_ = false;
-    bool                     enable_thinking_ = false;
-    bool                     ready_ = false;
-    LLMPipeline              pipeline_;
-};
-
-QnnLlm::QnnLlm(std::string lib_path) : m_model_impl(), m_lib_path(std::move(lib_path)) {}
-
-QnnLlm::~QnnLlm() = default;
-
-int32_t QnnLlm::create_impl(const ml_LlmCreateInput* input) {
-    if (!input || !input->model_name) {
+int32_t QairtLlm::create_impl(const ml_LlmCreateInput* input) {
+    if (!input || !input->model_name || !input->model_path) {
         return ML_ERROR_COMMON_INVALID_INPUT;
     }
 
-    std::string_view model_name(input->model_name);
+    model_name_ = input->model_name;
+    enable_thinking_ = input->config.enable_thinking;
+
+    // Look up model in registry
+    auto& registry = model_registry();
+    auto it = registry.find(model_name_);
+    if (it == registry.end()) {
+        GENIEX_LOG_ERROR("Unknown QAIRT model name: {}", model_name_);
+        return ML_ERROR_COMMON_MODEL_INVALID;
+    }
+
+    const auto& entry = it->second;
+
+    // Parse model_path to get model directory
+    fs::path model_path(input->model_path);
+    fs::path model_dir = model_path.parent_path();
+
+    // Determine QNN model folder (for .bin shards)
+    fs::path qnn_model_dir = model_dir;
+    if (input->config.qnn_model_folder_path && input->config.qnn_model_folder_path[0] != '\0') {
+        qnn_model_dir = fs::path(input->config.qnn_model_folder_path);
+    }
+
+    // Determine QNN lib folder (for QNN runtime DLLs)
+    fs::path qnn_lib_dir;
+    if (input->config.qnn_lib_folder_path && input->config.qnn_lib_folder_path[0] != '\0') {
+        qnn_lib_dir = fs::path(input->config.qnn_lib_folder_path);
+    } else {
+        // Auto-discover QNN lib directory by searching common locations
+        auto has_qnn = [](const fs::path& dir) {
+            return fs::exists(dir / "QnnHtp.dll");
+        };
+        // 1. model directory itself
+        if (has_qnn(model_dir)) {
+            qnn_lib_dir = model_dir;
+        }
+        // 2. htp-files subdirectory of model dir
+        else if (has_qnn(model_dir / "htp-files")) {
+            qnn_lib_dir = model_dir / "htp-files";
+        }
+#if defined(_WIN32)
+        // 3. Check GENIEX_PLUGIN_PATH/qairt/htp-files
+        else if (auto env = std::getenv("GENIEX_PLUGIN_PATH"); env) {
+            auto candidate = fs::path(env) / "qairt" / "htp-files";
+            if (has_qnn(candidate)) qnn_lib_dir = candidate;
+        }
+        // 4. Next to the plugin DLL itself
+        else {
+            // GetModuleHandleA for geniex_plugin.dll
+            HMODULE hm = GetModuleHandleA("geniex_plugin.dll");
+            if (hm) {
+                char path_buf[MAX_PATH];
+                if (GetModuleFileNameA(hm, path_buf, MAX_PATH)) {
+                    auto plugin_dir = fs::path(path_buf).parent_path();
+                    if (has_qnn(plugin_dir)) qnn_lib_dir = plugin_dir;
+                    else if (has_qnn(plugin_dir / "htp-files")) qnn_lib_dir = plugin_dir / "htp-files";
+                }
+            }
+        }
+#endif
+        if (qnn_lib_dir.empty()) {
+            qnn_lib_dir = model_dir;  // fallback
+        }
+    }
+    // Ensure absolute path for LoadLibrary
+    if (qnn_lib_dir.is_relative()) {
+        qnn_lib_dir = fs::absolute(qnn_lib_dir);
+    }
+
+    GENIEX_LOG_DEBUG("QNN lib dir resolved to: {}", qnn_lib_dir.string());
+
+    // Build QnnRuntimeConfig
+    QnnRuntimeConfig runtime_cfg{};
+    runtime_cfg.backend_path = (qnn_lib_dir / "QnnHtp.dll").string();
+    runtime_cfg.system_lib_path = (qnn_lib_dir / "QnnSystem.dll").string();
+    runtime_cfg.extensions_path = (qnn_lib_dir / "QnnHtpNetRunExtensions.dll").string();
 
 #if defined(_WIN32)
-    if (model_name == "qwen3-4b") {
-        m_model_impl = std::make_unique<PipelineLlm>(
-            "qwen3",
-            "qwen3_4b_instruct_2507_aihub",
-            []() { return qwen3_4b_instruct_2507_aihub::makeModel(); },
-            std::vector<std::string>{
-                "qwen3_4b_instruct_2507_part_1_of_4.bin",
-                "qwen3_4b_instruct_2507_part_2_of_4.bin",
-                "qwen3_4b_instruct_2507_part_3_of_4.bin",
-                "qwen3_4b_instruct_2507_part_4_of_4.bin",
-            },
-            false);
-    } else if (model_name == "qwen3-8b") {
-        m_model_impl = std::make_unique<PipelineLlm>(
-            "qwen3",
-            "qwen3_8b",
-            []() { return qwen3_8b::makeModel(); },
-            std::vector<std::string>{
-                "weight_sharing_model_1_of_4.serialized.bin",
-                "weight_sharing_model_2_of_4.serialized.bin",
-                "weight_sharing_model_3_of_4.serialized.bin",
-                "weight_sharing_model_4_of_4.serialized.bin",
-            },
-            true);
-    } else if (model_name == "phi4") {
-        m_model_impl = std::make_unique<PipelineLlm>(
-            "phi4",
-            "phi4",
-            []() { return phi4::makeModel(); },
-            std::vector<std::string>{
-                "weight_sharing_model_1_of_2.serialized.bin",
-                "weight_sharing_model_2_of_2.serialized.bin",
-            },
-            true);
-    } else if (model_name == "granite4") {
-        m_model_impl = std::make_unique<PipelineLlm>(
-            "granite4",
-            "granite4_micro",
-            []() { return granite4_micro::makeModel(); },
-            std::vector<std::string>{
-                "weight_sharing_model_1_of_2.serialized.bin",
-                "weight_sharing_model_2_of_2.serialized.bin",
-            },
-            true);
-    } else {
-        return ML_ERROR_COMMON_MODEL_LOAD;
-    }
-#else
-    return ML_ERROR_COMMON_MODEL_LOAD;
+    // Set DLL search path so QNN runtime dependencies can be found
+    SetDllDirectoryA(qnn_lib_dir.string().c_str());
 #endif
 
-    LlmFolderPathFiller _(input, m_lib_path);
-    return m_model_impl->create(input);
-}
-
-int32_t QnnLlm::reset() {
-    if (!m_model_impl) {
-        return ML_ERROR_COMMON_NOT_INITIALIZED;
+    // Discover .bin model shards
+    auto bin_shards = discover_bin_shards(qnn_model_dir);
+    if (bin_shards.empty()) {
+        GENIEX_LOG_ERROR("No .bin model shards found in: {}", qnn_model_dir.string());
+        return ML_ERROR_COMMON_FILE_NOT_FOUND;
     }
-    return m_model_impl->reset();
-}
 
-int32_t QnnLlm::save_kv_cache(const ml_KvCacheSaveInput* input, ml_KvCacheSaveOutput* output) {
-    if (!m_model_impl) {
-        return ML_ERROR_COMMON_NOT_INITIALIZED;
+    GENIEX_LOG_DEBUG("Found {} model shards in {}", bin_shards.size(), qnn_model_dir.string());
+
+    // Build ModelConfig
+    ModelConfig model_cfg{};
+    model_cfg.model_paths = std::move(bin_shards);
+
+    // Tokenizer path
+    if (input->tokenizer_path && input->tokenizer_path[0] != '\0') {
+        model_cfg.tokenizer_path = input->tokenizer_path;
+    } else {
+        model_cfg.tokenizer_path = find_file(model_dir, "tokenizer.json");
     }
-    return m_model_impl->save_kv_cache(input, output);
-}
-
-int32_t QnnLlm::load_kv_cache(const ml_KvCacheLoadInput* input, ml_KvCacheLoadOutput* output) {
-    if (!m_model_impl) {
-        return ML_ERROR_COMMON_NOT_INITIALIZED;
+    if (model_cfg.tokenizer_path.empty()) {
+        GENIEX_LOG_ERROR("tokenizer.json not found in: {}", model_dir.string());
+        return ML_ERROR_COMMON_FILE_NOT_FOUND;
     }
-    return m_model_impl->load_kv_cache(input, output);
-}
 
-int32_t QnnLlm::apply_chat_template(const ml_LlmApplyChatTemplateInput* input, ml_LlmApplyChatTemplateOutput* output) {
-    if (!m_model_impl) {
-        return ML_ERROR_COMMON_NOT_INITIALIZED;
+    // Embedding table (optional - AI Hub models do embedding on-device)
+    model_cfg.embedding_path = find_file(model_dir, "embed_tokens.npy");
+
+    // HTP backend config
+    model_cfg.htp_config_path = find_file(model_dir, "htp_backend_ext_config.json");
+
+    // Create LLMPipeline
+    pipeline_ = std::make_unique<LLMPipeline>();
+
+    LLMModel model = entry.make_model();
+    if (!pipeline_->create(entry.pipeline_name, std::move(model), runtime_cfg, model_cfg)) {
+        GENIEX_LOG_ERROR("Failed to create QAIRT LLM pipeline for model: {}", model_name_);
+        pipeline_.reset();
+        return ML_ERROR_COMMON_MODEL_LOAD;
     }
-    return m_model_impl->apply_chat_template(input, output);
-}
 
-int32_t QnnLlm::generate(const ml_LlmGenerateInput* input, ml_LlmGenerateOutput* output) {
-    if (!m_model_impl) {
-        return ML_ERROR_COMMON_NOT_INITIALIZED;
+    // Set system prompt if provided
+    if (input->config.system_prompt && input->config.system_prompt[0] != '\0') {
+        pipeline_->setSystemPrompt(input->config.system_prompt);
     }
-    return m_model_impl->generate(input, output);
+
+    GENIEX_LOG_DEBUG("QAIRT LLM created successfully: model={}, pipeline_name={}", model_name_, entry.pipeline_name);
+    return ML_SUCCESS;
 }
 
-ILlm* create_qairt_llm(const char* lib_path) {
-    return new QnnLlm(lib_path ? lib_path : "");
+int32_t QairtLlm::reset() {
+    if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
+    pipeline_->reset();
+    return ML_SUCCESS;
+}
+
+int32_t QairtLlm::save_kv_cache(const ml_KvCacheSaveInput* input, ml_KvCacheSaveOutput*) {
+    if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
+    if (!input || !input->path) return ML_ERROR_COMMON_INVALID_INPUT;
+    pipeline_->saveKVCache(input->path);
+    return ML_SUCCESS;
+}
+
+int32_t QairtLlm::load_kv_cache(const ml_KvCacheLoadInput* input, ml_KvCacheLoadOutput*) {
+    if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
+    if (!input || !input->path) return ML_ERROR_COMMON_INVALID_INPUT;
+    pipeline_->loadKVCache(input->path);
+    return ML_SUCCESS;
+}
+
+int32_t QairtLlm::apply_chat_template(const ml_LlmApplyChatTemplateInput* input,
+                                       ml_LlmApplyChatTemplateOutput* output) {
+    if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
+    if (!input || !output) return ML_ERROR_COMMON_INVALID_INPUT;
+    if (!input->messages || input->message_count <= 0) return ML_ERROR_COMMON_INVALID_INPUT;
+
+    // Extract the last user message
+    const char* user_message = nullptr;
+    for (int32_t i = input->message_count - 1; i >= 0; --i) {
+        if (input->messages[i].role && std::strcmp(input->messages[i].role, "user") == 0) {
+            user_message = input->messages[i].content;
+            break;
+        }
+    }
+
+    if (!user_message) {
+        GENIEX_LOG_ERROR("No user message found in chat messages");
+        return ML_ERROR_COMMON_INVALID_INPUT;
+    }
+
+    bool thinking = input->enable_thinking || enable_thinking_;
+    std::string formatted = pipeline_->applyChatTemplate(user_message, thinking);
+
+    output->formatted_text = portable_strdup(formatted.c_str());
+    if (!output->formatted_text) return ML_ERROR_COMMON_MEMORY_ALLOCATION;
+
+    return ML_SUCCESS;
+}
+
+int32_t QairtLlm::generate(const ml_LlmGenerateInput* input, ml_LlmGenerateOutput* output) {
+    if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
+    if (!input || !output) return ML_ERROR_COMMON_INVALID_INPUT;
+
+    // Check for input_ids path (not supported in Phase 1)
+    if (input->input_ids && input->input_ids_count > 0) {
+        GENIEX_LOG_ERROR("QAIRT plugin does not support input_ids yet, use prompt_utf8");
+        return ML_ERROR_COMMON_NOT_SUPPORTED;
+    }
+
+    if (!input->prompt_utf8) return ML_ERROR_COMMON_INVALID_INPUT;
+
+    // Map ml_GenerationConfig -> geniex::GenerationConfig
+    GenerationConfig gen_cfg{};
+    if (input->config) {
+        gen_cfg.max_tokens = input->config->max_tokens > 0 ? input->config->max_tokens : 512;
+        if (input->config->sampler_config) {
+            gen_cfg.temperature = input->config->sampler_config->temperature;
+            gen_cfg.top_p = input->config->sampler_config->top_p;
+        }
+    }
+    gen_cfg.thinking_mode = enable_thinking_;
+
+    // Wrap token callback
+    std::function<bool(const char*)> on_token_fn;
+    if (input->on_token) {
+        auto cb = input->on_token;
+        auto ud = input->user_data;
+        on_token_fn = [cb, ud](const char* token) -> bool {
+            return cb(token, ud);
+        };
+    }
+
+    // Generate
+    GenerateResult result = pipeline_->generate(input->prompt_utf8, gen_cfg, on_token_fn);
+
+    // Map result to output
+    output->full_text = portable_strdup(result.full_text.c_str());
+    if (!output->full_text) return ML_ERROR_COMMON_MEMORY_ALLOCATION;
+
+    // Profile data (convert ms -> us)
+    output->profile_data.ttft = static_cast<int64_t>(result.ttft_ms * 1000.0);
+    output->profile_data.prompt_time = output->profile_data.ttft;  // approximate
+    output->profile_data.decode_time = static_cast<int64_t>(result.decode_ms * 1000.0);
+    output->profile_data.prompt_tokens = result.prompt_tokens;
+    output->profile_data.generated_tokens = result.generated_tokens;
+    output->profile_data.decoding_speed = result.tokens_per_second;
+    output->profile_data.prefill_speed = result.prompt_tokens > 0 && result.ttft_ms > 0.0
+        ? result.prompt_tokens / (result.ttft_ms / 1000.0)
+        : 0.0;
+
+    // Stop reason (string must be static/persistent)
+    static const char* kStopEos = "eos";
+    static const char* kStopLength = "length";
+    static const char* kStopUser = "user";
+    if (result.stop_reason == "eos") output->profile_data.stop_reason = kStopEos;
+    else if (result.stop_reason == "length") output->profile_data.stop_reason = kStopLength;
+    else if (result.stop_reason == "user") output->profile_data.stop_reason = kStopUser;
+    else output->profile_data.stop_reason = kStopEos;
+
+    return ML_SUCCESS;
 }
 
 }  // namespace geniex

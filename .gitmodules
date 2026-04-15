@@ -4,3 +4,6 @@
 [submodule "third-party/geniex-qairt"]
 	path = third-party/geniex-qairt
 	url = git@github.com:qcom-it-nexa-ai/qnn-run.git
+[submodule "sdk/third-party/geniex-proc"]
+	path = sdk/third-party/geniex-proc
+	url = https://github.com/qcom-it-nexa-ai/nexaproc

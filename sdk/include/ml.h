@@ -701,7 +701,7 @@ typedef struct {
     const ml_EmbeddingConfig* config;       /** Embedding configuration (optional, can be nullptr) */
     const int32_t**           input_ids_2d; /** 2D array of already tokenized raw input ids.
                                              * When passed in, texts will be ignored.
-                                             * NOTE: this is supported for cpu_gpu backend only.
+                                             * NOTE: this is supported for llama_cpp backend only.
                                              * Passing this param to other backends will be ignored */
     const int32_t* input_ids_row_lengths;   /** Array containing the length of each row in input_ids_2d */
     int32_t        input_ids_row_count;     /** Number of rows in input_ids_2d array */

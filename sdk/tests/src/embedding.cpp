@@ -78,7 +78,7 @@ Setup<Param, ml_Embedder> setup_guard(
       // Initialize all fields to zero/nullptr first
       std::memset(&input, 0, sizeof(input));
 
-      // Set model_name if provided (required for npu plugin)
+      // Set model_name if provided (required for qairt plugin)
       input.model_name = model_name.c_str();
       input.model_path = model_path.c_str();
       input.mmproj_path =
@@ -87,8 +87,8 @@ Setup<Param, ml_Embedder> setup_guard(
           tokenizer.has_value() ? tokenizer.value().c_str() : nullptr;
       input.plugin_id = plugin;
 
-      // Initialize model config properly for NPU
-      if (std::string(plugin) == "npu") {
+      // Initialize model config properly for QAIRT
+      if (std::string(plugin) == "qairt") {
         input.config.max_tokens = 1024;
         input.config.verbose = false;
         // QAIRT paths will be injected by the plugin itself
