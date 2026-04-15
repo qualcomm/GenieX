@@ -20,7 +20,7 @@ go_library(
         "tts.go",
         "vlm.go",
     ],
-    cdeps = ["//bindings:shared_libs"],
+    cdeps = ["//sdk"],
     cgo = True,
     importpath = "github.com/qcom-it-nexa-ai/geniex/bindings/go",
     visibility = ["//visibility:public"],

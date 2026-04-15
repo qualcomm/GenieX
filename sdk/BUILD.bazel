@@ -1,20 +1,60 @@
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")
+
 package(default_visibility = ["//visibility:public"])
 
-load("@rules_cc//cc:defs.bzl", "cc_import")
+# flags
+
+string_flag(
+    name = "sdk_type",
+    build_setting_default = "s3",
+    values = ["s3", "local", "bazel"],
+)
+
+config_setting(name = "s3_sdk", flag_values = { ":sdk_type": "s3" })
+config_setting(name = "local_sdk", flag_values = { ":sdk_type": "local" })
+
+# local
 
 cc_import(
-    name = "sdk_bridge",
-    hdrs = ["./build/ml.h"],
-    includes = ["./build"],
+    name = "local_sdk_bridge",
+    hdrs = ["build/ml.h"],
+    includes = ["build"],
     shared_library = "build/libnexa_bridge.so",
 )
 
 filegroup(
-    name = "sdk_runtime",
-    srcs = glob(["build/**/*.so"]),
+    name = "local_sdk_runtime",
+    srcs = glob([
+        "build/**/*.so",
+        "build/**/*.dll",
+    ], allow_empty = True),
 )
 
-cc_library(
+# cc_library(
+#     name = "local_sdk",
+#     data = [
+#         ":sdk_runtime",
+#     ],
+#     deps = [
+#         ":sdk_bridge",
+#     ],
+# )
+
+alias(
     name = "sdk",
-    deps = [":sdk_bridge",":sdk_runtime"],
+    actual = select({
+        ":local_sdk": ":local_sdk_bridge",
+        ":s3_sdk": "@s3_sdk//:sdk_bridge",
+        "//conditions:default": "@s3_sdk//:sdk_bridge",
+    }),
+)
+
+alias(
+    name = "sdk_runtime",
+    actual = select({
+        ":local_sdk": ":local_sdk_runtime",
+        ":s3_sdk": "@s3_sdk//:sdk_runtime",
+        "//conditions:default": "@s3_sdk//:sdk_runtime",
+    }),
 )

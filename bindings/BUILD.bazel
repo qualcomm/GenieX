@@ -1,7 +1,0 @@
-
-alias(
-    name = "shared_libs",
-    actual = select({
-        "//conditions:default": "//sdk",
-    })
-)
