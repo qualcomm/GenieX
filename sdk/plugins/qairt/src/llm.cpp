@@ -1,21 +1,20 @@
 #include "llm.h"
 
-#include <algorithm>
 #include <cstring>
 #include <filesystem>
 #include <string>
 #include <vector>
 
 #if defined(_WIN32)
-#include <windows.h>
 #define portable_strdup _strdup
 #else
 #define portable_strdup strdup
 #endif
 
+#include "llm_model_registry.h"
 #include "logging.h"
-#include "model_registry.h"
 #include "pipeline/llm_pipeline.h"
+#include "qnn_runtime_utils.h"
 #include "types.h"
 
 namespace fs = std::filesystem;
@@ -23,40 +22,6 @@ namespace fs = std::filesystem;
 namespace geniex {
 
 QairtLlm::~QairtLlm() = default;
-
-// Parse .nexa filename: weights-{version}-{shard_count}.nexa
-// Returns shard_count, or 0 on failure.
-static int parse_nexa_shard_count(const std::string& filename) {
-    // Expected format: weights-X-Y.nexa
-    auto stem = fs::path(filename).stem().string();  // "weights-X-Y"
-    auto last_dash = stem.rfind('-');
-    if (last_dash == std::string::npos) return 0;
-    try {
-        return std::stoi(stem.substr(last_dash + 1));
-    } catch (...) {
-        return 0;
-    }
-}
-
-// Discover .bin model shards in a directory, sorted alphabetically.
-static std::vector<std::string> discover_bin_shards(const fs::path& dir) {
-    std::vector<std::string> bins;
-    if (!fs::exists(dir) || !fs::is_directory(dir)) return bins;
-
-    for (const auto& entry : fs::directory_iterator(dir)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".bin") {
-            bins.push_back(entry.path().string());
-        }
-    }
-    std::sort(bins.begin(), bins.end());
-    return bins;
-}
-
-// Find a file by name in the directory, return empty string if not found.
-static std::string find_file(const fs::path& dir, const std::string& filename) {
-    auto p = dir / filename;
-    return fs::exists(p) ? p.string() : std::string{};
-}
 
 int32_t QairtLlm::create_impl(const ml_LlmCreateInput* input) {
     if (!input || !input->model_name || !input->model_path) {
@@ -67,7 +32,7 @@ int32_t QairtLlm::create_impl(const ml_LlmCreateInput* input) {
     enable_thinking_ = input->config.enable_thinking;
 
     // Look up model in registry
-    auto& registry = model_registry();
+    auto& registry = llm_model_registry();
     auto it = registry.find(model_name_);
     if (it == registry.end()) {
         GENIEX_LOG_ERROR("Unknown QAIRT model name: {}", model_name_);
@@ -86,67 +51,16 @@ int32_t QairtLlm::create_impl(const ml_LlmCreateInput* input) {
         qnn_model_dir = fs::path(input->config.qnn_model_folder_path);
     }
 
-    // Determine QNN lib folder (for QNN runtime DLLs)
-    fs::path qnn_lib_dir;
-    if (input->config.qnn_lib_folder_path && input->config.qnn_lib_folder_path[0] != '\0') {
-        qnn_lib_dir = fs::path(input->config.qnn_lib_folder_path);
-    } else {
-        // Auto-discover QNN lib directory by searching common locations
-        auto has_qnn = [](const fs::path& dir) {
-            return fs::exists(dir / "QnnHtp.dll");
-        };
-        // 1. model directory itself
-        if (has_qnn(model_dir)) {
-            qnn_lib_dir = model_dir;
-        }
-        // 2. htp-files subdirectory of model dir
-        else if (has_qnn(model_dir / "htp-files")) {
-            qnn_lib_dir = model_dir / "htp-files";
-        }
-#if defined(_WIN32)
-        // 3. Check GENIEX_PLUGIN_PATH/qairt/htp-files
-        else if (auto env = std::getenv("GENIEX_PLUGIN_PATH"); env) {
-            auto candidate = fs::path(env) / "qairt" / "htp-files";
-            if (has_qnn(candidate)) qnn_lib_dir = candidate;
-        }
-        // 4. Next to the plugin DLL itself
-        else {
-            // GetModuleHandleA for geniex_plugin.dll
-            HMODULE hm = GetModuleHandleA("geniex_plugin.dll");
-            if (hm) {
-                char path_buf[MAX_PATH];
-                if (GetModuleFileNameA(hm, path_buf, MAX_PATH)) {
-                    auto plugin_dir = fs::path(path_buf).parent_path();
-                    if (has_qnn(plugin_dir)) qnn_lib_dir = plugin_dir;
-                    else if (has_qnn(plugin_dir / "htp-files")) qnn_lib_dir = plugin_dir / "htp-files";
-                }
-            }
-        }
-#endif
-        if (qnn_lib_dir.empty()) {
-            qnn_lib_dir = model_dir;  // fallback
-        }
-    }
-    // Ensure absolute path for LoadLibrary
-    if (qnn_lib_dir.is_relative()) {
-        qnn_lib_dir = fs::absolute(qnn_lib_dir);
-    }
+    const fs::path qnn_lib_dir = qairt::runtime::resolve_qnn_lib_dir(
+        model_dir, input->config.qnn_lib_folder_path);
 
     GENIEX_LOG_DEBUG("QNN lib dir resolved to: {}", qnn_lib_dir.string());
 
-    // Build QnnRuntimeConfig
-    QnnRuntimeConfig runtime_cfg{};
-    runtime_cfg.backend_path = (qnn_lib_dir / "QnnHtp.dll").string();
-    runtime_cfg.system_lib_path = (qnn_lib_dir / "QnnSystem.dll").string();
-    runtime_cfg.extensions_path = (qnn_lib_dir / "QnnHtpNetRunExtensions.dll").string();
-
-#if defined(_WIN32)
-    // Set DLL search path so QNN runtime dependencies can be found
-    SetDllDirectoryA(qnn_lib_dir.string().c_str());
-#endif
+    QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(qnn_lib_dir);
+    qairt::runtime::configure_qnn_dll_search_path(qnn_lib_dir);
 
     // Discover .bin model shards
-    auto bin_shards = discover_bin_shards(qnn_model_dir);
+    auto bin_shards = qairt::runtime::collect_bin_files(qnn_model_dir);
     if (bin_shards.empty()) {
         GENIEX_LOG_ERROR("No .bin model shards found in: {}", qnn_model_dir.string());
         return ML_ERROR_COMMON_FILE_NOT_FOUND;
@@ -162,7 +76,7 @@ int32_t QairtLlm::create_impl(const ml_LlmCreateInput* input) {
     if (input->tokenizer_path && input->tokenizer_path[0] != '\0') {
         model_cfg.tokenizer_path = input->tokenizer_path;
     } else {
-        model_cfg.tokenizer_path = find_file(model_dir, "tokenizer.json");
+        model_cfg.tokenizer_path = qairt::runtime::find_optional_file(model_dir, "tokenizer.json");
     }
     if (model_cfg.tokenizer_path.empty()) {
         GENIEX_LOG_ERROR("tokenizer.json not found in: {}", model_dir.string());
@@ -170,10 +84,10 @@ int32_t QairtLlm::create_impl(const ml_LlmCreateInput* input) {
     }
 
     // Embedding table (optional - AI Hub models do embedding on-device)
-    model_cfg.embedding_path = find_file(model_dir, "embed_tokens.npy");
+    model_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
 
     // HTP backend config
-    model_cfg.htp_config_path = find_file(model_dir, "htp_backend_ext_config.json");
+    model_cfg.htp_config_path = qairt::runtime::find_optional_file(model_dir, "htp_backend_ext_config.json");
 
     // Create LLMPipeline
     pipeline_ = std::make_unique<LLMPipeline>();

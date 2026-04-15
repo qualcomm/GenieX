@@ -5,6 +5,7 @@
 
 #include "build_config.h"
 #include "llm.h"
+#include "vlm.h"
 #include "logging.h"
 
 namespace geniex {
@@ -35,6 +36,7 @@ class QairtPlugin : public Plugin {
     }
 
     ILlm* create_llm() override { return new geniex::QairtLlm; }
+    IVlm* create_vlm() override { return new geniex::QairtVlm; }
 };
 
 }  // namespace geniex

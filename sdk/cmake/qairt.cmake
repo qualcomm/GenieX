@@ -19,21 +19,4 @@ set(BUILD_EXAMPLES OFF CACHE BOOL "Build geniex-qairt example executables" FORCE
 add_subdirectory(${GENIEX_QAIRT_DIR} ${CMAKE_BINARY_DIR}/third-party/geniex-qairt EXCLUDE_FROM_ALL)
 
 # Export list of qairt libraries for plugin installation
-set(QAIRT_LIBS geniex_core nexaproc nexa-sampling)
-
-if(GENIEX_BUILD_VLM)
-    list(APPEND QAIRT_LIBS geniex_vlm)
-endif()
-if(GENIEX_BUILD_AUDIO)
-    list(APPEND QAIRT_LIBS geniex_audio)
-endif()
-if(GENIEX_BUILD_OCR)
-    list(APPEND QAIRT_LIBS geniex_ocr)
-endif()
-
-message(STATUS "===== Qairt Configuration =====")
-message(STATUS "GENIEX_QAIRT_DIR:   ${GENIEX_QAIRT_DIR}")
-message(STATUS "GENIEX_BUILD_VLM:   ${GENIEX_BUILD_VLM}")
-message(STATUS "GENIEX_BUILD_AUDIO: ${GENIEX_BUILD_AUDIO}")
-message(STATUS "GENIEX_BUILD_OCR:   ${GENIEX_BUILD_OCR}")
-message(STATUS "================================")
+set(QAIRT_LIBS geniex_core nexaproc nexa-sampling geniex_vlm)
