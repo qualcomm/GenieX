@@ -67,20 +67,8 @@ class Registry {
     }
 
     template <typename M>
-    M* get(const std::string& id) {
+    M* get(const std::string& plugin_id) {
         std::lock_guard<std::mutex> lock(mutex);
-
-        std::string plugin_id = id;
-
-        // compact previous plugin id
-        std::map<std::string, std::string> id_map = {
-            {"llama_cpp", build_config::kPluginIdLlamaCpp},
-        };
-        auto map_it = id_map.find(plugin_id);
-        if (map_it != id_map.end()) {
-            GENIEX_LOG_WARN("Plugin id '{}' is deprecated, use '{}' instead", id, map_it->second);
-            plugin_id = map_it->second;
-        }
 
         auto it = plugins.find(plugin_id);
         if (it == plugins.end()) {

@@ -62,30 +62,9 @@ public:
     }
 #endif // _WIN32
     if (!plugin_base_path.empty()) {
-      auto backend_dir =
-          plugin_base_path / geniex::build_config::kCommonLibRelativePath;
-      auto backend_dir_str = backend_dir.u8string();
-      GENIEX_LOG_DEBUG("Loading GGML backend from path: {}", backend_dir_str);
-
-      auto load_backend = [&](const char *filename, const char *name) {
-        auto backend_path = (backend_dir / filename).u8string();
-        if (!std::filesystem::exists(backend_dir / filename)) {
-          GENIEX_LOG_DEBUG("Skipping {} backend because {} is missing", name,
-                           backend_path);
-          return;
-        }
-
-        if (ggml_backend_load(backend_path.c_str()) == nullptr) {
-          GENIEX_LOG_WARN("Failed to load {} backend from {}", name,
-                          backend_path);
-          return;
-        }
-
-        GENIEX_LOG_DEBUG("Loaded {} backend from {}", name, backend_path);
-      };
-
-      load_backend("ggml-opencl.dll", "OpenCL");
-      load_backend("ggml-cpu.dll", "CPU");
+        auto path = (plugin_base_path / "llama_cpp").u8string();
+        GENIEX_LOG_DEBUG("Loading GGML backend from path: {}", path);
+        ggml_backend_load_all_from_path(path.c_str());
     }
 #endif // GENIEX_DL
 

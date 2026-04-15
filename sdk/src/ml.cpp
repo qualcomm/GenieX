@@ -26,27 +26,6 @@ void* _crypto_dummy = (void*)OpenSSL_version;
 
 using namespace geniex;
 
-#ifdef _WIN32
-static void setup_windows_dll_search_path() {
-    auto core_dir = get_shared_lib_dir();
-
-    auto lib_dir = core_dir / build_config::kCommonLibRelativePath;
-    if (!std::filesystem::exists(lib_dir)) {
-        GENIEX_LOG_WARN(
-            "{} subdirectory not found, skip adding DLL search directory; some runtime dependencies may not be found",
-            build_config::kCommonLibRelativePath);
-        return;
-    }
-
-    auto cookie = AddDllDirectory(lib_dir.wstring().c_str());
-    if (!cookie) {
-        GENIEX_LOG_ERROR("Failed to add DLL directory (error {})", GetLastError());
-    }
-
-    GENIEX_LOG_DEBUG("Added DLL search directory: {}", lib_dir.u8string());
-}
-#endif
-
 // Default log handler - colorized for debug builds, no-op for release builds
 static void default_log_handler(ml_LogLevel level, const char* msg) {
 #ifdef GENIEX_DEBUG
@@ -83,9 +62,6 @@ int32_t ml_init(void) {
     GENIEX_LOG_INFO("initializing ml");
 
     try {
-#ifdef _WIN32
-        setup_windows_dll_search_path();
-#endif
 #ifdef GENIEX_DL
         Registry::instance().scan_plugins();
 #endif
