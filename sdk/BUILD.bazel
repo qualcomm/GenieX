@@ -17,6 +17,15 @@ config_setting(name = "local_sdk", flag_values = { ":sdk_type": "local" })
 
 # local
 
+sdk_local_bundle(
+    name = "local_sdk_runtime",
+    data = select({
+        "@platforms//os:windows": glob(["pkg-geniex/lib/**/*.dll"], allow_empty = True),
+        "@platforms//os:linux": glob(["pkg-geniex/lib/**/*.so"], allow_empty = True),
+    }),
+    strip_prefix = "sdk/pkg-geniex/lib/",
+)
+
 cc_library(
     name = "local_sdk_lib",
     hdrs = ["pkg-geniex/include/ml.h"],
@@ -25,23 +34,18 @@ cc_library(
         "@platforms//os:windows": ["pkg-geniex/lib/geniex.dll"],
         "@platforms//os:linux": ["pkg-geniex/lib/libgeniex.so"],
     }),
-)
-
-sdk_local_bundle(
-    name = "local_sdk_runtime",
-    sdk_lib = ":local_sdk_lib",
-    data = select({
-        "@platforms//os:windows": glob(["pkg-geniex/lib/**/*"]),
-        "@platforms//os:linux": glob(["pkg-geniex/lib/**/*"]),
+    linkopts = select({
+        "@platforms//os:linux": ["-Wl,-rpath,."],
+        "//conditions:default": [],
     }),
-    strip_prefix = "sdk/pkg-geniex/lib",
+    data = [":local_sdk_runtime"],
 )
 
 alias(
     name = "sdk",
     actual = select({
-        ":local_sdk": ":local_sdk_runtime",
+        ":local_sdk": ":local_sdk_lib",
         # ":s3_sdk": "@s3_sdk//:sdk",
-        "//conditions:default": ":local_sdk_runtime",
+        "//conditions:default": ":local_sdk_lib",
     }),
 )
