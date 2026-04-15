@@ -16,45 +16,22 @@ config_setting(name = "local_sdk", flag_values = { ":sdk_type": "local" })
 
 # local
 
-cc_import(
-    name = "local_sdk_bridge",
+cc_library(
+    name = "local_sdk_lib",
     hdrs = ["build/ml.h"],
     includes = ["build"],
-    shared_library = "build/libnexa_bridge.so",
+    srcs = select({
+        "@platforms//os:windows": ["build/nexa_bridge.dll"],
+        "@platforms//os:linux": ["build/libnexa_bridge.so"],
+    }),
+    data = glob(["build/**/*"]),
 )
-
-filegroup(
-    name = "local_sdk_runtime",
-    srcs = glob([
-        "build/**/*.so",
-        "build/**/*.dll",
-    ], allow_empty = True),
-)
-
-# cc_library(
-#     name = "local_sdk",
-#     data = [
-#         ":sdk_runtime",
-#     ],
-#     deps = [
-#         ":sdk_bridge",
-#     ],
-# )
 
 alias(
     name = "sdk",
     actual = select({
-        ":local_sdk": ":local_sdk_bridge",
-        ":s3_sdk": "@s3_sdk//:sdk_bridge",
-        "//conditions:default": "@s3_sdk//:sdk_bridge",
-    }),
-)
-
-alias(
-    name = "sdk_runtime",
-    actual = select({
-        ":local_sdk": ":local_sdk_runtime",
-        ":s3_sdk": "@s3_sdk//:sdk_runtime",
-        "//conditions:default": "@s3_sdk//:sdk_runtime",
+        ":local_sdk": ":local_sdk_lib",
+        ":s3_sdk": "@s3_sdk//:sdk",
+        "//conditions:default": "@s3_sdk//:sdk",
     }),
 )

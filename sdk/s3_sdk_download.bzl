@@ -27,27 +27,15 @@ load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
-cc_import(
-    name = "sdk_bridge",
-    hdrs = ["build/ml.h"],
-    includes = ["build"],
-    shared_library = select({
-        "@platforms//os:windows": "build/nexa_bridge.dll",
-        "@platforms//os:linux": "build/libnexa_bridge.so",
-    }),
-)
-
-filegroup(
-    name = "sdk_runtime",
-    srcs = glob([
-        "build/**/*",
-    ]),
-)
-
 cc_library(
     name = "sdk",
-    data = [":sdk_runtime"],
-    deps = [":sdk_bridge"],
+    hdrs = ["build/ml.h"],
+    includes = ["build"],
+    srcs = select({
+        "@platforms//os:windows": ["build/nexa_bridge.dll"],
+        "@platforms//os:linux": ["build/libnexa_bridge.so"],
+    }),
+    data = glob(["build/**/*"]),
 )
 """)
 
