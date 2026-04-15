@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 5,
   "vendor": {
     "geniex": {
       "autoFormat": false
@@ -7,15 +7,149 @@
   },
   "configurePresets": [
     {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build-${presetName}"
+    },
+    {
+      "name": "debug",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "GENIEX_DEBUG": "ON"
+      }
+    },
+    {
+      "name": "release",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "snapdragon",
+      "hidden": true,
+      "cacheVariables": {
+        "GENIEX_PLUGIN_LLAMA_CPP": "ON",
+        "GENIEX_PLUGIN_QAIRT": "ON"
+      }
+    },
+    {
+      "name": "arm64-windows-llvm",
+      "hidden": true,
+      "generator": "Ninja",
+      "architecture": {
+        "value": "arm64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/../third-party/llama.cpp/cmake/arm64-windows-llvm.cmake"
+      }
+    },
+    {
+      "name": "arm64-windows-snapdragon",
+      "hidden": true,
+      "inherits": [
+        "arm64-windows-llvm"
+      ]
+    },
+    {
+      "name": "arm64-android-snapdragon",
+      "hidden": true,
+      "architecture": {
+        "value": "arm64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x86_64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "ANDROID_ABI": "arm64-v8a",
+        "ANDROID_PLATFORM": "android-31",
+        "CMAKE_TOOLCHAIN_FILE": "$env{ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake",
+        "GENIEX_DL": "ON"
+      }
+    },
+    {
+      "name": "arm64-linux-snapdragon",
+      "hidden": true,
+      "architecture": {
+        "value": "arm64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x86_64",
+        "strategy": "external"
+      }
+    },
+    {
       "name": "default",
       "displayName": "Default (SDK Release)",
       "description": "Build SDK in Release mode with standard options",
-      "binaryDir": "${sourceDir}/build",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "GENIEX_PLUGIN_LLAMA_CPP": "ON",
-        "GENIEX_DL": "ON"
-      }
+      "inherits": [
+        "base",
+        "release"
+      ]
+    },
+    {
+      "name": "arm64-windows-snapdragon-debug",
+      "inherits": [
+        "base",
+        "snapdragon",
+        "arm64-windows-snapdragon",
+        "debug"
+      ]
+    },
+    {
+      "name": "arm64-windows-snapdragon-release",
+      "inherits": [
+        "base",
+        "snapdragon",
+        "arm64-windows-snapdragon",
+        "release"
+      ]
+    },
+    {
+      "name": "arm64-android-snapdragon-debug",
+      "inherits": [
+        "base",
+        "snapdragon",
+        "arm64-android-snapdragon",
+        "debug"
+      ]
+    },
+    {
+      "name": "arm64-android-snapdragon-release",
+      "inherits": [
+        "base",
+        "snapdragon",
+        "arm64-android-snapdragon",
+        "release"
+      ]
+    },
+    {
+      "name": "arm64-linux-snapdragon-debug",
+      "inherits": [
+        "base",
+        "snapdragon",
+        "arm64-linux-snapdragon",
+        "debug"
+      ]
+    },
+    {
+      "name": "arm64-linux-snapdragon-release",
+      "inherits": [
+        "base",
+        "snapdragon",
+        "arm64-linux-snapdragon",
+        "release"
+      ]
     }
   ],
   "buildPresets": [
@@ -23,20 +157,36 @@
       "name": "default",
       "configurePreset": "default",
       "jobs": 0
-    }
-  ],
-  "installPresets": [
+    },
     {
-      "name": "sdk-only",
-      "configurePreset": "default",
-      "description": "Install only SDK artifacts (no third-party headers/cmake)",
-      "directories": [
-        {
-          "path": "build"
-        }
-      ],
-      "configs": ["Release"],
-      "component": "SDK"
+      "name": "arm64-windows-snapdragon-debug",
+      "configurePreset": "arm64-windows-snapdragon-debug",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-windows-snapdragon-release",
+      "configurePreset": "arm64-windows-snapdragon-release",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-android-snapdragon-debug",
+      "configurePreset": "arm64-android-snapdragon-debug",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-android-snapdragon-release",
+      "configurePreset": "arm64-android-snapdragon-release",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-linux-snapdragon-debug",
+      "configurePreset": "arm64-linux-snapdragon-debug",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-linux-snapdragon-release",
+      "configurePreset": "arm64-linux-snapdragon-release",
+      "jobs": 0
     }
   ]
 }

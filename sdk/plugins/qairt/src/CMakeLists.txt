@@ -1,4 +1,9 @@
 file(GLOB_RECURSE QAIRT_SRCS *.cpp)
+
+if(WIN32)
+    list(FILTER QAIRT_SRCS EXCLUDE REGEX "[/\\]vlm\\.cpp$")
+endif()
+
 add_library(geniex_qairt SHARED ${QAIRT_SRCS})
 
 target_compile_features(geniex_qairt PRIVATE cxx_std_20)
@@ -30,13 +35,14 @@ target_include_directories(geniex_qairt
     PUBLIC  ${COMMON_INCLUDE}
     PRIVATE ../include/)
 
-target_link_libraries(geniex_qairt PRIVATE geniex geniex_core)
+set(QAIRT_PLUGIN_LINK_DEPS geniex geniex_core)
+foreach(dep IN ITEMS geniex_vlm)
+    if(TARGET ${dep})
+        list(APPEND QAIRT_PLUGIN_LINK_DEPS ${dep})
+    endif()
+endforeach()
 
-if(UNIX AND NOT ANDROID)
-    target_link_libraries(geniex_qairt PRIVATE
-        -Wl,--no-as-needed nexaproc nexa-sampling -Wl,--as-needed
-    )
-endif()
+target_link_libraries(geniex_qairt PRIVATE ${QAIRT_PLUGIN_LINK_DEPS})
 
 install(TARGETS geniex_qairt
     LIBRARY DESTINATION lib/qairt

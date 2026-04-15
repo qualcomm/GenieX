@@ -14,6 +14,13 @@ set(GENIEX_QAIRT_DIR "${CMAKE_SOURCE_DIR}/../third-party/geniex-qairt"
 # Disable examples when embedded; they require QNN SDK headers not present here
 set(BUILD_EXAMPLES OFF CACHE BOOL "Build geniex-qairt example executables" FORCE)
 
+# Keep Rust artifact paths short on Windows to avoid MAX_PATH linker failures
+# in third-party/tokenizers-cpp when building QAIRT dependencies.
+if(WIN32)
+    set(TOKENIZERS_CPP_CARGO_TARGET_DIR "${CMAKE_BINARY_DIR}/tok"
+        CACHE PATH "Cargo target dir for tokenizers-cpp" FORCE)
+endif()
+
 # EXCLUDE_FROM_ALL suppresses third-party install() rules.
 # Targets still build because SDK plugins link against them.
 add_subdirectory(${GENIEX_QAIRT_DIR} ${CMAKE_BINARY_DIR}/third-party/geniex-qairt EXCLUDE_FROM_ALL)
