@@ -174,7 +174,7 @@ func list() *cobra.Command {
 			for _, model := range models {
 				tw.AppendRow(table.Row{model.Name, humanize.IBytes(uint64(model.GetSize())), strings.Join(func() []string {
 					quants := make([]string, 0)
-					if !slices.Contains([]string{"cpu_gpu", "metal", "geniexml"}, model.PluginId) {
+					if !slices.Contains([]string{"llama_cpp"}, model.PluginId) {
 						return quants
 					}
 					for q := range model.ModelFile {
@@ -354,7 +354,7 @@ func choosePluginId(name string) string {
 	switch {
 	// prefer plugin by model name keyword
 	default:
-		return "cpu_gpu"
+		return "llama_cpp"
 	}
 
 }
