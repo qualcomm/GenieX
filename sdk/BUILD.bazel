@@ -1,52 +1,20 @@
 package(default_visibility = ["//visibility:public"])
 
-config_setting(
-    name = "enable_geniex_debug",
-    define_values = {"GENIEX_DEBUG": "1"},
+load("@rules_cc//cc:defs.bzl", "cc_import")
+
+cc_import(
+    name = "sdk_bridge",
+    hdrs = ["./build/ml.h"],
+    includes = ["./build"],
+    shared_library = "build/libnexa_bridge.so",
 )
 
-config_setting(
-    name = "enable_ggml_hexagon",
-    define_values = {"GGML_HEXAGON": "1"},
+filegroup(
+    name = "sdk_runtime",
+    srcs = glob(["build/**/*.so"]),
 )
 
-config_setting(
-    name = "disable_ggml_hexagon",
-    define_values = {"GGML_HEXAGON": "0"},
-)
-
-config_setting(
-    name = "windows_arm64",
-    constraint_values = [
-        "@platforms//os:windows",
-        "@platforms//cpu:arm64",
-    ],
-)
-
-config_setting(
-    name = "windows",
-    constraint_values = ["@platforms//os:windows"],
-)
-
-config_setting(
-    name = "linux_arm64",
-    constraint_values = [
-        "@platforms//os:linux",
-        "@platforms//cpu:arm64",
-    ],
-)
-
-config_setting(
-    name = "linux",
-    constraint_values = ["@platforms//os:linux"],
-)
-
-config_setting(
-    name = "android",
-    constraint_values = ["@platforms//os:android"],
-)
-
-alias(
+cc_library(
     name = "sdk",
-    actual = "//sdk/src:geniex_lib"
+    deps = [":sdk_bridge",":sdk_runtime"],
 )

@@ -1,39 +1,7 @@
-load("@rules_cc//cc:defs.bzl", "cc_import")
-
-cc_import(
-    name = "nexa_bridge",
-    hdrs = ["../sdk/build/ml.h"],
-    includes = ["../sdk/build"],
-    shared_library = "build/libnexa_bridge.so",
-    visibility = ["//visibility:public"],
-)
-
-filegroup(
-    name = "nexa_bridge_runtime",
-    srcs = glob(["build/**/*.so"]),
-    visibility = ["//visibility:public"],
-)
 
 alias(
-    name = ":shared_libs",
+    name = "shared_libs",
     actual = select({
-        "//conditions:default": ":nexa_bridge",
+        "//conditions:default": "//sdk",
     })
 )
-
-# cc_library(
-#     name = "native_prebuilts",
-#     deps = [
-#         ":nexa_bridge",
-#     ],
-#     hdrs = ["build/ml.h"],
-#     includes = ["build"],
-#     visibility = ["//visibility:public"],
-# )
-#
-# filegroup(
-#     name = "native_runfiles",
-#     srcs = [":prebuilt_shared_libs"],
-#     visibility = ["//visibility:public"],
-# )
-#

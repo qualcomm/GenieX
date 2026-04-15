@@ -1,6 +1,0 @@
-package(default_visibility = ["//visibility:public"])
-
-exports_files([
-    "arm64-linux-gnu.cmake",
-    "arm64-windows-llvm.cmake",
-])
