@@ -1,5 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")
+load(":runfiles.bzl", "sdk_local_bundle")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,20 +19,29 @@ config_setting(name = "local_sdk", flag_values = { ":sdk_type": "local" })
 
 cc_library(
     name = "local_sdk_lib",
-    hdrs = ["build/ml.h"],
-    includes = ["build"],
+    hdrs = ["pkg-geniex/include/ml.h"],
+    includes = ["pkg-geniex/include"],
     srcs = select({
-        "@platforms//os:windows": ["build/nexa_bridge.dll"],
-        "@platforms//os:linux": ["build/libnexa_bridge.so"],
+        "@platforms//os:windows": ["pkg-geniex/lib/geniex.dll"],
+        "@platforms//os:linux": ["pkg-geniex/lib/libgeniex.so"],
     }),
-    data = glob(["build/**/*"]),
+)
+
+sdk_local_bundle(
+    name = "local_sdk_runtime",
+    sdk_lib = ":local_sdk_lib",
+    data = select({
+        "@platforms//os:windows": glob(["pkg-geniex/lib/**/*"]),
+        "@platforms//os:linux": glob(["pkg-geniex/lib/**/*"]),
+    }),
+    strip_prefix = "sdk/pkg-geniex/lib",
 )
 
 alias(
     name = "sdk",
     actual = select({
-        ":local_sdk": ":local_sdk_lib",
-        ":s3_sdk": "@s3_sdk//:sdk",
-        "//conditions:default": "@s3_sdk//:sdk",
+        ":local_sdk": ":local_sdk_runtime",
+        # ":s3_sdk": "@s3_sdk//:sdk",
+        "//conditions:default": ":local_sdk_runtime",
     }),
 )
