@@ -1,0 +1,42 @@
+{
+  "version": 3,
+  "vendor": {
+    "geniex": {
+      "autoFormat": false
+    }
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Default (SDK Release)",
+      "description": "Build SDK in Release mode with standard options",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "GENIEX_PLUGIN_LLAMA_CPP": "ON",
+        "GENIEX_DL": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "jobs": 0
+    }
+  ],
+  "installPresets": [
+    {
+      "name": "sdk-only",
+      "configurePreset": "default",
+      "description": "Install only SDK artifacts (no third-party headers/cmake)",
+      "directories": [
+        {
+          "path": "build"
+        }
+      ],
+      "configs": ["Release"],
+      "component": "SDK"
+    }
+  ]
+}

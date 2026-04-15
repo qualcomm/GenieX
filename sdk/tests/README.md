@@ -126,9 +126,9 @@ adb shell
 cd /data/local/tmp/geniex
 chmod -R 777 .
 export GENIEX_PLUGIN_PATH=/data/local/tmp/geniex/out
-export LD_LIBRARY_PATH=/data/local/tmp/geniex/out:/data/local/tmp/geniex/out/common/lib:/data/local/tmp/geniex/out/cpu_gpu:/data/local/tmp/geniex/out/npu:/data/local/tmp/geniex/out/npu/htp-files:$LD_LIBRARY_PATH
-# for running llama.cpp hexagon, set ADSP_LIBRARY_PATH to /data/local/tmp/geniex/out/common/lib
-export ADSP_LIBRARY_PATH=/data/local/tmp/geniex/out/npu/htp-files
+export LD_LIBRARY_PATH=/data/local/tmp/geniex/out:/data/local/tmp/geniex/out/llama_cpp:/data/local/tmp/geniex/out/qairt:/data/local/tmp/geniex/out/qairt/htp-files:$LD_LIBRARY_PATH
+# for running llama.cpp hexagon, set ADSP_LIBRARY_PATH to /data/local/tmp/geniex/out/llama_cpp
+export ADSP_LIBRARY_PATH=/data/local/tmp/geniex/out/qairt/htp-files
 export GENIEX_TOKEN="key/eyJhY2NvdW50Ijp7ImlkIjoiNDI1Y2JiNWQtNjk1NC00NDYxLWJiOWMtYzhlZjBiY2JlYzA2In0sInByb2R1Y3QiOnsiaWQiOiJkYjI4ZTNmYy1mMjU4LTQ4ZTctYmNkYi0wZmE4YjRkYTJhNWYifSwicG9saWN5Ijp7ImlkIjoiMmYyOWQyMjctNDVkZS00MzQ3LTg0YTItMjUwNTYwMmEzYzMyIiwiZHVyYXRpb24iOjMxMTA0MDAwMH0sInVzZXIiOnsiaWQiOiI3MGE2YzA4NS1jYjc3LTQ3YmEtOWUxNC1lNjFjYTA2ZThmZjUiLCJlbWFpbCI6ImFsYW40QG5leGE0YWkuY29tIn0sImxpY2Vuc2UiOnsiaWQiOiI4OTlhZGQ2NS1lOTI2LTQ2M2ItODllNi0xMjc0NzM3ZjA1MzYiLCJjcmVhdGVkIjoiMjAyNS0wOS0wNlQwMDo1MzozNi4yMDNaIiwiZXhwaXJ5IjoiMjAzNS0xMi0zMVQyMzo1OTo1OS4wMDBaIn19.BXoUHIEzFMuuZbBT7RvsKO9nTi5950C6kHO64blF7XBnfKvZ6ClA8a55tmszI1ZWdngzpNFTzMM5PV5euuzMCA=="
 
 chmod +x ./out/tests/*

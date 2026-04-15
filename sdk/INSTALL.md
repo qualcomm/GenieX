@@ -1,237 +1,44 @@
-# GenieX-Bridge Installation Guide
+# Geniex SDK
 
-## Prerequisites
-
-### Clone Repository
-
-TODO: update the GenieX-Bridge repository URL and checkout path.
-
-### Git LFS Setup
-
-This repository uses Git LFS to store pre-built binary libraries. Ensure Git LFS is installed and initialized:
+## Build & Install
 
 ```bash
-git lfs install
-```
-
-### Version Configuration
-
-When building, you can specify a version using `-DGENIEX_BRIDGE_VERSION`:
-
-```bash
-# For tagged releases
-cmake -B build -DGENIEX_BRIDGE_VERSION="v1.0.0" ...
-
-# For development builds
-cmake -B build -DGENIEX_BRIDGE_VERSION="latest" ...
-```
-
-## Build Instructions
-
----
-
-## Windows ARM64
-
-### Required Software
-
-```powershell
-winget install -e Git.Git Kitware.CMake Mamba.Micromamba Microsoft.VisualStudio.BuildTools
-```
-
-### MSVC Environment
-
-Open Visual Studio Installer and install the following components:
-
-- **Windows 11 SDK (10.0.26100.6901)**
-- **MSVC build tools for ARM64/ARM64EC (latest version)**
-- **C++ CMake tools for Windows**
-- **C++ Clang compiler for Windows (20.1.8)**
-- **MSBuild support for LLVM (clang-cl) toolset**
-
-### Setup MSVC Environment
-
-```powershell
-function Import-VSEnv {
-    $vcvars = "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsarm64.bat"
-    $envDump = cmd /c "`"$vcvars`" && set"
-    foreach ($line in $envDump) {
-        if ($line -match "^(.*?)=(.*)$") {
-            [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2])
-        }
-    }
-}
-```
-
-Run `Import-VSEnv` in PowerShell before building.
-
-### Setup Micromamba Environment
-
-```powershell
-micromamba install -y openssl --platform win-arm64
-micromamba shell hook -s powershell | Out-String | Invoke-Expression
-micromamba activate
-```
-
-### Build
-
-Run the following command in PowerShell:
-
-```powershell
-eval "$(micromamba shell hook)"
-micromamba activate
-
-cmake -B build -G Ninja `
-  -DCMAKE_TOOLCHAIN_FILE="cmake/arm64-windows-llvm.cmake" `
-  -DGENIEX_TEST=OFF -DGENIEX_DEBUG=OFF `
-  -DGENIEX_PRODUCTION=ON `
-  -DGENIEX_VALIDATION=ON `
-  -DGENIEX_PLUGIN_LLAMA_CPP=ON -DGGML_OPENCL=ON -DGGML_BACKEND_DL=OFF `
-  -DGENIEX_PLUGIN_ORT_DML=OFF `
-  -DGENIEX_PLUGIN_ORT_DML_LLAMA_CPP=OFF `
-  -DGENIEX_PLUGIN_QNN=ON `
-
-cmake --build build --config Release -j
-```
-
-**Note**: Python bindings are not supported for ARM64 cross-compilation yet. Ensure OpenMP, OpenCL, and OpenSSL are installed and discoverable by CMake.
-
-### Setup Conda Environment
-
-**Deactivate default environment (if active):**
-
-```powershell
-conda deactivate
-```
-
-**Create and configure new environment:**
-
-```powershell
-# Create environment with OpenSSL for win-arm64
-conda create -n win-arm64 --platform win-arm64 --channel conda-forge --override-channels openssl
-```
-
-**Build with Conda:**
-
-```powershell
-# Ensure environment is activated
-conda activate win-arm64
-
-cmake -B build -G Ninja `
-  -DCMAKE_TOOLCHAIN_FILE="cmake/arm64-windows-llvm.cmake" `
-  -DGENIEX_TEST=OFF -DGENIEX_DEBUG=OFF `
-  -DGENIEX_PRODUCTION=ON `
-  -DGENIEX_VALIDATION=ON `
-  -DGENIEX_PLUGIN_LLAMA_CPP=ON -DGGML_OPENCL=ON -DGGML_BACKEND_DL=OFF `
-  -DGENIEX_PLUGIN_ORT_DML=OFF `
-  -DGENIEX_PLUGIN_ORT_DML_LLAMA_CPP=OFF `
-  -DGENIEX_PLUGIN_QNN=ON `
-
-cmake --build build --config Release -j
-```
-
----
-
-## Linux ARM64
-
-### Environment Setup
-
-There are **two ways** to set up the build environment for Linux ARM64. Choose either **conda** or **micromamba** to prepare OpenSSL and other dependencies. After the environment setup, all remaining build steps are identical.
-
----
-
-#### **Option 1: Using Conda**
-
-**Deactivate default environment (if active):**
-
-```bash
-conda deactivate
-```
-
-**Create and configure new environment:**
-
-```bash
-# Create environment with OpenSSL for linux-aarch64
-conda create -n linux-arm64 --platform linux-aarch64 --channel conda-forge --override-channels openssl
-
-# Install build tools
-# on IQ9, run
-# source ~/.profile
-
-conda activate linux-arm64
-conda install -c conda-forge cmake cxx-compiler compilers make  git-lfs
-git lfs install
-```
-
-**Activate environment:**
-
-```bash
-conda activate linux-arm64
-```
-
----
-
-#### **Option 2: Using Micromamba**
-
-**Install micromamba (if not already installed):**
-
-```bash
-# On Linux
-curl -Ls https://micro.mamba.pm/install.sh | bash
-```
-
-**Note**: If you have conda installed, deactivate it first: `conda deactivate`
-
-**Restart your shell, then install OpenSSL:**
-
-```bash
-# Install OpenSSL for linux-aarch64
-micromamba install openssl --platform linux-aarch64
-```
-
-**Activate micromamba environment:**
-
-```bash
-eval "$(micromamba shell hook)"
-micromamba activate
-```
-
----
-
-### Common Steps (After Environment Setup)
-
-The following steps are the same regardless of whether you used conda or micromamba.
-
-#### Install Cross-Compilation Toolchain
-
-```bash
-sudo apt-get update
-sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-```
-
-#### Build
-
-```bash
-# If using micromamba, ensure environment is activated
-eval "$(micromamba shell hook)"
-micromamba activate
-
-# If using conda, ensure environment is activated
-# conda activate linux-arm64
-
-# Configure CMake with cross-compilation toolchain
-cmake -B build \
-  -DCMAKE_TOOLCHAIN_FILE="cmake/arm64-linux-gnu.cmake" \
-  -DGENIEX_TEST=OFF -DGENIEX_DEBUG=OFF \
-  -DGENIEX_PRODUCTION=ON \
-  -DGENIEX_VALIDATION=ON \
-  -DGENIEX_PLUGIN_LLAMA_CPP=ON -DGGML_OPENCL=OFF \
-  -DGENIEX_PLUGIN_ORT_DML=OFF \
-  -DGENIEX_PLUGIN_ORT_DML_LLAMA_CPP=OFF \
-  -DGENIEX_PLUGIN_QNN=ON \
-  -DGENIEX_BINDING_PYTHON=OFF
-
-# Build the project
+cd sdk
+cmake -S . -B build
 cmake --build build -j
+cmake --install build --prefix pkg-geniex
+```
+
+## Installed Layout
+
+```
+pkg-geniex/
+├── include/
+│   └── ml.h
+├── lib/
+│   ├── libgeniex.so
+│   ├── llama_cpp/
+│   │   ├── libgeniex_plugin.so
+│   │   ├── libllama.so.*
+│   │   ├── libggml*.so*
+│   │   ├── libmtmd.so.*
+│   │   └── libcommon.a
+│   └── qairt/
+│       ├── libgeniex_plugin.so
+│       ├── libgeniex_core.so
+│       └── ...
+└── bin/
+    └── geniex_test_*
+```
+
+## Build Options
+
+```bash
+cmake -S . -B build \
+  -DGENIEX_PLUGIN_LLAMA_CPP=ON \
+  -DGENIEX_PLUGIN_QAIRT=OFF \
+  -DGENIEX_DL=ON \
+  -DGENIEX_DEBUG=ON
 ```
 
 **Note**:

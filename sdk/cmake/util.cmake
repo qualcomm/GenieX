@@ -1,37 +1,3 @@
-# ===============================================================================
-# Common Library Output Configuration
-# ===============================================================================
-# Define centralized library output directory under common/
-set(COMMON_LIB_REL_PATH "common/lib")
-set(COMMON_LIB_OUTPUT_DIR "out/${COMMON_LIB_REL_PATH}")
-add_compile_definitions(COMMON_LIB_RELATIVE_PATH="${COMMON_LIB_REL_PATH}")
-
-# ===============================================================================
-# Utility Functions
-# ===============================================================================
-
-function(copy_output dir)
-    set(COPY_OUTPUT_COMMANDS COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/${dir}/)
-
-    foreach(target ${ARGN})
-        if(TARGET ${target}) # is target
-            list(APPEND COPY_OUTPUT_COMMANDS
-                COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${target}> ${CMAKE_BINARY_DIR}/${dir}/
-                DEPENDS ${target})
-        elseif(EXISTS ${target}) # is file path
-            list(APPEND COPY_OUTPUT_COMMANDS
-                COMMAND ${CMAKE_COMMAND} -E copy ${target} ${CMAKE_BINARY_DIR}/${dir}/
-                DEPENDS ${target})
-        else()
-            message(WARNING "copy_output Target ${target} does not exist.")
-        endif()
-    endforeach()
-
-    string(REPLACE "/" "_" name ${dir})
-    string(REPLACE "$<CONFIG>" "" name ${name}) # Remove $<CONFIG> for MSVC
-    add_custom_target(copy_output_${name} ALL ${COPY_OUTPUT_COMMANDS})
-endfunction()
-
 # Function to find common library files for the current platform
 # Returns the list of files in the output variable specified
 function(find_common_libs output_var)
