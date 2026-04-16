@@ -3,7 +3,7 @@ if(TARGET llama)
 endif()
 
 set(GGML_BLAS OFF)
-set(GGML_NATIVE ON)
+set(GGML_NATIVE OFF)
 set(GGML_BACKEND_DL OFF)
 
 set(LLAMA_BUILD_COMMON ON)
