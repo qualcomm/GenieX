@@ -24,7 +24,8 @@
       "name": "release",
       "hidden": true,
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "GENIEX_DEBUG": "OFF"
       }
     },
     {
@@ -32,7 +33,13 @@
       "hidden": true,
       "cacheVariables": {
         "GENIEX_PLUGIN_LLAMA_CPP": "ON",
-        "GENIEX_PLUGIN_QAIRT": "ON"
+        "GGML_HEXAGON": "ON",
+        "GENIEX_PLUGIN_QAIRT": "ON",
+        "OPENCL_SDK_ROOT": "$env{OPENCL_SDK_ROOT}",
+        "HEXAGON_SDK_ROOT": "$env{HEXAGON_SDK_ROOT}",
+        "HEXAGON_TOOLS_ROOT": "$env{HEXAGON_TOOLS_ROOT}",
+        "HEXAGON_HTP_CERT": "$env{HEXAGON_HTP_CERT}",
+        "WINDOWS_SDK_BIN": "$env{WINDOWS_SDK_BIN}"
       }
     },
     {
