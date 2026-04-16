@@ -1,0 +1,8 @@
+include pyproject.toml
+include README.md
+include LICENSE
+include setup.py
+recursive-include geniex *.py
+recursive-include geniex/geniex_sdk/lib *
+
+prune tests

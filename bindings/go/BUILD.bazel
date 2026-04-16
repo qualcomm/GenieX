@@ -1,0 +1,27 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+alias(
+    name = "go",
+    actual = ":geniex_sdk_go",
+)
+
+go_library(
+    name = "geniex_sdk_go",
+    srcs = [
+        "asr.go",
+        "common.go",
+        "cv.go",
+        "diarize.go",
+        "embedder.go",
+        "image_gen.go",
+        "llm.go",
+        "ml.go",
+        "reranker.go",
+        "tts.go",
+        "vlm.go",
+    ],
+    cdeps = ["//sdk"],
+    cgo = True,
+    importpath = "github.com/qcom-it-nexa-ai/geniex/bindings/go",
+    visibility = ["//visibility:public"],
+)

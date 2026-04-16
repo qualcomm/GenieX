@@ -1,0 +1,36 @@
+name: "Checkout repository and Detect version"
+
+outputs:
+  bridge_version:
+    description: "Resolved bridge version for this run"
+    value: ${{ steps.set-version.outputs.bridge_version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Detect Tag Version
+      id: detect_tag
+      if: startsWith(github.ref, 'refs/tags/v')
+      shell: bash
+      run: echo "bridge_version=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+    - name: Detect Latest
+      id: detect_dispatch
+      if: github.event_name == 'workflow_dispatch'
+      shell: bash
+      run: echo "bridge_version=latest" >> "$GITHUB_OUTPUT"
+
+    - name: Detect CI Snapshot Version
+      id: detect_snapshot
+      if: github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/v')
+      shell: bash
+      run: echo "bridge_version=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+    - name: Export version to env and output
+      id: set-version
+      shell: bash
+      env:
+        RESOLVED_VERSION: ${{ steps.detect_tag.outputs.bridge_version || steps.detect_dispatch.outputs.bridge_version || steps.detect_snapshot.outputs.bridge_version }}
+      run: |
+        echo "BRIDGE_VERSION=${RESOLVED_VERSION}" >> "$GITHUB_ENV"
+        echo "bridge_version=${RESOLVED_VERSION}" >> "$GITHUB_OUTPUT"

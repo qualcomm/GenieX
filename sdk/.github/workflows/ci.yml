@@ -1,0 +1,28 @@
+name: CI Manual Regression
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-manual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-linux-arm64:
+    name: build-linux-arm64
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      platform: linux-arm64
+      runner: sdk-linux-16-core-x64
+      upload_artifact: false
+
+  build-windows-arm64:
+    name: build-windows-arm64
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      platform: windows-arm64
+      runner: sdk-windows-16-core-x64
+      upload_artifact: false

@@ -1,0 +1,9 @@
+BasedOnStyle: Google
+UseTab: Never
+ColumnLimit: 120
+IndentWidth: 4
+
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignAfterOpenBracket: DontAlign
+BinPackArguments: false

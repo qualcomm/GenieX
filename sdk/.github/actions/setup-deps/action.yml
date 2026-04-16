@@ -1,0 +1,106 @@
+name: "Setup Build Dependencies"
+description: "Prepare toolchains and dependencies for cross-platform Arm64 builds"
+
+inputs:
+  platform:
+    description: "Target platform: linux-arm64 or windows-arm64"
+    required: true
+  apt-mirror:
+    description: "Optional apt mirror URL for Linux runners"
+    required: false
+    default: ""
+  pip-index-url:
+    description: "Optional pip index URL"
+    required: false
+    default: ""
+  micromamba-installer-url:
+    description: "Micromamba installer URL"
+    required: false
+    default: "https://micro.mamba.pm/install.sh"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Configure pip index
+      if: inputs.pip-index-url != ''
+      shell: bash
+      run: |
+        echo "PIP_INDEX_URL=${{ inputs.pip-index-url }}" >> "$GITHUB_ENV"
+
+    - name: Configure apt mirror
+      if: inputs.platform == 'linux-arm64' && inputs.apt-mirror != ''
+      shell: bash
+      run: |
+        sudo sed -i "s|http://archive.ubuntu.com/ubuntu/|${{ inputs.apt-mirror }}|g" /etc/apt/sources.list
+
+    - name: Install Linux toolchain and git-lfs
+      if: inputs.platform == 'linux-arm64'
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu git-lfs
+        git lfs install
+
+    - name: Install Git LFS on Windows
+      if: inputs.platform == 'windows-arm64'
+      shell: bash
+      run: |
+        set -euo pipefail
+        git lfs install
+
+    - name: Install Micromamba
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -Ls "${{ inputs.micromamba-installer-url }}" | bash
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Install OpenSSL for Linux Arm64
+      if: inputs.platform == 'linux-arm64'
+      shell: bash
+      run: |
+        export PATH="$HOME/.local/bin:$PATH"
+        export MAMBA_ROOT_PREFIX="${HOME}/micromamba"
+        eval "$(micromamba shell hook --shell bash --root-prefix "$MAMBA_ROOT_PREFIX")"
+        micromamba install -y openssl --platform linux-aarch64
+
+    - name: Install OpenSSL for Windows Arm64
+      if: inputs.platform == 'windows-arm64'
+      shell: bash
+      run: |
+        export PATH="$HOME/.local/bin:$PATH"
+        export MAMBA_ROOT_PREFIX="${HOME}/micromamba"
+        eval "$(micromamba shell hook --shell bash --root-prefix "$MAMBA_ROOT_PREFIX")"
+        micromamba install -y openssl --platform win-arm64
+
+    - name: Setup VS environment variables
+      if: inputs.platform == 'windows-arm64'
+      shell: bash
+      run: |
+        set -euo pipefail
+        VCVARSALL="/c/Program Files/Microsoft Visual Studio/2022/Enterprise/VC/Auxiliary/Build/vcvarsall.bat"
+        if [ ! -f "$VCVARSALL" ]; then
+          VCVARSALL="/c/Program Files/Microsoft Visual Studio/2022/Professional/VC/Auxiliary/Build/vcvarsall.bat"
+        fi
+        if [ ! -f "$VCVARSALL" ]; then
+          VCVARSALL="/c/Program Files/Microsoft Visual Studio/2022/Community/VC/Auxiliary/Build/vcvarsall.bat"
+        fi
+        if [ ! -f "$VCVARSALL" ]; then
+          VCVARSALL="/c/Program Files/Microsoft Visual Studio/2022/BuildTools/VC/Auxiliary/Build/vcvarsall.bat"
+        fi
+        if [ ! -f "$VCVARSALL" ]; then
+          echo "Unable to locate vcvarsall.bat"
+          exit 1
+        fi
+
+        cmd.exe /c "\"${VCVARSALL}\" amd64_arm64 >nul && set" > vsenv.txt
+        while IFS='=' read -r key value; do
+          upper_key="${key^^}"
+          case "$upper_key" in
+            INCLUDE|LIB|LIBPATH|PATH|UCRTCONTENTROOT|UNIVERSALCRTSDKDIR|VCTOOLSINSTALLDIR|VCTOOLSVERSION|VCINSTALLDIR|WINDOWSLIBPATH|WINDOWSSDKBINPATH|WINDOWSSDKDIR|WINDOWSSDKLIBVERSION|WINDOWSSDKVERSION)
+              echo "$key=$value" >> "$GITHUB_ENV"
+              ;;
+          esac
+        done < vsenv.txt
+        rm -f vsenv.txt
