@@ -95,13 +95,8 @@ int32_t QairtVlm::create_impl(const ml_VlmCreateInput* input) {
     fs::path model_path(input->model_path);
     fs::path model_dir = model_path.parent_path();
 
-    const fs::path qnn_lib_dir = qairt::runtime::resolve_qnn_lib_dir(
+    QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(
         model_dir, input->config.qnn_lib_folder_path);
-
-    GENIEX_LOG_DEBUG("VLM QNN lib dir resolved to: {}", qnn_lib_dir.string());
-
-    QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(qnn_lib_dir);
-    qairt::runtime::configure_qnn_dll_search_path(qnn_lib_dir);
 
     // Create VLM model via registry factory
     model_ = entry.make_model(runtime_cfg, model_dir);

@@ -51,13 +51,8 @@ int32_t QairtLlm::create_impl(const ml_LlmCreateInput* input) {
         qnn_model_dir = fs::path(input->config.qnn_model_folder_path);
     }
 
-    const fs::path qnn_lib_dir = qairt::runtime::resolve_qnn_lib_dir(
+    QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(
         model_dir, input->config.qnn_lib_folder_path);
-
-    GENIEX_LOG_DEBUG("QNN lib dir resolved to: {}", qnn_lib_dir.string());
-
-    QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(qnn_lib_dir);
-    qairt::runtime::configure_qnn_dll_search_path(qnn_lib_dir);
 
     // Discover .bin model shards
     auto bin_shards = qairt::runtime::collect_bin_files(qnn_model_dir);
@@ -89,22 +84,21 @@ int32_t QairtLlm::create_impl(const ml_LlmCreateInput* input) {
     // HTP backend config
     model_cfg.htp_config_path = qairt::runtime::find_optional_file(model_dir, "htp_backend_ext_config.json");
 
-    // Create LLMPipeline
-    pipeline_ = std::make_unique<LLMPipeline>();
-
-    LLMModel model = entry.make_model();
-    if (!pipeline_->create(entry.pipeline_name, std::move(model), runtime_cfg, model_cfg)) {
+    // Create LLMPipeline via the per-model factory (handles makeModel + chat template internally).
+    // Returns std::nullopt on QNN init failure, missing tokenizer, etc.
+    auto pipe = entry.make_pipeline(runtime_cfg, model_cfg);
+    if (!pipe) {
         GENIEX_LOG_ERROR("Failed to create QAIRT LLM pipeline for model: {}", model_name_);
-        pipeline_.reset();
         return ML_ERROR_COMMON_MODEL_LOAD;
     }
+    pipeline_ = std::make_unique<LLMPipeline>(std::move(*pipe));
 
     // Set system prompt if provided
     if (input->config.system_prompt && input->config.system_prompt[0] != '\0') {
         pipeline_->setSystemPrompt(input->config.system_prompt);
     }
 
-    GENIEX_LOG_DEBUG("QAIRT LLM created successfully: model={}, pipeline_name={}", model_name_, entry.pipeline_name);
+    GENIEX_LOG_DEBUG("QAIRT LLM created successfully: model={}", model_name_);
     return ML_SUCCESS;
 }
 
