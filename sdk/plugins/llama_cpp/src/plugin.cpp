@@ -60,6 +60,13 @@ class LlamaPlugin : public Plugin {
             backend_dir = backend_dir / "llama_cpp";
         }
 
+        GENIEX_LOG_DEBUG("Setting ADSP_LIBRARY_PATH to {}", backend_dir.u8string());
+#ifdef _WIN32
+        _putenv_s("ADSP_LIBRARY_PATH", backend_dir.u8string().c_str());
+#else
+        setenv("ADSP_LIBRARY_PATH", backend_dir.u8string().c_str(), 1);
+#endif
+
 #ifdef GENIEX_DL
         if (!backend_dir.empty()) {
 #if defined(_WIN32)
@@ -74,13 +81,6 @@ class LlamaPlugin : public Plugin {
             ggml_backend_load_all_from_path(path.c_str());
         }
 #endif  // GENIEX_DL
-
-        GENIEX_LOG_DEBUG("Setting ADSP_LIBRARY_PATH to {}", backend_dir.u8string());
-#ifdef _WIN32
-        _putenv_s("ADSP_LIBRARY_PATH", backend_dir.u8string().c_str());
-#else
-        setenv("ADSP_LIBRARY_PATH", backend_dir.u8string().c_str(), 1);
-#endif
 
 #ifdef __ANDROID__
         // Harcoding to use 4 hexagon devices for Hexagon to make GPT-OSS work
