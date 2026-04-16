@@ -72,6 +72,13 @@ cmake --install build --prefix pkg-geniex
 
 ### Windows ARM64 (Snapdragon)
 
+> [!NOTE]
+> The Hexagon toolchain has a 250-character path limit. Use `subst` to shorten the source path before building:
+> ```powershell
+> subst G: C:\path\to\geniex
+> cd G:\sdk
+> ```
+
 ```powershell
 cd sdk
 cmake --preset arm64-windows-snapdragon-release -DGENIEX_TEST=OFF
