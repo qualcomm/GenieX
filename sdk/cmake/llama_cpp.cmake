@@ -21,6 +21,24 @@ set(BUILD_SHARED_LIBS ON)
 
 set(GENIEX_LLAMA_CPP ON)
 
+# Find OpenSSL first without CMAKE_SYSTEM_PATH to prefer local installations
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+    set(OpenCL_INCLUDE_DIR "$ENV{OPENCL_SDK_ROOT}/include")
+    set(OpenCL_LIBRARY "$ENV{OPENCL_SDK_ROOT}/lib/OpenCL.lib")
+endif()
+# add opencl lib for linux arm64
+# if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+#     set(OpenCL_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/linux-arm64/include")
+#     set(OpenCL_LIBRARY "${CMAKE_CURRENT_LIST_DIR}/linux-arm64/lib/OpenCL.so")
+# endif()
+# add opencl lib for android aarch64
+# if (CMAKE_SYSTEM_NAME STREQUAL "Android" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+#     set(OpenCL_INCLUDE_DIR "${CMAKE_CURRENT_LIST_DIR}/android-arm64/include")
+#     set(OpenCL_LIBRARY "${CMAKE_CURRENT_LIST_DIR}/android-arm64/lib/libOpenCL.so")
+# endif()
+set(OPENCL_SDK_ROOT "$ENV{OPENCL_SDK_ROOT}")
+set(HEXAGON_SDK_ROOT "$ENV{HEXAGON_SDK_ROOT}")
+
 set(GENIEX_LLAMA_CPP_DIR "${CMAKE_SOURCE_DIR}/../third-party/llama.cpp"
     CACHE PATH "Path to llama.cpp source directory")
 
