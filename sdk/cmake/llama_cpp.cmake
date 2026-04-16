@@ -3,13 +3,8 @@ if(TARGET llama)
 endif()
 
 set(GGML_BLAS OFF)
-set(GGML_NATIVE OFF)
-
-if(GENIEX_DL)
-    set(GGML_BACKEND_DL ON CACHE BOOL "Enable ggml dynamic loading")
-else()
-    set(GGML_BACKEND_DL OFF CACHE BOOL "Disable ggml dynamic loading")
-endif()
+set(GGML_NATIVE ON)
+set(GGML_BACKEND_DL OFF)
 
 set(LLAMA_BUILD_COMMON ON)
 set(LLAMA_CURL OFF)
