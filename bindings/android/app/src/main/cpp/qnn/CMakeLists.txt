@@ -10,8 +10,8 @@ get_filename_component(PARENT_DIR "${CMAKE_CURRENT_SOURCE_DIR}" DIRECTORY)
 message(STATUS "NPU JNI (QNN-based) - PROJECT_ROOT: ${PROJECT_ROOT}")
 message(STATUS "NPU JNI (QNN-based) - PARENT_DIR: ${PARENT_DIR}")
 
-# Use plugin API instead of internal headers
-set(PLUGIN_INCLUDE_DIR "${PROJECT_ROOT}/include")
+# Use SDK install directory for headers
+set(PLUGIN_INCLUDE_DIR "${SDK_INCLUDE_DIR}")
 set(QNN_LIBS_DIR "${PROJECT_ROOT}/plugins/qnn/libs/android-aarch64")  # QNN library path
 
 # JNI wrapper sources

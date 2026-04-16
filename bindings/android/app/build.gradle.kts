@@ -68,46 +68,58 @@ afterEvaluate {
 }
 
 fun registerCopyBridgeLibsTask(variant: BaseVariant) {
-    val bridgeOutDir = File(projectDir,"./../../../build-android/out/")
-    println("bridgeOutDir: $bridgeOutDir")
-    require(bridgeOutDir.exists()) { "SDK build-android not found at: ${bridgeOutDir.absolutePath}. Run scripts/build_android.sh." }
+    // Use SDK install directory structure
+    val sdkInstallDir = File(projectDir,"./../../../build-android/install")
+    println("SDK install directory: $sdkInstallDir")
+    require(sdkInstallDir.exists()) {
+        "SDK install directory not found at: ${sdkInstallDir.absolutePath}.\n" +
+        "Please run: cd sdk && cmake --install build-arm64-android-snapdragon-release --prefix ../build-android/install"
+    }
 
+    val sdkLibDir = File(sdkInstallDir, "lib")
     val cap = variant.name.replaceFirstChar { it.uppercase() }
 
     val jniOutDir = File(projectDir, "src/main/jniLibs/arm64-v8a")
     if (!jniOutDir.exists()) {
         jniOutDir.mkdirs()
     }
-    print("copy geniex sdk libraries to ${jniOutDir.absolutePath}\n")
+    println("Copying SDK libraries to ${jniOutDir.absolutePath}")
 
     val copyTask = tasks.register<Copy>("copyBridgeLibs$cap") {
-        from(File(projectDir, "extLibs/arm64-v8a"))
-        from(bridgeOutDir)
+        // Copy main SDK library
+        from(sdkLibDir) {
+            include("libgeniex.so")
+        }
+        // Copy llama_cpp plugin and dependencies
+        from(File(sdkLibDir, "llama_cpp")) {
+            include("*.so")
+            exclude("*.a")  // Exclude static libraries
+        }
+        // Copy external libs if they exist
+        from(File(projectDir, "extLibs/arm64-v8a")) {
+            include("*.so")
+        }
+
         into(jniOutDir)
-
-        include("**/*.so")
-        exclude("**/htp-files*/**")
-        includeEmptyDirs = false
-
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
         eachFile {
             if (name == "libgeniex_plugin.so") {
-                val dir = file.parentFile!!.name!!
-                path = "libgeniex_plugin_${dir}.so"
-                println("Found geniex bridge lib in dir: $dir, rename to: $path")
+                // Rename plugin to include backend name
+                path = "libgeniex_plugin_llama_cpp.so"
+                println("Found geniex plugin, rename to: $path")
             } else {
                 path = name
             }
         }
     }
 
-    val htpAssetsDir = File(projectDir, "src/main/assets/npu")
-    val npuBuildDir = File(bridgeOutDir, "npu")
+    // Copy HTP assets for QAIRT plugin (if exists)
+    val htpAssetsDir = File(projectDir, "src/main/assets/qairt")
+    val qnnLibDir = File(sdkLibDir, "qairt")
     val copyHtpTask = tasks.register<Copy>("copyHtpAssets$cap") {
-        from(npuBuildDir) {
-            include("htp-files/**")
-            include("htp-files-v81/**")
-            include("htp-files-v85/**")
+        from(qnnLibDir) {
+            include("htp-files*/**")
         }
         into(htpAssetsDir)
         includeEmptyDirs = false
