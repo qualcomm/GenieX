@@ -32,6 +32,10 @@ if(UNIX)
     )
 endif()
 
+if(TARGET install-htp-skels)
+    add_dependencies(geniex_llama_cpp install-htp-skels)
+endif()
+
 install(TARGETS geniex_llama_cpp
     LIBRARY DESTINATION lib/llama_cpp
     RUNTIME DESTINATION lib/llama_cpp

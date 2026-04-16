@@ -66,6 +66,40 @@ add_compile_definitions(GENIEX_PLUGIN_ID_QAIRT="${GENIEX_PLUGIN_ID_QAIRT}")
 
 include(./cmake/llama_cpp.cmake)
 
+if(GGML_HEXAGON)
+    set(_HEXAGON_BDIR ${CMAKE_BINARY_DIR}/third-party/llama.cpp/ggml/src/ggml-hexagon)
+    set(_INSTALL_COMMANDS)
+    foreach(_V IN ITEMS v68 v69 v73 v75 v79 v81)
+        list(APPEND _INSTALL_COMMANDS
+            COMMAND ${CMAKE_COMMAND} --install
+                ${_HEXAGON_BDIR}/htp-${_V}-prefix/src/htp-${_V}-build
+        )
+    endforeach()
+    add_custom_target(install-htp-skels
+        ${_INSTALL_COMMANDS}
+        DEPENDS htp-v68 htp-v69 htp-v73 htp-v75 htp-v79 htp-v81
+        COMMENT "Installing HTP skel libraries"
+    )
+    # libggml-htp-cat (inf2cat signing) depends on the .so files being
+    # present, so it must run after install-htp-skels.
+    add_dependencies(libggml-htp-cat install-htp-skels)
+
+    # Install HTP skels and catalog into pkg layout alongside ggml-hexagon.
+    set(_HTP_FILES)
+    foreach(_V IN ITEMS v68 v69 v73 v75 v79 v81)
+        list(APPEND _HTP_FILES ${_HEXAGON_BDIR}/libggml-htp-${_V}.so)
+    endforeach()
+    install(FILES ${_HTP_FILES} DESTINATION lib/llama_cpp)
+    if(WIN32)
+        install(FILES ${_HEXAGON_BDIR}/libggml-htp.cat DESTINATION lib/llama_cpp OPTIONAL)
+    endif()
+
+    unset(_HEXAGON_BDIR)
+    unset(_V)
+    unset(_INSTALL_COMMANDS)
+    unset(_HTP_FILES)
+endif()
+
 if(GENIEX_PLUGIN_QAIRT)
     include(./cmake/qairt.cmake)
 endif()
