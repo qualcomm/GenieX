@@ -1,1 +1,5 @@
+.venv
+.claude
+.vscode
+
 bazel-*

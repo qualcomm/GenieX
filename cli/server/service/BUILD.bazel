@@ -1,0 +1,18 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "service",
+    srcs = [
+        "keepalive.go",
+        "service.go",
+    ],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/server/service",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//bindings/go:geniex_sdk_go",
+        "//cli/internal/config",
+        "//cli/internal/store",
+        "//cli/internal/types",
+        "//cli/server/utils",
+    ],
+)

@@ -1,0 +1,192 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/actions/**"
+      - ".github/workflows/**"
+      - "CMakeLists.txt"
+      - "cmake/**"
+      - "include/**"
+      - "plugins/**"
+      - "src/**"
+      - "tests/**"
+      - "bindings/python/**"
+      - "**.cpp"
+      - "**.hpp"
+      - "**.c"
+      - "**.h"
+      - "**.cc"
+      - "**.cxx"
+      - "**.hxx"
+      - "**.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cpp-format:
+    name: cpp-format
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install clang-format
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clang-format-20
+          clang-format-20 --version
+
+      - name: Resolve C/C++ file list
+        id: file-list
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}..HEAD)
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            git fetch --no-tags --depth=1 origin main
+            base_ref=$(git merge-base HEAD origin/main || true)
+            if [ -n "$base_ref" ]; then
+              files=$(git diff --name-only "$base_ref"..HEAD)
+            else
+              files=$(git ls-files)
+            fi
+          else
+            files=$(git ls-files)
+          fi
+
+          filtered=$(echo "$files" \
+            | grep -E '\.(cpp|hpp|c|h|cc|cxx|hxx)$' \
+            | grep -v -E '^build/' \
+            | grep -v -E '^include/external/' \
+            | grep -v -E '^third-party/' \
+            | grep -v -E '^plugins/qnn/libs/' \
+            || true)
+
+          if [ -z "$filtered" ]; then
+            echo "files=" >> "$GITHUB_OUTPUT"
+            echo "No C/C++ files to check"
+          else
+            echo "files<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$filtered" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check C/C++ formatting
+        if: steps.file-list.outputs.files != ''
+        run: |
+          set -euo pipefail
+          failed=0
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            clang-format-20 "$file" > "$file.formatted"
+            if ! cmp -s "$file" "$file.formatted"; then
+              echo "Formatting mismatch: $file"
+              diff -u "$file" "$file.formatted" | head -100
+              failed=1
+            fi
+            rm -f "$file.formatted"
+          done <<< "${{ steps.file-list.outputs.files }}"
+
+          if [ "$failed" -ne 0 ]; then
+            echo "Run clang-format-20 -i on the listed files and push again."
+            exit 1
+          fi
+
+  python-format-lint:
+    name: python-format-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install Ruff
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff==0.6.9
+
+      - name: Resolve Python file list
+        id: py-file-list
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}..HEAD)
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            git fetch --no-tags --depth=1 origin main
+            base_ref=$(git merge-base HEAD origin/main || true)
+            if [ -n "$base_ref" ]; then
+              files=$(git diff --name-only "$base_ref"..HEAD)
+            else
+              files=$(git ls-files)
+            fi
+          else
+            files=$(git ls-files)
+          fi
+
+          filtered=$(echo "$files" | grep -E '^bindings/python/.*\.py$' || true)
+
+          if [ -z "$filtered" ]; then
+            echo "files=" >> "$GITHUB_OUTPUT"
+            echo "No Python files to check"
+          else
+            echo "files<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$filtered" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ruff check
+        if: steps.py-file-list.outputs.files != ''
+        run: |
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            python -m ruff check "$file"
+          done <<< "${{ steps.py-file-list.outputs.files }}"
+
+      - name: Ruff format check
+        if: steps.py-file-list.outputs.files != ''
+        run: |
+          while IFS= read -r file; do
+            [ -z "$file" ] && continue
+            python -m ruff format --check --diff "$file"
+          done <<< "${{ steps.py-file-list.outputs.files }}"
+
+  build-linux-arm64:
+    name: build-linux-arm64
+    needs:
+      - cpp-format
+      - python-format-lint
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      platform: linux-arm64
+      runner: sdk-linux-16-core-x64
+      upload_artifact: false
+
+  build-windows-arm64:
+    name: build-windows-arm64
+    needs:
+      - cpp-format
+      - python-format-lint
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      platform: windows-arm64
+      runner: sdk-windows-16-core-x64
+      upload_artifact: false

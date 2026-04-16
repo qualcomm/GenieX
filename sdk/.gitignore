@@ -1,0 +1,6 @@
+.venv
+
+modelfiles
+
+build*
+pkg*

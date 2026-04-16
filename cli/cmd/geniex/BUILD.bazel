@@ -1,0 +1,68 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "geniex_lib",
+    srcs = [
+        "config.go",
+        "function_call.go",
+        "infer.go",
+        "main.go",
+        "model.go",
+        "run.go",
+        "serve.go",
+        "update.go",
+        "version.go",
+    ],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//bindings/go:geniex_sdk_go",
+        "//cli/cmd/geniex/common",
+        "//cli/cmd/geniex/logic",
+        "//cli/internal/config",
+        "//cli/internal/downloader",
+        "//cli/internal/model_hub",
+        "//cli/internal/record",
+        "//cli/internal/render",
+        "//cli/internal/store",
+        "//cli/internal/types",
+        "//cli/server",
+        "@com_github_bytedance_sonic//:sonic",
+        "@com_github_charmbracelet_huh//:huh",
+        "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_github_jedib0t_go_pretty_v6//table",
+        "@com_github_openai_openai_go_v3//:openai-go",
+        "@com_github_openai_openai_go_v3//option",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_spf13_pflag//:pflag",
+        "@com_github_spf13_viper//:viper",
+        "@org_golang_x_sync//errgroup",
+    ],
+)
+
+go_test(
+    name = "geniex_test",
+    srcs = [
+        "model_test.go",
+        "version_test.go",
+    ],
+    embed = [":geniex_lib"],
+    gotags = [
+        "sonic",
+        "avx",
+    ],
+)
+
+go_binary(
+    name = "geniex",
+    embed = [":geniex_lib"],
+    gc_linkopts = [
+        "-X",
+        "main.Version=$(VERSION)",
+    ],
+    gotags = [
+        "sonic",
+        "avx",
+    ],
+    visibility = ["//visibility:public"],
+)

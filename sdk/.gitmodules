@@ -1,0 +1,6 @@
+[submodule "third-party/jni"]
+	path = third-party/jni
+	url = ../../android/ndk
+[submodule "third-party/llama.cpp"]
+	path = third-party/llama.cpp
+	url = ../llama.cpp-for-sdk.git

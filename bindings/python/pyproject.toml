@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=74.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geniex"
+dynamic = ["version"]
+description = "GenieX-Bridge Python binding for running AI models on Qualcomm platforms."
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Qualcomm" }]
+dependencies = ["huggingface_hub", "filelock"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.optional-dependencies]
+[project.urls]
+# TODO: add the current GenieX-Bridge project homepage.
+
+[tool.setuptools]
+include-package-data = true
+packages = { find = {} }
+
+[tool.setuptools.dynamic]
+version = { attr = "geniex._version.__version__" }
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

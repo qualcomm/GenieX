@@ -1,0 +1,69 @@
+#include <cstdlib>
+
+#include "logging.h"
+#include "ml.h"
+#include "plugin/IDiarize.h"
+#include "profile.h"
+#include "registry.h"
+
+using namespace geniex;
+
+int32_t ml_diarize_create(const ml_DiarizeCreateInput* input, ml_Diarize** out_handle) {
+    GENIEX_LOG_TRACE("{}", input);
+
+    try {
+        auto&     registry       = Registry::instance();
+        IDiarize* diarize_plugin = registry.get<IDiarize>(input->plugin_id);
+        if (!diarize_plugin) return ML_ERROR_COMMON_NOT_SUPPORTED;
+
+        int32_t result = diarize_plugin->create(input);
+        if (result != ML_SUCCESS) {
+            return result;
+        } else {
+            *out_handle = reinterpret_cast<ml_Diarize*>(diarize_plugin);
+        }
+
+        return ML_SUCCESS;
+    } catch (const PluginNotFoundException& e) {
+        GENIEX_LOG_ERROR("plugin not found");
+        return ML_ERROR_COMMON_PLUGIN_INVALID;
+    } catch (const PluginLoadException& e) {
+        GENIEX_LOG_ERROR("plugin load error");
+        return ML_ERROR_COMMON_PLUGIN_LOAD;
+    } catch (const std::exception& e) {
+        GENIEX_LOG_ERROR("failed to create Diarization model: {}", e.what());
+        return ML_ERROR_COMMON_MODEL_LOAD;
+    }
+}
+
+int32_t ml_diarize_destroy(ml_Diarize* handle) {
+    GENIEX_LOG_TRACE("destroying Diarization model");
+
+    try {
+        auto backend = reinterpret_cast<IDiarize*>(handle);
+        if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
+        delete backend;
+        return ML_SUCCESS;
+    } catch (const std::exception& e) {
+        GENIEX_LOG_ERROR("failed to destroy Diarization model: {}", e.what());
+        return ML_ERROR_COMMON_UNKNOWN;
+    }
+}
+
+int32_t ml_diarize_infer(ml_Diarize* handle, const ml_DiarizeInferInput* input, ml_DiarizeInferOutput* output) {
+    GENIEX_LOG_TRACE("{}", input);
+
+    try {
+        auto backend = reinterpret_cast<IDiarize*>(handle);
+        if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
+
+        int32_t result = backend->infer(input, output);
+        calculate_profile_data(output->profile_data);
+        GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+
+        return result;
+    } catch (const std::exception& e) {
+        GENIEX_LOG_ERROR("failed to perform Diarization inference: {}", e.what());
+        return ML_ERROR_COMMON_UNKNOWN;
+    }
+}

@@ -1,0 +1,155 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag to release, for example v1.2.3"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-linux-arm64:
+    name: build-linux-arm64
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      platform: linux-arm64
+      runner: sdk-linux-16-core-x64
+      upload_artifact: true
+
+  build-windows-arm64:
+    name: build-windows-arm64
+    uses: ./.github/workflows/reusable-build.yml
+    with:
+      platform: windows-arm64
+      runner: sdk-windows-16-core-x64
+      upload_artifact: true
+
+  publish-github-release:
+    name: publish-github-release
+    runs-on: sdk-linux-16-core-x64
+    needs:
+      - build-linux-arm64
+      - build-windows-arm64
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+
+    steps:
+      - name: Validate release tag
+        run: |
+          if [ -z "${RELEASE_TAG}" ]; then
+            echo "RELEASE_TAG must not be empty"
+            exit 1
+          fi
+          if ! echo "${RELEASE_TAG}" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' >/dev/null; then
+            echo "RELEASE_TAG should look like v1.2.3"
+            exit 1
+          fi
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: geniex-bridge-linux-arm64
+          path: dist/linux-arm64
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: geniex-bridge-windows-arm64
+          path: dist/windows-arm64
+
+      - name: Create release and upload assets
+        uses: actions/github-script@v8
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const tag = process.env.RELEASE_TAG;
+
+            let release;
+            try {
+              const existing = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              release = existing.data;
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+              const created = await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tag,
+                name: tag,
+                generate_release_notes: true,
+                draft: false,
+                prerelease: false,
+              });
+              release = created.data;
+            }
+
+            const assets = [
+              {
+                filePath: path.join(process.cwd(), 'dist', 'linux-arm64', 'geniex-bridge.zip'),
+                name: `geniex-bridge-linux-arm64-${tag}.zip`,
+              },
+              {
+                filePath: path.join(process.cwd(), 'dist', 'windows-arm64', 'geniex-bridge.zip'),
+                name: `geniex-bridge-windows-arm64-${tag}.zip`,
+              },
+            ];
+
+            for (const asset of assets) {
+              if (!fs.existsSync(asset.filePath)) {
+                core.setFailed(`Missing asset file: ${asset.filePath}`);
+                return;
+              }
+            }
+
+            const listed = await github.rest.repos.listReleaseAssets({
+              owner,
+              repo,
+              release_id: release.id,
+            });
+
+            for (const asset of assets) {
+              const duplicate = listed.data.find((item) => item.name === asset.name);
+              if (duplicate) {
+                await github.rest.repos.deleteReleaseAsset({
+                  owner,
+                  repo,
+                  asset_id: duplicate.id,
+                });
+              }
+
+              const data = fs.readFileSync(asset.filePath);
+              await github.rest.repos.uploadReleaseAsset({
+                owner,
+                repo,
+                release_id: release.id,
+                name: asset.name,
+                data,
+                headers: {
+                  'content-type': 'application/zip',
+                  'content-length': data.length,
+                },
+              });
+            }
+
+            core.info(`Release ${tag} is ready: ${release.html_url}`);

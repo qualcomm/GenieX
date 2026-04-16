@@ -18,7 +18,8 @@
 ### Common Commands
 
 - `bazel query //...` list all targets in the workspace
-- `bazel run //cli:geniex` build and run the CLI target, will not build full project.
+- `bazel (build|run) --define=VERSION=XXXX [args]` build/run with version string
+- `bazel run [args]` build and run the CLI target, for example: `bazel run //cli -- infer Qwen/Qwen3-0.6B-GGUF`
 
 #### go tips
 
