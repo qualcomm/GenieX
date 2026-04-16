@@ -82,7 +82,9 @@ if(GGML_HEXAGON)
     )
     # libggml-htp-cat (inf2cat signing) depends on the .so files being
     # present, so it must run after install-htp-skels.
-    add_dependencies(libggml-htp-cat install-htp-skels)
+    if(TARGET libggml-htp-cat)
+        add_dependencies(libggml-htp-cat install-htp-skels)
+    endif()
 
     # Install HTP skels and catalog into pkg layout alongside ggml-hexagon.
     set(_HTP_FILES)

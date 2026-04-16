@@ -85,6 +85,37 @@ cmake --preset arm64-windows-snapdragon-release -DGENIEX_TEST=OFF
 cmake --build --preset arm64-windows-snapdragon-release -j 8
 cmake --install build-arm64-windows-snapdragon-release --prefix pkg-geniex
 ```
+### Android (cross-compilation from Linux)
+
+```bash
+docker run --rm -u $(id -u):$(id -g) \
+    --volume $(pwd):/workspace \
+    --platform linux/amd64 \
+    ghcr.io/snapdragon-toolchain/arm64-android:v0.3
+
+apt update && apt install -y make
+
+cmake -G "Unix Makefiles" -B build-arm64-android-snapdragon-debug -S . -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
+      -DANDROID_ABI=arm64-v8a \
+      -DANDROID_PLATFORM=android-23 \
+      -DANDROID_STL=c++_static \
+      -DCMAKE_VERBOSE_MAKEFILE=ON \
+      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+      -DCMAKE_CXX_FLAGS="-Wno-error=unused-function -Wno-error=unused-local-typedef -Wno-error=for-loop-analysis -Wno-error" \
+      -DCMAKE_EXE_LINKER_FLAGS="-Wl,--allow-shlib-undefined" \
+      -DHEXAGON_SDK_ROOT="/opt/hexagon/6.4.0.2" \
+      -DGENIEX_DEBUG=ON \
+      -DGENIEX_PLUGIN_LLAMA_CPP=ON \
+            -DGGML_OPENCL=ON \
+            -DGGML_HEXAGON=on -DPREBUILT_LIB_DIR=android_aarch64
+
+cmake --build build-arm64-android-snapdragon-debug -j 8
+cmake --install build-arm64-android-snapdragon-debug --prefix pkg-geniex
+
+adb push pkg-geniex /data/local/tmp/geniex
+adb push Qwen3-0.6B-Q4_0.gguf /data/local/tmp/geniex/modelfiles/llama_cpp/
+adb shell "cd /data/local/tmp/geniex && LD_LIBRARY_PATH=./lib:./lib/llama_cpp GENIEX_PLUGIN_PATH=./lib ./bin/geniex_test_llm"
+```
 
 # Model Prepare
 
