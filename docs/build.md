@@ -28,7 +28,7 @@ There are also some optional flags for `bazelisk run`:
 Bazel requires symlink support on Windows. To enable this:
 
 1. **Enable Developer Mode**: Settings → Privacy & Security → For developers → Developer Mode (toggle on)
-2. **Grant Create Symlink Permission**: 
+2. **Grant Create Symlink Permission**:
    - Open Group Policy Editor: `gpedit.msc`
    - Navigate to: Computer Configuration → Windows Settings → Security Settings → Local Policies → User Rights Assignment
    - Find "Create symbolic links" and add your user account
@@ -48,7 +48,8 @@ Build and install the SDK bridge and plugins into `sdk/pkg-geniex` first, then r
 
 Use the SDK subproject instructions in `sdk/README.md` and the platform-specific steps in the [Build & Install](#build--install) section below.
 
-Change `CMakeLists.txt:86` in `tokenizer-cpp`: 
+Change `CMakeLists.txt:86` in `tokenizer-cpp`:
+
 ```cmake
 elseif (CMAKE_SYSTEM_NAME STREQUAL "Windows")
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
@@ -74,6 +75,7 @@ cmake --install build --prefix pkg-geniex
 
 > [!NOTE]
 > The Hexagon toolchain has a 250-character path limit. Use `subst` to shorten the source path before building:
+>
 > ```powershell
 > subst G: C:\path\to\geniex
 > cd G:\sdk
@@ -85,6 +87,7 @@ cmake --preset arm64-windows-snapdragon-release -DGENIEX_TEST=OFF
 cmake --build --preset arm64-windows-snapdragon-release -j 8
 cmake --install build-arm64-windows-snapdragon-release --prefix pkg-geniex
 ```
+
 ### Android (cross-compilation from Linux)
 
 ```bash
@@ -184,5 +187,24 @@ C:\USERS\REMIL\.CACHE
 file content of `geniex.manifest`:
 
 ```json
-{"Name":"nexa4ai/granite4_micro","ModelName":"granite4","ModelType":"llm","PluginId":"qairt","DeviceId":"","MinSDKVersion":"","ModelFile":{"N/A":{"Name":"embed_tokens.npy","Downloaded":true,"Size":1}},"MMProjFile":{"Name":"","Downloaded":false,"Size":0},"TokenizerFile":{"Name":"","Downloaded":false,"Size":0},"ExtraFiles":null}
+{
+  "Name": "nexa4ai/granite4_micro",
+  "ModelName": "granite4",
+  "ModelType": "llm",
+  "PluginId": "qairt",
+  "DeviceId": "",
+  "MinSDKVersion": "",
+  "ModelFile": {
+    "N/A": { "Name": "embed_tokens.npy", "Downloaded": true, "Size": 1 }
+  },
+  "MMProjFile": { "Name": "", "Downloaded": false, "Size": 0 },
+  "TokenizerFile": { "Name": "", "Downloaded": false, "Size": 0 },
+  "ExtraFiles": null
+}
 ```
+
+Currently `OpenCL` and `Hexagon` backend is support on Windows arm64.
+
+By default, `llama_cpp` use both at same time, if you want to specifiedly use one of them, you can change `DeviceId` in `geniex.manifest` file.
+
+PS: still issue when manually set `DeviceId` to `HTP0`, npu usage is zero.
