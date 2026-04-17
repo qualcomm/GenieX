@@ -238,8 +238,7 @@ struct fmt::formatter<ml_ModelConfig> {
                       "n_gpu_layers: {}, "
                       "chat_template_path: {}, chat_template_content: {}, system_prompt: {}, enable_sampling: {}, grammar_str: "
                       "{}, max_tokens: {}, "
-                      "enable_thinking: {}, verbose: {}, "
-                      "qnn_model_folder_path: {}, qnn_lib_folder_path: {})",
+                      "enable_thinking: {}, verbose: {})",
             lp(p.n_ctx),
             lp(p.n_threads),
             lp(p.n_threads_batch),
@@ -254,9 +253,7 @@ struct fmt::formatter<ml_ModelConfig> {
             lp(p.grammar_str),
             lp(p.max_tokens),
             lp(p.enable_thinking),
-            lp(p.verbose),
-            lp(p.qnn_model_folder_path),
-            lp(p.qnn_lib_folder_path));
+            lp(p.verbose));
     }
 };
 
@@ -309,7 +306,8 @@ struct fmt::formatter<ml_LlmGenerateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
     auto           format(const ml_LlmGenerateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
-            "LlmGenerateInput(prompt_utf8: {}, input_ids: {}, input_ids_count: {}, config: {}, on_token: {}, user_data: {})",
+            "LlmGenerateInput(prompt_utf8: {}, input_ids: {}, input_ids_count: {}, config: {}, on_token: {}, "
+                      "user_data: {})",
             lp(p.prompt_utf8),
             lp(fmt::ptr(p.input_ids)),
             lp(p.input_ids_count),
@@ -695,14 +693,11 @@ struct fmt::formatter<ml_CVModelConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
     auto           format(const ml_CVModelConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
-            "ml_CVModelConfig(capabilities: {}, det_model_path: {}, rec_model_path: {}, char_dict_path: {}, "
-                      "qnn_model_folder_path: {}, qnn_lib_folder_path: {})",
+            "ml_CVModelConfig(capabilities: {}, det_model_path: {}, rec_model_path: {}, char_dict_path: {})",
             lp(p.capabilities),
             lp(p.det_model_path),
             lp(p.rec_model_path),
-            lp(p.char_dict_path),
-            lp(p.qnn_model_folder_path),
-            lp(p.qnn_lib_folder_path));
+            lp(p.char_dict_path));
     }
 };
 

@@ -48,18 +48,6 @@ Build and install the SDK bridge and plugins into `sdk/pkg-geniex` first, then r
 
 Use the SDK subproject instructions in `sdk/README.md` and the platform-specific steps in the [Build & Install](#build--install) section below.
 
-Change `CMakeLists.txt:86` in `tokenizer-cpp`:
-
-```cmake
-elseif (CMAKE_SYSTEM_NAME STREQUAL "Windows")
-  if(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
-    set(TOKENIZERS_CPP_CARGO_TARGET aarch64-pc-windows-msvc)
-  else()
-    set(TOKENIZERS_CPP_CARGO_TARGET x86_64-pc-windows-msvc)
-  endif()
-endif()
-```
-
 ## Build & Install
 
 ### Linux
