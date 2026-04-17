@@ -24,6 +24,7 @@ sdk_local_bundle(
             "pkg-geniex/lib/**/*.dll",
             "pkg-geniex/lib/llama_cpp/*.so",
             "pkg-geniex/lib/llama_cpp/*.cat",
+            "pkg-geniex/lib/qairt/*.cat",
         ], allow_empty = True),
         "@platforms//os:linux": glob(["pkg-geniex/lib/**/*.so"], allow_empty = True),
     }),
