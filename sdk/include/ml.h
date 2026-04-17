@@ -365,9 +365,6 @@ typedef struct {
     int32_t     max_tokens;             // max tokens to generate
     bool        enable_thinking;        // enable thinking mode for Qwen models
     bool        verbose;                // verbose logging
-    // For QNN
-    ml_Path qnn_model_folder_path;  // path to QNN model folder, default same as model_path
-    ml_Path qnn_lib_folder_path;    // path to QNN library folder, default same as model_path
 } ml_ModelConfig;
 
 /* ====================  LLM Handle  ======================================== */
@@ -482,10 +479,10 @@ ML_API int32_t ml_llm_apply_chat_template(
 
 /** Input structure for streaming text generation */
 typedef struct {
-    const char* prompt_utf8; /** The full chat history as UTF-8 string */
-    const ml_GenerationConfig* config;          /** Generation configuration (optional, can be nullptr) */
-    ml_token_callback          on_token;        /** Token callback function for streaming */
-    void*                      user_data;       /** User data passed to callback (optional, can be nullptr) */
+    const char*                prompt_utf8; /** The full chat history as UTF-8 string */
+    const ml_GenerationConfig* config;      /** Generation configuration (optional, can be nullptr) */
+    ml_token_callback          on_token;    /** Token callback function for streaming */
+    void*                      user_data;   /** User data passed to callback (optional, can be nullptr) */
 
     /** Mutual exclusivity rules:
      *  - If input_ids is non-NULL and input_ids_count > 0, the input_ids will be used
@@ -498,8 +495,8 @@ typedef struct {
      *  (BOS/EOS) as needed. The API will not add them automatically.
      */
     /** Pre-tokenized input support (alternative to prompt_utf8) */
-    const int32_t*             input_ids;       /** Array of pre-tokenized token IDs (optional, can be nullptr) */
-    int32_t                    input_ids_count; /** Number of tokens in input_ids array */
+    const int32_t* input_ids;       /** Array of pre-tokenized token IDs (optional, can be nullptr) */
+    int32_t        input_ids_count; /** Number of tokens in input_ids array */
 } ml_LlmGenerateInput;
 
 /** Output structure for streaming text generation */
@@ -1350,10 +1347,6 @@ typedef struct {
     ml_Path           det_model_path; /* detection model path */
     ml_Path           rec_model_path; /* recognition model path */
     ml_Path           char_dict_path; /* Character dictionary path */
-
-    // QNN
-    ml_Path qnn_model_folder_path; /* Model path */
-    ml_Path qnn_lib_folder_path;   /* System library path */
 } ml_CVModelConfig;
 
 /* ====================  Generic CV Model  ================================== */

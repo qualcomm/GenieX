@@ -4,6 +4,7 @@ module(name = "geniex")
 
 bazel_dep(name = "gazelle", version = "0.50.0", repo_name = "bazel_gazelle")
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
+bazel_dep(name = "rules_pkg", version = "1.2.0")
 
 # ============ c/cpp ============
 
@@ -64,9 +65,13 @@ use_repo(
     "org_golang_x_term",
 )
 
+
 # ============ python ============
 
 bazel_dep(name = "rules_python", version = "1.9.0")
+
+python = use_extension("@rules_python//python:extensions.bzl", "python")
+python.toolchain(python_version = "3.12")
 
 # bazel_dep(
 #     name = "rules_python_gazelle_plugin",

@@ -9,7 +9,6 @@ target_include_directories(geniex PUBLIC ${COMMON_INCLUDE})
 
 install(TARGETS geniex
     LIBRARY DESTINATION lib
-    RUNTIME DESTINATION lib
-    ARCHIVE DESTINATION lib)
+    RUNTIME DESTINATION lib)
 
 install(FILES ${CMAKE_SOURCE_DIR}/include/ml.h DESTINATION include)

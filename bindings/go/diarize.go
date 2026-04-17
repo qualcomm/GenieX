@@ -95,8 +95,6 @@ type DiarizeModelConfig struct {
 	MaxTokens           int32
 	EnableThinking      bool
 	Verbose             bool
-	QnnModelFolderPath  string
-	QnnLibFolderPath    string
 }
 
 func (mc DiarizeModelConfig) toCPtr() *C.ml_ModelConfig {
@@ -124,13 +122,6 @@ func (mc DiarizeModelConfig) toCPtr() *C.ml_ModelConfig {
 	cPtr.max_tokens = C.int32_t(mc.MaxTokens)
 	cPtr.enable_thinking = C.bool(mc.EnableThinking)
 	cPtr.verbose = C.bool(mc.Verbose)
-
-	if mc.QnnModelFolderPath != "" {
-		cPtr.qnn_model_folder_path = C.CString(mc.QnnModelFolderPath)
-	}
-	if mc.QnnLibFolderPath != "" {
-		cPtr.qnn_lib_folder_path = C.CString(mc.QnnLibFolderPath)
-	}
 
 	return cPtr
 }

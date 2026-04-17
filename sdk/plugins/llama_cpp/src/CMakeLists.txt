@@ -38,5 +38,4 @@ endif()
 
 install(TARGETS geniex_llama_cpp
     LIBRARY DESTINATION lib/llama_cpp
-    RUNTIME DESTINATION lib/llama_cpp
-    ARCHIVE DESTINATION lib/llama_cpp)
+    RUNTIME DESTINATION lib/llama_cpp)

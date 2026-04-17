@@ -10,7 +10,7 @@ def _sdk_local_bundle_impl(ctx):
     runfiles = ctx.runfiles(root_symlinks = root_symlinks)
 
     return DefaultInfo(
-        files = depset(),
+        files = depset(ctx.files.data),
         default_runfiles = runfiles,
         data_runfiles = runfiles,
     )

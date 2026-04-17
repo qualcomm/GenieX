@@ -1,3 +1,7 @@
+# Geniex
+
+WIP, see [build.md](./docs/build.md) and [run.md](./docs/run.md).
+
 ## Directory Structure
 
 - All libraries and tools intended for external release are placed in the repository root
@@ -6,27 +10,7 @@
 
 ## Bazel
 
-- Advantages
-  - Supports C++/Go/Python/Android and can package Docker images
-  - Integrates lint/test/build, so CI only needs to run Bazel commands; local development can also use Bazel to maintain consistency
-  - Uses a self-maintained toolchain, unaffected by the system environment
-  - Easier to integrate custom build rules compared to CMake
-- Disadvantages
-  - May be overly complex for small projects (but our project spans multiple languages and platforms)
-  - Steeper learning curve (there are plenty of resources; AI can help)
-
-### Common Commands
-
-- `bazel query //...` list all targets in the workspace
-- `bazel (build|run) --define=VERSION=XXXX [args]` build/run with version string
-- `bazel run [args]` build and run the CLI target, for example: `bazel run //cli -- infer Qwen/Qwen3-0.6B-GGUF`
-
-#### go tips
-
-- `bazel run //gazelle` update BUILD files from `go.mod`
-- `# gazelle:resolve go ://example.com //local/foo:go_default_library` resolve external go module to local bazel target
-
-## Code Structure
+:# Code Structure
 
 ```
 .
@@ -86,5 +70,3 @@
 ## Notes
 
 - All tutorials, cookbook and sample apps are in a separate repo [geniex-app](https://github.com/geniex-app).
-- Should we keep `dlopen` plugins? There are only two plugins now, and both exist on windows/linux arm64.
-- Since we will open source all the code, maybe we can static link everything for simplicity.

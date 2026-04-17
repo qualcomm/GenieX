@@ -116,7 +116,7 @@ func (s *Store) GetManifest(name string) (*types.ModelManifest, error) {
 
 	dir := filepath.Join(s.home, "models")
 	// Read manifest file
-	data, e := os.ReadFile(filepath.Join(dir, name, "geniex.manifest"))
+	data, e := os.ReadFile(filepath.Join(dir, name, "geniex.json"))
 	if e != nil {
 		return nil, e
 	}
@@ -229,7 +229,7 @@ func (s *Store) Pull(ctx context.Context, mf types.ModelManifest) (infoCh <-chan
 			TokenizerFile: mf.TokenizerFile,
 			ExtraFiles:    mf.ExtraFiles,
 		}
-		manifestPath := filepath.Join(s.home, "models", mf.Name, "geniex.manifest")
+		manifestPath := filepath.Join(s.home, "models", mf.Name, "geniex.json")
 		manifestData, _ := sonic.Marshal(model) // JSON marshal won't fail, ignore error
 		err = os.WriteFile(manifestPath, manifestData, 0o664)
 		if err != nil {
@@ -314,7 +314,7 @@ func (s *Store) PullExtraQuant(ctx context.Context, omf, nmf types.ModelManifest
 			TokenizerFile: nmf.TokenizerFile,
 			ExtraFiles:    nmf.ExtraFiles,
 		}
-		manifestPath := filepath.Join(s.home, "models", nmf.Name, "geniex.manifest")
+		manifestPath := filepath.Join(s.home, "models", nmf.Name, "geniex.json")
 		manifestData, _ := sonic.Marshal(model) // JSON marshal won't fail, ignore error
 		err = os.WriteFile(manifestPath, manifestData, 0o664)
 		if err != nil {

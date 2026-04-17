@@ -20,7 +20,6 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -52,20 +51,20 @@ func RootCmd() *cobra.Command {
 			// log
 			common.ApplyLogLevel()
 
-			subCmd := cmd.CalledAs()
-
-			// skip update check
-			if !skipUpdate {
-				notifyUpdate()
-				// skip some quick commands
-				if !slices.Contains([]string{
-					"remove", "rm", "clean", "list", "ls",
-					"config",
-					"version", "update",
-				}, subCmd) {
-					go checkUpdate()
-				}
-			}
+			// subCmd := cmd.CalledAs()
+			//
+			// // skip update check
+			// if !skipUpdate {
+			// 	notifyUpdate()
+			// 	// skip some quick commands
+			// 	if !slices.Contains([]string{
+			// 		"remove", "rm", "clean", "list", "ls",
+			// 		"config",
+			// 		"version", "update",
+			// 	}, subCmd) {
+			// 		go checkUpdate()
+			// 	}
+			// }
 
 			// license
 			if os.Getenv("GENIEX_TOKEN") == "" {
