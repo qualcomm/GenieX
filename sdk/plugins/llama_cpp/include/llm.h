@@ -22,7 +22,6 @@ class LlamaLlm : public ILlm {
     std::vector<llama_token> past_prompt_tokens;  // for prefix match
 
     // Instance-level storage for model loading parameters (thread-safe)
-    ggml_backend_dev_t               device_array[9];               // Up to 8 devices + null terminator
     llama_model_tensor_buft_override tensor_overrides[2];           // MoE override + null terminator
     bool                             allow_special_tokens = false;  // Control special token output
 

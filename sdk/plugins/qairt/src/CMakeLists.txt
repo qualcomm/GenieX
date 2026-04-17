@@ -1,14 +1,5 @@
-option(GENIEX_QAIRT_ENABLE_VLM "Build QAIRT VLM support" OFF)
-
-set(QAIRT_SRCS
-    llm.cpp
-    plugin.cpp)
-
-if(GENIEX_QAIRT_ENABLE_VLM)
-    list(APPEND QAIRT_SRCS vlm.cpp)
-endif()
-
-add_library(geniex_qairt SHARED ${QAIRT_SRCS})
+add_library(geniex_qairt SHARED
+    plugin.cpp llm.cpp)
 
 target_compile_features(geniex_qairt PRIVATE cxx_std_20)
 target_compile_definitions(geniex_qairt PUBLIC ML_SHARED)
@@ -39,11 +30,9 @@ target_include_directories(geniex_qairt
     PUBLIC  ${COMMON_INCLUDE}
     PRIVATE ../include/)
 
-set(QAIRT_PLUGIN_LINK_DEPS geniex geniex_core geniex-proc)
-
-target_link_libraries(geniex_qairt PRIVATE ${QAIRT_PLUGIN_LINK_DEPS})
+target_link_libraries(geniex_qairt
+    PRIVATE geniex geniex_core geniex-proc)
 
 install(TARGETS geniex_qairt
     LIBRARY DESTINATION lib/qairt
-    RUNTIME DESTINATION lib/qairt
-    ARCHIVE DESTINATION lib/qairt)
+    RUNTIME DESTINATION lib/qairt)
