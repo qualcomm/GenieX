@@ -24,10 +24,17 @@ for example, [granite4_micro](https://huggingface.co/yichqian/geniex-qairt-model
 
 For builder:
 
-- run `bazel build //cli:artifact`
-- export `bazel-bin/cli/artifact.zip` and `ggml-htp-v1.cer`.
+1. run `bazel build //cli:artifact`
+2. export `bazel-bin/cli/artifact.zip` and `ggml-htp-v1.cer`.
 
-For users, Nothing different with `qairt`. `llama_cpp` need on extra step:
+For users:
+
+1. Get the artifact from builder and unzip it.
+2. Download model, `hf download yichqian/geniex-qairt-models --local-dir=geniex-qairt-models`
+3. run `./geniex.exe pull local/granite4_micro --model-hub localfs --local-path /path/to/geniex-qairt-models/granite4_micro`
+4. run `./geniex.exe infer local/granite4_micro`
+
+with `llama_cpp` backend, need on extra step:
 
 - Get builder's certificate, `ggml-htp-v1.cer`.
 - follow [document](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/windows.md#enable-npu-driver-test-signatures)
