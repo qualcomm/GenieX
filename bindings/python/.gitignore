@@ -1,6 +1,10 @@
-*.egg-info
-__pycache__
-.ruff_cache
+# Python build artifacts
+build/
+dist/
+*.egg-info/
+__pycache__/
+**/__pycache__/
+*.py[cod]
 
-# Will be modified by CMake
-geniex/_version.py
+# Native libraries staged for wheel build (generated — run BUILD.md step 2 to recreate)
+geniex/lib/

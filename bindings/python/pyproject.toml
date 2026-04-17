@@ -27,6 +27,11 @@ classifiers = [
 include-package-data = true
 packages = { find = {} }
 
+[tool.setuptools.package-data]
+# Bundle the native libraries when building a wheel.
+# Before running `pip wheel`, copy sdk/pkg-geniex/lib/ → geniex/lib/
+geniex = ["lib/**/*"]
+
 [tool.setuptools.dynamic]
 version = { attr = "geniex._version.__version__" }
 
