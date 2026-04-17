@@ -1,0 +1,10 @@
+# Python build artifacts
+build/
+dist/
+*.egg-info/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Native libraries staged for wheel build (generated — run BUILD.md step 2 to recreate)
+geniex/lib/

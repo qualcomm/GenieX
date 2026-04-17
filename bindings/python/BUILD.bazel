@@ -1,13 +1,12 @@
 load("@rules_python//python:defs.bzl", "py_library")
+load("@rules_python//python:packaging.bzl", "py_wheel")
 
 package(default_visibility = ["//visibility:public"])
 
 # Low-level ctypes binding layer.
-# Requires libgeniex.so/.dll at runtime (provided via //sdk data dep).
 py_library(
     name = "geniex_sdk_py",
     srcs = glob(["geniex/geniex_sdk/*.py"]),
-    data = ["//sdk"],
     imports = ["."],
 )
 
@@ -15,7 +14,24 @@ py_library(
 py_library(
     name = "geniex_py",
     srcs = glob(["geniex/**/*.py"]),
-    data = ["//sdk"],
     imports = ["."],
     deps = [":geniex_sdk_py"],
+)
+
+# Wheel — produced at bazel-bin/bindings/python/geniex-<version>-py3-none-any.whl
+# Build:  bazel build //bindings/python:geniex_wheel
+# Output: bazel-bin/bindings/python/geniex-0.1.0-py3-none-any.whl
+py_wheel(
+    name = "geniex_wheel",
+    # Wheel metadata
+    distribution = "geniex",
+    version = "0.1.0",
+    python_tag = "py3",
+    abi = "none",
+    platform = "any",
+    summary = "GenieX-Bridge Python binding for running AI models on Qualcomm platforms.",
+    license = "Apache-2.0",
+    author = "Qualcomm",
+    # Package contents
+    deps = [":geniex_py"],
 )
