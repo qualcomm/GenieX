@@ -27,6 +27,8 @@ endif()
 
 # EXCLUDE_FROM_ALL suppresses third-party install() rules.
 # Targets still build because SDK plugins link against them.
+# geniex_core and htp-files-v{arch}/ are installed explicitly by
+# sdk/plugins/qairt/CMakeLists.txt from the build tree.
 add_subdirectory(${GENIEX_QAIRT_DIR} ${CMAKE_BINARY_DIR}/third-party/geniex-qairt EXCLUDE_FROM_ALL)
 
 # Export list of qairt libraries for plugin installation
