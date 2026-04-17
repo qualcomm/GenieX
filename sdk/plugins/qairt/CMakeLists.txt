@@ -14,15 +14,17 @@ foreach(dep IN LISTS QAIRT_LIBS)
     endif()
 endforeach()
 
-set(_qairt_htp_root "${GENIEX_QAIRT_DIR}/third-party")
-file(GLOB _qairt_htp_dirs LIST_DIRECTORIES true "${_qairt_htp_root}/htp-files-*")
-
-if(_qairt_htp_dirs)
-    message(STATUS "Bundling QAIRT HTP runtime folders to lib/qairt:")
-    foreach(_htp_dir IN LISTS _qairt_htp_dirs)
-        message(STATUS "  - ${_htp_dir}")
+# Install htp-files-v{arch}/ folders from the build tree into lib/qairt/.
+# geniex-qairt's POST_BUILD rule copies them next to geniex_core after each build;
+# its own install() rules are suppressed by EXCLUDE_FROM_ALL in qairt.cmake.
+# resolveHtpPaths() in runtime.h locates these relative to geniex_core at runtime.
+install(CODE [[
+    file(GLOB _htp_dirs LIST_DIRECTORIES true "$<TARGET_FILE_DIR:geniex_core>/htp-files-v*")
+    foreach(_dir IN LISTS _htp_dirs)
+        if(IS_DIRECTORY "${_dir}")
+            get_filename_component(_name "${_dir}" NAME)
+            message(STATUS "Installing ${_name} -> ${CMAKE_INSTALL_PREFIX}/lib/qairt/${_name}")
+            file(INSTALL "${_dir}/" DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/qairt/${_name}")
+        endif()
     endforeach()
-    install(DIRECTORY ${_qairt_htp_dirs} DESTINATION lib/qairt)
-else()
-    message(WARNING "No htp-files-* folders found under ${_qairt_htp_root}")
-endif()
+]])
