@@ -81,7 +81,7 @@ func ModelInfo(ctx context.Context, modelName string) ([]ModelFileInfo, *types.M
 	}
 
 	// check manifest available
-	const manifestFile = "nexa.manifest" //TODO: update huggingface
+	const manifestFile = "geniex.manifest" //TODO: update huggingface
 	var hasManifest bool
 	for i := 0; i < len(files); i++ {
 		if files[i].Name == manifestFile {
