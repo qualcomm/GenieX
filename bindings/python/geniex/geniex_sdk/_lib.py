@@ -33,7 +33,6 @@ Side effects on success
 
 import ctypes
 import ctypes.util
-import glob
 import os
 import sys
 
@@ -146,23 +145,19 @@ def _find_release(name: str) -> tuple[str, str] | None:
     return None
 
 
-def _find_dev(name: str) -> tuple[str, str, str] | None:
-    """Return (lib_path, plugin_path) for the dev (in-repo build) layout.
+def _find_dev(name: str) -> tuple[str, str] | None:
+    """Return (lib_path, plugin_path) for the dev (in-repo) layout.
 
-    Walks up from this file to find the repo root (identified by the presence
-    of ``sdk/`` directory), then globs ``sdk/build-*/src/<name>`` and picks
-    the build with the most recent mtime.
-
-    Expected build output structure::
+    Looks for the cmake-installed SDK under ``sdk/pkg-geniex/``::
 
         <repo>/
             sdk/
-                build-default/
-                    src/libgeniex.so   ← lib_path
-                    plugins/           ← plugin_path (GENIEX_PLUGIN_PATH)
-                    bin/               ← transitive .so deps
+                pkg-geniex/
+                    lib/
+                        libgeniex.so      ← lib_path
+                        llama_cpp/        ← plugin_path (GENIEX_PLUGIN_PATH)
+                            libgeniex_plugin.so
     """
-    # Walk up to the repo root (has a "sdk/" child directory).
     current = os.path.dirname(os.path.abspath(__file__))
     repo_root: str | None = None
     for _ in range(10):
@@ -177,20 +172,12 @@ def _find_dev(name: str) -> tuple[str, str, str] | None:
     if repo_root is None:
         return None
 
-    pattern = os.path.join(repo_root, 'sdk', 'build-*', 'src', name)
-    candidates = glob.glob(pattern)
-    if not candidates:
+    lib_path = os.path.join(repo_root, 'sdk', 'pkg-geniex', 'lib', name)
+    if not os.path.isfile(lib_path):
         return None
 
-    # Pick the most recently modified build.
-    lib_path = max(candidates, key=os.path.getmtime)
-    build_dir = os.path.dirname(os.path.dirname(lib_path))  # sdk/build-*/
-    plugin_path = os.path.join(build_dir, 'plugins')
-    if not os.path.isdir(plugin_path):
-        plugin_path = os.path.join(build_dir, 'bin')  # fallback
-
-    # Also expose build_dir so _setup_env can add extra search dirs.
-    return lib_path, plugin_path, build_dir
+    plugin_path = os.path.join(repo_root, 'sdk', 'pkg-geniex', 'lib')
+    return lib_path, plugin_path
 
 
 # ---------------------------------------------------------------------------
@@ -220,12 +207,11 @@ def load_library() -> ctypes.CDLL:
         _lib = ctypes.CDLL(lib_path)
         return _lib
 
-    # --- Priority 3: dev (in-repo build) layout ---
+    # --- Priority 3: dev (in-repo) layout — sdk/pkg-geniex/lib/ ---
     result = _find_dev(name)
     if result:
-        lib_path, plugin_path, build_dir = result
-        # Pass build_dir/bin as extra so transitive deps (libggml*.so) are pre-loaded.
-        _setup_env(lib_path, plugin_path, extra_dirs=[os.path.join(build_dir, 'bin')])
+        lib_path, plugin_path = result
+        _setup_env(lib_path, plugin_path)
         _lib = ctypes.CDLL(lib_path)
         return _lib
 
