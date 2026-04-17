@@ -60,7 +60,7 @@ add_subdirectory(./src)
 
 # setup install
 
-set(LLAMA_LIBS mtmd llama ggml ggml-base ggml-cpu ggml-opencl ggml-hexagon)
+set(LLAMA_LIBS mtmd llama ggml ggml-base ggml-cpu ggml-vulkan ggml-opencl ggml-hexagon)
 foreach(dep IN LISTS LLAMA_LIBS)
     if(TARGET ${dep})
         install(TARGETS ${dep}

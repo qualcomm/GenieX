@@ -1,13 +1,15 @@
-common --enable_bzlmod --define=VERSION=unknown
+common --enable_bzlmod
 
+# default settings
+build --incompatible_disallow_empty_glob
 build --keep_going
+build --verbose_failures
 test --test_output=errors
 run --color=yes
 
-
 # hermetic toolchain
+common --@rules_python//python/config_settings:bootstrap_impl=script
 common --enable_platform_specific_config
-build  --incompatible_disallow_empty_glob
 build  --worker_sandboxing
 build  --experimental_output_directory_naming_scheme=diff_against_dynamic_baseline
 
@@ -15,5 +17,5 @@ build  --experimental_output_directory_naming_scheme=diff_against_dynamic_baseli
 startup --windows_enable_symlinks
 build --enable_runfiles
 
-# tests
-build  --verbose_failures
+# build info inject
+common --define=VERSION=unknown
