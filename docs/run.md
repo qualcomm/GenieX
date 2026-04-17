@@ -10,24 +10,28 @@ PS: still issue when manually set `DeviceId` to `HTP0`, npu usage is zero.
 
 # Run
 
-## build local
+`qairt` models need `geniex.json` to work.
 
-### Download and Import Model
+for example, [granite4_micro](https://huggingface.co/yichqian/geniex-qairt-models/blob/main/granite4_micro/geniex.json) model's `geniex.json` is like this:
 
-### Run
+## build and run local
 
-`bazel run //cli:geniex_cli`
+1. Download model, `hf download yichqian/geniex-qairt-models --local-dir=geniex-qairt-models`
+2. Import model, `bazel run //cli -- pull local/granite4_micro --model-hub localfs --local-path /path/to/geniex-qairt-models/granite4_micro`
+3. Run, `bazel run //cli -- infer local/granite4_micro`
 
 ## build from others
 
-### Get Artifacts
+For builder:
 
-`bazel run //cli:artifact`, then get artifact file at `./bazel-bin/cli/artifact.zip`
+- run `bazel build //cli:artifact`
+- export `bazel-bin/cli/artifact.zip` and `ggml-htp-v1.cer`.
 
-### Get and Import Cert
+For users, Nothing different with `qairt`. `llama_cpp` need on extra step:
 
-### Download and Import Model
-
-see build local
-
-### Run
+- Get builder's certificate, `ggml-htp-v1.cer`.
+- follow [document](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/windows.md#enable-npu-driver-test-signatures)
+  - disable secure boot
+  - enable test signing
+  - _skip_ create certificate
+  - import certificate with `certlm`
