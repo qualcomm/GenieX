@@ -1,0 +1,21 @@
+load("@rules_python//python:defs.bzl", "py_library")
+
+package(default_visibility = ["//visibility:public"])
+
+# Low-level ctypes binding layer.
+# Requires libgeniex.so/.dll at runtime (provided via //sdk data dep).
+py_library(
+    name = "geniex_sdk_py",
+    srcs = glob(["geniex/geniex_sdk/*.py"]),
+    data = ["//sdk"],
+    imports = ["."],
+)
+
+# Full public API: AutoModelForCausalLM, AutoModelForVision2Seq, etc.
+py_library(
+    name = "geniex_py",
+    srcs = glob(["geniex/**/*.py"]),
+    data = ["//sdk"],
+    imports = ["."],
+    deps = [":geniex_sdk_py"],
+)
