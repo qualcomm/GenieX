@@ -96,20 +96,50 @@ uv pip install dist/geniex-*.whl
 # or: pip install dist/geniex-*.whl
 ```
 
-After installation the package finds `libgeniex.so` automatically inside
-`site-packages/geniex/lib/` — no environment variables required.
+When `geniex/lib/` was bundled in step 3, the package finds the native library
+automatically — no environment variables required. If the wheel was built
+**without** bundling `lib/` (e.g. the Bazel wheel or a pure-Python wheel),
+set `GENIEX_LIB_PATH` to the native library before use:
+
+```bash
+# Linux
+export GENIEX_LIB_PATH=/path/to/sdk/pkg-geniex/lib/libgeniex.so
+
+# Windows
+set GENIEX_LIB_PATH=C:\path\to\sdk\pkg-geniex\lib\geniex.dll
+```
 
 ```python
 from geniex import AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("/path/to/model.gguf", device_map="cpu")
+# llama_cpp backend (CPU, default)
+model = AutoModelForCausalLM.from_pretrained(
+    "/path/to/model.gguf",
+    device_map="cpu",
+)
+
+# QAIRT backend (Snapdragon NPU)
+# model = AutoModelForCausalLM.from_pretrained(
+#     "sdk/modelfiles/qairt/my_model",
+#     model_name="my_model",
+#     device_map="qairt:NPU",
+# )
+
 text = model.tokenizer.apply_chat_template(
     [{"role": "user", "content": "Hello!"}],
     tokenize=False,
     add_generation_prompt=True,
 )
+
+# Batch
 output = model.generate(text, max_new_tokens=256)
 print(output.text)
+print(f"[{output.profile.generated_tokens} tokens, {output.profile.decode_speed:.1f} tok/s]")
+
+# Streaming
+for token in model.generate(text, max_new_tokens=256, stream=True):
+    print(token, end="", flush=True)
+
 model.close()
 ```
 
