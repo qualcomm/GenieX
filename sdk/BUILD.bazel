@@ -26,7 +26,10 @@ sdk_local_bundle(
             "pkg-geniex/lib/**/*.so",
             "pkg-geniex/lib/**/*.cat",
         ], allow_empty = True),
-        "@platforms//os:linux": glob(["pkg-geniex/lib/**/*.so"], allow_empty = True),
+        "@platforms//os:linux": glob([
+            "pkg-geniex/lib/**/*.so",
+            "pkg-geniex/lib/**/*.so.*",
+        ], allow_empty = True),
     }),
     strip_prefix = "sdk/pkg-geniex/lib/",
 )
