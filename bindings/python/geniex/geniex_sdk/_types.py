@@ -117,8 +117,6 @@ class ml_ModelConfig(Structure):
         ('max_tokens', c_int32),
         ('enable_thinking', c_bool),
         ('verbose', c_bool),
-        ('qnn_model_folder_path', c_char_p),
-        ('qnn_lib_folder_path', c_char_p),
     ]
 
 
