@@ -11,7 +11,7 @@
 #include "doctest.h"
 #include "external/json.hpp"
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "utf8.h" // IWYU pragma: export
 #include "util.h"
 
@@ -42,7 +42,7 @@ struct PluginCapabilities {
   }
 };
 
-Setup<Param, ml_LLM> setup_guard(
+Setup<Param, geniex_LLM> setup_guard(
     SetupMap<Param>{
         {llama_cpp::value,
          {
@@ -111,8 +111,8 @@ Setup<Param, ml_LLM> setup_guard(
 #endif
          }},
     },
-    [](ml_PluginId plugin, Param param) {
-      ml_LLM *llm = nullptr;
+    [](geniex_PluginId plugin, Param param) {
+      geniex_LLM *llm = nullptr;
 
       auto [test_id, name, model_path, tokenizer_path] = std::move(param);
 
@@ -121,11 +121,11 @@ Setup<Param, ml_LLM> setup_guard(
         GENIEX_LOG_WARN("Model file not found: {}", model_path);
         GENIEX_LOG_WARN("Skipping tests for model: {}", name);
         g_test_summary.add_skipped_model(name, model_path);
-        return static_cast<ml_LLM *>(
+        return static_cast<geniex_LLM *>(
             nullptr); // Return nullptr to indicate skip
       }
 
-      ml_LlmCreateInput input{};
+      geniex_LlmCreateInput input{};
       input.model_name = name.c_str();
       input.model_path = model_path.c_str();
       input.tokenizer_path = tokenizer_path ? tokenizer_path->c_str() : nullptr;
@@ -135,13 +135,13 @@ Setup<Param, ml_LLM> setup_guard(
       input.config.enable_sampling = false;
       input.plugin_id = plugin;
       input.device_id = "CPU";
-      int32_t res = ml_llm_create(&input, &llm);
+      int32_t res = geniex_llm_create(&input, &llm);
       CHECK_ML_ERROR(res);
       REQUIRE(llm != nullptr);
 
       return llm;
     },
-    ml_llm_reset, ml_llm_destroy);
+    geniex_llm_reset, geniex_llm_destroy);
 
 // Global state to track UTF-8 validation
 static size_t g_total_tokens_checked = 0;
@@ -187,7 +187,7 @@ bool stream_callback(const char *token, void *_) {
 // - FAIL: Multiple tokens are invalid, or invalid tokens appear in non-final
 // positions
 void validate_and_reset_utf8_state(
-    const ml_LlmGenerateOutput *output = nullptr) {
+    const geniex_LlmGenerateOutput *output = nullptr) {
   CHECK(g_total_tokens_checked > 0); // Ensure we actually checked some tokens
 
   if (g_invalid_tokens_count > 0) {
@@ -220,16 +220,16 @@ void validate_and_reset_utf8_state(
 
 // Register all LLM tests - conditionally based on plugin capabilities
 template <typename PluginType>
-void register_llm_tests(TestRegistry<ml_LLM> &registry) {
+void register_llm_tests(TestRegistry<geniex_LLM> &registry) {
   std::string plugin_name = PluginType::value;
 
   // Common tests for all plugins
   REGISTER_TEST(
-      registry, GenerateBasic, auto cfg = ml_GenerationConfig{};
-      cfg.max_tokens = 32; ml_LlmGenerateInput input{};
+      registry, GenerateBasic, auto cfg = geniex_GenerationConfig{};
+      cfg.max_tokens = 32; geniex_LlmGenerateInput input{};
       input.prompt_utf8 = " 🥳 🎂 Once upon a time"; input.config = &cfg;
-      ml_LlmGenerateOutput output{};
-      int32_t res = ml_llm_generate(model, &input, &output);
+      geniex_LlmGenerateOutput output{};
+      int32_t res = geniex_llm_generate(model, &input, &output);
       CHECK_ML_ERROR(res); GENIEX_LOG_INFO("{}", output);
 
       REQUIRE(output.full_text != nullptr); CHECK(utf8::is_valid(
@@ -257,13 +257,13 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
   //             GENIEX_LOG_INFO("Read prompt from file: {}", file_content);
 
   //             // Generate with file content as prompt
-  //             auto cfg = ml_GenerationConfig{};
+  //             auto cfg = geniex_GenerationConfig{};
   //             cfg.max_tokens = 128;
-  //             ml_LlmGenerateInput input{};
+  //             geniex_LlmGenerateInput input{};
   //             input.prompt_utf8 = file_content.c_str();
   //             input.config      = &cfg;
-  //             ml_LlmGenerateOutput output{};
-  //             int32_t              res = ml_llm_generate(model, &input,
+  //             geniex_LlmGenerateOutput output{};
+  //             int32_t              res = geniex_llm_generate(model, &input,
   //             &output); CHECK_ML_ERROR(res); GENIEX_LOG_INFO("Generated output:
   //             {}", output);
 
@@ -289,13 +289,13 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
   //     }
   // #endif
 
-  REGISTER_TEST(registry, GenerateStream, auto cfg = ml_GenerationConfig{};
-                cfg.max_tokens = 32; ml_LlmGenerateInput input{};
+  REGISTER_TEST(registry, GenerateStream, auto cfg = geniex_GenerationConfig{};
+                cfg.max_tokens = 32; geniex_LlmGenerateInput input{};
                 input.prompt_utf8 = " 🥳 🎂 Once upon a time";
                 input.config = &cfg; input.on_token = stream_callback;
-                ml_LlmGenerateOutput output{};
+                geniex_LlmGenerateOutput output{};
 
-                int32_t res = ml_llm_generate(model, &input, &output);
+                int32_t res = geniex_llm_generate(model, &input, &output);
                 CHECK_ML_ERROR(res);
 
                 std::cout << std::endl; // Add newline after streaming output
@@ -304,15 +304,15 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
                 validate_and_reset_utf8_state(&output););
 
   REGISTER_TEST(
-      registry, GenerateWithTokenIds, auto cfg = ml_GenerationConfig{};
-      cfg.max_tokens = 32; ml_LlmGenerateInput input{};
+      registry, GenerateWithTokenIds, auto cfg = geniex_GenerationConfig{};
+      cfg.max_tokens = 32; geniex_LlmGenerateInput input{};
       // token id in this model's tokenizer for ` 🥳 🎂 Once upon a time`
       std::vector<int32_t> token_ids = {11162, 98, 111, 11162, 236, 224, 9646,
                                         5193, 264, 882};
       input.input_ids = token_ids.data();
       input.input_ids_count = (int32_t)token_ids.size(); input.config = &cfg;
-      ml_LlmGenerateOutput output{};
-      int32_t res = ml_llm_generate(model, &input, &output);
+      geniex_LlmGenerateOutput output{};
+      int32_t res = geniex_llm_generate(model, &input, &output);
       CHECK_ML_ERROR(res); GENIEX_LOG_INFO("{}", output);
 
       REQUIRE(output.full_text != nullptr); CHECK(utf8::is_valid(
@@ -323,25 +323,25 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
       CHECK(output.profile_data.generated_tokens > 0););
 
   REGISTER_TEST(
-      registry, GenerateChat, std::vector<ml_LlmChatMessage> messages;
+      registry, GenerateChat, std::vector<geniex_LlmChatMessage> messages;
       messages.push_back({"user", " 🥳 🎂 Once upon a time"});
 
-      ml_LlmApplyChatTemplateInput apply_input{};
+      geniex_LlmApplyChatTemplateInput apply_input{};
       apply_input.messages = messages.data();
       apply_input.message_count = (int32_t)messages.size();
       apply_input.add_generation_prompt = true;
-      ml_LlmApplyChatTemplateOutput apply_output{};
+      geniex_LlmApplyChatTemplateOutput apply_output{};
       int32_t apply_res =
-          ml_llm_apply_chat_template(model, &apply_input, &apply_output);
+          geniex_llm_apply_chat_template(model, &apply_input, &apply_output);
       REQUIRE_ML_ERROR(apply_res);
 
-      auto cfg = ml_GenerationConfig{}; cfg.max_tokens = 32;
-      ml_LlmGenerateInput input{};
+      auto cfg = geniex_GenerationConfig{}; cfg.max_tokens = 32;
+      geniex_LlmGenerateInput input{};
       input.prompt_utf8 = apply_output.formatted_text; input.config = &cfg;
       input.on_token = stream_callback; input.user_data = nullptr;
-      ml_LlmGenerateOutput output{};
+      geniex_LlmGenerateOutput output{};
 
-      int32_t res = ml_llm_generate(model, &input, &output);
+      int32_t res = geniex_llm_generate(model, &input, &output);
       CHECK_ML_ERROR(res);
 
       std::cout << std::endl; // Add newline after streaming output
@@ -363,31 +363,31 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
       std::vector<Rounds> turns = {{"let a = 1; let b = 2;"},
                                    {"what is the value of a + b?"}};
 
-      std::vector<ml_LlmChatMessage> history; ml_GenerationConfig cfg{};
+      std::vector<geniex_LlmChatMessage> history; geniex_GenerationConfig cfg{};
       cfg.max_tokens = 64;
 
       for (size_t i = 0; i < turns.size(); ++i) {
         history.push_back({"user", turns[i].user_message.c_str()});
 
-        ml_LlmApplyChatTemplateInput apply_input{};
+        geniex_LlmApplyChatTemplateInput apply_input{};
         apply_input.messages = history.data();
         apply_input.message_count = static_cast<int32_t>(history.size());
         apply_input.add_generation_prompt = true;
 
-        ml_LlmApplyChatTemplateOutput apply_output{};
+        geniex_LlmApplyChatTemplateOutput apply_output{};
         int32_t apply_res =
-            ml_llm_apply_chat_template(model, &apply_input, &apply_output);
+            geniex_llm_apply_chat_template(model, &apply_input, &apply_output);
         CHECK_ML_ERROR(apply_res);
         REQUIRE(apply_output.formatted_text != nullptr);
 
-        ml_LlmGenerateInput gen_input{};
+        geniex_LlmGenerateInput gen_input{};
         gen_input.prompt_utf8 = apply_output.formatted_text;
         gen_input.config = &cfg;
         gen_input.on_token = stream_callback;
         gen_input.user_data = nullptr;
 
-        ml_LlmGenerateOutput output{};
-        int32_t res = ml_llm_generate(model, &gen_input, &output);
+        geniex_LlmGenerateOutput output{};
+        int32_t res = geniex_llm_generate(model, &gen_input, &output);
         CHECK_ML_ERROR(res);
 
         std::cout << std::endl; // Add newline after streaming output
@@ -405,21 +405,21 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
       validate_and_reset_utf8_state(););
 
   REGISTER_TEST(
-      registry, GenerateWithSampling, auto sampler_config = ml_SamplerConfig{};
+      registry, GenerateWithSampling, auto sampler_config = geniex_SamplerConfig{};
       sampler_config.temperature = 100.0; sampler_config.top_p = 0.9;
       sampler_config.top_k = 10; sampler_config.min_p = 0.0;
       sampler_config.repetition_penalty = 1.2;
       sampler_config.presence_penalty = 1.0;
       sampler_config.frequency_penalty = 1.0; sampler_config.seed = 42;
 
-      auto cfg = ml_GenerationConfig{}; cfg.max_tokens = 32;
+      auto cfg = geniex_GenerationConfig{}; cfg.max_tokens = 32;
       cfg.sampler_config = &sampler_config;
 
-      ml_LlmGenerateInput input{};
+      geniex_LlmGenerateInput input{};
       input.prompt_utf8 = " 🥳 🎂 Once upon a time"; input.config = &cfg;
-      ml_LlmGenerateOutput output{};
+      geniex_LlmGenerateOutput output{};
 
-      int32_t res = ml_llm_generate(model, &input, &output);
+      int32_t res = geniex_llm_generate(model, &input, &output);
       CHECK_ML_ERROR(res); GENIEX_LOG_INFO("{}", output);
 
       REQUIRE(output.full_text != nullptr); CHECK(utf8::is_valid(
@@ -433,14 +433,14 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
       registry, Threading,
       // Create and start a single worker thread
       auto thread_worker =
-          [](ml_LLM *llm) {
-            auto cfg = ml_GenerationConfig{};
+          [](geniex_LLM *llm) {
+            auto cfg = geniex_GenerationConfig{};
             cfg.max_tokens = 32;
-            ml_LlmGenerateInput input{};
+            geniex_LlmGenerateInput input{};
             input.prompt_utf8 = " 🥳 🎂 Once upon a time";
             input.config = &cfg;
-            ml_LlmGenerateOutput output{};
-            int32_t res = ml_llm_generate(llm, &input, &output);
+            geniex_LlmGenerateOutput output{};
+            int32_t res = geniex_llm_generate(llm, &input, &output);
             CHECK_ML_ERROR(res);
 
             REQUIRE(output.full_text != nullptr);
@@ -467,19 +467,19 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
         std::string cache_path = "./kvcache_" + model_name;
 
         // First run a generation to populate the KV cache
-        auto cfg = ml_GenerationConfig{};
-        cfg.max_tokens = 32; ml_LlmGenerateInput input{};
+        auto cfg = geniex_GenerationConfig{};
+        cfg.max_tokens = 32; geniex_LlmGenerateInput input{};
         input.prompt_utf8 = " 🥳 🎂 Once upon a time"; input.config = &cfg;
-        ml_LlmGenerateOutput output{};
-        int32_t gen_res = ml_llm_generate(model, &input, &output);
+        geniex_LlmGenerateOutput output{};
+        int32_t gen_res = geniex_llm_generate(model, &input, &output);
         REQUIRE_ML_ERROR(gen_res);
 
         if (output.full_text) { free(output.full_text); }
 
-        ml_KvCacheSaveInput save_input{};
+        geniex_KvCacheSaveInput save_input{};
         save_input.path = cache_path.c_str();
-        ml_KvCacheSaveOutput save_output{};
-        int32_t res = ml_llm_save_kv_cache(model, &save_input, &save_output);
+        geniex_KvCacheSaveOutput save_output{};
+        int32_t res = geniex_llm_save_kv_cache(model, &save_input, &save_output);
         CHECK_ML_ERROR(res);
 
         std::filesystem::remove(cache_path););
@@ -490,29 +490,29 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
         std::string cache_path = "./kvcache_" + model_name;
 
         // First run a generation to populate the KV cache
-        auto cfg = ml_GenerationConfig{};
-        cfg.max_tokens = 32; ml_LlmGenerateInput input{};
+        auto cfg = geniex_GenerationConfig{};
+        cfg.max_tokens = 32; geniex_LlmGenerateInput input{};
         input.prompt_utf8 = " 🥳 🎂 Once upon a time"; input.config = &cfg;
-        ml_LlmGenerateOutput output{};
-        int32_t gen_res = ml_llm_generate(model, &input, &output);
+        geniex_LlmGenerateOutput output{};
+        int32_t gen_res = geniex_llm_generate(model, &input, &output);
         REQUIRE_ML_ERROR(gen_res);
 
         if (output.full_text) { free(output.full_text); }
 
         // First save, then load
-        ml_KvCacheSaveInput save_input{};
+        geniex_KvCacheSaveInput save_input{};
         save_input.path = cache_path.c_str();
-        ml_KvCacheSaveOutput save_output{};
+        geniex_KvCacheSaveOutput save_output{};
         int32_t save_res =
-            ml_llm_save_kv_cache(model, &save_input, &save_output);
+            geniex_llm_save_kv_cache(model, &save_input, &save_output);
         REQUIRE_ML_ERROR(save_res);
 
-        ml_llm_reset(model);
+        geniex_llm_reset(model);
 
-        ml_KvCacheLoadInput load_input{}; load_input.path = cache_path.c_str();
-        ml_KvCacheLoadOutput load_output{};
+        geniex_KvCacheLoadInput load_input{}; load_input.path = cache_path.c_str();
+        geniex_KvCacheLoadOutput load_output{};
         int32_t load_res =
-            ml_llm_load_kv_cache(model, &load_input, &load_output);
+            geniex_llm_load_kv_cache(model, &load_input, &load_output);
         CHECK_ML_ERROR(load_res);
 
         std::filesystem::remove(cache_path););
@@ -520,11 +520,11 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
 
   if (PluginCapabilities::has_tool_call(plugin_name)) {
     REGISTER_TEST(
-        registry, ToolCallBasic, ml_LlmChatMessage message;
+        registry, ToolCallBasic, geniex_LlmChatMessage message;
         message.role = "user";
         message.content = "What is the weather in San Francisco?";
 
-        ml_LlmApplyChatTemplateInput input{}; input.messages = &message;
+        geniex_LlmApplyChatTemplateInput input{}; input.messages = &message;
         input.message_count = 1; input.tools = R"([{
                 "type": "function",
                 "function": {
@@ -547,17 +547,17 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
                 }
             }])";
 
-        ml_LlmApplyChatTemplateOutput output{};
-        int32_t res = ml_llm_apply_chat_template(model, &input, &output);
+        geniex_LlmApplyChatTemplateOutput output{};
+        int32_t res = geniex_llm_apply_chat_template(model, &input, &output);
         CHECK_ML_ERROR(res);
 
         REQUIRE(output.formatted_text != nullptr); GENIEX_LOG_INFO("{}", output);
 
-        auto cfg = ml_GenerationConfig{}; cfg.max_tokens = 32;
-        ml_LlmGenerateInput gen_input{};
+        auto cfg = geniex_GenerationConfig{}; cfg.max_tokens = 32;
+        geniex_LlmGenerateInput gen_input{};
         gen_input.prompt_utf8 = output.formatted_text; gen_input.config = &cfg;
-        ml_LlmGenerateOutput gen_output{};
-        int32_t gen_res = ml_llm_generate(model, &gen_input, &gen_output);
+        geniex_LlmGenerateOutput gen_output{};
+        int32_t gen_res = geniex_llm_generate(model, &gen_input, &gen_output);
         CHECK_ML_ERROR(gen_res); GENIEX_LOG_INFO("{}", gen_output);
 
         CHECK(gen_output.full_text != nullptr);
@@ -567,21 +567,21 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
 
   if (PluginCapabilities::has_json(plugin_name)) {
     REGISTER_TEST(
-        registry, GenerateJson, auto sampler_config = ml_SamplerConfig{};
+        registry, GenerateJson, auto sampler_config = geniex_SamplerConfig{};
         sampler_config.enable_json = true;
 
-        auto cfg = ml_GenerationConfig{};
+        auto cfg = geniex_GenerationConfig{};
         // Using a larger max_tokens to allow the model to generate a complete
         // json
         cfg.max_tokens = 64;
         cfg.sampler_config = &sampler_config;
 
-        ml_LlmGenerateInput input{};
+        geniex_LlmGenerateInput input{};
         input.prompt_utf8 = "Generate information of a cat, including only the "
                             "following information: name, breed, age, color";
-        input.config = &cfg; ml_LlmGenerateOutput output{};
+        input.config = &cfg; geniex_LlmGenerateOutput output{};
 
-        int32_t res = ml_llm_generate(model, &input, &output);
+        int32_t res = geniex_llm_generate(model, &input, &output);
         CHECK_ML_ERROR(res); GENIEX_LOG_INFO("{}", output);
 
         REQUIRE(output.full_text != nullptr);
@@ -597,7 +597,7 @@ void register_llm_tests(TestRegistry<ml_LLM> &registry) {
 
 // Generate test cases for all plugins using the PLUGINS X-macro list
 #define GEN(Plugin)                                                            \
-  TEST_CASE_FOR_PLUGIN(ml_LLM, Plugin, setup_guard, register_llm_tests<Plugin>)
+  TEST_CASE_FOR_PLUGIN(geniex_LLM, Plugin, setup_guard, register_llm_tests<Plugin>)
 PLUGINS(GEN)
 #undef GEN
 

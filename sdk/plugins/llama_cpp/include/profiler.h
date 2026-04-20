@@ -4,9 +4,9 @@
 #include <chrono>
 #include <cstdint>
 
-#include "ml.h"
+#include "geniex.h"
 
-using ProfileData = ml_ProfileData;
+using ProfileData = geniex_ProfileData;
 
 namespace common {
 

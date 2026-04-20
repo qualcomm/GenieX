@@ -14,7 +14,7 @@
 
 #include "android_utils.h"
 #include "jniutils.h"
-#include "ml.h"
+#include "geniex.h"
 
 using namespace geniex_android_sdk;
 
@@ -161,8 +161,8 @@ static void asr_dispose_callback_ctx(JNIEnv* env, AsrStreamingCallbackCtx* ctx) 
 
 extern "C" {
 
-ml_AsrCreateInput extract_asr_create_input(JNIEnv* env, jobject inputObj) {
-    ml_AsrCreateInput out = {};
+geniex_AsrCreateInput extract_asr_create_input(JNIEnv* env, jobject inputObj) {
+    geniex_AsrCreateInput out = {};
 
     if (!inputObj) {
         LOGe("extract_asr_create_input: inputObj is null");
@@ -204,8 +204,8 @@ ml_AsrCreateInput extract_asr_create_input(JNIEnv* env, jobject inputObj) {
     return out;
 }
 
-ml_ASRConfig extract_asr_config(JNIEnv* env, jobject inputObj) {
-    ml_ASRConfig out = {};
+geniex_ASRConfig extract_asr_config(JNIEnv* env, jobject inputObj) {
+    geniex_ASRConfig out = {};
 
     if (!inputObj) {
         LOGe("extract_asr_config: inputObj is null");
@@ -233,8 +233,8 @@ ml_ASRConfig extract_asr_config(JNIEnv* env, jobject inputObj) {
  * Note: AsrStreamConfig uses primitive types (Float, Int) not nullable (Float?, Int?)
  *       so we must use getPrimitiveFloatField/getPrimitiveIntField.
  */
-ml_ASRStreamConfig extract_asr_stream_config(JNIEnv* env, jobject configObj) {
-    ml_ASRStreamConfig out = {};
+geniex_ASRStreamConfig extract_asr_stream_config(JNIEnv* env, jobject configObj) {
+    geniex_ASRStreamConfig out = {};
 
     // Set defaults
     out.chunk_duration   = 4.0f;
@@ -372,8 +372,8 @@ std::vector<float> load_wav_as_float32(const std::string& file_path) {
     return audio_data;
 }
 
-ml_AsrTranscribeInput extract_asr_transcribe_input(JNIEnv* env, jclass cls, jobject inputObj, ml_ASRConfig* config) {
-    ml_AsrTranscribeInput out = {};
+geniex_AsrTranscribeInput extract_asr_transcribe_input(JNIEnv* env, jclass cls, jobject inputObj, geniex_ASRConfig* config) {
+    geniex_AsrTranscribeInput out = {};
 
     out.audio_path = getStringField(env, cls, inputObj, "audioPath");
     out.language   = getStringField(env, cls, inputObj, "language");
@@ -392,17 +392,17 @@ ml_AsrTranscribeInput extract_asr_transcribe_input(JNIEnv* env, jclass cls, jobj
 // ASR create - Initialize ASR with configuration
 JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Asr_create(JNIEnv* env, jobject /*thiz*/, jobject asrCreateInputObj) {
     try {
-        ml_AsrCreateInput input = extract_asr_create_input(env, asrCreateInputObj);
+        geniex_AsrCreateInput input = extract_asr_create_input(env, asrCreateInputObj);
 
-        ml_ASR* handle;
-        LOGd("[JNI] create() ml_asr_create called");
-        int32_t err = ml_asr_create(&input, &handle);
+        geniex_ASR* handle;
+        LOGd("[JNI] create() geniex_asr_create called");
+        int32_t err = geniex_asr_create(&input, &handle);
         if (err != ML_SUCCESS || !handle) {
-            LOGe("[JNI] ml_asr_create failed, error code: %d", err);
+            LOGe("[JNI] geniex_asr_create failed, error code: %d", err);
             throw_runtime_exception(env, "Asr create failed, error code: %d", err);
             return 0;
         }
-        LOGd("[JNI] create() ml_asr_create returned handle=%p", handle);
+        LOGd("[JNI] create() geniex_asr_create returned handle=%p", handle);
         return reinterpret_cast<jlong>(handle);
     } catch (const std::exception& e) {
         LOGe("[JNI] create() exception: %s", e.what());
@@ -412,11 +412,11 @@ JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Asr_create(JNIEnv* env, jobject 
 
 // ASR destroy - Clean up ASR resources
 JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Asr_destroy(JNIEnv*, jobject, jlong handle) {
-    LOGd("[JNI] ml_asr_destroy called, handle=%p", (void*)handle);
+    LOGd("[JNI] geniex_asr_destroy called, handle=%p", (void*)handle);
     if (handle) {
-        int32_t result = ml_asr_destroy(reinterpret_cast<ml_ASR*>(handle));
+        int32_t result = geniex_asr_destroy(reinterpret_cast<geniex_ASR*>(handle));
         if (result != ML_SUCCESS) {
-            LOGe("[JNI] ml_asr_destroy failed, error code: %d", result);
+            LOGe("[JNI] geniex_asr_destroy failed, error code: %d", result);
         }
         return result;
     }
@@ -440,12 +440,12 @@ JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Asr_transcribe(
         return nullptr;
     }
 
-    ml_ASRConfig          config;
-    ml_AsrTranscribeInput input = extract_asr_transcribe_input(env, cls, transcribeInputObj, &config);
+    geniex_ASRConfig          config;
+    geniex_AsrTranscribeInput input = extract_asr_transcribe_input(env, cls, transcribeInputObj, &config);
     env->DeleteLocalRef(cls);
 
-    ml_AsrTranscribeOutput output = {};
-    int32_t                err    = ml_asr_transcribe((ml_ASR*)handle, &input, &output);
+    geniex_AsrTranscribeOutput output = {};
+    int32_t                err    = geniex_asr_transcribe((geniex_ASR*)handle, &input, &output);
 
     if (err < 0 || !output.result.transcript) {
         throw_runtime_exception(env, "Asr transcribe failed, error code: %d", err);
@@ -462,9 +462,9 @@ JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Asr_transcribe(
         env->NewStringUTF(output.result.transcript),
         create_float_list(env, output.result.confidence_scores, output.result.confidence_count),
         create_float_list(env, output.result.timestamps, output.result.timestamp_count));
-    ml_free(output.result.transcript);
-    ml_free(output.result.confidence_scores);
-    ml_free(output.result.timestamps);
+    geniex_free(output.result.transcript);
+    geniex_free(output.result.confidence_scores);
+    geniex_free(output.result.timestamps);
     // profile_data
     jobject profileDataObj = jniutils::extract_profiling_data(env, output.profile_data);
     // output
@@ -477,9 +477,9 @@ JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Asr_transcribe(
 
 // ASR listSupportedLanguages
 JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Asr_listSupportedLanguages(JNIEnv* env, jobject, jlong handle) {
-    ml_AsrListSupportedLanguagesInput  input = {};
-    ml_AsrListSupportedLanguagesOutput out   = {};
-    int32_t result = ml_asr_list_supported_languages(reinterpret_cast<const ml_ASR*>(handle), &input, &out);
+    geniex_AsrListSupportedLanguagesInput  input = {};
+    geniex_AsrListSupportedLanguagesOutput out   = {};
+    int32_t result = geniex_asr_list_supported_languages(reinterpret_cast<const geniex_ASR*>(handle), &input, &out);
     if (result == ML_SUCCESS) {
         return create_string_list(env, out.language_codes, out.language_count);
     } else {
@@ -527,8 +527,8 @@ JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Asr_streamBegin(
     }
 
     // Extract input parameters
-    ml_AsrStreamBeginInput begin_input{};
-    ml_ASRStreamConfig     stream_config{};
+    geniex_AsrStreamBeginInput begin_input{};
+    geniex_ASRStreamConfig     stream_config{};
 
     if (streamBeginInputObj) {
         jclass inputCls = env->GetObjectClass(streamBeginInputObj);
@@ -554,11 +554,11 @@ JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Asr_streamBegin(
     begin_input.user_data        = ctx;
 
     // Call native API
-    ml_AsrStreamBeginOutput begin_output{};
-    int32_t                 res = ml_asr_stream_begin(reinterpret_cast<ml_ASR*>(handle), &begin_input, &begin_output);
+    geniex_AsrStreamBeginOutput begin_output{};
+    int32_t                 res = geniex_asr_stream_begin(reinterpret_cast<geniex_ASR*>(handle), &begin_input, &begin_output);
 
     if (res != ML_SUCCESS) {
-        LOGe("[JNI] ml_asr_stream_begin failed, error code: %d", res);
+        LOGe("[JNI] geniex_asr_stream_begin failed, error code: %d", res);
         asr_dispose_callback_ctx(env, ctx);
         delete ctx;
         throw_runtime_exception(env, "ASR stream begin failed, error code: %d", res);
@@ -628,24 +628,24 @@ JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Asr_streamPushAudio(
     }
 
     // Prepare input structure
-    ml_AsrStreamPushAudioInput push_input{};
+    geniex_AsrStreamPushAudioInput push_input{};
     push_input.audio_data = audioData;
     push_input.length     = static_cast<int32_t>(length);
 
     // Call native API
-    int32_t res = ml_asr_stream_push_audio(reinterpret_cast<ml_ASR*>(handle), &push_input);
+    int32_t res = geniex_asr_stream_push_audio(reinterpret_cast<geniex_ASR*>(handle), &push_input);
 
     // Release array elements (no copy back needed as we don't modify)
     env->ReleaseFloatArrayElements(audioDataArray, audioData, JNI_ABORT);
 
     if (res != ML_SUCCESS && res < 0) {
-        LOGe("[JNI] ml_asr_stream_push_audio failed, error code: %d", res);
+        LOGe("[JNI] geniex_asr_stream_push_audio failed, error code: %d", res);
     }
 
     return res;
 }
 
-void test_asr_streaming_transcription(ml_ASR* asr) {
+void test_asr_streaming_transcription(geniex_ASR* asr) {
     const char* test_audio_path = "/data/local/tmp/geniex/modelfiles/assets/OSR_us_000_0010_16k.wav";
     // Check if test audio file exists
     if (!std::filesystem::exists(test_audio_path)) {
@@ -662,17 +662,17 @@ void test_asr_streaming_transcription(ml_ASR* asr) {
     // Set up streaming callback data
     StreamingTestData test_data;
     test_data.reset();
-    LOGd("before ml_asr_stream_begin");
+    LOGd("before geniex_asr_stream_begin");
     // Begin streaming with consolidated configuration
-    ml_AsrStreamBeginInput begin_input{};
+    geniex_AsrStreamBeginInput begin_input{};
     begin_input.language         = "en";
     begin_input.on_transcription = streaming_transcription_callback;
     begin_input.user_data        = &test_data;
 
-    ml_AsrStreamBeginOutput begin_output{};
-    int32_t                 res = ml_asr_stream_begin(asr, &begin_input, &begin_output);
+    geniex_AsrStreamBeginOutput begin_output{};
+    int32_t                 res = geniex_asr_stream_begin(asr, &begin_input, &begin_output);
     if (res != ML_SUCCESS) {
-        LOGe("ml_asr_stream_begin failed and error code:: %d", res);
+        LOGe("geniex_asr_stream_begin failed and error code:: %d", res);
         return;
     }
 
@@ -685,14 +685,14 @@ void test_asr_streaming_transcription(ml_ASR* asr) {
     for (int32_t offset = 0; offset < total_samples; offset += chunk_size) {
         int32_t samples_to_send = std::min(chunk_size, total_samples - offset);
 
-        ml_AsrStreamPushAudioInput push_input{};
+        geniex_AsrStreamPushAudioInput push_input{};
         push_input.audio_data = audio_data.data() + offset;
         push_input.length     = samples_to_send;
 
-        res = ml_asr_stream_push_audio(asr, &push_input);
+        res = geniex_asr_stream_push_audio(asr, &push_input);
         // Silent check - only break if there's an error
         if (res < 0) {
-            LOGe("Failed to push audio chunk: %s", ml_get_error_message(static_cast<ml_ErrorCode>(res)));
+            LOGe("Failed to push audio chunk: %s", geniex_get_error_message(static_cast<geniex_ErrorCode>(res)));
             break;
         }
 
@@ -701,11 +701,11 @@ void test_asr_streaming_transcription(ml_ASR* asr) {
     }
 
     // Stop streaming gracefully
-    ml_AsrStreamStopInput stop_input{};
+    geniex_AsrStreamStopInput stop_input{};
     stop_input.graceful = true;
-    res                 = ml_asr_stream_stop(asr, &stop_input);
+    res                 = geniex_asr_stream_stop(asr, &stop_input);
     if (res != ML_SUCCESS) {
-        LOGe("ml_asr_stream_stop failed and error code:: %d", res);
+        LOGe("geniex_asr_stream_stop failed and error code:: %d", res);
         return;
     }
 
@@ -738,14 +738,14 @@ JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Asr_streamStop(JNIEnv* env, jobje
     void* h = (void*)handle;
 
     // Prepare stop input
-    ml_AsrStreamStopInput stop_input{};
+    geniex_AsrStreamStopInput stop_input{};
     stop_input.graceful = (graceful == JNI_TRUE);
 
     // Call native API
-    int32_t res = ml_asr_stream_stop(reinterpret_cast<ml_ASR*>(handle), &stop_input);
+    int32_t res = geniex_asr_stream_stop(reinterpret_cast<geniex_ASR*>(handle), &stop_input);
 
     if (res != ML_SUCCESS) {
-        LOGe("[JNI] ml_asr_stream_stop failed, error code: %d", res);
+        LOGe("[JNI] geniex_asr_stream_stop failed, error code: %d", res);
     }
 
     // Clean up callback context

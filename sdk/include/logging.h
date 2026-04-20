@@ -5,9 +5,9 @@
 #define FMT_USE_CONSTEVAL 0
 #endif
 #include "external/fmt/core.h"
-#include "ml.h"
+#include "geniex.h"
 
-ML_API extern ml_log_callback ml_log;
+ML_API extern geniex_log_callback geniex_log;
 
 template <typename T>
 inline auto lp(T arg) {
@@ -32,16 +32,16 @@ inline auto lp(T arg) {
 #include <cstring>
 
 template <typename... Args>
-void geniex_log_internal(ml_LogLevel level, const char* file, int32_t line, const char* func,
+void geniex_log_internal(geniex_LogLevel level, const char* file, int32_t line, const char* func,
     fmt::format_string<Args...> fmt, Args&&... args) {
-    if (ml_log == nullptr) return;
+    if (geniex_log == nullptr) return;
 #ifdef PROJECT_SOURCE_DIR
     auto p        = std::strstr(file, PROJECT_SOURCE_DIR);
     auto filename = p ? p + std::strlen(PROJECT_SOURCE_DIR) + 1 : file;
 #else
     auto filename = file;
 #endif
-    ml_log(level,
+    geniex_log(level,
         fmt::format("[{}:{}:{}] {}", filename, line, func, fmt::format(fmt, lp(std::forward<Args>(args))...)).c_str());
 }
 #define GENIEX_LEVEL_LOG(level, ...) geniex_log_internal(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
@@ -49,9 +49,9 @@ void geniex_log_internal(ml_LogLevel level, const char* file, int32_t line, cons
 #else  // GENIEX_DEBUG
 
 template <typename... Args>
-inline void geniex_log_internal(ml_LogLevel level, fmt::format_string<Args...> fmt, Args&&... args) {
-    if (ml_log == nullptr) return;
-    ml_log(level, fmt::format(fmt, lp(std::forward<Args>(args))...).c_str());
+inline void geniex_log_internal(geniex_LogLevel level, fmt::format_string<Args...> fmt, Args&&... args) {
+    if (geniex_log == nullptr) return;
+    geniex_log(level, fmt::format(fmt, lp(std::forward<Args>(args))...).c_str());
 }
 #define GENIEX_LEVEL_LOG(level, ...) geniex_log_internal(level, __VA_ARGS__)
 
@@ -70,10 +70,10 @@ inline void geniex_log_internal(ml_LogLevel level, fmt::format_string<Args...> f
 #define GENIEX_LOG_ERROR(...) GENIEX_LEVEL_LOG(ML_LOG_LEVEL_ERROR, __VA_ARGS__)
 
 template <>
-struct fmt::formatter<ml_LogLevel> {
+struct fmt::formatter<geniex_LogLevel> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
 
-    auto format(const ml_LogLevel& p, fmt::format_context& ctx) const {
+    auto format(const geniex_LogLevel& p, fmt::format_context& ctx) const {
         const char* level_str = "";
         switch (p) {
             case ML_LOG_LEVEL_TRACE:
@@ -100,65 +100,65 @@ struct fmt::formatter<ml_LogLevel> {
 };
 
 template <>
-struct fmt::formatter<ml_KvCacheSaveInput> {
+struct fmt::formatter<geniex_KvCacheSaveInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_KvCacheSaveInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_KvCacheSaveInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "KvCacheSaveInput(path: {})", lp(p.path));
     }
 };
 
 template <>
-struct fmt::formatter<ml_KvCacheSaveOutput> {
+struct fmt::formatter<geniex_KvCacheSaveOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_KvCacheSaveOutput& _, fmt::format_context& ctx) const {
+    auto           format(const geniex_KvCacheSaveOutput& _, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "KvCacheSaveOutput()");
     }
 };
 
 template <>
-struct fmt::formatter<ml_KvCacheLoadInput> {
+struct fmt::formatter<geniex_KvCacheLoadInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_KvCacheLoadInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_KvCacheLoadInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "KvCacheLoadInput(path: {})", lp(p.path));
     }
 };
 
 template <>
-struct fmt::formatter<ml_KvCacheLoadOutput> {
+struct fmt::formatter<geniex_KvCacheLoadOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_KvCacheLoadOutput& _, fmt::format_context& ctx) const {
+    auto           format(const geniex_KvCacheLoadOutput& _, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "KvCacheLoadOutput()");
     }
 };
 template <>
-struct fmt::formatter<ml_ErrorCode> {
+struct fmt::formatter<geniex_ErrorCode> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_ErrorCode& p, fmt::format_context& ctx) const {
-        return fmt::format_to(ctx.out(), "ErrorCode[{}]({})", static_cast<int32_t>(p), (ml_get_error_message(p)));
+    auto           format(const geniex_ErrorCode& p, fmt::format_context& ctx) const {
+        return fmt::format_to(ctx.out(), "ErrorCode[{}]({})", static_cast<int32_t>(p), (geniex_get_error_message(p)));
     }
 };
 
 template <>
-struct fmt::formatter<ml_GetPluginListOutput> {
+struct fmt::formatter<geniex_GetPluginListOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_GetPluginListOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_GetPluginListOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(
             ctx.out(), "GetPluginListOutput(plugin_ids: {}, plugin_count: {})", lp(p.plugin_ids), lp(p.plugin_count));
     }
 };
 
 template <>
-struct fmt::formatter<ml_GetDeviceListInput> {
+struct fmt::formatter<geniex_GetDeviceListInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_GetDeviceListInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_GetDeviceListInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "GetDeviceListInput(plugin_id: {})", lp(p.plugin_id));
     }
 };
 
 template <>
-struct fmt::formatter<ml_GetDeviceListOutput> {
+struct fmt::formatter<geniex_GetDeviceListOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_GetDeviceListOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_GetDeviceListOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "GetDeviceListOutput(device_ids: {}, device_names: {}, device_count: {})",
             lp(fmt::ptr(p.device_ids)),
@@ -168,9 +168,9 @@ struct fmt::formatter<ml_GetDeviceListOutput> {
 };
 
 template <>
-struct fmt::formatter<ml_ProfileData> {
+struct fmt::formatter<geniex_ProfileData> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_ProfileData& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_ProfileData& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "ProfileData(ttft: {} us, prompt_time: {} us, decode_time: {} us, prompt_tokens: {}, "
                       "generated_tokens: {}, audio_duration: {} us, prefill_speed: {} tokens/s, decoding_speed: {} "
@@ -189,9 +189,9 @@ struct fmt::formatter<ml_ProfileData> {
 };
 
 template <>
-struct fmt::formatter<ml_SamplerConfig> {
+struct fmt::formatter<geniex_SamplerConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_SamplerConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_SamplerConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "SamplerConfig(temperature: {}, top_p: {}, top_k: {}, min_p: {}, repetition_penalty: {}, presence_penalty: "
                       "{}, "
@@ -211,9 +211,9 @@ struct fmt::formatter<ml_SamplerConfig> {
 };
 
 template <>
-struct fmt::formatter<ml_GenerationConfig> {
+struct fmt::formatter<geniex_GenerationConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_GenerationConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_GenerationConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "GenerationConfig(max_tokens: {}, stop_count: {}, n_past: {}, sampler_config: {}, image_paths: {}, "
                       "image_count: {}, audio_paths: {}, audio_count: {}, image_max_length: {})",
@@ -230,9 +230,9 @@ struct fmt::formatter<ml_GenerationConfig> {
 };
 
 template <>
-struct fmt::formatter<ml_ModelConfig> {
+struct fmt::formatter<geniex_ModelConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_ModelConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_ModelConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "ModelConfig(n_ctx: {}, n_threads: {}, n_threads_batch: {}, n_batch: {}, n_ubatch: {}, n_seq_max: {}, "
                       "n_gpu_layers: {}, "
@@ -259,9 +259,9 @@ struct fmt::formatter<ml_ModelConfig> {
 
 // // LLM formatters
 template <>
-struct fmt::formatter<ml_LlmCreateInput> {
+struct fmt::formatter<geniex_LlmCreateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_LlmCreateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_LlmCreateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "LlmCreateInput(model_path: {}, tokenizer_path: {}, config: {}, plugin_id: {}, device_id: {})",
             lp(p.model_path),
@@ -273,9 +273,9 @@ struct fmt::formatter<ml_LlmCreateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_LlmApplyChatTemplateInput> {
+struct fmt::formatter<geniex_LlmApplyChatTemplateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_LlmApplyChatTemplateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_LlmApplyChatTemplateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "LlmApplyChatTemplateInput(messages: {}, message_count: {}, tools: {}, enable_thinking: {})",
             lp(fmt::ptr(p.messages)),
@@ -286,25 +286,25 @@ struct fmt::formatter<ml_LlmApplyChatTemplateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_LlmChatMessage> {
+struct fmt::formatter<geniex_LlmChatMessage> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_LlmChatMessage& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_LlmChatMessage& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "LlmChatMessage(role: {}, content: {})", lp(p.role), lp(p.content));
     }
 };
 
 template <>
-struct fmt::formatter<ml_LlmApplyChatTemplateOutput> {
+struct fmt::formatter<geniex_LlmApplyChatTemplateOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_LlmApplyChatTemplateOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_LlmApplyChatTemplateOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "LlmApplyChatTemplateOutput(formatted_text: {})", lp(p.formatted_text));
     }
 };
 
 template <>
-struct fmt::formatter<ml_LlmGenerateInput> {
+struct fmt::formatter<geniex_LlmGenerateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_LlmGenerateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_LlmGenerateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "LlmGenerateInput(prompt_utf8: {}, input_ids: {}, input_ids_count: {}, config: {}, on_token: {}, "
                       "user_data: {})",
@@ -318,9 +318,9 @@ struct fmt::formatter<ml_LlmGenerateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_LlmGenerateOutput> {
+struct fmt::formatter<geniex_LlmGenerateOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_LlmGenerateOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_LlmGenerateOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(
             ctx.out(), "LlmGenerateOutput(full_text: {}, profile_data: {})", lp(p.full_text), p.profile_data);
     }
@@ -328,17 +328,17 @@ struct fmt::formatter<ml_LlmGenerateOutput> {
 
 // // VLM formatters
 template <>
-struct fmt::formatter<ml_VlmContent> {
+struct fmt::formatter<geniex_VlmContent> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_VlmContent& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_VlmContent& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "VlmContent(type: {}, text: {})", lp(p.type), lp(p.text));
     }
 };
 
 template <>
-struct fmt::formatter<ml_VlmChatMessage> {
+struct fmt::formatter<geniex_VlmChatMessage> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_VlmChatMessage& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_VlmChatMessage& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "VlmChatMessage(role: {}, content_count: {}, contents: {})",
             lp(p.role),
@@ -348,9 +348,9 @@ struct fmt::formatter<ml_VlmChatMessage> {
 };
 
 template <>
-struct fmt::formatter<ml_VlmCreateInput> {
+struct fmt::formatter<geniex_VlmCreateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_VlmCreateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_VlmCreateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "VlmCreateInput(model_name: {}, model_path: {}, mmproj_path: {}, config: {}, plugin_id: {}, device_id: {}, "
                       "tokenizer_path: {}, license_id: {}, license_key: {})",
@@ -367,9 +367,9 @@ struct fmt::formatter<ml_VlmCreateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_VlmApplyChatTemplateInput> {
+struct fmt::formatter<geniex_VlmApplyChatTemplateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_VlmApplyChatTemplateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_VlmApplyChatTemplateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "VlmApplyChatTemplateInput(messages: {}, message_count: {}, tools: {}, enable_thinking: {})",
             lp(fmt::ptr(p.messages)),
@@ -380,17 +380,17 @@ struct fmt::formatter<ml_VlmApplyChatTemplateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_VlmApplyChatTemplateOutput> {
+struct fmt::formatter<geniex_VlmApplyChatTemplateOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_VlmApplyChatTemplateOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_VlmApplyChatTemplateOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "VlmApplyChatTemplateOutput(formatted_text: {})", lp(p.formatted_text));
     }
 };
 
 template <>
-struct fmt::formatter<ml_VlmGenerateInput> {
+struct fmt::formatter<geniex_VlmGenerateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_VlmGenerateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_VlmGenerateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "VlmGenerateInput(prompt_utf8: {}, config: {}, on_token: {}, user_data: {})",
             lp(p.prompt_utf8),
@@ -401,9 +401,9 @@ struct fmt::formatter<ml_VlmGenerateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_VlmGenerateOutput> {
+struct fmt::formatter<geniex_VlmGenerateOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_VlmGenerateOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_VlmGenerateOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(
             ctx.out(), "VlmGenerateOutput(full_text: {}, profile_data: {})", lp(p.full_text), p.profile_data);
     }
@@ -411,9 +411,9 @@ struct fmt::formatter<ml_VlmGenerateOutput> {
 
 // // Embedding formatters
 template <>
-struct fmt::formatter<ml_EmbeddingConfig> {
+struct fmt::formatter<geniex_EmbeddingConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_EmbeddingConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_EmbeddingConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "EmbeddingConfig(batch_size: {}, normalize: {}, normalize_method: {})",
             lp(p.batch_size),
@@ -423,9 +423,9 @@ struct fmt::formatter<ml_EmbeddingConfig> {
 };
 
 template <>
-struct fmt::formatter<ml_EmbedderCreateInput> {
+struct fmt::formatter<geniex_EmbedderCreateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_EmbedderCreateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_EmbedderCreateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "EmbedderCreateInput(model_name: {}, model_path: {}, tokenizer_path: {}, config: {}, plugin_id: {}, "
                       "device_id: {})",
@@ -439,9 +439,9 @@ struct fmt::formatter<ml_EmbedderCreateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_EmbedderEmbedInput> {
+struct fmt::formatter<geniex_EmbedderEmbedInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_EmbedderEmbedInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_EmbedderEmbedInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "EmbedderEmbedInput(texts: {}, text_count: {}, config: {}, input_ids_2d: {}, input_ids_row_lengths: {}, "
                       "input_ids_row_count: {}, task_type: {})",
@@ -456,9 +456,9 @@ struct fmt::formatter<ml_EmbedderEmbedInput> {
 };
 
 template <>
-struct fmt::formatter<ml_EmbedderEmbedOutput> {
+struct fmt::formatter<geniex_EmbedderEmbedOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_EmbedderEmbedOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_EmbedderEmbedOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "EmbedderEmbedOutput(embeddings: {}, embedding_count: {}, profile_data: {})",
             lp(fmt::ptr(p.embeddings)),
@@ -468,18 +468,18 @@ struct fmt::formatter<ml_EmbedderEmbedOutput> {
 };
 
 template <>
-struct fmt::formatter<ml_EmbedderDimOutput> {
+struct fmt::formatter<geniex_EmbedderDimOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_EmbedderDimOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_EmbedderDimOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "EmbedderDimOutput(dimension: {})", lp(p.dimension));
     }
 };
 
 // // Reranking formatters
 template <>
-struct fmt::formatter<ml_RerankConfig> {
+struct fmt::formatter<geniex_RerankConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_RerankConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_RerankConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "RerankConfig(batch_size: {}, normalize: {}, normalize_method: {})",
             lp(p.batch_size),
@@ -489,9 +489,9 @@ struct fmt::formatter<ml_RerankConfig> {
 };
 
 template <>
-struct fmt::formatter<ml_RerankerCreateInput> {
+struct fmt::formatter<geniex_RerankerCreateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_RerankerCreateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_RerankerCreateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "RerankerCreateInput(model_name: {}, model_path: {}, tokenizer_path: {}, config: {}, plugin_id: {}, "
                       "device_id: {})",
@@ -505,9 +505,9 @@ struct fmt::formatter<ml_RerankerCreateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_RerankerRerankInput> {
+struct fmt::formatter<geniex_RerankerRerankInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_RerankerRerankInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_RerankerRerankInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "RerankerRerankInput(query: {}, documents: {}, documents_count: {}, config: {})",
             lp(p.query),
@@ -518,9 +518,9 @@ struct fmt::formatter<ml_RerankerRerankInput> {
 };
 
 template <>
-struct fmt::formatter<ml_RerankerRerankOutput> {
+struct fmt::formatter<geniex_RerankerRerankOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_RerankerRerankOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_RerankerRerankOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "RerankerRerankOutput(scores: {}, score_count: {}, profile_data: {})",
             lp(fmt::ptr(p.scores)),
@@ -531,9 +531,9 @@ struct fmt::formatter<ml_RerankerRerankOutput> {
 
 // // Image Generation formatters
 template <>
-struct fmt::formatter<ml_ImageSamplerConfig> {
+struct fmt::formatter<geniex_ImageSamplerConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_ImageSamplerConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_ImageSamplerConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "ImageSamplerConfig(method: {}, steps: {}, guidance_scale: {}, eta: {}, seed: {})",
             lp(p.method),
@@ -545,9 +545,9 @@ struct fmt::formatter<ml_ImageSamplerConfig> {
 };
 
 template <>
-struct fmt::formatter<ml_SchedulerConfig> {
+struct fmt::formatter<geniex_SchedulerConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_SchedulerConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_SchedulerConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "SchedulerConfig(type: {}, num_train_timesteps: {}, steps_offset: {}, beta_start: {}, beta_end: {}, "
                       "beta_schedule: {}, prediction_type: {}, timestep_type: {}, timestep_spacing: {}, "
@@ -567,9 +567,9 @@ struct fmt::formatter<ml_SchedulerConfig> {
 };
 
 template <>
-struct fmt::formatter<ml_ImageGenerationConfig> {
+struct fmt::formatter<geniex_ImageGenerationConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_ImageGenerationConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_ImageGenerationConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "ImageGenerationConfig(prompts: {}, prompt_count: {}, negative_prompts: {}, negative_prompt_count: {}, "
                       "height: {}, width: {}, sampler_config: {}, scheduler_config: {}, strength: {})",
@@ -586,9 +586,9 @@ struct fmt::formatter<ml_ImageGenerationConfig> {
 };
 
 template <>
-struct fmt::formatter<ml_ImageGenCreateInput> {
+struct fmt::formatter<geniex_ImageGenCreateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_ImageGenCreateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_ImageGenCreateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "ImageGenCreateInput(model_name: {}, model_path: {}, config: {}, scheduler_config_path: {}, plugin_id: {}, "
                       "device_id: {})",
@@ -602,9 +602,9 @@ struct fmt::formatter<ml_ImageGenCreateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_ImageGenTxt2ImgInput> {
+struct fmt::formatter<geniex_ImageGenTxt2ImgInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_ImageGenTxt2ImgInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_ImageGenTxt2ImgInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "ImageGenTxt2ImgInput(prompt_utf8: {}, config: {}, output_path: {})",
             lp(p.prompt_utf8),
@@ -614,17 +614,17 @@ struct fmt::formatter<ml_ImageGenTxt2ImgInput> {
 };
 
 template <>
-struct fmt::formatter<ml_ImageGenOutput> {
+struct fmt::formatter<geniex_ImageGenOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_ImageGenOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_ImageGenOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "ImageGenOutput(output_image_path: {})", lp(p.output_image_path));
     }
 };
 
 template <>
-struct fmt::formatter<ml_ImageGenImg2ImgInput> {
+struct fmt::formatter<geniex_ImageGenImg2ImgInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_ImageGenImg2ImgInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_ImageGenImg2ImgInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "ImageGenImg2ImgInput(init_image_path: {}, prompt_utf8: {}, config: {}, output_path: {})",
             lp(p.init_image_path),
@@ -636,18 +636,18 @@ struct fmt::formatter<ml_ImageGenImg2ImgInput> {
 
 // // Computer Vision formatters
 template <>
-struct fmt::formatter<ml_BoundingBox> {
+struct fmt::formatter<geniex_BoundingBox> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_BoundingBox& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_BoundingBox& p, fmt::format_context& ctx) const {
         return fmt::format_to(
             ctx.out(), "BoundingBox(x: {}, y: {}, width: {}, height: {})", lp(p.x), lp(p.y), lp(p.width), lp(p.height));
     }
 };
 
 template <>
-struct fmt::formatter<ml_CVResult> {
+struct fmt::formatter<geniex_CVResult> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_CVResult& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_CVResult& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "CVResult(image_paths: {}, image_count: {}, class_id: {}, confidence: {}, bbox: {}, text: {}, "
                       "embedding: {}, embedding_dim: {})",
@@ -663,9 +663,9 @@ struct fmt::formatter<ml_CVResult> {
 };
 
 template <>
-struct fmt::formatter<ml_CVCapabilities> {
+struct fmt::formatter<geniex_CVCapabilities> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_CVCapabilities& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_CVCapabilities& p, fmt::format_context& ctx) const {
         const char* capability_str = "";
         switch (p) {
             case ML_CV_OCR:
@@ -689,11 +689,11 @@ struct fmt::formatter<ml_CVCapabilities> {
 };
 
 template <>
-struct fmt::formatter<ml_CVModelConfig> {
+struct fmt::formatter<geniex_CVModelConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_CVModelConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_CVModelConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
-            "ml_CVModelConfig(capabilities: {}, det_model_path: {}, rec_model_path: {}, char_dict_path: {})",
+            "geniex_CVModelConfig(capabilities: {}, det_model_path: {}, rec_model_path: {}, char_dict_path: {})",
             lp(p.capabilities),
             lp(p.det_model_path),
             lp(p.rec_model_path),
@@ -702,9 +702,9 @@ struct fmt::formatter<ml_CVModelConfig> {
 };
 
 template <>
-struct fmt::formatter<ml_CVCreateInput> {
+struct fmt::formatter<geniex_CVCreateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_CVCreateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_CVCreateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "CVCreateInput(model_name: {}, config: {}, plugin_id: {}, device_id: {})",
             lp(p.model_name),
@@ -715,17 +715,17 @@ struct fmt::formatter<ml_CVCreateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_CVInferInput> {
+struct fmt::formatter<geniex_CVInferInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_CVInferInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_CVInferInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "CVInferInput(input_image_path: {})", lp(p.input_image_path));
     }
 };
 
 template <>
-struct fmt::formatter<ml_CVInferOutput> {
+struct fmt::formatter<geniex_CVInferOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_CVInferOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_CVInferOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(
             ctx.out(), "CVInferOutput(results: {}, result_count: {})", lp(fmt::ptr(p.results)), lp(p.result_count));
     }
@@ -733,9 +733,9 @@ struct fmt::formatter<ml_CVInferOutput> {
 
 // // ASR formatters
 template <>
-struct fmt::formatter<ml_ASRConfig> {
+struct fmt::formatter<geniex_ASRConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_ASRConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_ASRConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "ASRConfig(timestamps: {}, beam_size: {}, stream: {})",
             lp(p.timestamps),
@@ -745,9 +745,9 @@ struct fmt::formatter<ml_ASRConfig> {
 };
 
 template <>
-struct fmt::formatter<ml_ASRResult> {
+struct fmt::formatter<geniex_ASRResult> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_ASRResult& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_ASRResult& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "ASRResult(transcript: {}, confidence_scores: {}, confidence_count: {}, timestamps: {}, timestamp_count: "
                       "{})",
@@ -760,9 +760,9 @@ struct fmt::formatter<ml_ASRResult> {
 };
 
 template <>
-struct fmt::formatter<ml_AsrCreateInput> {
+struct fmt::formatter<geniex_AsrCreateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_AsrCreateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_AsrCreateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "AsrCreateInput(model_name: {}, model_path: {}, tokenizer_path: {}, config: {}, language: {}, plugin_id: "
                       "{}, device_id: {}, license_id: {}, license_key: {})",
@@ -779,17 +779,17 @@ struct fmt::formatter<ml_AsrCreateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_AsrListSupportedLanguagesInput> {
+struct fmt::formatter<geniex_AsrListSupportedLanguagesInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_AsrListSupportedLanguagesInput& _, fmt::format_context& ctx) const {
+    auto           format(const geniex_AsrListSupportedLanguagesInput& _, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "AsrListSupportedLanguagesInput()");
     }
 };
 
 template <>
-struct fmt::formatter<ml_AsrTranscribeInput> {
+struct fmt::formatter<geniex_AsrTranscribeInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_AsrTranscribeInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_AsrTranscribeInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "AsrTranscribeInput(audio_path: {}, config: {}, language: {})",
             lp(p.audio_path),
@@ -799,18 +799,18 @@ struct fmt::formatter<ml_AsrTranscribeInput> {
 };
 
 template <>
-struct fmt::formatter<ml_AsrTranscribeOutput> {
+struct fmt::formatter<geniex_AsrTranscribeOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_AsrTranscribeOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_AsrTranscribeOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(
             ctx.out(), "AsrTranscribeOutput(result: {}, profile_data: {})", lp(p.result), p.profile_data);
     }
 };
 
 template <>
-struct fmt::formatter<ml_AsrListSupportedLanguagesOutput> {
+struct fmt::formatter<geniex_AsrListSupportedLanguagesOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_AsrListSupportedLanguagesOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_AsrListSupportedLanguagesOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "AsrListSupportedLanguagesOutput(language_codes: {}, language_count: {})",
             lp(p.language_codes),
@@ -820,9 +820,9 @@ struct fmt::formatter<ml_AsrListSupportedLanguagesOutput> {
 
 // ASR Streaming formatters
 template <>
-struct fmt::formatter<ml_ASRStreamConfig> {
+struct fmt::formatter<geniex_ASRStreamConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_ASRStreamConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_ASRStreamConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "ASRStreamConfig(chunk_duration: {}, overlap_duration: {}, sample_rate: {}, max_queue_size: {}, "
                       "buffer_size: {}, timestamps: {}, beam_size: {})",
@@ -837,9 +837,9 @@ struct fmt::formatter<ml_ASRStreamConfig> {
 };
 
 template <>
-struct fmt::formatter<ml_AsrStreamBeginInput> {
+struct fmt::formatter<geniex_AsrStreamBeginInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_AsrStreamBeginInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_AsrStreamBeginInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "AsrStreamBeginInput(stream_config: {}, language: {}, on_transcription: {}, user_data: {})",
             lp(p.stream_config),
@@ -850,18 +850,18 @@ struct fmt::formatter<ml_AsrStreamBeginInput> {
 };
 
 template <>
-struct fmt::formatter<ml_AsrStreamStopInput> {
+struct fmt::formatter<geniex_AsrStreamStopInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_AsrStreamStopInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_AsrStreamStopInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "AsrStreamStopInput(graceful: {})", lp(p.graceful));
     }
 };
 
 // // TTS formatters
 template <>
-struct fmt::formatter<ml_TTSConfig> {
+struct fmt::formatter<geniex_TTSConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_TTSConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_TTSConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "TTSConfig(voice: {}, speed: {}, seed: {}, sample_rate: {})",
             lp(p.voice),
@@ -872,9 +872,9 @@ struct fmt::formatter<ml_TTSConfig> {
 };
 
 template <>
-struct fmt::formatter<ml_TTSSamplerConfig> {
+struct fmt::formatter<geniex_TTSSamplerConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_TTSSamplerConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_TTSSamplerConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "TTSSamplerConfig(temperature: {}, noise_scale: {}, length_scale: {})",
             lp(p.temperature),
@@ -884,17 +884,17 @@ struct fmt::formatter<ml_TTSSamplerConfig> {
 };
 
 template <>
-struct fmt::formatter<ml_TtsListAvailableVoicesInput> {
+struct fmt::formatter<geniex_TtsListAvailableVoicesInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_TtsListAvailableVoicesInput& _, fmt::format_context& ctx) const {
+    auto           format(const geniex_TtsListAvailableVoicesInput& _, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(), "TtsListAvailableVoicesInput()");
     }
 };
 
 template <>
-struct fmt::formatter<ml_TtsListAvailableVoicesOutput> {
+struct fmt::formatter<geniex_TtsListAvailableVoicesOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_TtsListAvailableVoicesOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_TtsListAvailableVoicesOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "TtsListAvailableVoicesOutput(voice_ids: {}, voice_count: {})",
             lp(fmt::ptr(p.voice_ids)),
@@ -903,9 +903,9 @@ struct fmt::formatter<ml_TtsListAvailableVoicesOutput> {
 };
 
 template <>
-struct fmt::formatter<ml_TtsCreateInput> {
+struct fmt::formatter<geniex_TtsCreateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_TtsCreateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_TtsCreateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "TtsCreateInput(model_path: {}, vocoder_path: {}, plugin_id: {}, device_id: {})",
             lp(p.model_path),
@@ -916,9 +916,9 @@ struct fmt::formatter<ml_TtsCreateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_TTSResult> {
+struct fmt::formatter<geniex_TTSResult> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_TTSResult& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_TTSResult& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "TTSResult(audio_path: {}, duration_seconds: {}, sample_rate: {}, channels: {}, num_samples: {})",
             lp(fmt::ptr(p.audio_path)),
@@ -930,9 +930,9 @@ struct fmt::formatter<ml_TTSResult> {
 };
 
 template <>
-struct fmt::formatter<ml_TtsSynthesizeInput> {
+struct fmt::formatter<geniex_TtsSynthesizeInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_TtsSynthesizeInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_TtsSynthesizeInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "TtsSynthesizeInput(text_utf8: {}, config: {}, output_path: {})",
             lp(p.text_utf8),
@@ -942,9 +942,9 @@ struct fmt::formatter<ml_TtsSynthesizeInput> {
 };
 
 template <>
-struct fmt::formatter<ml_TtsSynthesizeOutput> {
+struct fmt::formatter<geniex_TtsSynthesizeOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_TtsSynthesizeOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_TtsSynthesizeOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(
             ctx.out(), "TtsSynthesizeOutput(result: {}, profile_data: {})", lp(p.result), lp(p.profile_data));
     }
@@ -952,18 +952,18 @@ struct fmt::formatter<ml_TtsSynthesizeOutput> {
 
 // // Diarization formatters
 template <>
-struct fmt::formatter<ml_DiarizeConfig> {
+struct fmt::formatter<geniex_DiarizeConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_DiarizeConfig& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_DiarizeConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(
             ctx.out(), "DiarizeConfig(min_speakers: {}, max_speakers: {})", lp(p.min_speakers), lp(p.max_speakers));
     }
 };
 
 template <>
-struct fmt::formatter<ml_DiarizeSpeechSegment> {
+struct fmt::formatter<geniex_DiarizeSpeechSegment> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_DiarizeSpeechSegment& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_DiarizeSpeechSegment& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "DiarizeSpeechSegment(start_time: {}, end_time: {}, speaker_label: {})",
             lp(p.start_time),
@@ -973,9 +973,9 @@ struct fmt::formatter<ml_DiarizeSpeechSegment> {
 };
 
 template <>
-struct fmt::formatter<ml_DiarizeCreateInput> {
+struct fmt::formatter<geniex_DiarizeCreateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_DiarizeCreateInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_DiarizeCreateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "DiarizeCreateInput(model_name: {}, model_path: {}, config: {}, plugin_id: {}, device_id: {}, license_id: "
                       "{}, license_key: {})",
@@ -990,18 +990,18 @@ struct fmt::formatter<ml_DiarizeCreateInput> {
 };
 
 template <>
-struct fmt::formatter<ml_DiarizeInferInput> {
+struct fmt::formatter<geniex_DiarizeInferInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_DiarizeInferInput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_DiarizeInferInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(
             ctx.out(), "DiarizeInferInput(audio_path: {}, config: {})", lp(p.audio_path), lp(p.config));
     }
 };
 
 template <>
-struct fmt::formatter<ml_DiarizeInferOutput> {
+struct fmt::formatter<geniex_DiarizeInferOutput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
-    auto           format(const ml_DiarizeInferOutput& p, fmt::format_context& ctx) const {
+    auto           format(const geniex_DiarizeInferOutput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "DiarizeInferOutput(segments: {}, segment_count: {}, num_speakers: {}, duration: {}, profile_data: {})",
             lp(fmt::ptr(p.segments)),

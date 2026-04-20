@@ -8,7 +8,7 @@
 #include <android/log.h>
 #include <jni.h>
 
-#include "ml.h"
+#include "geniex.h"
 
 namespace geniex_android_sdk {
 #define TAG "GeniexSdk"
@@ -18,7 +18,7 @@ namespace geniex_android_sdk {
 
 void throw_runtime_exception(JNIEnv* env, const char* _Nonnull format, ...);
 
-jobject create_java_profile_data(JNIEnv* env, ml_ProfileData data);
+jobject create_java_profile_data(JNIEnv* env, geniex_ProfileData data);
 
 bool check_jni_exception(JNIEnv* env, const char* where);
 

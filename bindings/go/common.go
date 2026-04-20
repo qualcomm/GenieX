@@ -16,7 +16,7 @@ package geniex_sdk
 
 /*
 #include <stdlib.h>
-#include "ml.h"
+#include "geniex.h"
 */
 import "C"
 
@@ -29,7 +29,7 @@ import (
 /* ========================================================================== */
 
 func mlFree(ptr unsafe.Pointer) {
-	C.ml_free(ptr)
+	C.geniex_free(ptr)
 }
 
 func sliceToCCharArray(slice []string) (**C.char, C.int32_t) {
@@ -141,7 +141,7 @@ func (p ProfileData) TotalTimeUs() int64 {
 	return p.PromptTime + p.DecodeTime
 }
 
-func newProfileDataFromCPtr(c C.ml_ProfileData) ProfileData {
+func newProfileDataFromCPtr(c C.geniex_ProfileData) ProfileData {
 	return ProfileData{
 		TTFT:            int64(c.ttft),
 		PromptTime:      int64(c.prompt_time),
@@ -172,13 +172,13 @@ type SamplerConfig struct {
 	GrammarString     string
 	EnableJson        bool
 
-	C *C.ml_SamplerConfig
+	C *C.geniex_SamplerConfig
 }
 
-func (sc SamplerConfig) toCPtr() *C.ml_SamplerConfig {
+func (sc SamplerConfig) toCPtr() *C.geniex_SamplerConfig {
 	// Allocate C structure
-	cPtr := (*C.ml_SamplerConfig)(C.malloc(C.sizeof_ml_SamplerConfig))
-	*cPtr = C.ml_SamplerConfig{}
+	cPtr := (*C.geniex_SamplerConfig)(C.malloc(C.sizeof_ml_SamplerConfig))
+	*cPtr = C.geniex_SamplerConfig{}
 
 	cPtr.temperature = C.float(sc.Temperature)
 	cPtr.top_p = C.float(sc.TopP)
@@ -200,7 +200,7 @@ func (sc SamplerConfig) toCPtr() *C.ml_SamplerConfig {
 	return cPtr
 }
 
-func freeSamplerConfig(cPtr *C.ml_SamplerConfig) {
+func freeSamplerConfig(cPtr *C.geniex_SamplerConfig) {
 	if cPtr != nil {
 		if cPtr.grammar_path != nil {
 			C.free(unsafe.Pointer(cPtr.grammar_path))
@@ -222,10 +222,10 @@ type GenerationConfig struct {
 	AudioPaths     []string
 }
 
-func (gc GenerationConfig) toCPtr() *C.ml_GenerationConfig {
+func (gc GenerationConfig) toCPtr() *C.geniex_GenerationConfig {
 	// Allocate C structure
-	cPtr := (*C.ml_GenerationConfig)(C.malloc(C.sizeof_ml_GenerationConfig))
-	*cPtr = C.ml_GenerationConfig{}
+	cPtr := (*C.geniex_GenerationConfig)(C.malloc(C.sizeof_ml_GenerationConfig))
+	*cPtr = C.geniex_GenerationConfig{}
 
 	cPtr.max_tokens = C.int32_t(gc.MaxTokens)
 	cPtr.n_past = C.int32_t(gc.NPast)
@@ -236,13 +236,13 @@ func (gc GenerationConfig) toCPtr() *C.ml_GenerationConfig {
 
 	if len(gc.ImagePaths) > 0 {
 		imagePaths, imageCount := sliceToCCharArray(gc.ImagePaths)
-		cPtr.image_paths = (*C.ml_Path)(imagePaths)
+		cPtr.image_paths = (*C.geniex_Path)(imagePaths)
 		cPtr.image_count = C.int32_t(imageCount)
 	}
 
 	if len(gc.AudioPaths) > 0 {
 		audioPaths, audioCount := sliceToCCharArray(gc.AudioPaths)
-		cPtr.audio_paths = (*C.ml_Path)(audioPaths)
+		cPtr.audio_paths = (*C.geniex_Path)(audioPaths)
 		cPtr.audio_count = C.int32_t(audioCount)
 	}
 
@@ -253,7 +253,7 @@ func (gc GenerationConfig) toCPtr() *C.ml_GenerationConfig {
 	return cPtr
 }
 
-func freeGenerationConfig(ptr *C.ml_GenerationConfig) {
+func freeGenerationConfig(ptr *C.geniex_GenerationConfig) {
 	if ptr == nil {
 		return
 	}

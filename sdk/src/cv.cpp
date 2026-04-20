@@ -1,12 +1,12 @@
 #include <cstdlib>
 
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "registry.h"
 
 using namespace geniex;
 
-int32_t ml_cv_create(const ml_CVCreateInput* input, ml_CV** out_handle) {
+int32_t geniex_cv_create(const geniex_CVCreateInput* input, geniex_CV** out_handle) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -18,7 +18,7 @@ int32_t ml_cv_create(const ml_CVCreateInput* input, ml_CV** out_handle) {
         if (result != ML_SUCCESS) {
             return result;
         } else {
-            *out_handle = reinterpret_cast<ml_CV*>(cv_plugin);
+            *out_handle = reinterpret_cast<geniex_CV*>(cv_plugin);
         }
 
         return ML_SUCCESS;
@@ -34,7 +34,7 @@ int32_t ml_cv_create(const ml_CVCreateInput* input, ml_CV** out_handle) {
     }
 }
 
-int32_t ml_cv_destroy(ml_CV* handle) {
+int32_t geniex_cv_destroy(geniex_CV* handle) {
     GENIEX_LOG_TRACE("destroying CV model");
 
     try {
@@ -49,16 +49,16 @@ int32_t ml_cv_destroy(ml_CV* handle) {
     }
 }
 
-int32_t ml_cv_infer(const ml_CV* handle, const ml_CVInferInput* input, ml_CVInferOutput* output) {
+int32_t geniex_cv_infer(const geniex_CV* handle, const geniex_CVInferInput* input, geniex_CVInferOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
-        auto backend = reinterpret_cast<ICv*>(const_cast<ml_CV*>(handle));
+        auto backend = reinterpret_cast<ICv*>(const_cast<geniex_CV*>(handle));
         if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
 
         int32_t result = backend->infer(input, output);
         // TODO: geniex::calculate_profile_data(output->profile_data);
-        GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+        GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
 
         return result;
     } catch (const std::exception& e) {

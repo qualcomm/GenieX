@@ -16,7 +16,7 @@ package geniex_sdk
 
 /*
 #include <stdlib.h>
-#include "ml.h"
+#include "geniex.h"
 */
 import "C"
 import (
@@ -31,9 +31,9 @@ type RerankConfig struct {
 	NormalizeMethod string
 }
 
-func (rc RerankConfig) toCPtr() *C.ml_RerankConfig {
-	cPtr := (*C.ml_RerankConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_RerankConfig{}))))
-	*cPtr = C.ml_RerankConfig{}
+func (rc RerankConfig) toCPtr() *C.geniex_RerankConfig {
+	cPtr := (*C.geniex_RerankConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_RerankConfig{}))))
+	*cPtr = C.geniex_RerankConfig{}
 
 	cPtr.batch_size = C.int32_t(rc.BatchSize)
 	cPtr.normalize = C.bool(rc.Normalize)
@@ -44,7 +44,7 @@ func (rc RerankConfig) toCPtr() *C.ml_RerankConfig {
 	return cPtr
 }
 
-func freeRerankConfig(cPtr *C.ml_RerankConfig) {
+func freeRerankConfig(cPtr *C.geniex_RerankConfig) {
 	if cPtr != nil {
 		if cPtr.normalize_method != nil {
 			C.free(unsafe.Pointer(cPtr.normalize_method))
@@ -62,9 +62,9 @@ type RerankerCreateInput struct {
 	DeviceID      string
 }
 
-func (rci RerankerCreateInput) toCPtr() *C.ml_RerankerCreateInput {
-	cPtr := (*C.ml_RerankerCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_RerankerCreateInput{}))))
-	*cPtr = C.ml_RerankerCreateInput{}
+func (rci RerankerCreateInput) toCPtr() *C.geniex_RerankerCreateInput {
+	cPtr := (*C.geniex_RerankerCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_RerankerCreateInput{}))))
+	*cPtr = C.geniex_RerankerCreateInput{}
 
 	if rci.ModelName != "" {
 		cPtr.model_name = C.CString(rci.ModelName)
@@ -85,7 +85,7 @@ func (rci RerankerCreateInput) toCPtr() *C.ml_RerankerCreateInput {
 	return cPtr
 }
 
-func freeRerankerCreateInput(cPtr *C.ml_RerankerCreateInput) {
+func freeRerankerCreateInput(cPtr *C.geniex_RerankerCreateInput) {
 	if cPtr != nil {
 		if cPtr.model_path != nil {
 			C.free(unsafe.Pointer(cPtr.model_path))
@@ -110,9 +110,9 @@ type RerankerRerankInput struct {
 	Config    *RerankConfig
 }
 
-func (rri RerankerRerankInput) toCPtr() *C.ml_RerankerRerankInput {
-	cPtr := (*C.ml_RerankerRerankInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_RerankerRerankInput{}))))
-	*cPtr = C.ml_RerankerRerankInput{}
+func (rri RerankerRerankInput) toCPtr() *C.geniex_RerankerRerankInput {
+	cPtr := (*C.geniex_RerankerRerankInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_RerankerRerankInput{}))))
+	*cPtr = C.geniex_RerankerRerankInput{}
 
 	if rri.Query != "" {
 		cPtr.query = C.CString(rri.Query)
@@ -138,7 +138,7 @@ func (rri RerankerRerankInput) toCPtr() *C.ml_RerankerRerankInput {
 	return cPtr
 }
 
-func freeRerankerRerankInput(cPtr *C.ml_RerankerRerankInput) {
+func freeRerankerRerankInput(cPtr *C.geniex_RerankerRerankInput) {
 	if cPtr == nil {
 		return
 	}
@@ -165,7 +165,7 @@ type RerankerRerankOutput struct {
 	ProfileData ProfileData
 }
 
-func newRerankerRerankOutputFromCPtr(c *C.ml_RerankerRerankOutput) RerankerRerankOutput {
+func newRerankerRerankOutputFromCPtr(c *C.geniex_RerankerRerankOutput) RerankerRerankOutput {
 	output := RerankerRerankOutput{}
 
 	if c == nil {
@@ -187,7 +187,7 @@ func newRerankerRerankOutputFromCPtr(c *C.ml_RerankerRerankOutput) RerankerReran
 	return output
 }
 
-func freeRerankerRerankOutput(ptr *C.ml_RerankerRerankOutput) {
+func freeRerankerRerankOutput(ptr *C.geniex_RerankerRerankOutput) {
 	if ptr == nil {
 		return
 	}
@@ -198,7 +198,7 @@ func freeRerankerRerankOutput(ptr *C.ml_RerankerRerankOutput) {
 
 // Reranker represents a reranker instance
 type Reranker struct {
-	ptr *C.ml_Reranker
+	ptr *C.geniex_Reranker
 }
 
 // NewReranker creates a new reranker instance
@@ -208,8 +208,8 @@ func NewReranker(input RerankerCreateInput) (*Reranker, error) {
 	cInput := input.toCPtr()
 	defer freeRerankerCreateInput(cInput)
 
-	var cHandle *C.ml_Reranker
-	res := C.ml_reranker_create(cInput, &cHandle)
+	var cHandle *C.geniex_Reranker
+	res := C.geniex_reranker_create(cInput, &cHandle)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -225,7 +225,7 @@ func (r *Reranker) Destroy() error {
 		return nil
 	}
 
-	res := C.ml_reranker_destroy(r.ptr)
+	res := C.geniex_reranker_destroy(r.ptr)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -240,10 +240,10 @@ func (r *Reranker) Rerank(input RerankerRerankInput) (RerankerRerankOutput, erro
 	cInput := input.toCPtr()
 	defer freeRerankerRerankInput(cInput)
 
-	var cOutput C.ml_RerankerRerankOutput
+	var cOutput C.geniex_RerankerRerankOutput
 	defer freeRerankerRerankOutput(&cOutput)
 
-	res := C.ml_reranker_rerank(r.ptr, cInput, &cOutput)
+	res := C.geniex_reranker_rerank(r.ptr, cInput, &cOutput)
 	if res < 0 {
 		return RerankerRerankOutput{}, SDKError(res)
 	}

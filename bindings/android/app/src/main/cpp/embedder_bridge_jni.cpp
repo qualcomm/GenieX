@@ -5,7 +5,7 @@
 
 #include "android_utils.h"
 #include "jniutils.h"
-#include "ml.h"
+#include "geniex.h"
 
 using namespace jniutils;
 using namespace geniex_android_sdk;
@@ -15,11 +15,11 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Embedder_create(
     JNIEnv* env, jobject, jobject embedderCreateInputObj) {
     try {
         // Extract EmbedderCreateInput from Java object
-        ml_EmbedderCreateInput input = extract_embedder_create_input(env, embedderCreateInputObj);
-        ml_Embedder*           h     = nullptr;
-        LOGd("[JNI] create() ml_embedder_create called");
+        geniex_EmbedderCreateInput input = extract_embedder_create_input(env, embedderCreateInputObj);
+        geniex_Embedder*           h     = nullptr;
+        LOGd("[JNI] create() geniex_embedder_create called");
 
-        int32_t result = ml_embedder_create(&input, &h);
+        int32_t result = geniex_embedder_create(&input, &h);
 
         if (result != ML_SUCCESS || !h) {
             LOGe("[JNI] create() failed, error code: %d", result);
@@ -27,7 +27,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Embedder_create(
             return 0;
         }
 
-        LOGd("[JNI] create() ml_embedder_create returned handle=%p", h);
+        LOGd("[JNI] create() geniex_embedder_create returned handle=%p", h);
         return (jlong)h;
     } catch (const std::exception& e) {
         LOGe("[JNI] create() exception: %s", e.what());
@@ -39,7 +39,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Embedder_create(
 extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Embedder_destroy(JNIEnv*, jobject, jlong handle) {
     LOGd("[JNI] destroy() called, handle=%p", (void*)handle);
     if (handle) {
-        int32_t result = ml_embedder_destroy((ml_Embedder*)handle);
+        int32_t result = geniex_embedder_destroy((geniex_Embedder*)handle);
         if (result != ML_SUCCESS) {
             LOGe("[JNI] destroy() failed, error code: %d", result);
         }
@@ -55,15 +55,15 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Embedder_embed(
     std::vector<const char*> c_texts;
     for (auto& s : texts) c_texts.push_back(s.c_str());
 
-    ml_EmbeddingConfig cfg = extract_embedding_config(env, configObj);
+    geniex_EmbeddingConfig cfg = extract_embedding_config(env, configObj);
 
-    ml_EmbedderEmbedInput input = {};
+    geniex_EmbedderEmbedInput input = {};
     input.texts                 = c_texts.data();
     input.text_count            = c_texts.size();
     input.config                = &cfg;
 
-    ml_EmbedderEmbedOutput output = {};
-    int32_t                result = ml_embedder_embed((ml_Embedder*)handle, &input, &output);
+    geniex_EmbedderEmbedOutput output = {};
+    int32_t                result = geniex_embedder_embed((geniex_Embedder*)handle, &input, &output);
 
     if (result < 0 || !output.embeddings || output.embedding_count <= 0) {
         throw_runtime_exception(env, "Embedder embed failed, error code: %d", result);
@@ -71,10 +71,10 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Embedder_embed(
     }
 
     // Get embedding dimension from the embedder
-    ml_EmbedderDimOutput dim_output = {};
-    int32_t              dim_result = ml_embedder_embedding_dim((const ml_Embedder*)handle, &dim_output);
+    geniex_EmbedderDimOutput dim_output = {};
+    int32_t              dim_result = geniex_embedder_embedding_dim((const geniex_Embedder*)handle, &dim_output);
     if (dim_result < 0 || dim_output.dimension <= 0) {
-        ml_free(output.embeddings);
+        geniex_free(output.embeddings);
         return nullptr;
     }
 
@@ -90,14 +90,14 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Embedder_embed(
     jmethodID ctor      = env->GetMethodID(resultCls, "<init>", "([FLcom/geniex/sdk/bean/ProfilingData;)V");
     jobject   resultObj = env->NewObject(resultCls, ctor, jarr, profileDataObj);
 
-    ml_free(output.embeddings);
+    geniex_free(output.embeddings);
     return resultObj;
 }
 
 // JNI: embeddingDim
 extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Embedder_embeddingDim(JNIEnv*, jobject, jlong handle) {
-    ml_EmbedderDimOutput output = {};
-    int32_t              result = ml_embedder_embedding_dim((const ml_Embedder*)handle, &output);
+    geniex_EmbedderDimOutput output = {};
+    int32_t              result = geniex_embedder_embedding_dim((const geniex_Embedder*)handle, &output);
     if (result < 0) return -1;
     return output.dimension;
 }
@@ -131,6 +131,6 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Embedder_getProfili
     JNIEnv* env, jobject, jlong handle) {
     // Embedder API doesn't provide separate get_profiling_data function
     // Profiling data comes from embed() output
-    ml_ProfileData data = {};
+    geniex_ProfileData data = {};
     return extract_profiling_data(env, data);
 }

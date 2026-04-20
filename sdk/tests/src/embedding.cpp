@@ -7,7 +7,7 @@
 
 #include "doctest.h"
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "utf8.h" // IWYU pragma: export
 #include "util.h"
 
@@ -18,7 +18,7 @@ using Param =
     std::tuple<std::string, std::string, std::string,
                std::optional<std::string>, std::optional<std::string>>;
 
-Setup<Param, ml_Embedder> setup_guard(
+Setup<Param, geniex_Embedder> setup_guard(
     SetupMap<Param>{
         {llama_cpp::value,
          std::vector<Param>{
@@ -50,8 +50,8 @@ Setup<Param, ml_Embedder> setup_guard(
 #endif
          }},
     },
-    [](ml_PluginId plugin, Param param) {
-      ml_Embedder *embedder = nullptr;
+    [](geniex_PluginId plugin, Param param) {
+      geniex_Embedder *embedder = nullptr;
       auto [test_id, model_name, model_path, mmproj_path, tokenizer] =
           std::move(param);
 
@@ -60,7 +60,7 @@ Setup<Param, ml_Embedder> setup_guard(
         GENIEX_LOG_WARN("Model file not found: {}", model_path);
         GENIEX_LOG_WARN("Skipping tests for model: {}", model_name);
         g_test_summary.add_skipped_model(model_name, model_path);
-        return static_cast<ml_Embedder *>(
+        return static_cast<geniex_Embedder *>(
             nullptr); // Return nullptr to indicate skip
       }
 
@@ -69,11 +69,11 @@ Setup<Param, ml_Embedder> setup_guard(
         GENIEX_LOG_WARN("MMProj file not found: {}", mmproj_path.value());
         GENIEX_LOG_WARN("Skipping tests for model: {}", model_name);
         g_test_summary.add_skipped_model(model_name, mmproj_path.value());
-        return static_cast<ml_Embedder *>(
+        return static_cast<geniex_Embedder *>(
             nullptr); // Return nullptr to indicate skip
       }
 
-      ml_EmbedderCreateInput input{};
+      geniex_EmbedderCreateInput input{};
 
       // Initialize all fields to zero/nullptr first
       std::memset(&input, 0, sizeof(input));
@@ -94,36 +94,36 @@ Setup<Param, ml_Embedder> setup_guard(
         // QAIRT paths will be injected by the plugin itself
       }
 
-      int32_t res = ml_embedder_create(&input, &embedder);
+      int32_t res = geniex_embedder_create(&input, &embedder);
 
       CHECK_ML_ERROR(res);
       REQUIRE(embedder != nullptr);
       return embedder;
     },
-    nullptr, ml_embedder_destroy);
+    nullptr, geniex_embedder_destroy);
 
 std::string test_text = "🥳 🎂 Once upon a time";
 
 // Test function definitions
-void test_embedder_creation(ml_Embedder *embedder,
+void test_embedder_creation(geniex_Embedder *embedder,
                             const std::string &model_name) {
-  ml_EmbedderDimOutput dim_output{};
-  int32_t res = ml_embedder_embedding_dim(embedder, &dim_output);
+  geniex_EmbedderDimOutput dim_output{};
+  int32_t res = geniex_embedder_embedding_dim(embedder, &dim_output);
   CHECK_ML_ERROR(res);
   CHECK(dim_output.dimension > 0);
   GENIEX_LOG_INFO("Embedding dimension: {}", dim_output.dimension);
 }
 
-void test_embedder_single_text(ml_Embedder *embedder,
+void test_embedder_single_text(geniex_Embedder *embedder,
                                const std::string &model_name) {
   // Initialize config properly
-  ml_EmbeddingConfig cfg{};
+  geniex_EmbeddingConfig cfg{};
   cfg.batch_size = 32;
   cfg.normalize = true;
   cfg.normalize_method = "l2";
 
   const char *texts[] = {test_text.c_str()};
-  ml_EmbedderEmbedInput input{};
+  geniex_EmbedderEmbedInput input{};
   std::memset(&input, 0, sizeof(input)); // Initialize all fields to zero
   input.texts = texts;
   input.text_count = 1;
@@ -133,17 +133,17 @@ void test_embedder_single_text(ml_Embedder *embedder,
   input.input_ids_row_lengths = nullptr;
   input.input_ids_row_count = 0;
 
-  ml_EmbedderEmbedOutput output{};
+  geniex_EmbedderEmbedOutput output{};
   std::memset(&output, 0, sizeof(output));
-  int32_t res = ml_embedder_embed(embedder, &input, &output);
+  int32_t res = geniex_embedder_embed(embedder, &input, &output);
 
   CHECK_ML_ERROR(res);
   REQUIRE(output.embeddings != nullptr);
   CHECK(output.embedding_count == 1);
 
   // Get embedding dimension for validation
-  ml_EmbedderDimOutput dim_output{};
-  ml_embedder_embedding_dim(embedder, &dim_output);
+  geniex_EmbedderDimOutput dim_output{};
+  geniex_embedder_embedding_dim(embedder, &dim_output);
   int32_t expected_total_floats = dim_output.dimension * output.embedding_count;
 
   GENIEX_LOG_INFO("{}", output);
@@ -187,13 +187,13 @@ void test_embedder_single_text(ml_Embedder *embedder,
   }
 
   if (output.embeddings) {
-    ml_free(output.embeddings);
+    geniex_free(output.embeddings);
   }
 }
 
-void test_embedder_semantic_similarity(ml_Embedder *embedder,
+void test_embedder_semantic_similarity(geniex_Embedder *embedder,
                                        const std::string &model_name) {
-  ml_EmbeddingConfig cfg{};
+  geniex_EmbeddingConfig cfg{};
   std::memset(&cfg, 0, sizeof(cfg));
   cfg.batch_size = 1;
   cfg.normalize = true;
@@ -208,33 +208,33 @@ void test_embedder_semantic_similarity(ml_Embedder *embedder,
   const char *text_c[] = {text_c_str.c_str()};
 
   // Generate embeddings separately
-  ml_EmbedderEmbedInput input_a{};
+  geniex_EmbedderEmbedInput input_a{};
   input_a.texts = text_a;
   input_a.text_count = 1;
   input_a.config = &cfg;
   input_a.task_type = nullptr;
 
-  ml_EmbedderEmbedInput input_b{};
+  geniex_EmbedderEmbedInput input_b{};
   std::memset(&input_b, 0, sizeof(input_b));
   input_b.texts = text_b;
   input_b.text_count = 1;
   input_b.config = &cfg;
   input_b.task_type = nullptr;
 
-  ml_EmbedderEmbedInput input_c{};
+  geniex_EmbedderEmbedInput input_c{};
   std::memset(&input_c, 0, sizeof(input_c));
   input_c.texts = text_c;
   input_c.text_count = 1;
   input_c.config = &cfg;
   input_c.task_type = nullptr;
 
-  ml_EmbedderEmbedOutput output_a{};
-  ml_EmbedderEmbedOutput output_b{};
-  ml_EmbedderEmbedOutput output_c{};
+  geniex_EmbedderEmbedOutput output_a{};
+  geniex_EmbedderEmbedOutput output_b{};
+  geniex_EmbedderEmbedOutput output_c{};
 
-  int32_t res_a = ml_embedder_embed(embedder, &input_a, &output_a);
-  int32_t res_b = ml_embedder_embed(embedder, &input_b, &output_b);
-  int32_t res_c = ml_embedder_embed(embedder, &input_c, &output_c);
+  int32_t res_a = geniex_embedder_embed(embedder, &input_a, &output_a);
+  int32_t res_b = geniex_embedder_embed(embedder, &input_b, &output_b);
+  int32_t res_c = geniex_embedder_embed(embedder, &input_c, &output_c);
 
   CHECK_ML_ERROR(res_a);
   CHECK_ML_ERROR(res_b);
@@ -244,8 +244,8 @@ void test_embedder_semantic_similarity(ml_Embedder *embedder,
   REQUIRE(output_c.embeddings != nullptr);
 
   // Get embedding dimension
-  ml_EmbedderDimOutput dim_output{};
-  ml_embedder_embedding_dim(embedder, &dim_output);
+  geniex_EmbedderDimOutput dim_output{};
+  geniex_embedder_embedding_dim(embedder, &dim_output);
   int32_t dim = dim_output.dimension;
 
   // Helper function to calculate cosine similarity between two vectors
@@ -279,16 +279,16 @@ void test_embedder_semantic_similarity(ml_Embedder *embedder,
 
   // Clean up
   if (output_a.embeddings)
-    ml_free(output_a.embeddings);
+    geniex_free(output_a.embeddings);
   if (output_b.embeddings)
-    ml_free(output_b.embeddings);
+    geniex_free(output_b.embeddings);
   if (output_c.embeddings)
-    ml_free(output_c.embeddings);
+    geniex_free(output_c.embeddings);
 }
 
-void test_embedder_batch_processing(ml_Embedder *embedder,
+void test_embedder_batch_processing(geniex_Embedder *embedder,
                                     const std::string &model_name) {
-  ml_EmbeddingConfig cfg{};
+  geniex_EmbeddingConfig cfg{};
   cfg.batch_size = 4;
   cfg.normalize = true;
   cfg.normalize_method = "l2";
@@ -301,16 +301,16 @@ void test_embedder_batch_processing(ml_Embedder *embedder,
     text_ptrs.push_back(text.c_str());
   }
 
-  ml_EmbedderEmbedInput input{};
+  geniex_EmbedderEmbedInput input{};
   std::memset(&input, 0, sizeof(input));
   input.texts = text_ptrs.data();
   input.text_count = 4;
   input.config = &cfg;
   input.task_type = nullptr;
 
-  ml_EmbedderEmbedOutput output{};
+  geniex_EmbedderEmbedOutput output{};
   std::memset(&output, 0, sizeof(output));
-  int32_t res = ml_embedder_embed(embedder, &input, &output);
+  int32_t res = geniex_embedder_embed(embedder, &input, &output);
 
   CHECK_ML_ERROR(res);
   REQUIRE(output.embeddings != nullptr);
@@ -319,68 +319,68 @@ void test_embedder_batch_processing(ml_Embedder *embedder,
   GENIEX_LOG_INFO("Batch processing: {}", output);
 
   if (output.embeddings) {
-    ml_free(output.embeddings);
+    geniex_free(output.embeddings);
   }
 }
 
-void test_image_search(ml_Embedder *embedder, const std::string &model_name) {
+void test_image_search(geniex_Embedder *embedder, const std::string &model_name) {
   GENIEX_LOG_INFO("Running image search test for multimodal model: {}",
                 model_name);
 
   // Config without normalization
-  ml_EmbeddingConfig cfg{};
+  geniex_EmbeddingConfig cfg{};
   cfg.batch_size = 1;
   cfg.normalize = false;
   cfg.normalize_method = "none";
 
   // Embed text query: "A blue cat"
   const char *query_text[] = {"A blue cat"};
-  ml_EmbedderEmbedInput text_input{};
+  geniex_EmbedderEmbedInput text_input{};
   std::memset(&text_input, 0, sizeof(text_input));
   text_input.texts = query_text;
   text_input.text_count = 1;
   text_input.config = &cfg;
 
-  ml_EmbedderEmbedOutput text_output{};
+  geniex_EmbedderEmbedOutput text_output{};
   std::memset(&text_output, 0, sizeof(text_output));
-  int32_t res = ml_embedder_embed(embedder, &text_input, &text_output);
+  int32_t res = geniex_embedder_embed(embedder, &text_input, &text_output);
   CHECK_ML_ERROR(res);
   REQUIRE(text_output.embeddings != nullptr);
   CHECK(text_output.embedding_count == 1);
 
   // Embed blue cat image
   const char *blue_cat_path[] = {"modelfiles/assets/blue_cat.jpg"};
-  ml_EmbedderEmbedInput blue_cat_input{};
+  geniex_EmbedderEmbedInput blue_cat_input{};
   std::memset(&blue_cat_input, 0, sizeof(blue_cat_input));
-  blue_cat_input.image_paths = const_cast<ml_Path *>(blue_cat_path);
+  blue_cat_input.image_paths = const_cast<geniex_Path *>(blue_cat_path);
   blue_cat_input.image_count = 1;
   blue_cat_input.config = &cfg;
 
-  ml_EmbedderEmbedOutput blue_cat_output{};
+  geniex_EmbedderEmbedOutput blue_cat_output{};
   std::memset(&blue_cat_output, 0, sizeof(blue_cat_output));
-  res = ml_embedder_embed(embedder, &blue_cat_input, &blue_cat_output);
+  res = geniex_embedder_embed(embedder, &blue_cat_input, &blue_cat_output);
   CHECK_ML_ERROR(res);
   REQUIRE(blue_cat_output.embeddings != nullptr);
   CHECK(blue_cat_output.embedding_count == 1);
 
   // Embed red cat image
   const char *red_cat_path[] = {"modelfiles/assets/red_cat.jpg"};
-  ml_EmbedderEmbedInput red_cat_input{};
+  geniex_EmbedderEmbedInput red_cat_input{};
   std::memset(&red_cat_input, 0, sizeof(red_cat_input));
-  red_cat_input.image_paths = const_cast<ml_Path *>(red_cat_path);
+  red_cat_input.image_paths = const_cast<geniex_Path *>(red_cat_path);
   red_cat_input.image_count = 1;
   red_cat_input.config = &cfg;
 
-  ml_EmbedderEmbedOutput red_cat_output{};
+  geniex_EmbedderEmbedOutput red_cat_output{};
   std::memset(&red_cat_output, 0, sizeof(red_cat_output));
-  res = ml_embedder_embed(embedder, &red_cat_input, &red_cat_output);
+  res = geniex_embedder_embed(embedder, &red_cat_input, &red_cat_output);
   CHECK_ML_ERROR(res);
   REQUIRE(red_cat_output.embeddings != nullptr);
   CHECK(red_cat_output.embedding_count == 1);
 
   // Get embedding dimension
-  ml_EmbedderDimOutput dim_output{};
-  ml_embedder_embedding_dim(embedder, &dim_output);
+  geniex_EmbedderDimOutput dim_output{};
+  geniex_embedder_embedding_dim(embedder, &dim_output);
   int32_t dim = dim_output.dimension;
 
   // Calculate Manhattan distance (L1 distance)
@@ -408,14 +408,14 @@ void test_image_search(ml_Embedder *embedder, const std::string &model_name) {
 
   // Clean up
   if (text_output.embeddings)
-    ml_free(text_output.embeddings);
+    geniex_free(text_output.embeddings);
   if (blue_cat_output.embeddings)
-    ml_free(blue_cat_output.embeddings);
+    geniex_free(blue_cat_output.embeddings);
   if (red_cat_output.embeddings)
-    ml_free(red_cat_output.embeddings);
+    geniex_free(red_cat_output.embeddings);
 }
 
-void test_embedder_video(ml_Embedder *embedder, const std::string &model_name) {
+void test_embedder_video(geniex_Embedder *embedder, const std::string &model_name) {
   GENIEX_LOG_INFO("Running video embedding test for multimodal model: {}",
                 model_name);
 
@@ -427,7 +427,7 @@ void test_embedder_video(ml_Embedder *embedder, const std::string &model_name) {
     return;
   }
 
-  ml_EmbeddingConfig cfg{};
+  geniex_EmbeddingConfig cfg{};
   cfg.batch_size = 1;
   cfg.normalize = true;
   cfg.normalize_method = "l2";
@@ -436,30 +436,30 @@ void test_embedder_video(ml_Embedder *embedder, const std::string &model_name) {
   float video_starts[] = {0.0f};
   float video_ends[] = {8.0f};
 
-  ml_EmbedderEmbedInput input{};
+  geniex_EmbedderEmbedInput input{};
   std::memset(&input, 0, sizeof(input));
-  input.video_paths = const_cast<ml_Path *>(video_paths);
+  input.video_paths = const_cast<geniex_Path *>(video_paths);
   input.video_starts = video_starts;
   input.video_ends = video_ends;
   input.video_count = 1;
   input.config = &cfg;
 
-  ml_EmbedderEmbedOutput output{};
+  geniex_EmbedderEmbedOutput output{};
   std::memset(&output, 0, sizeof(output));
-  int32_t res = ml_embedder_embed(embedder, &input, &output);
+  int32_t res = geniex_embedder_embed(embedder, &input, &output);
 
   CHECK_ML_ERROR(res);
   REQUIRE(output.embeddings != nullptr);
   CHECK(output.embedding_count == 1);
 
   if (output.embeddings) {
-    ml_free(output.embeddings);
+    geniex_free(output.embeddings);
   }
 }
 
 // Register all embedder tests
 template <typename PluginType>
-void register_embedder_tests(TestRegistry<ml_Embedder> &registry) {
+void register_embedder_tests(TestRegistry<geniex_Embedder> &registry) {
   REGISTER_TEST(registry, EmbedderCreation,
                 test_embedder_creation(model, model_name););
   REGISTER_TEST(registry, EmbedderSingleText,
@@ -472,7 +472,7 @@ void register_embedder_tests(TestRegistry<ml_Embedder> &registry) {
 
 // Generate test cases for all plugins
 #define GEN(Plugin)                                                            \
-  TEST_CASE_FOR_PLUGIN(ml_Embedder, Plugin, setup_guard,                       \
+  TEST_CASE_FOR_PLUGIN(geniex_Embedder, Plugin, setup_guard,                       \
                        register_embedder_tests<Plugin>)
 PLUGINS(GEN)
 #undef GEN

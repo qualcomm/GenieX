@@ -22,7 +22,7 @@ void throw_runtime_exception(JNIEnv *env, const char *_Nonnull format, ...) {
     }
 }
 
-jobject create_java_profile_data(JNIEnv *env, ml_ProfileData data) {
+jobject create_java_profile_data(JNIEnv *env, geniex_ProfileData data) {
     jclass cls = env->FindClass("com/geniex/sdk/bean/ProfilingData");
     if (!cls) return nullptr;
 

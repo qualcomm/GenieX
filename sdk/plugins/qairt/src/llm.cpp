@@ -23,7 +23,7 @@ namespace geniex {
 
 QairtLlm::~QairtLlm() = default;
 
-int32_t QairtLlm::create_impl(const ml_LlmCreateInput* input) {
+int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     if (!input || !input->model_name || !input->model_path) {
         return ML_ERROR_COMMON_INVALID_INPUT;
     }
@@ -101,14 +101,14 @@ int32_t QairtLlm::reset() {
     return ML_SUCCESS;
 }
 
-int32_t QairtLlm::save_kv_cache(const ml_KvCacheSaveInput* input, ml_KvCacheSaveOutput*) {
+int32_t QairtLlm::save_kv_cache(const geniex_KvCacheSaveInput* input, geniex_KvCacheSaveOutput*) {
     if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
     if (!input || !input->path) return ML_ERROR_COMMON_INVALID_INPUT;
     pipeline_->saveKVCache(input->path);
     return ML_SUCCESS;
 }
 
-int32_t QairtLlm::load_kv_cache(const ml_KvCacheLoadInput* input, ml_KvCacheLoadOutput*) {
+int32_t QairtLlm::load_kv_cache(const geniex_KvCacheLoadInput* input, geniex_KvCacheLoadOutput*) {
     if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
     if (!input || !input->path) return ML_ERROR_COMMON_INVALID_INPUT;
     pipeline_->loadKVCache(input->path);
@@ -116,7 +116,7 @@ int32_t QairtLlm::load_kv_cache(const ml_KvCacheLoadInput* input, ml_KvCacheLoad
 }
 
 int32_t QairtLlm::apply_chat_template(
-    const ml_LlmApplyChatTemplateInput* input, ml_LlmApplyChatTemplateOutput* output) {
+    const geniex_LlmApplyChatTemplateInput* input, geniex_LlmApplyChatTemplateOutput* output) {
     if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
     if (!input || !output) return ML_ERROR_COMMON_INVALID_INPUT;
     if (!input->messages || input->message_count <= 0) return ML_ERROR_COMMON_INVALID_INPUT;
@@ -144,7 +144,7 @@ int32_t QairtLlm::apply_chat_template(
     return ML_SUCCESS;
 }
 
-int32_t QairtLlm::generate(const ml_LlmGenerateInput* input, ml_LlmGenerateOutput* output) {
+int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGenerateOutput* output) {
     if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
     if (!input || !output) return ML_ERROR_COMMON_INVALID_INPUT;
 
@@ -156,7 +156,7 @@ int32_t QairtLlm::generate(const ml_LlmGenerateInput* input, ml_LlmGenerateOutpu
 
     if (!input->prompt_utf8) return ML_ERROR_COMMON_INVALID_INPUT;
 
-    // Map ml_GenerationConfig -> geniex::GenerationConfig
+    // Map geniex_GenerationConfig -> geniex::GenerationConfig
     GenerationConfig gen_cfg{};
     if (input->config) {
         gen_cfg.max_tokens = input->config->max_tokens > 0 ? input->config->max_tokens : 512;

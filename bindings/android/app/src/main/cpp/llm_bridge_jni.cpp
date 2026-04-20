@@ -15,7 +15,7 @@
 #include "android_utils.h"
 #include "jni_cb.h"
 #include "jniutils.h"
-#include "ml.h"
+#include "geniex.h"
 
 using namespace jniutils;
 
@@ -30,9 +30,9 @@ using namespace geniex_android_sdk;
 extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Llm_create(
     JNIEnv* env, jobject thiz, jobject llm_create_input_obj) {
     try {
-        ml_LlmCreateInput create_input = extract_llm_create_input(env, llm_create_input_obj);
-        ml_LLM*           handle       = nullptr;
-        LOGd("[JNI] create() ml_llm_create called with:");
+        geniex_LlmCreateInput create_input = extract_llm_create_input(env, llm_create_input_obj);
+        geniex_LLM*           handle       = nullptr;
+        LOGd("[JNI] create() geniex_llm_create called with:");
         LOGd("  model_name: %s", create_input.model_name);
         LOGd("  model_path: %s", create_input.model_path ? create_input.model_path : "(null)");
         LOGd("  tokenizer_path: %s", create_input.tokenizer_path ? create_input.tokenizer_path : "(null)");
@@ -45,14 +45,14 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Llm_create(
         LOGd("  config.verbose: %s", create_input.config.verbose ? "true" : "false");
         LOGd("  plugin_id: %s", create_input.plugin_id ? create_input.plugin_id : "(null)");
 
-        int32_t result = ml_llm_create(&create_input, &handle);
+        int32_t result = geniex_llm_create(&create_input, &handle);
 
         if (result != ML_SUCCESS || !handle) {
             LOGe("[JNI] create() failed, error code: %d", result);
             throw_runtime_exception(env, "Llm create failed, error code: %d", result);
             return 0;
         }
-        LOGd("[JNI] create() ml_llm_create returned handle=%p", handle);
+        LOGd("[JNI] create() geniex_llm_create returned handle=%p", handle);
         return reinterpret_cast<jlong>(handle);
 
     } catch (const std::exception& e) {
@@ -65,7 +65,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Llm_create(
 extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Llm_destroy(JNIEnv*, jobject, jlong handle) {
     LOGd("[JNI] destroy() called, handle=%p", (void*)handle);
     if (handle) {
-        int32_t result = ml_llm_destroy((ml_LLM*)handle);
+        int32_t result = geniex_llm_destroy((geniex_LLM*)handle);
         if (result != ML_SUCCESS) {
             LOGe("[JNI] destroy() failed, error code: %d", result);
         }
@@ -90,10 +90,10 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Llm_generate(
         }
 
         std::string         cprompt = jstring2str(env, prompt);
-        ml_GenerationConfig cfg     = extract_generation_config(env, configObj);
+        geniex_GenerationConfig cfg     = extract_generation_config(env, configObj);
 
-        ml_LlmGenerateInput  input  = {};
-        ml_LlmGenerateOutput output = {};
+        geniex_LlmGenerateInput  input  = {};
+        geniex_LlmGenerateOutput output = {};
         input.prompt_utf8           = cprompt.c_str();
         input.config                = &cfg;
 
@@ -118,7 +118,7 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Llm_generate(
             input.user_data = &cbCtx;
         }
 
-        int32_t ret = ml_llm_generate(reinterpret_cast<ml_LLM*>(handle), &input, &output);
+        int32_t ret = geniex_llm_generate(reinterpret_cast<geniex_LLM*>(handle), &input, &output);
         if (ret < 0 || !output.full_text) {
             if (callback) {
                 std::lock_guard<std::mutex> lock(g_stopFlagsMutex);
@@ -186,14 +186,14 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Llm_applyChatTempla
         tools_cstr = env->GetStringUTFChars(jtools, nullptr);
     }
 
-    ml_LlmApplyChatTemplateInput  input{.messages = msgs.data(),
+    geniex_LlmApplyChatTemplateInput  input{.messages = msgs.data(),
          .message_count                           = static_cast<int32_t>(msgs.size()),
          .tools                                   = tools_cstr,
          .enable_thinking                         = (jEnableThinking == JNI_TRUE),
          .add_generation_prompt                   = (jAddGenerationPrompt == JNI_TRUE)};
-    ml_LlmApplyChatTemplateOutput output{};
+    geniex_LlmApplyChatTemplateOutput output{};
 
-    int32_t ret = ml_llm_apply_chat_template(reinterpret_cast<ml_LLM*>(handle), &input, &output);
+    int32_t ret = geniex_llm_apply_chat_template(reinterpret_cast<geniex_LLM*>(handle), &input, &output);
 
     if (tools_cstr) {
         env->ReleaseStringUTFChars(jtools, tools_cstr);
@@ -214,5 +214,5 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Llm_applyChatTempla
 }
 
 extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Llm_reset(JNIEnv* env, jobject thiz, jlong handle) {
-    return ml_llm_reset(reinterpret_cast<ml_LLM*>(handle));
+    return geniex_llm_reset(reinterpret_cast<geniex_LLM*>(handle));
 }

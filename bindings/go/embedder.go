@@ -16,7 +16,7 @@ package geniex_sdk
 
 /*
 #include <stdlib.h>
-#include "ml.h"
+#include "geniex.h"
 */
 import "C"
 import (
@@ -31,9 +31,9 @@ type EmbeddingConfig struct {
 	NormalizeMethod string
 }
 
-func (ec EmbeddingConfig) toCPtr() *C.ml_EmbeddingConfig {
-	cPtr := (*C.ml_EmbeddingConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_EmbeddingConfig{}))))
-	*cPtr = C.ml_EmbeddingConfig{}
+func (ec EmbeddingConfig) toCPtr() *C.geniex_EmbeddingConfig {
+	cPtr := (*C.geniex_EmbeddingConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_EmbeddingConfig{}))))
+	*cPtr = C.geniex_EmbeddingConfig{}
 
 	cPtr.batch_size = C.int32_t(ec.BatchSize)
 	cPtr.normalize = C.bool(ec.Normalize)
@@ -44,7 +44,7 @@ func (ec EmbeddingConfig) toCPtr() *C.ml_EmbeddingConfig {
 	return cPtr
 }
 
-func freeEmbeddingConfig(cPtr *C.ml_EmbeddingConfig) {
+func freeEmbeddingConfig(cPtr *C.geniex_EmbeddingConfig) {
 	if cPtr != nil {
 		if cPtr.normalize_method != nil {
 			C.free(unsafe.Pointer(cPtr.normalize_method))
@@ -62,9 +62,9 @@ type EmbedderCreateInput struct {
 	DeviceID      string
 }
 
-func (eci EmbedderCreateInput) toCPtr() *C.ml_EmbedderCreateInput {
-	cPtr := (*C.ml_EmbedderCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_EmbedderCreateInput{}))))
-	*cPtr = C.ml_EmbedderCreateInput{}
+func (eci EmbedderCreateInput) toCPtr() *C.geniex_EmbedderCreateInput {
+	cPtr := (*C.geniex_EmbedderCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_EmbedderCreateInput{}))))
+	*cPtr = C.geniex_EmbedderCreateInput{}
 
 	if eci.ModelName != "" {
 		cPtr.model_name = C.CString(eci.ModelName)
@@ -85,7 +85,7 @@ func (eci EmbedderCreateInput) toCPtr() *C.ml_EmbedderCreateInput {
 	return cPtr
 }
 
-func freeEmbedderCreateInput(cPtr *C.ml_EmbedderCreateInput) {
+func freeEmbedderCreateInput(cPtr *C.geniex_EmbedderCreateInput) {
 	if cPtr != nil {
 		if cPtr.model_path != nil {
 			C.free(unsafe.Pointer(cPtr.model_path))
@@ -113,9 +113,9 @@ type EmbedderEmbedInput struct {
 	ImagePaths         []string
 }
 
-func (eei EmbedderEmbedInput) toCPtr() *C.ml_EmbedderEmbedInput {
-	cPtr := (*C.ml_EmbedderEmbedInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_EmbedderEmbedInput{}))))
-	*cPtr = C.ml_EmbedderEmbedInput{}
+func (eei EmbedderEmbedInput) toCPtr() *C.geniex_EmbedderEmbedInput {
+	cPtr := (*C.geniex_EmbedderEmbedInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_EmbedderEmbedInput{}))))
+	*cPtr = C.geniex_EmbedderEmbedInput{}
 
 	// Convert texts array
 	if len(eei.Texts) > 0 {
@@ -183,7 +183,7 @@ func (eei EmbedderEmbedInput) toCPtr() *C.ml_EmbedderEmbedInput {
 	// Convert image paths array
 	if len(eei.ImagePaths) > 0 {
 		imagePathsArray, imageCount := sliceToCCharArray(eei.ImagePaths)
-		cPtr.image_paths = (*C.ml_Path)(unsafe.Pointer(imagePathsArray))
+		cPtr.image_paths = (*C.geniex_Path)(unsafe.Pointer(imagePathsArray))
 		cPtr.image_count = imageCount
 	} else {
 		cPtr.image_paths = nil
@@ -193,7 +193,7 @@ func (eei EmbedderEmbedInput) toCPtr() *C.ml_EmbedderEmbedInput {
 	return cPtr
 }
 
-func freeEmbedderEmbedInput(cPtr *C.ml_EmbedderEmbedInput) {
+func freeEmbedderEmbedInput(cPtr *C.geniex_EmbedderEmbedInput) {
 	if cPtr == nil {
 		return
 	}
@@ -243,7 +243,7 @@ type EmbedderEmbedOutput struct {
 	ProfileData ProfileData
 }
 
-func newEmbedderEmbedOutputFromCPtr(c *C.ml_EmbedderEmbedOutput, embeddingDim int32) EmbedderEmbedOutput {
+func newEmbedderEmbedOutputFromCPtr(c *C.geniex_EmbedderEmbedOutput, embeddingDim int32) EmbedderEmbedOutput {
 	output := EmbedderEmbedOutput{}
 
 	if c == nil {
@@ -271,7 +271,7 @@ func newEmbedderEmbedOutputFromCPtr(c *C.ml_EmbedderEmbedOutput, embeddingDim in
 	return output
 }
 
-func freeEmbedderEmbedOutput(ptr *C.ml_EmbedderEmbedOutput) {
+func freeEmbedderEmbedOutput(ptr *C.geniex_EmbedderEmbedOutput) {
 	if ptr == nil {
 		return
 	}
@@ -285,7 +285,7 @@ type EmbedderDimOutput struct {
 	Dimension int32
 }
 
-func newEmbedderDimOutputFromCPtr(c *C.ml_EmbedderDimOutput) EmbedderDimOutput {
+func newEmbedderDimOutputFromCPtr(c *C.geniex_EmbedderDimOutput) EmbedderDimOutput {
 	output := EmbedderDimOutput{}
 
 	if c == nil {
@@ -298,7 +298,7 @@ func newEmbedderDimOutputFromCPtr(c *C.ml_EmbedderDimOutput) EmbedderDimOutput {
 
 // Embedder represents an embedder instance
 type Embedder struct {
-	ptr *C.ml_Embedder
+	ptr *C.geniex_Embedder
 }
 
 // NewEmbedder creates a new embedder instance
@@ -308,8 +308,8 @@ func NewEmbedder(input EmbedderCreateInput) (*Embedder, error) {
 	cInput := input.toCPtr()
 	defer freeEmbedderCreateInput(cInput)
 
-	var cHandle *C.ml_Embedder
-	res := C.ml_embedder_create(cInput, &cHandle)
+	var cHandle *C.geniex_Embedder
+	res := C.geniex_embedder_create(cInput, &cHandle)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -325,7 +325,7 @@ func (e *Embedder) Destroy() error {
 		return nil
 	}
 
-	res := C.ml_embedder_destroy(e.ptr)
+	res := C.geniex_embedder_destroy(e.ptr)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -346,10 +346,10 @@ func (e *Embedder) Embed(input EmbedderEmbedInput) (EmbedderEmbedOutput, error) 
 	cInput := input.toCPtr()
 	defer freeEmbedderEmbedInput(cInput)
 
-	var cOutput C.ml_EmbedderEmbedOutput
+	var cOutput C.geniex_EmbedderEmbedOutput
 	defer freeEmbedderEmbedOutput(&cOutput)
 
-	res := C.ml_embedder_embed(e.ptr, cInput, &cOutput)
+	res := C.geniex_embedder_embed(e.ptr, cInput, &cOutput)
 	if res < 0 {
 		return EmbedderEmbedOutput{}, SDKError(res)
 	}
@@ -362,9 +362,9 @@ func (e *Embedder) Embed(input EmbedderEmbedInput) (EmbedderEmbedOutput, error) 
 func (e *Embedder) EmbeddingDimension() (EmbedderDimOutput, error) {
 	slog.Debug("EmbeddingDimension called")
 
-	var cOutput C.ml_EmbedderDimOutput
+	var cOutput C.geniex_EmbedderDimOutput
 
-	res := C.ml_embedder_embedding_dim(e.ptr, &cOutput)
+	res := C.geniex_embedder_embedding_dim(e.ptr, &cOutput)
 	if res < 0 {
 		return EmbedderDimOutput{}, SDKError(res)
 	}

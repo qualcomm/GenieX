@@ -42,7 +42,7 @@
 #include "external/date.h"
 #include "external/httplib.h"
 #include "external/json.hpp"
-#include "ml.h"
+#include "geniex.h"
 
 namespace geniex {
 namespace validation {
@@ -68,7 +68,7 @@ namespace validation {
 
 struct ValidationResult {
     // ML standard error codes for validation results
-    ml_ErrorCode result;  // ML_SUCCESS, ML_ERROR_COMMON_LICENSE_INVALID, ML_ERROR_COMMON_LICENSE_EXPIRED, etc.
+    geniex_ErrorCode result;  // ML_SUCCESS, ML_ERROR_COMMON_LICENSE_INVALID, ML_ERROR_COMMON_LICENSE_EXPIRED, etc.
     std::string  message;
 };
 

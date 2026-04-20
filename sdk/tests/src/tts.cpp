@@ -6,7 +6,7 @@
 
 #include "doctest.h"
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "utf8.h" // IWYU pragma: export
 #include "util.h"
 
@@ -16,10 +16,10 @@ namespace {
 using Param = std::tuple<std::string, std::string, std::string,
                          std::optional<std::string>>;
 
-Setup<Param, ml_TTS> setup_guard(
+Setup<Param, geniex_TTS> setup_guard(
     SetupMap<Param>{},
-    [](ml_PluginId plugin, Param param) {
-      ml_TTS *tts = nullptr;
+    [](geniex_PluginId plugin, Param param) {
+      geniex_TTS *tts = nullptr;
 
       auto [test_id, model_name, model_path, vocoder] = std::move(param);
 
@@ -28,48 +28,48 @@ Setup<Param, ml_TTS> setup_guard(
         GENIEX_LOG_WARN("Model file not found: {}", model_path);
         GENIEX_LOG_WARN("Skipping tests for model: {}", model_name);
         g_test_summary.add_skipped_model(model_name, model_path);
-        return static_cast<ml_TTS *>(
+        return static_cast<geniex_TTS *>(
             nullptr); // Return nullptr to indicate skip
       }
 
-      ml_TtsCreateInput input{};
+      geniex_TtsCreateInput input{};
       input.model_name = model_name.c_str();
       input.model_path = model_path.c_str();
       input.vocoder_path = vocoder.has_value() ? vocoder.value().c_str() : "";
       input.device_id = nullptr;
       input.plugin_id = plugin;
 
-      int32_t res = ml_tts_create(&input, &tts);
+      int32_t res = geniex_tts_create(&input, &tts);
       CHECK_ML_ERROR(res);
       REQUIRE(tts != nullptr);
 
       return tts;
     },
-    nullptr, ml_tts_destroy);
+    nullptr, geniex_tts_destroy);
 
 std::string test_text =
     "Hello world! This is a test of the text to speech system.";
 
 // Test function definitions
-void test_tts_synthesize_basic(ml_TTS *tts, const std::string &model_name) {
+void test_tts_synthesize_basic(geniex_TTS *tts, const std::string &model_name) {
   // Ensure output directory exists
   std::filesystem::create_directories("output");
 
   // Set up TTS configuration
-  ml_TTSConfig config{};
+  geniex_TTSConfig config{};
   config.voice = "af_heart";
   config.speed = 1.0f;
   config.seed = 42;
   config.sample_rate = 24000;
 
-  ml_TtsSynthesizeInput input{};
+  geniex_TtsSynthesizeInput input{};
   input.text_utf8 = test_text.c_str();
   input.config = &config;
   input.output_path =
       "output/tts_test_basic.wav"; // Generate audio under output/ directory
 
-  ml_TtsSynthesizeOutput output{};
-  int32_t res = ml_tts_synthesize(tts, &input, &output);
+  geniex_TtsSynthesizeOutput output{};
+  int32_t res = geniex_tts_synthesize(tts, &input, &output);
   CHECK_ML_ERROR(res);
   GENIEX_LOG_INFO("{}", output);
 
@@ -109,12 +109,12 @@ void test_tts_synthesize_basic(ml_TTS *tts, const std::string &model_name) {
   }
 }
 
-void test_tts_list_available_voices(ml_TTS *tts,
+void test_tts_list_available_voices(geniex_TTS *tts,
                                     const std::string &model_name) {
-  ml_TtsListAvailableVoicesInput input{};
-  ml_TtsListAvailableVoicesOutput output{};
+  geniex_TtsListAvailableVoicesInput input{};
+  geniex_TtsListAvailableVoicesOutput output{};
 
-  int32_t res = ml_tts_list_available_voices(tts, &input, &output);
+  int32_t res = geniex_tts_list_available_voices(tts, &input, &output);
   CHECK_ML_ERROR(res);
 
   REQUIRE(output.voice_count >= 0);
@@ -160,32 +160,32 @@ void test_tts_list_available_voices(ml_TTS *tts,
   }
 }
 
-void test_tts_error_handling(ml_TTS *tts, const std::string &model_name) {
+void test_tts_error_handling(geniex_TTS *tts, const std::string &model_name) {
   // Test with null text input
   {
-    ml_TtsSynthesizeInput input{};
+    geniex_TtsSynthesizeInput input{};
     input.text_utf8 = nullptr; // Invalid input
     input.config = nullptr;
     input.output_path = nullptr;
 
-    ml_TtsSynthesizeOutput output{};
-    int32_t res = ml_tts_synthesize(tts, &input, &output);
+    geniex_TtsSynthesizeOutput output{};
+    int32_t res = geniex_tts_synthesize(tts, &input, &output);
 
     // Should fail with appropriate error
     CHECK(res < 0);
     GENIEX_LOG_INFO("Expected error for null text: {}",
-                  ml_get_error_message(static_cast<ml_ErrorCode>(res)));
+                  geniex_get_error_message(static_cast<geniex_ErrorCode>(res)));
   }
 
   // Test with empty text input
   {
-    ml_TtsSynthesizeInput input{};
+    geniex_TtsSynthesizeInput input{};
     input.text_utf8 = ""; // Empty text
     input.config = nullptr;
     input.output_path = nullptr;
 
-    ml_TtsSynthesizeOutput output{};
-    int32_t res = ml_tts_synthesize(tts, &input, &output);
+    geniex_TtsSynthesizeOutput output{};
+    int32_t res = geniex_tts_synthesize(tts, &input, &output);
 
     // This might succeed (empty audio) or fail, both are valid
     if (res >= 0) {
@@ -198,31 +198,31 @@ void test_tts_error_handling(ml_TTS *tts, const std::string &model_name) {
       }
     } else {
       GENIEX_LOG_INFO("TTS rejected empty text with error: {}",
-                    ml_get_error_message(static_cast<ml_ErrorCode>(res)));
+                    geniex_get_error_message(static_cast<geniex_ErrorCode>(res)));
     }
   }
 
   // Test with invalid output directory
   {
-    ml_TTSConfig config{};
+    geniex_TTSConfig config{};
     config.voice = "af_heart";
     config.speed = 1.0f;
     config.seed = 42;
     config.sample_rate = 24000;
 
-    ml_TtsSynthesizeInput input{};
+    geniex_TtsSynthesizeInput input{};
     input.text_utf8 = "Test text";
     input.config = &config;
     input.output_path =
         "/invalid/directory/path/output.wav"; // Invalid directory
 
-    ml_TtsSynthesizeOutput output{};
-    int32_t res = ml_tts_synthesize(tts, &input, &output);
+    geniex_TtsSynthesizeOutput output{};
+    int32_t res = geniex_tts_synthesize(tts, &input, &output);
 
     // Should either succeed (if TTS creates directory) or fail gracefully
     if (res < 0) {
       GENIEX_LOG_INFO("Expected error for invalid output path: {}",
-                    ml_get_error_message(static_cast<ml_ErrorCode>(res)));
+                    geniex_get_error_message(static_cast<geniex_ErrorCode>(res)));
     } else {
       GENIEX_LOG_INFO("TTS handled invalid path gracefully");
       if (output.result.audio_path) {
@@ -237,7 +237,7 @@ void test_tts_error_handling(ml_TTS *tts, const std::string &model_name) {
 
 // Register all TTS tests
 template <typename PluginType>
-void register_tts_tests(TestRegistry<ml_TTS> &registry) {
+void register_tts_tests(TestRegistry<geniex_TTS> &registry) {
   REGISTER_TEST(registry, TtsSynthesizeBasic,
                 test_tts_synthesize_basic(model, model_name););
   REGISTER_TEST(registry, TtsListAvailableVoices,
@@ -248,7 +248,7 @@ void register_tts_tests(TestRegistry<ml_TTS> &registry) {
 
 // Generate test cases for all plugins
 #define GEN(Plugin)                                                            \
-  TEST_CASE_FOR_PLUGIN(ml_TTS, Plugin, setup_guard, register_tts_tests<Plugin>)
+  TEST_CASE_FOR_PLUGIN(geniex_TTS, Plugin, setup_guard, register_tts_tests<Plugin>)
 PLUGINS(GEN)
 #undef GEN
 

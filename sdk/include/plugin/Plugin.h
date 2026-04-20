@@ -10,14 +10,14 @@
 #include "ITts.h"
 #include "IVlm.h"
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 
 namespace geniex {
 
 class Plugin {
    public:
     virtual ~Plugin() = default;
-    virtual int32_t get_device_list(const ml_GetDeviceListInput*, ml_GetDeviceListOutput* output) {
+    virtual int32_t get_device_list(const geniex_GetDeviceListInput*, geniex_GetDeviceListOutput* output) {
         if (!output) {
             GENIEX_LOG_ERROR("output is nullptr");
             return ML_ERROR_COMMON_INVALID_INPUT;
@@ -50,7 +50,7 @@ class Plugin {
 extern "C" {
 #endif
 
-PLUGIN_API ml_PluginId plugin_id();
+PLUGIN_API geniex_PluginId plugin_id();
 PLUGIN_API geniex::Plugin* create_plugin();
 
 #ifdef __cplusplus

@@ -24,9 +24,9 @@ class LlamaCppEmbedding : public IEmbedding {
     LlamaCppEmbedding();
     ~LlamaCppEmbedding() override;
 
-    int32_t create_impl(const ml_EmbedderCreateInput* input) override;
-    int32_t embed(const ml_EmbedderEmbedInput* input, ml_EmbedderEmbedOutput* output) override;
-    int32_t embedding_dim(ml_EmbedderDimOutput* output) override;
+    int32_t create_impl(const geniex_EmbedderCreateInput* input) override;
+    int32_t embed(const geniex_EmbedderEmbedInput* input, geniex_EmbedderEmbedOutput* output) override;
+    int32_t embedding_dim(geniex_EmbedderDimOutput* output) override;
 
    private:
     std::unique_ptr<EmbeddingState> state_;

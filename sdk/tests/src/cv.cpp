@@ -5,7 +5,7 @@
 
 #include "doctest.h"
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "utf8.h" // IWYU pragma: export
 #include "util.h"
 
@@ -15,7 +15,7 @@ namespace {
 using Param =
     std::tuple<std::string, std::string, std::string, std::string, std::string>;
 
-Setup<Param, ml_CV> setup_guard(
+Setup<Param, geniex_CV> setup_guard(
     SetupMap<Param>{
         {qairt::value,
          {
@@ -79,8 +79,8 @@ Setup<Param, ml_CV> setup_guard(
              // Add more qairt models here as needed
          }},
     },
-    [](ml_PluginId plugin, Param param) {
-      ml_CV *cv_model = nullptr;
+    [](geniex_PluginId plugin, Param param) {
+      geniex_CV *cv_model = nullptr;
       auto [test_id, model_name, rec_file, det_file, char_dict_file] =
           std::move(param);
 
@@ -88,28 +88,28 @@ Setup<Param, ml_CV> setup_guard(
         GENIEX_LOG_WARN("Detection model file not found: {}", det_file);
         GENIEX_LOG_WARN("Skipping tests for model: {}", model_name);
         g_test_summary.add_skipped_model(model_name, det_file);
-        return static_cast<ml_CV *>(nullptr); // Return nullptr to indicate skip
+        return static_cast<geniex_CV *>(nullptr); // Return nullptr to indicate skip
       }
 
-      ml_CVCreateInput input{};
+      geniex_CVCreateInput input{};
       input.model_name = model_name.c_str();
       input.plugin_id = plugin;
       input.config.det_model_path = det_file.c_str();
       input.config.rec_model_path = rec_file.c_str();
       input.config.char_dict_path = char_dict_file.c_str();
 
-      int32_t res = ml_cv_create(&input, &cv_model);
+      int32_t res = geniex_cv_create(&input, &cv_model);
       CHECK_ML_ERROR(res);
       REQUIRE(cv_model != nullptr);
 
       return cv_model;
     },
-    nullptr, ml_cv_destroy);
+    nullptr, geniex_cv_destroy);
 
 std::string test_image_path = "modelfiles/assets/test_image.png";
 
 // Test function definitions
-void test_cv_infer_basic(ml_CV *cv_model, const std::string &model_name) {
+void test_cv_infer_basic(geniex_CV *cv_model, const std::string &model_name) {
   // Check if test image file exists
   if (!std::filesystem::exists(test_image_path)) {
     GENIEX_LOG_ERROR("Test image file not found: {}", test_image_path);
@@ -119,11 +119,11 @@ void test_cv_infer_basic(ml_CV *cv_model, const std::string &model_name) {
   GENIEX_LOG_INFO("Testing CV inference with image: {}", test_image_path);
 
   // Set up inference input and output
-  ml_CVInferInput input{};
+  geniex_CVInferInput input{};
   input.input_image_path = test_image_path.c_str();
 
-  ml_CVInferOutput output{};
-  int32_t res = ml_cv_infer(cv_model, &input, &output);
+  geniex_CVInferOutput output{};
+  int32_t res = geniex_cv_infer(cv_model, &input, &output);
   CHECK_ML_ERROR(res);
 
   // Verify results structure
@@ -188,26 +188,26 @@ void test_cv_infer_basic(ml_CV *cv_model, const std::string &model_name) {
   if (output.results) {
     for (int i = 0; i < output.result_count; i++) {
       if (output.results[i].text) {
-        ml_free(const_cast<char *>(output.results[i].text));
+        geniex_free(const_cast<char *>(output.results[i].text));
       }
       if (output.results[i].embedding) {
-        ml_free(output.results[i].embedding);
+        geniex_free(output.results[i].embedding);
       }
     }
-    ml_free(output.results);
+    geniex_free(output.results);
   }
 }
 
 // Register all CV tests
 template <typename PluginType>
-void register_cv_tests(TestRegistry<ml_CV> &registry) {
+void register_cv_tests(TestRegistry<geniex_CV> &registry) {
   REGISTER_TEST(registry, CvInferBasic,
                 test_cv_infer_basic(model, model_name););
 }
 
 // Generate test cases for all plugins
 #define GEN(Plugin)                                                            \
-  TEST_CASE_FOR_PLUGIN(ml_CV, Plugin, setup_guard, register_cv_tests<Plugin>)
+  TEST_CASE_FOR_PLUGIN(geniex_CV, Plugin, setup_guard, register_cv_tests<Plugin>)
 PLUGINS(GEN)
 #undef GEN
 

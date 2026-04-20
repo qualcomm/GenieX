@@ -1,7 +1,7 @@
 #pragma once
 
 #include "IValidatable.h"
-#include "ml.h"
+#include "geniex.h"
 
 namespace geniex {
 
@@ -14,9 +14,9 @@ class IEmbedding {
      * @param input The creation input parameters
      * @return ML error code (ML_SUCCESS on success, negative on failure)
      */
-    virtual int32_t create(const ml_EmbedderCreateInput* input) {
+    virtual int32_t create(const geniex_EmbedderCreateInput* input) {
         // Check if this instance implements IValidatable
-        auto* validatable = dynamic_cast<IValidatable<ml_EmbedderCreateInput>*>(this);
+        auto* validatable = dynamic_cast<IValidatable<geniex_EmbedderCreateInput>*>(this);
         if (validatable) {
             // Check if validation is needed
             if (validatable->is_validation_needed(input)) {
@@ -32,9 +32,9 @@ class IEmbedding {
         return create_impl(input);
     }
 
-    virtual int32_t embed(const ml_EmbedderEmbedInput*, ml_EmbedderEmbedOutput*) = 0;
+    virtual int32_t embed(const geniex_EmbedderEmbedInput*, geniex_EmbedderEmbedOutput*) = 0;
 
-    virtual int32_t embedding_dim(ml_EmbedderDimOutput*) = 0;
+    virtual int32_t embedding_dim(geniex_EmbedderDimOutput*) = 0;
 
    protected:
     /**
@@ -42,7 +42,7 @@ class IEmbedding {
      * @param input The creation input parameters
      * @return ML error code (ML_SUCCESS on success, negative on failure)
      */
-    virtual int32_t create_impl(const ml_EmbedderCreateInput* input) = 0;
+    virtual int32_t create_impl(const geniex_EmbedderCreateInput* input) = 0;
 };
 
 }  // namespace geniex

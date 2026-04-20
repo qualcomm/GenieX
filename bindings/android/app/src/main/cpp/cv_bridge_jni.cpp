@@ -5,15 +5,15 @@
 
 #include "android_utils.h"
 #include "jniutils.h"
-#include "ml.h"
+#include "geniex.h"
 
 using namespace jniutils;
 using namespace geniex_android_sdk;
 
 // JNI: create - Create CV model handle
 extern "C" {
-ml_CVCapabilities extract_cv_capability(JNIEnv* env, jobject inputObj) {
-    ml_CVCapabilities out = ML_CV_OCR;
+geniex_CVCapabilities extract_cv_capability(JNIEnv* env, jobject inputObj) {
+    geniex_CVCapabilities out = ML_CV_OCR;
     jclass            cls = env->GetObjectClass(inputObj);
     if (!cls) {
         LOGe("extract_cv_capability: GetObjectClass returned null");
@@ -65,8 +65,8 @@ ml_CVCapabilities extract_cv_capability(JNIEnv* env, jobject inputObj) {
     return ML_CV_OCR;
 }
 
-ml_CVModelConfig extract_cv_model_config(JNIEnv* env, jobject inputObj) {
-    ml_CVModelConfig out = {};
+geniex_CVModelConfig extract_cv_model_config(JNIEnv* env, jobject inputObj) {
+    geniex_CVModelConfig out = {};
 
     if (!inputObj) {
         LOGe("extract_cv_create_input: inputObj is null");
@@ -167,8 +167,8 @@ ml_CVModelConfig extract_cv_model_config(JNIEnv* env, jobject inputObj) {
     return out;
 }
 
-ml_CVCreateInput extract_cv_create_input(JNIEnv* env, jobject inputObj) {
-    ml_CVCreateInput out = {};
+geniex_CVCreateInput extract_cv_create_input(JNIEnv* env, jobject inputObj) {
+    geniex_CVCreateInput out = {};
     if (!inputObj) {
         LOGe("extract_cv_create_input: inputObj is null");
         return out;
@@ -282,7 +282,7 @@ ml_CVCreateInput extract_cv_create_input(JNIEnv* env, jobject inputObj) {
 
 //=============================================================================
 // 创建 BoundingBox Java 对象
-jobject create_bounding_box(JNIEnv* env, ml_BoundingBox bbox) {
+jobject create_bounding_box(JNIEnv* env, geniex_BoundingBox bbox) {
     jclass    bbox_class       = env->FindClass("com/geniex/sdk/bean/BoundingBox");
     jmethodID bbox_constructor = env->GetMethodID(bbox_class, "<init>", "(FFFF)V");
 
@@ -291,7 +291,7 @@ jobject create_bounding_box(JNIEnv* env, ml_BoundingBox bbox) {
 }
 
 // 创建单个 CVResult Java 对象
-jobject create_cv_result(JNIEnv* env, ml_CVResult result) {
+jobject create_cv_result(JNIEnv* env, geniex_CVResult result) {
     jclass    result_class       = env->FindClass("com/geniex/sdk/bean/CVResult");
     jmethodID result_constructor = env->GetMethodID(result_class, "<init>", "()V");
 
@@ -340,7 +340,7 @@ jobject create_cv_result(JNIEnv* env, ml_CVResult result) {
 }
 
 // 主函数：创建 CVResult List
-jobject create_cv_results(JNIEnv* env, ml_CVInferOutput output) {
+jobject create_cv_results(JNIEnv* env, geniex_CVInferOutput output) {
     if (output.results == NULL || output.result_count <= 0) {
         // 返回空的 ArrayList
         jclass    array_list_class       = env->FindClass("java/util/ArrayList");
@@ -364,29 +364,29 @@ jobject create_cv_results(JNIEnv* env, ml_CVInferOutput output) {
 }
 
 // 资源清理函数（保持不变）
-void free_cv_infer_output(ml_CVInferOutput output) {
+void free_cv_infer_output(geniex_CVInferOutput output) {
     if (output.results == NULL) return;
 
     for (int i = 0; i < output.result_count; i++) {
-        ml_CVResult result = output.results[i];
+        geniex_CVResult result = output.results[i];
 
         if (result.image_paths) {
             for (int j = 0; j < result.image_count; j++) {
-                ml_free((void*)result.image_paths[j]);
+                geniex_free((void*)result.image_paths[j]);
             }
-            ml_free(result.image_paths);
+            geniex_free(result.image_paths);
         }
 
         if (result.text) {
-            ml_free((void*)result.text);
+            geniex_free((void*)result.text);
         }
 
         if (result.embedding) {
-            ml_free(result.embedding);
+            geniex_free(result.embedding);
         }
     }
 
-    ml_free(output.results);
+    geniex_free(output.results);
 }
 }
 
@@ -394,7 +394,7 @@ void free_cv_infer_output(ml_CVInferOutput output) {
 extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Cv_destroy(JNIEnv*, jobject, jlong handle) {
     LOGd("[JNI] destroy() called, handle=%p", (void*)handle);
     if (handle) {
-        int32_t result = ml_cv_destroy((ml_CV*)handle);
+        int32_t result = geniex_cv_destroy((geniex_CV*)handle);
         if (result != ML_SUCCESS) {
             LOGe("[JNI] destroy() failed, error code: %d", result);
         }
@@ -414,17 +414,17 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Cv_destroy(JNIEnv*, jo
 extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Cv_getProfilingData(JNIEnv* env, jobject, jlong handle) {
     // CV API doesn't provide get_profiling_data function
     // Return empty profiling data
-    ml_ProfileData data = {};
+    geniex_ProfileData data = {};
     return extract_profiling_data(env, data);
 }
 
 extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Cv_create(JNIEnv* env, jobject thiz, jobject input) {
     try {
-        ml_CVCreateInput in = extract_cv_create_input(env, input);
-        ml_CV*           h  = nullptr;
-        LOGd("[JNI] create() ml_cv_create called");
+        geniex_CVCreateInput in = extract_cv_create_input(env, input);
+        geniex_CV*           h  = nullptr;
+        LOGd("[JNI] create() geniex_cv_create called");
 
-        int32_t result = ml_cv_create(&in, &h);
+        int32_t result = geniex_cv_create(&in, &h);
 
         if (result != ML_SUCCESS || !h) {
             LOGe("[JNI] create() failed, error code: %d", result);
@@ -432,7 +432,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Cv_create(JNIEnv* env
             return 0;
         }
 
-        LOGd("[JNI] create() ml_cv_create returned handle=%p", h);
+        LOGd("[JNI] create() geniex_cv_create returned handle=%p", h);
         return (jlong)h;
     } catch (const std::exception& e) {
         LOGe("[JNI] create() exception: %s", e.what());
@@ -446,11 +446,11 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Cv_infer(
 
     std::string c_image_path = jstring2str(env, image_path);
 
-    ml_CVInferInput input  = {};
+    geniex_CVInferInput input  = {};
     input.input_image_path = c_image_path.c_str();
 
-    ml_CVInferOutput output = {};
-    int32_t          result = ml_cv_infer((ml_CV*)handle, &input, &output);
+    geniex_CVInferOutput output = {};
+    int32_t          result = geniex_cv_infer((geniex_CV*)handle, &input, &output);
 
     if (result < 0 || !output.results || output.result_count <= 0) {
         throw_runtime_exception(env, "CV infer failed, error code: %d", result);

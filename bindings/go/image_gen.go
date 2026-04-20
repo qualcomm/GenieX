@@ -16,7 +16,7 @@ package geniex_sdk
 
 /*
 #include <stdlib.h>
-#include "ml.h"
+#include "geniex.h"
 */
 import "C"
 import (
@@ -33,9 +33,9 @@ type ImageGenCreateInput struct {
 	DeviceID            string
 }
 
-func (igci ImageGenCreateInput) toCPtr() *C.ml_ImageGenCreateInput {
-	cPtr := (*C.ml_ImageGenCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_ImageGenCreateInput{}))))
-	*cPtr = C.ml_ImageGenCreateInput{}
+func (igci ImageGenCreateInput) toCPtr() *C.geniex_ImageGenCreateInput {
+	cPtr := (*C.geniex_ImageGenCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_ImageGenCreateInput{}))))
+	*cPtr = C.geniex_ImageGenCreateInput{}
 
 	if igci.ModelName != "" {
 		cPtr.model_name = C.CString(igci.ModelName)
@@ -56,7 +56,7 @@ func (igci ImageGenCreateInput) toCPtr() *C.ml_ImageGenCreateInput {
 	return cPtr
 }
 
-func freeImageGenCreateInput(cPtr *C.ml_ImageGenCreateInput) {
+func freeImageGenCreateInput(cPtr *C.geniex_ImageGenCreateInput) {
 	if cPtr != nil {
 		if cPtr.model_path != nil {
 			C.free(unsafe.Pointer(cPtr.model_path))
@@ -109,9 +109,9 @@ type ImageGenerationConfig struct {
 	Strength        float32
 }
 
-func (igc ImageGenerationConfig) toCPtr() *C.ml_ImageGenerationConfig {
-	cPtr := (*C.ml_ImageGenerationConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_ImageGenerationConfig{}))))
-	*cPtr = C.ml_ImageGenerationConfig{}
+func (igc ImageGenerationConfig) toCPtr() *C.geniex_ImageGenerationConfig {
+	cPtr := (*C.geniex_ImageGenerationConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_ImageGenerationConfig{}))))
+	*cPtr = C.geniex_ImageGenerationConfig{}
 
 	if len(igc.Prompts) > 0 {
 		cPtr.prompts, cPtr.prompt_count = sliceToCCharArray(igc.Prompts)
@@ -163,7 +163,7 @@ func (igc ImageGenerationConfig) toCPtr() *C.ml_ImageGenerationConfig {
 	return cPtr
 }
 
-func freeImageGenerationConfig(cPtr *C.ml_ImageGenerationConfig) {
+func freeImageGenerationConfig(cPtr *C.geniex_ImageGenerationConfig) {
 	if cPtr == nil {
 		return
 	}
@@ -209,9 +209,9 @@ type ImageGenTxt2ImgInput struct {
 	OutputPath string
 }
 
-func (igtii ImageGenTxt2ImgInput) toCPtr() *C.ml_ImageGenTxt2ImgInput {
-	cPtr := (*C.ml_ImageGenTxt2ImgInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_ImageGenTxt2ImgInput{}))))
-	*cPtr = C.ml_ImageGenTxt2ImgInput{}
+func (igtii ImageGenTxt2ImgInput) toCPtr() *C.geniex_ImageGenTxt2ImgInput {
+	cPtr := (*C.geniex_ImageGenTxt2ImgInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_ImageGenTxt2ImgInput{}))))
+	*cPtr = C.geniex_ImageGenTxt2ImgInput{}
 
 	cPtr.prompt_utf8 = C.CString(igtii.PromptUTF8)
 	if igtii.Config != nil {
@@ -228,7 +228,7 @@ func (igtii ImageGenTxt2ImgInput) toCPtr() *C.ml_ImageGenTxt2ImgInput {
 	return cPtr
 }
 
-func freeImageGenTxt2ImgInput(cPtr *C.ml_ImageGenTxt2ImgInput) {
+func freeImageGenTxt2ImgInput(cPtr *C.geniex_ImageGenTxt2ImgInput) {
 	if cPtr == nil {
 		return
 	}
@@ -249,7 +249,7 @@ type ImageGenOutput struct {
 	OutputImagePath string
 }
 
-func newImageGenOutputFromCPtr(c *C.ml_ImageGenOutput) ImageGenOutput {
+func newImageGenOutputFromCPtr(c *C.geniex_ImageGenOutput) ImageGenOutput {
 	output := ImageGenOutput{}
 
 	if c == nil {
@@ -263,7 +263,7 @@ func newImageGenOutputFromCPtr(c *C.ml_ImageGenOutput) ImageGenOutput {
 	return output
 }
 
-func freeImageGenOutput(ptr *C.ml_ImageGenOutput) {
+func freeImageGenOutput(ptr *C.geniex_ImageGenOutput) {
 	if ptr == nil {
 		return
 	}
@@ -274,7 +274,7 @@ func freeImageGenOutput(ptr *C.ml_ImageGenOutput) {
 
 // ImageGen represents an ImageGen instance
 type ImageGen struct {
-	ptr *C.ml_ImageGen
+	ptr *C.geniex_ImageGen
 }
 
 // NewImageGen creates a new ImageGen instance
@@ -284,8 +284,8 @@ func NewImageGen(input ImageGenCreateInput) (*ImageGen, error) {
 	cInput := input.toCPtr()
 	defer freeImageGenCreateInput(cInput)
 
-	var cHandle *C.ml_ImageGen
-	res := C.ml_imagegen_create(cInput, &cHandle)
+	var cHandle *C.geniex_ImageGen
+	res := C.geniex_imagegen_create(cInput, &cHandle)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -301,7 +301,7 @@ func (ig *ImageGen) Destroy() error {
 		return nil
 	}
 
-	res := C.ml_imagegen_destroy(ig.ptr)
+	res := C.geniex_imagegen_destroy(ig.ptr)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -316,10 +316,10 @@ func (ig *ImageGen) Txt2Img(input ImageGenTxt2ImgInput) (ImageGenOutput, error) 
 	cInput := input.toCPtr()
 	defer freeImageGenTxt2ImgInput(cInput)
 
-	var cOutput C.ml_ImageGenOutput
+	var cOutput C.geniex_ImageGenOutput
 	defer freeImageGenOutput(&cOutput)
 
-	res := C.ml_imagegen_txt2img(ig.ptr, cInput, &cOutput)
+	res := C.geniex_imagegen_txt2img(ig.ptr, cInput, &cOutput)
 	if res < 0 {
 		return ImageGenOutput{}, SDKError(res)
 	}

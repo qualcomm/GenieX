@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include "ml.h"
+#include "geniex.h"
 
 namespace geniex {
 
@@ -39,7 +39,7 @@ std::string valid_utf8(std::string& buffer);
  * and only pass complete UTF-8 characters to the original callback.
  */
 struct Utf8CallbackWrapper {
-    ml_token_callback original_callback;
+    geniex_token_callback original_callback;
     void*             original_user_data;
     std::string       utf8_buffer;
 
@@ -62,9 +62,9 @@ struct Utf8CallbackWrapper {
  * The wrapper accumulates incomplete sequences and only passes complete UTF-8 characters
  * to the original callback.
  *
- * @return Function pointer suitable for use as ml_token_callback
+ * @return Function pointer suitable for use as geniex_token_callback
  */
-ml_token_callback get_utf8_callback_wrapper();
+geniex_token_callback get_utf8_callback_wrapper();
 
 /**
  * @brief Replace all occurrences of a substring in a string

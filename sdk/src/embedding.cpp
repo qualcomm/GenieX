@@ -1,12 +1,12 @@
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "plugin/IEmbedding.h"
 #include "profile.h"
 #include "registry.h"
 
 using namespace geniex;
 
-int32_t ml_embedder_create(const ml_EmbedderCreateInput* input, ml_Embedder** out_handle) {
+int32_t geniex_embedder_create(const geniex_EmbedderCreateInput* input, geniex_Embedder** out_handle) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -29,7 +29,7 @@ int32_t ml_embedder_create(const ml_EmbedderCreateInput* input, ml_Embedder** ou
             delete backend;
         } else {
             GENIEX_LOG_INFO("Embedder created successfully");
-            *out_handle = reinterpret_cast<ml_Embedder*>(backend);
+            *out_handle = reinterpret_cast<geniex_Embedder*>(backend);
         }
         return res;
     } catch (const PluginNotFoundException& e) {
@@ -44,7 +44,7 @@ int32_t ml_embedder_create(const ml_EmbedderCreateInput* input, ml_Embedder** ou
     }
 }
 
-int32_t ml_embedder_destroy(ml_Embedder* h) {
+int32_t geniex_embedder_destroy(geniex_Embedder* h) {
     GENIEX_LOG_INFO("Destroying embedder instance");
 
     try {
@@ -64,7 +64,7 @@ int32_t ml_embedder_destroy(ml_Embedder* h) {
     }
 }
 
-int32_t ml_embedder_embed(ml_Embedder* h, const ml_EmbedderEmbedInput* input, ml_EmbedderEmbedOutput* output) {
+int32_t geniex_embedder_embed(geniex_Embedder* h, const geniex_EmbedderEmbedInput* input, geniex_EmbedderEmbedOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -108,7 +108,7 @@ int32_t ml_embedder_embed(ml_Embedder* h, const ml_EmbedderEmbedInput* input, ml
     }
 }
 
-int32_t ml_embedder_embedding_dim(const ml_Embedder* h, ml_EmbedderDimOutput* output) {
+int32_t geniex_embedder_embedding_dim(const geniex_Embedder* h, geniex_EmbedderDimOutput* output) {
     GENIEX_LOG_INFO("Getting embedding dimension");
 
     try {
@@ -117,7 +117,7 @@ int32_t ml_embedder_embedding_dim(const ml_Embedder* h, ml_EmbedderDimOutput* ou
             return ML_ERROR_COMMON_INVALID_INPUT;
         }
 
-        auto backend = reinterpret_cast<IEmbedding*>(const_cast<ml_Embedder*>(h));
+        auto backend = reinterpret_cast<IEmbedding*>(const_cast<geniex_Embedder*>(h));
         if (!backend) {
             GENIEX_LOG_ERROR("Embedder backend is null");
             return ML_ERROR_COMMON_NOT_INITIALIZED;

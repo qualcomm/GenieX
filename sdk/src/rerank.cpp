@@ -1,12 +1,12 @@
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "plugin/IReranker.h"
 #include "profile.h"
 #include "registry.h"
 
 using namespace geniex;
 
-int32_t ml_reranker_create(const ml_RerankerCreateInput* input, ml_Reranker** out_handle) {
+int32_t geniex_reranker_create(const geniex_RerankerCreateInput* input, geniex_Reranker** out_handle) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -28,7 +28,7 @@ int32_t ml_reranker_create(const ml_RerankerCreateInput* input, ml_Reranker** ou
             delete backend;
         } else {
             GENIEX_LOG_INFO("Reranker created successfully");
-            *out_handle = reinterpret_cast<ml_Reranker*>(backend);
+            *out_handle = reinterpret_cast<geniex_Reranker*>(backend);
         }
         return res;
     } catch (const PluginNotFoundException& e) {
@@ -43,7 +43,7 @@ int32_t ml_reranker_create(const ml_RerankerCreateInput* input, ml_Reranker** ou
     }
 }
 
-int32_t ml_reranker_destroy(ml_Reranker* handle) {
+int32_t geniex_reranker_destroy(geniex_Reranker* handle) {
     GENIEX_LOG_INFO("Destroying reranker instance");
 
     try {
@@ -63,7 +63,7 @@ int32_t ml_reranker_destroy(ml_Reranker* handle) {
     }
 }
 
-int32_t ml_reranker_rerank(ml_Reranker* h, const ml_RerankerRerankInput* input, ml_RerankerRerankOutput* output) {
+int32_t geniex_reranker_rerank(geniex_Reranker* h, const geniex_RerankerRerankInput* input, geniex_RerankerRerankOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {

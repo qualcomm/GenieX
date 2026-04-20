@@ -11,7 +11,7 @@
 #include "android_utils.h"
 #include "jni_cb.h"
 #include "jniutils.h"
-#include "ml.h"
+#include "geniex.h"
 
 static std::unordered_map<void*, std::atomic<bool>*> g_stopFlags;
 static std::mutex                                    g_stopFlagsMutex;
@@ -23,11 +23,11 @@ using namespace geniex_android_sdk;
 extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Vlm_create(JNIEnv* env, jobject, jobject vlmCreateInputObj) {
     try {
         LOGi("[JNI] [create] Java_com_geniex_sdk_jni_Vlm_create ");
-        ml_VlmCreateInput create_input = extract_vlm_create_input(env, vlmCreateInputObj);
+        geniex_VlmCreateInput create_input = extract_vlm_create_input(env, vlmCreateInputObj);
         LOGi("[JNI] [create] model_name = %s", create_input.model_name ? create_input.model_name : "(null)");
         LOGi("[JNI] [create] plugin_id = %s", create_input.plugin_id ? create_input.plugin_id : "(null)");
-        ml_VLM* handle = nullptr;
-        int32_t result = ml_vlm_create(&create_input, &handle);
+        geniex_VLM* handle = nullptr;
+        int32_t result = geniex_vlm_create(&create_input, &handle);
 
         if (result != ML_SUCCESS || !handle) {
             LOGe("[JNI] create() failed, error code: %d", result);
@@ -35,7 +35,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Vlm_create(JNIEnv* en
             return 0;
         }
 
-        LOGi("[JNI] create() ml_vlm_create returned handle=%p", handle);
+        LOGi("[JNI] create() geniex_vlm_create returned handle=%p", handle);
         return reinterpret_cast<jlong>(handle);
 
     } catch (const std::exception& e) {
@@ -48,7 +48,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Vlm_create(JNIEnv* en
 extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Vlm_destroy(JNIEnv*, jobject, jlong handle) {
     LOGd("[JNI] destroy() called, handle=%p", (void*)handle);
     if (handle) {
-        int32_t result = ml_vlm_destroy(reinterpret_cast<ml_VLM*>(handle));
+        int32_t result = geniex_vlm_destroy(reinterpret_cast<geniex_VLM*>(handle));
         if (result != ML_SUCCESS) {
             LOGe("[JNI] destroy() failed, error code: %d", result);
         }
@@ -64,7 +64,7 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Vlm_reset(JNIEnv* env,
         throw_runtime_exception(env, "VLM reset failed: invalid handle");
         return ML_ERROR_COMMON_INVALID_INPUT;
     }
-    int32_t result = ml_vlm_reset(reinterpret_cast<ml_VLM*>(handle));
+    int32_t result = geniex_vlm_reset(reinterpret_cast<geniex_VLM*>(handle));
     if (result != ML_SUCCESS) {
         LOGe("[JNI] reset() failed, error code: %d", result);
     }
@@ -78,7 +78,7 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Vlm_reset(JNIEnv* env,
 //                                 jintArray outTokens) {
 //    std::string c_text = jstring2str(env, text);
 //    int32_t *tokens = nullptr;
-//    int32_t num_tokens = ml_vlm_encode(reinterpret_cast<ml_VLM *>(handle), c_text.c_str(), &tokens);
+//    int32_t num_tokens = geniex_vlm_encode(reinterpret_cast<geniex_VLM *>(handle), c_text.c_str(), &tokens);
 //    if (num_tokens > 0 && tokens && outTokens) {
 //        env->SetIntArrayRegion(outTokens, 0, num_tokens, tokens);
 //    }
@@ -93,7 +93,7 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Vlm_reset(JNIEnv* env,
 //                                 jint length) {
 //    std::vector<int32_t> c_tokens = jintArray2vec(env, tokens);
 //    char *out_text = nullptr;
-//    int32_t ret = ml_vlm_decode(reinterpret_cast<ml_VLM *>(handle), c_tokens.data(), length,
+//    int32_t ret = geniex_vlm_decode(reinterpret_cast<geniex_VLM *>(handle), c_tokens.data(), length,
 //                                &out_text);
 //    if (ret <= 0 || !out_text) return nullptr;
 //    jstring jresult = env->NewStringUTF(out_text);
@@ -116,10 +116,10 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_generate(
         }
 
         std::string         cprompt = jstring2str(env, prompt);
-        ml_GenerationConfig cfg     = extract_generation_config(env, configObj);
+        geniex_GenerationConfig cfg     = extract_generation_config(env, configObj);
 
-        ml_VlmGenerateInput  input  = {};
-        ml_VlmGenerateOutput output = {};
+        geniex_VlmGenerateInput  input  = {};
+        geniex_VlmGenerateOutput output = {};
         input.prompt_utf8           = cprompt.c_str();
         input.config                = &cfg;
 
@@ -144,7 +144,7 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_generate(
             input.user_data = &cbCtx;
         }
 
-        int32_t ret = ml_vlm_generate(reinterpret_cast<ml_VLM*>(handle), &input, &output);
+        int32_t ret = geniex_vlm_generate(reinterpret_cast<geniex_VLM*>(handle), &input, &output);
 
         if (ret < 0 || !output.full_text) {
             if (callback) {
@@ -199,7 +199,7 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_generate(
 //    std::vector<const char *> c_texts;
 //    for (auto &s: texts) c_texts.push_back(s.c_str());
 //    float *embeddings = nullptr;
-//    int32_t dim = ml_vlm_embed(reinterpret_cast<ml_VLM *>(handle), c_texts.data(), c_texts.size(),
+//    int32_t dim = geniex_vlm_embed(reinterpret_cast<geniex_VLM *>(handle), c_texts.data(), c_texts.size(),
 //                               &embeddings);
 //    if (!embeddings || dim <= 0) return nullptr;
 //    jfloatArray jarr = env->NewFloatArray(dim);
@@ -212,14 +212,14 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_generate(
 // extern "C"
 // JNIEXPORT void JNICALL
 // Java_com_geniex_sdk_jni_Vlm_setSampler(JNIEnv *env, jobject, jlong handle, jobject cfgObj) {
-//    ml_SamplerConfig cfg = extract_sampler_config(env, cfgObj);
-//    ml_vlm_set_sampler(reinterpret_cast<ml_VLM *>(handle), &cfg);
+//    geniex_SamplerConfig cfg = extract_sampler_config(env, cfgObj);
+//    geniex_vlm_set_sampler(reinterpret_cast<geniex_VLM *>(handle), &cfg);
 //}
 //
 //// resetSampler
 // extern "C"
 // JNIEXPORT void JNICALL Java_com_geniex_sdk_jni_Vlm_resetSampler(JNIEnv *, jobject, jlong handle) {
-//     ml_vlm_reset_sampler(reinterpret_cast<ml_VLM *>(handle));
+//     geniex_vlm_reset_sampler(reinterpret_cast<geniex_VLM *>(handle));
 // }
 
 extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_applyChatTemplate(
@@ -234,13 +234,13 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_applyChatTempla
         tools_cstr = env->GetStringUTFChars(jtools, nullptr);
     }
 
-    ml_VlmApplyChatTemplateInput  input{.messages = msgs.data(),
+    geniex_VlmApplyChatTemplateInput  input{.messages = msgs.data(),
          .message_count                           = static_cast<int32_t>(msgs.size()),
          .tools                                   = tools_cstr,
          .enable_thinking                         = (jEnableThinking == JNI_TRUE)};
-    ml_VlmApplyChatTemplateOutput output{};
+    geniex_VlmApplyChatTemplateOutput output{};
 
-    int32_t ret = ml_vlm_apply_chat_template(reinterpret_cast<ml_VLM*>(handle), &input, &output);
+    int32_t ret = geniex_vlm_apply_chat_template(reinterpret_cast<geniex_VLM*>(handle), &input, &output);
 
     if (tools_cstr) {
         env->ReleaseStringUTFChars(jtools, tools_cstr);

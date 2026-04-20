@@ -42,7 +42,7 @@ LlamaCppEmbedding::~LlamaCppEmbedding() {
     GENIEX_LOG_INFO("Cleanup completed successfully");
 }
 
-int32_t LlamaCppEmbedding::create_impl(const ml_EmbedderCreateInput* input) {
+int32_t LlamaCppEmbedding::create_impl(const geniex_EmbedderCreateInput* input) {
     if (!input || !input->model_path) {
         GENIEX_LOG_ERROR("Invalid input parameters for embedder creation");
         return ML_ERROR_COMMON_INVALID_INPUT;
@@ -127,7 +127,7 @@ int32_t LlamaCppEmbedding::create_impl(const ml_EmbedderCreateInput* input) {
     return ML_SUCCESS;
 }
 
-int32_t LlamaCppEmbedding::embed(const ml_EmbedderEmbedInput* input, ml_EmbedderEmbedOutput* output) {
+int32_t LlamaCppEmbedding::embed(const geniex_EmbedderEmbedInput* input, geniex_EmbedderEmbedOutput* output) {
     if (!input || !output) {
         GENIEX_LOG_ERROR("Invalid input parameters for embedding");
         return ML_ERROR_COMMON_INVALID_INPUT;
@@ -302,7 +302,7 @@ int32_t LlamaCppEmbedding::embed(const ml_EmbedderEmbedInput* input, ml_Embedder
     return ML_SUCCESS;
 }
 
-int32_t LlamaCppEmbedding::embedding_dim(ml_EmbedderDimOutput* output) {
+int32_t LlamaCppEmbedding::embedding_dim(geniex_EmbedderDimOutput* output) {
     if (!output) {
         return ML_ERROR_COMMON_INVALID_INPUT;
     }

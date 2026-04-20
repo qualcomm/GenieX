@@ -16,7 +16,7 @@ package geniex_sdk
 
 /*
 #include <stdlib.h>
-#include "ml.h"
+#include "geniex.h"
 
 extern bool go_asr_stream_on_transcription(char*, void*);
 */
@@ -44,9 +44,9 @@ type ASRStreamConfig struct {
 	BeamSize        int32
 }
 
-func (ac ASRConfig) toCPtr() *C.ml_ASRConfig {
-	cPtr := (*C.ml_ASRConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_ASRConfig{}))))
-	*cPtr = C.ml_ASRConfig{}
+func (ac ASRConfig) toCPtr() *C.geniex_ASRConfig {
+	cPtr := (*C.geniex_ASRConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_ASRConfig{}))))
+	*cPtr = C.geniex_ASRConfig{}
 
 	if ac.Timestamps != "" {
 		cPtr.timestamps = C.CString(ac.Timestamps)
@@ -57,9 +57,9 @@ func (ac ASRConfig) toCPtr() *C.ml_ASRConfig {
 	return cPtr
 }
 
-func (asc ASRStreamConfig) toCPtr() *C.ml_ASRStreamConfig {
-	cPtr := (*C.ml_ASRStreamConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_ASRStreamConfig{}))))
-	*cPtr = C.ml_ASRStreamConfig{}
+func (asc ASRStreamConfig) toCPtr() *C.geniex_ASRStreamConfig {
+	cPtr := (*C.geniex_ASRStreamConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_ASRStreamConfig{}))))
+	*cPtr = C.geniex_ASRStreamConfig{}
 
 	cPtr.chunk_duration = C.float(asc.ChunkDuration)
 	cPtr.overlap_duration = C.float(asc.OverlapDuration)
@@ -74,7 +74,7 @@ func (asc ASRStreamConfig) toCPtr() *C.ml_ASRStreamConfig {
 	return cPtr
 }
 
-func freeASRConfig(cPtr *C.ml_ASRConfig) {
+func freeASRConfig(cPtr *C.geniex_ASRConfig) {
 	if cPtr != nil {
 		if cPtr.timestamps != nil {
 			C.free(unsafe.Pointer(cPtr.timestamps))
@@ -83,7 +83,7 @@ func freeASRConfig(cPtr *C.ml_ASRConfig) {
 	}
 }
 
-func freeASRStreamConfig(cPtr *C.ml_ASRStreamConfig) {
+func freeASRStreamConfig(cPtr *C.geniex_ASRStreamConfig) {
 	if cPtr != nil {
 		if cPtr.timestamps != nil {
 			C.free(unsafe.Pointer(cPtr.timestamps))
@@ -99,7 +99,7 @@ type ASRResult struct {
 	Timestamps       []float32
 }
 
-func newASRResultFromCPtr(c *C.ml_ASRResult) ASRResult {
+func newASRResultFromCPtr(c *C.geniex_ASRResult) ASRResult {
 	result := ASRResult{}
 
 	if c == nil {
@@ -131,7 +131,7 @@ func newASRResultFromCPtr(c *C.ml_ASRResult) ASRResult {
 	return result
 }
 
-func freeASRResult(ptr *C.ml_ASRResult) {
+func freeASRResult(ptr *C.geniex_ASRResult) {
 	if ptr == nil {
 		return
 	}
@@ -177,9 +177,9 @@ type AsrCreateInput struct {
 	LicenseKey    string
 }
 
-func (mc ASRModelConfig) toCPtr() *C.ml_ModelConfig {
-	cPtr := (*C.ml_ModelConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_ModelConfig{}))))
-	*cPtr = C.ml_ModelConfig{}
+func (mc ASRModelConfig) toCPtr() *C.geniex_ModelConfig {
+	cPtr := (*C.geniex_ModelConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_ModelConfig{}))))
+	*cPtr = C.geniex_ModelConfig{}
 
 	cPtr.n_ctx = C.int32_t(mc.NCtx)
 	cPtr.n_threads = C.int32_t(mc.NThreads)
@@ -206,9 +206,9 @@ func (mc ASRModelConfig) toCPtr() *C.ml_ModelConfig {
 	return cPtr
 }
 
-func (aci AsrCreateInput) toCPtr() *C.ml_AsrCreateInput {
-	cPtr := (*C.ml_AsrCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_AsrCreateInput{}))))
-	*cPtr = C.ml_AsrCreateInput{}
+func (aci AsrCreateInput) toCPtr() *C.geniex_AsrCreateInput {
+	cPtr := (*C.geniex_AsrCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_AsrCreateInput{}))))
+	*cPtr = C.geniex_AsrCreateInput{}
 
 	if aci.ModelName != "" {
 		cPtr.model_name = C.CString(aci.ModelName)
@@ -239,7 +239,7 @@ func (aci AsrCreateInput) toCPtr() *C.ml_AsrCreateInput {
 	return cPtr
 }
 
-func freeAsrCreateInput(cPtr *C.ml_AsrCreateInput) {
+func freeAsrCreateInput(cPtr *C.geniex_AsrCreateInput) {
 	if cPtr != nil {
 		if cPtr.model_name != nil {
 			C.free(unsafe.Pointer(cPtr.model_name))
@@ -277,9 +277,9 @@ type AsrTranscribeInput struct {
 	Config    *ASRConfig
 }
 
-func (ati AsrTranscribeInput) toCPtr() *C.ml_AsrTranscribeInput {
-	cPtr := (*C.ml_AsrTranscribeInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_AsrTranscribeInput{}))))
-	*cPtr = C.ml_AsrTranscribeInput{}
+func (ati AsrTranscribeInput) toCPtr() *C.geniex_AsrTranscribeInput {
+	cPtr := (*C.geniex_AsrTranscribeInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_AsrTranscribeInput{}))))
+	*cPtr = C.geniex_AsrTranscribeInput{}
 
 	cPtr.audio_path = C.CString(ati.AudioPath)
 	if ati.Language != "" {
@@ -296,7 +296,7 @@ func (ati AsrTranscribeInput) toCPtr() *C.ml_AsrTranscribeInput {
 	return cPtr
 }
 
-func freeAsrTranscribeInput(cPtr *C.ml_AsrTranscribeInput) {
+func freeAsrTranscribeInput(cPtr *C.geniex_AsrTranscribeInput) {
 	if cPtr != nil {
 		if cPtr.audio_path != nil {
 			C.free(unsafe.Pointer(cPtr.audio_path))
@@ -317,7 +317,7 @@ type AsrTranscribeOutput struct {
 	ProfileData ProfileData
 }
 
-func newAsrTranscribeOutputFromCPtr(c *C.ml_AsrTranscribeOutput) AsrTranscribeOutput {
+func newAsrTranscribeOutputFromCPtr(c *C.geniex_AsrTranscribeOutput) AsrTranscribeOutput {
 	output := AsrTranscribeOutput{}
 
 	if c == nil {
@@ -329,7 +329,7 @@ func newAsrTranscribeOutputFromCPtr(c *C.ml_AsrTranscribeOutput) AsrTranscribeOu
 	return output
 }
 
-func freeAsrTranscribeOutput(ptr *C.ml_AsrTranscribeOutput) {
+func freeAsrTranscribeOutput(ptr *C.geniex_AsrTranscribeOutput) {
 	if ptr == nil {
 		return
 	}
@@ -341,13 +341,13 @@ type AsrListSupportedLanguagesInput struct {
 	Reserved any
 }
 
-func (asli AsrListSupportedLanguagesInput) toCPtr() *C.ml_AsrListSupportedLanguagesInput {
-	cPtr := (*C.ml_AsrListSupportedLanguagesInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_AsrListSupportedLanguagesInput{}))))
-	*cPtr = C.ml_AsrListSupportedLanguagesInput{}
+func (asli AsrListSupportedLanguagesInput) toCPtr() *C.geniex_AsrListSupportedLanguagesInput {
+	cPtr := (*C.geniex_AsrListSupportedLanguagesInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_AsrListSupportedLanguagesInput{}))))
+	*cPtr = C.geniex_AsrListSupportedLanguagesInput{}
 	return cPtr
 }
 
-func freeAsrListSupportedLanguagesInput(cPtr *C.ml_AsrListSupportedLanguagesInput) {
+func freeAsrListSupportedLanguagesInput(cPtr *C.geniex_AsrListSupportedLanguagesInput) {
 	if cPtr != nil {
 		C.free(unsafe.Pointer(cPtr))
 	}
@@ -358,7 +358,7 @@ type AsrListSupportedLanguagesOutput struct {
 	LanguageCodes []string
 }
 
-func newAsrListSupportedLanguagesOutputFromCPtr(c *C.ml_AsrListSupportedLanguagesOutput) AsrListSupportedLanguagesOutput {
+func newAsrListSupportedLanguagesOutputFromCPtr(c *C.geniex_AsrListSupportedLanguagesOutput) AsrListSupportedLanguagesOutput {
 	output := AsrListSupportedLanguagesOutput{}
 
 	if c == nil {
@@ -370,7 +370,7 @@ func newAsrListSupportedLanguagesOutputFromCPtr(c *C.ml_AsrListSupportedLanguage
 	return output
 }
 
-func freeAsrListSupportedLanguagesOutput(ptr *C.ml_AsrListSupportedLanguagesOutput) {
+func freeAsrListSupportedLanguagesOutput(ptr *C.geniex_AsrListSupportedLanguagesOutput) {
 	if ptr == nil {
 		return
 	}
@@ -407,7 +407,7 @@ type AsrStreamStopInput struct {
 
 // ASR represents an ASR instance
 type ASR struct {
-	ptr *C.ml_ASR
+	ptr *C.geniex_ASR
 }
 
 // NewASR creates a new ASR instance
@@ -417,8 +417,8 @@ func NewASR(input AsrCreateInput) (*ASR, error) {
 	cInput := input.toCPtr()
 	defer freeAsrCreateInput(cInput)
 
-	var cHandle *C.ml_ASR
-	res := C.ml_asr_create(cInput, &cHandle)
+	var cHandle *C.geniex_ASR
+	res := C.geniex_asr_create(cInput, &cHandle)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -434,7 +434,7 @@ func (a *ASR) Destroy() error {
 		return nil
 	}
 
-	res := C.ml_asr_destroy(a.ptr)
+	res := C.geniex_asr_destroy(a.ptr)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -449,10 +449,10 @@ func (a *ASR) Transcribe(input AsrTranscribeInput) (AsrTranscribeOutput, error) 
 	cInput := input.toCPtr()
 	defer freeAsrTranscribeInput(cInput)
 
-	var cOutput C.ml_AsrTranscribeOutput
+	var cOutput C.geniex_AsrTranscribeOutput
 	defer freeAsrTranscribeOutput(&cOutput)
 
-	res := C.ml_asr_transcribe(a.ptr, cInput, &cOutput)
+	res := C.geniex_asr_transcribe(a.ptr, cInput, &cOutput)
 	if res < 0 {
 		return AsrTranscribeOutput{}, SDKError(res)
 	}
@@ -469,10 +469,10 @@ func (a *ASR) ListSupportedLanguages() (AsrListSupportedLanguagesOutput, error) 
 	cInput := input.toCPtr()
 	defer freeAsrListSupportedLanguagesInput(cInput)
 
-	var cOutput C.ml_AsrListSupportedLanguagesOutput
+	var cOutput C.geniex_AsrListSupportedLanguagesOutput
 	defer freeAsrListSupportedLanguagesOutput(&cOutput)
 
-	res := C.ml_asr_list_supported_languages(a.ptr, cInput, &cOutput)
+	res := C.geniex_asr_list_supported_languages(a.ptr, cInput, &cOutput)
 	if res < 0 {
 		return AsrListSupportedLanguagesOutput{}, SDKError(res)
 	}
@@ -490,12 +490,12 @@ func (a *ASR) StreamBegin(input AsrStreamBeginInput) (AsrStreamBeginOutput, erro
 	// Set up the callback
 	onASRTranscription = input.OnTranscription
 
-	cInput.on_transcription = C.ml_asr_transcription_callback(C.go_asr_stream_on_transcription)
+	cInput.on_transcription = C.geniex_asr_transcription_callback(C.go_asr_stream_on_transcription)
 
-	var cOutput C.ml_AsrStreamBeginOutput
+	var cOutput C.geniex_AsrStreamBeginOutput
 	defer freeAsrStreamBeginOutput(&cOutput)
 
-	res := C.ml_asr_stream_begin(a.ptr, cInput, &cOutput)
+	res := C.geniex_asr_stream_begin(a.ptr, cInput, &cOutput)
 	if res < 0 {
 		return AsrStreamBeginOutput{}, SDKError(res)
 	}
@@ -510,7 +510,7 @@ func (a *ASR) StreamPushAudio(input AsrStreamPushAudioInput) error {
 	cInput := input.toCPtr()
 	defer freeAsrStreamPushAudioInput(cInput)
 
-	res := C.ml_asr_stream_push_audio(a.ptr, cInput)
+	res := C.geniex_asr_stream_push_audio(a.ptr, cInput)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -527,7 +527,7 @@ func (a *ASR) StreamStop(input AsrStreamStopInput) error {
 	cInput := input.toCPtr()
 	defer freeAsrStreamStopInput(cInput)
 
-	res := C.ml_asr_stream_stop(a.ptr, cInput)
+	res := C.geniex_asr_stream_stop(a.ptr, cInput)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -538,9 +538,9 @@ func (a *ASR) StreamStop(input AsrStreamStopInput) error {
 // Note: ASR callback is now handled via global variables in common.go
 // similar to how LLM callbacks are implemented
 
-func (asbi AsrStreamBeginInput) toCPtr() *C.ml_AsrStreamBeginInput {
-	cPtr := (*C.ml_AsrStreamBeginInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_AsrStreamBeginInput{}))))
-	*cPtr = C.ml_AsrStreamBeginInput{}
+func (asbi AsrStreamBeginInput) toCPtr() *C.geniex_AsrStreamBeginInput {
+	cPtr := (*C.geniex_AsrStreamBeginInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_AsrStreamBeginInput{}))))
+	*cPtr = C.geniex_AsrStreamBeginInput{}
 
 	if asbi.StreamConfig != nil {
 		cPtr.stream_config = asbi.StreamConfig.toCPtr()
@@ -556,7 +556,7 @@ func (asbi AsrStreamBeginInput) toCPtr() *C.ml_AsrStreamBeginInput {
 	return cPtr
 }
 
-func freeAsrStreamBeginInput(cPtr *C.ml_AsrStreamBeginInput) {
+func freeAsrStreamBeginInput(cPtr *C.geniex_AsrStreamBeginInput) {
 	if cPtr != nil {
 		if cPtr.stream_config != nil {
 			freeASRStreamConfig(cPtr.stream_config)
@@ -568,7 +568,7 @@ func freeAsrStreamBeginInput(cPtr *C.ml_AsrStreamBeginInput) {
 	}
 }
 
-func newAsrStreamBeginOutputFromCPtr(c *C.ml_AsrStreamBeginOutput) AsrStreamBeginOutput {
+func newAsrStreamBeginOutputFromCPtr(c *C.geniex_AsrStreamBeginOutput) AsrStreamBeginOutput {
 	output := AsrStreamBeginOutput{}
 	if c == nil {
 		return output
@@ -577,13 +577,13 @@ func newAsrStreamBeginOutputFromCPtr(c *C.ml_AsrStreamBeginOutput) AsrStreamBegi
 	return output
 }
 
-func freeAsrStreamBeginOutput(ptr *C.ml_AsrStreamBeginOutput) {
+func freeAsrStreamBeginOutput(ptr *C.geniex_AsrStreamBeginOutput) {
 	// Nothing to free for now as it's reserved
 }
 
-func (aspai AsrStreamPushAudioInput) toCPtr() *C.ml_AsrStreamPushAudioInput {
-	cPtr := (*C.ml_AsrStreamPushAudioInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_AsrStreamPushAudioInput{}))))
-	*cPtr = C.ml_AsrStreamPushAudioInput{}
+func (aspai AsrStreamPushAudioInput) toCPtr() *C.geniex_AsrStreamPushAudioInput {
+	cPtr := (*C.geniex_AsrStreamPushAudioInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_AsrStreamPushAudioInput{}))))
+	*cPtr = C.geniex_AsrStreamPushAudioInput{}
 
 	if len(aspai.AudioData) > 0 {
 		cPtr.audio_data = (*C.float)(unsafe.Pointer(&aspai.AudioData[0]))
@@ -593,22 +593,22 @@ func (aspai AsrStreamPushAudioInput) toCPtr() *C.ml_AsrStreamPushAudioInput {
 	return cPtr
 }
 
-func freeAsrStreamPushAudioInput(cPtr *C.ml_AsrStreamPushAudioInput) {
+func freeAsrStreamPushAudioInput(cPtr *C.geniex_AsrStreamPushAudioInput) {
 	if cPtr != nil {
 		C.free(unsafe.Pointer(cPtr))
 	}
 }
 
-func (assi AsrStreamStopInput) toCPtr() *C.ml_AsrStreamStopInput {
-	cPtr := (*C.ml_AsrStreamStopInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_AsrStreamStopInput{}))))
-	*cPtr = C.ml_AsrStreamStopInput{}
+func (assi AsrStreamStopInput) toCPtr() *C.geniex_AsrStreamStopInput {
+	cPtr := (*C.geniex_AsrStreamStopInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_AsrStreamStopInput{}))))
+	*cPtr = C.geniex_AsrStreamStopInput{}
 
 	cPtr.graceful = C.bool(assi.Graceful)
 
 	return cPtr
 }
 
-func freeAsrStreamStopInput(cPtr *C.ml_AsrStreamStopInput) {
+func freeAsrStreamStopInput(cPtr *C.geniex_AsrStreamStopInput) {
 	if cPtr != nil {
 		C.free(unsafe.Pointer(cPtr))
 	}

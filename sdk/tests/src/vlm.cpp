@@ -7,7 +7,7 @@
 #include "doctest.h"
 #include "external/json.hpp"
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "utf8.h"  // IWYU pragma: export
 #include "util.h"
 
@@ -16,7 +16,7 @@ namespace {
 #define PLUGINS(M) M(llama_cpp) M(qairt)
 using Param = std::tuple<std::string, std::string, std::string, std::optional<std::string>, std::optional<std::string>>;
 
-Setup<Param, ml_VLM> setup_guard(
+Setup<Param, geniex_VLM> setup_guard(
     SetupMap<Param>{
         {llama_cpp::value,
             {
@@ -62,8 +62,8 @@ Setup<Param, ml_VLM> setup_guard(
 #endif
             }},
     },
-    [](ml_PluginId plugin, Param param) {
-        ml_VLM* vlm = nullptr;
+    [](geniex_PluginId plugin, Param param) {
+        geniex_VLM* vlm = nullptr;
 
         auto [test_id, name, model, mmproj, tokenizer] = std::move(param);
 
@@ -72,10 +72,10 @@ Setup<Param, ml_VLM> setup_guard(
             GENIEX_LOG_WARN("Model file not found: {}", model);
             GENIEX_LOG_WARN("Skipping tests for model: {}", name);
             g_test_summary.add_skipped_model(name, model);
-            return static_cast<ml_VLM*>(nullptr);  // Return nullptr to indicate skip
+            return static_cast<geniex_VLM*>(nullptr);  // Return nullptr to indicate skip
         }
 
-        ml_VlmCreateInput input{};
+        geniex_VlmCreateInput input{};
         input.model_name       = name.c_str();
         input.model_path       = model.c_str();
         input.mmproj_path      = mmproj.has_value() ? mmproj.value().c_str() : nullptr;
@@ -84,13 +84,13 @@ Setup<Param, ml_VLM> setup_guard(
         input.plugin_id        = plugin;
         input.config.n_ctx = 512;
 
-        int32_t res = ml_vlm_create(&input, &vlm);
+        int32_t res = geniex_vlm_create(&input, &vlm);
         CHECK_ML_ERROR(res);
         REQUIRE(vlm != nullptr);
 
         return vlm;
     },
-    ml_vlm_reset, ml_vlm_destroy);
+    geniex_vlm_reset, geniex_vlm_destroy);
 
 std::string test_prompt = " 🥳 🎂 Once upon a time";
 
@@ -133,7 +133,7 @@ bool stream_callback(const char* token, void* _) {
 // - PASS: All tokens are valid UTF-8
 // - PASS: Only the last token is invalid UTF-8 (incomplete sequence at generation end)
 // - FAIL: Multiple tokens are invalid, or invalid tokens appear in non-final positions
-void validate_and_reset_utf8_state(const ml_VlmGenerateOutput* output = nullptr) {
+void validate_and_reset_utf8_state(const geniex_VlmGenerateOutput* output = nullptr) {
     CHECK(g_total_tokens_checked > 0);  // Ensure we actually checked some tokens
 
     if (g_invalid_tokens_count > 0) {
@@ -159,23 +159,23 @@ void validate_and_reset_utf8_state(const ml_VlmGenerateOutput* output = nullptr)
 }
 
 // Test function definitions
-void test_generate_basic(ml_VLM* vlm, const std::string& model_name) {
-    ml_GenerationConfig cfg{};
+void test_generate_basic(geniex_VLM* vlm, const std::string& model_name) {
+    geniex_GenerationConfig cfg{};
     cfg.max_tokens  = 32;
     cfg.image_paths = nullptr;
     cfg.image_count = 0;
     cfg.audio_paths = nullptr;
     cfg.audio_count = 0;
 
-    ml_VlmGenerateInput input{};
+    geniex_VlmGenerateInput input{};
     input.prompt_utf8 = test_prompt.c_str();
     input.config      = &cfg;
     input.on_token    = nullptr;
     input.user_data   = nullptr;
 
-    ml_VlmGenerateOutput output{};
+    geniex_VlmGenerateOutput output{};
 
-    int32_t res = ml_vlm_generate(vlm, &input, &output);
+    int32_t res = geniex_vlm_generate(vlm, &input, &output);
     CHECK_ML_ERROR(res);
     GENIEX_LOG_INFO("Output: {}", output);
     if (output.full_text) {
@@ -183,22 +183,22 @@ void test_generate_basic(ml_VLM* vlm, const std::string& model_name) {
     }
 }
 
-void test_apply_chat_template(ml_VLM* vlm, const std::string& model_name) {
-    auto* contents = new ml_VlmContent[2]{
+void test_apply_chat_template(geniex_VLM* vlm, const std::string& model_name) {
+    auto* contents = new geniex_VlmContent[2]{
         {"text", strdup(test_prompt.c_str())}, {"image", strdup("modelfiles/assets/test_image.png")}};
 
-    ml_VlmChatMessage message{};
+    geniex_VlmChatMessage message{};
     message.contents      = contents;
     message.content_count = 2;
     message.role          = "user";
 
-    ml_VlmApplyChatTemplateInput  apply_input{};
-    ml_VlmApplyChatTemplateOutput apply_output{};
+    geniex_VlmApplyChatTemplateInput  apply_input{};
+    geniex_VlmApplyChatTemplateOutput apply_output{};
     apply_input.messages      = &message;
     apply_input.message_count = 1;
     apply_input.tools         = nullptr;
 
-    int32_t res = ml_vlm_apply_chat_template(vlm, &apply_input, &apply_output);
+    int32_t res = geniex_vlm_apply_chat_template(vlm, &apply_input, &apply_output);
     CHECK_ML_ERROR(res);
 
     // Cleanup
@@ -207,48 +207,48 @@ void test_apply_chat_template(ml_VLM* vlm, const std::string& model_name) {
     delete[] contents;
 }
 
-void test_generate_multi_round(ml_VLM* vlm, const std::string& model_name) {
+void test_generate_multi_round(geniex_VLM* vlm, const std::string& model_name) {
     std::string user_prompt;
     if (model_name.find("DeepSeek-OCR") != std::string::npos) {
         user_prompt = "Free OCR.";
     } else {
         user_prompt = "Describe the image.";
     }
-    std::vector<std::vector<ml_VlmContent>> user_rounds = {
+    std::vector<std::vector<geniex_VlmContent>> user_rounds = {
         {{"text", user_prompt.c_str()}, {"image", "modelfiles/assets/test_image.png"}},
     };
 
-    std::vector<ml_VlmChatMessage> history;
-    ml_GenerationConfig            cfg{};
+    std::vector<geniex_VlmChatMessage> history;
+    geniex_GenerationConfig            cfg{};
     cfg.max_tokens                          = 512;
     cfg.audio_paths                         = nullptr;
     cfg.audio_count                         = 0;
-    static std::vector<ml_Path> image_paths = {"modelfiles/assets/test_image.png"};
+    static std::vector<geniex_Path> image_paths = {"modelfiles/assets/test_image.png"};
     cfg.image_paths                         = image_paths.data();
     cfg.image_count                         = image_paths.size();
     cfg.image_max_length                    = 768;
 
     for (size_t i = 0; i < user_rounds.size(); ++i) {
         history.push_back(
-            {"user", const_cast<ml_VlmContent*>(user_rounds[i].data()), static_cast<int64_t>(user_rounds[i].size())});
+            {"user", const_cast<geniex_VlmContent*>(user_rounds[i].data()), static_cast<int64_t>(user_rounds[i].size())});
 
-        ml_VlmApplyChatTemplateInput input{
-            const_cast<ml_VlmChatMessage*>(history.data()), static_cast<int>(history.size()), nullptr, false};
-        ml_VlmApplyChatTemplateOutput template_result{};
-        int32_t                       res = ml_vlm_apply_chat_template(vlm, &input, &template_result);
+        geniex_VlmApplyChatTemplateInput input{
+            const_cast<geniex_VlmChatMessage*>(history.data()), static_cast<int>(history.size()), nullptr, false};
+        geniex_VlmApplyChatTemplateOutput template_result{};
+        int32_t                       res = geniex_vlm_apply_chat_template(vlm, &input, &template_result);
         CHECK_ML_ERROR(res);
         REQUIRE(template_result.formatted_text != nullptr);
 
-        ml_VlmGenerateInput  gen_input{template_result.formatted_text, &cfg, stream_callback, nullptr};
-        ml_VlmGenerateOutput output{};
-        res = ml_vlm_generate(vlm, &gen_input, &output);
+        geniex_VlmGenerateInput  gen_input{template_result.formatted_text, &cfg, stream_callback, nullptr};
+        geniex_VlmGenerateOutput output{};
+        res = geniex_vlm_generate(vlm, &gen_input, &output);
         CHECK_ML_ERROR(res);
         CHECK(template_result.formatted_text != nullptr);
 
         std::cout << std::endl;  // Add newline after streaming output
         GENIEX_LOG_INFO("Round {} output: {}", i + 1, output);
 
-        ml_VlmContent assistant_content{};
+        geniex_VlmContent assistant_content{};
         assistant_content.type = "text";
         assistant_content.text = strdup(output.full_text);
         history.push_back({"assistant", &assistant_content, 1});
@@ -261,8 +261,8 @@ void test_generate_multi_round(ml_VLM* vlm, const std::string& model_name) {
     validate_and_reset_utf8_state();
 }
 
-void test_generate_with_sampling(ml_VLM* vlm, const std::string& model_name) {
-    auto sampler_config               = ml_SamplerConfig{};
+void test_generate_with_sampling(geniex_VLM* vlm, const std::string& model_name) {
+    auto sampler_config               = geniex_SamplerConfig{};
     sampler_config.temperature        = 100.0;
     sampler_config.top_p              = 0.9;
     sampler_config.top_k              = 10;
@@ -272,7 +272,7 @@ void test_generate_with_sampling(ml_VLM* vlm, const std::string& model_name) {
     sampler_config.frequency_penalty  = 1.0;
     sampler_config.seed               = -1;
 
-    ml_GenerationConfig cfg{};
+    geniex_GenerationConfig cfg{};
     cfg.max_tokens     = 32;
     cfg.sampler_config = &sampler_config;
     cfg.image_paths    = nullptr;
@@ -280,15 +280,15 @@ void test_generate_with_sampling(ml_VLM* vlm, const std::string& model_name) {
     cfg.audio_paths    = nullptr;
     cfg.audio_count    = 0;
 
-    ml_VlmGenerateInput input{};
+    geniex_VlmGenerateInput input{};
     input.prompt_utf8 = test_prompt.c_str();
     input.config      = &cfg;
     input.on_token    = nullptr;
     input.user_data   = nullptr;
 
-    ml_VlmGenerateOutput output{};
+    geniex_VlmGenerateOutput output{};
 
-    int32_t res = ml_vlm_generate(vlm, &input, &output);
+    int32_t res = geniex_vlm_generate(vlm, &input, &output);
     CHECK_ML_ERROR(res);
     GENIEX_LOG_INFO("Output: {}", output);
     if (output.full_text) {
@@ -296,11 +296,11 @@ void test_generate_with_sampling(ml_VLM* vlm, const std::string& model_name) {
     }
 }
 
-void test_generate_json(ml_VLM* vlm, const std::string& model_name) {
-    auto sampler_config        = ml_SamplerConfig{};
+void test_generate_json(geniex_VLM* vlm, const std::string& model_name) {
+    auto sampler_config        = geniex_SamplerConfig{};
     sampler_config.enable_json = true;
 
-    ml_GenerationConfig cfg{};
+    geniex_GenerationConfig cfg{};
     cfg.max_tokens     = 32;
     cfg.sampler_config = &sampler_config;
     cfg.image_paths    = nullptr;
@@ -308,15 +308,15 @@ void test_generate_json(ml_VLM* vlm, const std::string& model_name) {
     cfg.audio_paths    = nullptr;
     cfg.audio_count    = 0;
 
-    ml_VlmGenerateInput input{};
+    geniex_VlmGenerateInput input{};
     input.prompt_utf8 = "Give me a name for a cat.";
     input.config      = &cfg;
     input.on_token    = nullptr;
     input.user_data   = nullptr;
 
-    ml_VlmGenerateOutput output{};
+    geniex_VlmGenerateOutput output{};
 
-    int32_t res = ml_vlm_generate(vlm, &input, &output);
+    int32_t res = geniex_vlm_generate(vlm, &input, &output);
     CHECK_ML_ERROR(res);
     GENIEX_LOG_INFO("Output: {}", output);
 
@@ -329,7 +329,7 @@ void test_generate_json(ml_VLM* vlm, const std::string& model_name) {
 
 // Register all VLM tests - conditionally based on plugin capabilities
 template <typename PluginType>
-void register_vlm_tests(TestRegistry<ml_VLM>& registry) {
+void register_vlm_tests(TestRegistry<geniex_VLM>& registry) {
     // Common tests for all plugins
     REGISTER_TEST(registry, GenerateBasic, test_generate_basic(model, model_name););
     REGISTER_TEST(registry, ApplyChatTemplate, test_apply_chat_template(model, model_name););
@@ -343,7 +343,7 @@ void register_vlm_tests(TestRegistry<ml_VLM>& registry) {
 }
 
 // Generate test cases for all plugins
-#define GEN(Plugin) TEST_CASE_FOR_PLUGIN(ml_VLM, Plugin, setup_guard, register_vlm_tests<Plugin>)
+#define GEN(Plugin) TEST_CASE_FOR_PLUGIN(geniex_VLM, Plugin, setup_guard, register_vlm_tests<Plugin>)
 PLUGINS(GEN)
 #undef GEN
 

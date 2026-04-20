@@ -10,7 +10,7 @@
 
 #include "android_utils.h"
 #include "jniutils.h"
-#include "ml.h"
+#include "geniex.h"
 
 using namespace jniutils;
 using namespace geniex_android_sdk;
@@ -33,7 +33,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
         "dGVkIjoiMjAyNS0wOS0wNlQwMDo1MzozNi4yMDNaIiwiZXhwaXJ5IjoiMjAzNS0xMi0zMVQyMzo1OTo1OS4wMDBaIn19."
         "BXoUHIEzFMuuZbBT7RvsKO9nTi5950C6kHO64blF7XBnfKvZ6ClA8a55tmszI1ZWdngzpNFTzMM5PV5euuzMCA==",
         1);
-    ml_init();
+    geniex_init();
     return JNI_VERSION_1_6;
 }
 
@@ -51,5 +51,5 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_NexaSdk_registerPlugin(
 
     void* plugin_id_func     = dlsym(pluginSo, "plugin_id");
     void* create_plugin_func = dlsym(pluginSo, "create_plugin");
-    return ml_register_plugin((ml_plugin_id_func)plugin_id_func, (ml_create_plugin_func)create_plugin_func);
+    return geniex_register_plugin((geniex_plugin_id_func)plugin_id_func, (geniex_create_plugin_func)create_plugin_func);
 }

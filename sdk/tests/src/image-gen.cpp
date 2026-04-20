@@ -6,7 +6,7 @@
 
 #include "doctest.h"
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "utf8.h" // IWYU pragma: export
 #include "util.h"
 
@@ -17,10 +17,10 @@ using Param =
     std::tuple<std::string, std::string, std::string,
                std::optional<std::string>, std::optional<std::string>>;
 
-Setup<Param, ml_ImageGen> setup_guard(
+Setup<Param, geniex_ImageGen> setup_guard(
     SetupMap<Param>{},
-    [](ml_PluginId plugin, Param param) {
-      ml_ImageGen *imagegen = nullptr;
+    [](geniex_PluginId plugin, Param param) {
+      geniex_ImageGen *imagegen = nullptr;
       auto [test_id, name, model, scheduler, device] = std::move(param);
 
       // Check if model path exists (it's a directory for image generation
@@ -29,43 +29,43 @@ Setup<Param, ml_ImageGen> setup_guard(
         GENIEX_LOG_WARN("Model path not found: {}", model);
         GENIEX_LOG_WARN("Skipping tests for model: {}", name);
         g_test_summary.add_skipped_model(name, model);
-        return static_cast<ml_ImageGen *>(
+        return static_cast<geniex_ImageGen *>(
             nullptr); // Return nullptr to indicate skip
       }
 
-      ml_ImageGenCreateInput input{};
+      geniex_ImageGenCreateInput input{};
       input.model_name = name.c_str();
       input.model_path = model.c_str();
       input.scheduler_config_path =
           scheduler.has_value() ? scheduler.value().c_str() : nullptr;
       input.plugin_id = plugin;
       input.device_id = device.has_value() ? device.value().c_str() : nullptr;
-      int32_t res = ml_imagegen_create(&input, &imagegen);
+      int32_t res = geniex_imagegen_create(&input, &imagegen);
       REQUIRE_ML_ERROR(res);
 
       REQUIRE(imagegen != nullptr);
       return imagegen;
     },
-    nullptr, ml_imagegen_destroy);
+    nullptr, geniex_imagegen_destroy);
 
 std::string test_prompt = "a beautiful landscape with mountains and trees";
 std::string negative_prompt = "blurry, low quality, distorted";
 
 // Test function definitions
-void test_imagegen_txt2img(ml_ImageGen *imagegen,
+void test_imagegen_txt2img(geniex_ImageGen *imagegen,
                            const std::string &model_name) {
   // The image generator must be created successfully or the test fails
   REQUIRE(imagegen != nullptr);
 
   // Set up image generation configuration (aligned with config.json)
-  ml_ImageSamplerConfig sampler_config = {};
+  geniex_ImageSamplerConfig sampler_config = {};
   sampler_config.method = "ddim";
   sampler_config.steps = 20;
   sampler_config.guidance_scale = 7.5f;
   sampler_config.eta = 0.0f;
   sampler_config.seed = 2; // Changed from 42 to match config.json
 
-  ml_SchedulerConfig scheduler_config = {};
+  geniex_SchedulerConfig scheduler_config = {};
   scheduler_config.type = "ddim";
   scheduler_config.num_train_timesteps = 1000;
   scheduler_config.steps_offset = 1;
@@ -81,7 +81,7 @@ void test_imagegen_txt2img(ml_ImageGen *imagegen,
   const char *prompts[] = {test_prompt.c_str()};
   const char *neg_prompts[] = {negative_prompt.c_str()};
 
-  ml_ImageGenerationConfig config = {};
+  geniex_ImageGenerationConfig config = {};
   config.prompts = prompts;
   config.prompt_count = 1;
   config.negative_prompts = neg_prompts;
@@ -92,7 +92,7 @@ void test_imagegen_txt2img(ml_ImageGen *imagegen,
   config.scheduler_config = scheduler_config;
   config.strength = 1.0f;
 
-  ml_ImageGenTxt2ImgInput input = {};
+  geniex_ImageGenTxt2ImgInput input = {};
   input.prompt_utf8 = test_prompt.c_str();
   input.config = &config;
   input.output_path = "./build/output/generated_image.png";
@@ -101,8 +101,8 @@ void test_imagegen_txt2img(ml_ImageGen *imagegen,
     std::filesystem::remove(input.output_path);
   }
 
-  ml_ImageGenOutput output = {};
-  int32_t res = ml_imagegen_txt2img(imagegen, &input, &output);
+  geniex_ImageGenOutput output = {};
+  int32_t res = geniex_imagegen_txt2img(imagegen, &input, &output);
   CHECK_ML_ERROR(res);
 
   GENIEX_LOG_INFO("{}", output);
@@ -113,14 +113,14 @@ void test_imagegen_txt2img(ml_ImageGen *imagegen,
 
 // Register all image generation tests
 template <typename PluginType>
-void register_imagegen_tests(TestRegistry<ml_ImageGen> &registry) {
+void register_imagegen_tests(TestRegistry<geniex_ImageGen> &registry) {
   REGISTER_TEST(registry, ImageGenTxt2Img,
                 test_imagegen_txt2img(model, model_name););
 }
 
 // Generate test cases for all plugins
 #define GEN(Plugin)                                                            \
-  TEST_CASE_FOR_PLUGIN(ml_ImageGen, Plugin, setup_guard,                       \
+  TEST_CASE_FOR_PLUGIN(geniex_ImageGen, Plugin, setup_guard,                       \
                        register_imagegen_tests<Plugin>)
 PLUGINS(GEN)
 #undef GEN

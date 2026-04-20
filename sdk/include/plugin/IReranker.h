@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../ml.h"
+#include "../geniex.h"
 #include "IValidatable.h"
 
 namespace geniex {
@@ -14,9 +14,9 @@ class IReranker {
      * @param input The creation input parameters
      * @return ML error code (ML_SUCCESS on success, negative on failure)
      */
-    virtual int32_t create(const ml_RerankerCreateInput* input) {
+    virtual int32_t create(const geniex_RerankerCreateInput* input) {
         // Check if this instance implements IValidatable
-        auto* validatable = dynamic_cast<IValidatable<ml_RerankerCreateInput>*>(this);
+        auto* validatable = dynamic_cast<IValidatable<geniex_RerankerCreateInput>*>(this);
         if (validatable) {
             // Check if validation is needed
             if (validatable->is_validation_needed(input)) {
@@ -32,7 +32,7 @@ class IReranker {
         return create_impl(input);
     }
 
-    virtual int32_t rerank(const ml_RerankerRerankInput*, ml_RerankerRerankOutput*) = 0;
+    virtual int32_t rerank(const geniex_RerankerRerankInput*, geniex_RerankerRerankOutput*) = 0;
 
    protected:
     /**
@@ -40,7 +40,7 @@ class IReranker {
      * @param input The creation input parameters
      * @return ML error code (ML_SUCCESS on success, negative on failure)
      */
-    virtual int32_t create_impl(const ml_RerankerCreateInput* input) = 0;
+    virtual int32_t create_impl(const geniex_RerankerCreateInput* input) = 0;
 };
 
 }  // namespace geniex

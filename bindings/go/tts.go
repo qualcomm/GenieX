@@ -16,7 +16,7 @@ package geniex_sdk
 
 /*
 #include <stdlib.h>
-#include "ml.h"
+#include "geniex.h"
 */
 import "C"
 import (
@@ -32,9 +32,9 @@ type TTSConfig struct {
 	SampleRate int32
 }
 
-func (tc TTSConfig) toCPtr() *C.ml_TTSConfig {
-	cPtr := (*C.ml_TTSConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_TTSConfig{}))))
-	*cPtr = C.ml_TTSConfig{}
+func (tc TTSConfig) toCPtr() *C.geniex_TTSConfig {
+	cPtr := (*C.geniex_TTSConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_TTSConfig{}))))
+	*cPtr = C.geniex_TTSConfig{}
 
 	if tc.Voice != "" {
 		cPtr.voice = C.CString(tc.Voice)
@@ -46,7 +46,7 @@ func (tc TTSConfig) toCPtr() *C.ml_TTSConfig {
 	return cPtr
 }
 
-func freeTTSConfig(cPtr *C.ml_TTSConfig) {
+func freeTTSConfig(cPtr *C.geniex_TTSConfig) {
 	if cPtr != nil {
 		if cPtr.voice != nil {
 			C.free(unsafe.Pointer(cPtr.voice))
@@ -62,9 +62,9 @@ func freeTTSConfig(cPtr *C.ml_TTSConfig) {
 // 	LengthScale  float32
 // }
 
-// func (tsc TTSSamplerConfig) toCPtr() *C.ml_TTSSamplerConfig {
-// 	cPtr := (*C.ml_TTSSamplerConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_TTSSamplerConfig{}))))
-// 	*cPtr = C.ml_TTSSamplerConfig{}
+// func (tsc TTSSamplerConfig) toCPtr() *C.geniex_TTSSamplerConfig {
+// 	cPtr := (*C.geniex_TTSSamplerConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_TTSSamplerConfig{}))))
+// 	*cPtr = C.geniex_TTSSamplerConfig{}
 
 // 	cPtr.temperature = C.float(tsc.Temperature)
 // 	cPtr.noise_scale = C.float(tsc.NoiseScale)
@@ -73,7 +73,7 @@ func freeTTSConfig(cPtr *C.ml_TTSConfig) {
 // 	return cPtr
 // }
 
-// func freeTTSSamplerConfig(cPtr *C.ml_TTSSamplerConfig) {
+// func freeTTSSamplerConfig(cPtr *C.geniex_TTSSamplerConfig) {
 // 	if cPtr != nil {
 // 		C.free(unsafe.Pointer(cPtr))
 // 	}
@@ -88,7 +88,7 @@ type TTSResult struct {
 	NumSamples      int32
 }
 
-func newTTSResultFromCPtr(c *C.ml_TTSResult) TTSResult {
+func newTTSResultFromCPtr(c *C.geniex_TTSResult) TTSResult {
 	result := TTSResult{}
 
 	if c == nil {
@@ -106,7 +106,7 @@ func newTTSResultFromCPtr(c *C.ml_TTSResult) TTSResult {
 	return result
 }
 
-func freeTTSResult(ptr *C.ml_TTSResult) {
+func freeTTSResult(ptr *C.geniex_TTSResult) {
 	if ptr == nil {
 		return
 	}
@@ -124,9 +124,9 @@ type TtsCreateInput struct {
 	DeviceID    string
 }
 
-func (tci TtsCreateInput) toCPtr() *C.ml_TtsCreateInput {
-	cPtr := (*C.ml_TtsCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_TtsCreateInput{}))))
-	*cPtr = C.ml_TtsCreateInput{}
+func (tci TtsCreateInput) toCPtr() *C.geniex_TtsCreateInput {
+	cPtr := (*C.geniex_TtsCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_TtsCreateInput{}))))
+	*cPtr = C.geniex_TtsCreateInput{}
 
 	if tci.ModelName != "" {
 		cPtr.model_name = C.CString(tci.ModelName)
@@ -147,7 +147,7 @@ func (tci TtsCreateInput) toCPtr() *C.ml_TtsCreateInput {
 	return cPtr
 }
 
-func freeTtsCreateInput(cPtr *C.ml_TtsCreateInput) {
+func freeTtsCreateInput(cPtr *C.geniex_TtsCreateInput) {
 	if cPtr != nil {
 		if cPtr.model_path != nil {
 			C.free(unsafe.Pointer(cPtr.model_path))
@@ -172,9 +172,9 @@ type TtsSynthesizeInput struct {
 	OutputPath string
 }
 
-func (tsi TtsSynthesizeInput) toCPtr() *C.ml_TtsSynthesizeInput {
-	cPtr := (*C.ml_TtsSynthesizeInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_TtsSynthesizeInput{}))))
-	*cPtr = C.ml_TtsSynthesizeInput{}
+func (tsi TtsSynthesizeInput) toCPtr() *C.geniex_TtsSynthesizeInput {
+	cPtr := (*C.geniex_TtsSynthesizeInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_TtsSynthesizeInput{}))))
+	*cPtr = C.geniex_TtsSynthesizeInput{}
 
 	cPtr.text_utf8 = C.CString(tsi.TextUTF8)
 	if tsi.Config != nil {
@@ -191,7 +191,7 @@ func (tsi TtsSynthesizeInput) toCPtr() *C.ml_TtsSynthesizeInput {
 	return cPtr
 }
 
-func freeTtsSynthesizeInput(cPtr *C.ml_TtsSynthesizeInput) {
+func freeTtsSynthesizeInput(cPtr *C.geniex_TtsSynthesizeInput) {
 	if cPtr != nil {
 		if cPtr.text_utf8 != nil {
 			C.free(unsafe.Pointer(cPtr.text_utf8))
@@ -212,7 +212,7 @@ type TtsSynthesizeOutput struct {
 	ProfileData ProfileData
 }
 
-func newTtsSynthesizeOutputFromCPtr(c *C.ml_TtsSynthesizeOutput) TtsSynthesizeOutput {
+func newTtsSynthesizeOutputFromCPtr(c *C.geniex_TtsSynthesizeOutput) TtsSynthesizeOutput {
 	output := TtsSynthesizeOutput{}
 
 	if c == nil {
@@ -224,7 +224,7 @@ func newTtsSynthesizeOutputFromCPtr(c *C.ml_TtsSynthesizeOutput) TtsSynthesizeOu
 	return output
 }
 
-func freeTtsSynthesizeOutput(ptr *C.ml_TtsSynthesizeOutput) {
+func freeTtsSynthesizeOutput(ptr *C.geniex_TtsSynthesizeOutput) {
 	if ptr == nil {
 		return
 	}
@@ -236,13 +236,13 @@ type TtsListAvailableVoicesInput struct {
 	Reserved any
 }
 
-func (tlavi TtsListAvailableVoicesInput) toCPtr() *C.ml_TtsListAvailableVoicesInput {
-	cPtr := (*C.ml_TtsListAvailableVoicesInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_TtsListAvailableVoicesInput{}))))
-	*cPtr = C.ml_TtsListAvailableVoicesInput{}
+func (tlavi TtsListAvailableVoicesInput) toCPtr() *C.geniex_TtsListAvailableVoicesInput {
+	cPtr := (*C.geniex_TtsListAvailableVoicesInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_TtsListAvailableVoicesInput{}))))
+	*cPtr = C.geniex_TtsListAvailableVoicesInput{}
 	return cPtr
 }
 
-func freeTtsListAvailableVoicesInput(cPtr *C.ml_TtsListAvailableVoicesInput) {
+func freeTtsListAvailableVoicesInput(cPtr *C.geniex_TtsListAvailableVoicesInput) {
 	if cPtr != nil {
 		C.free(unsafe.Pointer(cPtr))
 	}
@@ -253,7 +253,7 @@ type TtsListAvailableVoicesOutput struct {
 	VoiceIDs []string
 }
 
-func newTtsListAvailableVoicesOutputFromCPtr(c *C.ml_TtsListAvailableVoicesOutput) TtsListAvailableVoicesOutput {
+func newTtsListAvailableVoicesOutputFromCPtr(c *C.geniex_TtsListAvailableVoicesOutput) TtsListAvailableVoicesOutput {
 	output := TtsListAvailableVoicesOutput{}
 
 	if c == nil {
@@ -265,7 +265,7 @@ func newTtsListAvailableVoicesOutputFromCPtr(c *C.ml_TtsListAvailableVoicesOutpu
 	return output
 }
 
-func freeTtsListAvailableVoicesOutput(ptr *C.ml_TtsListAvailableVoicesOutput) {
+func freeTtsListAvailableVoicesOutput(ptr *C.geniex_TtsListAvailableVoicesOutput) {
 	if ptr == nil {
 		return
 	}
@@ -276,7 +276,7 @@ func freeTtsListAvailableVoicesOutput(ptr *C.ml_TtsListAvailableVoicesOutput) {
 
 // TTS represents a TTS instance
 type TTS struct {
-	ptr *C.ml_TTS
+	ptr *C.geniex_TTS
 }
 
 // NewTTS creates a new TTS instance
@@ -286,8 +286,8 @@ func NewTTS(input TtsCreateInput) (*TTS, error) {
 	cInput := input.toCPtr()
 	defer freeTtsCreateInput(cInput)
 
-	var cHandle *C.ml_TTS
-	res := C.ml_tts_create(cInput, &cHandle)
+	var cHandle *C.geniex_TTS
+	res := C.geniex_tts_create(cInput, &cHandle)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -303,7 +303,7 @@ func (t *TTS) Destroy() error {
 		return nil
 	}
 
-	res := C.ml_tts_destroy(t.ptr)
+	res := C.geniex_tts_destroy(t.ptr)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -318,10 +318,10 @@ func (t *TTS) Synthesize(input TtsSynthesizeInput) (TtsSynthesizeOutput, error) 
 	cInput := input.toCPtr()
 	defer freeTtsSynthesizeInput(cInput)
 
-	var cOutput C.ml_TtsSynthesizeOutput
+	var cOutput C.geniex_TtsSynthesizeOutput
 	defer freeTtsSynthesizeOutput(&cOutput)
 
-	res := C.ml_tts_synthesize(t.ptr, cInput, &cOutput)
+	res := C.geniex_tts_synthesize(t.ptr, cInput, &cOutput)
 	if res < 0 {
 		return TtsSynthesizeOutput{}, SDKError(res)
 	}
@@ -338,10 +338,10 @@ func (t *TTS) ListAvailableVoices() (TtsListAvailableVoicesOutput, error) {
 	cInput := input.toCPtr()
 	defer freeTtsListAvailableVoicesInput(cInput)
 
-	var cOutput C.ml_TtsListAvailableVoicesOutput
+	var cOutput C.geniex_TtsListAvailableVoicesOutput
 	defer freeTtsListAvailableVoicesOutput(&cOutput)
 
-	res := C.ml_tts_list_available_voices(t.ptr, cInput, &cOutput)
+	res := C.geniex_tts_list_available_voices(t.ptr, cInput, &cOutput)
 	if res < 0 {
 		return TtsListAvailableVoicesOutput{}, SDKError(res)
 	}

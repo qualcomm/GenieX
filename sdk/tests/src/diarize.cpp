@@ -8,7 +8,7 @@
 
 #include "doctest.h"
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "utf8.h"  // IWYU pragma: export
 #include "util.h"
 
@@ -17,7 +17,7 @@ namespace {
 #define PLUGINS(M) M(qairt)
 using Param = std::tuple<std::string, std::string, std::string>;
 
-Setup<Param, ml_Diarize> setup_guard(
+Setup<Param, geniex_Diarize> setup_guard(
     SetupMap<Param>{
         {qairt::value,
             {
@@ -25,8 +25,8 @@ Setup<Param, ml_Diarize> setup_guard(
                 // Add more qairt diarization models here as needed
             }},
     },
-    [](ml_PluginId plugin, Param param) {
-        ml_Diarize* diarize = nullptr;
+    [](geniex_PluginId plugin, Param param) {
+        geniex_Diarize* diarize = nullptr;
 
         auto [test_id, name, model_folder] = std::move(param);
 
@@ -35,10 +35,10 @@ Setup<Param, ml_Diarize> setup_guard(
             GENIEX_LOG_WARN("Model folder not found: {}", model_folder);
             GENIEX_LOG_WARN("Skipping tests for model: {}", name);
             g_test_summary.add_skipped_model(name, model_folder);
-            return static_cast<ml_Diarize*>(nullptr);  // Return nullptr to indicate skip
+            return static_cast<geniex_Diarize*>(nullptr);  // Return nullptr to indicate skip
         }
 
-        ml_DiarizeCreateInput input{};
+        geniex_DiarizeCreateInput input{};
         input.model_name = name.c_str();
         input.model_path = model_folder.c_str();
         input.plugin_id  = plugin;
@@ -47,18 +47,18 @@ Setup<Param, ml_Diarize> setup_guard(
         // Model config
         input.config.verbose = false;
 
-        int32_t res = ml_diarize_create(&input, &diarize);
+        int32_t res = geniex_diarize_create(&input, &diarize);
         CHECK_ML_ERROR(res);
         REQUIRE(diarize != nullptr);
 
         return diarize;
     },
-    nullptr, ml_diarize_destroy);
+    nullptr, geniex_diarize_destroy);
 
 std::string test_audio_path = "modelfiles/assets/conversation_16k.wav";
 
 // Comprehensive diarization test
-void test_diarize(ml_Diarize* diarize, const std::string& model_name) {
+void test_diarize(geniex_Diarize* diarize, const std::string& model_name) {
     // Check if test audio file exists
     if (!std::filesystem::exists(test_audio_path)) {
         GENIEX_LOG_ERROR("Test audio file not found: {}", test_audio_path);
@@ -69,18 +69,18 @@ void test_diarize(ml_Diarize* diarize, const std::string& model_name) {
     GENIEX_LOG_INFO("Running diarization on: {}", test_audio_path);
 
     // Set up diarization configuration
-    ml_DiarizeConfig config{};
+    geniex_DiarizeConfig config{};
     config.min_speakers = 0;  // Auto-detect
     config.max_speakers = 0;  // No limit
 
-    ml_DiarizeInferInput input{};
+    geniex_DiarizeInferInput input{};
     input.audio_path = test_audio_path.c_str();
     input.config     = &config;
 
-    ml_DiarizeInferOutput output{};
+    geniex_DiarizeInferOutput output{};
 
     auto    start_time  = std::chrono::high_resolution_clock::now();
-    int32_t res         = ml_diarize_infer(diarize, &input, &output);
+    int32_t res         = geniex_diarize_infer(diarize, &input, &output);
     auto    end_time    = std::chrono::high_resolution_clock::now();
     auto    duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 
@@ -192,12 +192,12 @@ void test_diarize(ml_Diarize* diarize, const std::string& model_name) {
 
 // Register diarization test
 template <typename PluginType>
-void register_diarize_tests(TestRegistry<ml_Diarize>& registry) {
+void register_diarize_tests(TestRegistry<geniex_Diarize>& registry) {
     REGISTER_TEST(registry, Diarize, test_diarize(model, model_name););
 }
 
 // Generate test cases for all plugins
-#define GEN(Plugin) TEST_CASE_FOR_PLUGIN(ml_Diarize, Plugin, setup_guard, register_diarize_tests<Plugin>)
+#define GEN(Plugin) TEST_CASE_FOR_PLUGIN(geniex_Diarize, Plugin, setup_guard, register_diarize_tests<Plugin>)
 PLUGINS(GEN)
 #undef GEN
 

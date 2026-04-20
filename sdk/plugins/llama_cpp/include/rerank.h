@@ -14,8 +14,8 @@ class LlamaCppReranker : public IReranker {
     LlamaCppReranker();
     ~LlamaCppReranker() override;
 
-    int32_t create_impl(const ml_RerankerCreateInput* input) override;
-    int32_t rerank(const ml_RerankerRerankInput* input, ml_RerankerRerankOutput* output) override;
+    int32_t create_impl(const geniex_RerankerCreateInput* input) override;
+    int32_t rerank(const geniex_RerankerRerankInput* input, geniex_RerankerRerankOutput* output) override;
 
    private:
     // Model and context

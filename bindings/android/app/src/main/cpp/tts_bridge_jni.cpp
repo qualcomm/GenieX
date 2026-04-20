@@ -9,14 +9,14 @@
 
 #include "android_utils.h"
 #include "jniutils.h"
-#include "ml.h"
+#include "geniex.h"
 
 using namespace geniex_android_sdk;
 
 extern "C" {
 
-ml_TtsCreateInput extract_tts_create_input(JNIEnv* env, jobject inputObj) {
-    ml_TtsCreateInput out = {};
+geniex_TtsCreateInput extract_tts_create_input(JNIEnv* env, jobject inputObj) {
+    geniex_TtsCreateInput out = {};
 
     if (!inputObj) {
         LOGe("extract_tts_create_input: inputObj is null");
@@ -55,8 +55,8 @@ ml_TtsCreateInput extract_tts_create_input(JNIEnv* env, jobject inputObj) {
     return out;
 }
 
-ml_TTSConfig extract_tts_config(JNIEnv* env, jobject inputObj) {
-    ml_TTSConfig out = {};
+geniex_TTSConfig extract_tts_config(JNIEnv* env, jobject inputObj) {
+    geniex_TTSConfig out = {};
 
     if (!inputObj) {
         LOGe("extract_tts_config: inputObj is null");
@@ -78,8 +78,8 @@ ml_TTSConfig extract_tts_config(JNIEnv* env, jobject inputObj) {
     return out;
 }
 
-ml_TtsSynthesizeInput extract_tts_synthesize_input(JNIEnv* env, jclass cls, jobject inputObj, ml_TTSConfig* config) {
-    ml_TtsSynthesizeInput out = {};
+geniex_TtsSynthesizeInput extract_tts_synthesize_input(JNIEnv* env, jclass cls, jobject inputObj, geniex_TTSConfig* config) {
+    geniex_TtsSynthesizeInput out = {};
 
     out.text_utf8   = getStringField(env, cls, inputObj, "textUtf8");
     out.output_path = getStringField(env, cls, inputObj, "outputPath");
@@ -98,17 +98,17 @@ ml_TtsSynthesizeInput extract_tts_synthesize_input(JNIEnv* env, jclass cls, jobj
 // TTS create - Initialize TTS with configuration
 JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Tts_create(JNIEnv* env, jobject /*thiz*/, jobject ttsCreateInputObj) {
     try {
-        ml_TtsCreateInput input = extract_tts_create_input(env, ttsCreateInputObj);
+        geniex_TtsCreateInput input = extract_tts_create_input(env, ttsCreateInputObj);
 
-        ml_TTS* handle;
-        LOGd("[JNI] create() ml_tts_create called");
-        int32_t err = ml_tts_create(&input, &handle);
+        geniex_TTS* handle;
+        LOGd("[JNI] create() geniex_tts_create called");
+        int32_t err = geniex_tts_create(&input, &handle);
         if (err != ML_SUCCESS || !handle) {
-            LOGe("[JNI] ml_tts_create failed, error code: %d", err);
+            LOGe("[JNI] geniex_tts_create failed, error code: %d", err);
             throw_runtime_exception(env, "TTS create failed, error code: %d", err);
             return 0;
         }
-        LOGd("[JNI] create() ml_tts_create returned handle=%p", handle);
+        LOGd("[JNI] create() geniex_tts_create returned handle=%p", handle);
         return reinterpret_cast<jlong>(handle);
     } catch (const std::exception& e) {
         LOGe("[JNI] create() exception: %s", e.what());
@@ -118,11 +118,11 @@ JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Tts_create(JNIEnv* env, jobject 
 
 // TTS destroy - Clean up TTS resources
 JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Tts_destroy(JNIEnv*, jobject, jlong handle) {
-    LOGd("[JNI] ml_tts_destroy called, handle=%p", (void*)handle);
+    LOGd("[JNI] geniex_tts_destroy called, handle=%p", (void*)handle);
     if (handle) {
-        int32_t result = ml_tts_destroy(reinterpret_cast<ml_TTS*>(handle));
+        int32_t result = geniex_tts_destroy(reinterpret_cast<geniex_TTS*>(handle));
         if (result != ML_SUCCESS) {
-            LOGe("[JNI] ml_tts_destroy failed, error code: %d", result);
+            LOGe("[JNI] geniex_tts_destroy failed, error code: %d", result);
         }
         return result;
     }
@@ -146,12 +146,12 @@ JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Tts_synthesize(
         return nullptr;
     }
 
-    ml_TTSConfig          config;
-    ml_TtsSynthesizeInput input = extract_tts_synthesize_input(env, cls, synthesizeInputObj, &config);
+    geniex_TTSConfig          config;
+    geniex_TtsSynthesizeInput input = extract_tts_synthesize_input(env, cls, synthesizeInputObj, &config);
     env->DeleteLocalRef(cls);
 
-    ml_TtsSynthesizeOutput output = {};
-    int32_t                err    = ml_tts_synthesize((ml_TTS*)handle, &input, &output);
+    geniex_TtsSynthesizeOutput output = {};
+    int32_t                err    = geniex_tts_synthesize((geniex_TTS*)handle, &input, &output);
 
     if (err < 0 || !output.result.audio_path) {
         throw_runtime_exception(env, "TTS synthesize failed, error code: %d", err);
@@ -174,7 +174,7 @@ JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Tts_synthesize(
         output.result.channels,
         output.result.num_samples);
 
-    ml_free((void*)output.result.audio_path);
+    geniex_free((void*)output.result.audio_path);
 
     // profile_data
     jobject profileDataObj = jniutils::extract_profiling_data(env, output.profile_data);
@@ -189,9 +189,9 @@ JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Tts_synthesize(
 
 // TTS listAvailableVoices
 JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Tts_listAvailableVoices(JNIEnv* env, jobject, jlong handle) {
-    ml_TtsListAvailableVoicesInput  input = {};
-    ml_TtsListAvailableVoicesOutput out   = {};
-    int32_t result = ml_tts_list_available_voices(reinterpret_cast<const ml_TTS*>(handle), &input, &out);
+    geniex_TtsListAvailableVoicesInput  input = {};
+    geniex_TtsListAvailableVoicesOutput out   = {};
+    int32_t result = geniex_tts_list_available_voices(reinterpret_cast<const geniex_TTS*>(handle), &input, &out);
     if (result == ML_SUCCESS) {
         return create_string_list(env, out.voice_ids, out.voice_count);
     } else {

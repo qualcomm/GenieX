@@ -16,7 +16,7 @@ package geniex_sdk
 
 /*
 #include <stdlib.h>
-#include "ml.h"
+#include "geniex.h"
 */
 import "C"
 import (
@@ -30,9 +30,9 @@ type DiarizeConfig struct {
 	MaxSpeakers int32
 }
 
-func (dc DiarizeConfig) toCPtr() *C.ml_DiarizeConfig {
-	cPtr := (*C.ml_DiarizeConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_DiarizeConfig{}))))
-	*cPtr = C.ml_DiarizeConfig{}
+func (dc DiarizeConfig) toCPtr() *C.geniex_DiarizeConfig {
+	cPtr := (*C.geniex_DiarizeConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_DiarizeConfig{}))))
+	*cPtr = C.geniex_DiarizeConfig{}
 
 	cPtr.min_speakers = C.int32_t(dc.MinSpeakers)
 	cPtr.max_speakers = C.int32_t(dc.MaxSpeakers)
@@ -40,7 +40,7 @@ func (dc DiarizeConfig) toCPtr() *C.ml_DiarizeConfig {
 	return cPtr
 }
 
-func freeDiarizeConfig(cPtr *C.ml_DiarizeConfig) {
+func freeDiarizeConfig(cPtr *C.geniex_DiarizeConfig) {
 	if cPtr != nil {
 		C.free(unsafe.Pointer(cPtr))
 	}
@@ -53,7 +53,7 @@ type DiarizeSpeechSegment struct {
 	SpeakerLabel string
 }
 
-func newDiarizeSpeechSegmentFromCPtr(c *C.ml_DiarizeSpeechSegment) DiarizeSpeechSegment {
+func newDiarizeSpeechSegmentFromCPtr(c *C.geniex_DiarizeSpeechSegment) DiarizeSpeechSegment {
 	segment := DiarizeSpeechSegment{}
 
 	if c == nil {
@@ -70,7 +70,7 @@ func newDiarizeSpeechSegmentFromCPtr(c *C.ml_DiarizeSpeechSegment) DiarizeSpeech
 	return segment
 }
 
-func freeDiarizeSpeechSegment(ptr *C.ml_DiarizeSpeechSegment) {
+func freeDiarizeSpeechSegment(ptr *C.geniex_DiarizeSpeechSegment) {
 	if ptr == nil {
 		return
 	}
@@ -97,9 +97,9 @@ type DiarizeModelConfig struct {
 	Verbose             bool
 }
 
-func (mc DiarizeModelConfig) toCPtr() *C.ml_ModelConfig {
-	cPtr := (*C.ml_ModelConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_ModelConfig{}))))
-	*cPtr = C.ml_ModelConfig{}
+func (mc DiarizeModelConfig) toCPtr() *C.geniex_ModelConfig {
+	cPtr := (*C.geniex_ModelConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_ModelConfig{}))))
+	*cPtr = C.geniex_ModelConfig{}
 
 	cPtr.n_ctx = C.int32_t(mc.NCtx)
 	cPtr.n_threads = C.int32_t(mc.NThreads)
@@ -137,9 +137,9 @@ type DiarizeCreateInput struct {
 	LicenseKey string
 }
 
-func (dci DiarizeCreateInput) toCPtr() *C.ml_DiarizeCreateInput {
-	cPtr := (*C.ml_DiarizeCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_DiarizeCreateInput{}))))
-	*cPtr = C.ml_DiarizeCreateInput{}
+func (dci DiarizeCreateInput) toCPtr() *C.geniex_DiarizeCreateInput {
+	cPtr := (*C.geniex_DiarizeCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_DiarizeCreateInput{}))))
+	*cPtr = C.geniex_DiarizeCreateInput{}
 
 	if dci.ModelName != "" {
 		cPtr.model_name = C.CString(dci.ModelName)
@@ -164,7 +164,7 @@ func (dci DiarizeCreateInput) toCPtr() *C.ml_DiarizeCreateInput {
 	return cPtr
 }
 
-func freeDiarizeCreateInput(cPtr *C.ml_DiarizeCreateInput) {
+func freeDiarizeCreateInput(cPtr *C.geniex_DiarizeCreateInput) {
 	if cPtr != nil {
 		if cPtr.model_name != nil {
 			C.free(unsafe.Pointer(cPtr.model_name))
@@ -195,9 +195,9 @@ type DiarizeInferInput struct {
 	Config    *DiarizeConfig
 }
 
-func (dii DiarizeInferInput) toCPtr() *C.ml_DiarizeInferInput {
-	cPtr := (*C.ml_DiarizeInferInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_DiarizeInferInput{}))))
-	*cPtr = C.ml_DiarizeInferInput{}
+func (dii DiarizeInferInput) toCPtr() *C.geniex_DiarizeInferInput {
+	cPtr := (*C.geniex_DiarizeInferInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_DiarizeInferInput{}))))
+	*cPtr = C.geniex_DiarizeInferInput{}
 
 	cPtr.audio_path = C.CString(dii.AudioPath)
 	if dii.Config != nil {
@@ -209,7 +209,7 @@ func (dii DiarizeInferInput) toCPtr() *C.ml_DiarizeInferInput {
 	return cPtr
 }
 
-func freeDiarizeInferInput(cPtr *C.ml_DiarizeInferInput) {
+func freeDiarizeInferInput(cPtr *C.geniex_DiarizeInferInput) {
 	if cPtr != nil {
 		if cPtr.audio_path != nil {
 			C.free(unsafe.Pointer(cPtr.audio_path))
@@ -229,7 +229,7 @@ type DiarizeInferOutput struct {
 	ProfileData ProfileData
 }
 
-func newDiarizeInferOutputFromCPtr(c *C.ml_DiarizeInferOutput) DiarizeInferOutput {
+func newDiarizeInferOutputFromCPtr(c *C.geniex_DiarizeInferOutput) DiarizeInferOutput {
 	output := DiarizeInferOutput{}
 
 	if c == nil {
@@ -238,7 +238,7 @@ func newDiarizeInferOutputFromCPtr(c *C.ml_DiarizeInferOutput) DiarizeInferOutpu
 
 	// Convert segments array
 	if c.segments != nil && c.segment_count > 0 {
-		segments := unsafe.Slice((*C.ml_DiarizeSpeechSegment)(unsafe.Pointer(c.segments)), int(c.segment_count))
+		segments := unsafe.Slice((*C.geniex_DiarizeSpeechSegment)(unsafe.Pointer(c.segments)), int(c.segment_count))
 		output.Segments = make([]DiarizeSpeechSegment, c.segment_count)
 		for i := range output.Segments {
 			output.Segments[i] = newDiarizeSpeechSegmentFromCPtr(&segments[i])
@@ -252,12 +252,12 @@ func newDiarizeInferOutputFromCPtr(c *C.ml_DiarizeInferOutput) DiarizeInferOutpu
 	return output
 }
 
-func freeDiarizeInferOutput(ptr *C.ml_DiarizeInferOutput) {
+func freeDiarizeInferOutput(ptr *C.geniex_DiarizeInferOutput) {
 	if ptr == nil {
 		return
 	}
 	if ptr.segments != nil && ptr.segment_count > 0 {
-		segments := unsafe.Slice((*C.ml_DiarizeSpeechSegment)(unsafe.Pointer(ptr.segments)), int(ptr.segment_count))
+		segments := unsafe.Slice((*C.geniex_DiarizeSpeechSegment)(unsafe.Pointer(ptr.segments)), int(ptr.segment_count))
 		for i := range segments {
 			freeDiarizeSpeechSegment(&segments[i])
 		}
@@ -267,7 +267,7 @@ func freeDiarizeInferOutput(ptr *C.ml_DiarizeInferOutput) {
 
 // Diarize represents a diarization instance
 type Diarize struct {
-	ptr *C.ml_Diarize
+	ptr *C.geniex_Diarize
 }
 
 // NewDiarize creates a new diarization instance
@@ -277,8 +277,8 @@ func NewDiarize(input DiarizeCreateInput) (*Diarize, error) {
 	cInput := input.toCPtr()
 	defer freeDiarizeCreateInput(cInput)
 
-	var cHandle *C.ml_Diarize
-	res := C.ml_diarize_create(cInput, &cHandle)
+	var cHandle *C.geniex_Diarize
+	res := C.geniex_diarize_create(cInput, &cHandle)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -294,7 +294,7 @@ func (d *Diarize) Destroy() error {
 		return nil
 	}
 
-	res := C.ml_diarize_destroy(d.ptr)
+	res := C.geniex_diarize_destroy(d.ptr)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -309,10 +309,10 @@ func (d *Diarize) Infer(input DiarizeInferInput) (DiarizeInferOutput, error) {
 	cInput := input.toCPtr()
 	defer freeDiarizeInferInput(cInput)
 
-	var cOutput C.ml_DiarizeInferOutput
+	var cOutput C.geniex_DiarizeInferOutput
 	defer freeDiarizeInferOutput(&cOutput)
 
-	res := C.ml_diarize_infer(d.ptr, cInput, &cOutput)
+	res := C.geniex_diarize_infer(d.ptr, cInput, &cOutput)
 	if res < 0 {
 		return DiarizeInferOutput{}, SDKError(res)
 	}

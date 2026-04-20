@@ -16,7 +16,7 @@ package geniex_sdk
 
 /*
 #include <stdlib.h>
-#include "ml.h"
+#include "geniex.h"
 */
 import "C"
 import (
@@ -43,7 +43,7 @@ type BoundingBox struct {
 	Height float32
 }
 
-func newBoundingBoxFromCPtr(c *C.ml_BoundingBox) BoundingBox {
+func newBoundingBoxFromCPtr(c *C.geniex_BoundingBox) BoundingBox {
 	bbox := BoundingBox{}
 
 	if c == nil {
@@ -77,7 +77,7 @@ func (c CVResult) String() string {
 		c.ImagePaths, c.ClassID, c.Confidence, c.BBox, c.Text, c.EmbeddingDim, c.MaskWidth, c.MaskHeight)
 }
 
-func newCVResultFromCPtr(c *C.ml_CVResult) CVResult {
+func newCVResultFromCPtr(c *C.geniex_CVResult) CVResult {
 	result := CVResult{}
 
 	if c == nil {
@@ -129,7 +129,7 @@ func newCVResultFromCPtr(c *C.ml_CVResult) CVResult {
 	return result
 }
 
-func freeCVResult(ptr *C.ml_CVResult) {
+func freeCVResult(ptr *C.geniex_CVResult) {
 	if ptr == nil {
 		return
 	}
@@ -169,11 +169,11 @@ type CVModelConfig struct {
 	CharDictPath string
 }
 
-func (cmc CVModelConfig) toCPtr() *C.ml_CVModelConfig {
-	cPtr := (*C.ml_CVModelConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_CVModelConfig{}))))
-	*cPtr = C.ml_CVModelConfig{}
+func (cmc CVModelConfig) toCPtr() *C.geniex_CVModelConfig {
+	cPtr := (*C.geniex_CVModelConfig)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_CVModelConfig{}))))
+	*cPtr = C.geniex_CVModelConfig{}
 
-	cPtr.capabilities = C.ml_CVCapabilities(cmc.Capabilities)
+	cPtr.capabilities = C.geniex_CVCapabilities(cmc.Capabilities)
 
 	if cmc.DetModelPath != "" {
 		cPtr.det_model_path = C.CString(cmc.DetModelPath)
@@ -196,9 +196,9 @@ type CVCreateInput struct {
 	DeviceID  string
 }
 
-func (cvi CVCreateInput) toCPtr() *C.ml_CVCreateInput {
-	cPtr := (*C.ml_CVCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_CVCreateInput{}))))
-	*cPtr = C.ml_CVCreateInput{}
+func (cvi CVCreateInput) toCPtr() *C.geniex_CVCreateInput {
+	cPtr := (*C.geniex_CVCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_CVCreateInput{}))))
+	*cPtr = C.geniex_CVCreateInput{}
 
 	// Convert config - config is a value type, not a pointer
 	configPtr := cvi.Config.toCPtr()
@@ -218,7 +218,7 @@ func (cvi CVCreateInput) toCPtr() *C.ml_CVCreateInput {
 	return cPtr
 }
 
-func freeCVCreateInput(cPtr *C.ml_CVCreateInput) {
+func freeCVCreateInput(cPtr *C.geniex_CVCreateInput) {
 	if cPtr != nil {
 		// Note: config is a value type, so we don't need to free it separately
 		if cPtr.plugin_id != nil {
@@ -236,9 +236,9 @@ type CVInferInput struct {
 	InputImagePath string
 }
 
-func (cii CVInferInput) toCPtr() *C.ml_CVInferInput {
-	cPtr := (*C.ml_CVInferInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_CVInferInput{}))))
-	*cPtr = C.ml_CVInferInput{}
+func (cii CVInferInput) toCPtr() *C.geniex_CVInferInput {
+	cPtr := (*C.geniex_CVInferInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_CVInferInput{}))))
+	*cPtr = C.geniex_CVInferInput{}
 
 	if cii.InputImagePath != "" {
 		cPtr.input_image_path = C.CString(cii.InputImagePath)
@@ -247,7 +247,7 @@ func (cii CVInferInput) toCPtr() *C.ml_CVInferInput {
 	return cPtr
 }
 
-func freeCVInferInput(cPtr *C.ml_CVInferInput) {
+func freeCVInferInput(cPtr *C.geniex_CVInferInput) {
 	if cPtr != nil {
 		if cPtr.input_image_path != nil {
 			C.free(unsafe.Pointer(cPtr.input_image_path))
@@ -261,7 +261,7 @@ type CVInferOutput struct {
 	Results []CVResult
 }
 
-func newCVInferOutputFromCPtr(c *C.ml_CVInferOutput) CVInferOutput {
+func newCVInferOutputFromCPtr(c *C.geniex_CVInferOutput) CVInferOutput {
 	output := CVInferOutput{}
 
 	if c == nil {
@@ -280,7 +280,7 @@ func newCVInferOutputFromCPtr(c *C.ml_CVInferOutput) CVInferOutput {
 	return output
 }
 
-func freeCVInferOutput(ptr *C.ml_CVInferOutput) {
+func freeCVInferOutput(ptr *C.geniex_CVInferOutput) {
 	if ptr == nil {
 		return
 	}
@@ -297,7 +297,7 @@ func freeCVInferOutput(ptr *C.ml_CVInferOutput) {
 
 // CV represents a CV model instance
 type CV struct {
-	ptr *C.ml_CV
+	ptr *C.geniex_CV
 }
 
 // NewCV creates a new CV model instance
@@ -307,8 +307,8 @@ func NewCV(input CVCreateInput) (*CV, error) {
 	cInput := input.toCPtr()
 	defer freeCVCreateInput(cInput)
 
-	var cHandle *C.ml_CV
-	res := C.ml_cv_create(cInput, &cHandle)
+	var cHandle *C.geniex_CV
+	res := C.geniex_cv_create(cInput, &cHandle)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -324,7 +324,7 @@ func (c *CV) Destroy() error {
 		return nil
 	}
 
-	res := C.ml_cv_destroy(c.ptr)
+	res := C.geniex_cv_destroy(c.ptr)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -339,10 +339,10 @@ func (c *CV) Infer(input CVInferInput) (CVInferOutput, error) {
 	cInput := input.toCPtr()
 	defer freeCVInferInput(cInput)
 
-	var cOutput C.ml_CVInferOutput
+	var cOutput C.geniex_CVInferOutput
 	defer freeCVInferOutput(&cOutput)
 
-	res := C.ml_cv_infer(c.ptr, cInput, &cOutput)
+	res := C.geniex_cv_infer(c.ptr, cInput, &cOutput)
 	if res < 0 {
 		return CVInferOutput{}, SDKError(res)
 	}

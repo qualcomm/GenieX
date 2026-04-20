@@ -36,7 +36,7 @@ LlamaCppReranker::~LlamaCppReranker() {
     GENIEX_LOG_INFO("Cleanup completed successfully");
 }
 
-int32_t LlamaCppReranker::create_impl(const ml_RerankerCreateInput* input) {
+int32_t LlamaCppReranker::create_impl(const geniex_RerankerCreateInput* input) {
     if (!input || !input->model_path) {
         GENIEX_LOG_ERROR("Invalid input parameters for reranker creation");
         return ML_ERROR_COMMON_INVALID_INPUT;
@@ -128,7 +128,7 @@ int32_t LlamaCppReranker::create_impl(const ml_RerankerCreateInput* input) {
     return ML_SUCCESS;
 }
 
-int32_t LlamaCppReranker::rerank(const ml_RerankerRerankInput* input, ml_RerankerRerankOutput* output) {
+int32_t LlamaCppReranker::rerank(const geniex_RerankerRerankInput* input, geniex_RerankerRerankOutput* output) {
     if (!input || !output) {
         GENIEX_LOG_ERROR("Invalid input parameters for reranking");
         return ML_ERROR_COMMON_INVALID_INPUT;

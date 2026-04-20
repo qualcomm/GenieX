@@ -3,13 +3,13 @@
 #include <cstring>
 
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "plugin/ITts.h"
 #include "registry.h"
 
 using namespace geniex;
 
-int32_t ml_tts_create(const ml_TtsCreateInput* input, ml_TTS** out_handle) {
+int32_t geniex_tts_create(const geniex_TtsCreateInput* input, geniex_TTS** out_handle) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -19,7 +19,7 @@ int32_t ml_tts_create(const ml_TtsCreateInput* input, ml_TTS** out_handle) {
         if (res != ML_SUCCESS) {
             delete backend;
         } else {
-            *out_handle = reinterpret_cast<ml_TTS*>(backend);
+            *out_handle = reinterpret_cast<geniex_TTS*>(backend);
         }
         return res;
     } catch (const PluginNotFoundException& e) {
@@ -34,7 +34,7 @@ int32_t ml_tts_create(const ml_TtsCreateInput* input, ml_TTS** out_handle) {
     }
 }
 
-int32_t ml_tts_destroy(ml_TTS* h) {
+int32_t geniex_tts_destroy(geniex_TTS* h) {
     GENIEX_LOG_TRACE("destroying tts");
 
     try {
@@ -48,7 +48,7 @@ int32_t ml_tts_destroy(ml_TTS* h) {
     }
 }
 
-int32_t ml_tts_synthesize(ml_TTS* h, const ml_TtsSynthesizeInput* input, ml_TtsSynthesizeOutput* output) {
+int32_t geniex_tts_synthesize(geniex_TTS* h, const geniex_TtsSynthesizeInput* input, geniex_TtsSynthesizeOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -56,7 +56,7 @@ int32_t ml_tts_synthesize(ml_TTS* h, const ml_TtsSynthesizeInput* input, ml_TtsS
         if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
         auto result = backend->synthesize(input, output);
         calculate_profile_data(output->profile_data);
-        GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+        GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("tts synthesize error: {}", e.what());
@@ -64,15 +64,15 @@ int32_t ml_tts_synthesize(ml_TTS* h, const ml_TtsSynthesizeInput* input, ml_TtsS
     }
 }
 
-int32_t ml_tts_list_available_voices(
-    const ml_TTS* h, const ml_TtsListAvailableVoicesInput* input, ml_TtsListAvailableVoicesOutput* output) {
+int32_t geniex_tts_list_available_voices(
+    const geniex_TTS* h, const geniex_TtsListAvailableVoicesInput* input, geniex_TtsListAvailableVoicesOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
-        auto backend = reinterpret_cast<ITts*>(const_cast<ml_TTS*>(h));
+        auto backend = reinterpret_cast<ITts*>(const_cast<geniex_TTS*>(h));
         if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
         int32_t result = backend->list_available_voices(input, output);
-        GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+        GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("tts list available voices error: {}", e.what());

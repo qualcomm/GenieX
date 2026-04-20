@@ -16,12 +16,12 @@ package geniex_sdk
 
 /*
 #include <stdlib.h>
-#include "ml.h"
+#include "geniex.h"
 
 #if defined(_WIN32)
-__declspec(dllexport) void go_log_wrap(ml_LogLevel level, char *msg);
+__declspec(dllexport) void go_log_wrap(geniex_LogLevel level, char *msg);
 #else
-extern void go_log_wrap(ml_LogLevel level, char *msg);
+extern void go_log_wrap(geniex_LogLevel level, char *msg);
 #endif
 
 static void set_token(const char* token) {
@@ -46,7 +46,7 @@ var bridgeLogEnabled = false
 type SDKError int32
 
 func (s SDKError) Error() string {
-	return fmt.Sprintf("SDKError(%s)", C.GoString(C.ml_get_error_message(C.ml_ErrorCode(s))))
+	return fmt.Sprintf("SDKError(%s)", C.GoString(C.geniex_get_error_message(C.geniex_ErrorCode(s))))
 }
 
 func SDKErrorCode(err error) int32 {
@@ -69,37 +69,37 @@ var (
 func Init() {
 	slog.Debug("[ML] Init", "bridgeLogEnabled", bridgeLogEnabled)
 	if bridgeLogEnabled {
-		C.ml_set_log((C.ml_log_callback)(C.go_log_wrap))
+		C.geniex_set_log((C.geniex_log_callback)(C.go_log_wrap))
 	}
 	C.set_token(C.CString(os.Getenv("GENIEX_TOKEN"))) // sync token to C env
-	C.ml_init()
+	C.geniex_init()
 }
 
 // DeInit cleans up resources allocated by the GenieX-CLI
 // This should be called when the SDK is no longer needed
 func DeInit() {
-	C.ml_deinit()
+	C.geniex_deinit()
 }
 
 // Get SDK Version
 func Version() string {
-	return C.GoString(C.ml_version())
+	return C.GoString(C.geniex_version())
 }
 
 type PluginListOutput struct {
 	PluginIDs []string
 }
 
-func newPluginListOutputFromCPtr(c *C.ml_GetPluginListOutput) PluginListOutput {
+func newPluginListOutputFromCPtr(c *C.geniex_GetPluginListOutput) PluginListOutput {
 	return PluginListOutput{
 		PluginIDs: cCharArrayToSlice((**C.char)(unsafe.Pointer(c.plugin_ids)), c.plugin_count),
 	}
 }
 
 func GetPluginList() (*PluginListOutput, error) {
-	var cOutput C.ml_GetPluginListOutput
+	var cOutput C.geniex_GetPluginListOutput
 
-	res := C.ml_get_plugin_list(&cOutput)
+	res := C.geniex_get_plugin_list(&cOutput)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -117,13 +117,13 @@ type DeviceListInput struct {
 	PluginID string
 }
 
-func (di DeviceListInput) toCPtr() *C.ml_GetDeviceListInput {
-	cPtr := (*C.ml_GetDeviceListInput)(C.malloc(C.sizeof_ml_GetDeviceListInput))
+func (di DeviceListInput) toCPtr() *C.geniex_GetDeviceListInput {
+	cPtr := (*C.geniex_GetDeviceListInput)(C.malloc(C.sizeof_ml_GetDeviceListInput))
 	cPtr.plugin_id = C.CString(di.PluginID)
 	return cPtr
 }
 
-func freeDeviceListInput(cPtr *C.ml_GetDeviceListInput) {
+func freeDeviceListInput(cPtr *C.geniex_GetDeviceListInput) {
 	if cPtr == nil {
 		return
 	}
@@ -142,7 +142,7 @@ type DeviceListOutput struct {
 	Devices []Device
 }
 
-func freeDeviceListOutput(c *C.ml_GetDeviceListOutput) {
+func freeDeviceListOutput(c *C.geniex_GetDeviceListOutput) {
 	if c == nil {
 		return
 	}
@@ -150,7 +150,7 @@ func freeDeviceListOutput(c *C.ml_GetDeviceListOutput) {
 	mlFree(unsafe.Pointer(c.device_names))
 }
 
-func newDeviceListOutputFromCPtr(c *C.ml_GetDeviceListOutput) DeviceListOutput {
+func newDeviceListOutputFromCPtr(c *C.geniex_GetDeviceListOutput) DeviceListOutput {
 	devices := make([]Device, c.device_count)
 
 	deviceIDs := unsafe.Slice(c.device_ids, int(c.device_count))
@@ -171,10 +171,10 @@ func GetDeviceList(input DeviceListInput) (*DeviceListOutput, error) {
 	cInput := input.toCPtr()
 	defer freeDeviceListInput(cInput)
 
-	var cOutput C.ml_GetDeviceListOutput
+	var cOutput C.geniex_GetDeviceListOutput
 	defer freeDeviceListOutput(&cOutput)
 
-	res := C.ml_get_device_list(cInput, &cOutput)
+	res := C.geniex_get_device_list(cInput, &cOutput)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -188,7 +188,7 @@ func GetDeviceList(input DeviceListInput) (*DeviceListOutput, error) {
 // It converts C strings to Go strings and prints them to stdout
 //
 //export go_log_wrap
-func go_log_wrap(level C.ml_LogLevel, msg *C.char) {
+func go_log_wrap(level C.geniex_LogLevel, msg *C.char) {
 	msgStr := C.GoString(msg)
 	switch level {
 	case C.ML_LOG_LEVEL_INFO:

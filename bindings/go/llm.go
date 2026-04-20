@@ -16,7 +16,7 @@ package geniex_sdk
 
 /*
 #include <stdlib.h>
-#include "ml.h"
+#include "geniex.h"
 
 extern bool go_generate_stream_on_token(char*, void*);
 */
@@ -46,9 +46,9 @@ type LlmCreateInput struct {
 	DeviceID      string
 }
 
-func (lci LlmCreateInput) toCPtr() *C.ml_LlmCreateInput {
-	cPtr := (*C.ml_LlmCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_LlmCreateInput{}))))
-	*cPtr = C.ml_LlmCreateInput{}
+func (lci LlmCreateInput) toCPtr() *C.geniex_LlmCreateInput {
+	cPtr := (*C.geniex_LlmCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_LlmCreateInput{}))))
+	*cPtr = C.geniex_LlmCreateInput{}
 
 	if lci.ModelName != "" {
 		cPtr.model_name = C.CString(lci.ModelName)
@@ -67,7 +67,7 @@ func (lci LlmCreateInput) toCPtr() *C.ml_LlmCreateInput {
 	}
 
 	// no need to use toCPtr() here, because we are not using the config pointer
-	cPtr.config = C.ml_ModelConfig{
+	cPtr.config = C.geniex_ModelConfig{
 		n_ctx:           C.int32_t(lci.Config.NCtx),
 		n_threads:       C.int32_t(lci.Config.NThreads),
 		n_threads_batch: C.int32_t(lci.Config.NThreadsBatch),
@@ -86,7 +86,7 @@ func (lci LlmCreateInput) toCPtr() *C.ml_LlmCreateInput {
 	return cPtr
 }
 
-func freeLlmCreateInput(cPtr *C.ml_LlmCreateInput) {
+func freeLlmCreateInput(cPtr *C.geniex_LlmCreateInput) {
 	if cPtr != nil {
 		// Free string fields
 		if cPtr.model_path != nil {
@@ -124,9 +124,9 @@ type LlmGenerateInput struct {
 	// UserData   unsafe.Pointer
 }
 
-func (lgi LlmGenerateInput) toCPtr() *C.ml_LlmGenerateInput {
-	cPtr := (*C.ml_LlmGenerateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_LlmGenerateInput{}))))
-	*cPtr = C.ml_LlmGenerateInput{}
+func (lgi LlmGenerateInput) toCPtr() *C.geniex_LlmGenerateInput {
+	cPtr := (*C.geniex_LlmGenerateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_LlmGenerateInput{}))))
+	*cPtr = C.geniex_LlmGenerateInput{}
 
 	if lgi.PromptUTF8 != "" {
 		cPtr.prompt_utf8 = C.CString(lgi.PromptUTF8)
@@ -158,7 +158,7 @@ func (lgi LlmGenerateInput) toCPtr() *C.ml_LlmGenerateInput {
 	return cPtr
 }
 
-func freeLlmGenerateInput(cPtr *C.ml_LlmGenerateInput) {
+func freeLlmGenerateInput(cPtr *C.geniex_LlmGenerateInput) {
 	if cPtr != nil {
 		if cPtr.prompt_utf8 != nil {
 			C.free(unsafe.Pointer(cPtr.prompt_utf8))
@@ -181,7 +181,7 @@ type LlmGenerateOutput struct {
 	ProfileData ProfileData
 }
 
-func newLlmGenerateOutputFromCPtr(c *C.ml_LlmGenerateOutput) LlmGenerateOutput {
+func newLlmGenerateOutputFromCPtr(c *C.geniex_LlmGenerateOutput) LlmGenerateOutput {
 	output := LlmGenerateOutput{}
 
 	if c == nil {
@@ -195,7 +195,7 @@ func newLlmGenerateOutputFromCPtr(c *C.ml_LlmGenerateOutput) LlmGenerateOutput {
 	return output
 }
 
-func freeLlmGenerateOutput(ptr *C.ml_LlmGenerateOutput) {
+func freeLlmGenerateOutput(ptr *C.geniex_LlmGenerateOutput) {
 	if ptr == nil {
 		return
 	}
@@ -211,14 +211,14 @@ type LlmChatMessage struct {
 
 type llmChatMessages []LlmChatMessage
 
-func (lcm llmChatMessages) toCPtr() (*C.ml_LlmChatMessage, C.int32_t) {
+func (lcm llmChatMessages) toCPtr() (*C.geniex_LlmChatMessage, C.int32_t) {
 	if len(lcm) == 0 {
 		return nil, 0
 	}
 
 	count := len(lcm)
 	raw := C.malloc(C.size_t(count * C.sizeof_ml_LlmChatMessage))
-	cMessages := unsafe.Slice((*C.ml_LlmChatMessage)(raw), count)
+	cMessages := unsafe.Slice((*C.geniex_LlmChatMessage)(raw), count)
 
 	for i, msg := range lcm {
 		if msg.Role != "" {
@@ -227,10 +227,10 @@ func (lcm llmChatMessages) toCPtr() (*C.ml_LlmChatMessage, C.int32_t) {
 		}
 	}
 
-	return (*C.ml_LlmChatMessage)(raw), C.int32_t(count)
+	return (*C.geniex_LlmChatMessage)(raw), C.int32_t(count)
 }
 
-func freeLlmChatMessages(cPtr *C.ml_LlmChatMessage, count C.int32_t) {
+func freeLlmChatMessages(cPtr *C.geniex_LlmChatMessage, count C.int32_t) {
 	if cPtr == nil || count == 0 {
 		return
 	}
@@ -255,9 +255,9 @@ type LlmApplyChatTemplateInput struct {
 	AddGenerationPrompt bool
 }
 
-func (lati LlmApplyChatTemplateInput) toCPtr() *C.ml_LlmApplyChatTemplateInput {
-	cPtr := (*C.ml_LlmApplyChatTemplateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_LlmApplyChatTemplateInput{}))))
-	*cPtr = C.ml_LlmApplyChatTemplateInput{}
+func (lati LlmApplyChatTemplateInput) toCPtr() *C.geniex_LlmApplyChatTemplateInput {
+	cPtr := (*C.geniex_LlmApplyChatTemplateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_LlmApplyChatTemplateInput{}))))
+	*cPtr = C.geniex_LlmApplyChatTemplateInput{}
 
 	if len(lati.Messages) > 0 {
 		cMessages, messageCount := llmChatMessages(lati.Messages).toCPtr()
@@ -275,7 +275,7 @@ func (lati LlmApplyChatTemplateInput) toCPtr() *C.ml_LlmApplyChatTemplateInput {
 	return cPtr
 }
 
-func freeLlmApplyChatTemplateInput(cPtr *C.ml_LlmApplyChatTemplateInput) {
+func freeLlmApplyChatTemplateInput(cPtr *C.geniex_LlmApplyChatTemplateInput) {
 	if cPtr == nil {
 		return
 	}
@@ -290,7 +290,7 @@ type LlmApplyChatTemplateOutput struct {
 	FormattedText string
 }
 
-func newLlmApplyChatTemplateOutputFromCPtr(c *C.ml_LlmApplyChatTemplateOutput) LlmApplyChatTemplateOutput {
+func newLlmApplyChatTemplateOutputFromCPtr(c *C.geniex_LlmApplyChatTemplateOutput) LlmApplyChatTemplateOutput {
 	output := LlmApplyChatTemplateOutput{}
 
 	if c == nil {
@@ -304,7 +304,7 @@ func newLlmApplyChatTemplateOutputFromCPtr(c *C.ml_LlmApplyChatTemplateOutput) L
 	return output
 }
 
-func freeLlmApplyChatTemplateOutput(cPtr *C.ml_LlmApplyChatTemplateOutput) {
+func freeLlmApplyChatTemplateOutput(cPtr *C.geniex_LlmApplyChatTemplateOutput) {
 	if cPtr == nil {
 		return
 	}
@@ -314,7 +314,7 @@ func freeLlmApplyChatTemplateOutput(cPtr *C.ml_LlmApplyChatTemplateOutput) {
 }
 
 type LLM struct {
-	ptr *C.ml_LLM
+	ptr *C.geniex_LLM
 }
 
 func NewLLM(input LlmCreateInput) (*LLM, error) {
@@ -323,8 +323,8 @@ func NewLLM(input LlmCreateInput) (*LLM, error) {
 	cInput := input.toCPtr()
 	defer freeLlmCreateInput(cInput)
 
-	var cHandle *C.ml_LLM
-	res := C.ml_llm_create(cInput, &cHandle)
+	var cHandle *C.geniex_LLM
+	res := C.geniex_llm_create(cInput, &cHandle)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -339,7 +339,7 @@ func (l *LLM) Destroy() error {
 		return nil
 	}
 
-	res := C.ml_llm_destroy(l.ptr)
+	res := C.geniex_llm_destroy(l.ptr)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -353,7 +353,7 @@ func (l *LLM) Reset() error {
 		return nil
 	}
 
-	res := C.ml_llm_reset(l.ptr)
+	res := C.geniex_llm_reset(l.ptr)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -365,9 +365,9 @@ type LlmSaveKVCacheInput struct {
 	Path string
 }
 
-func (lsci LlmSaveKVCacheInput) toCPtr() *C.ml_KvCacheSaveInput {
-	cPtr := (*C.ml_KvCacheSaveInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_KvCacheSaveInput{}))))
-	*cPtr = C.ml_KvCacheSaveInput{}
+func (lsci LlmSaveKVCacheInput) toCPtr() *C.geniex_KvCacheSaveInput {
+	cPtr := (*C.geniex_KvCacheSaveInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_KvCacheSaveInput{}))))
+	*cPtr = C.geniex_KvCacheSaveInput{}
 
 	if lsci.Path != "" {
 		cPtr.path = C.CString(lsci.Path)
@@ -376,7 +376,7 @@ func (lsci LlmSaveKVCacheInput) toCPtr() *C.ml_KvCacheSaveInput {
 	return cPtr
 }
 
-func freeLlmSaveKVCacheInput(cPtr *C.ml_KvCacheSaveInput) {
+func freeLlmSaveKVCacheInput(cPtr *C.geniex_KvCacheSaveInput) {
 	if cPtr != nil {
 		if cPtr.path != nil {
 			C.free(unsafe.Pointer(cPtr.path))
@@ -390,7 +390,7 @@ type LlmSaveKVCacheOutput struct {
 	Reserved any
 }
 
-func newLlmSaveKVCacheOutputFromCPtr(c *C.ml_KvCacheSaveOutput) LlmSaveKVCacheOutput {
+func newLlmSaveKVCacheOutputFromCPtr(c *C.geniex_KvCacheSaveOutput) LlmSaveKVCacheOutput {
 	output := LlmSaveKVCacheOutput{}
 
 	if c == nil {
@@ -401,7 +401,7 @@ func newLlmSaveKVCacheOutputFromCPtr(c *C.ml_KvCacheSaveOutput) LlmSaveKVCacheOu
 	return output
 }
 
-func freeLlmSaveKVCacheOutput(cPtr *C.ml_KvCacheSaveOutput) {
+func freeLlmSaveKVCacheOutput(cPtr *C.geniex_KvCacheSaveOutput) {
 	if cPtr == nil {
 		return
 	}
@@ -413,9 +413,9 @@ type LlmLoadKVCacheInput struct {
 	Path string
 }
 
-func (llci LlmLoadKVCacheInput) toCPtr() *C.ml_KvCacheLoadInput {
-	cPtr := (*C.ml_KvCacheLoadInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_KvCacheLoadInput{}))))
-	*cPtr = C.ml_KvCacheLoadInput{}
+func (llci LlmLoadKVCacheInput) toCPtr() *C.geniex_KvCacheLoadInput {
+	cPtr := (*C.geniex_KvCacheLoadInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_KvCacheLoadInput{}))))
+	*cPtr = C.geniex_KvCacheLoadInput{}
 
 	if llci.Path != "" {
 		cPtr.path = C.CString(llci.Path)
@@ -424,7 +424,7 @@ func (llci LlmLoadKVCacheInput) toCPtr() *C.ml_KvCacheLoadInput {
 	return cPtr
 }
 
-func freeLlmLoadKVCacheInput(cPtr *C.ml_KvCacheLoadInput) {
+func freeLlmLoadKVCacheInput(cPtr *C.geniex_KvCacheLoadInput) {
 	if cPtr != nil {
 		if cPtr.path != nil {
 			C.free(unsafe.Pointer(cPtr.path))
@@ -438,7 +438,7 @@ type LlmLoadKVCacheOutput struct {
 	Reserved any
 }
 
-func newLlmLoadKVCacheOutputFromCPtr(c *C.ml_KvCacheLoadOutput) LlmLoadKVCacheOutput {
+func newLlmLoadKVCacheOutputFromCPtr(c *C.geniex_KvCacheLoadOutput) LlmLoadKVCacheOutput {
 	output := LlmLoadKVCacheOutput{}
 
 	if c == nil {
@@ -449,7 +449,7 @@ func newLlmLoadKVCacheOutputFromCPtr(c *C.ml_KvCacheLoadOutput) LlmLoadKVCacheOu
 	return output
 }
 
-func freeLlmLoadKVCacheOutput(cPtr *C.ml_KvCacheLoadOutput) {
+func freeLlmLoadKVCacheOutput(cPtr *C.geniex_KvCacheLoadOutput) {
 	if cPtr == nil {
 		return
 	}
@@ -462,10 +462,10 @@ func (l *LLM) ApplyChatTemplate(input LlmApplyChatTemplateInput) (*LlmApplyChatT
 	cinput := input.toCPtr()
 	defer freeLlmApplyChatTemplateInput(cinput)
 
-	var cOutput C.ml_LlmApplyChatTemplateOutput
+	var cOutput C.geniex_LlmApplyChatTemplateOutput
 	defer freeLlmApplyChatTemplateOutput(&cOutput)
 
-	res := C.ml_llm_apply_chat_template(l.ptr, cinput, &cOutput)
+	res := C.geniex_llm_apply_chat_template(l.ptr, cinput, &cOutput)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -481,10 +481,10 @@ func (l *LLM) SaveKVCache(input LlmSaveKVCacheInput) (*LlmSaveKVCacheOutput, err
 	cInput := input.toCPtr()
 	defer freeLlmSaveKVCacheInput(cInput)
 
-	var cOutput C.ml_KvCacheSaveOutput
+	var cOutput C.geniex_KvCacheSaveOutput
 	defer freeLlmSaveKVCacheOutput(&cOutput)
 
-	res := C.ml_llm_save_kv_cache(l.ptr, cInput, &cOutput)
+	res := C.geniex_llm_save_kv_cache(l.ptr, cInput, &cOutput)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -500,10 +500,10 @@ func (l *LLM) LoadKVCache(input LlmLoadKVCacheInput) (*LlmLoadKVCacheOutput, err
 	cInput := input.toCPtr()
 	defer freeLlmLoadKVCacheInput(cInput)
 
-	var cOutput C.ml_KvCacheLoadOutput
+	var cOutput C.geniex_KvCacheLoadOutput
 	defer freeLlmLoadKVCacheOutput(&cOutput)
 
-	res := C.ml_llm_load_kv_cache(l.ptr, cInput, &cOutput)
+	res := C.geniex_llm_load_kv_cache(l.ptr, cInput, &cOutput)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -524,12 +524,12 @@ func (l *LLM) Generate(input LlmGenerateInput) (LlmGenerateOutput, error) {
 	defer func() {
 		onToken = nil // reset to default
 	}()
-	cInput.on_token = C.ml_token_callback(C.go_generate_stream_on_token)
+	cInput.on_token = C.geniex_token_callback(C.go_generate_stream_on_token)
 
-	var cOutput C.ml_LlmGenerateOutput
+	var cOutput C.geniex_LlmGenerateOutput
 	defer freeLlmGenerateOutput(&cOutput)
 
-	res := C.ml_llm_generate(l.ptr, cInput, &cOutput)
+	res := C.geniex_llm_generate(l.ptr, cInput, &cOutput)
 	if res < 0 {
 		return LlmGenerateOutput{}, SDKError(res)
 	}

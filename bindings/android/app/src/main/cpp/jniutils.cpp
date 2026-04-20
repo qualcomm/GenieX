@@ -118,8 +118,8 @@ void getStringArrayField(JNIEnv* env, jobject obj, jclass cls, const char* field
     }
 }
 
-ml_GenerationConfig extract_generation_config(JNIEnv* env, jobject configObj) {
-    ml_GenerationConfig cfg = {};
+geniex_GenerationConfig extract_generation_config(JNIEnv* env, jobject configObj) {
+    geniex_GenerationConfig cfg = {};
     if (!configObj) return cfg;
     jclass cls = env->GetObjectClass(configObj);
 
@@ -145,28 +145,28 @@ ml_GenerationConfig extract_generation_config(JNIEnv* env, jobject configObj) {
     jfieldID samplerCfgId  = env->GetFieldID(cls, "samplerConfig", "Lcom/geniex/sdk/bean/SamplerConfig;");
     jobject  samplerCfgObj = samplerCfgId ? env->GetObjectField(configObj, samplerCfgId) : nullptr;
     if (samplerCfgObj) {
-        cfg.sampler_config = new ml_SamplerConfig(extract_sampler_config(env, samplerCfgObj));
+        cfg.sampler_config = new geniex_SamplerConfig(extract_sampler_config(env, samplerCfgObj));
     }
 
     // ----------- imagePaths  -----------
     static thread_local std::vector<std::string> imagePathStorage;
     static thread_local std::vector<const char*> imagePathPtrs;
     getStringArrayField(env, configObj, cls, "imagePaths", imagePathStorage, imagePathPtrs);
-    cfg.image_paths = imagePathPtrs.empty() ? nullptr : (ml_Path*)imagePathPtrs.data();
+    cfg.image_paths = imagePathPtrs.empty() ? nullptr : (geniex_Path*)imagePathPtrs.data();
     cfg.image_count = imagePathPtrs.size();
 
     // ----------- audioPaths  -----------
     static thread_local std::vector<std::string> audioPathStorage;
     static thread_local std::vector<const char*> audioPathPtrs;
     getStringArrayField(env, configObj, cls, "audioPaths", audioPathStorage, audioPathPtrs);
-    cfg.audio_paths = audioPathPtrs.empty() ? nullptr : (ml_Path*)audioPathPtrs.data();
+    cfg.audio_paths = audioPathPtrs.empty() ? nullptr : (geniex_Path*)audioPathPtrs.data();
     cfg.audio_count = audioPathPtrs.size();
 
     return cfg;
 }
 
-ml_SamplerConfig extract_sampler_config(JNIEnv* env, jobject configObj) {
-    ml_SamplerConfig cfg = {};
+geniex_SamplerConfig extract_sampler_config(JNIEnv* env, jobject configObj) {
+    geniex_SamplerConfig cfg = {};
     if (!configObj) return cfg;
 
     jclass cls = env->GetObjectClass(configObj);
@@ -188,7 +188,7 @@ ml_SamplerConfig extract_sampler_config(JNIEnv* env, jobject configObj) {
     static thread_local std::string grammar_path_storage;
     static thread_local std::string grammar_str_storage;
 
-    // grammarPath -> ml_Path
+    // grammarPath -> geniex_Path
     {
         jfieldID fid  = env->GetFieldID(cls, "grammarPath", "Ljava/lang/String;");
         jstring  jstr = (jstring)env->GetObjectField(configObj, fid);
@@ -219,10 +219,10 @@ ml_SamplerConfig extract_sampler_config(JNIEnv* env, jobject configObj) {
     return cfg;
 }
 
-//    std::vector <ml_ChatMessage>
+//    std::vector <geniex_ChatMessage>
 //    extract_chat_messages(JNIEnv *env, jobjectArray jmessages, std::vector <std::string> &str_buf) {
 //        jsize count = env->GetArrayLength(jmessages);
-//        std::vector <ml_ChatMessage> msgs(count);
+//        std::vector <geniex_ChatMessage> msgs(count);
 //
 //        str_buf.clear();
 //        str_buf.reserve(count * 2); // for role and content
@@ -253,8 +253,8 @@ ml_SamplerConfig extract_sampler_config(JNIEnv* env, jobject configObj) {
 //        return msgs;
 //    }
 
-ml_EmbeddingConfig extract_embedding_config(JNIEnv* env, jobject configObj) {
-    ml_EmbeddingConfig cfg = {};
+geniex_EmbeddingConfig extract_embedding_config(JNIEnv* env, jobject configObj) {
+    geniex_EmbeddingConfig cfg = {};
     if (!configObj) {
         cfg.batch_size       = 32;
         cfg.normalize        = true;
@@ -279,8 +279,8 @@ ml_EmbeddingConfig extract_embedding_config(JNIEnv* env, jobject configObj) {
     return cfg;
 }
 
-ml_RerankConfig extract_rerank_config(JNIEnv* env, jobject configObj) {
-    ml_RerankConfig cfg = {};
+geniex_RerankConfig extract_rerank_config(JNIEnv* env, jobject configObj) {
+    geniex_RerankConfig cfg = {};
     if (!configObj) return cfg;
 
     jclass cls = env->GetObjectClass(configObj);
@@ -298,8 +298,8 @@ ml_RerankConfig extract_rerank_config(JNIEnv* env, jobject configObj) {
 
     return cfg;
 }
-ml_ModelConfig extract_model_config(JNIEnv* env, jobject configObj) {
-    ml_ModelConfig config = {};
+geniex_ModelConfig extract_model_config(JNIEnv* env, jobject configObj) {
+    geniex_ModelConfig config = {};
     if (!configObj) return config;
 
     jclass cls = env->GetObjectClass(configObj);
@@ -324,7 +324,7 @@ ml_ModelConfig extract_model_config(JNIEnv* env, jobject configObj) {
     config.chat_template_content = jstr ? hold_c_str(jstring2str(env, jstr)) : nullptr;
 
     // Note: old fields like system_library_path, backend_library_path, etc. are removed
-    // They don't exist in ml_ModelConfig anymore (see include/ml.h)
+    // They don't exist in geniex_ModelConfig anymore (see include/ml.h)
 
     // max_tokens
     fid               = env->GetFieldID(cls, "max_tokens", "I");
@@ -350,7 +350,7 @@ ml_ModelConfig extract_model_config(JNIEnv* env, jobject configObj) {
 
     return config;
 }
-jobject extract_profiling_data(JNIEnv* env, const ml_ProfileData& data) {
+jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data) {
     jclass cls = env->FindClass("com/geniex/sdk/bean/ProfilingData");
     if (!cls) return nullptr;
 
@@ -411,8 +411,8 @@ static bool checkAndLogJniException(JNIEnv* env, const char* where) {
     return false;
 }
 
-ml_LlmCreateInput extract_llm_create_input(JNIEnv* env, jobject inputObj) {
-    ml_LlmCreateInput out = {};
+geniex_LlmCreateInput extract_llm_create_input(JNIEnv* env, jobject inputObj) {
+    geniex_LlmCreateInput out = {};
     if (!inputObj) {
         LOGe("[JNI] extract_llm_create_input: inputObj is null");
         return out;
@@ -539,8 +539,8 @@ ml_LlmCreateInput extract_llm_create_input(JNIEnv* env, jobject inputObj) {
     return out;
 }
 
-ml_VlmCreateInput extract_vlm_create_input(JNIEnv* env, jobject inputObj) {
-    ml_VlmCreateInput out{};  // 全部設為 0 / nullptr
+geniex_VlmCreateInput extract_vlm_create_input(JNIEnv* env, jobject inputObj) {
+    geniex_VlmCreateInput out{};  // 全部設為 0 / nullptr
     if (!inputObj) return out;
 
     jclass cls = env->GetObjectClass(inputObj);
@@ -619,9 +619,9 @@ ml_VlmCreateInput extract_vlm_create_input(JNIEnv* env, jobject inputObj) {
     return out;
 }
 
-// Extract EmbedderCreateInput from Java object (matches ml_EmbedderCreateInput)
-ml_EmbedderCreateInput extract_embedder_create_input(JNIEnv* env, jobject inputObj) {
-    ml_EmbedderCreateInput out = {};
+// Extract EmbedderCreateInput from Java object (matches geniex_EmbedderCreateInput)
+geniex_EmbedderCreateInput extract_embedder_create_input(JNIEnv* env, jobject inputObj) {
+    geniex_EmbedderCreateInput out = {};
     if (!inputObj) {
         LOGe("[JNI] extract_embedder_create_input: inputObj is null");
         return out;
@@ -724,9 +724,9 @@ ml_EmbedderCreateInput extract_embedder_create_input(JNIEnv* env, jobject inputO
     return out;
 }
 
-// Extract RerankerCreateInput from Java object (matches ml_RerankerCreateInput)
-ml_RerankerCreateInput extract_reranker_create_input(JNIEnv* env, jobject inputObj) {
-    ml_RerankerCreateInput out = {};
+// Extract RerankerCreateInput from Java object (matches geniex_RerankerCreateInput)
+geniex_RerankerCreateInput extract_reranker_create_input(JNIEnv* env, jobject inputObj) {
+    geniex_RerankerCreateInput out = {};
     if (!inputObj) {
         LOGe("[JNI] extract_reranker_create_input: inputObj is null");
         return out;
@@ -829,9 +829,9 @@ ml_RerankerCreateInput extract_reranker_create_input(JNIEnv* env, jobject inputO
     return out;
 }
 
-std::vector<ml_LlmChatMessage> extract_llm_chat_messages(
+std::vector<geniex_LlmChatMessage> extract_llm_chat_messages(
     JNIEnv* env, jobjectArray jmessages, std::vector<std::string>& str_buf) {
-    std::vector<ml_LlmChatMessage> msgs;
+    std::vector<geniex_LlmChatMessage> msgs;
     str_buf.clear();
     jsize len = env->GetArrayLength(jmessages);
     msgs.reserve(len);
@@ -851,7 +851,7 @@ std::vector<ml_LlmChatMessage> extract_llm_chat_messages(
         str_buf.push_back(sRole);
         str_buf.push_back(sContent);
 
-        ml_LlmChatMessage m;
+        geniex_LlmChatMessage m;
         m.role    = str_buf[str_buf.size() - 2].c_str();
         m.content = str_buf[str_buf.size() - 1].c_str();
         msgs.push_back(m);
@@ -866,16 +866,16 @@ std::vector<ml_LlmChatMessage> extract_llm_chat_messages(
 // typedef struct {
 //     const char* type;  // "text", "image", "audio", …
 //     const char* text;  // payload: actual text, URL, or token
-// } ml_VlmContent;
+// } geniex_VlmContent;
 //
 // typedef struct {
 //     const char*    role;           // "user", "assistant", "system", …
 //     int64_t        content_count;  // number of elements in `contents`
-//     ml_VlmContent* contents;       // dynamically-allocated array (may be NULL)
-// } ml_VlmChatMessage;
+//     geniex_VlmContent* contents;       // dynamically-allocated array (may be NULL)
+// } geniex_VlmChatMessage;
 
-static ml_VlmContent extract_vlm_content(JNIEnv* env, jobject jcontent) {
-    ml_VlmContent out{};
+static geniex_VlmContent extract_vlm_content(JNIEnv* env, jobject jcontent) {
+    geniex_VlmContent out{};
     if (!jcontent) return out;
 
     jclass cls = env->GetObjectClass(jcontent);
@@ -937,8 +937,8 @@ static ml_VlmContent extract_vlm_content(JNIEnv* env, jobject jcontent) {
 // static const char* hold_c_str(const std::string& s);
 // static inline void clear_jni_cstr_pool();
 
-std::vector<ml_VlmChatMessage> extract_vlm_chat_messages(JNIEnv* env, jobjectArray jmessages) {
-    std::vector<ml_VlmChatMessage> msgs;
+std::vector<geniex_VlmChatMessage> extract_vlm_chat_messages(JNIEnv* env, jobjectArray jmessages) {
+    std::vector<geniex_VlmChatMessage> msgs;
 
     if (!jmessages) return msgs;
 
@@ -959,7 +959,7 @@ std::vector<ml_VlmChatMessage> extract_vlm_chat_messages(JNIEnv* env, jobjectArr
     for (jsize i = 0; i < len; ++i) {
         jobject jmsg = env->GetObjectArrayElement(jmessages, i);
         if (!jmsg) {
-            msgs.push_back(ml_VlmChatMessage{});
+            msgs.push_back(geniex_VlmChatMessage{});
             continue;
         }
 
@@ -977,7 +977,7 @@ std::vector<ml_VlmChatMessage> extract_vlm_chat_messages(JNIEnv* env, jobjectArr
         }
 
         // contents: List<VlmContent> -> getContents()
-        ml_VlmContent* contents_arr = nullptr;
+        geniex_VlmContent* contents_arr = nullptr;
         int64_t        count        = 0;
 
         jmethodID midGetContents = env->GetMethodID(msgCls, "getContents", "()Ljava/util/List;");
@@ -986,7 +986,7 @@ std::vector<ml_VlmChatMessage> extract_vlm_chat_messages(JNIEnv* env, jobjectArr
             if (jList) {
                 const jint cLen = env->CallIntMethod(jList, midListSize);
                 if (cLen > 0) {
-                    contents_arr = new ml_VlmContent[cLen];
+                    contents_arr = new geniex_VlmContent[cLen];
                     count        = cLen;
                     for (jint ci = 0; ci < cLen; ++ci) {
                         jobject jc = env->CallObjectMethod(jList, midListGet, ci);
@@ -994,7 +994,7 @@ std::vector<ml_VlmChatMessage> extract_vlm_chat_messages(JNIEnv* env, jobjectArr
                             contents_arr[ci] = extract_vlm_content(env, jc);  // 你已改成用 hold_c_str 的版本
                             env->DeleteLocalRef(jc);
                         } else {
-                            contents_arr[ci] = ml_VlmContent{};
+                            contents_arr[ci] = geniex_VlmContent{};
                         }
                     }
                 }
@@ -1002,7 +1002,7 @@ std::vector<ml_VlmChatMessage> extract_vlm_chat_messages(JNIEnv* env, jobjectArr
             }
         }
 
-        ml_VlmChatMessage m{};
+        geniex_VlmChatMessage m{};
         m.role          = role_cstr;
         m.content_count = count;
         m.contents      = contents_arr;
@@ -1017,7 +1017,7 @@ std::vector<ml_VlmChatMessage> extract_vlm_chat_messages(JNIEnv* env, jobjectArr
     return msgs;
 }
 
-void free_vlm_chat_messages(std::vector<ml_VlmChatMessage>& msgs) {
+void free_vlm_chat_messages(std::vector<geniex_VlmChatMessage>& msgs) {
     for (auto& m : msgs) {
         delete[] m.contents;  // delete nullptr 安全
         m.contents      = nullptr;

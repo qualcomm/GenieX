@@ -1,13 +1,13 @@
 #include <cstdlib>
 
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "plugin/IImageGen.h"
 #include "registry.h"
 
 using namespace geniex;
 
-int32_t ml_imagegen_create(const ml_ImageGenCreateInput* input, ml_ImageGen** out_handle) {
+int32_t geniex_imagegen_create(const geniex_ImageGenCreateInput* input, geniex_ImageGen** out_handle) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -17,7 +17,7 @@ int32_t ml_imagegen_create(const ml_ImageGenCreateInput* input, ml_ImageGen** ou
         if (result != ML_SUCCESS) {
             delete backend;
         } else {
-            *out_handle = reinterpret_cast<ml_ImageGen*>(backend);
+            *out_handle = reinterpret_cast<geniex_ImageGen*>(backend);
         }
         return result;
     } catch (const PluginNotFoundException& e) {
@@ -32,7 +32,7 @@ int32_t ml_imagegen_create(const ml_ImageGenCreateInput* input, ml_ImageGen** ou
     }
 }
 
-int32_t ml_imagegen_destroy(ml_ImageGen* handle) {
+int32_t geniex_imagegen_destroy(geniex_ImageGen* handle) {
     GENIEX_LOG_TRACE("destroying image gen");
 
     try {
@@ -46,7 +46,7 @@ int32_t ml_imagegen_destroy(ml_ImageGen* handle) {
     }
 }
 
-int32_t ml_imagegen_txt2img(ml_ImageGen* handle, const ml_ImageGenTxt2ImgInput* input, ml_ImageGenOutput* output) {
+int32_t geniex_imagegen_txt2img(geniex_ImageGen* handle, const geniex_ImageGenTxt2ImgInput* input, geniex_ImageGenOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -56,7 +56,7 @@ int32_t ml_imagegen_txt2img(ml_ImageGen* handle, const ml_ImageGenTxt2ImgInput* 
         int32_t result = backend->txt2img(input, output);
         // TODO: add profile data
         // calculate_profile_data(output->profile_data);
-        GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+        GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("image gen txt2img error: {}", e.what());
@@ -64,7 +64,7 @@ int32_t ml_imagegen_txt2img(ml_ImageGen* handle, const ml_ImageGenTxt2ImgInput* 
     }
 }
 
-int32_t ml_imagegen_img2img(ml_ImageGen* handle, const ml_ImageGenImg2ImgInput* input, ml_ImageGenOutput* output) {
+int32_t geniex_imagegen_img2img(geniex_ImageGen* handle, const geniex_ImageGenImg2ImgInput* input, geniex_ImageGenOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -74,7 +74,7 @@ int32_t ml_imagegen_img2img(ml_ImageGen* handle, const ml_ImageGenImg2ImgInput* 
         int32_t result = backend->img2img(input, output);
         // TODO: add profile data
         // calculate_profile_data(output->profile_data);
-        GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+        GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("image gen img2img error: {}", e.what());

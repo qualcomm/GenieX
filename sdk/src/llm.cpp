@@ -2,7 +2,7 @@
 #include <memory>
 
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "plugin/ILlm.h"
 #include "profile.h"
 #include "registry.h"
@@ -10,7 +10,7 @@
 
 using namespace geniex;
 
-int32_t ml_llm_create(const ml_LlmCreateInput* input, ml_LLM** out_handle) {
+int32_t geniex_llm_create(const geniex_LlmCreateInput* input, geniex_LLM** out_handle) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -20,7 +20,7 @@ int32_t ml_llm_create(const ml_LlmCreateInput* input, ml_LLM** out_handle) {
         if (res != ML_SUCCESS) {
             delete backend;
         } else {
-            *out_handle = reinterpret_cast<ml_LLM*>(backend);
+            *out_handle = reinterpret_cast<geniex_LLM*>(backend);
         }
         return res;
     } catch (const PluginNotFoundException& e) {
@@ -35,7 +35,7 @@ int32_t ml_llm_create(const ml_LlmCreateInput* input, ml_LLM** out_handle) {
     }
 }
 
-int32_t ml_llm_destroy(ml_LLM* h) {
+int32_t geniex_llm_destroy(geniex_LLM* h) {
     GENIEX_LOG_TRACE("llm destroy");
 
     try {
@@ -49,7 +49,7 @@ int32_t ml_llm_destroy(ml_LLM* h) {
     }
 }
 
-int32_t ml_llm_reset(ml_LLM* h) {
+int32_t geniex_llm_reset(geniex_LLM* h) {
     GENIEX_LOG_TRACE("llm reset");
 
     try {
@@ -62,14 +62,14 @@ int32_t ml_llm_reset(ml_LLM* h) {
     }
 }
 
-int32_t ml_llm_save_kv_cache(ml_LLM* h, const ml_KvCacheSaveInput* input, ml_KvCacheSaveOutput* output) {
+int32_t geniex_llm_save_kv_cache(geniex_LLM* h, const geniex_KvCacheSaveInput* input, geniex_KvCacheSaveOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
         auto backend = reinterpret_cast<ILlm*>(h);
         if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
         auto result = backend->save_kv_cache(input, output);
-        GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+        GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("llm save kv cache error: {}", e.what());
@@ -77,14 +77,14 @@ int32_t ml_llm_save_kv_cache(ml_LLM* h, const ml_KvCacheSaveInput* input, ml_KvC
     }
 }
 
-int32_t ml_llm_load_kv_cache(ml_LLM* h, const ml_KvCacheLoadInput* input, ml_KvCacheLoadOutput* output) {
+int32_t geniex_llm_load_kv_cache(geniex_LLM* h, const geniex_KvCacheLoadInput* input, geniex_KvCacheLoadOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
         auto backend = reinterpret_cast<ILlm*>(h);
         if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
         auto result = backend->load_kv_cache(input, output);
-        GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+        GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("llm load kv cache error: {}", e.what());
@@ -92,15 +92,15 @@ int32_t ml_llm_load_kv_cache(ml_LLM* h, const ml_KvCacheLoadInput* input, ml_KvC
     }
 }
 
-int32_t ml_llm_apply_chat_template(
-    ml_LLM* h, const ml_LlmApplyChatTemplateInput* input, ml_LlmApplyChatTemplateOutput* output) {
+int32_t geniex_llm_apply_chat_template(
+    geniex_LLM* h, const geniex_LlmApplyChatTemplateInput* input, geniex_LlmApplyChatTemplateOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
         auto backend = reinterpret_cast<ILlm*>(h);
         if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
         auto result = backend->apply_chat_template(input, output);
-        GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+        GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("llm apply chat template error: {}", e.what());
@@ -108,7 +108,7 @@ int32_t ml_llm_apply_chat_template(
     }
 }
 
-int32_t ml_llm_generate(ml_LLM* h, const ml_LlmGenerateInput* input, ml_LlmGenerateOutput* output) {
+int32_t geniex_llm_generate(geniex_LLM* h, const geniex_LlmGenerateInput* input, geniex_LlmGenerateOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -117,7 +117,7 @@ int32_t ml_llm_generate(ml_LLM* h, const ml_LlmGenerateInput* input, ml_LlmGener
 
         // Wrap the user's callback with UTF-8 validation if a callback is provided
         std::unique_ptr<Utf8CallbackWrapper> wrapper;
-        ml_LlmGenerateInput                  modified_input;
+        geniex_LlmGenerateInput                  modified_input;
 
         if (input->on_token) {
             // Create wrapper that accumulates incomplete UTF-8 sequences
@@ -132,7 +132,7 @@ int32_t ml_llm_generate(ml_LLM* h, const ml_LlmGenerateInput* input, ml_LlmGener
 
             int32_t result = backend->generate(&modified_input, output);
             calculate_profile_data(output->profile_data);
-            GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+            GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
 
             // Flush any remaining incomplete UTF-8 sequence after generation completes
             wrapper->flush();
@@ -142,7 +142,7 @@ int32_t ml_llm_generate(ml_LLM* h, const ml_LlmGenerateInput* input, ml_LlmGener
             // No callback, pass through directly
             int32_t result = backend->generate(input, output);
             calculate_profile_data(output->profile_data);
-            GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+            GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
             return result;
         }
     } catch (const std::exception& e) {

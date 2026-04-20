@@ -27,7 +27,7 @@ LlamaLlm::~LlamaLlm() {
     if (threadpool_batch) this->threadpool_free_fn(threadpool_batch);
 }
 
-int32_t LlamaLlm::create_impl(const ml_LlmCreateInput* input) {
+int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     if (!input) {
         return ML_ERROR_COMMON_INVALID_INPUT;
     }
@@ -222,11 +222,11 @@ int32_t LlamaLlm::reset() {
     return ML_SUCCESS;
 }
 
-int32_t LlamaLlm::save_kv_cache(const ml_KvCacheSaveInput* input, ml_KvCacheSaveOutput* _) {
+int32_t LlamaLlm::save_kv_cache(const geniex_KvCacheSaveInput* input, geniex_KvCacheSaveOutput* _) {
     return llama_state_save_file(this->ctx, input->path, nullptr, 0) ? ML_SUCCESS : ML_ERROR_COMMON_UNKNOWN;
 }
 
-int32_t LlamaLlm::load_kv_cache(const ml_KvCacheLoadInput* input, ml_KvCacheLoadOutput* _) {
+int32_t LlamaLlm::load_kv_cache(const geniex_KvCacheLoadInput* input, geniex_KvCacheLoadOutput* _) {
     size_t  out;
     int32_t ret = llama_state_load_file(this->ctx, input->path, nullptr, 0, &out);
 
@@ -248,12 +248,12 @@ int32_t LlamaLlm::load_kv_cache(const ml_KvCacheLoadInput* input, ml_KvCacheLoad
 }
 
 int32_t LlamaLlm::apply_chat_template(
-    const ml_LlmApplyChatTemplateInput* input, ml_LlmApplyChatTemplateOutput* output) {
+    const geniex_LlmApplyChatTemplateInput* input, geniex_LlmApplyChatTemplateOutput* output) {
     if (!input || !input->messages || !output || input->message_count <= 0) {
         return ML_ERROR_COMMON_INVALID_INPUT;  // error: invalid input
     }
 
-    // Convert ml_ChatMessage to common_chat_msg
+    // Convert geniex_ChatMessage to common_chat_msg
     std::vector<common_chat_msg> common_messages;
     common_messages.reserve(input->message_count);
 
@@ -298,7 +298,7 @@ int32_t LlamaLlm::apply_chat_template(
     return ML_SUCCESS;
 }
 
-int32_t LlamaLlm::generate(const ml_LlmGenerateInput* input, ml_LlmGenerateOutput* output) {
+int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGenerateOutput* output) {
     // Validate input
     if (!input) return ML_ERROR_COMMON_INVALID_INPUT;
 
@@ -309,7 +309,7 @@ int32_t LlamaLlm::generate(const ml_LlmGenerateInput* input, ml_LlmGenerateOutpu
         return ML_ERROR_COMMON_INVALID_INPUT;  // error: neither input_ids nor
                                                // prompt_utf8 provided
 
-    ml_GenerationConfig cfg = input->config ? *input->config : ml_GenerationConfig{};
+    geniex_GenerationConfig cfg = input->config ? *input->config : geniex_GenerationConfig{};
     cfg.max_tokens          = cfg.max_tokens > 0 ? cfg.max_tokens : 128;
 
     // Initialzie resources
@@ -540,8 +540,8 @@ int32_t LlamaLlm::generate(const ml_LlmGenerateInput* input, ml_LlmGenerateOutpu
 
 // Private
 namespace geniex {
-ml_ModelConfig LlamaLlm::model_config_default(void) {
-    auto cfg            = ml_ModelConfig{};
+geniex_ModelConfig LlamaLlm::model_config_default(void) {
+    auto cfg            = geniex_ModelConfig{};
     cfg.n_ctx           = 4096;
     cfg.n_threads       = static_cast<int32_t>(std::thread::hardware_concurrency());
     cfg.n_threads_batch = static_cast<int32_t>(std::thread::hardware_concurrency());
@@ -560,13 +560,13 @@ void LlamaLlm::reset_sampler() {
     this->sampler = common_sampler_init(this->model, s);
 }
 
-void LlamaLlm::set_sampler(const ml_SamplerConfig* cfg) {
+void LlamaLlm::set_sampler(const geniex_SamplerConfig* cfg) {
     if (this->sampler) {
         common_sampler_free(this->sampler);
         this->sampler = nullptr;
     }
 
-    // Convert ml_SamplerConfig to common_params_sampling
+    // Convert geniex_SamplerConfig to common_params_sampling
     common_params_sampling s;
 
     if (cfg) {

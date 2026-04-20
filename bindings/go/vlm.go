@@ -16,7 +16,7 @@ package geniex_sdk
 
 /*
 #include <stdlib.h>
-#include "ml.h"
+#include "geniex.h"
 
 extern bool go_generate_stream_on_token(char*, void*);
 */
@@ -37,9 +37,9 @@ type VlmCreateInput struct {
 	DeviceID      string
 }
 
-func (vci VlmCreateInput) toCPtr() *C.ml_VlmCreateInput {
-	cPtr := (*C.ml_VlmCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_VlmCreateInput{}))))
-	*cPtr = C.ml_VlmCreateInput{}
+func (vci VlmCreateInput) toCPtr() *C.geniex_VlmCreateInput {
+	cPtr := (*C.geniex_VlmCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_VlmCreateInput{}))))
+	*cPtr = C.geniex_VlmCreateInput{}
 
 	if vci.ModelName != "" {
 		cPtr.model_name = C.CString(vci.ModelName)
@@ -61,7 +61,7 @@ func (vci VlmCreateInput) toCPtr() *C.ml_VlmCreateInput {
 	}
 
 	// Directly assign the ModelConfig to the C structure because it's not a pointer
-	cPtr.config = C.ml_ModelConfig{
+	cPtr.config = C.geniex_ModelConfig{
 		n_ctx:           C.int32_t(vci.Config.NCtx),
 		n_threads:       C.int32_t(vci.Config.NThreads),
 		n_threads_batch: C.int32_t(vci.Config.NThreadsBatch),
@@ -80,7 +80,7 @@ func (vci VlmCreateInput) toCPtr() *C.ml_VlmCreateInput {
 	return cPtr
 }
 
-func freeVlmCreateInput(cPtr *C.ml_VlmCreateInput) {
+func freeVlmCreateInput(cPtr *C.geniex_VlmCreateInput) {
 	if cPtr != nil {
 		// Free string fields
 		if cPtr.model_path != nil {
@@ -128,14 +128,14 @@ type VlmContent struct {
 
 type vlmContents []VlmContent
 
-func (vcs vlmContents) toCPtr() (*C.ml_VlmContent, C.int32_t) {
+func (vcs vlmContents) toCPtr() (*C.geniex_VlmContent, C.int32_t) {
 	if len(vcs) == 0 {
 		return nil, 0
 	}
 
 	count := len(vcs)
 	raw := C.malloc(C.size_t(count * C.sizeof_ml_VlmContent))
-	cContents := unsafe.Slice((*C.ml_VlmContent)(raw), count)
+	cContents := unsafe.Slice((*C.geniex_VlmContent)(raw), count)
 
 	for i, vc := range vcs {
 		// Initialize all fields to prevent garbage memory
@@ -149,10 +149,10 @@ func (vcs vlmContents) toCPtr() (*C.ml_VlmContent, C.int32_t) {
 		cContents[i].text = C.CString(vc.Text)
 	}
 
-	return (*C.ml_VlmContent)(raw), C.int32_t(count)
+	return (*C.geniex_VlmContent)(raw), C.int32_t(count)
 }
 
-func freeVlmContents(cPtr *C.ml_VlmContent, count C.int64_t) {
+func freeVlmContents(cPtr *C.geniex_VlmContent, count C.int64_t) {
 	if cPtr == nil || count == 0 {
 		return
 	}
@@ -186,14 +186,14 @@ type VlmChatMessage struct {
 
 type vlmChatMessages []VlmChatMessage
 
-func (vcms vlmChatMessages) toCPtr() (*C.ml_VlmChatMessage, C.int32_t) {
+func (vcms vlmChatMessages) toCPtr() (*C.geniex_VlmChatMessage, C.int32_t) {
 	if len(vcms) == 0 {
 		return nil, 0
 	}
 
 	count := len(vcms)
 	raw := C.malloc(C.size_t(count * C.sizeof_ml_VlmChatMessage))
-	cMessages := unsafe.Slice((*C.ml_VlmChatMessage)(raw), count)
+	cMessages := unsafe.Slice((*C.geniex_VlmChatMessage)(raw), count)
 
 	for i, vcm := range vcms {
 		if vcm.Role != "" {
@@ -206,10 +206,10 @@ func (vcms vlmChatMessages) toCPtr() (*C.ml_VlmChatMessage, C.int32_t) {
 		}
 	}
 
-	return (*C.ml_VlmChatMessage)(raw), C.int32_t(count)
+	return (*C.geniex_VlmChatMessage)(raw), C.int32_t(count)
 }
 
-func freeVlmChatMessages(cPtr *C.ml_VlmChatMessage, count C.int32_t) {
+func freeVlmChatMessages(cPtr *C.geniex_VlmChatMessage, count C.int32_t) {
 	if cPtr == nil || count == 0 {
 		return
 	}
@@ -234,9 +234,9 @@ type VlmApplyChatTemplateInput struct {
 	EnableThink bool
 }
 
-func (vati VlmApplyChatTemplateInput) toCPtr() *C.ml_VlmApplyChatTemplateInput {
-	cPtr := (*C.ml_VlmApplyChatTemplateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_VlmApplyChatTemplateInput{}))))
-	*cPtr = C.ml_VlmApplyChatTemplateInput{}
+func (vati VlmApplyChatTemplateInput) toCPtr() *C.geniex_VlmApplyChatTemplateInput {
+	cPtr := (*C.geniex_VlmApplyChatTemplateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_VlmApplyChatTemplateInput{}))))
+	*cPtr = C.geniex_VlmApplyChatTemplateInput{}
 
 	if len(vati.Messages) > 0 {
 		cMessages, messageCount := vlmChatMessages(vati.Messages).toCPtr()
@@ -253,7 +253,7 @@ func (vati VlmApplyChatTemplateInput) toCPtr() *C.ml_VlmApplyChatTemplateInput {
 	return cPtr
 }
 
-func freeVlmApplyChatTemplateInput(cPtr *C.ml_VlmApplyChatTemplateInput) {
+func freeVlmApplyChatTemplateInput(cPtr *C.geniex_VlmApplyChatTemplateInput) {
 	if cPtr == nil {
 		return
 	}
@@ -270,7 +270,7 @@ type VlmApplyChatTemplateOutput struct {
 	FormattedText string
 }
 
-func newVlmApplyChatTemplateOutputFromCPtr(c *C.ml_VlmApplyChatTemplateOutput) VlmApplyChatTemplateOutput {
+func newVlmApplyChatTemplateOutputFromCPtr(c *C.geniex_VlmApplyChatTemplateOutput) VlmApplyChatTemplateOutput {
 	output := VlmApplyChatTemplateOutput{}
 
 	if c == nil {
@@ -284,7 +284,7 @@ func newVlmApplyChatTemplateOutputFromCPtr(c *C.ml_VlmApplyChatTemplateOutput) V
 	return output
 }
 
-func freeVlmApplyChatTemplateOutput(cPtr *C.ml_VlmApplyChatTemplateOutput) {
+func freeVlmApplyChatTemplateOutput(cPtr *C.geniex_VlmApplyChatTemplateOutput) {
 	if cPtr == nil {
 		return
 	}
@@ -300,9 +300,9 @@ type VlmGenerateInput struct {
 	OnToken    OnTokenCallback
 }
 
-func (vgi VlmGenerateInput) toCPtr() *C.ml_VlmGenerateInput {
-	cPtr := (*C.ml_VlmGenerateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.ml_VlmGenerateInput{}))))
-	*cPtr = C.ml_VlmGenerateInput{}
+func (vgi VlmGenerateInput) toCPtr() *C.geniex_VlmGenerateInput {
+	cPtr := (*C.geniex_VlmGenerateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_VlmGenerateInput{}))))
+	*cPtr = C.geniex_VlmGenerateInput{}
 
 	cPtr.prompt_utf8 = C.CString(vgi.PromptUTF8)
 	if vgi.Config != nil {
@@ -318,7 +318,7 @@ func (vgi VlmGenerateInput) toCPtr() *C.ml_VlmGenerateInput {
 	return cPtr
 }
 
-func freeVlmGenerateInput(cPtr *C.ml_VlmGenerateInput) {
+func freeVlmGenerateInput(cPtr *C.geniex_VlmGenerateInput) {
 	if cPtr != nil {
 		if cPtr.prompt_utf8 != nil {
 			C.free(unsafe.Pointer(cPtr.prompt_utf8))
@@ -338,7 +338,7 @@ type VlmGenerateOutput struct {
 	ProfileData ProfileData
 }
 
-func newVlmGenerateOutputFromCPtr(c *C.ml_VlmGenerateOutput) VlmGenerateOutput {
+func newVlmGenerateOutputFromCPtr(c *C.geniex_VlmGenerateOutput) VlmGenerateOutput {
 	output := VlmGenerateOutput{}
 
 	if c == nil {
@@ -352,7 +352,7 @@ func newVlmGenerateOutputFromCPtr(c *C.ml_VlmGenerateOutput) VlmGenerateOutput {
 	return output
 }
 
-func freeVlmGenerateOutput(ptr *C.ml_VlmGenerateOutput) {
+func freeVlmGenerateOutput(ptr *C.geniex_VlmGenerateOutput) {
 	if ptr == nil {
 		return
 	}
@@ -363,7 +363,7 @@ func freeVlmGenerateOutput(ptr *C.ml_VlmGenerateOutput) {
 
 // VLM represents a VLM instance
 type VLM struct {
-	ptr *C.ml_VLM
+	ptr *C.geniex_VLM
 }
 
 // NewVLM creates a new VLM instance
@@ -373,8 +373,8 @@ func NewVLM(input VlmCreateInput) (*VLM, error) {
 	cInput := input.toCPtr()
 	defer freeVlmCreateInput(cInput)
 
-	var cHandle *C.ml_VLM
-	res := C.ml_vlm_create(cInput, &cHandle)
+	var cHandle *C.geniex_VLM
+	res := C.geniex_vlm_create(cInput, &cHandle)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -390,7 +390,7 @@ func (v *VLM) Destroy() error {
 		return nil
 	}
 
-	res := C.ml_vlm_destroy(v.ptr)
+	res := C.geniex_vlm_destroy(v.ptr)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -406,7 +406,7 @@ func (v *VLM) Reset() error {
 		return SDKError(C.ML_ERROR_COMMON_INVALID_INPUT)
 	}
 
-	res := C.ml_vlm_reset(v.ptr)
+	res := C.geniex_vlm_reset(v.ptr)
 	if res < 0 {
 		return SDKError(res)
 	}
@@ -420,10 +420,10 @@ func (v *VLM) ApplyChatTemplate(input VlmApplyChatTemplateInput) (*VlmApplyChatT
 	cinput := input.toCPtr()
 	defer freeVlmApplyChatTemplateInput(cinput)
 
-	var cOutput C.ml_VlmApplyChatTemplateOutput
+	var cOutput C.geniex_VlmApplyChatTemplateOutput
 	defer freeVlmApplyChatTemplateOutput(&cOutput)
 
-	res := C.ml_vlm_apply_chat_template(v.ptr, cinput, &cOutput)
+	res := C.geniex_vlm_apply_chat_template(v.ptr, cinput, &cOutput)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
@@ -445,12 +445,12 @@ func (v *VLM) Generate(input VlmGenerateInput) (*VlmGenerateOutput, error) {
 	defer func() {
 		onToken = nil // reset to default
 	}()
-	cInput.on_token = C.ml_token_callback(C.go_generate_stream_on_token)
+	cInput.on_token = C.geniex_token_callback(C.go_generate_stream_on_token)
 
-	var cOutput C.ml_VlmGenerateOutput
+	var cOutput C.geniex_VlmGenerateOutput
 	defer freeVlmGenerateOutput(&cOutput)
 
-	res := C.ml_vlm_generate(v.ptr, cInput, &cOutput)
+	res := C.geniex_vlm_generate(v.ptr, cInput, &cOutput)
 	if res < 0 {
 		return nil, SDKError(res)
 	}

@@ -25,18 +25,18 @@ class LlamaVlm : public IVlm {
    public:
     ~LlamaVlm() override;
 
-    virtual int32_t create_impl(const ml_VlmCreateInput* input) override;
+    virtual int32_t create_impl(const geniex_VlmCreateInput* input) override;
 
     virtual int32_t reset() override;
 
     virtual int32_t apply_chat_template(
-        const ml_VlmApplyChatTemplateInput* input, ml_VlmApplyChatTemplateOutput* output) override;
+        const geniex_VlmApplyChatTemplateInput* input, geniex_VlmApplyChatTemplateOutput* output) override;
 
-    virtual int32_t generate(const ml_VlmGenerateInput* input, ml_VlmGenerateOutput* output) override;
+    virtual int32_t generate(const geniex_VlmGenerateInput* input, geniex_VlmGenerateOutput* output) override;
 
    private:
     void reset_sampler();
-    bool vlm_message_to_common_chat_msg(const ml_VlmChatMessage* input, common_chat_msg* output);
+    bool vlm_message_to_common_chat_msg(const geniex_VlmChatMessage* input, common_chat_msg* output);
 };
 
 }  // namespace geniex

@@ -1,14 +1,14 @@
 #include <cstdlib>
 
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "plugin/IDiarize.h"
 #include "profile.h"
 #include "registry.h"
 
 using namespace geniex;
 
-int32_t ml_diarize_create(const ml_DiarizeCreateInput* input, ml_Diarize** out_handle) {
+int32_t geniex_diarize_create(const geniex_DiarizeCreateInput* input, geniex_Diarize** out_handle) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -20,7 +20,7 @@ int32_t ml_diarize_create(const ml_DiarizeCreateInput* input, ml_Diarize** out_h
         if (result != ML_SUCCESS) {
             return result;
         } else {
-            *out_handle = reinterpret_cast<ml_Diarize*>(diarize_plugin);
+            *out_handle = reinterpret_cast<geniex_Diarize*>(diarize_plugin);
         }
 
         return ML_SUCCESS;
@@ -36,7 +36,7 @@ int32_t ml_diarize_create(const ml_DiarizeCreateInput* input, ml_Diarize** out_h
     }
 }
 
-int32_t ml_diarize_destroy(ml_Diarize* handle) {
+int32_t geniex_diarize_destroy(geniex_Diarize* handle) {
     GENIEX_LOG_TRACE("destroying Diarization model");
 
     try {
@@ -50,7 +50,7 @@ int32_t ml_diarize_destroy(ml_Diarize* handle) {
     }
 }
 
-int32_t ml_diarize_infer(ml_Diarize* handle, const ml_DiarizeInferInput* input, ml_DiarizeInferOutput* output) {
+int32_t geniex_diarize_infer(geniex_Diarize* handle, const geniex_DiarizeInferInput* input, geniex_DiarizeInferOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -59,7 +59,7 @@ int32_t ml_diarize_infer(ml_Diarize* handle, const ml_DiarizeInferInput* input, 
 
         int32_t result = backend->infer(input, output);
         calculate_profile_data(output->profile_data);
-        GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+        GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
 
         return result;
     } catch (const std::exception& e) {

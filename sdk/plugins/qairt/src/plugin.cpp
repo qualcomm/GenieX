@@ -19,8 +19,8 @@ class QairtPlugin : public Plugin {
         GENIEX_LOG_TRACE("destroying qairt plugin");
     }
 
-    int32_t get_device_list(const ml_GetDeviceListInput* input,
-                            ml_GetDeviceListOutput* output) override {
+    int32_t get_device_list(const geniex_GetDeviceListInput* input,
+                            geniex_GetDeviceListOutput* output) override {
         if (!input || !output) {
             return ML_ERROR_COMMON_INVALID_INPUT;
         }
@@ -84,7 +84,7 @@ class QairtPlugin : public Plugin {
 
 #else
 
-ml_PluginId plugin_id() { return geniex::build_config::kPluginIdQairt; }
+geniex_PluginId plugin_id() { return geniex::build_config::kPluginIdQairt; }
 
 geniex::Plugin* create_plugin() {
     try {

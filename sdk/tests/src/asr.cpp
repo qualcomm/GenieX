@@ -10,7 +10,7 @@
 
 #include "doctest.h"
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "utf8.h" // IWYU pragma: export
 #include "util.h"
 
@@ -21,7 +21,7 @@ using Param =
     std::tuple<std::string, std::string, std::string,
                std::optional<std::string>, std::optional<std::string>>;
 
-Setup<Param, ml_ASR> setup_guard(
+Setup<Param, geniex_ASR> setup_guard(
     SetupMap<Param>{
         {qairt::value,
          {
@@ -45,8 +45,8 @@ Setup<Param, ml_ASR> setup_guard(
              // Add more qairt models here as needed
          }},
     },
-    [](ml_PluginId plugin, Param param) {
-      ml_ASR *asr = nullptr;
+    [](geniex_PluginId plugin, Param param) {
+      geniex_ASR *asr = nullptr;
 
       auto [test_id, name, model, tokenizer, language] = std::move(param);
 
@@ -55,11 +55,11 @@ Setup<Param, ml_ASR> setup_guard(
         GENIEX_LOG_WARN("Model file not found: {}", model);
         GENIEX_LOG_WARN("Skipping tests for model: {}", name);
         g_test_summary.add_skipped_model(name, model);
-        return static_cast<ml_ASR *>(
+        return static_cast<geniex_ASR *>(
             nullptr); // Return nullptr to indicate skip
       }
 
-      ml_AsrCreateInput input{};
+      geniex_AsrCreateInput input{};
       input.model_name = name.c_str();
       input.model_path = model.c_str();
       input.tokenizer_path =
@@ -68,13 +68,13 @@ Setup<Param, ml_ASR> setup_guard(
       input.device_id = nullptr;
       input.plugin_id = plugin;
 
-      int32_t res = ml_asr_create(&input, &asr);
+      int32_t res = geniex_asr_create(&input, &asr);
       CHECK_ML_ERROR(res);
       REQUIRE(asr != nullptr);
 
       return asr;
     },
-    nullptr, ml_asr_destroy);
+    nullptr, geniex_asr_destroy);
 
 std::string test_audio_path = "modelfiles/assets/OSR_us_000_0010_16k.wav";
 
@@ -165,7 +165,7 @@ void streaming_transcription_callback(const char *text, void *user_data) {
 }
 
 // Test function definitions
-void test_asr_transcribe_basic(ml_ASR *asr, const std::string &model_name) {
+void test_asr_transcribe_basic(geniex_ASR *asr, const std::string &model_name) {
   // Check if test audio file exists
   if (!std::filesystem::exists(test_audio_path)) {
     GENIEX_LOG_ERROR("Test audio file not found: {}", test_audio_path);
@@ -173,18 +173,18 @@ void test_asr_transcribe_basic(ml_ASR *asr, const std::string &model_name) {
   }
 
   // Set up ASR configuration
-  ml_ASRConfig config{};
+  geniex_ASRConfig config{};
   config.timestamps = "segment";
   config.beam_size = 5;
   config.stream = false;
 
-  ml_AsrTranscribeInput input{};
+  geniex_AsrTranscribeInput input{};
   input.audio_path = test_audio_path.c_str();
   input.config = &config;
   input.language = nullptr; // Use default language from creation
 
-  ml_AsrTranscribeOutput output{};
-  int32_t res = ml_asr_transcribe(asr, &input, &output);
+  geniex_AsrTranscribeOutput output{};
+  int32_t res = geniex_asr_transcribe(asr, &input, &output);
   CHECK_ML_ERROR(res);
   GENIEX_LOG_INFO("{}", output);
 
@@ -251,12 +251,12 @@ void test_asr_transcribe_basic(ml_ASR *asr, const std::string &model_name) {
   }
 }
 
-void test_asr_list_supported_languages(ml_ASR *asr,
+void test_asr_list_supported_languages(geniex_ASR *asr,
                                        const std::string &model_name) {
-  ml_AsrListSupportedLanguagesInput input{};
-  ml_AsrListSupportedLanguagesOutput output{};
+  geniex_AsrListSupportedLanguagesInput input{};
+  geniex_AsrListSupportedLanguagesOutput output{};
 
-  int32_t res = ml_asr_list_supported_languages(asr, &input, &output);
+  int32_t res = geniex_asr_list_supported_languages(asr, &input, &output);
   CHECK_ML_ERROR(res);
 
   REQUIRE(output.language_count >= 0);
@@ -292,23 +292,23 @@ void test_asr_list_supported_languages(ml_ASR *asr,
   }
 }
 
-void test_asr_error_handling(ml_ASR *asr, const std::string &model_name) {
+void test_asr_error_handling(geniex_ASR *asr, const std::string &model_name) {
   // Test with invalid audio path
-  ml_AsrTranscribeInput input{};
+  geniex_AsrTranscribeInput input{};
   input.audio_path = "nonexistent_file.wav";
   input.config = nullptr;
   input.language = nullptr;
 
-  ml_AsrTranscribeOutput output{};
-  int32_t res = ml_asr_transcribe(asr, &input, &output);
+  geniex_AsrTranscribeOutput output{};
+  int32_t res = geniex_asr_transcribe(asr, &input, &output);
 
   // Should fail with appropriate error
   CHECK(res < 0);
   GENIEX_LOG_INFO("Expected error for nonexistent file: {}",
-                ml_get_error_message(static_cast<ml_ErrorCode>(res)));
+                geniex_get_error_message(static_cast<geniex_ErrorCode>(res)));
 }
 
-void test_asr_streaming_transcription(ml_ASR *asr,
+void test_asr_streaming_transcription(geniex_ASR *asr,
                                       const std::string &model_name) {
   // Only parakeet models support streaming - skip for other models
   if (model_name.find("parakeet") == std::string::npos) {
@@ -335,7 +335,7 @@ void test_asr_streaming_transcription(ml_ASR *asr,
   test_data.reset();
 
   // Set up explicit stream configuration (matching CLI behavior)
-  ml_ASRStreamConfig stream_config{};
+  geniex_ASRStreamConfig stream_config{};
   stream_config.chunk_duration = 4.0f;
   stream_config.overlap_duration = 3.5f;
   stream_config.sample_rate = 16000;
@@ -345,14 +345,14 @@ void test_asr_streaming_transcription(ml_ASR *asr,
   stream_config.beam_size = 4;
 
   // Begin streaming with consolidated configuration
-  ml_AsrStreamBeginInput begin_input{};
+  geniex_AsrStreamBeginInput begin_input{};
   begin_input.stream_config = &stream_config;
   begin_input.language = "en";
   begin_input.on_transcription = streaming_transcription_callback;
   begin_input.user_data = &test_data;
 
-  ml_AsrStreamBeginOutput begin_output{};
-  int32_t res = ml_asr_stream_begin(asr, &begin_input, &begin_output);
+  geniex_AsrStreamBeginOutput begin_output{};
+  int32_t res = geniex_asr_stream_begin(asr, &begin_input, &begin_output);
   CHECK_ML_ERROR(res);
 
   // Simulate streaming by pushing audio data in chunks
@@ -366,15 +366,15 @@ void test_asr_streaming_transcription(ml_ASR *asr,
   for (int32_t offset = 0; offset < total_samples; offset += chunk_size) {
     int32_t samples_to_send = std::min(chunk_size, total_samples - offset);
 
-    ml_AsrStreamPushAudioInput push_input{};
+    geniex_AsrStreamPushAudioInput push_input{};
     push_input.audio_data = audio_data.data() + offset;
     push_input.length = samples_to_send;
 
-    res = ml_asr_stream_push_audio(asr, &push_input);
+    res = geniex_asr_stream_push_audio(asr, &push_input);
     // Silent check - only break if there's an error
     if (res < 0) {
       GENIEX_LOG_ERROR("Failed to push audio chunk: {}",
-                     ml_get_error_message(static_cast<ml_ErrorCode>(res)));
+                     geniex_get_error_message(static_cast<geniex_ErrorCode>(res)));
       break;
     }
 
@@ -383,9 +383,9 @@ void test_asr_streaming_transcription(ml_ASR *asr,
   }
 
   // Stop streaming gracefully
-  ml_AsrStreamStopInput stop_input{};
+  geniex_AsrStreamStopInput stop_input{};
   stop_input.graceful = true;
-  res = ml_asr_stream_stop(asr, &stop_input);
+  res = geniex_asr_stream_stop(asr, &stop_input);
   CHECK_ML_ERROR(res);
 
   // Wait longer for processing to complete.
@@ -436,7 +436,7 @@ void test_asr_streaming_transcription(ml_ASR *asr,
 
 // Register all ASR tests - conditionally based on plugin capabilities
 template <typename PluginType>
-void register_asr_tests(TestRegistry<ml_ASR> &registry) {
+void register_asr_tests(TestRegistry<geniex_ASR> &registry) {
   // Common tests for all plugins
   REGISTER_TEST(registry, AsrTranscribeBasic,
                 test_asr_transcribe_basic(model, model_name););
@@ -454,7 +454,7 @@ void register_asr_tests(TestRegistry<ml_ASR> &registry) {
 
 // Generate test cases for all plugins
 #define GEN(Plugin)                                                            \
-  TEST_CASE_FOR_PLUGIN(ml_ASR, Plugin, setup_guard, register_asr_tests<Plugin>)
+  TEST_CASE_FOR_PLUGIN(geniex_ASR, Plugin, setup_guard, register_asr_tests<Plugin>)
 PLUGINS(GEN)
 #undef GEN
 

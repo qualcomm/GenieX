@@ -72,7 +72,7 @@ std::string valid_utf8(std::string& buffer) {
     return string_to_send;
 }
 
-ml_token_callback get_utf8_callback_wrapper() {
+geniex_token_callback get_utf8_callback_wrapper() {
     return [](const char* token, void* user_data) -> bool {
         auto* wrapper_data = static_cast<Utf8CallbackWrapper*>(user_data);
         wrapper_data->utf8_buffer.append(token);

@@ -1,4 +1,4 @@
-#include "ml.h"
+#include "geniex.h"
 
 /**
  * @brief Get error message string for error code
@@ -6,10 +6,10 @@
  * This function maps error codes to human-readable error messages.
  * Error codes follow hierarchical naming: ML_ERROR_[CATEGORY]_[SUBCATEGORY]_[ERROR_TYPE]
  *
- * @param error_code Error code from ml_ErrorCode enumeration
+ * @param error_code Error code from geniex_ErrorCode enumeration
  * @return Error message string (const char*)
  */
-const char* ml_get_error_message(const ml_ErrorCode error_code) {
+const char* geniex_get_error_message(const geniex_ErrorCode error_code) {
     if (error_code > 0) {
         return "Success";  // Success case
     }

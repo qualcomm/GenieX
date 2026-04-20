@@ -1,7 +1,7 @@
 #pragma once
 
 /**
- * @file ml.h
+ * @file geniex.h
  * @brief Unified C API for machine learning operations
  *
  * This header provides a comprehensive C interface for various ML tasks including:
@@ -127,22 +127,22 @@ typedef enum {
     ML_ERROR_DIARIZE_EMBEDDING    = -208102, /**< Embedding extraction failed */
     ML_ERROR_DIARIZE_CLUSTERING   = -208103, /**< Speaker clustering failed (PLDA/VBx) */
 
-} ml_ErrorCode;
+} geniex_ErrorCode;
 
 /** Get error message string for error code */
-ML_API const char* ml_get_error_message(const ml_ErrorCode error_code);
+ML_API const char* geniex_get_error_message(const geniex_ErrorCode error_code);
 
 /* ========================================================================== */
 /*                              CORE TYPES & UTILITIES                         */
 /* ========================================================================== */
 
 /** Plugin Id string type - plain char* for plugin id
- * @ref ml_get_device_list device must in list of plugin ids
+ * @ref geniex_get_device_list device must in list of plugin ids
  */
-typedef const char* ml_PluginId;
+typedef const char* geniex_PluginId;
 
 /** Path string type - plain char* for file paths */
-typedef const char* ml_Path;
+typedef const char* geniex_Path;
 
 typedef enum {
     ML_LOG_LEVEL_TRACE, /* Trace messages */
@@ -150,50 +150,50 @@ typedef enum {
     ML_LOG_LEVEL_INFO,  /* Informational messages */
     ML_LOG_LEVEL_WARN,  /* Warning messages */
     ML_LOG_LEVEL_ERROR  /* Error messages */
-} ml_LogLevel;
+} geniex_LogLevel;
 
 /** Logging callback function type */
-typedef void (*ml_log_callback)(ml_LogLevel, const char*);
+typedef void (*geniex_log_callback)(geniex_LogLevel, const char*);
 
 /** Token callback for streaming generation */
-typedef bool (*ml_token_callback)(const char* token, void* user_data);
+typedef bool (*geniex_token_callback)(const char* token, void* user_data);
 
 /** Input structure for saving KV cache */
 typedef struct {
-    ml_Path path; /** Path to save the KV cache */
-} ml_KvCacheSaveInput;
+    geniex_Path path; /** Path to save the KV cache */
+} geniex_KvCacheSaveInput;
 
 /** Output structure for saving KV cache (empty for now) */
 typedef struct {
     void* reserved; /** Reserved for future use, safe to set as NULL */
-} ml_KvCacheSaveOutput;
+} geniex_KvCacheSaveOutput;
 
 /** Input structure for loading KV cache */
 typedef struct {
-    ml_Path path; /** Path to load the KV cache from */
-} ml_KvCacheLoadInput;
+    geniex_Path path; /** Path to load the KV cache from */
+} geniex_KvCacheLoadInput;
 
 /** Output structure for loading KV cache (empty for now) */
 typedef struct {
     void* reserved; /** Reserved for future use, safe to set as NULL */
-} ml_KvCacheLoadOutput;
+} geniex_KvCacheLoadOutput;
 
 /* ====================  Core Initialization  ================================ */
 
 /**
  * @brief Initialize the ML C-Lib runtime, starting the life cycle of the library.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe.
  */
-ML_API int32_t ml_init(void);
+ML_API int32_t geniex_init(void);
 
 /** Plugin id create function type */
-typedef ml_PluginId (*ml_plugin_id_func)();
+typedef geniex_PluginId (*geniex_plugin_id_func)();
 
 /** Plugin instance create function type */
-typedef void* (*ml_create_plugin_func)();
+typedef void* (*geniex_create_plugin_func)();
 
 /**
  * @brief Register a custom plugin with the ML C-Lib runtime.
@@ -201,31 +201,31 @@ typedef void* (*ml_create_plugin_func)();
  * @param plugin_id_func[in]: The pointer to plugin create_id function.
  * @param create_func[in]: The pointer to plugin create function.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Thread-safe.
  */
-ML_API int32_t ml_register_plugin(ml_plugin_id_func plugin_id_func, ml_create_plugin_func create_func);
+ML_API int32_t geniex_register_plugin(geniex_plugin_id_func plugin_id_func, geniex_create_plugin_func create_func);
 
 /**
  * @brief Deinitialize the ML C-Lib runtime, ending the life cycle of the library.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe.
  */
-ML_API int32_t ml_deinit(void);
+ML_API int32_t geniex_deinit(void);
 
 /**
  * @brief Set custom logging callback function, call before init
  *
  * @param callback[in]: The callback function to set.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Thread-safe
  */
-ML_API int32_t ml_set_log(ml_log_callback callback);
+ML_API int32_t geniex_set_log(geniex_log_callback callback);
 
 /**
  * @brief Simple wrapper around free() to free memory allocated by ML library functions
@@ -234,50 +234,50 @@ ML_API int32_t ml_set_log(ml_log_callback callback);
  *
  * @thread_safety: Thread-safe if called for different pointers.
  */
-ML_API void ml_free(void* ptr);
+ML_API void geniex_free(void* ptr);
 
 /**
  * @brief Get Library Version
  *
  * @param out_version[out]: Pointer to the library version.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Thread-safe.
  */
-ML_API const char* ml_version(void);
+ML_API const char* geniex_version(void);
 
 /** Output structure containing the list of available plugins */
 typedef struct {
-    ml_PluginId* plugin_ids;   /**< Array of plugin IDs (UTF-8) (caller must free with ml_free) */
+    geniex_PluginId* plugin_ids;   /**< Array of plugin IDs (UTF-8) (caller must free with geniex_free) */
     int32_t      plugin_count; /**< Number of plugin IDs in the list */
-} ml_GetPluginListOutput;
+} geniex_GetPluginListOutput;
 
 /**
  * @brief Query the list of available plugins.
  *
- * @param output[out] Pointer to plugin list and count. caller must free with `ml_free`.
+ * @param output[out] Pointer to plugin list and count. caller must free with `geniex_free`.
  *
- * @return ml_ErrorCode ML_SUCCESS on success, negative value on failure.
+ * @return geniex_ErrorCode ML_SUCCESS on success, negative value on failure.
  *
  * @thread_safety: Not thread-safe.
  *
  * @note The returned plugin_list TODO
  */
-ML_API int32_t ml_get_plugin_list(ml_GetPluginListOutput* output);
+ML_API int32_t geniex_get_plugin_list(geniex_GetPluginListOutput* output);
 
 /** Input structure for querying available devices for a plugin */
 typedef struct {
-    ml_PluginId plugin_id; /**< Plugin identifier */
-} ml_GetDeviceListInput;
+    geniex_PluginId plugin_id; /**< Plugin identifier */
+} geniex_GetDeviceListInput;
 
 /** Output structure containing the list of available devices */
 typedef struct {
     // example: HTP0
-    const char** device_ids;   /**< Array of device IDs  (caller must free with ml_free when not null) */
-    const char** device_names; /**< Array of device names  (caller must free with ml_free when not null) */
+    const char** device_ids;   /**< Array of device IDs  (caller must free with geniex_free when not null) */
+    const char** device_names; /**< Array of device names  (caller must free with geniex_free when not null) */
     int32_t      device_count; /**< Number of device names in the list */
-} ml_GetDeviceListOutput;
+} geniex_GetDeviceListOutput;
 
 /**
  * @brief Query the list of available devices for a given plugin.
@@ -285,13 +285,13 @@ typedef struct {
  * @param input[in]   Pointer to input structure specifying the plugin.
  * @param output[out] Pointer to output structure to receive device list and count.
  *
- * @return ml_ErrorCode ML_SUCCESS on success, negative value on failure.
+ * @return geniex_ErrorCode ML_SUCCESS on success, negative value on failure.
  *
  * @thread_safety: Not thread-safe.
  *
  * @note The returned device_list TODO
  */
-ML_API int32_t ml_get_device_list(const ml_GetDeviceListInput* input, ml_GetDeviceListOutput* output);
+ML_API int32_t geniex_get_device_list(const geniex_GetDeviceListInput* input, geniex_GetDeviceListOutput* output);
 
 /* ====================  Data Structures  ==================================== */
 
@@ -310,7 +310,7 @@ typedef struct {
     double real_time_factor; /* Real-Time Factor(RTF) (1.0 = real-time, >1.0 = faster, <1.0 = slower) */
 
     const char* stop_reason; /* Stop reason: "eos", "length", "user", "stop_sequence" */
-} ml_ProfileData;
+} geniex_ProfileData;
 
 /* ========================================================================== */
 /*                              LANGUAGE MODELS (LLM)                          */
@@ -326,10 +326,10 @@ typedef struct {
     float       presence_penalty;   /* Penalty for token presence */
     float       frequency_penalty;  /* Penalty for token frequency */
     int32_t     seed;               /* Random seed (-1 for random) */
-    ml_Path     grammar_path;       /* Optional grammar file path */
+    geniex_Path     grammar_path;       /* Optional grammar file path */
     const char* grammar_string;     /* Optional grammar string (BNF-like format) */
     bool        enable_json;        /* Enable JSON grammar */
-} ml_SamplerConfig;
+} geniex_SamplerConfig;
 
 /** LLM / VLM generation configuration (IMPROVED: support multiple images and audios) */
 typedef struct {
@@ -337,14 +337,14 @@ typedef struct {
     const char**      stop;           /* Array of stop sequences */
     int32_t           stop_count;     /* Number of stop sequences */
     int32_t           n_past;         /* Number of past tokens to consider */
-    ml_SamplerConfig* sampler_config; /* Advanced sampling config */
+    geniex_SamplerConfig* sampler_config; /* Advanced sampling config */
     // --- Improved multimodal support ---
-    ml_Path* image_paths;      /* Array of image paths for VLM (NULL if none) */
+    geniex_Path* image_paths;      /* Array of image paths for VLM (NULL if none) */
     int32_t  image_count;      /* Number of images */
     int32_t  image_max_length; /* Maximum length of the image */
-    ml_Path* audio_paths;      /* Array of audio paths for VLM (NULL if none) */
+    geniex_Path* audio_paths;      /* Array of audio paths for VLM (NULL if none) */
     int32_t  audio_count;      /* Number of audios */
-} ml_GenerationConfig;
+} geniex_GenerationConfig;
 
 /** LLM / VLM model configuration */
 typedef struct {
@@ -357,65 +357,65 @@ typedef struct {
     int32_t n_gpu_layers;     // number of layers to offload to GPU, 0 = all layers on CPU
 
     // TODO: consider removing the following fields from ModelConfig, or move to another struct
-    ml_Path     chat_template_path;     // path to chat template file, optional
+    geniex_Path     chat_template_path;     // path to chat template file, optional
     const char* chat_template_content;  // content of chat template file, optional
     const char* system_prompt;          // system prompt for chat template, optional
-    bool        enable_sampling;        // DEPRECATED, use enable_json in ml_SamplerConfig
+    bool        enable_sampling;        // DEPRECATED, use enable_json in geniex_SamplerConfig
     const char* grammar_str;            // grammar string
     int32_t     max_tokens;             // max tokens to generate
     bool        enable_thinking;        // enable thinking mode for Qwen models
     bool        verbose;                // verbose logging
-} ml_ModelConfig;
+} geniex_ModelConfig;
 
 /* ====================  LLM Handle  ======================================== */
-typedef struct ml_LLM ml_LLM; /* Opaque LLM handle */
+typedef struct geniex_LLM geniex_LLM; /* Opaque LLM handle */
 
 /* ====================  Lifecycle Management  ============================== */
 typedef struct {
     const char*    model_name;     /** Name of the model */
-    ml_Path        model_path;     /** Path to the model file */
-    ml_Path        tokenizer_path; /** Path to the tokenizer file */
-    ml_ModelConfig config;         /** Model configuration */
-    ml_PluginId    plugin_id;      /** plugin to use for the model */
+    geniex_Path        model_path;     /** Path to the model file */
+    geniex_Path        tokenizer_path; /** Path to the tokenizer file */
+    geniex_ModelConfig config;         /** Model configuration */
+    geniex_PluginId    plugin_id;      /** plugin to use for the model */
     const char*    device_id;      /** device to use for the model, NULL for default device */
     const char*    license_id; /** licence id for loading NPU models, must be provided upon the first use of the license
                                   key. null terminated string */
     const char* license_key;   /** licence key for loading NPU models, null terminated string */
-} ml_LlmCreateInput;
+} geniex_LlmCreateInput;
 
 /**
  * @brief Create and initialize an LLM instance from model files
  *
  * @param input[in]: Input parameters for the LLM creation
- * @param out_handle[out]: Pointer to the LLM handle. Must be freed with ml_llm_destroy.
+ * @param out_handle[out]: Pointer to the LLM handle. Must be freed with geniex_llm_destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_llm_create(const ml_LlmCreateInput* input, ml_LLM** out_handle);
+ML_API int32_t geniex_llm_create(const geniex_LlmCreateInput* input, geniex_LLM** out_handle);
 
 /**
  * @brief Destroy LLM instance and free associated resources
  *
  * @param handle[in]: The LLM handle to destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_llm_destroy(ml_LLM* handle);
+ML_API int32_t geniex_llm_destroy(geniex_LLM* handle);
 
 /**
  * @brief Reset LLM internal state (clear KV cache, reset sampling)
  *
  * @param handle[in]: The LLM handle to reset.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_llm_reset(ml_LLM* handle);
+ML_API int32_t geniex_llm_reset(geniex_LLM* handle);
 
 /* ====================  KV-Cache Management  ============================== */
 
@@ -426,9 +426,9 @@ ML_API int32_t ml_llm_reset(ml_LLM* handle);
  * @param input[in]: Input parameters for saving KV cache
  * @param output[out]: Reserved struct for future use, safe to pass nullptr now
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  */
-ML_API int32_t ml_llm_save_kv_cache(ml_LLM* handle, const ml_KvCacheSaveInput* input, ml_KvCacheSaveOutput* output);
+ML_API int32_t geniex_llm_save_kv_cache(geniex_LLM* handle, const geniex_KvCacheSaveInput* input, geniex_KvCacheSaveOutput* output);
 
 /**
  * @brief Load KV cache state from file
@@ -437,9 +437,9 @@ ML_API int32_t ml_llm_save_kv_cache(ml_LLM* handle, const ml_KvCacheSaveInput* i
  * @param input[in]: Input parameters for loading KV cache
  * @param output[out]: Reserved struct for future use, safe to pass nullptr now
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  */
-ML_API int32_t ml_llm_load_kv_cache(ml_LLM* handle, const ml_KvCacheLoadInput* input, ml_KvCacheLoadOutput* output);
+ML_API int32_t geniex_llm_load_kv_cache(geniex_LLM* handle, const geniex_KvCacheLoadInput* input, geniex_KvCacheLoadOutput* output);
 
 /* ====================  Chat Template ================================== */
 
@@ -447,21 +447,21 @@ ML_API int32_t ml_llm_load_kv_cache(ml_LLM* handle, const ml_KvCacheLoadInput* i
 typedef struct {
     const char* role;    /* Message role: "user", "assistant", "system" */
     const char* content; /* Message content in UTF-8 */
-} ml_LlmChatMessage;
+} geniex_LlmChatMessage;
 
 /** Input structure for applying chat template */
 typedef struct {
-    ml_LlmChatMessage* messages;              /** Array of chat messages */
+    geniex_LlmChatMessage* messages;              /** Array of chat messages */
     int32_t            message_count;         /** Number of messages */
     const char*        tools;                 /** Tool JSON string (optional, can be NULL) */
     bool               enable_thinking;       /** Enable thinking */
     bool               add_generation_prompt; /** Add generation prompt */
-} ml_LlmApplyChatTemplateInput;
+} geniex_LlmApplyChatTemplateInput;
 
 /** Output structure for applying chat template */
 typedef struct {
-    char* formatted_text; /** Formatted chat text (caller must free with ml_free) */
-} ml_LlmApplyChatTemplateOutput;
+    char* formatted_text; /** Formatted chat text (caller must free with geniex_free) */
+} geniex_LlmApplyChatTemplateOutput;
 
 /**
  * @brief Apply chat template to messages
@@ -470,18 +470,18 @@ typedef struct {
  * @param input[in]: Input parameters for applying chat template
  * @param output[out]: Output data containing the formatted text
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  */
-ML_API int32_t ml_llm_apply_chat_template(
-    ml_LLM* handle, const ml_LlmApplyChatTemplateInput* input, ml_LlmApplyChatTemplateOutput* output);
+ML_API int32_t geniex_llm_apply_chat_template(
+    geniex_LLM* handle, const geniex_LlmApplyChatTemplateInput* input, geniex_LlmApplyChatTemplateOutput* output);
 
 /* ====================  Streaming Generation  ============================= */
 
 /** Input structure for streaming text generation */
 typedef struct {
     const char*                prompt_utf8; /** The full chat history as UTF-8 string */
-    const ml_GenerationConfig* config;      /** Generation configuration (optional, can be nullptr) */
-    ml_token_callback          on_token;    /** Token callback function for streaming */
+    const geniex_GenerationConfig* config;      /** Generation configuration (optional, can be nullptr) */
+    geniex_token_callback          on_token;    /** Token callback function for streaming */
     void*                      user_data;   /** User data passed to callback (optional, can be nullptr) */
 
     /** Mutual exclusivity rules:
@@ -497,13 +497,13 @@ typedef struct {
     /** Pre-tokenized input support (alternative to prompt_utf8) */
     const int32_t* input_ids;       /** Array of pre-tokenized token IDs (optional, can be nullptr) */
     int32_t        input_ids_count; /** Number of tokens in input_ids array */
-} ml_LlmGenerateInput;
+} geniex_LlmGenerateInput;
 
 /** Output structure for streaming text generation */
 typedef struct {
-    char*          full_text;    /** Complete generated text (caller must free with ml_free) */
-    ml_ProfileData profile_data; /** Profiling data for the generation */
-} ml_LlmGenerateOutput;
+    char*          full_text;    /** Complete generated text (caller must free with geniex_free) */
+    geniex_ProfileData profile_data; /** Profiling data for the generation */
+} geniex_LlmGenerateOutput;
 
 /**
  * @brief Generate text with streaming token callback
@@ -512,9 +512,9 @@ typedef struct {
  * @param input[in]: Input parameters for streaming generation
  * @param output[out]: Output containing the complete generated text
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  */
-ML_API int32_t ml_llm_generate(ml_LLM* handle, const ml_LlmGenerateInput* input, ml_LlmGenerateOutput* output);
+ML_API int32_t geniex_llm_generate(geniex_LLM* handle, const geniex_LlmGenerateInput* input, geniex_LlmGenerateOutput* output);
 
 /* ========================================================================== */
 /*                              MULTIMODAL MODELS (VLM)                          */
@@ -523,83 +523,83 @@ ML_API int32_t ml_llm_generate(ml_LLM* handle, const ml_LlmGenerateInput* input,
 typedef struct {
     const char* type;  // "text", "image", "audio", … (null-terminated UTF-8)
     const char* text;  // payload: the actual text, URL, or special token
-} ml_VlmContent;
+} geniex_VlmContent;
 
 /* ---------- Message ---------- */
 typedef struct {
     const char*    role;           // "user", "assistant", "system", …
-    ml_VlmContent* contents;       // dynamically-allocated array (may be NULL)
+    geniex_VlmContent* contents;       // dynamically-allocated array (may be NULL)
     int64_t        content_count;  // number of elements in `contents`
-} ml_VlmChatMessage;
+} geniex_VlmChatMessage;
 
-typedef struct ml_VLM ml_VLM; /* Opaque VLM handle */
+typedef struct geniex_VLM geniex_VLM; /* Opaque VLM handle */
 
 /* ====================  Lifecycle Management  ============================== */
 
 typedef struct {
     const char*    model_name;     /** Name of the model */
-    ml_Path        model_path;     /** Path to the model file */
-    ml_Path        mmproj_path;    /** Path to the mmproj file */
-    ml_ModelConfig config;         /** Model configuration */
-    ml_PluginId    plugin_id;      /** Plugin to use for the model */
+    geniex_Path        model_path;     /** Path to the model file */
+    geniex_Path        mmproj_path;    /** Path to the mmproj file */
+    geniex_ModelConfig config;         /** Model configuration */
+    geniex_PluginId    plugin_id;      /** Plugin to use for the model */
     const char*    device_id;      /** device to use for the model */
-    ml_Path        tokenizer_path; /** Path to the tokenizer file */
+    geniex_Path        tokenizer_path; /** Path to the tokenizer file */
     const char*    license_id; /** licence id for loading NPU models, must be provided upon the first use of the license
                                   key. null terminated string */
     const char* license_key;   /** licence key for loading NPU models, null terminated string */
-} ml_VlmCreateInput;
+} geniex_VlmCreateInput;
 
 /**
  * @brief Create and initialize a VLM instance from model files
  *
  * @param input[in]: Input parameters for the VLM creation
- * @param out_handle[out]: Pointer to the VLM handle. Must be freed with ml_vlm_destroy.
+ * @param out_handle[out]: Pointer to the VLM handle. Must be freed with geniex_vlm_destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_vlm_create(const ml_VlmCreateInput* input, ml_VLM** out_handle);
+ML_API int32_t geniex_vlm_create(const geniex_VlmCreateInput* input, geniex_VLM** out_handle);
 
 /**
  * @brief Destroy VLM instance and free associated resources
  *
  * @param handle[in]: The VLM handle to destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_vlm_destroy(ml_VLM* handle);
+ML_API int32_t geniex_vlm_destroy(geniex_VLM* handle);
 
 /**
  * @brief Reset VLM internal state (clear KV cache, reset sampling)
  *
  * @param handle[in]: The VLM handle to reset.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_vlm_reset(ml_VLM* handle);
+ML_API int32_t geniex_vlm_reset(geniex_VLM* handle);
 
 /* ====================  Text Generation  ================================== */
 
 /** Input structure for applying VLM chat template */
 typedef struct {
-    ml_VlmChatMessage* messages;        /** Array of chat messages */
+    geniex_VlmChatMessage* messages;        /** Array of chat messages */
     int32_t            message_count;   /** Number of messages */
     const char*        tools;           /** Tool JSON string (optional, can be NULL) */
     bool               enable_thinking; /** Enable thinking */
 
     // deepseek-ocr
     bool grounding; /** Enable grounding (Add grounding token) */
-} ml_VlmApplyChatTemplateInput;
+} geniex_VlmApplyChatTemplateInput;
 
 /** Output structure for applying VLM chat template */
 typedef struct {
-    char* formatted_text; /** Formatted chat text (caller must free with ml_free) */
-} ml_VlmApplyChatTemplateOutput;
+    char* formatted_text; /** Formatted chat text (caller must free with geniex_free) */
+} geniex_VlmApplyChatTemplateOutput;
 
 /**
  * @brief Apply chat template to messages
@@ -608,26 +608,26 @@ typedef struct {
  * @param input[in]: Input parameters for applying chat template
  * @param output[out]: Output data containing the formatted text
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  */
-ML_API int32_t ml_vlm_apply_chat_template(
-    ml_VLM* handle, const ml_VlmApplyChatTemplateInput* input, ml_VlmApplyChatTemplateOutput* output);
+ML_API int32_t geniex_vlm_apply_chat_template(
+    geniex_VLM* handle, const geniex_VlmApplyChatTemplateInput* input, geniex_VlmApplyChatTemplateOutput* output);
 
 /* ====================  Streaming Generation  ============================= */
 
 /** Input structure for VLM streaming text generation */
 typedef struct {
     const char*                prompt_utf8; /** The full chat history as UTF-8 string */
-    const ml_GenerationConfig* config;      /** Generation configuration (optional, can be nullptr) */
-    ml_token_callback          on_token;    /** Token callback function for streaming */
+    const geniex_GenerationConfig* config;      /** Generation configuration (optional, can be nullptr) */
+    geniex_token_callback          on_token;    /** Token callback function for streaming */
     void*                      user_data;   /** User data passed to callback (optional, can be nullptr) */
-} ml_VlmGenerateInput;
+} geniex_VlmGenerateInput;
 
 /** Output structure for VLM streaming text generation */
 typedef struct {
-    char*          full_text;    /** Complete generated text (caller must free with ml_free) */
-    ml_ProfileData profile_data; /** Profiling data for the generation */
-} ml_VlmGenerateOutput;
+    char*          full_text;    /** Complete generated text (caller must free with geniex_free) */
+    geniex_ProfileData profile_data; /** Profiling data for the generation */
+} geniex_VlmGenerateOutput;
 
 /**
  * @brief Generate text with streaming token callback
@@ -636,9 +636,9 @@ typedef struct {
  * @param input[in]: Input parameters for streaming generation
  * @param output[out]: Output containing the complete generated text
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  */
-ML_API int32_t ml_vlm_generate(ml_VLM* handle, const ml_VlmGenerateInput* input, ml_VlmGenerateOutput* output);
+ML_API int32_t geniex_vlm_generate(geniex_VLM* handle, const geniex_VlmGenerateInput* input, geniex_VlmGenerateOutput* output);
 
 /* ========================================================================== */
 /*                              EMBEDDING MODELS                               */
@@ -649,45 +649,45 @@ typedef struct {
     int32_t     batch_size;       /* Processing batch size */
     bool        normalize;        /* Whether to normalize embeddings */
     const char* normalize_method; /* Normalization: "l2", "mean", "none" */
-} ml_EmbeddingConfig;
+} geniex_EmbeddingConfig;
 
-typedef struct ml_Embedder ml_Embedder; /* Opaque embedder handle */
+typedef struct geniex_Embedder geniex_Embedder; /* Opaque embedder handle */
 
 /* ====================  Lifecycle Management  ============================== */
 
 /** Input structure for creating an embedder */
 typedef struct {
     const char*    model_name;     /** Name of the model */
-    ml_Path        model_path;     /** Path to the model file */
-    ml_Path        mmproj_path;    /** Path to the mmproj file */
-    ml_Path        tokenizer_path; /** Path to the tokenizer file */
-    ml_ModelConfig config;         /** Model configuration */
-    ml_PluginId    plugin_id;      /** Plugin to use for the model */
+    geniex_Path        model_path;     /** Path to the model file */
+    geniex_Path        mmproj_path;    /** Path to the mmproj file */
+    geniex_Path        tokenizer_path; /** Path to the tokenizer file */
+    geniex_ModelConfig config;         /** Model configuration */
+    geniex_PluginId    plugin_id;      /** Plugin to use for the model */
     const char*    device_id;      /** device to use for the model */
-} ml_EmbedderCreateInput;
+} geniex_EmbedderCreateInput;
 
 /**
  * @brief Create and initialize an embedder instance from model files
  *
  * @param input[in]: Input parameters for the embedder creation
- * @param out_handle[out]: Pointer to the embedder handle. Must be freed with ml_embedder_destroy.
+ * @param out_handle[out]: Pointer to the embedder handle. Must be freed with geniex_embedder_destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_embedder_create(const ml_EmbedderCreateInput* input, ml_Embedder** out_handle);
+ML_API int32_t geniex_embedder_create(const geniex_EmbedderCreateInput* input, geniex_Embedder** out_handle);
 
 /**
  * @brief Destroy embedder instance and free associated resources
  *
  * @param handle[in]: The embedder handle to destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_embedder_destroy(ml_Embedder* handle);
+ML_API int32_t geniex_embedder_destroy(geniex_Embedder* handle);
 
 /* ====================  Embedding Generation  ============================= */
 
@@ -695,7 +695,7 @@ ML_API int32_t ml_embedder_destroy(ml_Embedder* handle);
 typedef struct {
     const char**              texts;        /** Array of input texts in UTF-8 encoding */
     int32_t                   text_count;   /** Number of input texts */
-    const ml_EmbeddingConfig* config;       /** Embedding configuration (optional, can be nullptr) */
+    const geniex_EmbeddingConfig* config;       /** Embedding configuration (optional, can be nullptr) */
     const int32_t**           input_ids_2d; /** 2D array of already tokenized raw input ids.
                                              * When passed in, texts will be ignored.
                                              * NOTE: this is supported for llama_cpp backend only.
@@ -706,7 +706,7 @@ typedef struct {
 
     /* ====================  Image inputs (for multimodal embedders)  ============================= */
 
-    ml_Path* image_paths; /** Array of image file paths to embed (UTF-8).
+    geniex_Path* image_paths; /** Array of image file paths to embed (UTF-8).
                            *  When non-NULL and image_count > 0, the call is treated as
                            *  an image embedding request.
                            *
@@ -719,7 +719,7 @@ typedef struct {
 
     /* ====================  Video inputs (for multimodal embedders)  ============================= */
 
-    ml_Path* video_paths; /** Array of video file paths to embed (UTF-8).
+    geniex_Path* video_paths; /** Array of video file paths to embed (UTF-8).
                            *  When non-NULL and video_count > 0, the call is treated as
                            *  a video embedding request.
                            *
@@ -730,14 +730,14 @@ typedef struct {
     float* video_ends;    /** Array of end times for each video in seconds. Should be the same length as video_count.
                            * NOTE: video_starts and video_ends must be provided together. */
     int32_t video_count;  /** Number of videos in video_paths, video_starts, and video_ends. */
-} ml_EmbedderEmbedInput;
+} geniex_EmbedderEmbedInput;
 
 /** Output structure for embedding generation */
 typedef struct {
-    float*         embeddings;      /** Output embeddings array (caller must free with ml_free) */
+    float*         embeddings;      /** Output embeddings array (caller must free with geniex_free) */
     int32_t        embedding_count; /** Number of embeddings returned */
-    ml_ProfileData profile_data;    /** Profiling data for the embedding generation */
-} ml_EmbedderEmbedOutput;
+    geniex_ProfileData profile_data;    /** Profiling data for the embedding generation */
+} geniex_EmbedderEmbedOutput;
 
 /**
  * @brief Generate embeddings for input texts
@@ -746,19 +746,19 @@ typedef struct {
  * @param input[in]: Input parameters for embedding generation
  * @param output[out]: Output data containing the generated embeddings
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_embedder_embed(
-    ml_Embedder* handle, const ml_EmbedderEmbedInput* input, ml_EmbedderEmbedOutput* output);
+ML_API int32_t geniex_embedder_embed(
+    geniex_Embedder* handle, const geniex_EmbedderEmbedInput* input, geniex_EmbedderEmbedOutput* output);
 
 /* ====================  Model Information  ================================ */
 
 /** Output structure for getting embedding dimension */
 typedef struct {
     int32_t dimension; /** The embedding dimension size */
-} ml_EmbedderDimOutput;
+} geniex_EmbedderDimOutput;
 
 /**
  * @brief Get embedding dimension from the model
@@ -766,11 +766,11 @@ typedef struct {
  * @param handle[in]: Embedder handle
  * @param output[out]: Output data containing the embedding dimension
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Thread-safe
  */
-ML_API int32_t ml_embedder_embedding_dim(const ml_Embedder* handle, ml_EmbedderDimOutput* output);
+ML_API int32_t geniex_embedder_embedding_dim(const geniex_Embedder* handle, geniex_EmbedderDimOutput* output);
 
 /* ========================================================================== */
 /*                              RERANKING MODELS                               */
@@ -781,44 +781,44 @@ typedef struct {
     int32_t     batch_size;       /* Processing batch size */
     bool        normalize;        /* Whether to normalize scores */
     const char* normalize_method; /* Normalization: "softmax", "min-max", "none" */
-} ml_RerankConfig;
+} geniex_RerankConfig;
 
-typedef struct ml_Reranker ml_Reranker; /* Opaque reranker handle */
+typedef struct geniex_Reranker geniex_Reranker; /* Opaque reranker handle */
 
 /* ====================  Lifecycle Management  ============================== */
 
 /** Input structure for creating a reranker */
 typedef struct {
     const char*    model_name;     /** Name of the model */
-    ml_Path        model_path;     /** Path to the model file */
-    ml_Path        tokenizer_path; /** Path to the tokenizer file */
-    ml_ModelConfig config;         /** Model configuration */
-    ml_PluginId    plugin_id;      /** Plugin to use for the model */
+    geniex_Path        model_path;     /** Path to the model file */
+    geniex_Path        tokenizer_path; /** Path to the tokenizer file */
+    geniex_ModelConfig config;         /** Model configuration */
+    geniex_PluginId    plugin_id;      /** Plugin to use for the model */
     const char*    device_id;      /** device to use for the model */
-} ml_RerankerCreateInput;
+} geniex_RerankerCreateInput;
 
 /**
  * @brief Create and initialize a reranker instance from model files
  *
  * @param input[in]: Input parameters for the reranker creation
- * @param out_handle[out]: Pointer to the reranker handle. Must be freed with ml_reranker_destroy.
+ * @param out_handle[out]: Pointer to the reranker handle. Must be freed with geniex_reranker_destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_reranker_create(const ml_RerankerCreateInput* input, ml_Reranker** out_handle);
+ML_API int32_t geniex_reranker_create(const geniex_RerankerCreateInput* input, geniex_Reranker** out_handle);
 
 /**
  * @brief Destroy reranker instance and free associated resources
  *
  * @param handle[in]: The reranker handle to destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_reranker_destroy(ml_Reranker* handle);
+ML_API int32_t geniex_reranker_destroy(geniex_Reranker* handle);
 
 /* ====================  Reranking  ========================================= */
 
@@ -827,15 +827,15 @@ typedef struct {
     const char*            query;           /** Query text in UTF-8 encoding */
     const char**           documents;       /** Array of document texts in UTF-8 encoding */
     int32_t                documents_count; /** Number of documents */
-    const ml_RerankConfig* config;          /** Reranking configuration (optional, can be nullptr) */
-} ml_RerankerRerankInput;
+    const geniex_RerankConfig* config;          /** Reranking configuration (optional, can be nullptr) */
+} geniex_RerankerRerankInput;
 
 /** Output structure for reranking operation */
 typedef struct {
-    float*         scores;       /** Output ranking scores array (caller must free with ml_free) */
+    float*         scores;       /** Output ranking scores array (caller must free with geniex_free) */
     int32_t        score_count;  /** Number of scores returned */
-    ml_ProfileData profile_data; /** Profiling data for the reranking operation */
-} ml_RerankerRerankOutput;
+    geniex_ProfileData profile_data; /** Profiling data for the reranking operation */
+} geniex_RerankerRerankOutput;
 
 /**
  * @brief Rerank documents against a query
@@ -844,12 +844,12 @@ typedef struct {
  * @param input[in]: Input parameters for reranking operation
  * @param output[out]: Output data containing the ranking scores
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_reranker_rerank(
-    ml_Reranker* handle, const ml_RerankerRerankInput* input, ml_RerankerRerankOutput* output);
+ML_API int32_t geniex_reranker_rerank(
+    geniex_Reranker* handle, const geniex_RerankerRerankInput* input, geniex_RerankerRerankOutput* output);
 
 /* ========================================================================== */
 /*                              IMAGE GENERATION                               */
@@ -864,7 +864,7 @@ typedef struct {
     float       guidance_scale; /* Classifier-free guidance scale */
     float       eta;            /* DDIM eta parameter */
     int32_t     seed;           /* Random seed (-1 for random) */
-} ml_ImageSamplerConfig;
+} geniex_ImageSamplerConfig;
 
 /** Diffusion scheduler configuration */
 typedef struct {
@@ -878,8 +878,8 @@ typedef struct {
     const char* timestep_type;       /* Timestep type: "discrete", "continuous" */
     const char* timestep_spacing;    /* Timestep spacing: "linspace", "leading", "trailing" */
     const char* interpolation_type;  /* Interpolation type: "linear", "exponential" */
-    ml_Path     config_path;         /* Optional config file path */
-} ml_SchedulerConfig;
+    geniex_Path     config_path;         /* Optional config file path */
+} geniex_SchedulerConfig;
 
 /** Image generation configuration */
 typedef struct {
@@ -889,69 +889,69 @@ typedef struct {
     int32_t               negative_prompt_count; /* Number of negative prompts */
     int32_t               height;                /* Output image height */
     int32_t               width;                 /* Output image width */
-    ml_ImageSamplerConfig sampler_config;        /* Sampling parameters */
-    ml_SchedulerConfig    scheduler_config;      /* Scheduler configuration */
+    geniex_ImageSamplerConfig sampler_config;        /* Sampling parameters */
+    geniex_SchedulerConfig    scheduler_config;      /* Scheduler configuration */
     float                 strength;              /* Denoising strength for img2img */
-} ml_ImageGenerationConfig;
+} geniex_ImageGenerationConfig;
 
-typedef struct ml_ImageGen ml_ImageGen; /* Opaque image generator handle */
+typedef struct geniex_ImageGen geniex_ImageGen; /* Opaque image generator handle */
 
 /* ====================  Lifecycle Management  ============================== */
 
 /** Input structure for creating an image generator */
 typedef struct {
     const char*    model_name;            /** Name of the model */
-    ml_Path        model_path;            /** Path to the model file */
-    ml_ModelConfig config;                /** Model configuration */
-    ml_Path        scheduler_config_path; /** Path to the scheduler config file */
-    ml_PluginId    plugin_id;             /** Plugin to use for the model */
+    geniex_Path        model_path;            /** Path to the model file */
+    geniex_ModelConfig config;                /** Model configuration */
+    geniex_Path        scheduler_config_path; /** Path to the scheduler config file */
+    geniex_PluginId    plugin_id;             /** Plugin to use for the model */
     const char*    device_id;             /** Device to use for the model, NULL for default device */
-} ml_ImageGenCreateInput;
+} geniex_ImageGenCreateInput;
 
 /**
  * @brief Create and initialize an image generator instance
  *
  * @param input[in]: Input parameters for the image generator creation
- * @param out_handle[out]: Pointer to the image generator handle. Must be freed with ml_imagegen_destroy.
+ * @param out_handle[out]: Pointer to the image generator handle. Must be freed with geniex_imagegen_destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_imagegen_create(const ml_ImageGenCreateInput* input, ml_ImageGen** out_handle);
+ML_API int32_t geniex_imagegen_create(const geniex_ImageGenCreateInput* input, geniex_ImageGen** out_handle);
 
 /**
  * @brief Destroy image generator instance and free associated resources
  *
  * @param handle[in]: The image generator handle to destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_imagegen_destroy(ml_ImageGen* handle);
+ML_API int32_t geniex_imagegen_destroy(geniex_ImageGen* handle);
 
 /* ====================  Image Generation  ================================== */
 
 /** Input structure for text-to-image generation */
 typedef struct {
     const char*                     prompt_utf8; /** Text prompt in UTF-8 encoding */
-    const ml_ImageGenerationConfig* config;      /** Image generation configuration */
-    ml_Path                         output_path; /** Optional output file path (NULL for auto-generated) */
-} ml_ImageGenTxt2ImgInput;
+    const geniex_ImageGenerationConfig* config;      /** Image generation configuration */
+    geniex_Path                         output_path; /** Optional output file path (NULL for auto-generated) */
+} geniex_ImageGenTxt2ImgInput;
 
 /** Input structure for image-to-image generation */
 typedef struct {
-    ml_Path                         init_image_path; /** Path to initial image file for img2img */
+    geniex_Path                         init_image_path; /** Path to initial image file for img2img */
     const char*                     prompt_utf8;     /** Text prompt in UTF-8 encoding */
-    const ml_ImageGenerationConfig* config;          /** Image generation configuration */
-    ml_Path                         output_path;     /** Optional output file path (NULL for auto-generated) */
-} ml_ImageGenImg2ImgInput;
+    const geniex_ImageGenerationConfig* config;          /** Image generation configuration */
+    geniex_Path                         output_path;     /** Optional output file path (NULL for auto-generated) */
+} geniex_ImageGenImg2ImgInput;
 
 /** Output structure for image generation */
 typedef struct {
-    ml_Path output_image_path; /** Path where the generated image will be saved (caller must free with ml_free) */
-} ml_ImageGenOutput;
+    geniex_Path output_image_path; /** Path where the generated image will be saved (caller must free with geniex_free) */
+} geniex_ImageGenOutput;
 
 /**
  * @brief Generate image from text prompt and save to filesystem
@@ -960,12 +960,12 @@ typedef struct {
  * @param input[in]: Input parameters for text-to-image generation
  * @param output[out]: Output data containing the path where the generated image is saved
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_imagegen_txt2img(
-    ml_ImageGen* handle, const ml_ImageGenTxt2ImgInput* input, ml_ImageGenOutput* output);
+ML_API int32_t geniex_imagegen_txt2img(
+    geniex_ImageGen* handle, const geniex_ImageGenTxt2ImgInput* input, geniex_ImageGenOutput* output);
 
 /**
  * @brief Generate image from initial image file and prompt, save to filesystem
@@ -974,12 +974,12 @@ ML_API int32_t ml_imagegen_txt2img(
  * @param input[in]: Input parameters for image-to-image generation (includes initial image path)
  * @param output[out]: Output data containing the path where the generated image is saved
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_imagegen_img2img(
-    ml_ImageGen* handle, const ml_ImageGenImg2ImgInput* input, ml_ImageGenOutput* output);
+ML_API int32_t geniex_imagegen_img2img(
+    geniex_ImageGen* handle, const geniex_ImageGenImg2ImgInput* input, geniex_ImageGenOutput* output);
 
 /* ========================================================================== */
 /*                              SPEECH RECOGNITION (ASR)                       */
@@ -992,72 +992,72 @@ typedef struct {
     const char* timestamps; /* Timestamp mode: "none", "segment", "word" */
     int32_t     beam_size;  /* Beam search size */
     bool        stream;     /* Enable streaming mode */
-} ml_ASRConfig;
+} geniex_ASRConfig;
 
 /** ASR transcription result */
 typedef struct {
-    char*   transcript;        /* Transcribed text (UTF-8, caller must free with ml_free) */
-    float*  confidence_scores; /* Confidence scores for each unit (caller must free with ml_free) */
+    char*   transcript;        /* Transcribed text (UTF-8, caller must free with geniex_free) */
+    float*  confidence_scores; /* Confidence scores for each unit (caller must free with geniex_free) */
     int32_t confidence_count;  /* Number of confidence scores */
-    float*  timestamps;        /* Timestamp pairs: [start, end] for each unit (caller must free with ml_free) */
+    float*  timestamps;        /* Timestamp pairs: [start, end] for each unit (caller must free with geniex_free) */
     int32_t timestamp_count;   /* Number of timestamp pairs */
-} ml_ASRResult;
+} geniex_ASRResult;
 
-typedef struct ml_ASR ml_ASR; /* Opaque ASR handle */
+typedef struct geniex_ASR geniex_ASR; /* Opaque ASR handle */
 
 /* ====================  Lifecycle Management  ============================== */
 
 /** Input structure for creating an ASR instance */
 typedef struct {
     const char*    model_name;     /** Name of the model */
-    ml_Path        model_path;     /** Path to the model file */
-    ml_Path        tokenizer_path; /** Path to the tokenizer file (may be NULL) */
-    ml_ModelConfig config;         /** Model configuration */
+    geniex_Path        model_path;     /** Path to the model file */
+    geniex_Path        tokenizer_path; /** Path to the tokenizer file (may be NULL) */
+    geniex_ModelConfig config;         /** Model configuration */
     const char*    language;       /** Language code (ISO 639-1 or NULL) */
-    ml_PluginId    plugin_id;      /** Plugin to use for the model */
+    geniex_PluginId    plugin_id;      /** Plugin to use for the model */
     const char*    device_id;      /** Device to use for the model, NULL for default device */
     const char*    license_id; /** licence id for loading NPU models, must be provided upon the first use of the license
                               key. null terminated string */
     const char* license_key;   /** licence key for loading NPU models, null terminated string */
-} ml_AsrCreateInput;
+} geniex_AsrCreateInput;
 
 /**
  * @brief Create and initialize an ASR instance with language support
  *
  * @param input[in]: Input parameters for the ASR creation
- * @param out_handle[out]: Pointer to the ASR handle. Must be freed with ml_asr_destroy.
+ * @param out_handle[out]: Pointer to the ASR handle. Must be freed with geniex_asr_destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_asr_create(const ml_AsrCreateInput* input, ml_ASR** out_handle);
+ML_API int32_t geniex_asr_create(const geniex_AsrCreateInput* input, geniex_ASR** out_handle);
 
 /**
  * @brief Destroy ASR instance and free associated resources
  *
  * @param handle[in]: The ASR handle to destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_asr_destroy(ml_ASR* handle);
+ML_API int32_t geniex_asr_destroy(geniex_ASR* handle);
 
 /* ====================  Transcription  ===================================== */
 
 /** Input structure for ASR transcription */
 typedef struct {
-    ml_Path             audio_path; /** Path to audio file */
+    geniex_Path             audio_path; /** Path to audio file */
     const char*         language;   /** Language code (ISO 639-1 or NULL for auto-detect) */
-    const ml_ASRConfig* config;     /** ASR configuration (optional, can be nullptr) */
-} ml_AsrTranscribeInput;
+    const geniex_ASRConfig* config;     /** ASR configuration (optional, can be nullptr) */
+} geniex_AsrTranscribeInput;
 
 /** Output structure for ASR transcription */
 typedef struct {
-    ml_ASRResult   result;       /** Transcription result (caller must free with ml_free for text fields) */
-    ml_ProfileData profile_data; /** Profiling data for the transcription operation */
-} ml_AsrTranscribeOutput;
+    geniex_ASRResult   result;       /** Transcription result (caller must free with geniex_free for text fields) */
+    geniex_ProfileData profile_data; /** Profiling data for the transcription operation */
+} geniex_AsrTranscribeOutput;
 
 /**
  * @brief Transcribe audio file to text with specified language
@@ -1066,24 +1066,24 @@ typedef struct {
  * @param input[in]: Input parameters for transcription (includes audio file path and language)
  * @param output[out]: Output data containing the transcription result
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_asr_transcribe(ml_ASR* handle, const ml_AsrTranscribeInput* input, ml_AsrTranscribeOutput* output);
+ML_API int32_t geniex_asr_transcribe(geniex_ASR* handle, const geniex_AsrTranscribeInput* input, geniex_AsrTranscribeOutput* output);
 
 /* ====================  Language Management  ============================== */
 
 /** Input structure for getting supported languages */
 typedef struct {
     void* reserved; /** Reserved for future use, safe to set as NULL */
-} ml_AsrListSupportedLanguagesInput;
+} geniex_AsrListSupportedLanguagesInput;
 
 /** Output structure for getting supported languages */
 typedef struct {
-    const char** language_codes; /** Array of supported language codes (caller must free with ml_free) */
+    const char** language_codes; /** Array of supported language codes (caller must free with geniex_free) */
     int32_t      language_count; /** Number of supported languages */
-} ml_AsrListSupportedLanguagesOutput;
+} geniex_AsrListSupportedLanguagesOutput;
 
 /**
  * @brief Get list of supported languages for ASR model
@@ -1092,12 +1092,12 @@ typedef struct {
  * @param input[in]: Input parameters for language list query
  * @param output[out]: Output data containing the supported languages array and count
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Thread-safe
  */
-ML_API int32_t ml_asr_list_supported_languages(
-    const ml_ASR* handle, const ml_AsrListSupportedLanguagesInput* input, ml_AsrListSupportedLanguagesOutput* output);
+ML_API int32_t geniex_asr_list_supported_languages(
+    const geniex_ASR* handle, const geniex_AsrListSupportedLanguagesInput* input, geniex_AsrListSupportedLanguagesOutput* output);
 
 /* ========================================================================== */
 /*                              ASR STREAMING                                  */
@@ -1106,7 +1106,7 @@ ML_API int32_t ml_asr_list_supported_languages(
 /* ====================  Streaming Types & Callbacks  ====================== */
 
 /** Callback for streaming transcription updates */
-typedef void (*ml_asr_transcription_callback)(const char* text, void* user_data);
+typedef void (*geniex_asr_transcription_callback)(const char* text, void* user_data);
 
 /** ASR streaming configuration */
 typedef struct {
@@ -1117,22 +1117,22 @@ typedef struct {
     int32_t     buffer_size;      /* Audio buffer size for input (default: 512) */
     const char* timestamps;       /* Timestamp mode: "none", "segment", "word" */
     int32_t     beam_size;        /* Beam search size */
-} ml_ASRStreamConfig;
+} geniex_ASRStreamConfig;
 
 /* ====================  Streaming Operations  ============================== */
 
 /** Input structure for beginning ASR streaming */
 typedef struct {
-    const ml_ASRStreamConfig*     stream_config;    /** Streaming configuration (optional) */
+    const geniex_ASRStreamConfig*     stream_config;    /** Streaming configuration (optional) */
     const char*                   language;         /** Language code (optional) */
-    ml_asr_transcription_callback on_transcription; /** Required: transcription updates */
+    geniex_asr_transcription_callback on_transcription; /** Required: transcription updates */
     void*                         user_data;        /** User data passed to callbacks */
-} ml_AsrStreamBeginInput;
+} geniex_AsrStreamBeginInput;
 
 /** Output structure for streaming begin (minimal) */
 typedef struct {
     void* reserved; /** Reserved for future use */
-} ml_AsrStreamBeginOutput;
+} geniex_AsrStreamBeginOutput;
 
 /**
  * @brief Begin streaming ASR with specified callbacks
@@ -1141,18 +1141,18 @@ typedef struct {
  * @param input[in]: Streaming callbacks configuration
  * @param output[out]: Output structure (reserved for future use)
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_asr_stream_begin(
-    ml_ASR* handle, const ml_AsrStreamBeginInput* input, ml_AsrStreamBeginOutput* output);
+ML_API int32_t geniex_asr_stream_begin(
+    geniex_ASR* handle, const geniex_AsrStreamBeginInput* input, geniex_AsrStreamBeginOutput* output);
 
 /** Input structure for processing audio data */
 typedef struct {
     const float* audio_data; /** Audio samples (float32) */
     int32_t      length;     /** Number of samples */
-} ml_AsrStreamPushAudioInput;
+} geniex_AsrStreamPushAudioInput;
 
 /**
  * @brief Push audio data to streaming ASR for processing
@@ -1160,16 +1160,16 @@ typedef struct {
  * @param handle[in]: ASR handle
  * @param input[in]: Audio data to process
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_asr_stream_push_audio(ml_ASR* handle, const ml_AsrStreamPushAudioInput* input);
+ML_API int32_t geniex_asr_stream_push_audio(geniex_ASR* handle, const geniex_AsrStreamPushAudioInput* input);
 
 /** Input structure for stopping streaming */
 typedef struct {
     bool graceful; /** If true, processes remaining audio before stopping; if false, stops immediately */
-} ml_AsrStreamStopInput;
+} geniex_AsrStreamStopInput;
 
 /**
  * @brief Stop streaming ASR
@@ -1177,11 +1177,11 @@ typedef struct {
  * @param handle[in]: ASR handle
  * @param input[in]: Stop configuration (graceful vs immediate)
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_asr_stream_stop(ml_ASR* handle, const ml_AsrStreamStopInput* input);
+ML_API int32_t geniex_asr_stream_stop(geniex_ASR* handle, const geniex_AsrStreamStopInput* input);
 
 /* ========================================================================== */
 /*                              TEXT-TO-SPEECH (TTS)                         */
@@ -1195,75 +1195,75 @@ typedef struct {
     float       speed;       /* Speech speed (1.0 = normal) */
     int32_t     seed;        /* Random seed (-1 for random) */
     int32_t     sample_rate; /* Output sample rate in Hz */
-} ml_TTSConfig;
+} geniex_TTSConfig;
 
 /** TTS sampling parameters */
 typedef struct {
     float temperature;  /* Sampling temperature */
     float noise_scale;  /* Noise scale for voice variation */
     float length_scale; /* Length scale for speech duration */
-} ml_TTSSamplerConfig;
+} geniex_TTSSamplerConfig;
 
 /** TTS synthesis result */
 typedef struct {
-    ml_Path audio_path;       /* Path where the synthesized audio is saved (caller must free with ml_free) */
+    geniex_Path audio_path;       /* Path where the synthesized audio is saved (caller must free with geniex_free) */
     float   duration_seconds; /* Audio duration in seconds */
     int32_t sample_rate;      /* Audio sample rate in Hz */
     int32_t channels;         /* Number of audio channels (default: 1) */
     int32_t num_samples;      /* Number of audio samples */
-} ml_TTSResult;
+} geniex_TTSResult;
 
-typedef struct ml_TTS ml_TTS; /* Opaque TTS handle */
+typedef struct geniex_TTS geniex_TTS; /* Opaque TTS handle */
 
 /* ====================  Lifecycle Management  ============================== */
 
 /** Input structure for creating a TTS instance */
 typedef struct {
     const char*    model_name;   /** Name of the model */
-    ml_Path        model_path;   /** Path to the TTS model file */
-    ml_ModelConfig config;       /** Model configuration */
-    ml_Path        vocoder_path; /** Path to the vocoder file */
-    ml_PluginId    plugin_id;    /** Plugin to use for the model */
+    geniex_Path        model_path;   /** Path to the TTS model file */
+    geniex_ModelConfig config;       /** Model configuration */
+    geniex_Path        vocoder_path; /** Path to the vocoder file */
+    geniex_PluginId    plugin_id;    /** Plugin to use for the model */
     const char*    device_id;    /** Device to use for the model, NULL for default device */
-} ml_TtsCreateInput;
+} geniex_TtsCreateInput;
 
 /**
  * @brief Create and initialize a TTS instance with model and vocoder
  *
  * @param input[in]: Input parameters for the TTS creation
- * @param out_handle[out]: Pointer to the TTS handle. Must be freed with ml_tts_destroy.
+ * @param out_handle[out]: Pointer to the TTS handle. Must be freed with geniex_tts_destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_tts_create(const ml_TtsCreateInput* input, ml_TTS** out_handle);
+ML_API int32_t geniex_tts_create(const geniex_TtsCreateInput* input, geniex_TTS** out_handle);
 
 /**
  * @brief Destroy TTS instance and free associated resources
  *
  * @param handle[in]: The TTS handle to destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_tts_destroy(ml_TTS* handle);
+ML_API int32_t geniex_tts_destroy(geniex_TTS* handle);
 
 /* ====================  Speech Synthesis  ================================== */
 
 /** Input structure for TTS synthesis */
 typedef struct {
     const char*         text_utf8;   /** Text to synthesize in UTF-8 encoding */
-    const ml_TTSConfig* config;      /** TTS configuration (optional, can be nullptr) */
-    ml_Path             output_path; /** Optional output file path (NULL for auto-generated) */
-} ml_TtsSynthesizeInput;
+    const geniex_TTSConfig* config;      /** TTS configuration (optional, can be nullptr) */
+    geniex_Path             output_path; /** Optional output file path (NULL for auto-generated) */
+} geniex_TtsSynthesizeInput;
 
 /** Output structure for TTS synthesis */
 typedef struct {
-    ml_TTSResult   result;       /** Synthesis result with audio saved to filesystem */
-    ml_ProfileData profile_data; /** Profiling data for the synthesis operation */
-} ml_TtsSynthesizeOutput;
+    geniex_TTSResult   result;       /** Synthesis result with audio saved to filesystem */
+    geniex_ProfileData profile_data; /** Profiling data for the synthesis operation */
+} geniex_TtsSynthesizeOutput;
 
 /**
  * @brief Synthesize speech from text and save to filesystem
@@ -1272,24 +1272,24 @@ typedef struct {
  * @param input[in]: Input parameters for speech synthesis
  * @param output[out]: Output data containing the path where synthesized audio is saved
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_tts_synthesize(ml_TTS* handle, const ml_TtsSynthesizeInput* input, ml_TtsSynthesizeOutput* output);
+ML_API int32_t geniex_tts_synthesize(geniex_TTS* handle, const geniex_TtsSynthesizeInput* input, geniex_TtsSynthesizeOutput* output);
 
 /* ====================  Voice Management  ================================== */
 
 /** Input structure for getting available voices */
 typedef struct {
     void* reserved; /** Reserved for future use, safe to set as NULL */
-} ml_TtsListAvailableVoicesInput;
+} geniex_TtsListAvailableVoicesInput;
 
 /** Output structure for getting available voices */
 typedef struct {
-    const char** voice_ids;   /** Array of available voice identifiers (caller must free with ml_free) */
+    const char** voice_ids;   /** Array of available voice identifiers (caller must free with geniex_free) */
     int32_t      voice_count; /** Number of available voices */
-} ml_TtsListAvailableVoicesOutput;
+} geniex_TtsListAvailableVoicesOutput;
 
 /**
  * @brief Get list of available voice identifiers
@@ -1298,12 +1298,12 @@ typedef struct {
  * @param input[in]: Input parameters for voice list query
  * @param output[out]: Output data containing the available voices array and count
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Thread-safe
  */
-ML_API int32_t ml_tts_list_available_voices(
-    const ml_TTS* handle, const ml_TtsListAvailableVoicesInput* input, ml_TtsListAvailableVoicesOutput* output);
+ML_API int32_t geniex_tts_list_available_voices(
+    const geniex_TTS* handle, const geniex_TtsListAvailableVoicesInput* input, geniex_TtsListAvailableVoicesOutput* output);
 
 /* ========================================================================== */
 /*                              COMPUTER VISION (CV)                           */
@@ -1316,22 +1316,22 @@ typedef struct {
     float y;      /* Y coordinate (normalized or pixel, depends on model) */
     float width;  /* Width */
     float height; /* Height */
-} ml_BoundingBox;
+} geniex_BoundingBox;
 
 /** Generic detection/classification result */
 typedef struct {
-    ml_Path*       image_paths;   /* Output image paths (caller must free with ml_free) */
+    geniex_Path*       image_paths;   /* Output image paths (caller must free with geniex_free) */
     int32_t        image_count;   /* Number of output images */
     int32_t        class_id;      /* Class ID (example: ConvNext) */
     float          confidence;    /* Confidence score [0.0-1.0] */
-    ml_BoundingBox bbox;          /* Bounding box (example: YOLO) */
-    const char*    text;          /* Text result (example: OCR) (caller must free with ml_free) */
-    float*         embedding;     /* Feature embedding (example: CLIP embedding) (caller must free with ml_free) */
+    geniex_BoundingBox bbox;          /* Bounding box (example: YOLO) */
+    const char*    text;          /* Text result (example: OCR) (caller must free with geniex_free) */
+    float*         embedding;     /* Feature embedding (example: CLIP embedding) (caller must free with geniex_free) */
     int32_t        embedding_dim; /* Embedding dimension */
-    float*         mask;          /* Mask (example: segmentation mask) (caller must free with ml_free) */
+    float*         mask;          /* Mask (example: segmentation mask) (caller must free with geniex_free) */
     int32_t        mask_h;        /* Mask height */
     int32_t        mask_w;        /* Mask width */
-} ml_CVResult;
+} geniex_CVResult;
 
 /** CV capabilities */
 typedef enum {
@@ -1339,29 +1339,29 @@ typedef enum {
     ML_CV_CLASSIFICATION = 1, /* Classification */
     ML_CV_SEGMENTATION   = 2, /* Segmentation */
     ML_CV_CUSTOM         = 3, /* Custom task */
-} ml_CVCapabilities;
+} geniex_CVCapabilities;
 
 /** CV model preprocessing configuration */
 typedef struct {
-    ml_CVCapabilities capabilities;   /* Capabilities */
-    ml_Path           det_model_path; /* detection model path */
-    ml_Path           rec_model_path; /* recognition model path */
-    ml_Path           char_dict_path; /* Character dictionary path */
-} ml_CVModelConfig;
+    geniex_CVCapabilities capabilities;   /* Capabilities */
+    geniex_Path           det_model_path; /* detection model path */
+    geniex_Path           rec_model_path; /* recognition model path */
+    geniex_Path           char_dict_path; /* Character dictionary path */
+} geniex_CVModelConfig;
 
 /* ====================  Generic CV Model  ================================== */
 
-typedef struct ml_CV ml_CV; /* Opaque CV model handle */
+typedef struct geniex_CV geniex_CV; /* Opaque CV model handle */
 
 typedef struct {
     const char*      model_name; /** Name of the model */
-    ml_CVModelConfig config;     /** CV model configuration */
-    ml_PluginId      plugin_id;  /** Plugin to use for the model */
+    geniex_CVModelConfig config;     /** CV model configuration */
+    geniex_PluginId      plugin_id;  /** Plugin to use for the model */
     const char*      device_id;  /** device to use for the model */
     const char* license_id;  /** licence id for loading NPU models, must be provided upon the first use of the license
                                 key. null terminated string */
     const char* license_key; /** licence key for loading NPU models, null terminated string */
-} ml_CVCreateInput;
+} geniex_CVCreateInput;
 
 /* ====================  Lifecycle Management  ============================== */
 
@@ -1369,32 +1369,32 @@ typedef struct {
  * @brief Create and initialize a CV model
  *
  * @param input[in]: Input parameters for the CV model creation
- * @param out_handle[out]: Pointer to the CV model handle. Must be freed with ml_cv_destroy.
+ * @param out_handle[out]: Pointer to the CV model handle. Must be freed with geniex_cv_destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  */
-ML_API int32_t ml_cv_create(const ml_CVCreateInput* input, ml_CV** out_handle);
+ML_API int32_t geniex_cv_create(const geniex_CVCreateInput* input, geniex_CV** out_handle);
 
 /**
  * @brief Destroy CV model instance and free associated resources
  *
  * @param handle[in]: The CV model handle to destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  */
-ML_API int32_t ml_cv_destroy(ml_CV* handle);
+ML_API int32_t geniex_cv_destroy(geniex_CV* handle);
 
 /* ====================  Generic Inference  ================================= */
 /** Input structure for CV inference */
 typedef struct {
     const char* input_image_path; /* Input image path */
-} ml_CVInferInput;
+} geniex_CVInferInput;
 
 /** Output structure for CV inference */
 typedef struct {
-    ml_CVResult* results;      /* Array of CV results (caller must free with ml_free) */
+    geniex_CVResult* results;      /* Array of CV results (caller must free with geniex_free) */
     int32_t      result_count; /* Number of CV results */
-} ml_CVInferOutput;
+} geniex_CVInferOutput;
 
 /**
  * @brief Perform inference on a single image
@@ -1403,9 +1403,9 @@ typedef struct {
  * @param input[in]: Input parameters for the inference
  * @param output[out]: Output data containing the inference results
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  */
-ML_API int32_t ml_cv_infer(const ml_CV* handle, const ml_CVInferInput* input, ml_CVInferOutput* output);
+ML_API int32_t geniex_cv_infer(const geniex_CV* handle, const geniex_CVInferInput* input, geniex_CVInferOutput* output);
 
 /* ========================================================================== */
 /*                              SPEAKER DIARIZATION                            */
@@ -1417,70 +1417,70 @@ ML_API int32_t ml_cv_infer(const ml_CV* handle, const ml_CVInferInput* input, ml
 typedef struct {
     int32_t min_speakers; /* Minimum number of speakers (0 = auto-detect) */
     int32_t max_speakers; /* Maximum number of speakers (0 = no limit) */
-} ml_DiarizeConfig;
+} geniex_DiarizeConfig;
 
 /** Speech segment structure */
 typedef struct {
     float start_time;    /* Segment start time in seconds */
     float end_time;      /* Segment end time in seconds */
-    char* speaker_label; /* Speaker label (e.g., "SPEAKER_00") (caller must free with ml_free) */
-} ml_DiarizeSpeechSegment;
+    char* speaker_label; /* Speaker label (e.g., "SPEAKER_00") (caller must free with geniex_free) */
+} geniex_DiarizeSpeechSegment;
 
-typedef struct ml_Diarize ml_Diarize; /* Opaque diarization handle */
+typedef struct geniex_Diarize geniex_Diarize; /* Opaque diarization handle */
 
 /* ====================  Lifecycle Management  ============================== */
 
 /** Input structure for creating a diarization instance */
 typedef struct {
     const char*    model_name; /** Name of the model */
-    ml_Path        model_path; /** Path to the model folder */
-    ml_ModelConfig config;     /** Model configuration */
-    ml_PluginId    plugin_id;  /** Plugin to use for the model */
+    geniex_Path        model_path; /** Path to the model folder */
+    geniex_ModelConfig config;     /** Model configuration */
+    geniex_PluginId    plugin_id;  /** Plugin to use for the model */
     const char*    device_id;  /** Device to use for the model, NULL for default device */
     const char*    license_id; /** Licence id for loading NPU models, must be provided upon the first use of the license
                                   key. null terminated string */
     const char* license_key;   /** Licence key for loading NPU models, null terminated string */
-} ml_DiarizeCreateInput;
+} geniex_DiarizeCreateInput;
 
 /**
  * @brief Create and initialize a diarization instance
  *
  * @param input[in]: Input parameters for the diarization instance creation
- * @param out_handle[out]: Pointer to the diarization handle. Must be freed with ml_diarize_destroy.
+ * @param out_handle[out]: Pointer to the diarization handle. Must be freed with geniex_diarize_destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_diarize_create(const ml_DiarizeCreateInput* input, ml_Diarize** out_handle);
+ML_API int32_t geniex_diarize_create(const geniex_DiarizeCreateInput* input, geniex_Diarize** out_handle);
 
 /**
  * @brief Destroy diarization instance and free associated resources
  *
  * @param handle[in]: The diarization handle to destroy.
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_diarize_destroy(ml_Diarize* handle);
+ML_API int32_t geniex_diarize_destroy(geniex_Diarize* handle);
 
 /* ====================  Diarization Inference  ================================ */
 
 /** Input structure for diarization inference */
 typedef struct {
-    ml_Path                 audio_path; /** Path to audio file */
-    const ml_DiarizeConfig* config;     /** Diarization configuration (optional, can be nullptr) */
-} ml_DiarizeInferInput;
+    geniex_Path                 audio_path; /** Path to audio file */
+    const geniex_DiarizeConfig* config;     /** Diarization configuration (optional, can be nullptr) */
+} geniex_DiarizeInferInput;
 
 /** Output structure for diarization inference */
 typedef struct {
-    ml_DiarizeSpeechSegment* segments;      /** Array of speech segments (caller must free with ml_free) */
+    geniex_DiarizeSpeechSegment* segments;      /** Array of speech segments (caller must free with geniex_free) */
     int32_t                  segment_count; /** Number of segments */
     int32_t                  num_speakers;  /** Total unique speakers detected */
     float                    duration;      /** Total audio duration in seconds */
-    ml_ProfileData           profile_data;  /** Profiling data for the diarization operation */
-} ml_DiarizeInferOutput;
+    geniex_ProfileData           profile_data;  /** Profiling data for the diarization operation */
+} geniex_DiarizeInferOutput;
 
 /**
  * @brief Perform speaker diarization on audio file
@@ -1492,11 +1492,11 @@ typedef struct {
  * @param input[in]: Input parameters for diarization (audio file path and optional configuration)
  * @param output[out]: Output data containing the diarization results
  *
- * @return ml_ErrorCode: ML_SUCCESS on success, negative on failure.
+ * @return geniex_ErrorCode: ML_SUCCESS on success, negative on failure.
  *
  * @thread_safety: Not thread-safe
  */
-ML_API int32_t ml_diarize_infer(ml_Diarize* handle, const ml_DiarizeInferInput* input, ml_DiarizeInferOutput* output);
+ML_API int32_t geniex_diarize_infer(geniex_Diarize* handle, const geniex_DiarizeInferInput* input, geniex_DiarizeInferOutput* output);
 
 #ifdef __cplusplus
 } /* extern "C" */

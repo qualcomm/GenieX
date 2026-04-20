@@ -1,7 +1,7 @@
 #pragma once
 
 #include "IValidatable.h"
-#include "ml.h"
+#include "geniex.h"
 
 namespace geniex {
 
@@ -14,9 +14,9 @@ class ITts {
      * @param input The creation input parameters
      * @return ML error code (ML_SUCCESS on success, negative on failure)
      */
-    virtual int32_t create(const ml_TtsCreateInput* input) {
+    virtual int32_t create(const geniex_TtsCreateInput* input) {
         // Check if this instance implements IValidatable
-        auto* validatable = dynamic_cast<IValidatable<ml_TtsCreateInput>*>(this);
+        auto* validatable = dynamic_cast<IValidatable<geniex_TtsCreateInput>*>(this);
         if (validatable) {
             // Check if validation is needed
             if (validatable->is_validation_needed(input)) {
@@ -32,9 +32,9 @@ class ITts {
         return create_impl(input);
     }
 
-    virtual int32_t synthesize(const ml_TtsSynthesizeInput*, ml_TtsSynthesizeOutput*) = 0;
+    virtual int32_t synthesize(const geniex_TtsSynthesizeInput*, geniex_TtsSynthesizeOutput*) = 0;
 
-    virtual int32_t list_available_voices(const ml_TtsListAvailableVoicesInput*, ml_TtsListAvailableVoicesOutput*) = 0;
+    virtual int32_t list_available_voices(const geniex_TtsListAvailableVoicesInput*, geniex_TtsListAvailableVoicesOutput*) = 0;
 
    protected:
     /**
@@ -42,7 +42,7 @@ class ITts {
      * @param input The creation input parameters
      * @return ML error code (ML_SUCCESS on success, negative on failure)
      */
-    virtual int32_t create_impl(const ml_TtsCreateInput* input) = 0;
+    virtual int32_t create_impl(const geniex_TtsCreateInput* input) = 0;
 };
 
 }  // namespace geniex

@@ -10,7 +10,7 @@
  */
 
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #ifdef GENIEX_VALIDATION
 #include "validation.h"
 #endif
@@ -23,7 +23,7 @@ namespace geniex {
 
 /**
  * @brief Generic interface for validation logic
- * @tparam CreateInput The type of creation input to validate (e.g., ml_LlmCreateInput)
+ * @tparam CreateInput The type of creation input to validate (e.g., geniex_LlmCreateInput)
  *
  * This interface encapsulates the validation concern and can be composed
  * with any plugin interface to add validation capabilities.

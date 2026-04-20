@@ -3,7 +3,7 @@
 #include <string>
 
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "plugin/IVlm.h"
 #include "profile.h"
 #include "registry.h"
@@ -11,7 +11,7 @@
 
 using namespace geniex;
 
-int32_t ml_vlm_create(const ml_VlmCreateInput* input, ml_VLM** out_handle) {
+int32_t geniex_vlm_create(const geniex_VlmCreateInput* input, geniex_VLM** out_handle) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -22,7 +22,7 @@ int32_t ml_vlm_create(const ml_VlmCreateInput* input, ml_VLM** out_handle) {
         if (result != ML_SUCCESS) {
             delete backend;
         } else {
-            *out_handle = reinterpret_cast<ml_VLM*>(backend);
+            *out_handle = reinterpret_cast<geniex_VLM*>(backend);
         }
         return result;
     } catch (const PluginNotFoundException& e) {
@@ -37,7 +37,7 @@ int32_t ml_vlm_create(const ml_VlmCreateInput* input, ml_VLM** out_handle) {
     }
 }
 
-int32_t ml_vlm_destroy(ml_VLM* handle) {
+int32_t geniex_vlm_destroy(geniex_VLM* handle) {
     GENIEX_LOG_TRACE("destroying vlm");
 
     try {
@@ -51,7 +51,7 @@ int32_t ml_vlm_destroy(ml_VLM* handle) {
     }
 }
 
-int32_t ml_vlm_reset(ml_VLM* handle) {
+int32_t geniex_vlm_reset(geniex_VLM* handle) {
     GENIEX_LOG_TRACE("resetting vlm");
 
     try {
@@ -64,8 +64,8 @@ int32_t ml_vlm_reset(ml_VLM* handle) {
     }
 }
 
-int32_t ml_vlm_apply_chat_template(
-    ml_VLM* handle, const ml_VlmApplyChatTemplateInput* input, ml_VlmApplyChatTemplateOutput* output) {
+int32_t geniex_vlm_apply_chat_template(
+    geniex_VLM* handle, const geniex_VlmApplyChatTemplateInput* input, geniex_VlmApplyChatTemplateOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -78,7 +78,7 @@ int32_t ml_vlm_apply_chat_template(
     }
 }
 
-int32_t ml_vlm_generate(ml_VLM* handle, const ml_VlmGenerateInput* input, ml_VlmGenerateOutput* output) {
+int32_t geniex_vlm_generate(geniex_VLM* handle, const geniex_VlmGenerateInput* input, geniex_VlmGenerateOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
@@ -87,7 +87,7 @@ int32_t ml_vlm_generate(ml_VLM* handle, const ml_VlmGenerateInput* input, ml_Vlm
 
         // Wrap the user's callback with UTF-8 validation if a callback is provided
         std::unique_ptr<Utf8CallbackWrapper> wrapper;
-        ml_VlmGenerateInput                  modified_input;
+        geniex_VlmGenerateInput                  modified_input;
 
         if (input->on_token) {
             // Create wrapper that accumulates incomplete UTF-8 sequences
@@ -102,7 +102,7 @@ int32_t ml_vlm_generate(ml_VLM* handle, const ml_VlmGenerateInput* input, ml_Vlm
 
             int32_t result = backend->generate(&modified_input, output);
             calculate_profile_data(output->profile_data);
-            GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+            GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
 
             // Flush any remaining incomplete UTF-8 sequence after generation completes
             wrapper->flush();
@@ -112,7 +112,7 @@ int32_t ml_vlm_generate(ml_VLM* handle, const ml_VlmGenerateInput* input, ml_Vlm
             // No callback, pass through directly
             int32_t result = backend->generate(input, output);
             calculate_profile_data(output->profile_data);
-            GENIEX_LOG_TRACE("{}: {}", static_cast<ml_ErrorCode>(result), output);
+            GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
             return result;
         }
     } catch (const std::exception& e) {

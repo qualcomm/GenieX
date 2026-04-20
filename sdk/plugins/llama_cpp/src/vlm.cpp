@@ -7,7 +7,7 @@
 #include "common.h"
 #include "llama.h"
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "mtmd-helper.h"
 #include "mtmd.h"
 #include "profiler.h"
@@ -25,7 +25,7 @@ LlamaVlm::~LlamaVlm() {
     }
 }
 
-int32_t LlamaVlm::create_impl(const ml_VlmCreateInput* input) {
+int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
     if (!input || !input->model_path) {
         return ML_ERROR_COMMON_INVALID_INPUT;
     }
@@ -101,11 +101,11 @@ int32_t LlamaVlm::reset() {
 }
 
 int32_t LlamaVlm::apply_chat_template(
-    const ml_VlmApplyChatTemplateInput* input, ml_VlmApplyChatTemplateOutput* output) {
+    const geniex_VlmApplyChatTemplateInput* input, geniex_VlmApplyChatTemplateOutput* output) {
     if (!this->model || !input || !output || !input->messages || input->message_count <= 0)
         return ML_ERROR_COMMON_INVALID_INPUT;
 
-    // Convert ml_VlmChatMessage array to vector<common_chat_msg>
+    // Convert geniex_VlmChatMessage array to vector<common_chat_msg>
     std::vector<common_chat_msg> chat_messages;
     chat_messages.reserve(input->message_count);
 
@@ -158,7 +158,7 @@ int32_t LlamaVlm::apply_chat_template(
     return ML_SUCCESS;
 }
 
-int32_t LlamaVlm::generate(const ml_VlmGenerateInput* input, ml_VlmGenerateOutput* output) {
+int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGenerateOutput* output) {
     if (!this->ctx || !input || !output || !input->prompt_utf8) {
         return ML_ERROR_COMMON_INVALID_INPUT;
     }
@@ -166,7 +166,7 @@ int32_t LlamaVlm::generate(const ml_VlmGenerateInput* input, ml_VlmGenerateOutpu
     common::Profiler profiler;
     profiler.prompt_start();
 
-    ml_GenerationConfig cfg = input->config ? *input->config : ml_GenerationConfig{};
+    geniex_GenerationConfig cfg = input->config ? *input->config : geniex_GenerationConfig{};
     if (cfg.max_tokens <= 0) cfg.max_tokens = 512;
 
     // Prepare multimodal input: collect bitmaps for images and audio
@@ -441,7 +441,7 @@ void LlamaVlm::reset_sampler() {
     this->sampler = common_sampler_init(this->model, s);
 }
 
-bool LlamaVlm::vlm_message_to_common_chat_msg(const ml_VlmChatMessage* input, common_chat_msg* output) {
+bool LlamaVlm::vlm_message_to_common_chat_msg(const geniex_VlmChatMessage* input, common_chat_msg* output) {
     if (!input || !output) return false;
 
     // Role is required

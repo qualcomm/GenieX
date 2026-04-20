@@ -1,7 +1,7 @@
 #pragma once
 
 #include "IValidatable.h"
-#include "ml.h"
+#include "geniex.h"
 
 namespace geniex {
 
@@ -14,9 +14,9 @@ class IImageGen {
      * @param input The creation input parameters
      * @return ML error code (ML_SUCCESS on success, negative on failure)
      */
-    virtual int32_t create(const ml_ImageGenCreateInput* input) {
+    virtual int32_t create(const geniex_ImageGenCreateInput* input) {
         // Check if this instance implements IValidatable
-        auto* validatable = dynamic_cast<IValidatable<ml_ImageGenCreateInput>*>(this);
+        auto* validatable = dynamic_cast<IValidatable<geniex_ImageGenCreateInput>*>(this);
         if (validatable) {
             // Check if validation is needed
             if (validatable->is_validation_needed(input)) {
@@ -32,9 +32,9 @@ class IImageGen {
         return create_impl(input);
     }
 
-    virtual int32_t txt2img(const ml_ImageGenTxt2ImgInput*, ml_ImageGenOutput*) = 0;
+    virtual int32_t txt2img(const geniex_ImageGenTxt2ImgInput*, geniex_ImageGenOutput*) = 0;
 
-    virtual int32_t img2img(const ml_ImageGenImg2ImgInput*, ml_ImageGenOutput*) = 0;
+    virtual int32_t img2img(const geniex_ImageGenImg2ImgInput*, geniex_ImageGenOutput*) = 0;
 
    protected:
     /**
@@ -42,7 +42,7 @@ class IImageGen {
      * @param input The creation input parameters
      * @return ML error code (ML_SUCCESS on success, negative on failure)
      */
-    virtual int32_t create_impl(const ml_ImageGenCreateInput* input) = 0;
+    virtual int32_t create_impl(const geniex_ImageGenCreateInput* input) = 0;
 };
 
 }  // namespace geniex

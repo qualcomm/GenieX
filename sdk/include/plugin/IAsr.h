@@ -1,7 +1,7 @@
 #pragma once
 
 #include "IValidatable.h"
-#include "ml.h"
+#include "geniex.h"
 
 namespace geniex {
 
@@ -14,9 +14,9 @@ class IAsr {
      * @param input The creation input parameters
      * @return ML error code (ML_SUCCESS on success, negative on failure)
      */
-    virtual int32_t create(const ml_AsrCreateInput* input) {
+    virtual int32_t create(const geniex_AsrCreateInput* input) {
         // Check if this instance implements IValidatable
-        auto* validatable = dynamic_cast<IValidatable<ml_AsrCreateInput>*>(this);
+        auto* validatable = dynamic_cast<IValidatable<geniex_AsrCreateInput>*>(this);
         if (validatable) {
             // Check if validation is needed
             if (validatable->is_validation_needed(input)) {
@@ -32,21 +32,21 @@ class IAsr {
         return create_impl(input);
     }
 
-    virtual int32_t transcribe(const ml_AsrTranscribeInput*, ml_AsrTranscribeOutput*) = 0;
+    virtual int32_t transcribe(const geniex_AsrTranscribeInput*, geniex_AsrTranscribeOutput*) = 0;
 
     virtual int32_t list_supported_languages(
-        const ml_AsrListSupportedLanguagesInput*, ml_AsrListSupportedLanguagesOutput*) = 0;
+        const geniex_AsrListSupportedLanguagesInput*, geniex_AsrListSupportedLanguagesOutput*) = 0;
 
     // Streaming ASR interface - default implementations for optional streaming support
-    virtual int32_t stream_begin(const ml_AsrStreamBeginInput* input, ml_AsrStreamBeginOutput* output) {
+    virtual int32_t stream_begin(const geniex_AsrStreamBeginInput* input, geniex_AsrStreamBeginOutput* output) {
         return ML_ERROR_COMMON_NOT_SUPPORTED;  // Default: streaming not supported
     }
 
-    virtual int32_t stream_push_audio(const ml_AsrStreamPushAudioInput* input) {
+    virtual int32_t stream_push_audio(const geniex_AsrStreamPushAudioInput* input) {
         return ML_ERROR_COMMON_NOT_SUPPORTED;  // Default: streaming not supported
     }
 
-    virtual int32_t stream_stop(const ml_AsrStreamStopInput* input) {
+    virtual int32_t stream_stop(const geniex_AsrStreamStopInput* input) {
         return ML_ERROR_COMMON_NOT_SUPPORTED;  // Default: streaming not supported
     }
 
@@ -56,7 +56,7 @@ class IAsr {
      * @param input The creation input parameters
      * @return ML error code (ML_SUCCESS on success, negative on failure)
      */
-    virtual int32_t create_impl(const ml_AsrCreateInput* input) = 0;
+    virtual int32_t create_impl(const geniex_AsrCreateInput* input) = 0;
 };
 
 }  // namespace geniex

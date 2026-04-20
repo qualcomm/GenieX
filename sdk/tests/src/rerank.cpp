@@ -3,7 +3,7 @@
 
 #include "doctest.h"
 #include "logging.h"
-#include "ml.h"
+#include "geniex.h"
 #include "util.h"
 
 namespace {
@@ -12,7 +12,7 @@ namespace {
 #define PLUGINS(M) M(llama_cpp) M(qairt)
 using Param = std::tuple<std::string, std::string, std::optional<std::string>>;
 
-Setup<Param, ml_Reranker> setup_guard(
+Setup<Param, geniex_Reranker> setup_guard(
     SetupMap<Param>{
         {llama_cpp::value,
          {
@@ -35,8 +35,8 @@ Setup<Param, ml_Reranker> setup_guard(
              // Add more qairt models here as needed
          }},
     },
-    [](ml_PluginId plugin, Param param) {
-      ml_Reranker *reranker = nullptr;
+    [](geniex_PluginId plugin, Param param) {
+      geniex_Reranker *reranker = nullptr;
       auto [name, model_path, tokenizer_path] = std::move(param);
 
       // Check if model file exists
@@ -44,22 +44,22 @@ Setup<Param, ml_Reranker> setup_guard(
         GENIEX_LOG_WARN("Model file not found: {}", model_path);
         GENIEX_LOG_WARN("Skipping tests for model: {}", name);
         g_test_summary.add_skipped_model(name, model_path);
-        return static_cast<ml_Reranker *>(
+        return static_cast<geniex_Reranker *>(
             nullptr); // Return nullptr to indicate skip
       }
 
-      ml_RerankerCreateInput input{};
+      geniex_RerankerCreateInput input{};
       input.model_name = name.c_str();
       input.model_path = model_path.c_str();
       input.tokenizer_path = tokenizer_path ? tokenizer_path->c_str() : nullptr;
       input.plugin_id = plugin;
-      int32_t res = ml_reranker_create(&input, &reranker);
+      int32_t res = geniex_reranker_create(&input, &reranker);
       CHECK_ML_ERROR(res);
       REQUIRE(reranker != nullptr);
 
       return reranker;
     },
-    nullptr, ml_reranker_destroy);
+    nullptr, geniex_reranker_destroy);
 
 std::string test_query = "What is machine learning?";
 std::vector<std::string> test_documents = {
@@ -75,9 +75,9 @@ std::vector<std::string> test_documents = {
     "The weather today is sunny and warm."};
 
 // Test function definitions
-void test_reranker_single_query(ml_Reranker *reranker,
+void test_reranker_single_query(geniex_Reranker *reranker,
                                 const std::string &model_name) {
-  ml_RerankConfig cfg = {};
+  geniex_RerankConfig cfg = {};
   cfg.batch_size = 32;
   cfg.normalize = true;
   cfg.normalize_method = "l2";
@@ -87,14 +87,14 @@ void test_reranker_single_query(ml_Reranker *reranker,
     documents[i] = test_documents[i].c_str();
   }
 
-  ml_RerankerRerankInput input = {};
+  geniex_RerankerRerankInput input = {};
   input.query = test_query.c_str();
   input.documents = documents.data();
   input.documents_count = static_cast<int32_t>(test_documents.size());
   input.config = &cfg;
 
-  ml_RerankerRerankOutput output = {};
-  int32_t res = ml_reranker_rerank(reranker, &input, &output);
+  geniex_RerankerRerankOutput output = {};
+  int32_t res = geniex_reranker_rerank(reranker, &input, &output);
 
   CHECK_ML_ERROR(res);
   REQUIRE(output.scores != nullptr);
@@ -107,9 +107,9 @@ void test_reranker_single_query(ml_Reranker *reranker,
   GENIEX_LOG_INFO("Profile data: {}", output.profile_data);
 }
 
-void test_reranker_batch_processing(ml_Reranker *reranker,
+void test_reranker_batch_processing(geniex_Reranker *reranker,
                                     const std::string &model_name) {
-  ml_RerankConfig cfg = {};
+  geniex_RerankConfig cfg = {};
   cfg.batch_size = 2; // Small batch size for testing
   cfg.normalize = true;
 
@@ -118,14 +118,14 @@ void test_reranker_batch_processing(ml_Reranker *reranker,
     documents[i] = test_documents[i].c_str();
   }
 
-  ml_RerankerRerankInput input = {};
+  geniex_RerankerRerankInput input = {};
   input.query = test_query.c_str();
   input.documents = documents.data();
   input.documents_count = static_cast<int32_t>(test_documents.size());
   input.config = &cfg;
 
-  ml_RerankerRerankOutput output = {};
-  int32_t res = ml_reranker_rerank(reranker, &input, &output);
+  geniex_RerankerRerankOutput output = {};
+  int32_t res = geniex_reranker_rerank(reranker, &input, &output);
 
   CHECK_ML_ERROR(res);
   REQUIRE(output.scores != nullptr);
@@ -140,7 +140,7 @@ void test_reranker_batch_processing(ml_Reranker *reranker,
 
 // Register all reranker tests
 template <typename PluginType>
-void register_reranker_tests(TestRegistry<ml_Reranker> &registry) {
+void register_reranker_tests(TestRegistry<geniex_Reranker> &registry) {
   REGISTER_TEST(registry, RerankerSingleQuery,
                 test_reranker_single_query(model, model_name););
   REGISTER_TEST(registry, RerankerBatchProcessing,
@@ -149,7 +149,7 @@ void register_reranker_tests(TestRegistry<ml_Reranker> &registry) {
 
 // Generate test cases for all plugins
 #define GEN(Plugin)                                                            \
-  TEST_CASE_FOR_PLUGIN(ml_Reranker, Plugin, setup_guard,                       \
+  TEST_CASE_FOR_PLUGIN(geniex_Reranker, Plugin, setup_guard,                       \
                        register_reranker_tests<Plugin>)
 PLUGINS(GEN)
 #undef GEN

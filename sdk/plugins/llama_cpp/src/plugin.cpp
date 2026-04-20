@@ -34,7 +34,7 @@ class LlamaPlugin : public Plugin {
 #endif  // GENIEX_DEBUG
                 std::string_view s = t ? t : "";
                 while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.remove_suffix(1);
-                GENIEX_LEVEL_LOG(static_cast<ml_LogLevel>(l - 1), "{}", s);
+                GENIEX_LEVEL_LOG(static_cast<geniex_LogLevel>(l - 1), "{}", s);
             },
             nullptr);
 
@@ -93,7 +93,7 @@ class LlamaPlugin : public Plugin {
 
     ~LlamaPlugin() override { GENIEX_LOG_TRACE("destroying llama plugin"); }
 
-    int32_t get_device_list(const ml_GetDeviceListInput* input, ml_GetDeviceListOutput* output) override {
+    int32_t get_device_list(const geniex_GetDeviceListInput* input, geniex_GetDeviceListOutput* output) override {
         GENIEX_LOG_TRACE("getting device list");
         if (!input || !output) {
             return ML_ERROR_COMMON_INVALID_INPUT;
@@ -133,7 +133,7 @@ class LlamaPlugin : public Plugin {
 
 #else
 
-ml_PluginId plugin_id() { return geniex::build_config::kPluginIdLlamaCpp; }
+geniex_PluginId plugin_id() { return geniex::build_config::kPluginIdLlamaCpp; }
 
 geniex::Plugin* create_plugin() {
     try {

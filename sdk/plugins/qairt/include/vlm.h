@@ -26,14 +26,14 @@ class QairtVlm : public IVlm {
    public:
     virtual ~QairtVlm() override;
 
-    virtual int32_t create_impl(const ml_VlmCreateInput*) override;
+    virtual int32_t create_impl(const geniex_VlmCreateInput*) override;
 
     virtual int32_t reset() override;
 
     virtual int32_t apply_chat_template(
-        const ml_VlmApplyChatTemplateInput*, ml_VlmApplyChatTemplateOutput*) override;
+        const geniex_VlmApplyChatTemplateInput*, geniex_VlmApplyChatTemplateOutput*) override;
 
-    virtual int32_t generate(const ml_VlmGenerateInput*, ml_VlmGenerateOutput*) override;
+    virtual int32_t generate(const geniex_VlmGenerateInput*, geniex_VlmGenerateOutput*) override;
 };
 
 }  // namespace geniex
