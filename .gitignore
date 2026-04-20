@@ -3,3 +3,6 @@
 .vscode
 
 bazel-*
+
+# Local CMake user presets (machine-specific, not for version control)
+CMakeUserPresets.json
