@@ -56,7 +56,7 @@
         "strategy": "external"
       },
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/../third-party/llama.cpp/cmake/arm64-windows-llvm.cmake"
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm64-windows-llvm.cmake"
       }
     },
     {
@@ -98,6 +98,8 @@
         "strategy": "external"
       },
       "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm64-linux-gnu.cmake",
+        "GGML_OPENCL": "OFF",
         "PREBUILT_LIB_DIR": "linux_aarch64"
       }
     },
@@ -105,15 +107,15 @@
       "name": "default",
       "displayName": "Default (SDK Release)",
       "description": "Build SDK in Release mode with standard options",
-      "inherits": ["base", "release"]
+      "inherits": ["release", "base"]
     },
     {
       "name": "arm64-windows-snapdragon-debug",
-      "inherits": ["base", "snapdragon", "arm64-windows-snapdragon", "debug"]
+      "inherits": ["arm64-windows-snapdragon", "snapdragon", "debug", "base"]
     },
     {
       "name": "arm64-windows-snapdragon-release",
-      "inherits": ["base", "snapdragon", "arm64-windows-snapdragon", "release"]
+      "inherits": ["arm64-windows-snapdragon", "snapdragon", "release", "base"]
     },
     {
       "name": "arm64-windows-snapdragon-cpu-debug",
@@ -137,19 +139,19 @@
     },
     {
       "name": "arm64-android-snapdragon-debug",
-      "inherits": ["base", "snapdragon", "arm64-android-snapdragon", "debug"]
+      "inherits": ["arm64-android-snapdragon", "snapdragon", "debug", "base"]
     },
     {
       "name": "arm64-android-snapdragon-release",
-      "inherits": ["base", "snapdragon", "arm64-android-snapdragon", "release"]
+      "inherits": ["arm64-android-snapdragon", "snapdragon", "release", "base"]
     },
     {
       "name": "arm64-linux-snapdragon-debug",
-      "inherits": ["base", "snapdragon", "arm64-linux-snapdragon", "debug"]
+      "inherits": ["arm64-linux-snapdragon", "snapdragon", "debug", "base"]
     },
     {
       "name": "arm64-linux-snapdragon-release",
-      "inherits": ["base", "snapdragon", "arm64-linux-snapdragon", "release"]
+      "inherits": ["arm64-linux-snapdragon", "snapdragon", "release", "base"]
     }
   ],
   "buildPresets": [
@@ -200,4 +202,3 @@
     }
   ]
 }
-
