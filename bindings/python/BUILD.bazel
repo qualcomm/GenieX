@@ -3,6 +3,16 @@ load("@rules_python//python:packaging.bzl", "py_wheel")
 
 package(default_visibility = ["//visibility:public"])
 
+# Generate _version.py from the Bazel --define=VERSION value (set in .bazelrc,
+# overridden by CI with the actual release tag, e.g. --define=VERSION=0.1.0).
+# Strips a leading "v" so "v0.1.0" → "0.1.0" (PEP 440).
+genrule(
+    name = "gen_version",
+    outs = ["geniex/_version.py"],
+    # Strip leading "v" from VERSION (e.g. "v0.1.0" → "0.1.0") for PEP 440.
+    cmd = """V=$$(echo "$(VERSION)" | sed 's/^v//'); printf '__version__ = "%s"\\n' "$$V" > $@""",
+)
+
 # Low-level ctypes binding layer.
 py_library(
     name = "geniex_sdk_py",
@@ -11,27 +21,47 @@ py_library(
 )
 
 # Full public API: AutoModelForCausalLM, AutoModelForVision2Seq, etc.
+# Excludes _version.py from glob — the generated one is injected via deps.
 py_library(
     name = "geniex_py",
-    srcs = glob(["geniex/**/*.py"]),
+    srcs = glob(
+        ["geniex/**/*.py"],
+        exclude = ["geniex/_version.py"],
+    ) + [":gen_version"],
     imports = ["."],
     deps = [":geniex_sdk_py"],
 )
 
 # Wheel — produced at bazel-bin/bindings/python/geniex-<version>-py3-none-any.whl
-# Build:  bazel build //bindings/python:geniex_wheel
-# Output: bazel-bin/bindings/python/geniex-0.1.0-py3-none-any.whl
+# Build:  bazelisk build //bindings/python:geniex_wheel
+# Build with version: bazelisk build //bindings/python:geniex_wheel --define=VERSION=0.1.0
+# NOTE: This wheel does NOT bundle native libs (geniex.dll / libgeniex.so).
+#       Run `cmake --install` and copy sdk/pkg-geniex/lib/ → geniex/lib/ before
+#       publishing. See bindings/python/BUILD.md for the full release workflow.
 py_wheel(
     name = "geniex_wheel",
-    # Wheel metadata
     distribution = "geniex",
-    version = "0.1.0",
+    version = "$(VERSION)",
     python_tag = "py3",
     abi = "none",
     platform = "any",
     summary = "GenieX-Bridge Python binding for running AI models on Qualcomm platforms.",
     license = "Apache-2.0",
     author = "Qualcomm",
-    # Package contents
+    homepage = "https://github.qualcomm.com/qcom-it-nexa-ai/geniex",
+    classifiers = [
+        "Programming Language :: Python :: 3",
+        "Operating System :: OS Independent",
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: Developers",
+        "Topic :: Software Development :: Libraries :: Python Modules",
+    ],
+    requires = [
+        "huggingface_hub",
+        "filelock",
+    ],
+    # strip_path_prefixes removes "bindings/python/" so geniex/ lands at the
+    # wheel root — without this, `import geniex` fails after pip install.
+    strip_path_prefixes = ["bindings/python/"],
     deps = [":geniex_py"],
 )

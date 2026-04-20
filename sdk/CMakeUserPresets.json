@@ -1,0 +1,52 @@
+{
+  "version": 5,
+  "configurePresets": [
+    {
+      "name": "arm64-windows-snapdragon-qairt-release",
+      "displayName": "ARM64 Windows Snapdragon (QAIRT, no Hexagon, Release)",
+      "inherits": ["arm64-windows-snapdragon-release"],
+      "cacheVariables": {
+        "GGML_HEXAGON": "OFF",
+        "GGML_OPENCL": "OFF",
+        "GENIEX_PLUGIN_QAIRT": "ON"
+      }
+    },
+    {
+      "name": "arm64-windows-snapdragon-no-hexagon-debug",
+      "displayName": "ARM64 Windows Snapdragon (no Hexagon/QAIRT, Debug)",
+      "inherits": ["arm64-windows-snapdragon-debug"],
+      "cacheVariables": {
+        "GGML_HEXAGON": "OFF",
+        "GGML_OPENCL": "OFF",
+        "GENIEX_PLUGIN_QAIRT": "OFF"
+      }
+    },
+    {
+      "name": "arm64-windows-snapdragon-no-hexagon-release",
+      "displayName": "ARM64 Windows Snapdragon (no Hexagon/QAIRT, Release)",
+      "inherits": ["arm64-windows-snapdragon-release"],
+      "cacheVariables": {
+        "GGML_HEXAGON": "OFF",
+        "GGML_OPENCL": "OFF",
+        "GENIEX_PLUGIN_QAIRT": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "arm64-windows-snapdragon-qairt-release",
+      "configurePreset": "arm64-windows-snapdragon-qairt-release",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-windows-snapdragon-no-hexagon-debug",
+      "configurePreset": "arm64-windows-snapdragon-no-hexagon-debug",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-windows-snapdragon-no-hexagon-release",
+      "configurePreset": "arm64-windows-snapdragon-no-hexagon-release",
+      "jobs": 0
+    }
+  ]
+}

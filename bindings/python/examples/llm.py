@@ -3,7 +3,7 @@
 Run from the repo root:
 Example with a local Qwen3 model:
 
-    python bindings/python/examples/llm_basic.py \\
+    python bindings/python/examples/llm.py \\
         --model ~/.cache/nexa.ai/nexa_sdk/models/ggml-org/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf \\
         --prompt "Explain gravity in one sentence." --stream
 

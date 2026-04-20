@@ -17,5 +17,5 @@ build  --experimental_output_directory_naming_scheme=diff_against_dynamic_baseli
 startup --windows_enable_symlinks
 build --enable_runfiles
 
-# build info inject
-common --define=VERSION=unknown
+# build info inject — override with --define=VERSION=0.1.0 for releases
+common --define=VERSION=0.0.0.dev0
