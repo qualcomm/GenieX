@@ -225,8 +225,9 @@ def load_library() -> ctypes.CDLL:
             pass
 
     raise OSError(
-        f'Cannot find {name}.\n'
-        '  Release: ensure the wheel was built with sdk/pkg-geniex/lib/ bundled.\n'
-        '  Dev: build the SDK first with "cmake --build sdk/build-default".\n'
-        '  Override: set GENIEX_LIB_PATH to the full path of the library.'
+        f'Cannot find the geniex native library ({name}).\n'
+        '\n'
+        'The native library must be present alongside this package.\n'
+        f'Set GENIEX_LIB_PATH=/path/to/{name} to point to your local build,\n'
+        'or see https://github.qualcomm.com/qcom-it-nexa-ai/geniex for build instructions.'
     )
