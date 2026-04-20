@@ -132,7 +132,15 @@ def _bind_all() -> None:
     lib.ml_vlm_apply_chat_template.restype = c_int32
 
 
-_bind_all()
+_bound = False
+
+
+def _ensure_bound() -> None:
+    global _bound
+    if not _bound:
+        _bind_all()
+        _bound = True
+
 
 # ---------------------------------------------------------------------------
 # Init lifecycle
@@ -145,6 +153,7 @@ def init() -> None:
     global _initialized
     if _initialized:
         return
+    _ensure_bound()
     lib = load_library()
     _check(lib.ml_init())
     _initialized = True
@@ -191,6 +200,7 @@ def _str_list_to_c(strings: list[str]):
 
 
 def get_plugin_list() -> list[str]:
+    _ensure_bound()
     lib = load_library()
     out = ml_GetPluginListOutput()
     _check(lib.ml_get_plugin_list(byref(out)))
@@ -201,6 +211,7 @@ def get_plugin_list() -> list[str]:
 
 
 def get_device_list(plugin_id: str) -> list[tuple[str, str]]:
+    _ensure_bound()
     lib = load_library()
     inp = ml_GetDeviceListInput(plugin_id=plugin_id.encode())
     out = ml_GetDeviceListOutput()
@@ -214,5 +225,6 @@ def get_device_list(plugin_id: str) -> list[tuple[str, str]]:
 
 
 def version() -> str:
+    _ensure_bound()
     lib = load_library()
     return lib.ml_version().decode()

@@ -349,7 +349,7 @@ class GeniexVLM:
             message_count=count,
             tools=_enc(tools),
             enable_thinking=enable_thinking,
-            # VLM template input has no add_generation_prompt field in C API
+            # add_generation_prompt is not in the VLM C API (ml_VlmApplyChatTemplateInput)
         )
         out = ml_VlmApplyChatTemplateOutput()
         _check(lib.ml_vlm_apply_chat_template(self._handle, byref(inp), byref(out)))

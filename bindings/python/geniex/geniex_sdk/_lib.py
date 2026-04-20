@@ -16,7 +16,7 @@
 
 Search order
 ------------
-1. ``GENIEX_LIB_PATH`` env var — explicit override, works in any environment.
+1. ``GENIEX_LIB_PATH`` env var — path to the lib directory or the library file itself.
 2. **Release layout** — ``lib/libgeniex.so`` beside the ``geniex`` package root
    (i.e. ``site-packages/geniex/lib/libgeniex.so`` after ``pip install``).
 3. **Dev layout** — walk up from this file to the repo root, then glob
@@ -193,11 +193,16 @@ def load_library() -> ctypes.CDLL:
     name = _lib_name()
 
     # --- Priority 1: explicit env override ---
+    # Accepts either a directory (GENIEX_LIB_PATH=/path/to/lib/) or a full
+    # file path (GENIEX_LIB_PATH=/path/to/lib/geniex.dll).
     env_path = os.environ.get('GENIEX_LIB_PATH')
-    if env_path and os.path.isfile(env_path):
-        # Trust the user; don't touch GENIEX_PLUGIN_PATH or LD_LIBRARY_PATH.
-        _lib = ctypes.CDLL(env_path)
-        return _lib
+    if env_path:
+        if os.path.isdir(env_path):
+            env_path = os.path.join(env_path, name)
+        if os.path.isfile(env_path):
+            _setup_env(env_path, os.path.dirname(env_path))
+            _lib = ctypes.CDLL(env_path)
+            return _lib
 
     # --- Priority 2: release (wheel) layout ---
     result = _find_release(name)
@@ -225,8 +230,9 @@ def load_library() -> ctypes.CDLL:
             pass
 
     raise OSError(
-        f'Cannot find {name}.\n'
-        '  Release: ensure the wheel was built with sdk/pkg-geniex/lib/ bundled.\n'
-        '  Dev: build the SDK first with "cmake --build sdk/build-default".\n'
-        '  Override: set GENIEX_LIB_PATH to the full path of the library.'
+        f'Cannot find the geniex native library ({name}).\n'
+        '\n'
+        'The native library must be present alongside this package.\n'
+        f'Set GENIEX_LIB_PATH=/path/to/lib/dir/ to point to your local build,\n'
+        'or see https://github.qualcomm.com/qcom-it-nexa-ai/geniex for build instructions.'
     )

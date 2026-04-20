@@ -2,128 +2,65 @@
 
 ## Prerequisites
 
-- Python 3.10+
-- CMake 3.20+
-- C++ compiler (GCC / Clang / MSVC)
+- Python 3.10+, CMake 3.20+, C++ compiler (GCC / Clang / MSVC)
 
 ---
 
 ## Dev mode (in-repo)
 
-### 1. Build the native library
-
 ```bash
 cd sdk
-cmake --preset default          # configure (native Linux x86_64)
-cmake --build build-default --parallel $(nproc)
+cmake --preset default          # native Linux x86_64; see below for other platforms
+cmake --build --preset default
+cmake --install build-default --prefix pkg-geniex
 ```
 
-> **Other platforms:**
-> - ARM64 Linux:   `--preset arm64-linux-snapdragon-release`
-> - ARM64 Windows: `--preset arm64-windows-snapdragon-release`
-> - Android:       `--preset arm64-android-snapdragon-release`
-
-### 2. Run — no env vars needed
-
-The Python package auto-discovers the built library by walking up to the repo
-root and globbing `sdk/build-*/src/libgeniex.so` (newest build wins).
-`GENIEX_PLUGIN_PATH` and transitive `.so` deps are configured automatically.
+The package auto-discovers the library from `sdk/pkg-geniex/lib/` — no env vars needed.
 
 ```bash
-python bindings/python/examples/llm.py \
-  --model /path/to/model.gguf \  
+python bindings/python/examples/llm.py --model /path/to/model.gguf
 ```
 
-> **Override:** set `GENIEX_LIB_PATH=/path/to/libgeniex.so` to force a specific library.
+**Other platforms:** use `--preset arm64-linux-snapdragon-release`, `arm64-windows-snapdragon-release`, or `arm64-android-snapdragon-release`. Always run `cmake --install` after building.
+
+**Override:** `GENIEX_LIB_PATH=/path/to/lib/dir/` forces a specific library directory.
 
 ---
 
-## Release mode (wheel)
-
-### 1. Build the native library (see above)
-
-### 2. Install the SDK to `pkg-geniex`
+## Release wheel (setuptools)
 
 ```bash
-# From repo root — adjust BUILD_DIR for your preset
-BUILD_DIR=sdk/build-default
+# 1. Build and install the native library (see Dev mode above)
 
-cmake --install "$BUILD_DIR" --prefix sdk/pkg-geniex
-```
+# 2. Bundle libs into the package tree
+cp -r sdk/pkg-geniex/lib bindings/python/geniex/lib
+rm -f bindings/python/geniex/lib/llama_cpp/*.a   # remove static libs
 
-This produces the canonical install tree:
-
-```
-sdk/pkg-geniex/
-├── bin/            # test binaries
-├── include/ml.h
-└── lib/
-    ├── libgeniex.so
-    └── llama_cpp/
-        ├── libgeniex_plugin.so
-        ├── libggml.so  (+ versioned symlinks)
-        ├── libllama.so
-        └── ...
-```
-
-### 3. Bundle the native libs into the package tree
-
-Copy only the `lib/` subtree from the install prefix:
-
-```bash
-DEST=bindings/python/geniex/lib
-rm -rf "$DEST"
-cp -r sdk/pkg-geniex/lib "$DEST"
-rm -f "$DEST/llama_cpp/libcommon.a"   # static lib — not needed at runtime
-```
-
-### 4. Build the wheel
-
-```bash
+# 3. Build the wheel
 uv build --wheel --out-dir dist/ bindings/python/
-# or: cd bindings/python && python -m build --wheel -o ../../dist/
+# or: python -m build --wheel -o dist/ bindings/python/
+
+# 4. Install
+pip install dist/geniex-*.whl
 ```
 
-### 5. Install and use
+When `geniex/lib/` is bundled the library is found automatically after `pip install`.
+Without it, set `GENIEX_LIB_PATH` to the lib directory before use:
 
 ```bash
-uv pip install dist/geniex-*.whl
-# or: pip install dist/geniex-*.whl
+export GENIEX_LIB_PATH=/path/to/sdk/pkg-geniex/lib/   # Linux
+set GENIEX_LIB_PATH=C:\path\to\sdk\pkg-geniex\lib\    # Windows
 ```
 
-After installation the package finds `libgeniex.so` automatically inside
-`site-packages/geniex/lib/` — no environment variables required.
-
-```python
-from geniex import AutoModelForCausalLM
-
-model = AutoModelForCausalLM.from_pretrained("/path/to/model.gguf", device_map="cpu")
-text = model.tokenizer.apply_chat_template(
-    [{"role": "user", "content": "Hello!"}],
-    tokenize=False,
-    add_generation_prompt=True,
-)
-output = model.generate(text, max_new_tokens=256)
-print(output.text)
-model.close()
-```
+See [README.md](README.md) for usage examples.
 
 ---
 
-## (Optional) Bazel build
-
-`py_library` target (for use as a Bazel dependency):
+## Bazel wheel
 
 ```bash
-bazel build //bindings/python:geniex_py
+bazelisk build //bindings/python:geniex_wheel                     # dev (0.0.0.dev0)
+bazelisk build //bindings/python:geniex_wheel --define=VERSION=0.1.0  # release
 ```
 
-`py_wheel` target — produces a `.whl` file:
-
-```bash
-bazel build //bindings/python:geniex_wheel
-# Output: bazel-bin/bindings/python/geniex-0.1.0-py3-none-any.whl
-```
-
-> The Bazel wheel does **not** bundle native libs. Run steps 2–3 above first to
-> stage `geniex/lib/` before building the wheel if you need the libs included.
+> The Bazel wheel does **not** bundle native libs. Run steps 1–2 above first if you need them included.
