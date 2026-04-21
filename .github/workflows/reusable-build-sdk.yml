@@ -64,6 +64,21 @@ jobs:
           platform: ${{ inputs.platform }}
           apt-mirror: ${{ inputs.apt_mirror }}
 
+      - name: Setup Snapdragon SDKs
+        if: inputs.platform == 'windows-arm64'
+        uses: ./.github/actions/setup-snapdragon-sdks
+
+      - name: Configure HTP signing cert
+        if: inputs.platform == 'windows-arm64'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $src = "$env:GITHUB_WORKSPACE\.github\certs\hexagon\ggml-htp-v1.pfx"
+          $dst = "$env:RUNNER_TEMP\ggml-htp-v1.pfx"
+          Copy-Item $src $dst -Force
+          Add-Content -Path $env:GITHUB_ENV -Value "HEXAGON_HTP_CERT=$dst"
+          Write-Host "HEXAGON_HTP_CERT=$dst"
+
       - name: Build SDK (Linux)
         if: inputs.platform == 'linux-arm64'
         shell: bash
@@ -146,12 +161,32 @@ jobs:
             -DGENIEX_DEBUG=OFF `
             -DGENIEX_DL=ON `
             -DGENIEX_PLUGIN_LLAMA_CPP=ON `
-            -DGENIEX_PLUGIN_QAIRT=OFF `
-            -DGGML_OPENCL=OFF `
-            -DGGML_HEXAGON=OFF `
+            -DGENIEX_PLUGIN_QAIRT=ON `
+            -DGGML_OPENCL=ON `
+            -DGGML_HEXAGON=ON `
+            -DCMAKE_PREFIX_PATH="$env:OPENCL_SDK_ROOT" `
+            -DHEXAGON_SDK_ROOT="$env:HEXAGON_SDK_ROOT" `
+            -DHEXAGON_TOOLS_ROOT="$env:HEXAGON_TOOLS_ROOT" `
+            -DHEXAGON_HTP_CERT="$env:HEXAGON_HTP_CERT" `
+            -DWINDOWS_SDK_BIN="$env:WINDOWS_SDK_BIN" `
             -DPREBUILT_LIB_DIR=windows_aarch64
 
+          # Two-phase build to avoid Inf2Cat racing with Hexagon ExternalProject
+          # workspaces: libggml-htp-cat DEPENDS only on the .so file paths, so
+          # ninja schedules it in parallel with htp-v* ExternalProject build
+          # steps; Inf2Cat then recursively scans the driver dir and trips over
+          # transient files like .ninja_lock under htp-v*-prefix/.
+          # Phase 1: build all Hexagon HTP skels first.
+          & $vsCmake --build $buildDir -j 8 --target htp-v68 htp-v69 htp-v73 htp-v75 htp-v79 htp-v81
+          if ($LASTEXITCODE -ne 0) { throw "cmake --build (htp skels) failed: $LASTEXITCODE" }
+          # Clean up ExternalProject workspaces so Inf2Cat's recursive scan of
+          # /driver: only sees finalised .so + .inf.
+          $hexDir = Join-Path $buildDir "third-party\llama.cpp\ggml\src\ggml-hexagon"
+          Get-ChildItem $hexDir -Directory -Filter "htp-v*-prefix" -ErrorAction SilentlyContinue |
+            ForEach-Object { Remove-Item -Recurse -Force $_.FullName }
+          # Phase 2: build everything else (cat signing + geniex itself).
           & $vsCmake --build $buildDir -j 8
+          if ($LASTEXITCODE -ne 0) { throw "cmake --build failed: $LASTEXITCODE" }
           & $vsCmake --install $buildDir --prefix sdk/pkg-geniex
 
       - name: Upload SDK artifact
