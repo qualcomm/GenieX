@@ -1,0 +1,24 @@
+genrule(
+    name = "windows_installer",
+    srcs = [
+        "geniex-cli-setup.iss",
+        "geniex.ico",
+        "//cli/cmd/geniex",
+        "//sdk:local_sdk_runtime",
+    ],
+    outs = ["geniex-cli-setup.exe"],
+    cmd_bat = " ".join([
+        '$(location @innosetup//:iscc) /Q',
+        '"/O$(@D)"',
+        '"/DVersion=$(VERSION)"',
+        '"/DCliExe=%CD%\\$(location //cli/cmd/geniex)"',
+        '"/DSdkDir=%CD%\\sdk\\pkg-geniex\\lib"',
+        '"$(location geniex-cli-setup.iss)"',
+    ]),
+    tools = ["@innosetup//:iscc"],
+)
+
+alias(
+    name = "windows",
+    actual = ":windows_installer",
+)
