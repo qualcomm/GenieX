@@ -47,23 +47,34 @@ runs:
         Install-Tarball $openclUrl  $openclRoot
         Install-Tarball $hexagonUrl $hexagonRoot
 
-        # Windows Driver Kit: required so that Inf2Cat has driver templates /
-        # catalog signability data. SDK alone is not enough for signing
-        # libggml-htp.cat.
+        # Windows Driver Kit: required so that Inf2Cat has the driver
+        # signability catalog data (`Windows Kits\10\Catalogs\`). The Windows
+        # SDK alone is not enough — Inf2Cat will run but report all driver
+        # files as "missing or cannot be decompressed from source media".
         # See https://learn.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk
-        $inf2cat = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.0.*\x86\Inf2Cat.exe" -ErrorAction SilentlyContinue |
-          Select-Object -First 1 -ExpandProperty FullName
-        $wdkSignability = Test-Path "C:\Program Files (x86)\Windows Kits\10\Catalog"
-        if (-not $inf2cat -or -not $wdkSignability) {
-          Write-Host "Installing Windows Driver Kit via winget"
-          winget install --id Microsoft.WindowsWDK.10.0.26100 -e --silent `
-            --accept-package-agreements --accept-source-agreements `
-            --disable-interactivity
-          if ($LASTEXITCODE -ne 0) {
-            throw "winget install WDK failed with exit code $LASTEXITCODE"
+        $wdkCatalogs = "C:\Program Files (x86)\Windows Kits\10\Catalogs"
+        if (-not (Test-Path $wdkCatalogs) -or -not (Get-ChildItem $wdkCatalogs -ErrorAction SilentlyContinue)) {
+          Write-Host "Installing Windows Driver Kit (WDK 10.0.26100)"
+          $wdkUrl = "https://go.microsoft.com/fwlink/?linkid=2303833"
+          $setup = Join-Path $env:RUNNER_TEMP "wdksetup.exe"
+          $log   = Join-Path $env:RUNNER_TEMP "wdksetup.log"
+          curl.exe -L --fail --retry 3 -o $setup $wdkUrl
+          $p = Start-Process -FilePath $setup `
+            -ArgumentList "/features","+","/quiet","/norestart","/log",$log `
+            -Wait -PassThru
+          Write-Host "wdksetup exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
+            if (Test-Path $log) {
+              Write-Host "--- wdksetup log (tail) ---"
+              Get-Content $log -Tail 80
+            }
+            throw "wdksetup.exe failed with exit code $($p.ExitCode)"
+          }
+          if (-not (Test-Path $wdkCatalogs)) {
+            throw "WDK install finished but $wdkCatalogs still missing"
           }
         } else {
-          Write-Host "WDK already present: $inf2cat"
+          Write-Host "WDK already present at $wdkCatalogs"
         }
 
         $winsdkArm64 = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.0.*\arm64" -ErrorAction SilentlyContinue |
