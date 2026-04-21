@@ -19,12 +19,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Debug: lint / check-tools / build-cli are already green, skip them while
-  # iterating on Hexagon signing. Restore before merging.
-  # lint:
-  #   name: lint
-  #   uses: ./.github/workflows/lint.yml
-  #   secrets: inherit
+  lint:
+    name: lint
+    uses: ./.github/workflows/lint.yml
+    secrets: inherit
 
   # --- Linux pipeline (commented out until runner is available) ---
   # build-sdk-linux:
@@ -57,6 +55,7 @@ jobs:
   # --- Windows pipeline ---
   build-sdk-windows:
     name: build-sdk-windows
+    needs: [lint]
     uses: ./.github/workflows/reusable-build-sdk.yml
     secrets: inherit
     with:
@@ -64,14 +63,14 @@ jobs:
       runner: windows-arm64
       upload_artifact: true
 
-  # build-cli-windows:
-  #   name: build-cli-windows
-  #   needs: [build-sdk-windows]
-  #   uses: ./.github/workflows/reusable-build-cli.yml
-  #   secrets: inherit
-  #   with:
-  #     platform: windows-arm64
-  #     runner: windows-arm64
+  build-cli-windows:
+    name: build-cli-windows
+    needs: [build-sdk-windows]
+    uses: ./.github/workflows/reusable-build-cli.yml
+    secrets: inherit
+    with:
+      platform: windows-arm64
+      runner: windows-arm64
 
   # build-python-windows:
   #   name: build-python-windows

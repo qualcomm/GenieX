@@ -186,11 +186,7 @@ jobs:
             ForEach-Object { Remove-Item -Recurse -Force $_.FullName }
           # Phase 2: build everything else (cat signing + geniex itself).
           & $vsCmake --build $buildDir -j 8
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "--- Contents of $hexDir after failed build ---"
-            Get-ChildItem $hexDir -ErrorAction SilentlyContinue | Select-Object Name,Length,LastWriteTime | Format-Table | Out-String | Write-Host
-            throw "cmake --build failed: $LASTEXITCODE"
-          }
+          if ($LASTEXITCODE -ne 0) { throw "cmake --build failed: $LASTEXITCODE" }
           & $vsCmake --install $buildDir --prefix sdk/pkg-geniex
 
       - name: Upload SDK artifact
