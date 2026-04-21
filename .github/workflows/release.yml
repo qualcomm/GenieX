@@ -85,7 +85,10 @@ jobs:
           set -euo pipefail
           zip -r "geniex-sdk-windows-arm64-${RELEASE_TAG}.zip" sdk-pkg-windows-arm64
           mv geniex-cli-setup.exe "geniex-cli-installer-windows-arm64-${RELEASE_TAG}.exe"
-          files=$(ls *.zip *.exe)
+          # Ship the HTP signing public cert so end users can add it to
+          # Trusted Root + Trusted Publishers on WoS devices.
+          cp .github/certs/hexagon/ggml-htp-v1.cer ggml-htp-v1.cer
+          files=$(ls *.zip *.exe *.cer)
           sha256sum $files > "SHA256SUMS-${RELEASE_TAG}.txt"
           {
             echo "files<<EOF"
