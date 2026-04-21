@@ -60,18 +60,42 @@ runs:
         $inf2cat = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.0.*\x86\Inf2Cat.exe" -ErrorAction SilentlyContinue |
           Select-Object -First 1 -ExpandProperty FullName
         $wdkOk = $false
-        # Heuristic: run Inf2Cat against an empty dir; a working install exits
-        # cleanly, a broken one prints "file could not be copied" or similar.
+        # Health probe: create a minimal dummy driver (empty .inf + one
+        # referenced file) and run Inf2Cat. Healthy WDK -> "Signability test
+        # complete. Errors: None"; partial WDK -> "NTUSER.DAT corrupt" or
+        # "missing or cannot be decompressed from source media".
         if ($inf2cat -and (Test-Path $wdkCatalogs)) {
           $probeDir = Join-Path $env:RUNNER_TEMP "inf2cat-probe-$(Get-Random)"
           New-Item -ItemType Directory -Path $probeDir | Out-Null
-          $probeOut = & $inf2cat /driver:$probeDir /os:10_25H2_ARM64 /nocat 2>&1
+          @"
+[Version]
+Signature   = "`$WINDOWS NT`$"
+Class       = ComputeAccelerator
+ClassGuid   = {F01A9D53-3FF6-48D2-9F97-C8A7004BE10C}
+Provider    = %P%
+DriverVer   = 01/01/2026,1.0.0.0
+CatalogFile = probe.cat
+PnpLockDown = 1
+[DestinationDirs]
+D = 6
+[SourceDisksNames]
+1 = %D1%
+[SourceDisksFiles]
+probe.bin = 1
+[DefaultInstall.NTarm64]
+CopyFiles = D
+[D]
+probe.bin,,,0x10
+[Strings]
+P  = 'probe'
+D1 = 'probe disk'
+"@ | Set-Content -Path (Join-Path $probeDir "probe.inf") -Encoding ASCII
+          Set-Content -Path (Join-Path $probeDir "probe.bin") -Value "x"
+          $probeOut = & $inf2cat /driver:$probeDir /os:10_25H2_ARM64 /nocat 2>&1 | Out-String
           Remove-Item -Recurse -Force $probeDir
-          # A WDK with missing signability data prints errors even on empty
-          # input (NTUSER.DAT corrupt, etc.). A healthy install prints
-          # "Signability test complete" with no errors.
-          if ($probeOut -match "Signability test complete" -and $probeOut -notmatch "File could not be copied") {
+          if ($probeOut -match "Signability test complete" -and $probeOut -notmatch "missing or cannot be decompressed") {
             $wdkOk = $true
+            Write-Host "Inf2Cat probe OK"
           } else {
             Write-Host "Inf2Cat probe indicates partial WDK; reinstalling"
             Write-Host "Probe output: $probeOut"
@@ -108,14 +132,39 @@ runs:
             }
             throw "wdksetup.exe failed with exit code $($p.ExitCode)"
           }
+          # Post-install health check (same minimal driver as above).
           $inf2cat2 = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.0.*\x86\Inf2Cat.exe" -ErrorAction SilentlyContinue |
             Select-Object -First 1 -ExpandProperty FullName
           if (-not $inf2cat2) { throw "Inf2Cat.exe missing after WDK install" }
           $probeDir2 = Join-Path $env:RUNNER_TEMP "inf2cat-postprobe-$(Get-Random)"
           New-Item -ItemType Directory -Path $probeDir2 | Out-Null
-          $probeOut2 = & $inf2cat2 /driver:$probeDir2 /os:10_25H2_ARM64 /nocat 2>&1
+          @"
+[Version]
+Signature   = "`$WINDOWS NT`$"
+Class       = ComputeAccelerator
+ClassGuid   = {F01A9D53-3FF6-48D2-9F97-C8A7004BE10C}
+Provider    = %P%
+DriverVer   = 01/01/2026,1.0.0.0
+CatalogFile = probe.cat
+PnpLockDown = 1
+[DestinationDirs]
+D = 6
+[SourceDisksNames]
+1 = %D1%
+[SourceDisksFiles]
+probe.bin = 1
+[DefaultInstall.NTarm64]
+CopyFiles = D
+[D]
+probe.bin,,,0x10
+[Strings]
+P  = 'probe'
+D1 = 'probe disk'
+"@ | Set-Content -Path (Join-Path $probeDir2 "probe.inf") -Encoding ASCII
+          Set-Content -Path (Join-Path $probeDir2 "probe.bin") -Value "x"
+          $probeOut2 = & $inf2cat2 /driver:$probeDir2 /os:10_25H2_ARM64 /nocat 2>&1 | Out-String
           Remove-Item -Recurse -Force $probeDir2
-          if ($probeOut2 -notmatch "Signability test complete") {
+          if ($probeOut2 -notmatch "Signability test complete" -or $probeOut2 -match "missing or cannot be decompressed") {
             throw "WDK install finished but Inf2Cat probe failed: $probeOut2"
           }
           Write-Host "WDK install verified via Inf2Cat probe"
