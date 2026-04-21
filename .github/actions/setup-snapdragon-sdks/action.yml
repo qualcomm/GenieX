@@ -64,33 +64,38 @@ runs:
         # referenced file) and run Inf2Cat. Healthy WDK -> "Signability test
         # complete. Errors: None"; partial WDK -> "NTUSER.DAT corrupt" or
         # "missing or cannot be decompressed from source media".
+        function Write-ProbeDriver($dir) {
+          $infLines = @(
+            '[Version]',
+            'Signature   = "$WINDOWS NT$"',
+            'Class       = ComputeAccelerator',
+            'ClassGuid   = {F01A9D53-3FF6-48D2-9F97-C8A7004BE10C}',
+            'Provider    = %P%',
+            'DriverVer   = 01/01/2026,1.0.0.0',
+            'CatalogFile = probe.cat',
+            'PnpLockDown = 1',
+            '[DestinationDirs]',
+            'D = 6',
+            '[SourceDisksNames]',
+            '1 = %D1%',
+            '[SourceDisksFiles]',
+            'probe.bin = 1',
+            '[DefaultInstall.NTarm64]',
+            'CopyFiles = D',
+            '[D]',
+            'probe.bin,,,0x10',
+            '[Strings]',
+            'P  = "probe"',
+            'D1 = "probe disk"'
+          )
+          Set-Content -Path (Join-Path $dir "probe.inf") -Value $infLines -Encoding ASCII
+          Set-Content -Path (Join-Path $dir "probe.bin") -Value "x"
+        }
+
         if ($inf2cat -and (Test-Path $wdkCatalogs)) {
           $probeDir = Join-Path $env:RUNNER_TEMP "inf2cat-probe-$(Get-Random)"
           New-Item -ItemType Directory -Path $probeDir | Out-Null
-          @"
-[Version]
-Signature   = "`$WINDOWS NT`$"
-Class       = ComputeAccelerator
-ClassGuid   = {F01A9D53-3FF6-48D2-9F97-C8A7004BE10C}
-Provider    = %P%
-DriverVer   = 01/01/2026,1.0.0.0
-CatalogFile = probe.cat
-PnpLockDown = 1
-[DestinationDirs]
-D = 6
-[SourceDisksNames]
-1 = %D1%
-[SourceDisksFiles]
-probe.bin = 1
-[DefaultInstall.NTarm64]
-CopyFiles = D
-[D]
-probe.bin,,,0x10
-[Strings]
-P  = 'probe'
-D1 = 'probe disk'
-"@ | Set-Content -Path (Join-Path $probeDir "probe.inf") -Encoding ASCII
-          Set-Content -Path (Join-Path $probeDir "probe.bin") -Value "x"
+          Write-ProbeDriver $probeDir
           $probeOut = & $inf2cat /driver:$probeDir /os:10_25H2_ARM64 /nocat 2>&1 | Out-String
           Remove-Item -Recurse -Force $probeDir
           if ($probeOut -match "Signability test complete" -and $probeOut -notmatch "missing or cannot be decompressed") {
@@ -138,30 +143,7 @@ D1 = 'probe disk'
           if (-not $inf2cat2) { throw "Inf2Cat.exe missing after WDK install" }
           $probeDir2 = Join-Path $env:RUNNER_TEMP "inf2cat-postprobe-$(Get-Random)"
           New-Item -ItemType Directory -Path $probeDir2 | Out-Null
-          @"
-[Version]
-Signature   = "`$WINDOWS NT`$"
-Class       = ComputeAccelerator
-ClassGuid   = {F01A9D53-3FF6-48D2-9F97-C8A7004BE10C}
-Provider    = %P%
-DriverVer   = 01/01/2026,1.0.0.0
-CatalogFile = probe.cat
-PnpLockDown = 1
-[DestinationDirs]
-D = 6
-[SourceDisksNames]
-1 = %D1%
-[SourceDisksFiles]
-probe.bin = 1
-[DefaultInstall.NTarm64]
-CopyFiles = D
-[D]
-probe.bin,,,0x10
-[Strings]
-P  = 'probe'
-D1 = 'probe disk'
-"@ | Set-Content -Path (Join-Path $probeDir2 "probe.inf") -Encoding ASCII
-          Set-Content -Path (Join-Path $probeDir2 "probe.bin") -Value "x"
+          Write-ProbeDriver $probeDir2
           $probeOut2 = & $inf2cat2 /driver:$probeDir2 /os:10_25H2_ARM64 /nocat 2>&1 | Out-String
           Remove-Item -Recurse -Force $probeDir2
           if ($probeOut2 -notmatch "Signability test complete" -or $probeOut2 -match "missing or cannot be decompressed") {
