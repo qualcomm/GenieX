@@ -64,6 +64,21 @@ jobs:
           platform: ${{ inputs.platform }}
           apt-mirror: ${{ inputs.apt_mirror }}
 
+      - name: Setup Snapdragon SDKs
+        if: inputs.platform == 'windows-arm64'
+        uses: ./.github/actions/setup-snapdragon-sdks
+
+      - name: Configure HTP signing cert
+        if: inputs.platform == 'windows-arm64'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $src = "$env:GITHUB_WORKSPACE\.github\certs\hexagon\ggml-htp-v1.pfx"
+          $dst = "$env:RUNNER_TEMP\ggml-htp-v1.pfx"
+          Copy-Item $src $dst -Force
+          Add-Content -Path $env:GITHUB_ENV -Value "HEXAGON_HTP_CERT=$dst"
+          Write-Host "HEXAGON_HTP_CERT=$dst"
+
       - name: Build SDK (Linux)
         if: inputs.platform == 'linux-arm64'
         shell: bash
@@ -146,9 +161,14 @@ jobs:
             -DGENIEX_DEBUG=OFF `
             -DGENIEX_DL=ON `
             -DGENIEX_PLUGIN_LLAMA_CPP=ON `
-            -DGENIEX_PLUGIN_QAIRT=OFF `
-            -DGGML_OPENCL=OFF `
-            -DGGML_HEXAGON=OFF `
+            -DGENIEX_PLUGIN_QAIRT=ON `
+            -DGGML_OPENCL=ON `
+            -DGGML_HEXAGON=ON `
+            -DCMAKE_PREFIX_PATH="$env:OPENCL_SDK_ROOT" `
+            -DHEXAGON_SDK_ROOT="$env:HEXAGON_SDK_ROOT" `
+            -DHEXAGON_TOOLS_ROOT="$env:HEXAGON_TOOLS_ROOT" `
+            -DHEXAGON_HTP_CERT="$env:HEXAGON_HTP_CERT" `
+            -DWINDOWS_SDK_BIN="$env:WINDOWS_SDK_BIN" `
             -DPREBUILT_LIB_DIR=windows_aarch64
 
           & $vsCmake --build $buildDir -j 8

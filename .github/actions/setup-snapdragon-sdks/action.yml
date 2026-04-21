@@ -1,0 +1,69 @@
+name: "Setup Snapdragon SDKs"
+description: "Install OpenCL and Hexagon SDKs on Windows ARM64 runner and export env vars for the Snapdragon cmake preset"
+
+inputs:
+  opencl-version:
+    description: "Adreno OpenCL SDK version"
+    required: false
+    default: "2.3.2"
+  hexagon-version:
+    description: "Hexagon SDK version"
+    required: false
+    default: "6.4.0.2"
+  hexagon-tools-version:
+    description: "Hexagon tools version under $HEXAGON_SDK_ROOT/tools/HEXAGON_Tools"
+    required: false
+    default: "19.0.04"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install OpenCL and Hexagon SDKs
+      shell: powershell
+      run: |
+        $ErrorActionPreference = "Stop"
+
+        $openclRoot  = "C:\Qualcomm\OpenCL_SDK\${{ inputs.opencl-version }}"
+        $hexagonRoot = "C:\Qualcomm\Hexagon_SDK\${{ inputs.hexagon-version }}"
+
+        $openclUrl  = "https://github.com/snapdragon-toolchain/opencl-sdk/releases/download/v${{ inputs.opencl-version }}/adreno-opencl-sdk-v${{ inputs.opencl-version }}-arm64-wos.tar.xz"
+        $hexagonUrl = "https://github.com/snapdragon-toolchain/hexagon-sdk/releases/download/v${{ inputs.hexagon-version }}/hexagon-sdk-v${{ inputs.hexagon-version }}-arm64-wos.tar.xz"
+
+        function Install-Tarball($url, $target) {
+          if (Test-Path $target) {
+            Write-Host "Already installed: $target"
+            return
+          }
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          $archive = Join-Path $env:RUNNER_TEMP ([System.IO.Path]::GetFileName($url))
+          Write-Host "Downloading $url"
+          curl.exe -L --fail --retry 3 -o $archive $url
+          Write-Host "Extracting to $target"
+          # tar.exe on Windows handles .tar.xz via libarchive
+          tar.exe -xf $archive -C $target --strip-components=1
+          Remove-Item $archive -Force
+        }
+
+        Install-Tarball $openclUrl  $openclRoot
+        Install-Tarball $hexagonUrl $hexagonRoot
+
+        $winsdkArm64 = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.0.*\arm64" -ErrorAction SilentlyContinue |
+          Sort-Object Name -Descending | Select-Object -First 1
+        if (-not $winsdkArm64) {
+          throw "Windows SDK arm64 bin directory not found under C:\Program Files (x86)\Windows Kits\10\bin\"
+        }
+
+        $hexagonToolsRoot = Join-Path $hexagonRoot "tools\HEXAGON_Tools\${{ inputs.hexagon-tools-version }}"
+        if (-not (Test-Path $hexagonToolsRoot)) {
+          throw "HEXAGON_TOOLS_ROOT not found: $hexagonToolsRoot"
+        }
+
+        Add-Content -Path $env:GITHUB_ENV -Value "OPENCL_SDK_ROOT=$openclRoot"
+        Add-Content -Path $env:GITHUB_ENV -Value "HEXAGON_SDK_ROOT=$hexagonRoot"
+        Add-Content -Path $env:GITHUB_ENV -Value "HEXAGON_TOOLS_ROOT=$hexagonToolsRoot"
+        Add-Content -Path $env:GITHUB_ENV -Value "WINDOWS_SDK_BIN=$($winsdkArm64.FullName)"
+
+        Write-Host "OPENCL_SDK_ROOT   = $openclRoot"
+        Write-Host "HEXAGON_SDK_ROOT  = $hexagonRoot"
+        Write-Host "HEXAGON_TOOLS_ROOT= $hexagonToolsRoot"
+        Write-Host "WINDOWS_SDK_BIN   = $($winsdkArm64.FullName)"
