@@ -1,0 +1,66 @@
+name: "Setup Visual Studio Environment"
+description: >
+  Discover Visual Studio's vcvars bat, LLVM clang, bundled cmake + ninja.
+  Paths are exported to $GITHUB_ENV (VCVARS_BAT, VCVARS_ARGS, CC, CXX, CMAKE,
+  NINJA, TOOLCHAIN_FILE) for the subsequent build step, which is responsible
+  for sourcing vcvars into its own PowerShell process (same semantics as
+  `call vcvars && cmake`). See docs/ci-windows-build-notes.md for background.
+
+inputs:
+  arch:
+    description: "Target architecture for vcvars (e.g. arm64)"
+    required: false
+    default: "arm64"
+  toolchain-file:
+    description: "CMake toolchain file path, relative to $GITHUB_WORKSPACE"
+    required: false
+    default: "third-party/llama.cpp/cmake/arm64-windows-llvm.cmake"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Discover VS toolchain paths
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        $arch = "${{ inputs.arch }}"
+        $toolchainRel = "${{ inputs.toolchain-file }}"
+
+        # Prefer arch-native vcvarsARCH.bat; fall back to vcvarsall.bat <arch>.
+        $vcvars = Get-ChildItem "C:\Program Files*\Microsoft Visual Studio\*\*\VC\Auxiliary\Build\vcvars$arch.bat" -ErrorAction SilentlyContinue |
+          Select-Object -First 1 -ExpandProperty FullName
+        $vcvarsArgs = ""
+        if (-not $vcvars) {
+          $vcvars = Get-ChildItem "C:\Program Files*\Microsoft Visual Studio\*\*\VC\Auxiliary\Build\vcvarsall.bat" -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+          $vcvarsArgs = $arch
+        }
+        if (-not $vcvars) { throw "Could not locate vcvars for arch=$arch" }
+
+        $llvmBin = Get-ChildItem "C:\Program Files*\Microsoft Visual Studio\*\*\VC\Tools\Llvm\bin" `
+          -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+        if (-not $llvmBin) { throw "Could not locate VS-bundled Llvm\bin" }
+        $clangExe   = Join-Path $llvmBin "clang.exe"
+        $clangppExe = Join-Path $llvmBin "clang++.exe"
+
+        $vsCmake = Get-ChildItem "C:\Program Files*\Microsoft Visual Studio\*\*\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" `
+          -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+        if (-not $vsCmake) { $vsCmake = (Get-Command cmake -ErrorAction SilentlyContinue).Path }
+        $vsNinja = Get-ChildItem "C:\Program Files*\Microsoft Visual Studio\*\*\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe" `
+          -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+
+        Write-Host "vcvars: $vcvars $vcvarsArgs"
+        Write-Host "clang:  $clangExe"
+        Write-Host "cmake:  $vsCmake"
+        Write-Host "ninja:  $vsNinja"
+
+        $toolchainAbs = Join-Path $env:GITHUB_WORKSPACE $toolchainRel
+
+        Add-Content -Path $env:GITHUB_ENV -Value "VCVARS_BAT=$vcvars"
+        Add-Content -Path $env:GITHUB_ENV -Value "VCVARS_ARGS=$vcvarsArgs"
+        Add-Content -Path $env:GITHUB_ENV -Value "LLVM_BIN=$llvmBin"
+        Add-Content -Path $env:GITHUB_ENV -Value "CC=$clangExe"
+        Add-Content -Path $env:GITHUB_ENV -Value "CXX=$clangppExe"
+        Add-Content -Path $env:GITHUB_ENV -Value "CMAKE=$vsCmake"
+        Add-Content -Path $env:GITHUB_ENV -Value "NINJA=$vsNinja"
+        Add-Content -Path $env:GITHUB_ENV -Value "TOOLCHAIN_FILE=$toolchainAbs"

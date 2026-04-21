@@ -50,11 +50,12 @@ module.exports = async ({ github, context, core }) => {
       });
     }
     const data = fs.readFileSync(path.join(process.cwd(), fileName));
-    const contentType = fileName.endsWith(".txt")
-      ? "text/plain"
-      : fileName.endsWith(".exe")
-        ? "application/octet-stream"
-        : "application/zip";
+    const contentType =
+      fileName.endsWith(".txt") || fileName.endsWith(".sha256")
+        ? "text/plain"
+        : fileName.endsWith(".exe")
+          ? "application/octet-stream"
+          : "application/zip";
     await github.rest.repos.uploadReleaseAsset({
       owner,
       repo,

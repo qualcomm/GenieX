@@ -19,41 +19,51 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # TODO: re-enable once the linux-arm64 self-hosted runner is set up.
-  # build-sdk-linux:
-  #   uses: ./.github/workflows/reusable-build-sdk.yml
-  #   secrets: inherit
-  #   with:
-  #     platform: linux-arm64
-  #     runner: larger-runner
-  #     upload_artifact: true
-
-  build-sdk-windows:
-    name: build-sdk-windows
-    uses: ./.github/workflows/reusable-build-sdk.yml
+  # SDK matrix. linux-arm64 / android-arm64 are cross-compiled from x64 Linux;
+  # placeholders kept commented-out until the cross-compile paths land.
+  build-sdk:
+    name: build-sdk (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-arm64
+            runner: windows-arm64
+          # - platform: linux-arm64
+          #   runner: ubuntu-latest
+          # - platform: android-arm64
+          #   runner: ubuntu-latest
+    uses: ./.github/workflows/build-sdk.yml
     secrets: inherit
     with:
-      platform: windows-arm64
-      runner: windows-arm64
+      platform: ${{ matrix.platform }}
+      runner: ${{ matrix.runner }}
       upload_artifact: true
 
-  build-cli-windows:
-    name: build-cli-windows
-    needs: [build-sdk-windows]
-    uses: ./.github/workflows/reusable-build-cli.yml
+  build-cli:
+    name: build-cli (${{ matrix.platform }})
+    needs: [build-sdk]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-arm64
+            runner: windows-arm64
+            build_installer: true
+    uses: ./.github/workflows/build-cli.yml
     secrets: inherit
     with:
-      platform: windows-arm64
-      runner: windows-arm64
-      build_installer: true
+      platform: ${{ matrix.platform }}
+      runner: ${{ matrix.runner }}
+      build_installer: ${{ matrix.build_installer }}
       upload_artifact: true
 
   publish-github-release:
     name: publish-github-release
     runs-on: ubuntu-latest
     needs:
-      - build-sdk-windows
-      - build-cli-windows
+      - build-sdk
+      - build-cli
     timeout-minutes: 20
     permissions:
       contents: write
@@ -67,7 +77,7 @@ jobs:
           semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
           [[ "${RELEASE_TAG}" =~ $semver ]] || { echo "Invalid SemVer 2.0 tag: ${RELEASE_TAG}"; exit 1; }
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/download-artifact@v5
         with:
@@ -79,7 +89,7 @@ jobs:
           name: geniex-cli-installer-windows-arm64
           path: .
 
-      - name: Package artifacts and generate SHA256SUMS
+      - name: Package artifacts and write SHA256 sidecars
         id: assets
         run: |
           set -euo pipefail
@@ -88,12 +98,14 @@ jobs:
           # Ship the HTP signing public cert so end users can add it to
           # Trusted Root + Trusted Publishers on WoS devices.
           cp .github/certs/hexagon/ggml-htp-v1.cer ggml-htp-v1.cer
+          # Per-file .sha256 sidecars (one hash per file) — friendlier for
+          # winget manifests and download-script consumers than a combined sums file.
           files=$(ls *.zip *.exe *.cer)
-          sha256sum $files > "SHA256SUMS-${RELEASE_TAG}.txt"
+          for f in $files; do sha256sum "$f" > "$f.sha256"; done
           {
             echo "files<<EOF"
             echo "$files"
-            echo "SHA256SUMS-${RELEASE_TAG}.txt"
+            for f in $files; do echo "$f.sha256"; done
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
