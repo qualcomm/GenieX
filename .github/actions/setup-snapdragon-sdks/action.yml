@@ -52,8 +52,21 @@ runs:
         # SDK alone is not enough — Inf2Cat will run but report all driver
         # files as "missing or cannot be decompressed from source media".
         # See https://learn.microsoft.com/en-us/windows-hardware/drivers/download-the-wdk
+        # Use Inf2Cat itself as the "is WDK fully installed" probe: if the
+        # previous install was partial (only Catalogs dir from a failed winget
+        # run), Inf2Cat reports Signability test failures. Running it once
+        # against an empty directory with /nocat gives us a quick health check.
         $wdkCatalogs = "C:\Program Files (x86)\Windows Kits\10\Catalogs"
-        if (-not (Test-Path $wdkCatalogs) -or -not (Get-ChildItem $wdkCatalogs -ErrorAction SilentlyContinue)) {
+        $inf2cat = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.0.*\x86\Inf2Cat.exe" -ErrorAction SilentlyContinue |
+          Select-Object -First 1 -ExpandProperty FullName
+        $wdkOk = $false
+        if ($inf2cat -and (Test-Path $wdkCatalogs)) {
+          $catCount = (Get-ChildItem $wdkCatalogs -File -ErrorAction SilentlyContinue | Measure-Object).Count
+          # Full WDK 10.0.26100 ships with >1000 catalog files
+          if ($catCount -gt 500) { $wdkOk = $true }
+          else { Write-Host "Partial WDK detected (only $catCount catalogs), reinstalling" }
+        }
+        if (-not $wdkOk) {
           Write-Host "Installing Windows Driver Kit (WDK 10.0.26100)"
           $wdkUrl = "https://go.microsoft.com/fwlink/?linkid=2303833"
           $setup = Join-Path $env:RUNNER_TEMP "wdksetup.exe"
@@ -70,11 +83,13 @@ runs:
             }
             throw "wdksetup.exe failed with exit code $($p.ExitCode)"
           }
-          if (-not (Test-Path $wdkCatalogs)) {
-            throw "WDK install finished but $wdkCatalogs still missing"
+          $catCount = (Get-ChildItem $wdkCatalogs -File -ErrorAction SilentlyContinue | Measure-Object).Count
+          if ($catCount -lt 500) {
+            throw "WDK install finished but only $catCount catalogs found under $wdkCatalogs"
           }
+          Write-Host "WDK installed: $catCount catalogs present"
         } else {
-          Write-Host "WDK already present at $wdkCatalogs"
+          Write-Host "WDK already fully installed at $wdkCatalogs"
         }
 
         $winsdkArm64 = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.0.*\arm64" -ErrorAction SilentlyContinue |
