@@ -21,6 +21,10 @@ There are also some optional flags for `bazelisk run`:
 - `--//sdk:sdk_type=local` default behavior, force local build of sdk instead of using prebuilt binaries, you should manually build the sdk first, see [Build SDK](#build-sdk) section below
 - `--//sdk:sdk_type=bazel` WIP
 
+## Package Release
+
+Run `bazelisk build //cli/release/windows`, and release executable can be found in `bazel-bin/cli/release/windows/geniex-cli-setup.exe`.
+
 ## Tips
 
 ### Windows Symlink Requirements
