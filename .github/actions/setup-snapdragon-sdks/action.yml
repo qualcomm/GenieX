@@ -60,13 +60,31 @@ runs:
         $inf2cat = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.0.*\x86\Inf2Cat.exe" -ErrorAction SilentlyContinue |
           Select-Object -First 1 -ExpandProperty FullName
         $wdkOk = $false
+        # Heuristic: run Inf2Cat against an empty dir; a working install exits
+        # cleanly, a broken one prints "file could not be copied" or similar.
         if ($inf2cat -and (Test-Path $wdkCatalogs)) {
-          $catCount = (Get-ChildItem $wdkCatalogs -File -ErrorAction SilentlyContinue | Measure-Object).Count
-          # Full WDK 10.0.26100 ships with >1000 catalog files
-          if ($catCount -gt 500) { $wdkOk = $true }
-          else { Write-Host "Partial WDK detected (only $catCount catalogs), reinstalling" }
+          $probeDir = Join-Path $env:RUNNER_TEMP "inf2cat-probe-$(Get-Random)"
+          New-Item -ItemType Directory -Path $probeDir | Out-Null
+          $probeOut = & $inf2cat /driver:$probeDir /os:10_25H2_ARM64 /nocat 2>&1
+          Remove-Item -Recurse -Force $probeDir
+          # A WDK with missing signability data prints errors even on empty
+          # input (NTUSER.DAT corrupt, etc.). A healthy install prints
+          # "Signability test complete" with no errors.
+          if ($probeOut -match "Signability test complete" -and $probeOut -notmatch "File could not be copied") {
+            $wdkOk = $true
+          } else {
+            Write-Host "Inf2Cat probe indicates partial WDK; reinstalling"
+            Write-Host "Probe output: $probeOut"
+          }
         }
         if (-not $wdkOk) {
+          # winget may have left a half-installed WDK behind. Remove the
+          # Catalogs dir so wdksetup doesn't short-circuit by detecting a
+          # "present" installation.
+          if (Test-Path $wdkCatalogs) {
+            Write-Host "Removing partial Catalogs dir before reinstall"
+            Remove-Item -Recurse -Force $wdkCatalogs
+          }
           Write-Host "Installing Windows Driver Kit (WDK 10.0.26100)"
           # Direct MS CDN link. fwlink redirects through HTML on some arches,
           # giving a 255KB HTML blob that Start-Process rejects.
@@ -90,11 +108,17 @@ runs:
             }
             throw "wdksetup.exe failed with exit code $($p.ExitCode)"
           }
-          $catCount = (Get-ChildItem $wdkCatalogs -File -ErrorAction SilentlyContinue | Measure-Object).Count
-          if ($catCount -lt 500) {
-            throw "WDK install finished but only $catCount catalogs found under $wdkCatalogs"
+          $inf2cat2 = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\10.0.*\x86\Inf2Cat.exe" -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $inf2cat2) { throw "Inf2Cat.exe missing after WDK install" }
+          $probeDir2 = Join-Path $env:RUNNER_TEMP "inf2cat-postprobe-$(Get-Random)"
+          New-Item -ItemType Directory -Path $probeDir2 | Out-Null
+          $probeOut2 = & $inf2cat2 /driver:$probeDir2 /os:10_25H2_ARM64 /nocat 2>&1
+          Remove-Item -Recurse -Force $probeDir2
+          if ($probeOut2 -notmatch "Signability test complete") {
+            throw "WDK install finished but Inf2Cat probe failed: $probeOut2"
           }
-          Write-Host "WDK installed: $catCount catalogs present"
+          Write-Host "WDK install verified via Inf2Cat probe"
         } else {
           Write-Host "WDK already fully installed at $wdkCatalogs"
         }
