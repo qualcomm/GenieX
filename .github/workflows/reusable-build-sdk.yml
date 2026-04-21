@@ -171,7 +171,18 @@ jobs:
             -DWINDOWS_SDK_BIN="$env:WINDOWS_SDK_BIN" `
             -DPREBUILT_LIB_DIR=windows_aarch64
 
+          $buildExit = 0
           & $vsCmake --build $buildDir -j 8
+          $buildExit = $LASTEXITCODE
+          if ($buildExit -ne 0) {
+            $hexDir = Join-Path $buildDir "third-party\llama.cpp\ggml\src\ggml-hexagon"
+            Write-Host "--- Contents of $hexDir after failed build ---"
+            Get-ChildItem $hexDir -ErrorAction SilentlyContinue | Select-Object Name,Length,LastWriteTime | Format-Table | Out-String | Write-Host
+            Write-Host "--- libggml-htp.inf (in build dir) ---"
+            $infInBuild = Join-Path $hexDir "libggml-htp.inf"
+            if (Test-Path $infInBuild) { Get-Content $infInBuild | Write-Host }
+            throw "cmake --build failed with exit code $buildExit"
+          }
           & $vsCmake --install $buildDir --prefix sdk/pkg-geniex
 
       - name: Upload SDK artifact
