@@ -68,10 +68,17 @@ runs:
         }
         if (-not $wdkOk) {
           Write-Host "Installing Windows Driver Kit (WDK 10.0.26100)"
-          $wdkUrl = "https://go.microsoft.com/fwlink/?linkid=2303833"
+          # Direct MS CDN link. fwlink redirects through HTML on some arches,
+          # giving a 255KB HTML blob that Start-Process rejects.
+          $wdkUrl = "https://download.microsoft.com/download/41fb59c2-1723-45f9-a270-96b73ad58233/KIT_BUNDLE_WDK_MEDIACREATION/wdksetup.exe"
           $setup = Join-Path $env:RUNNER_TEMP "wdksetup.exe"
           $log   = Join-Path $env:RUNNER_TEMP "wdksetup.log"
           curl.exe -L --fail --retry 3 -o $setup $wdkUrl
+          $size = (Get-Item $setup).Length
+          Write-Host "Downloaded wdksetup.exe: $size bytes"
+          if ($size -lt 1MB) {
+            throw "wdksetup.exe download too small ($size bytes) — URL likely returned HTML"
+          }
           $p = Start-Process -FilePath $setup `
             -ArgumentList "/features","+","/quiet","/norestart","/log",$log `
             -Wait -PassThru
