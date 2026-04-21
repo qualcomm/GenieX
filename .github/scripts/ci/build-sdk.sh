@@ -29,5 +29,5 @@ cmake -B "$BUILD_DIR" -S sdk \
   -DGGML_OPENCL=OFF \
   $EXTRA_CMAKE_FLAGS
 
-cmake --build "$BUILD_DIR" -j
+cmake --build "$BUILD_DIR" -j "$(nproc)"
 cmake --install "$BUILD_DIR" --prefix "$INSTALL_PREFIX"

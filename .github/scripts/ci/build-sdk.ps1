@@ -99,8 +99,11 @@ Remove-Item -Recurse -Force $BuildDir -ErrorAction SilentlyContinue
   -DPREBUILT_LIB_DIR=windows_aarch64
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed: $LASTEXITCODE" }
 
+$Jobs = [Environment]::ProcessorCount
+Write-Host "Building with -j $Jobs"
+
 # Phase 1: build all Hexagon HTP skels first.
-& $env:CMAKE --build $BuildDir -j 8 --target htp-v68 htp-v69 htp-v73 htp-v75 htp-v79 htp-v81
+& $env:CMAKE --build $BuildDir -j $Jobs --target htp-v68 htp-v69 htp-v73 htp-v75 htp-v79 htp-v81
 if ($LASTEXITCODE -ne 0) { throw "cmake --build (htp skels) failed: $LASTEXITCODE" }
 
 # Clean up ExternalProject workspaces so Inf2Cat's recursive scan of /driver:
@@ -110,7 +113,7 @@ Get-ChildItem $hexDir -Directory -Filter "htp-v*-prefix" -ErrorAction SilentlyCo
   ForEach-Object { Remove-Item -Recurse -Force $_.FullName }
 
 # Phase 2: build everything else (cat signing + geniex itself).
-& $env:CMAKE --build $BuildDir -j 8
+& $env:CMAKE --build $BuildDir -j $Jobs
 if ($LASTEXITCODE -ne 0) { throw "cmake --build failed: $LASTEXITCODE" }
 
 & $env:CMAKE --install $BuildDir --prefix $InstallPrefix
