@@ -50,16 +50,94 @@ jobs:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
 
     steps:
-      - name: Validate release tag
+      - name: Validate release tag (SemVer 2.0)
+        id: validate
         run: |
+          set -euo pipefail
           if [ -z "${RELEASE_TAG}" ]; then
             echo "RELEASE_TAG must not be empty"
             exit 1
           fi
-          if ! echo "${RELEASE_TAG}" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' >/dev/null; then
-            echo "RELEASE_TAG should look like v1.2.3"
+          # SemVer 2.0 regex (https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string)
+          # prefixed with a required leading "v".
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
+          if ! [[ "${RELEASE_TAG}" =~ $semver ]]; then
+            echo "RELEASE_TAG '${RELEASE_TAG}' is not a valid SemVer 2.0 tag (expected form: v1.2.3, v1.2.3-rc.1, v1.2.3+build.5)"
             exit 1
           fi
+          if [[ "${RELEASE_TAG}" == *-* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout source (for changelog)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: notes
+        env:
+          TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          # Find previous tag (excluding the current one) reachable from the tag ref.
+          # When running on a tag push, ${TAG} resolves; for workflow_dispatch we check if it exists.
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            range_end="${TAG}"
+          else
+            range_end="HEAD"
+          fi
+          prev_tag="$(git describe --tags --abbrev=0 --exclude="${TAG}" "${range_end}^" 2>/dev/null || true)"
+
+          notes_file="RELEASE_NOTES.md"
+          {
+            echo "## ${TAG}"
+            echo
+            if [ -n "${prev_tag}" ]; then
+              echo "_Changes since ${prev_tag}._"
+              echo
+              range="${prev_tag}..${range_end}"
+            else
+              echo "_Initial release._"
+              echo
+              range="${range_end}"
+            fi
+
+            emit_section() {
+              local title="$1" pattern="$2"
+              local lines
+              lines=$(git log --no-merges --pretty=format:'- %s (%h)' "${range}" \
+                | grep -E "${pattern}" || true)
+              if [ -n "${lines}" ]; then
+                echo "### ${title}"
+                echo "${lines}"
+                echo
+              fi
+            }
+
+            emit_section "Features"        '^- feat(\(|:)'
+            emit_section "Fixes"           '^- fix(\(|:)'
+            emit_section "Performance"     '^- perf(\(|:)'
+            emit_section "Documentation"   '^- docs(\(|:)'
+            emit_section "Build / CI"      '^- (build|ci)(\(|:)'
+            emit_section "Refactors"       '^- refactor(\(|:)'
+            emit_section "Chores"          '^- chore(\(|:)'
+
+            # Anything that doesn't match a conventional prefix.
+            other=$(git log --no-merges --pretty=format:'- %s (%h)' "${range}" \
+              | grep -Ev '^- (feat|fix|perf|docs|build|ci|refactor|chore|test|style)(\(|:)' || true)
+            if [ -n "${other}" ]; then
+              echo "### Other"
+              echo "${other}"
+              echo
+            fi
+          } > "${notes_file}"
+
+          echo "notes_file=${notes_file}" >> "$GITHUB_OUTPUT"
+          echo "---- Generated notes ----"
+          cat "${notes_file}"
 
       - name: Download Linux SDK artifact
         uses: actions/download-artifact@v5
@@ -97,10 +175,26 @@ jobs:
           name: geniex-wheel-windows-arm64
           path: dist/wheel-windows-arm64
 
+      - name: Generate SHA256SUMS
+        run: |
+          set -euo pipefail
+          cd dist
+          # Collect all zips/wheels across sub-directories into a single checksum file
+          # at a predictable path. Paths in SHA256SUMS are relative to dist/.
+          find . -type f \( -name '*.zip' -o -name '*.whl' \) -print0 \
+            | sort -z \
+            | xargs -0 sha256sum \
+            | sed 's| \./| |' \
+            > SHA256SUMS
+          echo "---- SHA256SUMS ----"
+          cat SHA256SUMS
+
       - name: Create release and upload assets
         uses: actions/github-script@v8
         env:
           RELEASE_TAG: ${{ env.RELEASE_TAG }}
+          IS_PRERELEASE: ${{ steps.validate.outputs.is_prerelease }}
+          NOTES_FILE: ${{ steps.notes.outputs.notes_file }}
         with:
           script: |
             const fs = require('fs');
@@ -109,11 +203,24 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const tag = process.env.RELEASE_TAG;
+            const isPrerelease = process.env.IS_PRERELEASE === 'true';
+            const notesPath = process.env.NOTES_FILE;
+            const body = notesPath && fs.existsSync(notesPath)
+              ? fs.readFileSync(notesPath, 'utf8')
+              : '';
 
             let release;
             try {
               const existing = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
               release = existing.data;
+              // Update prerelease flag and body if they drifted.
+              await github.rest.repos.updateRelease({
+                owner,
+                repo,
+                release_id: release.id,
+                prerelease: isPrerelease,
+                body,
+              });
             } catch (error) {
               if (error.status !== 404) {
                 throw error;
@@ -123,9 +230,9 @@ jobs:
                 repo,
                 tag_name: tag,
                 name: tag,
-                generate_release_notes: true,
+                body,
                 draft: false,
-                prerelease: false,
+                prerelease: isPrerelease,
               });
               release = created.data;
             }
@@ -167,7 +274,13 @@ jobs:
               }
             }
 
-            const assets = [...sdkAssets, ...wheelAssets];
+            const checksumAsset = {
+              filePath: path.join(process.cwd(), 'dist', 'SHA256SUMS'),
+              name: `SHA256SUMS-${tag}.txt`,
+              contentType: 'text/plain',
+            };
+
+            const assets = [...sdkAssets, ...wheelAssets, checksumAsset];
 
             for (const asset of assets) {
               if (!fs.existsSync(asset.filePath)) {

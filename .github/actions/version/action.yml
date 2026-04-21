@@ -2,11 +2,14 @@ name: "Detect build version"
 
 outputs:
   version:
-    description: "Version string for SDK/CLI (e.g. v1.2.3 or sha-abc1234)"
+    description: "Version string for SDK/CLI (e.g. v1.2.3, v1.2.3-rc.1, or sha-abc1234)"
     value: ${{ steps.set-version.outputs.version }}
   python_version:
-    description: "PEP 440 compliant version for Python wheel (e.g. 1.2.3 or 0.0.0.dev0+gitabc1234)"
+    description: "PEP 440 compliant version for Python wheel (e.g. 1.2.3, 1.2.3rc1, or 0.0.0.dev0+gitabc1234)"
     value: ${{ steps.set-version.outputs.python_version }}
+  is_prerelease:
+    description: "true when tag is a SemVer pre-release (e.g. v1.2.3-rc.1)"
+    value: ${{ steps.set-version.outputs.is_prerelease }}
 
 runs:
   using: "composite"
@@ -15,12 +18,41 @@ runs:
       id: set-version
       shell: bash
       run: |
+        set -euo pipefail
+        is_prerelease="false"
         if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-          # Tag push: v1.2.3
           version="${GITHUB_REF_NAME}"
-          python_version="${GITHUB_REF_NAME#v}"
+          raw="${version#v}"
+
+          # Strip SemVer build metadata (+...) — not meaningful for PEP 440 here.
+          core_and_pre="${raw%%+*}"
+
+          if [[ "${core_and_pre}" == *-* ]]; then
+            is_prerelease="true"
+            core="${core_and_pre%%-*}"
+            pre="${core_and_pre#*-}"
+            # Map SemVer pre-release identifiers to PEP 440:
+            #   alpha(.N)  -> aN     beta(.N)  -> bN     rc(.N) / pre(.N) -> rcN
+            # For any other identifier, fall back to a dev release to stay PEP 440 compliant.
+            pep_pre="$(echo "${pre}" \
+              | sed -E \
+                -e 's/^alpha\.?([0-9]+)?$/a\1/' \
+                -e 's/^beta\.?([0-9]+)?$/b\1/' \
+                -e 's/^(rc|pre)\.?([0-9]+)?$/rc\2/')"
+            if [[ "${pep_pre}" =~ ^(a|b|rc)[0-9]*$ ]]; then
+              # Ensure a trailing number (PEP 440 allows aN with implicit 0, but be explicit).
+              [[ "${pep_pre}" =~ [0-9]$ ]] || pep_pre="${pep_pre}0"
+              python_version="${core}${pep_pre}"
+            else
+              # Unknown pre-release label: encode as dev release based on a sanitized suffix.
+              sanitized="$(echo "${pre}" | tr -cd '0-9')"
+              [[ -n "${sanitized}" ]] || sanitized="0"
+              python_version="${core}.dev${sanitized}"
+            fi
+          else
+            python_version="${core_and_pre}"
+          fi
         else
-          # PR or push without tag: use short SHA
           sha="${GITHUB_SHA::7}"
           version="sha-${sha}"
           python_version="0.0.0.dev0+git${sha}"
@@ -28,4 +60,5 @@ runs:
 
         echo "version=${version}" >> "$GITHUB_OUTPUT"
         echo "python_version=${python_version}" >> "$GITHUB_OUTPUT"
+        echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
         echo "VERSION=${version}" >> "$GITHUB_ENV"
