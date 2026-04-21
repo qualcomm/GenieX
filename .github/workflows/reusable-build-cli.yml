@@ -11,6 +11,16 @@ on:
         description: "Runner label"
         required: true
         type: string
+      build_installer:
+        description: "Also build the platform installer (//cli/release/<platform>)"
+        required: false
+        type: boolean
+        default: false
+      upload_artifact:
+        description: "Upload the built installer as a workflow artifact"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -50,3 +60,21 @@ jobs:
         shell: cmd
         run: |
           bazelisk build //cli:artifact --//sdk:sdk_type=local
+
+      - name: Build Windows installer
+        if: inputs.build_installer && inputs.platform == 'windows-arm64'
+        shell: bash
+        env:
+          RAW_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          bare="${RAW_VERSION#v}"
+          bazelisk build //cli/release/windows --//sdk:sdk_type=local "--define=VERSION=${bare}"
+
+      - name: Upload Windows installer artifact
+        if: inputs.upload_artifact && inputs.build_installer && inputs.platform == 'windows-arm64'
+        uses: actions/upload-artifact@v5
+        with:
+          name: geniex-cli-installer-windows-arm64
+          path: bazel-bin/cli/release/windows/geniex-cli-setup.exe
+          retention-days: 1
