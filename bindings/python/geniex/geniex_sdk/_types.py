@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ctypes struct/type definitions mirroring sdk/include/ml.h."""
+"""ctypes struct/type definitions mirroring sdk/include/geniex.h."""
 
 from ctypes import (
     CFUNCTYPE,
@@ -31,15 +31,15 @@ from ctypes import (
 # Callback types
 # ---------------------------------------------------------------------------
 
-# bool (*ml_token_callback)(const char* token, void* user_data)
-ml_token_callback = CFUNCTYPE(c_bool, c_char_p, c_void_p)
+# bool (*geniex_token_callback)(const char* token, void* user_data)
+geniex_token_callback = CFUNCTYPE(c_bool, c_char_p, c_void_p)
 
 # ---------------------------------------------------------------------------
-# ml_ProfileData
+# geniex_ProfileData
 # ---------------------------------------------------------------------------
 
 
-class ml_ProfileData(Structure):
+class geniex_ProfileData(Structure):
     _fields_ = [
         ('ttft', c_int64),
         ('prompt_time', c_int64),
@@ -55,11 +55,11 @@ class ml_ProfileData(Structure):
 
 
 # ---------------------------------------------------------------------------
-# ml_SamplerConfig
+# geniex_SamplerConfig
 # ---------------------------------------------------------------------------
 
 
-class ml_SamplerConfig(Structure):
+class geniex_SamplerConfig(Structure):
     _fields_ = [
         ('temperature', c_float),
         ('top_p', c_float),
@@ -76,17 +76,17 @@ class ml_SamplerConfig(Structure):
 
 
 # ---------------------------------------------------------------------------
-# ml_GenerationConfig
+# geniex_GenerationConfig
 # ---------------------------------------------------------------------------
 
 
-class ml_GenerationConfig(Structure):
+class geniex_GenerationConfig(Structure):
     _fields_ = [
         ('max_tokens', c_int32),
         ('stop', POINTER(c_char_p)),
         ('stop_count', c_int32),
         ('n_past', c_int32),
-        ('sampler_config', POINTER(ml_SamplerConfig)),
+        ('sampler_config', POINTER(geniex_SamplerConfig)),
         ('image_paths', POINTER(c_char_p)),
         ('image_count', c_int32),
         ('image_max_length', c_int32),
@@ -96,11 +96,11 @@ class ml_GenerationConfig(Structure):
 
 
 # ---------------------------------------------------------------------------
-# ml_ModelConfig
+# geniex_ModelConfig
 # ---------------------------------------------------------------------------
 
 
-class ml_ModelConfig(Structure):
+class geniex_ModelConfig(Structure):
     _fields_ = [
         ('n_ctx', c_int32),
         ('n_threads', c_int32),
@@ -125,19 +125,19 @@ class ml_ModelConfig(Structure):
 # ---------------------------------------------------------------------------
 
 
-class ml_KvCacheSaveInput(Structure):
+class geniex_KvCacheSaveInput(Structure):
     _fields_ = [('path', c_char_p)]
 
 
-class ml_KvCacheSaveOutput(Structure):
+class geniex_KvCacheSaveOutput(Structure):
     _fields_ = [('reserved', c_void_p)]
 
 
-class ml_KvCacheLoadInput(Structure):
+class geniex_KvCacheLoadInput(Structure):
     _fields_ = [('path', c_char_p)]
 
 
-class ml_KvCacheLoadOutput(Structure):
+class geniex_KvCacheLoadOutput(Structure):
     _fields_ = [('reserved', c_void_p)]
 
 
@@ -146,12 +146,12 @@ class ml_KvCacheLoadOutput(Structure):
 # ---------------------------------------------------------------------------
 
 
-class ml_LlmCreateInput(Structure):
+class geniex_LlmCreateInput(Structure):
     _fields_ = [
         ('model_name', c_char_p),
         ('model_path', c_char_p),
         ('tokenizer_path', c_char_p),
-        ('config', ml_ModelConfig),
+        ('config', geniex_ModelConfig),
         ('plugin_id', c_char_p),
         ('device_id', c_char_p),
         ('license_id', c_char_p),
@@ -159,34 +159,34 @@ class ml_LlmCreateInput(Structure):
     ]
 
 
-class ml_LlmGenerateInput(Structure):
+class geniex_LlmGenerateInput(Structure):
     _fields_ = [
         ('prompt_utf8', c_char_p),
-        ('config', POINTER(ml_GenerationConfig)),
-        ('on_token', ml_token_callback),
+        ('config', POINTER(geniex_GenerationConfig)),
+        ('on_token', geniex_token_callback),
         ('user_data', c_void_p),
         ('input_ids', POINTER(c_int32)),
         ('input_ids_count', c_int32),
     ]
 
 
-class ml_LlmGenerateOutput(Structure):
+class geniex_LlmGenerateOutput(Structure):
     _fields_ = [
         ('full_text', c_void_p),
-        ('profile_data', ml_ProfileData),
+        ('profile_data', geniex_ProfileData),
     ]
 
 
-class ml_LlmChatMessage(Structure):
+class geniex_LlmChatMessage(Structure):
     _fields_ = [
         ('role', c_char_p),
         ('content', c_char_p),
     ]
 
 
-class ml_LlmApplyChatTemplateInput(Structure):
+class geniex_LlmApplyChatTemplateInput(Structure):
     _fields_ = [
-        ('messages', POINTER(ml_LlmChatMessage)),
+        ('messages', POINTER(geniex_LlmChatMessage)),
         ('message_count', c_int32),
         ('tools', c_char_p),
         ('enable_thinking', c_bool),
@@ -194,7 +194,7 @@ class ml_LlmApplyChatTemplateInput(Structure):
     ]
 
 
-class ml_LlmApplyChatTemplateOutput(Structure):
+class geniex_LlmApplyChatTemplateOutput(Structure):
     _fields_ = [('formatted_text', c_void_p)]
 
 
@@ -203,7 +203,7 @@ class ml_LlmApplyChatTemplateOutput(Structure):
 # ---------------------------------------------------------------------------
 
 
-class ml_VlmContent(Structure):
+class geniex_VlmContent(Structure):
     # field name in C is `type` but that's a Python keyword — use _type_ alias
     _fields_ = [
         ('type', c_char_p),
@@ -211,20 +211,20 @@ class ml_VlmContent(Structure):
     ]
 
 
-class ml_VlmChatMessage(Structure):
+class geniex_VlmChatMessage(Structure):
     _fields_ = [
         ('role', c_char_p),
-        ('contents', POINTER(ml_VlmContent)),
-        ('content_count', c_int64),  # int64_t in ml.h
+        ('contents', POINTER(geniex_VlmContent)),
+        ('content_count', c_int64),  # int64_t in geniex.h
     ]
 
 
-class ml_VlmCreateInput(Structure):
+class geniex_VlmCreateInput(Structure):
     _fields_ = [
         ('model_name', c_char_p),
         ('model_path', c_char_p),
         ('mmproj_path', c_char_p),
-        ('config', ml_ModelConfig),
+        ('config', geniex_ModelConfig),
         ('plugin_id', c_char_p),
         ('device_id', c_char_p),
         ('tokenizer_path', c_char_p),
@@ -233,25 +233,25 @@ class ml_VlmCreateInput(Structure):
     ]
 
 
-class ml_VlmGenerateInput(Structure):
+class geniex_VlmGenerateInput(Structure):
     _fields_ = [
         ('prompt_utf8', c_char_p),
-        ('config', POINTER(ml_GenerationConfig)),
-        ('on_token', ml_token_callback),
+        ('config', POINTER(geniex_GenerationConfig)),
+        ('on_token', geniex_token_callback),
         ('user_data', c_void_p),
     ]
 
 
-class ml_VlmGenerateOutput(Structure):
+class geniex_VlmGenerateOutput(Structure):
     _fields_ = [
         ('full_text', c_void_p),
-        ('profile_data', ml_ProfileData),
+        ('profile_data', geniex_ProfileData),
     ]
 
 
-class ml_VlmApplyChatTemplateInput(Structure):
+class geniex_VlmApplyChatTemplateInput(Structure):
     _fields_ = [
-        ('messages', POINTER(ml_VlmChatMessage)),
+        ('messages', POINTER(geniex_VlmChatMessage)),
         ('message_count', c_int32),
         ('tools', c_char_p),
         ('enable_thinking', c_bool),
@@ -259,7 +259,7 @@ class ml_VlmApplyChatTemplateInput(Structure):
     ]
 
 
-class ml_VlmApplyChatTemplateOutput(Structure):
+class geniex_VlmApplyChatTemplateOutput(Structure):
     _fields_ = [('formatted_text', c_void_p)]
 
 
@@ -268,18 +268,18 @@ class ml_VlmApplyChatTemplateOutput(Structure):
 # ---------------------------------------------------------------------------
 
 
-class ml_GetPluginListOutput(Structure):
+class geniex_GetPluginListOutput(Structure):
     _fields_ = [
         ('plugin_ids', POINTER(c_char_p)),
         ('plugin_count', c_int32),
     ]
 
 
-class ml_GetDeviceListInput(Structure):
+class geniex_GetDeviceListInput(Structure):
     _fields_ = [('plugin_id', c_char_p)]
 
 
-class ml_GetDeviceListOutput(Structure):
+class geniex_GetDeviceListOutput(Structure):
     _fields_ = [
         ('device_ids', POINTER(c_char_p)),
         ('device_names', POINTER(c_char_p)),

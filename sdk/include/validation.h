@@ -68,8 +68,9 @@ namespace validation {
 
 struct ValidationResult {
     // ML standard error codes for validation results
-    geniex_ErrorCode result;  // ML_SUCCESS, ML_ERROR_COMMON_LICENSE_INVALID, ML_ERROR_COMMON_LICENSE_EXPIRED, etc.
-    std::string  message;
+    geniex_ErrorCode
+        result;  // GENIEX_SUCCESS, GENIEX_ERROR_COMMON_LICENSE_INVALID, GENIEX_ERROR_COMMON_LICENSE_EXPIRED, etc.
+    std::string message;
 };
 
 // =============================================================================
@@ -150,12 +151,12 @@ inline ValidationResult validate_license_key_offline(const std::string& provided
     // Resolve the license key to use (parameter or environment variable)
     std::string license_key = resolve_license_key(provided_key);
     if (license_key.empty()) {
-        return ValidationResult{
-            ML_ERROR_COMMON_LICENSE_INVALID, "No license key provided and GENIEX_TOKEN environment variable not set"};
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID,
+            "No license key provided and GENIEX_TOKEN environment variable not set"};
     }
 
     if (license_key.substr(0, 4) != LICENSE_KEY_HEAD) {
-        return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID, "invalid license key format: missing key/ prefix"};
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID, "invalid license key format: missing key/ prefix"};
     }
 
     auto        pos          = license_key.rfind(".");
@@ -169,14 +170,14 @@ inline ValidationResult validate_license_key_offline(const std::string& provided
 
     EVP_PKEY* pkey = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, nullptr, pkey_bytes.data(), pkey_bytes.size());
     if (!pkey) {
-        return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID, "fail to decode ED25519 public key"};
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID, "fail to decode ED25519 public key"};
     }
 
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
     if (!ctx) {
-        return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID, "fail to new signature verification context"};
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID, "fail to new signature verification context"};
     } else if (EVP_DigestVerifyInit(ctx, nullptr, nullptr, nullptr, pkey) != 1) {
-        return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID, "fail to initialize signature verification"};
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID, "fail to initialize signature verification"};
     }
 
     auto ret = EVP_DigestVerify(ctx,
@@ -189,7 +190,7 @@ inline ValidationResult validate_license_key_offline(const std::string& provided
     EVP_PKEY_free(pkey);
 
     if (ret != 1) {
-        return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID, "signature verification failed"};
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID, "signature verification failed"};
     }
 
     try {
@@ -197,19 +198,19 @@ inline ValidationResult validate_license_key_offline(const std::string& provided
         if (!detail.contains("license") || !detail["license"].is_object() || !detail["license"].contains("expiry") ||
             !detail["license"]["expiry"].is_string() || !detail["license"].contains("created") ||
             !detail["license"]["created"].is_string()) {
-            return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID, "invalid license data format"};
+            return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID, "invalid license data format"};
         }
 
         auto created_at = convertTime(detail["license"]["created"].get<std::string>());
         auto expired_at = convertTime(detail["license"]["expiry"].get<std::string>());
         auto now        = std::time(nullptr);
         if (now < created_at || now > expired_at) {
-            return ValidationResult{ML_ERROR_COMMON_LICENSE_EXPIRED, "license expired or not yet valid"};
+            return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_EXPIRED, "license expired or not yet valid"};
         }
-        return ValidationResult{ML_SUCCESS, "verification success"};
+        return ValidationResult{GENIEX_SUCCESS, "verification success"};
     } catch (nlohmann::json::parse_error& e) {
         return ValidationResult{
-            ML_ERROR_COMMON_LICENSE_INVALID, "fail to parse license data: " + std::string(e.what())};
+            GENIEX_ERROR_COMMON_LICENSE_INVALID, "fail to parse license data: " + std::string(e.what())};
     }
 }
 
@@ -217,8 +218,8 @@ inline ValidationResult validate_license_key_online(const std::string& provided_
     // Resolve the license key to use (parameter or environment variable)
     std::string license_key = resolve_license_key(provided_key);
     if (license_key.empty()) {
-        return ValidationResult{
-            ML_ERROR_COMMON_LICENSE_INVALID, "No license key provided and GENIEX_TOKEN environment variable not set"};
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID,
+            "No license key provided and GENIEX_TOKEN environment variable not set"};
     }
 
     httplib::Client cli(LICENSE_SERVER_ENDPOINT);
@@ -227,29 +228,29 @@ inline ValidationResult validate_license_key_online(const std::string& provided_
     body["meta"]["key"] = license_key;
     auto resp           = cli.Post("/v1/licenses/actions/validate-key", body.dump(), "application/json");
     if (!resp || resp->status != 200) {
-        return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID, "fail to request license host"};
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID, "fail to request license host"};
     }
 
     try {
         nlohmann::json pj = nlohmann::json::parse(resp->body);
         if (!pj.contains("meta") || !pj["meta"].is_object() || !pj["meta"].contains("code") ||
             !pj["meta"]["code"].is_string()) {
-            return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID, "invalid validation reponse format"};
+            return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID, "invalid validation reponse format"};
         }
 
         // refer to https://keygen.sh/docs/api/licenses/#licenses-actions-validate-key
         auto code = pj["meta"]["code"].get<std::string>();
 
         if (code == "VALID") {
-            return ValidationResult{ML_SUCCESS, "verification success"};
+            return ValidationResult{GENIEX_SUCCESS, "verification success"};
         } else if (code == "EXPIRED") {
-            return ValidationResult{ML_ERROR_COMMON_LICENSE_EXPIRED, "license expired: " + code};
+            return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_EXPIRED, "license expired: " + code};
         } else {
-            return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID, "invalid license status: " + code};
+            return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID, "invalid license status: " + code};
         }
     } catch (nlohmann::json::parse_error& e) {
         return ValidationResult{
-            ML_ERROR_COMMON_LICENSE_INVALID, "fail to parse validation response: " + std::string(e.what())};
+            GENIEX_ERROR_COMMON_LICENSE_INVALID, "fail to parse validation response: " + std::string(e.what())};
     }
 }
 
@@ -485,8 +486,8 @@ inline ValidationResult activate(const std::string& provided_key = "", const std
     // Resolve the license key to use (parameter or environment variable)
     std::string license_key = resolve_license_key(provided_key);
     if (license_key.empty()) {
-        return ValidationResult{
-            ML_ERROR_COMMON_LICENSE_INVALID, "No license key provided and GENIEX_TOKEN environment variable not set"};
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID,
+            "No license key provided and GENIEX_TOKEN environment variable not set"};
     }
 
     httplib::Client cli(LICENSE_SERVER_ENDPOINT);
@@ -497,7 +498,8 @@ inline ValidationResult activate(const std::string& provided_key = "", const std
         // If license_id is not provided, decode it from the license key
         license_id = decode_license_id_from_key(license_key);
         if (license_id.empty()) {
-            return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID, "failed to decode license ID from license key"};
+            return ValidationResult{
+                GENIEX_ERROR_COMMON_LICENSE_INVALID, "failed to decode license ID from license key"};
         }
     }
 
@@ -520,11 +522,11 @@ inline ValidationResult activate(const std::string& provided_key = "", const std
 
     auto resp = cli.Post("/v1/machines", headers, body.dump(), "application/vnd.api+json");
     if (!resp) {
-        return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID, "fail to request license host for activation"};
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID, "fail to request license host for activation"};
     }
 
     if (resp->status == 200 || resp->status == 201) {
-        return ValidationResult{ML_SUCCESS, "activation success"};
+        return ValidationResult{GENIEX_SUCCESS, "activation success"};
     } else if (resp->status == 422) {
         // Handle the specific case where fingerprint is already taken
         try {
@@ -535,16 +537,16 @@ inline ValidationResult activate(const std::string& provided_key = "", const std
                 error_response["errors"].size() == 1 && error_response["errors"][0].contains("code") &&
                 error_response["errors"][0]["code"].is_string() &&
                 error_response["errors"][0]["code"].get<std::string>() == "FINGERPRINT_TAKEN") {
-                return ValidationResult{ML_SUCCESS, "activation success (fingerprint already registered)"};
+                return ValidationResult{GENIEX_SUCCESS, "activation success (fingerprint already registered)"};
             }
         } catch (const nlohmann::json::parse_error& e) {
             // If JSON parsing fails, fall through to the general error case
         }
 
-        return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID,
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID,
             "activation failed with status: " + std::to_string(resp->status) + ", response: " + resp->body};
     } else {
-        return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID,
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID,
             "activation failed with status: " + std::to_string(resp->status) + ", response: " + resp->body};
     }
 }
@@ -618,8 +620,8 @@ inline ValidationResult validate_license(const std::string& provided_key = "", c
         // Resolve the license key to use (parameter or environment variable)
         std::string license_key = resolve_license_key(provided_key);
         if (license_key.empty()) {
-            return ValidationResult{
-                ML_ERROR_COMMON_LICENSE_INVALID, "No license key provided and GENIEX_TOKEN environment variable not set"};
+            return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID,
+                "No license key provided and GENIEX_TOKEN environment variable not set"};
         }
 
         // Step 1: Determine if this license key is seen for the first time (ignoring license_id)
@@ -628,26 +630,26 @@ inline ValidationResult validate_license(const std::string& provided_key = "", c
         if (is_first_time) {
             // Step 2a: For first time, activate the license first
             ValidationResult activation_result = activate(license_key, provided_id);
-            if (activation_result.result != ML_SUCCESS) {
+            if (activation_result.result != GENIEX_SUCCESS) {
                 return activation_result;  // Return activation failure
             }
 
             // Step 2b: After successful activation, validate the license online
             ValidationResult online_validation = validate_license_key_online(license_key);
-            if (online_validation.result != ML_SUCCESS) {
+            if (online_validation.result != GENIEX_SUCCESS) {
                 return online_validation;  // Return online validation failure
             }
 
             // Step 2c: Only if both activation and validation succeeded, mark the license as seen
             record_license(license_key, provided_id);
 
-            return ValidationResult{ML_SUCCESS, "first time activation and validation success"};
+            return ValidationResult{GENIEX_SUCCESS, "first time activation and validation success"};
         } else {
             // Step 3: For subsequent times, use offline validation
             return validate_license_key_offline(license_key);
         }
     } catch (const std::exception& e) {
-        return ValidationResult{ML_ERROR_COMMON_LICENSE_INVALID, "validation failed: " + std::string(e.what())};
+        return ValidationResult{GENIEX_ERROR_COMMON_LICENSE_INVALID, "validation failed: " + std::string(e.what())};
     }
 }
 

@@ -14,8 +14,8 @@
 
 from ._version import __version__
 from .auto import AutoModelForCausalLM, AutoModelForVision2Seq
-from .geniex_sdk._api import deinit, init, version
 from .generation import GenerateOutput, ProfileData, TextIteratorStreamer
+from .geniex_sdk._api import deinit, init, version
 from .modeling import GeniexLLM, GeniexVLM
 
 __all__ = [

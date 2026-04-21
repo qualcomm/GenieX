@@ -29,10 +29,10 @@ import (
 type CVCapabilities int32
 
 const (
-	CVCapabilityOCR            CVCapabilities = C.ML_CV_OCR
-	CVCapabilityClassification CVCapabilities = C.ML_CV_CLASSIFICATION
-	CVCapabilitySegmentation   CVCapabilities = C.ML_CV_SEGMENTATION
-	CVCapabilityCustom         CVCapabilities = C.ML_CV_CUSTOM
+	CVCapabilityOCR            CVCapabilities = C.GENIEX_CV_OCR
+	CVCapabilityClassification CVCapabilities = C.GENIEX_CV_CLASSIFICATION
+	CVCapabilitySegmentation   CVCapabilities = C.GENIEX_CV_SEGMENTATION
+	CVCapabilityCustom         CVCapabilities = C.GENIEX_CV_CUSTOM
 )
 
 // BoundingBox represents a generic bounding box structure

@@ -9,8 +9,8 @@
 
 #include "build_config.h"
 #include "doctest.h"
-#include "logging.h"
 #include "geniex.h"
+#include "logging.h"
 
 #define CHECK_ML_ERROR(res) \
     CHECK_MESSAGE((res) >= 0, std::string_view(geniex_get_error_message(static_cast<geniex_ErrorCode>(res))))
@@ -123,9 +123,9 @@ class TestRegistry {
 
 // Setup
 
-#define PLUGIN_DEF(plugin_name, plugin_id)                                                                    \
-    inline constexpr auto plugin_name##_str        = plugin_id;                                               \
-    using plugin_name                               = std::integral_constant<const char*, plugin_name##_str>; \
+#define PLUGIN_DEF(plugin_name, plugin_id)                                                            \
+    inline constexpr auto plugin_name##_str = plugin_id;                                              \
+    using plugin_name                       = std::integral_constant<const char*, plugin_name##_str>; \
     TYPE_TO_STRING(plugin_name);
 
 // plugin id map - using string literals for plugin IDs
@@ -138,18 +138,18 @@ using SetupMap = std::map<geniex_PluginId, std::vector<P>>;
 template <typename P, typename M>
 class Setup {
    private:
-    SetupMap<P>                                  param_map;
+    SetupMap<P>                                      param_map;
     std::function<M*(geniex_PluginId, P)>            create_func;
-    std::function<int32_t(M*)>                   reset_func;
-    std::function<int32_t(M*)>                   destroy_func;
+    std::function<int32_t(M*)>                       reset_func;
+    std::function<int32_t(M*)>                       destroy_func;
     std::map<std::pair<geniex_PluginId, size_t>, M*> handlers;
     geniex_PluginId                                  current_plugin;
-    size_t                                       current_model_idx;
-    M*                                           current_handler;  // Track current active handler
+    size_t                                           current_model_idx;
+    M*                                               current_handler;  // Track current active handler
 
    public:
-    Setup(SetupMap<P> param_map, std::function<M*(geniex_PluginId, P)> create_func, std::function<int32_t(M*)> reset_func,
-        std::function<int32_t(M*)> destroy_func)
+    Setup(SetupMap<P> param_map, std::function<M*(geniex_PluginId, P)> create_func,
+        std::function<int32_t(M*)> reset_func, std::function<int32_t(M*)> destroy_func)
         : param_map(param_map),
           create_func(create_func),
           reset_func(reset_func),

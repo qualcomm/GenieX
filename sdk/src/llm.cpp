@@ -1,8 +1,8 @@
 #include <cstring>
 #include <memory>
 
-#include "logging.h"
 #include "geniex.h"
+#include "logging.h"
 #include "plugin/ILlm.h"
 #include "profile.h"
 #include "registry.h"
@@ -15,9 +15,9 @@ int32_t geniex_llm_create(const geniex_LlmCreateInput* input, geniex_LLM** out_h
 
     try {
         auto backend = geniex::Registry::instance().get<geniex::ILlm>(input->plugin_id);
-        if (!backend) return ML_ERROR_COMMON_NOT_SUPPORTED;
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_SUPPORTED;
         int32_t res = backend->create(input);
-        if (res != ML_SUCCESS) {
+        if (res != GENIEX_SUCCESS) {
             delete backend;
         } else {
             *out_handle = reinterpret_cast<geniex_LLM*>(backend);
@@ -25,13 +25,13 @@ int32_t geniex_llm_create(const geniex_LlmCreateInput* input, geniex_LLM** out_h
         return res;
     } catch (const PluginNotFoundException& e) {
         GENIEX_LOG_ERROR("plugin not found");
-        return ML_ERROR_COMMON_PLUGIN_INVALID;
+        return GENIEX_ERROR_COMMON_PLUGIN_INVALID;
     } catch (const PluginLoadException& e) {
         GENIEX_LOG_ERROR("plugin load error");
-        return ML_ERROR_COMMON_PLUGIN_LOAD;
+        return GENIEX_ERROR_COMMON_PLUGIN_LOAD;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("creating llm error: {}", e.what());
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 }
 
@@ -40,12 +40,12 @@ int32_t geniex_llm_destroy(geniex_LLM* h) {
 
     try {
         auto backend = reinterpret_cast<ILlm*>(h);
-        if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
         delete backend;
-        return ML_SUCCESS;
+        return GENIEX_SUCCESS;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("destroy llm error: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
 
@@ -54,41 +54,43 @@ int32_t geniex_llm_reset(geniex_LLM* h) {
 
     try {
         auto backend = reinterpret_cast<ILlm*>(h);
-        if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
         return backend->reset();
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("reset llm error: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
 
-int32_t geniex_llm_save_kv_cache(geniex_LLM* h, const geniex_KvCacheSaveInput* input, geniex_KvCacheSaveOutput* output) {
+int32_t geniex_llm_save_kv_cache(
+    geniex_LLM* h, const geniex_KvCacheSaveInput* input, geniex_KvCacheSaveOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
         auto backend = reinterpret_cast<ILlm*>(h);
-        if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
         auto result = backend->save_kv_cache(input, output);
         GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("llm save kv cache error: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
 
-int32_t geniex_llm_load_kv_cache(geniex_LLM* h, const geniex_KvCacheLoadInput* input, geniex_KvCacheLoadOutput* output) {
+int32_t geniex_llm_load_kv_cache(
+    geniex_LLM* h, const geniex_KvCacheLoadInput* input, geniex_KvCacheLoadOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
         auto backend = reinterpret_cast<ILlm*>(h);
-        if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
         auto result = backend->load_kv_cache(input, output);
         GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("llm load kv cache error: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
 
@@ -98,13 +100,13 @@ int32_t geniex_llm_apply_chat_template(
 
     try {
         auto backend = reinterpret_cast<ILlm*>(h);
-        if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
         auto result = backend->apply_chat_template(input, output);
         GENIEX_LOG_TRACE("{}: {}", static_cast<geniex_ErrorCode>(result), output);
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("llm apply chat template error: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
 
@@ -113,11 +115,11 @@ int32_t geniex_llm_generate(geniex_LLM* h, const geniex_LlmGenerateInput* input,
 
     try {
         auto backend = reinterpret_cast<ILlm*>(h);
-        if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
 
         // Wrap the user's callback with UTF-8 validation if a callback is provided
         std::unique_ptr<Utf8CallbackWrapper> wrapper;
-        geniex_LlmGenerateInput                  modified_input;
+        geniex_LlmGenerateInput              modified_input;
 
         if (input->on_token) {
             // Create wrapper that accumulates incomplete UTF-8 sequences
@@ -147,6 +149,6 @@ int32_t geniex_llm_generate(geniex_LLM* h, const geniex_LlmGenerateInput* input,
         }
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("llm generate error: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }

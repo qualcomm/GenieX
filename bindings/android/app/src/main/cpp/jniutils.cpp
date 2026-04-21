@@ -978,7 +978,7 @@ std::vector<geniex_VlmChatMessage> extract_vlm_chat_messages(JNIEnv* env, jobjec
 
         // contents: List<VlmContent> -> getContents()
         geniex_VlmContent* contents_arr = nullptr;
-        int64_t        count        = 0;
+        int64_t            count        = 0;
 
         jmethodID midGetContents = env->GetMethodID(msgCls, "getContents", "()Ljava/util/List;");
         if (midGetContents && listCls && midListSize && midListGet) {

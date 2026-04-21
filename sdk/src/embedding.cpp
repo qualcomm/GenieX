@@ -1,5 +1,5 @@
-#include "logging.h"
 #include "geniex.h"
+#include "logging.h"
 #include "plugin/IEmbedding.h"
 #include "profile.h"
 #include "registry.h"
@@ -12,19 +12,19 @@ int32_t geniex_embedder_create(const geniex_EmbedderCreateInput* input, geniex_E
     try {
         if (!input || !input->plugin_id) {
             GENIEX_LOG_ERROR("Invalid input parameters for embedder creation");
-            return ML_ERROR_COMMON_INVALID_INPUT;
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
 
         GENIEX_LOG_INFO("Retrieving backend for plugin: {}", input->plugin_id);
         auto backend = geniex::Registry::instance().get<geniex::IEmbedding>(input->plugin_id);
         if (!backend) {
             GENIEX_LOG_ERROR("Failed to get backend for plugin: {}", input->plugin_id);
-            return ML_ERROR_COMMON_NOT_INITIALIZED;
+            return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
         }
 
         GENIEX_LOG_INFO("Backend retrieved successfully, calling create implementation");
         int32_t res = backend->create(input);
-        if (res != ML_SUCCESS) {
+        if (res != GENIEX_SUCCESS) {
             GENIEX_LOG_ERROR("Backend create failed with error code: {}", res);
             delete backend;
         } else {
@@ -34,13 +34,13 @@ int32_t geniex_embedder_create(const geniex_EmbedderCreateInput* input, geniex_E
         return res;
     } catch (const PluginNotFoundException& e) {
         GENIEX_LOG_ERROR("plugin not found");
-        return ML_ERROR_COMMON_PLUGIN_INVALID;
+        return GENIEX_ERROR_COMMON_PLUGIN_INVALID;
     } catch (const PluginLoadException& e) {
         GENIEX_LOG_ERROR("plugin load error");
-        return ML_ERROR_COMMON_PLUGIN_LOAD;
+        return GENIEX_ERROR_COMMON_PLUGIN_LOAD;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("Exception creating embedder: {}", e.what());
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 }
 
@@ -51,26 +51,27 @@ int32_t geniex_embedder_destroy(geniex_Embedder* h) {
         auto backend = reinterpret_cast<IEmbedding*>(h);
         if (!backend) {
             GENIEX_LOG_ERROR("Attempted to destroy null embedder handle");
-            return ML_ERROR_COMMON_NOT_INITIALIZED;
+            return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
         }
 
         GENIEX_LOG_INFO("Deleting embedder backend instance");
         delete backend;
         GENIEX_LOG_INFO("Embedder destroyed successfully");
-        return ML_SUCCESS;
+        return GENIEX_SUCCESS;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("Exception destroying embedder: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
 
-int32_t geniex_embedder_embed(geniex_Embedder* h, const geniex_EmbedderEmbedInput* input, geniex_EmbedderEmbedOutput* output) {
+int32_t geniex_embedder_embed(
+    geniex_Embedder* h, const geniex_EmbedderEmbedInput* input, geniex_EmbedderEmbedOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
         if (!input || !output) {
             GENIEX_LOG_ERROR("Invalid input or output parameters for embedding");
-            return ML_ERROR_COMMON_INVALID_INPUT;
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
 
         // --- API-level validation: which modalities are present? ---
@@ -81,19 +82,19 @@ int32_t geniex_embedder_embed(geniex_Embedder* h, const geniex_EmbedderEmbedInpu
 
         if (!has_text && !has_image && !has_video) {
             GENIEX_LOG_ERROR("Embedding input must provide at least one text/token, image, or video");
-            return ML_ERROR_COMMON_INVALID_INPUT;
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
 
         auto backend = reinterpret_cast<IEmbedding*>(h);
         if (!backend) {
             GENIEX_LOG_ERROR("Embedder backend is null");
-            return ML_ERROR_COMMON_NOT_INITIALIZED;
+            return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
         }
 
         GENIEX_LOG_INFO("Calling backend embed implementation");
         int32_t result = backend->embed(input, output);
 
-        if (result == ML_SUCCESS) {
+        if (result == GENIEX_SUCCESS) {
             GENIEX_LOG_INFO(
                 "Embedding operation completed successfully, generated {} embeddings", output->embedding_count);
         } else {
@@ -104,7 +105,7 @@ int32_t geniex_embedder_embed(geniex_Embedder* h, const geniex_EmbedderEmbedInpu
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("Exception in embedder embed: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
 
@@ -114,18 +115,18 @@ int32_t geniex_embedder_embedding_dim(const geniex_Embedder* h, geniex_EmbedderD
     try {
         if (!output) {
             GENIEX_LOG_ERROR("Invalid output parameter for embedding dimension");
-            return ML_ERROR_COMMON_INVALID_INPUT;
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
 
         auto backend = reinterpret_cast<IEmbedding*>(const_cast<geniex_Embedder*>(h));
         if (!backend) {
             GENIEX_LOG_ERROR("Embedder backend is null");
-            return ML_ERROR_COMMON_NOT_INITIALIZED;
+            return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
         }
 
         int32_t result = backend->embedding_dim(output);
 
-        if (result == ML_SUCCESS) {
+        if (result == GENIEX_SUCCESS) {
             GENIEX_LOG_INFO("Embedding dimension retrieved successfully: {}", output->dimension);
         } else {
             GENIEX_LOG_ERROR("Failed to get embedding dimension, error code: {}", result);
@@ -134,6 +135,6 @@ int32_t geniex_embedder_embedding_dim(const geniex_Embedder* h, geniex_EmbedderD
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("Exception getting embedding dimension: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }

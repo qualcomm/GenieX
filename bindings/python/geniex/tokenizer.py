@@ -54,7 +54,7 @@ class ModelTokenizer:
         """
         if tokenize:
             raise ValueError(
-                "tokenize=True is not supported by geniex — the C runtime decodes tokens internally. "
+                'tokenize=True is not supported by geniex — the C runtime decodes tokens internally. '
                 'Use tokenize=False and pass the returned string directly to model.generate().'
             )
 

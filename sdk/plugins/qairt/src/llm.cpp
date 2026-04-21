@@ -25,7 +25,7 @@ QairtLlm::~QairtLlm() = default;
 
 int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     if (!input || !input->model_name || !input->model_path) {
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     model_name_      = input->model_name;
@@ -36,7 +36,7 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     auto  it       = registry.find(model_name_);
     if (it == registry.end()) {
         GENIEX_LOG_ERROR("Unknown QAIRT model name: {}", model_name_);
-        return ML_ERROR_COMMON_MODEL_INVALID;
+        return GENIEX_ERROR_COMMON_MODEL_INVALID;
     }
 
     const auto& entry = it->second;
@@ -51,7 +51,7 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     auto bin_shards = qairt::runtime::collect_bin_files(model_dir);
     if (bin_shards.empty()) {
         GENIEX_LOG_ERROR("No .bin model shards found in: {}", model_dir.string());
-        return ML_ERROR_COMMON_FILE_NOT_FOUND;
+        return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
 
     GENIEX_LOG_DEBUG("Found {} model shards in {}", bin_shards.size(), model_dir.string());
@@ -68,7 +68,7 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     }
     if (model_cfg.tokenizer_path.empty()) {
         GENIEX_LOG_ERROR("tokenizer.json not found in: {}", model_dir.string());
-        return ML_ERROR_COMMON_FILE_NOT_FOUND;
+        return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
 
     // Embedding table (optional - AI Hub models do embedding on-device)
@@ -82,7 +82,7 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     auto pipe = entry.make_pipeline(runtime_cfg, model_cfg);
     if (!pipe) {
         GENIEX_LOG_ERROR("Failed to create QAIRT LLM pipeline for model: {}", model_name_);
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
     pipeline_ = std::make_unique<LLMPipeline>(std::move(*pipe));
 
@@ -92,34 +92,34 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     }
 
     GENIEX_LOG_DEBUG("QAIRT LLM created successfully: model={}", model_name_);
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t QairtLlm::reset() {
-    if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
+    if (!pipeline_) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     pipeline_->reset();
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t QairtLlm::save_kv_cache(const geniex_KvCacheSaveInput* input, geniex_KvCacheSaveOutput*) {
-    if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
-    if (!input || !input->path) return ML_ERROR_COMMON_INVALID_INPUT;
+    if (!pipeline_) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
+    if (!input || !input->path) return GENIEX_ERROR_COMMON_INVALID_INPUT;
     pipeline_->saveKVCache(input->path);
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t QairtLlm::load_kv_cache(const geniex_KvCacheLoadInput* input, geniex_KvCacheLoadOutput*) {
-    if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
-    if (!input || !input->path) return ML_ERROR_COMMON_INVALID_INPUT;
+    if (!pipeline_) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
+    if (!input || !input->path) return GENIEX_ERROR_COMMON_INVALID_INPUT;
     pipeline_->loadKVCache(input->path);
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t QairtLlm::apply_chat_template(
     const geniex_LlmApplyChatTemplateInput* input, geniex_LlmApplyChatTemplateOutput* output) {
-    if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
-    if (!input || !output) return ML_ERROR_COMMON_INVALID_INPUT;
-    if (!input->messages || input->message_count <= 0) return ML_ERROR_COMMON_INVALID_INPUT;
+    if (!pipeline_) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
+    if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    if (!input->messages || input->message_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
     // Extract the last user message
     const char* user_message = nullptr;
@@ -132,29 +132,29 @@ int32_t QairtLlm::apply_chat_template(
 
     if (!user_message) {
         GENIEX_LOG_ERROR("No user message found in chat messages");
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     bool        thinking  = input->enable_thinking || enable_thinking_;
     std::string formatted = pipeline_->applyChatTemplate(user_message, thinking);
 
     output->formatted_text = portable_strdup(formatted.c_str());
-    if (!output->formatted_text) return ML_ERROR_COMMON_MEMORY_ALLOCATION;
+    if (!output->formatted_text) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
 
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGenerateOutput* output) {
-    if (!pipeline_) return ML_ERROR_COMMON_NOT_INITIALIZED;
-    if (!input || !output) return ML_ERROR_COMMON_INVALID_INPUT;
+    if (!pipeline_) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
+    if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
     // Check for input_ids path (not supported in Phase 1)
     if (input->input_ids && input->input_ids_count > 0) {
         GENIEX_LOG_ERROR("QAIRT plugin does not support input_ids yet, use prompt_utf8");
-        return ML_ERROR_COMMON_NOT_SUPPORTED;
+        return GENIEX_ERROR_COMMON_NOT_SUPPORTED;
     }
 
-    if (!input->prompt_utf8) return ML_ERROR_COMMON_INVALID_INPUT;
+    if (!input->prompt_utf8) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
     // Map geniex_GenerationConfig -> geniex::GenerationConfig
     GenerationConfig gen_cfg{};
@@ -180,7 +180,7 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
     // Map result to output
     output->full_text = portable_strdup(result.full_text.c_str());
-    if (!output->full_text) return ML_ERROR_COMMON_MEMORY_ALLOCATION;
+    if (!output->full_text) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
 
     // Profile data (convert ms -> us)
     output->profile_data.ttft             = static_cast<int64_t>(result.ttft_ms * 1000.0);
@@ -205,7 +205,7 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     else
         output->profile_data.stop_reason = kStopEos;
 
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 }  // namespace geniex

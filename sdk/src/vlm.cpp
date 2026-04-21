@@ -2,8 +2,8 @@
 #include <memory>
 #include <string>
 
-#include "logging.h"
 #include "geniex.h"
+#include "logging.h"
 #include "plugin/IVlm.h"
 #include "profile.h"
 #include "registry.h"
@@ -16,10 +16,10 @@ int32_t geniex_vlm_create(const geniex_VlmCreateInput* input, geniex_VLM** out_h
 
     try {
         auto backend = geniex::Registry::instance().get<geniex::IVlm>(input->plugin_id);
-        if (!backend) return ML_ERROR_COMMON_NOT_SUPPORTED;
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_SUPPORTED;
 
         int32_t result = backend->create(input);
-        if (result != ML_SUCCESS) {
+        if (result != GENIEX_SUCCESS) {
             delete backend;
         } else {
             *out_handle = reinterpret_cast<geniex_VLM*>(backend);
@@ -27,13 +27,13 @@ int32_t geniex_vlm_create(const geniex_VlmCreateInput* input, geniex_VLM** out_h
         return result;
     } catch (const PluginNotFoundException& e) {
         GENIEX_LOG_ERROR("plugin not found");
-        return ML_ERROR_COMMON_PLUGIN_INVALID;
+        return GENIEX_ERROR_COMMON_PLUGIN_INVALID;
     } catch (const PluginLoadException& e) {
         GENIEX_LOG_ERROR("plugin load error");
-        return ML_ERROR_COMMON_PLUGIN_LOAD;
+        return GENIEX_ERROR_COMMON_PLUGIN_LOAD;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("failed to create VLM: {}", e.what());
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 }
 
@@ -42,12 +42,12 @@ int32_t geniex_vlm_destroy(geniex_VLM* handle) {
 
     try {
         auto backend = reinterpret_cast<IVlm*>(handle);
-        if (!backend) return ML_ERROR_COMMON_INVALID_INPUT;
+        if (!backend) return GENIEX_ERROR_COMMON_INVALID_INPUT;
         delete backend;
-        return ML_SUCCESS;
+        return GENIEX_SUCCESS;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("failed to destroy VLM: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
 
@@ -56,11 +56,11 @@ int32_t geniex_vlm_reset(geniex_VLM* handle) {
 
     try {
         auto backend = reinterpret_cast<IVlm*>(handle);
-        if (!backend) return ML_ERROR_COMMON_INVALID_INPUT;
+        if (!backend) return GENIEX_ERROR_COMMON_INVALID_INPUT;
         return backend->reset();
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("failed to reset VLM: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
 
@@ -70,24 +70,25 @@ int32_t geniex_vlm_apply_chat_template(
 
     try {
         auto backend = reinterpret_cast<IVlm*>(handle);
-        if (!backend) return ML_ERROR_COMMON_INVALID_INPUT;
+        if (!backend) return GENIEX_ERROR_COMMON_INVALID_INPUT;
         return backend->apply_chat_template(input, output);
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("failed to apply chat template to VLM: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
 
-int32_t geniex_vlm_generate(geniex_VLM* handle, const geniex_VlmGenerateInput* input, geniex_VlmGenerateOutput* output) {
+int32_t geniex_vlm_generate(
+    geniex_VLM* handle, const geniex_VlmGenerateInput* input, geniex_VlmGenerateOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
         auto backend = reinterpret_cast<IVlm*>(handle);
-        if (!backend) return ML_ERROR_COMMON_INVALID_INPUT;
+        if (!backend) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
         // Wrap the user's callback with UTF-8 validation if a callback is provided
         std::unique_ptr<Utf8CallbackWrapper> wrapper;
-        geniex_VlmGenerateInput                  modified_input;
+        geniex_VlmGenerateInput              modified_input;
 
         if (input->on_token) {
             // Create wrapper that accumulates incomplete UTF-8 sequences
@@ -117,6 +118,6 @@ int32_t geniex_vlm_generate(geniex_VLM* handle, const geniex_VlmGenerateInput* i
         }
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("failed to generate VLM: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }

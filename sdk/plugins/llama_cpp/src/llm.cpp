@@ -29,11 +29,11 @@ LlamaLlm::~LlamaLlm() {
 
 int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     if (!input) {
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     if (!input->model_path) {
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     auto mpar      = llama_model_default_params();
@@ -109,13 +109,13 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
             GENIEX_LOG_INFO("Using {} device(s): {}", devices.size(), input->device_id);
         } else {
             GENIEX_LOG_ERROR("No valid devices found in '{}'", input->device_id);
-            return ML_ERROR_COMMON_INVALID_INPUT;
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
     }
 
     this->model = llama_model_load_from_file(input->model_path, mpar);
     if (!this->model) {
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 
     auto config = input->config;
@@ -141,14 +141,14 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
 
     this->ctx = llama_init_from_model(this->model, cpar);
     if (!this->ctx) {
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 
     // Create and attach threadpools for better performance
     auto* cpu_dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
     if (!cpu_dev) {
         GENIEX_LOG_ERROR("No CPU backend found");
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 
     auto* reg = ggml_backend_dev_backend_reg(cpu_dev);
@@ -159,7 +159,7 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
 
     if (!ggml_threadpool_new_fn || !ggml_threadpool_free_fn) {
         GENIEX_LOG_ERROR("Failed to get threadpool functions");
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
     this->threadpool_free_fn = ggml_threadpool_free_fn;
 
@@ -172,7 +172,7 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
         this->threadpool_batch = ggml_threadpool_new_fn(&tpp_batch);
         if (!this->threadpool_batch) {
             GENIEX_LOG_ERROR("Batch threadpool create failed: n_threads {}", tpp_batch.n_threads);
-            return ML_ERROR_COMMON_MODEL_LOAD;
+            return GENIEX_ERROR_COMMON_MODEL_LOAD;
         }
         // Start the non-batch threadpool in the paused state
         tpp.paused = true;
@@ -182,7 +182,7 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     this->threadpool = ggml_threadpool_new_fn(&tpp);
     if (!this->threadpool) {
         GENIEX_LOG_ERROR("Threadpool create failed: n_threads {}", tpp.n_threads);
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 
     // Attach threadpools to context
@@ -209,7 +209,7 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     this->reset();
     this->reset_sampler();
 
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t LlamaLlm::reset() {
@@ -219,11 +219,11 @@ int32_t LlamaLlm::reset() {
 
     llama_memory_clear(llama_get_memory(this->ctx), /*clear data=*/true);
 
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t LlamaLlm::save_kv_cache(const geniex_KvCacheSaveInput* input, geniex_KvCacheSaveOutput* _) {
-    return llama_state_save_file(this->ctx, input->path, nullptr, 0) ? ML_SUCCESS : ML_ERROR_COMMON_UNKNOWN;
+    return llama_state_save_file(this->ctx, input->path, nullptr, 0) ? GENIEX_SUCCESS : GENIEX_ERROR_COMMON_UNKNOWN;
 }
 
 int32_t LlamaLlm::load_kv_cache(const geniex_KvCacheLoadInput* input, geniex_KvCacheLoadOutput* _) {
@@ -244,13 +244,13 @@ int32_t LlamaLlm::load_kv_cache(const geniex_KvCacheLoadInput* input, geniex_KvC
     this->n_past_global = 0;
     this->past_prompt_tokens.clear();
 
-    return ret ? ML_SUCCESS : ML_ERROR_COMMON_UNKNOWN;
+    return ret ? GENIEX_SUCCESS : GENIEX_ERROR_COMMON_UNKNOWN;
 }
 
 int32_t LlamaLlm::apply_chat_template(
     const geniex_LlmApplyChatTemplateInput* input, geniex_LlmApplyChatTemplateOutput* output) {
     if (!input || !input->messages || !output || input->message_count <= 0) {
-        return ML_ERROR_COMMON_INVALID_INPUT;  // error: invalid input
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;  // error: invalid input
     }
 
     // Convert geniex_ChatMessage to common_chat_msg
@@ -288,29 +288,29 @@ int32_t LlamaLlm::apply_chat_template(
     size_t len       = result.prompt.length();
     char*  formatted = (char*)malloc(len + 1);
     if (!formatted) {
-        return ML_ERROR_COMMON_MEMORY_ALLOCATION;  // error: memory allocation failed
+        return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;  // error: memory allocation failed
     }
 
     std::memcpy(formatted, result.prompt.c_str(), len);
     formatted[len] = '\0';
 
     output->formatted_text = formatted;
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGenerateOutput* output) {
     // Validate input
-    if (!input) return ML_ERROR_COMMON_INVALID_INPUT;
+    if (!input) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
     bool has_input_ids   = input->input_ids != nullptr && input->input_ids_count > 0;
     bool has_prompt_utf8 = input->prompt_utf8 != nullptr;
 
     if (!has_input_ids && !has_prompt_utf8)
-        return ML_ERROR_COMMON_INVALID_INPUT;  // error: neither input_ids nor
-                                               // prompt_utf8 provided
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;  // error: neither input_ids nor
+                                                   // prompt_utf8 provided
 
     geniex_GenerationConfig cfg = input->config ? *input->config : geniex_GenerationConfig{};
-    cfg.max_tokens          = cfg.max_tokens > 0 ? cfg.max_tokens : 128;
+    cfg.max_tokens              = cfg.max_tokens > 0 ? cfg.max_tokens : 128;
 
     // Initialzie resources
     this->set_sampler(cfg.sampler_config);
@@ -327,8 +327,8 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         for (int32_t i = 0; i < input->input_ids_count; i++) {
             if (input->input_ids[i] < 0 || input->input_ids[i] >= vocab_size) {
                 GENIEX_LOG_ERROR("token ID out of range: {}", input->input_ids[i]);
-                return ML_ERROR_COMMON_INVALID_INPUT;  // error: token ID out of
-                                                       // vocabulary range
+                return GENIEX_ERROR_COMMON_INVALID_INPUT;  // error: token ID out of
+                                                           // vocabulary range
             }
         }
 
@@ -351,7 +351,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
                 GENIEX_LOG_DEBUG("Prompt token IDs:\n{}", buffer.str());
             }
         } catch (const std::exception& e) {
-            return ML_ERROR_LLM_TOKENIZATION_FAILED;  // error: prompt encoding failed
+            return GENIEX_ERROR_LLM_TOKENIZATION_FAILED;  // error: prompt encoding failed
         }
     }
     int32_t prompt_len = static_cast<int32_t>(prompt_ids.size());
@@ -423,14 +423,14 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
             llama_batch batch = llama_batch_get_one(&embd[i], n_eval);
             if (llama_decode(this->ctx, batch) != 0) {
-                return ML_ERROR_LLM_GENERATION_FAILED;  // error: llama_decode failed
-                                                        // during token processing
+                return GENIEX_ERROR_LLM_GENERATION_FAILED;  // error: llama_decode failed
+                                                            // during token processing
             }
 
             n_past += n_eval;
         }
 
-        return ML_SUCCESS;
+        return GENIEX_SUCCESS;
     };
 
     // Process input (prefilling)
@@ -448,7 +448,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         embd.push_back(embd_inp[i]);
         if ((int)embd.size() >= n_batch || i == embd_inp.size() - 1) {
             int32_t res = process(embd);  // Enable detailed logging during prefilling
-            if (res != ML_SUCCESS) {
+            if (res != GENIEX_SUCCESS) {
                 return res;  // error during processing
             }
             embd.clear();
@@ -478,7 +478,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
         if (llama_vocab_is_eog(vocab, id)) {
             GENIEX_LOG_DEBUG("EOS token generated, stopping generation");
-            profiler.set_stop_reason(common::StopReason::ML_STOP_REASON_EOS);
+            profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_EOS);
             break;
         }
 
@@ -486,7 +486,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         char token_buf[64];
         // Use instance-level setting for special token output
         int n = llama_token_to_piece(vocab, id, token_buf, sizeof(token_buf) - 1, 0, this->allow_special_tokens);
-        if (n < 0) return ML_ERROR_LLM_GENERATION_FAILED;
+        if (n < 0) return GENIEX_ERROR_LLM_GENERATION_FAILED;
         token_buf[n] = '\0';
 
         // Check stop sequences
@@ -494,7 +494,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         for (int i = 0; i < cfg.stop_count; ++i) {
             if (cfg.stop[i] && strcmp(token_buf, cfg.stop[i]) == 0) {
                 GENIEX_LOG_DEBUG("Stop sequence matched: '{}'", cfg.stop[i]);
-                profiler.set_stop_reason(common::StopReason::ML_STOP_REASON_STOP_SEQUENCE);
+                profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_STOP_SEQUENCE);
                 stop_matched = true;
                 break;
             }
@@ -509,21 +509,21 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         // level)
         if (input->on_token && !input->on_token(token_buf, input->user_data)) {
             GENIEX_LOG_WARN("User callback requested stop during token generation");
-            profiler.set_stop_reason(common::StopReason::ML_STOP_REASON_USER);
+            profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_USER);
             break;
         }
         full_text << token_buf;
 
         std::vector<llama_token> embd(1, id);
         int32_t                  res = process(embd);
-        if (res != ML_SUCCESS) {
+        if (res != GENIEX_SUCCESS) {
             return res;  // error during processing
         }
     }
 
     // Set stop reason if not already set
     if ((int)generated_tokens.size() >= cfg.max_tokens) {
-        profiler.set_stop_reason(common::StopReason::ML_STOP_REASON_LENGTH);
+        profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_LENGTH);
     }
     profiler.decode_end();
     profiler.update_generated_tokens(generated_tokens.size());
@@ -534,7 +534,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     this->past_prompt_tokens.insert(this->past_prompt_tokens.end(), embd_inp.begin(), embd_inp.end());
     this->past_prompt_tokens.insert(this->past_prompt_tokens.end(), generated_tokens.begin(), generated_tokens.end());
 
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 }  // namespace geniex
 

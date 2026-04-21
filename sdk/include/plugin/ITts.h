@@ -12,7 +12,7 @@ class ITts {
     /**
      * @brief Create the TTS model with optional validation
      * @param input The creation input parameters
-     * @return ML error code (ML_SUCCESS on success, negative on failure)
+     * @return ML error code (GENIEX_SUCCESS on success, negative on failure)
      */
     virtual int32_t create(const geniex_TtsCreateInput* input) {
         // Check if this instance implements IValidatable
@@ -22,7 +22,7 @@ class ITts {
             if (validatable->is_validation_needed(input)) {
                 // Perform validation
                 int32_t validation_result = validatable->validate(input);
-                if (validation_result != ML_SUCCESS) {
+                if (validation_result != GENIEX_SUCCESS) {
                     return validation_result;
                 }
             }
@@ -34,13 +34,14 @@ class ITts {
 
     virtual int32_t synthesize(const geniex_TtsSynthesizeInput*, geniex_TtsSynthesizeOutput*) = 0;
 
-    virtual int32_t list_available_voices(const geniex_TtsListAvailableVoicesInput*, geniex_TtsListAvailableVoicesOutput*) = 0;
+    virtual int32_t list_available_voices(
+        const geniex_TtsListAvailableVoicesInput*, geniex_TtsListAvailableVoicesOutput*) = 0;
 
    protected:
     /**
      * @brief Pure virtual method for actual model creation implementation
      * @param input The creation input parameters
-     * @return ML error code (ML_SUCCESS on success, negative on failure)
+     * @return ML error code (GENIEX_SUCCESS on success, negative on failure)
      */
     virtual int32_t create_impl(const geniex_TtsCreateInput* input) = 0;
 };

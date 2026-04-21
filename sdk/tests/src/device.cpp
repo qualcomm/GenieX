@@ -1,6 +1,6 @@
 #include "doctest.h"
-#include "logging.h"
 #include "geniex.h"
+#include "logging.h"
 #include "util.h"
 
 Setup<int, int> setup_guard(SetupMap<int>{}, nullptr, nullptr, nullptr);
@@ -41,7 +41,8 @@ TEST_CASE("GetDeviceList") {
 //     CHECK_ML_ERROR(geniex_get_plugin_list(&plugin_output));
 //     GENIEX_LOG_INFO("Registered plugins: {}", plugin_output);
 //
-//     auto handle = dlopen("/home/remilia/Workspace/github/geniex-bridge/build/out/geniex_llama_cpp/libgeniex_plugin.so",
+//     auto handle =
+//     dlopen("/home/remilia/Workspace/github/geniex-bridge/build/out/geniex_llama_cpp/libgeniex_plugin.so",
 //         RTLD_NOW | RTLD_LOCAL);
 //     if (!handle) {
 //         throw std::runtime_error(std::string("dlopen failed: ") + dlerror());

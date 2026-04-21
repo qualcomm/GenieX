@@ -6,8 +6,8 @@
 
 #include "doctest.h"
 #include "external/json.hpp"
-#include "logging.h"
 #include "geniex.h"
+#include "logging.h"
 #include "utf8.h"  // IWYU pragma: export
 #include "util.h"
 
@@ -56,9 +56,17 @@ Setup<Param, geniex_VLM> setup_guard(
                     "modelfiles/qairt/Qwen3-VL-4B-Instruct-NPU/weights-1-4.nexa",
                     std::nullopt,
                     std::nullopt},
-                {"AutoNeural", "auto-neural", "modelfiles/qairt/AutoNeural/weights-1-3.nexa", std::nullopt, std::nullopt},
+                {"AutoNeural",
+                    "auto-neural",
+                    "modelfiles/qairt/AutoNeural/weights-1-3.nexa",
+                    std::nullopt,
+                    std::nullopt},
 #elif defined(__linux__)
-                {"AutoNeural", "auto-neural", "modelfiles/qairt/AutoNeural/weights-1-3.nexa", std::nullopt, std::nullopt},
+                {"AutoNeural",
+                    "auto-neural",
+                    "modelfiles/qairt/AutoNeural/weights-1-3.nexa",
+                    std::nullopt,
+                    std::nullopt},
 #endif
             }},
     },
@@ -82,7 +90,7 @@ Setup<Param, geniex_VLM> setup_guard(
         input.tokenizer_path   = tokenizer.has_value() ? tokenizer.value().c_str() : nullptr;
         input.config.n_seq_max = 64;
         input.plugin_id        = plugin;
-        input.config.n_ctx = 512;
+        input.config.n_ctx     = 512;
 
         int32_t res = geniex_vlm_create(&input, &vlm);
         CHECK_ML_ERROR(res);
@@ -220,22 +228,23 @@ void test_generate_multi_round(geniex_VLM* vlm, const std::string& model_name) {
 
     std::vector<geniex_VlmChatMessage> history;
     geniex_GenerationConfig            cfg{};
-    cfg.max_tokens                          = 512;
-    cfg.audio_paths                         = nullptr;
-    cfg.audio_count                         = 0;
+    cfg.max_tokens                              = 512;
+    cfg.audio_paths                             = nullptr;
+    cfg.audio_count                             = 0;
     static std::vector<geniex_Path> image_paths = {"modelfiles/assets/test_image.png"};
-    cfg.image_paths                         = image_paths.data();
-    cfg.image_count                         = image_paths.size();
-    cfg.image_max_length                    = 768;
+    cfg.image_paths                             = image_paths.data();
+    cfg.image_count                             = image_paths.size();
+    cfg.image_max_length                        = 768;
 
     for (size_t i = 0; i < user_rounds.size(); ++i) {
-        history.push_back(
-            {"user", const_cast<geniex_VlmContent*>(user_rounds[i].data()), static_cast<int64_t>(user_rounds[i].size())});
+        history.push_back({"user",
+            const_cast<geniex_VlmContent*>(user_rounds[i].data()),
+            static_cast<int64_t>(user_rounds[i].size())});
 
         geniex_VlmApplyChatTemplateInput input{
             const_cast<geniex_VlmChatMessage*>(history.data()), static_cast<int>(history.size()), nullptr, false};
         geniex_VlmApplyChatTemplateOutput template_result{};
-        int32_t                       res = geniex_vlm_apply_chat_template(vlm, &input, &template_result);
+        int32_t                           res = geniex_vlm_apply_chat_template(vlm, &input, &template_result);
         CHECK_ML_ERROR(res);
         REQUIRE(template_result.formatted_text != nullptr);
 

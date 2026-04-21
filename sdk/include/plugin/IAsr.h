@@ -12,7 +12,7 @@ class IAsr {
     /**
      * @brief Create the ASR model with optional validation
      * @param input The creation input parameters
-     * @return ML error code (ML_SUCCESS on success, negative on failure)
+     * @return ML error code (GENIEX_SUCCESS on success, negative on failure)
      */
     virtual int32_t create(const geniex_AsrCreateInput* input) {
         // Check if this instance implements IValidatable
@@ -22,7 +22,7 @@ class IAsr {
             if (validatable->is_validation_needed(input)) {
                 // Perform validation
                 int32_t validation_result = validatable->validate(input);
-                if (validation_result != ML_SUCCESS) {
+                if (validation_result != GENIEX_SUCCESS) {
                     return validation_result;
                 }
             }
@@ -39,22 +39,22 @@ class IAsr {
 
     // Streaming ASR interface - default implementations for optional streaming support
     virtual int32_t stream_begin(const geniex_AsrStreamBeginInput* input, geniex_AsrStreamBeginOutput* output) {
-        return ML_ERROR_COMMON_NOT_SUPPORTED;  // Default: streaming not supported
+        return GENIEX_ERROR_COMMON_NOT_SUPPORTED;  // Default: streaming not supported
     }
 
     virtual int32_t stream_push_audio(const geniex_AsrStreamPushAudioInput* input) {
-        return ML_ERROR_COMMON_NOT_SUPPORTED;  // Default: streaming not supported
+        return GENIEX_ERROR_COMMON_NOT_SUPPORTED;  // Default: streaming not supported
     }
 
     virtual int32_t stream_stop(const geniex_AsrStreamStopInput* input) {
-        return ML_ERROR_COMMON_NOT_SUPPORTED;  // Default: streaming not supported
+        return GENIEX_ERROR_COMMON_NOT_SUPPORTED;  // Default: streaming not supported
     }
 
    protected:
     /**
      * @brief Pure virtual method for actual model creation implementation
      * @param input The creation input parameters
-     * @return ML error code (ML_SUCCESS on success, negative on failure)
+     * @return ML error code (GENIEX_SUCCESS on success, negative on failure)
      */
     virtual int32_t create_impl(const geniex_AsrCreateInput* input) = 0;
 };

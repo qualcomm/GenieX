@@ -134,7 +134,7 @@ func (vcs vlmContents) toCPtr() (*C.geniex_VlmContent, C.int32_t) {
 	}
 
 	count := len(vcs)
-	raw := C.malloc(C.size_t(count * C.sizeof_ml_VlmContent))
+	raw := C.malloc(C.size_t(count * C.sizeof_geniex_VlmContent))
 	cContents := unsafe.Slice((*C.geniex_VlmContent)(raw), count)
 
 	for i, vc := range vcs {
@@ -192,7 +192,7 @@ func (vcms vlmChatMessages) toCPtr() (*C.geniex_VlmChatMessage, C.int32_t) {
 	}
 
 	count := len(vcms)
-	raw := C.malloc(C.size_t(count * C.sizeof_ml_VlmChatMessage))
+	raw := C.malloc(C.size_t(count * C.sizeof_geniex_VlmChatMessage))
 	cMessages := unsafe.Slice((*C.geniex_VlmChatMessage)(raw), count)
 
 	for i, vcm := range vcms {
@@ -403,7 +403,7 @@ func (v *VLM) Reset() error {
 	slog.Debug("Reset called", "ptr", v.ptr)
 
 	if v.ptr == nil {
-		return SDKError(C.ML_ERROR_COMMON_INVALID_INPUT)
+		return SDKError(C.GENIEX_ERROR_COMMON_INVALID_INPUT)
 	}
 
 	res := C.geniex_vlm_reset(v.ptr)

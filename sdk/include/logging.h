@@ -7,7 +7,7 @@
 #include "external/fmt/core.h"
 #include "geniex.h"
 
-ML_API extern geniex_log_callback geniex_log;
+GENIEX_API extern geniex_log_callback geniex_log;
 
 template <typename T>
 inline auto lp(T arg) {
@@ -58,16 +58,16 @@ inline void geniex_log_internal(geniex_LogLevel level, fmt::format_string<Args..
 #endif  // GENIEX_DEBUG
 
 #ifdef GENIEX_DEBUG
-#define GENIEX_LOG_TRACE(...) GENIEX_LEVEL_LOG(ML_LOG_LEVEL_TRACE, __VA_ARGS__)
-#define GENIEX_LOG_DEBUG(...) GENIEX_LEVEL_LOG(ML_LOG_LEVEL_DEBUG, __VA_ARGS__)
+#define GENIEX_LOG_TRACE(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_TRACE, __VA_ARGS__)
+#define GENIEX_LOG_DEBUG(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_DEBUG, __VA_ARGS__)
 #else  // GENIEX_DEBUG
 #define GENIEX_LOG_TRACE(...) ((void)0)
 #define GENIEX_LOG_DEBUG(...) ((void)0)
 #endif  // GENIEX_DEBUG
 
-#define GENIEX_LOG_INFO(...) GENIEX_LEVEL_LOG(ML_LOG_LEVEL_INFO, __VA_ARGS__)
-#define GENIEX_LOG_WARN(...) GENIEX_LEVEL_LOG(ML_LOG_LEVEL_WARN, __VA_ARGS__)
-#define GENIEX_LOG_ERROR(...) GENIEX_LEVEL_LOG(ML_LOG_LEVEL_ERROR, __VA_ARGS__)
+#define GENIEX_LOG_INFO(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_INFO, __VA_ARGS__)
+#define GENIEX_LOG_WARN(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_WARN, __VA_ARGS__)
+#define GENIEX_LOG_ERROR(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_ERROR, __VA_ARGS__)
 
 template <>
 struct fmt::formatter<geniex_LogLevel> {
@@ -76,19 +76,19 @@ struct fmt::formatter<geniex_LogLevel> {
     auto format(const geniex_LogLevel& p, fmt::format_context& ctx) const {
         const char* level_str = "";
         switch (p) {
-            case ML_LOG_LEVEL_TRACE:
+            case GENIEX_LOG_LEVEL_TRACE:
                 level_str = "TRACE";
                 break;
-            case ML_LOG_LEVEL_DEBUG:
+            case GENIEX_LOG_LEVEL_DEBUG:
                 level_str = "DEBUG";
                 break;
-            case ML_LOG_LEVEL_INFO:
+            case GENIEX_LOG_LEVEL_INFO:
                 level_str = "INFO";
                 break;
-            case ML_LOG_LEVEL_WARN:
+            case GENIEX_LOG_LEVEL_WARN:
                 level_str = "WARN";
                 break;
-            case ML_LOG_LEVEL_ERROR:
+            case GENIEX_LOG_LEVEL_ERROR:
                 level_str = "ERROR";
                 break;
             default:
@@ -668,16 +668,16 @@ struct fmt::formatter<geniex_CVCapabilities> {
     auto           format(const geniex_CVCapabilities& p, fmt::format_context& ctx) const {
         const char* capability_str = "";
         switch (p) {
-            case ML_CV_OCR:
+            case GENIEX_CV_OCR:
                 capability_str = "OCR";
                 break;
-            case ML_CV_CLASSIFICATION:
+            case GENIEX_CV_CLASSIFICATION:
                 capability_str = "CLASSIFICATION";
                 break;
-            case ML_CV_SEGMENTATION:
+            case GENIEX_CV_SEGMENTATION:
                 capability_str = "SEGMENTATION";
                 break;
-            case ML_CV_CUSTOM:
+            case GENIEX_CV_CUSTOM:
                 capability_str = "CUSTOM";
                 break;
             default:

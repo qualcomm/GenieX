@@ -217,7 +217,7 @@ func (lcm llmChatMessages) toCPtr() (*C.geniex_LlmChatMessage, C.int32_t) {
 	}
 
 	count := len(lcm)
-	raw := C.malloc(C.size_t(count * C.sizeof_ml_LlmChatMessage))
+	raw := C.malloc(C.size_t(count * C.sizeof_geniex_LlmChatMessage))
 	cMessages := unsafe.Slice((*C.geniex_LlmChatMessage)(raw), count)
 
 	for i, msg := range lcm {

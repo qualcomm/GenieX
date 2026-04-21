@@ -9,8 +9,8 @@
 #include "IReranker.h"
 #include "ITts.h"
 #include "IVlm.h"
-#include "logging.h"
 #include "geniex.h"
+#include "logging.h"
 
 namespace geniex {
 
@@ -20,12 +20,12 @@ class Plugin {
     virtual int32_t get_device_list(const geniex_GetDeviceListInput*, geniex_GetDeviceListOutput* output) {
         if (!output) {
             GENIEX_LOG_ERROR("output is nullptr");
-            return ML_ERROR_COMMON_INVALID_INPUT;
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
         output->device_ids   = nullptr;
         output->device_names = nullptr;
         output->device_count = 0;
-        return ML_SUCCESS;
+        return GENIEX_SUCCESS;
     }
     virtual ILlm*       create_llm() { return nullptr; }
     virtual IVlm*       create_vlm() { return nullptr; }

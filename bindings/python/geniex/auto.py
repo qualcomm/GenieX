@@ -27,9 +27,9 @@ from .geniex_sdk._api import (
     load_library,
 )
 from .geniex_sdk._types import (
-    ml_LlmCreateInput,
-    ml_ModelConfig,
-    ml_VlmCreateInput,
+    geniex_LlmCreateInput,
+    geniex_ModelConfig,
+    geniex_VlmCreateInput,
 )
 from .modeling import GeniexLLM, GeniexVLM
 
@@ -63,8 +63,7 @@ def _resolve_model_path(model_name_or_path: str, quant: str | None) -> str:
         # Prefer tokenizer.json as the anchor file; fall back to the first file.
         anchor = os.path.join(model_name_or_path, 'tokenizer.json')
         if not os.path.isfile(anchor):
-            entries = [e for e in os.listdir(model_name_or_path)
-                       if os.path.isfile(os.path.join(model_name_or_path, e))]
+            entries = [e for e in os.listdir(model_name_or_path) if os.path.isfile(os.path.join(model_name_or_path, e))]
             if not entries:
                 raise FileNotFoundError(f'No files found in model directory: {model_name_or_path}')
             anchor = os.path.join(model_name_or_path, entries[0])
@@ -77,8 +76,7 @@ def _resolve_model_path(model_name_or_path: str, quant: str | None) -> str:
         from huggingface_hub import snapshot_download
     except ImportError as exc:
         raise ImportError(
-            'huggingface_hub is required to download models. '
-            'Install it with: pip install huggingface_hub'
+            'huggingface_hub is required to download models. Install it with: pip install huggingface_hub'
         ) from exc
 
     kwargs: dict = {'repo_id': model_name_or_path}
@@ -88,8 +86,8 @@ def _resolve_model_path(model_name_or_path: str, quant: str | None) -> str:
     return snapshot_download(**kwargs)
 
 
-def _build_model_config(n_ctx: int, n_gpu_layers: int, **kwargs) -> ml_ModelConfig:
-    cfg = ml_ModelConfig(
+def _build_model_config(n_ctx: int, n_gpu_layers: int, **kwargs) -> geniex_ModelConfig:
+    cfg = geniex_ModelConfig(
         n_ctx=n_ctx,
         n_gpu_layers=n_gpu_layers,
     )
@@ -150,7 +148,7 @@ class AutoModelForCausalLM:
         model_path = _resolve_model_path(model_name_or_path, quant)
         config = _build_model_config(n_ctx, n_gpu_layers, **kwargs)
 
-        inp = ml_LlmCreateInput(
+        inp = geniex_LlmCreateInput(
             model_name=(model_name or model_name_or_path).encode(),
             model_path=model_path.encode(),
             config=config,
@@ -168,7 +166,7 @@ class AutoModelForCausalLM:
 
         handle = c_void_p()
         lib = load_library()
-        _check(lib.ml_llm_create(byref(inp), byref(handle)))
+        _check(lib.geniex_llm_create(byref(inp), byref(handle)))
         return GeniexLLM(handle)
 
 
@@ -213,7 +211,7 @@ class AutoModelForVision2Seq:
         model_path = _resolve_model_path(model_name_or_path, quant)
         config = _build_model_config(n_ctx, n_gpu_layers, **kwargs)
 
-        inp = ml_VlmCreateInput(
+        inp = geniex_VlmCreateInput(
             model_name=model_name_or_path.encode(),
             model_path=model_path.encode(),
             config=config,
@@ -233,5 +231,5 @@ class AutoModelForVision2Seq:
 
         handle = c_void_p()
         lib = load_library()
-        _check(lib.ml_vlm_create(byref(inp), byref(handle)))
+        _check(lib.geniex_vlm_create(byref(inp), byref(handle)))
         return GeniexVLM(handle)

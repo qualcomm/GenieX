@@ -19,8 +19,8 @@ import threading
 from ctypes import c_bool, c_void_p
 from typing import Callable, Iterator
 
-from ..geniex_sdk._types import ml_token_callback
-from .output import GenerateOutput, ProfileData
+from ..geniex_sdk._types import geniex_token_callback
+from .output import GenerateOutput
 
 _SENTINEL = object()
 
@@ -45,10 +45,10 @@ class TextIteratorStreamer:
     def output(self) -> GenerateOutput | None:
         return self._output
 
-    def _make_callback(self) -> ml_token_callback:
+    def _make_callback(self) -> geniex_token_callback:
         q = self._queue
 
-        @ml_token_callback
+        @geniex_token_callback
         def _cb(token_bytes: bytes, _userdata: c_void_p) -> c_bool:
             if token_bytes is not None:
                 q.put(token_bytes.decode('utf-8', errors='replace'))

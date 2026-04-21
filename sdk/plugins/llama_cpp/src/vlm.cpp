@@ -5,9 +5,9 @@
 
 #include "chat.h"
 #include "common.h"
+#include "geniex.h"
 #include "llama.h"
 #include "logging.h"
-#include "geniex.h"
 #include "mtmd-helper.h"
 #include "mtmd.h"
 #include "profiler.h"
@@ -27,7 +27,7 @@ LlamaVlm::~LlamaVlm() {
 
 int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
     if (!input || !input->model_path) {
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     llama_model_params mpar = llama_model_default_params();
@@ -39,7 +39,7 @@ int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
         if (!device) {
             // Device not found, log warning and continue with default device
             GENIEX_LOG_ERROR("Device '{}' not found", input->device_id);
-            return ML_ERROR_COMMON_INVALID_INPUT;
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
         } else {
             // Create a NULL-terminated array with the device
             static ggml_backend_dev_t device_array[2];
@@ -53,7 +53,7 @@ int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
     if (!this->model) {
         llama_model_free(this->model);
         this->model = nullptr;
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 
     llama_context_params cpar = llama_context_default_params();
@@ -64,7 +64,7 @@ int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
     if (!this->ctx) {
         llama_model_free(this->model);
         this->model = nullptr;
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 
     // Initialize vision context if mmproj_path provided
@@ -82,11 +82,11 @@ int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
 
     this->reset_sampler();
 
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t LlamaVlm::reset() {
-    if (!this->ctx) return ML_ERROR_COMMON_INVALID_INPUT;
+    if (!this->ctx) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
     // Clear memory keeping BOS token (like mtmd-cli.cpp does)
     llama_memory_seq_rm(llama_get_memory(this->ctx), 0, 1, -1);
@@ -97,13 +97,13 @@ int32_t LlamaVlm::reset() {
     this->n_past              = 1;
     this->global_n_past_chars = 0;
 
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t LlamaVlm::apply_chat_template(
     const geniex_VlmApplyChatTemplateInput* input, geniex_VlmApplyChatTemplateOutput* output) {
     if (!this->model || !input || !output || !input->messages || input->message_count <= 0)
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
     // Convert geniex_VlmChatMessage array to vector<common_chat_msg>
     std::vector<common_chat_msg> chat_messages;
@@ -115,10 +115,11 @@ int32_t LlamaVlm::apply_chat_template(
             GENIEX_LOG_DEBUG("failed to convert message {} (role={})",
                 i,
                 input->messages[i].role ? input->messages[i].role : "NULL");
-            return ML_ERROR_COMMON_INVALID_INPUT;
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
         chat_messages.push_back(msg);
-        GENIEX_LOG_DEBUG("converted message {} - role={}, content_length={}", i, msg.role.c_str(), msg.content.length());
+        GENIEX_LOG_DEBUG(
+            "converted message {} - role={}, content_length={}", i, msg.role.c_str(), msg.content.length());
     }
 
     common_chat_templates_inputs tmpl_inputs;
@@ -139,13 +140,13 @@ int32_t LlamaVlm::apply_chat_template(
 
     if (result.prompt.empty()) {
         GENIEX_LOG_ERROR("chat template application resulted in empty prompt");
-        return ML_ERROR_COMMON_FILE_NOT_FOUND;
+        return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
 
     // Allocate and copy result
     size_t prompt_length = result.prompt.length();
     char*  output_text   = (char*)malloc(prompt_length + 1);
-    if (!output_text) return ML_ERROR_COMMON_MEMORY_ALLOCATION;
+    if (!output_text) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
 
     memcpy(output_text, result.prompt.c_str(), prompt_length);
     output_text[prompt_length] = '\0';
@@ -155,12 +156,12 @@ int32_t LlamaVlm::apply_chat_template(
     GENIEX_LOG_DEBUG("successfully generated prompt with length={}", prompt_length);
     GENIEX_LOG_DEBUG("result text: {}", output_text);
 
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGenerateOutput* output) {
     if (!this->ctx || !input || !output || !input->prompt_utf8) {
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     common::Profiler profiler;
@@ -233,7 +234,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             text.parse_special = true;
 
             mtmd_input_chunks* chunks = mtmd_input_chunks_init();
-            if (!chunks) return ML_ERROR_COMMON_MEMORY_ALLOCATION;
+            if (!chunks) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
 
             int32_t res = mtmd_tokenize(this->ctx_vision, chunks, &text, (const mtmd_bitmap**)bitmaps.data(), n_media);
             if (res != 0) {
@@ -242,7 +243,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
                     if (bmp) mtmd_bitmap_free(bmp);
                 }
                 GENIEX_LOG_ERROR("mtmd_tokenize failed");
-                return ML_ERROR_VLM_GENERATION_FAILED;
+                return GENIEX_ERROR_VLM_GENERATION_FAILED;
             }
 
             GENIEX_LOG_DEBUG("mtmd_tokenize successful");
@@ -262,7 +263,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
                     &new_n_past)) {
                 mtmd_input_chunks_free(chunks);
                 GENIEX_LOG_ERROR("mtmd_helper_eval_chunks failed");
-                return ML_ERROR_VLM_GENERATION_FAILED;
+                return GENIEX_ERROR_VLM_GENERATION_FAILED;
             }
 
             GENIEX_LOG_DEBUG("mtmd_helper_eval_chunks successful, n_past: {} -> {}", this->n_past, new_n_past);
@@ -289,17 +290,17 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             int32_t needed = llama_tokenize(
                 vocab, new_text_portion.c_str(), (int32_t)new_text_portion.length(), nullptr, 0, true, true);
             if (needed < 0) needed = -needed;
-            if (needed == 0) return ML_ERROR_LLM_TOKENIZATION_FAILED;
+            if (needed == 0) return GENIEX_ERROR_LLM_TOKENIZATION_FAILED;
 
             // Allocate and tokenize
             int32_t* prompt_tokens = (int32_t*)malloc(sizeof(int32_t) * needed);
-            if (!prompt_tokens) return ML_ERROR_COMMON_MEMORY_ALLOCATION;
+            if (!prompt_tokens) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
 
             int32_t prompt_len = llama_tokenize(
                 vocab, new_text_portion.c_str(), (int32_t)new_text_portion.length(), prompt_tokens, needed, true, true);
             if (prompt_len < 0) {
                 free(prompt_tokens);
-                return ML_ERROR_LLM_TOKENIZATION_FAILED;
+                return GENIEX_ERROR_LLM_TOKENIZATION_FAILED;
             }
 
             GENIEX_LOG_DEBUG("_ml_vlm_generate_internal: Tokenized new text portion into {} tokens", prompt_len);
@@ -318,7 +319,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             if (llama_decode(this->ctx, batch) != 0) {
                 free(prompt_tokens);
                 GENIEX_LOG_ERROR("llama_decode failed");
-                return ML_ERROR_VLM_GENERATION_FAILED;
+                return GENIEX_ERROR_VLM_GENERATION_FAILED;
             }
             free(prompt_tokens);
             this->n_past += prompt_len;
@@ -349,7 +350,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
 
         if (llama_vocab_is_eog(vocab, token)) {
             GENIEX_LOG_DEBUG("reached end of generation token at step {}", i);
-            profiler.set_stop_reason(common::StopReason::ML_STOP_REASON_EOS);
+            profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_EOS);
             break;
         }
 
@@ -362,7 +363,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
         for (int i = 0; i < cfg.stop_count; ++i) {
             if (cfg.stop[i] && strcmp(token_buffer, cfg.stop[i]) == 0) {
                 GENIEX_LOG_DEBUG("Stop sequence matched: '{}'", cfg.stop[i]);
-                profiler.set_stop_reason(common::StopReason::ML_STOP_REASON_STOP_SEQUENCE);
+                profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_STOP_SEQUENCE);
                 stop_matched = true;
                 break;
             }
@@ -378,7 +379,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             if (!input->on_token(token_buffer, input->user_data)) {
                 GENIEX_LOG_DEBUG("generation stopped by callback or stop sequence at step {}", i);
                 GENIEX_LOG_WARN("User callback requested stop during token generation");
-                profiler.set_stop_reason(common::StopReason::ML_STOP_REASON_USER);
+                profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_USER);
                 break;
             }
         }
@@ -392,7 +393,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
 
     if (generated_token_count >= cfg.max_tokens) {
         GENIEX_LOG_DEBUG("reached max_tokens limit ({})", cfg.max_tokens);
-        profiler.set_stop_reason(common::StopReason::ML_STOP_REASON_LENGTH);
+        profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_LENGTH);
     }
 
     // Clean up batch
@@ -406,10 +407,10 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     // Generate output text
     if (generated_token_count == 0) {
         // output->full_text = (char*)malloc(1);
-        // if (!output->full_text) return ML_ERROR_COMMON_MEMORY_ALLOCATION;
+        // if (!output->full_text) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
         // output->full_text[0] = '\0';
         GENIEX_LOG_DEBUG("no tokens generated, returning empty string");
-        return ML_SUCCESS;
+        return GENIEX_SUCCESS;
     } else {
         auto full_text_str        = full_text.str();
         output->full_text         = strdup(full_text_str.c_str());
@@ -422,7 +423,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     }
 
     GENIEX_LOG_DEBUG("completed generation with {} tokens (no text output requested)", generated_token_count);
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 }  // namespace geniex

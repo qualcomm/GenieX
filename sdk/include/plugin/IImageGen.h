@@ -12,7 +12,7 @@ class IImageGen {
     /**
      * @brief Create the ImageGen model with optional validation
      * @param input The creation input parameters
-     * @return ML error code (ML_SUCCESS on success, negative on failure)
+     * @return ML error code (GENIEX_SUCCESS on success, negative on failure)
      */
     virtual int32_t create(const geniex_ImageGenCreateInput* input) {
         // Check if this instance implements IValidatable
@@ -22,7 +22,7 @@ class IImageGen {
             if (validatable->is_validation_needed(input)) {
                 // Perform validation
                 int32_t validation_result = validatable->validate(input);
-                if (validation_result != ML_SUCCESS) {
+                if (validation_result != GENIEX_SUCCESS) {
                     return validation_result;
                 }
             }
@@ -40,7 +40,7 @@ class IImageGen {
     /**
      * @brief Pure virtual method for actual model creation implementation
      * @param input The creation input parameters
-     * @return ML error code (ML_SUCCESS on success, negative on failure)
+     * @return ML error code (GENIEX_SUCCESS on success, negative on failure)
      */
     virtual int32_t create_impl(const geniex_ImageGenCreateInput* input) = 0;
 };

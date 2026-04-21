@@ -177,7 +177,7 @@ type SamplerConfig struct {
 
 func (sc SamplerConfig) toCPtr() *C.geniex_SamplerConfig {
 	// Allocate C structure
-	cPtr := (*C.geniex_SamplerConfig)(C.malloc(C.sizeof_ml_SamplerConfig))
+	cPtr := (*C.geniex_SamplerConfig)(C.malloc(C.sizeof_geniex_SamplerConfig))
 	*cPtr = C.geniex_SamplerConfig{}
 
 	cPtr.temperature = C.float(sc.Temperature)
@@ -224,7 +224,7 @@ type GenerationConfig struct {
 
 func (gc GenerationConfig) toCPtr() *C.geniex_GenerationConfig {
 	// Allocate C structure
-	cPtr := (*C.geniex_GenerationConfig)(C.malloc(C.sizeof_ml_GenerationConfig))
+	cPtr := (*C.geniex_GenerationConfig)(C.malloc(C.sizeof_geniex_GenerationConfig))
 	*cPtr = C.geniex_GenerationConfig{}
 
 	cPtr.max_tokens = C.int32_t(gc.MaxTokens)

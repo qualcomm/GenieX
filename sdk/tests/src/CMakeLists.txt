@@ -16,7 +16,7 @@ foreach(name ${SUITS})
         PRIVATE ../include)
     target_link_libraries(${target_name} PUBLIC geniex)
     target_compile_definitions(${target_name} PRIVATE DOCTEST_CONFIG_IMPLEMENT)
-    target_compile_definitions(${target_name} PRIVATE ML_SHARED)
+    target_compile_definitions(${target_name} PRIVATE GENIEX_SHARED)
 
     install(TARGETS ${target_name} RUNTIME DESTINATION bin)
 
@@ -40,7 +40,7 @@ foreach(name ${BRIDGE_SUITS})
         PRIVATE ../include)
     target_link_libraries(${target_name} PUBLIC geniex)
     target_compile_definitions(${target_name} PRIVATE DOCTEST_CONFIG_IMPLEMENT)
-    target_compile_definitions(${target_name} PRIVATE ML_SHARED)
+    target_compile_definitions(${target_name} PRIVATE GENIEX_SHARED)
 
     install(TARGETS ${target_name} RUNTIME DESTINATION bin)
 

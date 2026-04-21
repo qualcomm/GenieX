@@ -45,7 +45,7 @@ LlamaCppEmbedding::~LlamaCppEmbedding() {
 int32_t LlamaCppEmbedding::create_impl(const geniex_EmbedderCreateInput* input) {
     if (!input || !input->model_path) {
         GENIEX_LOG_ERROR("Invalid input parameters for embedder creation");
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     GENIEX_LOG_INFO("Creating embedder with model: {}", input->model_path);
@@ -66,7 +66,7 @@ int32_t LlamaCppEmbedding::create_impl(const geniex_EmbedderCreateInput* input) 
         if (!device) {
             // Device not found, log warning and continue with default device
             GENIEX_LOG_ERROR("Device '{}' not found", input->device_id);
-            return ML_ERROR_COMMON_INVALID_INPUT;
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
         } else {
             // Create a NULL-terminated array with the device
             static ggml_backend_dev_t device_array[2];
@@ -81,7 +81,7 @@ int32_t LlamaCppEmbedding::create_impl(const geniex_EmbedderCreateInput* input) 
     state_->model = llama_model_load_from_file(input->model_path, mparams);
     if (!state_->model) {
         GENIEX_LOG_ERROR("Failed to load model from: {}", input->model_path);
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
     GENIEX_LOG_INFO("Model loaded successfully from: {}", input->model_path);
 
@@ -117,27 +117,27 @@ int32_t LlamaCppEmbedding::create_impl(const geniex_EmbedderCreateInput* input) 
         GENIEX_LOG_ERROR("Failed to create llama context");
         llama_model_free(state_->model);
         state_->model = nullptr;
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
     GENIEX_LOG_INFO("Llama context created successfully");
 
     state_->initialized = true;
 
     GENIEX_LOG_INFO("Embedder created successfully with dimension: {}", state_->n_embd);
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t LlamaCppEmbedding::embed(const geniex_EmbedderEmbedInput* input, geniex_EmbedderEmbedOutput* output) {
     if (!input || !output) {
         GENIEX_LOG_ERROR("Invalid input parameters for embedding");
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     // This backend only supports text embeddings, reject image inputs
     const bool has_image = input->image_paths && input->image_count > 0;
     if (has_image) {
         GENIEX_LOG_ERROR("Image embedding requested, but llama_cpp backend only supports text embeddings");
-        return ML_ERROR_COMMON_NOT_SUPPORTED;
+        return GENIEX_ERROR_COMMON_NOT_SUPPORTED;
     }
 
     // Validate that either texts or input_ids_2d is provided
@@ -146,12 +146,12 @@ int32_t LlamaCppEmbedding::embed(const geniex_EmbedderEmbedInput* input, geniex_
 
     if (!has_texts && !has_input_ids) {
         GENIEX_LOG_ERROR("Either texts or input_ids_2d must be provided");
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     if (!state_ || !state_->initialized) {
         GENIEX_LOG_ERROR("Embedder not initialized");
-        return ML_ERROR_COMMON_NOT_INITIALIZED;
+        return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     }
 
     common::Profiler profiler;
@@ -187,8 +187,9 @@ int32_t LlamaCppEmbedding::embed(const geniex_EmbedderEmbedInput* input, geniex_
             }
 
             if (row_length > state_->n_batch) {
-                GENIEX_LOG_ERROR("Token sequence {} length {} exceeds max batch size {}", i, row_length, state_->n_batch);
-                return ML_ERROR_EMBEDDING_GENERATION;
+                GENIEX_LOG_ERROR(
+                    "Token sequence {} length {} exceeds max batch size {}", i, row_length, state_->n_batch);
+                return GENIEX_ERROR_EMBEDDING_GENERATION;
             }
 
             const int32_t* row_data = input->input_ids_2d[i];
@@ -214,7 +215,7 @@ int32_t LlamaCppEmbedding::embed(const geniex_EmbedderEmbedInput* input, geniex_
 
             if (n_tokens <= 0 || n_tokens > state_->n_batch) {
                 GENIEX_LOG_ERROR("Invalid token count {} for text {} (max batch: {})", n_tokens, i, state_->n_batch);
-                return ML_ERROR_EMBEDDING_GENERATION;
+                return GENIEX_ERROR_EMBEDDING_GENERATION;
             }
 
             std::vector<llama_token> tokens(n_tokens);
@@ -225,7 +226,7 @@ int32_t LlamaCppEmbedding::embed(const geniex_EmbedderEmbedInput* input, geniex_
 
     if (token_sequences.empty()) {
         GENIEX_LOG_ERROR("No valid texts to process");
-        return ML_ERROR_EMBEDDING_GENERATION;
+        return GENIEX_ERROR_EMBEDDING_GENERATION;
     }
 
     const size_t n_sequences = token_sequences.size();
@@ -239,7 +240,7 @@ int32_t LlamaCppEmbedding::embed(const geniex_EmbedderEmbedInput* input, geniex_
     float* embeddings = static_cast<float*>(std::malloc(memory_size));
     if (!embeddings) {
         GENIEX_LOG_ERROR("Failed to allocate memory for embeddings: {} bytes", memory_size);
-        return ML_ERROR_COMMON_MEMORY_ALLOCATION;
+        return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
     }
     GENIEX_LOG_INFO("Memory allocation successful for embeddings");
 
@@ -273,7 +274,7 @@ int32_t LlamaCppEmbedding::embed(const geniex_EmbedderEmbedInput* input, geniex_
             GENIEX_LOG_ERROR("Failed to process batch");
             llama_batch_free(batch);
             std::free(embeddings);
-            return ML_ERROR_EMBEDDING_GENERATION;
+            return GENIEX_ERROR_EMBEDDING_GENERATION;
         }
         // Record TTFT on first batch processing (for embedding, this is the first batch completion)
         if (processed == 0) {
@@ -288,7 +289,7 @@ int32_t LlamaCppEmbedding::embed(const geniex_EmbedderEmbedInput* input, geniex_
     profiler.prompt_end();
     profiler.update_prompt_tokens(total_tokens);
     profiler.update_generated_tokens(0);  // Not applicable for embeddings
-    profiler.set_stop_reason(common::StopReason::ML_STOP_REASON_COMPLETED);
+    profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_COMPLETED);
 
     // Set output
     output->embeddings      = embeddings;
@@ -299,21 +300,21 @@ int32_t LlamaCppEmbedding::embed(const geniex_EmbedderEmbedInput* input, geniex_
         n_sequences,
         state_->n_embd,
         total_tokens);
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t LlamaCppEmbedding::embedding_dim(geniex_EmbedderDimOutput* output) {
     if (!output) {
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     if (!state_ || !state_->initialized) {
-        return ML_ERROR_COMMON_NOT_INITIALIZED;
+        return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     }
 
     GENIEX_LOG_TRACE("embedder embedding dim: {}", state_->n_embd);
     output->dimension = state_->n_embd;
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 void LlamaCppEmbedding::normalize_embeddings(const float* inp, float* out, int n, const char* method) {

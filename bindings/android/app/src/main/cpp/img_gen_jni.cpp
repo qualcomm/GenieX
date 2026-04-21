@@ -12,9 +12,9 @@
 #include <unordered_map>
 
 #include "android_utils.h"
+#include "geniex.h"
 #include "jni_cb.h"
 #include "jniutils.h"
-#include "geniex.h"
 
 static std::unordered_map<void *, std::atomic<bool> *> g_stopFlags;
 static std::mutex                                      g_stopFlagsMutex;
@@ -262,8 +262,8 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_ImgGen_create(
     JNIEnv *env, jobject thiz, jobject image_gen_create_input) {
     geniex_ImageGenCreateInput input = extract_image_gen_create_input(env, image_gen_create_input);
     geniex_ImageGen           *handle;
-    int32_t                result = geniex_imagegen_create(&input, &handle);
-    if (result != ML_SUCCESS || !handle) {
+    int32_t                    result = geniex_imagegen_create(&input, &handle);
+    if (result != GENIEX_SUCCESS || !handle) {
         LOGe("[JNI] geniex_img_gen_create failed, error code: %d", result);
         throw_runtime_exception(env, "geniex_img_gen_create failed, error code: %d", result);
         return 0;
@@ -277,12 +277,12 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_ImgGen_txt2Img(
     geniex_ImageGenerationConfig config;
     geniex_ImageGenTxt2ImgInput  input  = extract_image_gen_txt_2_img_input(env, image_gen_txt2_img_input, &config);
     geniex_ImageGenOutput        output = {};
-    int32_t                  result = geniex_imagegen_txt2img(reinterpret_cast<geniex_ImageGen *>(handle), &input, &output);
-    if (result != ML_SUCCESS) {
+    int32_t result = geniex_imagegen_txt2img(reinterpret_cast<geniex_ImageGen *>(handle), &input, &output);
+    if (result != GENIEX_SUCCESS) {
         LOGe("[JNI] txt2Img failed, error code: %d", result);
         return result;
     }
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_ImgGen_destroy(JNIEnv *env, jobject thiz, jlong handle) {
@@ -294,10 +294,10 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_ImgGen_img2Img(
     geniex_ImageGenerationConfig config;
     geniex_ImageGenImg2ImgInput  input  = extract_image_gen_img_2_img_input(env, image_gen_img2_img_input, &config);
     geniex_ImageGenOutput        output = {};
-    int32_t                  result = geniex_imagegen_img2img(reinterpret_cast<geniex_ImageGen *>(handle), &input, &output);
-    if (result != ML_SUCCESS) {
+    int32_t result = geniex_imagegen_img2img(reinterpret_cast<geniex_ImageGen *>(handle), &input, &output);
+    if (result != GENIEX_SUCCESS) {
         LOGe("[JNI] img2Img failed, error code: %d", result);
         return result;
     }
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }

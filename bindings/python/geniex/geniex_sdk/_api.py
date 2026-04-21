@@ -18,23 +18,23 @@ from ctypes import POINTER, byref, c_char_p, c_int32, c_void_p
 
 from ._lib import load_library
 from ._types import (
-    ml_GetDeviceListInput,
-    ml_GetDeviceListOutput,
-    ml_GetPluginListOutput,
-    ml_KvCacheLoadInput,
-    ml_KvCacheLoadOutput,
-    ml_KvCacheSaveInput,
-    ml_KvCacheSaveOutput,
-    ml_LlmApplyChatTemplateInput,
-    ml_LlmApplyChatTemplateOutput,
-    ml_LlmCreateInput,
-    ml_LlmGenerateInput,
-    ml_LlmGenerateOutput,
-    ml_VlmApplyChatTemplateInput,
-    ml_VlmApplyChatTemplateOutput,
-    ml_VlmCreateInput,
-    ml_VlmGenerateInput,
-    ml_VlmGenerateOutput,
+    geniex_GetDeviceListInput,
+    geniex_GetDeviceListOutput,
+    geniex_GetPluginListOutput,
+    geniex_KvCacheLoadInput,
+    geniex_KvCacheLoadOutput,
+    geniex_KvCacheSaveInput,
+    geniex_KvCacheSaveOutput,
+    geniex_LlmApplyChatTemplateInput,
+    geniex_LlmApplyChatTemplateOutput,
+    geniex_LlmCreateInput,
+    geniex_LlmGenerateInput,
+    geniex_LlmGenerateOutput,
+    geniex_VlmApplyChatTemplateInput,
+    geniex_VlmApplyChatTemplateOutput,
+    geniex_VlmCreateInput,
+    geniex_VlmGenerateInput,
+    geniex_VlmGenerateOutput,
 )
 
 # ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ class GeniexError(Exception):
 def _check(code: int) -> None:
     if code < 0:
         lib = load_library()
-        msg_bytes = lib.ml_get_error_message(c_int32(code))
+        msg_bytes = lib.geniex_get_error_message(c_int32(code))
         msg = msg_bytes.decode() if msg_bytes else 'unknown error'
         raise GeniexError(code, msg)
 
@@ -64,72 +64,80 @@ def _check(code: int) -> None:
 def _bind_all() -> None:
     lib = load_library()
 
-    lib.ml_get_error_message.argtypes = [c_int32]
-    lib.ml_get_error_message.restype = c_char_p
+    lib.geniex_get_error_message.argtypes = [c_int32]
+    lib.geniex_get_error_message.restype = c_char_p
 
-    lib.ml_init.argtypes = []
-    lib.ml_init.restype = c_int32
+    lib.geniex_init.argtypes = []
+    lib.geniex_init.restype = c_int32
 
-    lib.ml_deinit.argtypes = []
-    lib.ml_deinit.restype = c_int32
+    lib.geniex_deinit.argtypes = []
+    lib.geniex_deinit.restype = c_int32
 
-    lib.ml_free.argtypes = [c_void_p]
-    lib.ml_free.restype = None
+    lib.geniex_free.argtypes = [c_void_p]
+    lib.geniex_free.restype = None
 
-    lib.ml_version.argtypes = []
-    lib.ml_version.restype = c_char_p
+    lib.geniex_version.argtypes = []
+    lib.geniex_version.restype = c_char_p
 
-    lib.ml_get_plugin_list.argtypes = [POINTER(ml_GetPluginListOutput)]
-    lib.ml_get_plugin_list.restype = c_int32
+    lib.geniex_get_plugin_list.argtypes = [POINTER(geniex_GetPluginListOutput)]
+    lib.geniex_get_plugin_list.restype = c_int32
 
-    lib.ml_get_device_list.argtypes = [POINTER(ml_GetDeviceListInput), POINTER(ml_GetDeviceListOutput)]
-    lib.ml_get_device_list.restype = c_int32
+    lib.geniex_get_device_list.argtypes = [POINTER(geniex_GetDeviceListInput), POINTER(geniex_GetDeviceListOutput)]
+    lib.geniex_get_device_list.restype = c_int32
 
     # LLM
-    lib.ml_llm_create.argtypes = [POINTER(ml_LlmCreateInput), POINTER(c_void_p)]
-    lib.ml_llm_create.restype = c_int32
+    lib.geniex_llm_create.argtypes = [POINTER(geniex_LlmCreateInput), POINTER(c_void_p)]
+    lib.geniex_llm_create.restype = c_int32
 
-    lib.ml_llm_destroy.argtypes = [c_void_p]
-    lib.ml_llm_destroy.restype = c_int32
+    lib.geniex_llm_destroy.argtypes = [c_void_p]
+    lib.geniex_llm_destroy.restype = c_int32
 
-    lib.ml_llm_reset.argtypes = [c_void_p]
-    lib.ml_llm_reset.restype = c_int32
+    lib.geniex_llm_reset.argtypes = [c_void_p]
+    lib.geniex_llm_reset.restype = c_int32
 
-    lib.ml_llm_generate.argtypes = [c_void_p, POINTER(ml_LlmGenerateInput), POINTER(ml_LlmGenerateOutput)]
-    lib.ml_llm_generate.restype = c_int32
+    lib.geniex_llm_generate.argtypes = [c_void_p, POINTER(geniex_LlmGenerateInput), POINTER(geniex_LlmGenerateOutput)]
+    lib.geniex_llm_generate.restype = c_int32
 
-    lib.ml_llm_apply_chat_template.argtypes = [
+    lib.geniex_llm_apply_chat_template.argtypes = [
         c_void_p,
-        POINTER(ml_LlmApplyChatTemplateInput),
-        POINTER(ml_LlmApplyChatTemplateOutput),
+        POINTER(geniex_LlmApplyChatTemplateInput),
+        POINTER(geniex_LlmApplyChatTemplateOutput),
     ]
-    lib.ml_llm_apply_chat_template.restype = c_int32
+    lib.geniex_llm_apply_chat_template.restype = c_int32
 
-    lib.ml_llm_save_kv_cache.argtypes = [c_void_p, POINTER(ml_KvCacheSaveInput), POINTER(ml_KvCacheSaveOutput)]
-    lib.ml_llm_save_kv_cache.restype = c_int32
+    lib.geniex_llm_save_kv_cache.argtypes = [
+        c_void_p,
+        POINTER(geniex_KvCacheSaveInput),
+        POINTER(geniex_KvCacheSaveOutput),
+    ]
+    lib.geniex_llm_save_kv_cache.restype = c_int32
 
-    lib.ml_llm_load_kv_cache.argtypes = [c_void_p, POINTER(ml_KvCacheLoadInput), POINTER(ml_KvCacheLoadOutput)]
-    lib.ml_llm_load_kv_cache.restype = c_int32
+    lib.geniex_llm_load_kv_cache.argtypes = [
+        c_void_p,
+        POINTER(geniex_KvCacheLoadInput),
+        POINTER(geniex_KvCacheLoadOutput),
+    ]
+    lib.geniex_llm_load_kv_cache.restype = c_int32
 
     # VLM
-    lib.ml_vlm_create.argtypes = [POINTER(ml_VlmCreateInput), POINTER(c_void_p)]
-    lib.ml_vlm_create.restype = c_int32
+    lib.geniex_vlm_create.argtypes = [POINTER(geniex_VlmCreateInput), POINTER(c_void_p)]
+    lib.geniex_vlm_create.restype = c_int32
 
-    lib.ml_vlm_destroy.argtypes = [c_void_p]
-    lib.ml_vlm_destroy.restype = c_int32
+    lib.geniex_vlm_destroy.argtypes = [c_void_p]
+    lib.geniex_vlm_destroy.restype = c_int32
 
-    lib.ml_vlm_reset.argtypes = [c_void_p]
-    lib.ml_vlm_reset.restype = c_int32
+    lib.geniex_vlm_reset.argtypes = [c_void_p]
+    lib.geniex_vlm_reset.restype = c_int32
 
-    lib.ml_vlm_generate.argtypes = [c_void_p, POINTER(ml_VlmGenerateInput), POINTER(ml_VlmGenerateOutput)]
-    lib.ml_vlm_generate.restype = c_int32
+    lib.geniex_vlm_generate.argtypes = [c_void_p, POINTER(geniex_VlmGenerateInput), POINTER(geniex_VlmGenerateOutput)]
+    lib.geniex_vlm_generate.restype = c_int32
 
-    lib.ml_vlm_apply_chat_template.argtypes = [
+    lib.geniex_vlm_apply_chat_template.argtypes = [
         c_void_p,
-        POINTER(ml_VlmApplyChatTemplateInput),
-        POINTER(ml_VlmApplyChatTemplateOutput),
+        POINTER(geniex_VlmApplyChatTemplateInput),
+        POINTER(geniex_VlmApplyChatTemplateOutput),
     ]
-    lib.ml_vlm_apply_chat_template.restype = c_int32
+    lib.geniex_vlm_apply_chat_template.restype = c_int32
 
 
 _bound = False
@@ -155,7 +163,7 @@ def init() -> None:
         return
     _ensure_bound()
     lib = load_library()
-    _check(lib.ml_init())
+    _check(lib.geniex_init())
     _initialized = True
 
 
@@ -164,7 +172,7 @@ def deinit() -> None:
     if not _initialized:
         return
     lib = load_library()
-    lib.ml_deinit()
+    lib.geniex_deinit()
     _initialized = False
 
 
@@ -184,7 +192,6 @@ def _encode(s: str | None) -> bytes | None:
 
 def _str_list_to_c(strings: list[str]):
     """Return (array, count) of c_char_p array allocated from Python bytes."""
-    from ctypes import cast, create_string_buffer
 
     count = len(strings)
     if count == 0:
@@ -202,29 +209,29 @@ def _str_list_to_c(strings: list[str]):
 def get_plugin_list() -> list[str]:
     _ensure_bound()
     lib = load_library()
-    out = ml_GetPluginListOutput()
-    _check(lib.ml_get_plugin_list(byref(out)))
+    out = geniex_GetPluginListOutput()
+    _check(lib.geniex_get_plugin_list(byref(out)))
     result = [out.plugin_ids[i].decode() for i in range(out.plugin_count)]
     if out.plugin_ids:
-        lib.ml_free(out.plugin_ids)
+        lib.geniex_free(out.plugin_ids)
     return result
 
 
 def get_device_list(plugin_id: str) -> list[tuple[str, str]]:
     _ensure_bound()
     lib = load_library()
-    inp = ml_GetDeviceListInput(plugin_id=plugin_id.encode())
-    out = ml_GetDeviceListOutput()
-    _check(lib.ml_get_device_list(byref(inp), byref(out)))
+    inp = geniex_GetDeviceListInput(plugin_id=plugin_id.encode())
+    out = geniex_GetDeviceListOutput()
+    _check(lib.geniex_get_device_list(byref(inp), byref(out)))
     result = [(out.device_ids[i].decode(), out.device_names[i].decode()) for i in range(out.device_count)]
     if out.device_ids:
-        lib.ml_free(out.device_ids)
+        lib.geniex_free(out.device_ids)
     if out.device_names:
-        lib.ml_free(out.device_names)
+        lib.geniex_free(out.device_names)
     return result
 
 
 def version() -> str:
     _ensure_bound()
     lib = load_library()
-    return lib.ml_version().decode()
+    return lib.geniex_version().decode()

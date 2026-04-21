@@ -13,9 +13,9 @@
 #include <vector>
 
 #include "android_utils.h"
+#include "geniex.h"
 #include "jni_cb.h"
 #include "jniutils.h"
-#include "geniex.h"
 
 using namespace jniutils;
 
@@ -47,7 +47,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Llm_create(
 
         int32_t result = geniex_llm_create(&create_input, &handle);
 
-        if (result != ML_SUCCESS || !handle) {
+        if (result != GENIEX_SUCCESS || !handle) {
             LOGe("[JNI] create() failed, error code: %d", result);
             throw_runtime_exception(env, "Llm create failed, error code: %d", result);
             return 0;
@@ -66,7 +66,7 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Llm_destroy(JNIEnv*, j
     LOGd("[JNI] destroy() called, handle=%p", (void*)handle);
     if (handle) {
         int32_t result = geniex_llm_destroy((geniex_LLM*)handle);
-        if (result != ML_SUCCESS) {
+        if (result != GENIEX_SUCCESS) {
             LOGe("[JNI] destroy() failed, error code: %d", result);
         }
         return result;
@@ -89,13 +89,13 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Llm_generate(
             stop_flag      = g_stopFlags[h];
         }
 
-        std::string         cprompt = jstring2str(env, prompt);
+        std::string             cprompt = jstring2str(env, prompt);
         geniex_GenerationConfig cfg     = extract_generation_config(env, configObj);
 
         geniex_LlmGenerateInput  input  = {};
         geniex_LlmGenerateOutput output = {};
-        input.prompt_utf8           = cprompt.c_str();
-        input.config                = &cfg;
+        input.prompt_utf8               = cprompt.c_str();
+        input.config                    = &cfg;
 
         JavaCallbackCtx cbCtx{};
         if (callback) {
@@ -187,10 +187,10 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Llm_applyChatTempla
     }
 
     geniex_LlmApplyChatTemplateInput  input{.messages = msgs.data(),
-         .message_count                           = static_cast<int32_t>(msgs.size()),
-         .tools                                   = tools_cstr,
-         .enable_thinking                         = (jEnableThinking == JNI_TRUE),
-         .add_generation_prompt                   = (jAddGenerationPrompt == JNI_TRUE)};
+         .message_count                               = static_cast<int32_t>(msgs.size()),
+         .tools                                       = tools_cstr,
+         .enable_thinking                             = (jEnableThinking == JNI_TRUE),
+         .add_generation_prompt                       = (jAddGenerationPrompt == JNI_TRUE)};
     geniex_LlmApplyChatTemplateOutput output{};
 
     int32_t ret = geniex_llm_apply_chat_template(reinterpret_cast<geniex_LLM*>(handle), &input, &output);

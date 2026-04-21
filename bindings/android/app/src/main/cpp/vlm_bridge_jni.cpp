@@ -9,9 +9,9 @@
 #include <unordered_map>
 
 #include "android_utils.h"
+#include "geniex.h"
 #include "jni_cb.h"
 #include "jniutils.h"
-#include "geniex.h"
 
 static std::unordered_map<void*, std::atomic<bool>*> g_stopFlags;
 static std::mutex                                    g_stopFlagsMutex;
@@ -27,9 +27,9 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Vlm_create(JNIEnv* en
         LOGi("[JNI] [create] model_name = %s", create_input.model_name ? create_input.model_name : "(null)");
         LOGi("[JNI] [create] plugin_id = %s", create_input.plugin_id ? create_input.plugin_id : "(null)");
         geniex_VLM* handle = nullptr;
-        int32_t result = geniex_vlm_create(&create_input, &handle);
+        int32_t     result = geniex_vlm_create(&create_input, &handle);
 
-        if (result != ML_SUCCESS || !handle) {
+        if (result != GENIEX_SUCCESS || !handle) {
             LOGe("[JNI] create() failed, error code: %d", result);
             throw_runtime_exception(env, "Model create() failed, error code: %d", result);
             return 0;
@@ -49,7 +49,7 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Vlm_destroy(JNIEnv*, j
     LOGd("[JNI] destroy() called, handle=%p", (void*)handle);
     if (handle) {
         int32_t result = geniex_vlm_destroy(reinterpret_cast<geniex_VLM*>(handle));
-        if (result != ML_SUCCESS) {
+        if (result != GENIEX_SUCCESS) {
             LOGe("[JNI] destroy() failed, error code: %d", result);
         }
         return result;
@@ -62,10 +62,10 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Vlm_reset(JNIEnv* env,
     LOGd("[JNI] reset() called, handle=%p", (void*)handle);
     if (!handle) {
         throw_runtime_exception(env, "VLM reset failed: invalid handle");
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
     int32_t result = geniex_vlm_reset(reinterpret_cast<geniex_VLM*>(handle));
-    if (result != ML_SUCCESS) {
+    if (result != GENIEX_SUCCESS) {
         LOGe("[JNI] reset() failed, error code: %d", result);
     }
     return result;
@@ -115,13 +115,13 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_generate(
             stop_flag      = g_stopFlags[h];
         }
 
-        std::string         cprompt = jstring2str(env, prompt);
+        std::string             cprompt = jstring2str(env, prompt);
         geniex_GenerationConfig cfg     = extract_generation_config(env, configObj);
 
         geniex_VlmGenerateInput  input  = {};
         geniex_VlmGenerateOutput output = {};
-        input.prompt_utf8           = cprompt.c_str();
-        input.config                = &cfg;
+        input.prompt_utf8               = cprompt.c_str();
+        input.config                    = &cfg;
 
         JavaCallbackCtx cbCtx{};
         if (callback) {
@@ -235,9 +235,9 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_applyChatTempla
     }
 
     geniex_VlmApplyChatTemplateInput  input{.messages = msgs.data(),
-         .message_count                           = static_cast<int32_t>(msgs.size()),
-         .tools                                   = tools_cstr,
-         .enable_thinking                         = (jEnableThinking == JNI_TRUE)};
+         .message_count                               = static_cast<int32_t>(msgs.size()),
+         .tools                                       = tools_cstr,
+         .enable_thinking                             = (jEnableThinking == JNI_TRUE)};
     geniex_VlmApplyChatTemplateOutput output{};
 
     int32_t ret = geniex_vlm_apply_chat_template(reinterpret_cast<geniex_VLM*>(handle), &input, &output);

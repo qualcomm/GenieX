@@ -7,8 +7,8 @@
 #include <vector>
 
 #include "doctest.h"
-#include "logging.h"
 #include "geniex.h"
+#include "logging.h"
 #include "utf8.h"  // IWYU pragma: export
 #include "util.h"
 
@@ -162,7 +162,8 @@ void test_diarize(geniex_Diarize* diarize, const std::string& model_name) {
 
         REQUIRE(pattern_valid);
     } else {
-        GENIEX_LOG_WARN("Only {} distinct speaker turns found, need at least 3 for pattern check", speaker_turns.size());
+        GENIEX_LOG_WARN(
+            "Only {} distinct speaker turns found, need at least 3 for pattern check", speaker_turns.size());
         REQUIRE(speaker_turns.size() >= 3);
     }
 

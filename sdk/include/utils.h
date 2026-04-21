@@ -40,8 +40,8 @@ std::string valid_utf8(std::string& buffer);
  */
 struct Utf8CallbackWrapper {
     geniex_token_callback original_callback;
-    void*             original_user_data;
-    std::string       utf8_buffer;
+    void*                 original_user_data;
+    std::string           utf8_buffer;
 
     /**
      * @brief Flush any remaining incomplete UTF-8 sequence

@@ -14,36 +14,34 @@
 
 from __future__ import annotations
 
-from ctypes import POINTER, byref, c_void_p, pointer, string_at
-from typing import Iterator
+from ctypes import byref, c_void_p, pointer, string_at
 
 from .generation.output import GenerateOutput, ProfileData
 from .generation.streamer import TextIteratorStreamer
 from .geniex_sdk._api import (
-    GeniexError,
     _check,
     _str_list_to_c,
     load_library,
 )
 from .geniex_sdk._types import (
-    ml_GenerationConfig,
-    ml_KvCacheLoadInput,
-    ml_KvCacheLoadOutput,
-    ml_KvCacheSaveInput,
-    ml_KvCacheSaveOutput,
-    ml_LlmApplyChatTemplateInput,
-    ml_LlmApplyChatTemplateOutput,
-    ml_LlmChatMessage,
-    ml_LlmGenerateInput,
-    ml_LlmGenerateOutput,
-    ml_SamplerConfig,
-    ml_VlmApplyChatTemplateInput,
-    ml_VlmApplyChatTemplateOutput,
-    ml_VlmChatMessage,
-    ml_VlmContent,
-    ml_VlmGenerateInput,
-    ml_VlmGenerateOutput,
-    ml_token_callback,
+    geniex_GenerationConfig,
+    geniex_KvCacheLoadInput,
+    geniex_KvCacheLoadOutput,
+    geniex_KvCacheSaveInput,
+    geniex_KvCacheSaveOutput,
+    geniex_LlmApplyChatTemplateInput,
+    geniex_LlmApplyChatTemplateOutput,
+    geniex_LlmChatMessage,
+    geniex_LlmGenerateInput,
+    geniex_LlmGenerateOutput,
+    geniex_SamplerConfig,
+    geniex_token_callback,
+    geniex_VlmApplyChatTemplateInput,
+    geniex_VlmApplyChatTemplateOutput,
+    geniex_VlmChatMessage,
+    geniex_VlmContent,
+    geniex_VlmGenerateInput,
+    geniex_VlmGenerateOutput,
 )
 from .tokenizer import ModelTokenizer
 
@@ -63,8 +61,8 @@ def _build_sampler(
     seed: int,
     grammar: str | None,
     json_mode: bool,
-) -> ml_SamplerConfig:
-    return ml_SamplerConfig(
+) -> geniex_SamplerConfig:
+    return geniex_SamplerConfig(
         temperature=temperature,
         top_p=top_p,
         top_k=top_k,
@@ -81,16 +79,16 @@ def _build_sampler(
 def _build_gen_config(
     max_new_tokens: int,
     stop: list[str],
-    sampler: ml_SamplerConfig,
+    sampler: geniex_SamplerConfig,
     images: list[str],
     audios: list[str],
-) -> tuple[ml_GenerationConfig, object, object, object, object, object]:
+) -> tuple[geniex_GenerationConfig, object, object, object, object, object]:
     """Returns (config, *arrays) — callers must keep arrays alive for the call."""
     stop_arr, stop_count = _str_list_to_c(stop)
     img_arr, img_count = _str_list_to_c(images)
     aud_arr, aud_count = _str_list_to_c(audios)
 
-    cfg = ml_GenerationConfig(
+    cfg = geniex_GenerationConfig(
         max_tokens=max_new_tokens,
         stop_count=stop_count,
         sampler_config=pointer(sampler),
@@ -98,15 +96,15 @@ def _build_gen_config(
         audio_count=aud_count,
     )
     if stop_arr is not None:
-        from ctypes import cast, c_char_p, POINTER
+        from ctypes import POINTER, c_char_p, cast
 
         cfg.stop = cast(stop_arr, POINTER(c_char_p))
     if img_arr is not None:
-        from ctypes import cast, c_char_p, POINTER
+        from ctypes import POINTER, c_char_p, cast
 
         cfg.image_paths = cast(img_arr, POINTER(c_char_p))
     if aud_arr is not None:
-        from ctypes import cast, c_char_p, POINTER
+        from ctypes import POINTER, c_char_p, cast
 
         cfg.audio_paths = cast(aud_arr, POINTER(c_char_p))
 
@@ -119,7 +117,7 @@ def _build_gen_config(
 
 
 class GeniexLLM:
-    """Internal LLM wrapper around a C ml_LLM* handle."""
+    """Internal LLM wrapper around a C geniex_LLM* handle."""
 
     def __init__(self, handle: c_void_p) -> None:
         self._handle = handle
@@ -138,26 +136,28 @@ class GeniexLLM:
     ) -> str:
         lib = load_library()
         count = len(messages)
-        MsgArray = ml_LlmChatMessage * count
-        c_msgs = MsgArray(*[
-            ml_LlmChatMessage(
-                role=msg['role'].encode(),
-                content=(msg['content'] if isinstance(msg['content'], str) else '').encode(),
-            )
-            for msg in messages
-        ])
-        inp = ml_LlmApplyChatTemplateInput(
+        MsgArray = geniex_LlmChatMessage * count
+        c_msgs = MsgArray(
+            *[
+                geniex_LlmChatMessage(
+                    role=msg['role'].encode(),
+                    content=(msg['content'] if isinstance(msg['content'], str) else '').encode(),
+                )
+                for msg in messages
+            ]
+        )
+        inp = geniex_LlmApplyChatTemplateInput(
             messages=c_msgs,
             message_count=count,
             tools=_enc(tools),
             enable_thinking=enable_thinking,
             add_generation_prompt=add_generation_prompt,
         )
-        out = ml_LlmApplyChatTemplateOutput()
-        _check(lib.ml_llm_apply_chat_template(self._handle, byref(inp), byref(out)))
+        out = geniex_LlmApplyChatTemplateOutput()
+        _check(lib.geniex_llm_apply_chat_template(self._handle, byref(inp), byref(out)))
         result = string_at(out.formatted_text).decode() if out.formatted_text else ''
         if out.formatted_text:
-            lib.ml_free(out.formatted_text)
+            lib.geniex_free(out.formatted_text)
         return result
 
     # ------------------------------------------------------------------
@@ -185,9 +185,16 @@ class GeniexLLM:
     ) -> GenerateOutput | TextIteratorStreamer:
         stop = stop or []
         sampler = _build_sampler(
-            temperature, top_p, top_k, min_p,
-            repetition_penalty, presence_penalty, frequency_penalty,
-            seed, grammar, json_mode,
+            temperature,
+            top_p,
+            top_k,
+            min_p,
+            repetition_penalty,
+            presence_penalty,
+            frequency_penalty,
+            seed,
+            grammar,
+            json_mode,
         )
         cfg, _sa, _ia, _aa = _build_gen_config(max_new_tokens, stop, sampler, [], [])
 
@@ -199,22 +206,22 @@ class GeniexLLM:
         lib = load_library()
 
         # no-op streaming callback that just collects tokens silently
-        @ml_token_callback
+        @geniex_token_callback
         def _noop(token, _ud):
             return True
 
-        inp = ml_LlmGenerateInput(
+        inp = geniex_LlmGenerateInput(
             prompt_utf8=prompt.encode(),
             config=pointer(cfg),
             on_token=_noop,
             user_data=None,
         )
-        out = ml_LlmGenerateOutput()
-        _check(lib.ml_llm_generate(self._handle, byref(inp), byref(out)))
+        out = geniex_LlmGenerateOutput()
+        _check(lib.geniex_llm_generate(self._handle, byref(inp), byref(out)))
         full = string_at(out.full_text).decode() if out.full_text else ''
         profile = ProfileData.from_c(out.profile_data)
         if out.full_text:
-            lib.ml_free(out.full_text)
+            lib.geniex_free(out.full_text)
         return GenerateOutput.from_raw(full, profile)
 
     def _generate_stream(self, prompt: str, cfg, sampler, *_keep) -> TextIteratorStreamer:
@@ -223,18 +230,18 @@ class GeniexLLM:
 
         def _run() -> GenerateOutput:
             lib = load_library()
-            inp = ml_LlmGenerateInput(
+            inp = geniex_LlmGenerateInput(
                 prompt_utf8=prompt.encode(),
                 config=pointer(cfg),
                 on_token=cb,
                 user_data=None,
             )
-            out = ml_LlmGenerateOutput()
-            _check(lib.ml_llm_generate(self._handle, byref(inp), byref(out)))
+            out = geniex_LlmGenerateOutput()
+            _check(lib.geniex_llm_generate(self._handle, byref(inp), byref(out)))
             full = string_at(out.full_text).decode() if out.full_text else ''
             profile = ProfileData.from_c(out.profile_data)
             if out.full_text:
-                lib.ml_free(out.full_text)
+                lib.geniex_free(out.full_text)
             return GenerateOutput.from_raw(full, profile)
 
         streamer.start(_run)
@@ -246,19 +253,19 @@ class GeniexLLM:
 
     def reset(self) -> None:
         lib = load_library()
-        _check(lib.ml_llm_reset(self._handle))
+        _check(lib.geniex_llm_reset(self._handle))
 
     def save_kv_cache(self, path: str) -> None:
         lib = load_library()
-        inp = ml_KvCacheSaveInput(path=path.encode())
-        out = ml_KvCacheSaveOutput()
-        _check(lib.ml_llm_save_kv_cache(self._handle, byref(inp), byref(out)))
+        inp = geniex_KvCacheSaveInput(path=path.encode())
+        out = geniex_KvCacheSaveOutput()
+        _check(lib.geniex_llm_save_kv_cache(self._handle, byref(inp), byref(out)))
 
     def load_kv_cache(self, path: str) -> None:
         lib = load_library()
-        inp = ml_KvCacheLoadInput(path=path.encode())
-        out = ml_KvCacheLoadOutput()
-        _check(lib.ml_llm_load_kv_cache(self._handle, byref(inp), byref(out)))
+        inp = geniex_KvCacheLoadInput(path=path.encode())
+        out = geniex_KvCacheLoadOutput()
+        _check(lib.geniex_llm_load_kv_cache(self._handle, byref(inp), byref(out)))
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -267,7 +274,7 @@ class GeniexLLM:
     def close(self) -> None:
         if self._handle:
             lib = load_library()
-            lib.ml_llm_destroy(self._handle)
+            lib.geniex_llm_destroy(self._handle)
             self._handle = None  # type: ignore[assignment]
 
     def __enter__(self) -> 'GeniexLLM':
@@ -289,9 +296,9 @@ class GeniexLLM:
 
 
 def _build_vlm_messages(messages: list[dict]):
-    """Convert list[dict] to (ml_VlmChatMessage array, count)."""
+    """Convert list[dict] to (geniex_VlmChatMessage array, count)."""
     count = len(messages)
-    MsgArray = ml_VlmChatMessage * count
+    MsgArray = geniex_VlmChatMessage * count
     c_msgs_list = []
     # keep content arrays alive
     _content_refs: list = []
@@ -301,31 +308,31 @@ def _build_vlm_messages(messages: list[dict]):
         content = msg.get('content', '')
 
         if isinstance(content, str):
-            ContentArray = ml_VlmContent * 1
-            contents = ContentArray(ml_VlmContent(type=b'text', text=content.encode()))
+            ContentArray = geniex_VlmContent * 1
+            contents = ContentArray(geniex_VlmContent(type=b'text', text=content.encode()))
             _content_refs.append(contents)
-            c_msgs_list.append(ml_VlmChatMessage(role=role, contents=contents, content_count=1))
+            c_msgs_list.append(geniex_VlmChatMessage(role=role, contents=contents, content_count=1))
         elif isinstance(content, list):
             n = len(content)
-            ContentArray = ml_VlmContent * n
+            ContentArray = geniex_VlmContent * n
             items = []
             for item in content:
                 ctype = item.get('type', 'text').encode()
                 # image field may be a path; text field is text
                 text_val = (item.get('text') or item.get('image') or item.get('audio') or '').encode()
-                items.append(ml_VlmContent(type=ctype, text=text_val))
+                items.append(geniex_VlmContent(type=ctype, text=text_val))
             contents = ContentArray(*items)
             _content_refs.append(contents)
-            c_msgs_list.append(ml_VlmChatMessage(role=role, contents=contents, content_count=n))
+            c_msgs_list.append(geniex_VlmChatMessage(role=role, contents=contents, content_count=n))
         else:
-            c_msgs_list.append(ml_VlmChatMessage(role=role, content_count=0))
+            c_msgs_list.append(geniex_VlmChatMessage(role=role, content_count=0))
 
     arr = MsgArray(*c_msgs_list)
     return arr, count, _content_refs
 
 
 class GeniexVLM:
-    """Internal VLM wrapper around a C ml_VLM* handle."""
+    """Internal VLM wrapper around a C geniex_VLM* handle."""
 
     def __init__(self, handle: c_void_p) -> None:
         self._handle = handle
@@ -344,18 +351,18 @@ class GeniexVLM:
     ) -> str:
         lib = load_library()
         c_msgs, count, _refs = _build_vlm_messages(messages)
-        inp = ml_VlmApplyChatTemplateInput(
+        inp = geniex_VlmApplyChatTemplateInput(
             messages=c_msgs,
             message_count=count,
             tools=_enc(tools),
             enable_thinking=enable_thinking,
-            # add_generation_prompt is not in the VLM C API (ml_VlmApplyChatTemplateInput)
+            # add_generation_prompt is not in the VLM C API (geniex_VlmApplyChatTemplateInput)
         )
-        out = ml_VlmApplyChatTemplateOutput()
-        _check(lib.ml_vlm_apply_chat_template(self._handle, byref(inp), byref(out)))
+        out = geniex_VlmApplyChatTemplateOutput()
+        _check(lib.geniex_vlm_apply_chat_template(self._handle, byref(inp), byref(out)))
         result = string_at(out.formatted_text).decode() if out.formatted_text else ''
         if out.formatted_text:
-            lib.ml_free(out.formatted_text)
+            lib.geniex_free(out.formatted_text)
         return result
 
     # ------------------------------------------------------------------
@@ -387,9 +394,16 @@ class GeniexVLM:
         images = images or []
         audios = audios or []
         sampler = _build_sampler(
-            temperature, top_p, top_k, min_p,
-            repetition_penalty, presence_penalty, frequency_penalty,
-            seed, grammar, json_mode,
+            temperature,
+            top_p,
+            top_k,
+            min_p,
+            repetition_penalty,
+            presence_penalty,
+            frequency_penalty,
+            seed,
+            grammar,
+            json_mode,
         )
         cfg, _sa, _ia, _aa = _build_gen_config(max_new_tokens, stop, sampler, images, audios)
 
@@ -400,22 +414,22 @@ class GeniexVLM:
     def _generate_blocking(self, prompt: str, cfg, sampler, *_keep) -> GenerateOutput:
         lib = load_library()
 
-        @ml_token_callback
+        @geniex_token_callback
         def _noop(token, _ud):
             return True
 
-        inp = ml_VlmGenerateInput(
+        inp = geniex_VlmGenerateInput(
             prompt_utf8=prompt.encode(),
             config=pointer(cfg),
             on_token=_noop,
             user_data=None,
         )
-        out = ml_VlmGenerateOutput()
-        _check(lib.ml_vlm_generate(self._handle, byref(inp), byref(out)))
+        out = geniex_VlmGenerateOutput()
+        _check(lib.geniex_vlm_generate(self._handle, byref(inp), byref(out)))
         full = string_at(out.full_text).decode() if out.full_text else ''
         profile = ProfileData.from_c(out.profile_data)
         if out.full_text:
-            lib.ml_free(out.full_text)
+            lib.geniex_free(out.full_text)
         return GenerateOutput.from_raw(full, profile)
 
     def _generate_stream(self, prompt: str, cfg, sampler, *_keep) -> TextIteratorStreamer:
@@ -424,18 +438,18 @@ class GeniexVLM:
 
         def _run() -> GenerateOutput:
             lib = load_library()
-            inp = ml_VlmGenerateInput(
+            inp = geniex_VlmGenerateInput(
                 prompt_utf8=prompt.encode(),
                 config=pointer(cfg),
                 on_token=cb,
                 user_data=None,
             )
-            out = ml_VlmGenerateOutput()
-            _check(lib.ml_vlm_generate(self._handle, byref(inp), byref(out)))
+            out = geniex_VlmGenerateOutput()
+            _check(lib.geniex_vlm_generate(self._handle, byref(inp), byref(out)))
             full = string_at(out.full_text).decode() if out.full_text else ''
             profile = ProfileData.from_c(out.profile_data)
             if out.full_text:
-                lib.ml_free(out.full_text)
+                lib.geniex_free(out.full_text)
             return GenerateOutput.from_raw(full, profile)
 
         streamer.start(_run)
@@ -447,7 +461,7 @@ class GeniexVLM:
 
     def reset(self) -> None:
         lib = load_library()
-        _check(lib.ml_vlm_reset(self._handle))
+        _check(lib.geniex_vlm_reset(self._handle))
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -456,7 +470,7 @@ class GeniexVLM:
     def close(self) -> None:
         if self._handle:
             lib = load_library()
-            lib.ml_vlm_destroy(self._handle)
+            lib.geniex_vlm_destroy(self._handle)
             self._handle = None  # type: ignore[assignment]
 
     def __enter__(self) -> 'GeniexVLM':

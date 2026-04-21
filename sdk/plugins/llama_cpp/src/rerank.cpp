@@ -39,7 +39,7 @@ LlamaCppReranker::~LlamaCppReranker() {
 int32_t LlamaCppReranker::create_impl(const geniex_RerankerCreateInput* input) {
     if (!input || !input->model_path) {
         GENIEX_LOG_ERROR("Invalid input parameters for reranker creation");
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     GENIEX_LOG_INFO("Creating reranker with model: {}", input->model_path);
@@ -59,7 +59,7 @@ int32_t LlamaCppReranker::create_impl(const geniex_RerankerCreateInput* input) {
         if (!device) {
             // Device not found, log warning and continue with default device
             GENIEX_LOG_ERROR("Device '{}' not found", input->device_id);
-            return ML_ERROR_COMMON_INVALID_INPUT;
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
         } else {
             // Create a NULL-terminated array with the device
             static ggml_backend_dev_t device_array[2];
@@ -74,7 +74,7 @@ int32_t LlamaCppReranker::create_impl(const geniex_RerankerCreateInput* input) {
     model_ = llama_model_load_from_file(input->model_path, mparams);
     if (!model_) {
         GENIEX_LOG_ERROR("Failed to load model from: {}", input->model_path);
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
     GENIEX_LOG_INFO("Model loaded successfully from: {}", input->model_path);
 
@@ -120,28 +120,28 @@ int32_t LlamaCppReranker::create_impl(const geniex_RerankerCreateInput* input) {
         GENIEX_LOG_ERROR("Failed to create llama context");
         llama_model_free(model_);
         model_ = nullptr;
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
     GENIEX_LOG_INFO("Llama context created successfully");
 
     GENIEX_LOG_INFO("Reranker created successfully");
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 int32_t LlamaCppReranker::rerank(const geniex_RerankerRerankInput* input, geniex_RerankerRerankOutput* output) {
     if (!input || !output) {
         GENIEX_LOG_ERROR("Invalid input parameters for reranking");
-        return ML_ERROR_COMMON_INVALID_INPUT;
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     if (!input->query || !input->documents || input->documents_count <= 0) {
         GENIEX_LOG_ERROR("Query and documents must be provided");
-        return ML_ERROR_RERANK_INPUT;
+        return GENIEX_ERROR_RERANK_INPUT;
     }
 
     if (!model_) {
         GENIEX_LOG_ERROR("Reranker not initialized");
-        return ML_ERROR_COMMON_NOT_INITIALIZED;
+        return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     }
 
     common::Profiler profiler;
@@ -195,7 +195,7 @@ int32_t LlamaCppReranker::rerank(const geniex_RerankerRerankInput* input, geniex
 
         if (tokens.empty() || static_cast<int>(tokens.size()) > n_batch_) {
             GENIEX_LOG_ERROR("Invalid token count {} for document {} (max batch: {})", tokens.size(), i, n_batch_);
-            return ML_ERROR_RERANK_FAILED;
+            return GENIEX_ERROR_RERANK_FAILED;
         }
 
         token_sequences.emplace_back(tokens.begin(), tokens.end());
@@ -203,7 +203,7 @@ int32_t LlamaCppReranker::rerank(const geniex_RerankerRerankInput* input, geniex
 
     if (token_sequences.empty()) {
         GENIEX_LOG_ERROR("No valid documents to process");
-        return ML_ERROR_RERANK_FAILED;
+        return GENIEX_ERROR_RERANK_FAILED;
     }
 
     const size_t n_sequences = token_sequences.size();
@@ -219,7 +219,7 @@ int32_t LlamaCppReranker::rerank(const geniex_RerankerRerankInput* input, geniex
     float* scores = static_cast<float*>(std::malloc(memory_size));
     if (!scores) {
         GENIEX_LOG_ERROR("Failed to allocate memory for scores: {} bytes", memory_size);
-        return ML_ERROR_COMMON_MEMORY_ALLOCATION;
+        return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
     }
     GENIEX_LOG_INFO("Memory allocation successful for scores");
 
@@ -253,7 +253,7 @@ int32_t LlamaCppReranker::rerank(const geniex_RerankerRerankInput* input, geniex
             GENIEX_LOG_ERROR("Failed to process batch");
             llama_batch_free(batch);
             std::free(scores);
-            return ML_ERROR_RERANK_FAILED;
+            return GENIEX_ERROR_RERANK_FAILED;
         }
 
         // Record TTFT on first batch processing
@@ -269,7 +269,7 @@ int32_t LlamaCppReranker::rerank(const geniex_RerankerRerankInput* input, geniex
     profiler.prompt_end();
     profiler.update_prompt_tokens(total_tokens);
     profiler.update_generated_tokens(0);  // Not applicable for reranking
-    profiler.set_stop_reason(common::StopReason::ML_STOP_REASON_COMPLETED);
+    profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_COMPLETED);
 
     // Set output
     output->scores      = scores;
@@ -280,7 +280,7 @@ int32_t LlamaCppReranker::rerank(const geniex_RerankerRerankInput* input, geniex
         score_count,
         n_sequences,
         total_tokens);
-    return ML_SUCCESS;
+    return GENIEX_SUCCESS;
 }
 
 void LlamaCppReranker::batch_add_seq(llama_batch& batch, const std::vector<int32_t>& tokens, llama_seq_id seq_id) {

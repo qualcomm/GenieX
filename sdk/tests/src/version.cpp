@@ -1,6 +1,6 @@
 #include "doctest.h"
-#include "logging.h"
 #include "geniex.h"
+#include "logging.h"
 #include "util.h"
 
 Setup<int, int> setup_guard(SetupMap<int>{}, nullptr, nullptr, nullptr);

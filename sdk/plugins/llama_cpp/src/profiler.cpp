@@ -4,15 +4,15 @@ namespace common {
 
 static const char* stop_reason_to_string(StopReason reason) {
     switch (reason) {
-        case StopReason::ML_STOP_REASON_EOS:
+        case StopReason::GENIEX_STOP_REASON_EOS:
             return "eos";
-        case StopReason::ML_STOP_REASON_LENGTH:
+        case StopReason::GENIEX_STOP_REASON_LENGTH:
             return "length";
-        case StopReason::ML_STOP_REASON_USER:
+        case StopReason::GENIEX_STOP_REASON_USER:
             return "user";
-        case StopReason::ML_STOP_REASON_STOP_SEQUENCE:
+        case StopReason::GENIEX_STOP_REASON_STOP_SEQUENCE:
             return "stop_sequence";
-        case StopReason::ML_STOP_REASON_COMPLETED:
+        case StopReason::GENIEX_STOP_REASON_COMPLETED:
             return "completed";
         default:
             return "unknown";

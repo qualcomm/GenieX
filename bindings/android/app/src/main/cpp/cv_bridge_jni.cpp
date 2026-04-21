@@ -4,8 +4,8 @@
 #include <vector>
 
 #include "android_utils.h"
-#include "jniutils.h"
 #include "geniex.h"
+#include "jniutils.h"
 
 using namespace jniutils;
 using namespace geniex_android_sdk;
@@ -13,8 +13,8 @@ using namespace geniex_android_sdk;
 // JNI: create - Create CV model handle
 extern "C" {
 geniex_CVCapabilities extract_cv_capability(JNIEnv* env, jobject inputObj) {
-    geniex_CVCapabilities out = ML_CV_OCR;
-    jclass            cls = env->GetObjectClass(inputObj);
+    geniex_CVCapabilities out = GENIEX_CV_OCR;
+    jclass                cls = env->GetObjectClass(inputObj);
     if (!cls) {
         LOGe("extract_cv_capability: GetObjectClass returned null");
         return out;
@@ -47,22 +47,22 @@ geniex_CVCapabilities extract_cv_capability(JNIEnv* env, jobject inputObj) {
                     LOGd("extract_cv_capability capabilities = %s", hold_c_str(name_string));
 
                     if (strcmp("OCR", name_string.c_str()) == 0) {
-                        return ML_CV_OCR;
+                        return GENIEX_CV_OCR;
                     } else if (strcmp("CLASSIFICATION", name_string.c_str()) == 0) {
-                        return ML_CV_CLASSIFICATION;
+                        return GENIEX_CV_CLASSIFICATION;
                     } else if (strcmp("SEGMENTATION", name_string.c_str()) == 0) {
-                        return ML_CV_SEGMENTATION;
+                        return GENIEX_CV_SEGMENTATION;
                     } else if (strcmp("CUSTOM", name_string.c_str()) == 0) {
-                        return ML_CV_CUSTOM;
+                        return GENIEX_CV_CUSTOM;
                     } else {
-                        return ML_CV_OCR;
+                        return GENIEX_CV_OCR;
                     }
                 }
             }
         }
     }
 
-    return ML_CV_OCR;
+    return GENIEX_CV_OCR;
 }
 
 geniex_CVModelConfig extract_cv_model_config(JNIEnv* env, jobject inputObj) {
@@ -395,7 +395,7 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Cv_destroy(JNIEnv*, jo
     LOGd("[JNI] destroy() called, handle=%p", (void*)handle);
     if (handle) {
         int32_t result = geniex_cv_destroy((geniex_CV*)handle);
-        if (result != ML_SUCCESS) {
+        if (result != GENIEX_SUCCESS) {
             LOGe("[JNI] destroy() failed, error code: %d", result);
         }
         return result;
@@ -426,7 +426,7 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Cv_create(JNIEnv* env
 
         int32_t result = geniex_cv_create(&in, &h);
 
-        if (result != ML_SUCCESS || !h) {
+        if (result != GENIEX_SUCCESS || !h) {
             LOGe("[JNI] create() failed, error code: %d", result);
             throw_runtime_exception(env, "CV create failed, error code: %d", result);
             return 0;
@@ -446,11 +446,11 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Cv_infer(
 
     std::string c_image_path = jstring2str(env, image_path);
 
-    geniex_CVInferInput input  = {};
-    input.input_image_path = c_image_path.c_str();
+    geniex_CVInferInput input = {};
+    input.input_image_path    = c_image_path.c_str();
 
     geniex_CVInferOutput output = {};
-    int32_t          result = geniex_cv_infer((geniex_CV*)handle, &input, &output);
+    int32_t              result = geniex_cv_infer((geniex_CV*)handle, &input, &output);
 
     if (result < 0 || !output.results || output.result_count <= 0) {
         throw_runtime_exception(env, "CV infer failed, error code: %d", result);

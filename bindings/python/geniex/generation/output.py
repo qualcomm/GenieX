@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from ..geniex_sdk._types import ml_ProfileData
+from ..geniex_sdk._types import geniex_ProfileData
 
 _THINK_RE = re.compile(r'<think>(.*?)</think>', re.DOTALL)
 
@@ -34,7 +34,7 @@ class ProfileData:
     stop_reason: str | None = None
 
     @classmethod
-    def from_c(cls, c: ml_ProfileData) -> 'ProfileData':
+    def from_c(cls, c: geniex_ProfileData) -> 'ProfileData':
         stop = c.stop_reason.decode() if c.stop_reason else None
         return cls(
             ttft=c.ttft,

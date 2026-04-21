@@ -18,8 +18,8 @@ geniex_RerankConfig extract_rerank_config(JNIEnv* env, jobject configObj);
 
 geniex_ModelConfig extract_model_config(JNIEnv* env, jobject configObj);
 
-//    std::vector<geniex_ChatMessage> extract_chat_messages(JNIEnv* env, jobjectArray jmessages, std::vector<std::string>&
-//    str_buf);
+//    std::vector<geniex_ChatMessage> extract_chat_messages(JNIEnv* env, jobjectArray jmessages,
+//    std::vector<std::string>& str_buf);
 void getStringArrayField(JNIEnv* env, jobject obj, jclass cls, const char* fieldName, std::vector<std::string>& storage,
     std::vector<const char*>& ptrs);
 
@@ -47,7 +47,7 @@ geniex_EmbedderCreateInput extract_embedder_create_input(JNIEnv* env, jobject in
 
 geniex_RerankerCreateInput extract_reranker_create_input(JNIEnv* env, jobject inputObj);
 
-void                           clear_jni_cstr_pool();
+void                               clear_jni_cstr_pool();
 std::vector<geniex_LlmChatMessage> extract_llm_chat_messages(
     JNIEnv* env, jobjectArray jmessages, std::vector<std::string>& str_buf);
 

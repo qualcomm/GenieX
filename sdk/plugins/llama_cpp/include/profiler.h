@@ -11,12 +11,12 @@ using ProfileData = geniex_ProfileData;
 namespace common {
 
 enum StopReason {
-    ML_STOP_REASON_UNKNOWN = 0,
-    ML_STOP_REASON_EOS,
-    ML_STOP_REASON_LENGTH,
-    ML_STOP_REASON_USER,
-    ML_STOP_REASON_STOP_SEQUENCE,
-    ML_STOP_REASON_COMPLETED
+    GENIEX_STOP_REASON_UNKNOWN = 0,
+    GENIEX_STOP_REASON_EOS,
+    GENIEX_STOP_REASON_LENGTH,
+    GENIEX_STOP_REASON_USER,
+    GENIEX_STOP_REASON_STOP_SEQUENCE,
+    GENIEX_STOP_REASON_COMPLETED
 };
 
 class Profiler {
@@ -51,7 +51,7 @@ class Profiler {
     timestamp end_time{};
 
     bool       ttft_recorded    = false;
-    StopReason stop_reason      = StopReason::ML_STOP_REASON_UNKNOWN;
+    StopReason stop_reason      = StopReason::GENIEX_STOP_REASON_UNKNOWN;
     uint32_t   prompt_tokens    = 0;
     uint32_t   generated_tokens = 0;
 };

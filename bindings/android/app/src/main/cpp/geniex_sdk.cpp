@@ -9,8 +9,8 @@
 #include <string>
 
 #include "android_utils.h"
-#include "jniutils.h"
 #include "geniex.h"
+#include "jniutils.h"
 
 using namespace jniutils;
 using namespace geniex_android_sdk;

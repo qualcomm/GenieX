@@ -1,7 +1,7 @@
 #include <cstdlib>
 
-#include "logging.h"
 #include "geniex.h"
+#include "logging.h"
 #include "plugin/IImageGen.h"
 #include "registry.h"
 
@@ -12,9 +12,9 @@ int32_t geniex_imagegen_create(const geniex_ImageGenCreateInput* input, geniex_I
 
     try {
         auto backend = Registry::instance().get<IImageGen>(input->plugin_id);
-        if (!backend) return ML_ERROR_COMMON_NOT_SUPPORTED;
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_SUPPORTED;
         int32_t result = backend->create(input);
-        if (result != ML_SUCCESS) {
+        if (result != GENIEX_SUCCESS) {
             delete backend;
         } else {
             *out_handle = reinterpret_cast<geniex_ImageGen*>(backend);
@@ -22,13 +22,13 @@ int32_t geniex_imagegen_create(const geniex_ImageGenCreateInput* input, geniex_I
         return result;
     } catch (const PluginNotFoundException& e) {
         GENIEX_LOG_ERROR("plugin not found");
-        return ML_ERROR_COMMON_PLUGIN_INVALID;
+        return GENIEX_ERROR_COMMON_PLUGIN_INVALID;
     } catch (const PluginLoadException& e) {
         GENIEX_LOG_ERROR("plugin load error");
-        return ML_ERROR_COMMON_PLUGIN_LOAD;
+        return GENIEX_ERROR_COMMON_PLUGIN_LOAD;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("failed to create image gen: {}", e.what());
-        return ML_ERROR_COMMON_MODEL_LOAD;
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 }
 
@@ -37,21 +37,22 @@ int32_t geniex_imagegen_destroy(geniex_ImageGen* handle) {
 
     try {
         auto backend = reinterpret_cast<IImageGen*>(handle);
-        if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
         delete backend;
-        return ML_SUCCESS;
+        return GENIEX_SUCCESS;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("destroy image gen error: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
 
-int32_t geniex_imagegen_txt2img(geniex_ImageGen* handle, const geniex_ImageGenTxt2ImgInput* input, geniex_ImageGenOutput* output) {
+int32_t geniex_imagegen_txt2img(
+    geniex_ImageGen* handle, const geniex_ImageGenTxt2ImgInput* input, geniex_ImageGenOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
         auto backend = reinterpret_cast<IImageGen*>(handle);
-        if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
 
         int32_t result = backend->txt2img(input, output);
         // TODO: add profile data
@@ -60,16 +61,17 @@ int32_t geniex_imagegen_txt2img(geniex_ImageGen* handle, const geniex_ImageGenTx
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("image gen txt2img error: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
 
-int32_t geniex_imagegen_img2img(geniex_ImageGen* handle, const geniex_ImageGenImg2ImgInput* input, geniex_ImageGenOutput* output) {
+int32_t geniex_imagegen_img2img(
+    geniex_ImageGen* handle, const geniex_ImageGenImg2ImgInput* input, geniex_ImageGenOutput* output) {
     GENIEX_LOG_TRACE("{}", input);
 
     try {
         auto backend = reinterpret_cast<IImageGen*>(handle);
-        if (!backend) return ML_ERROR_COMMON_NOT_INITIALIZED;
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
 
         int32_t result = backend->img2img(input, output);
         // TODO: add profile data
@@ -78,6 +80,6 @@ int32_t geniex_imagegen_img2img(geniex_ImageGen* handle, const geniex_ImageGenIm
         return result;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("image gen img2img error: {}", e.what());
-        return ML_ERROR_COMMON_UNKNOWN;
+        return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }

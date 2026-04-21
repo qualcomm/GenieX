@@ -1,7 +1,7 @@
 file(GLOB_RECURSE LLAMA_CPP_SRCS *.cpp)
 add_library(geniex_llama_cpp SHARED ${LLAMA_CPP_SRCS})
 
-target_compile_definitions(geniex_llama_cpp PUBLIC ML_SHARED)
+target_compile_definitions(geniex_llama_cpp PUBLIC GENIEX_SHARED)
 
 target_include_directories(geniex_llama_cpp
     PUBLIC  ${COMMON_INCLUDE}

@@ -2,7 +2,7 @@ add_library(geniex_qairt SHARED
     plugin.cpp llm.cpp)
 
 target_compile_features(geniex_qairt PRIVATE cxx_std_20)
-target_compile_definitions(geniex_qairt PUBLIC ML_SHARED)
+target_compile_definitions(geniex_qairt PUBLIC GENIEX_SHARED)
 target_compile_definitions(geniex_qairt PRIVATE GENIEX_VERSION="${GENIEX_VERSION}")
 set_target_properties(geniex_qairt PROPERTIES
     OUTPUT_NAME "geniex_plugin"

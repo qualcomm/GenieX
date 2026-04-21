@@ -4,8 +4,8 @@
 #include <vector>
 
 #include "android_utils.h"
-#include "jniutils.h"
 #include "geniex.h"
+#include "jniutils.h"
 
 using namespace jniutils;
 using namespace geniex_android_sdk;
@@ -22,7 +22,7 @@ JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Reranker_create(JNIEnv* env, job
 
         int32_t result = geniex_reranker_create(&input, &h);
 
-        if (result != ML_SUCCESS || !h) {
+        if (result != GENIEX_SUCCESS || !h) {
             LOGe("[JNI] create() failed, error code: %d", result);
             throw_runtime_exception(env, "Reranker create failed, error code: %d", result);
             return 0;
@@ -41,7 +41,7 @@ JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Reranker_destroy(JNIEnv*, jobject
     LOGd("[JNI] destroy() called, handle=%p", (void*)handle);
     if (handle) {
         int32_t result = geniex_reranker_destroy((geniex_Reranker*)handle);
-        if (result != ML_SUCCESS) {
+        if (result != GENIEX_SUCCESS) {
             LOGe("[JNI] destroy() failed, error code: %d", result);
         }
         return result;
@@ -60,13 +60,13 @@ JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Reranker_rerank(
     geniex_RerankConfig cfg = extract_rerank_config(env, configObj);
 
     geniex_RerankerRerankInput input = {};
-    input.query                  = c_query.c_str();
-    input.documents              = c_docs.data();
-    input.documents_count        = c_docs.size();
-    input.config                 = &cfg;
+    input.query                      = c_query.c_str();
+    input.documents                  = c_docs.data();
+    input.documents_count            = c_docs.size();
+    input.config                     = &cfg;
 
     geniex_RerankerRerankOutput output = {};
-    int32_t                 status = geniex_reranker_rerank((geniex_Reranker*)handle, &input, &output);
+    int32_t                     status = geniex_reranker_rerank((geniex_Reranker*)handle, &input, &output);
 
     if (status < 0 || !output.scores || output.score_count <= 0) {
         throw_runtime_exception(env, "Reranker rerank failed, error code: %d", status);
