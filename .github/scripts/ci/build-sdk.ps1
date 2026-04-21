@@ -3,15 +3,20 @@
 Build the GenieX SDK on Windows ARM64 (with Hexagon HTP + OpenCL + QAIRT).
 
 This script replaces the inline "Build SDK (Windows)" step that used to live in
-.github/workflows/build-sdk.yml. It is called by that workflow after two
+.github/workflows/build-sdk.yml. It is called by that workflow after these
 preparatory steps have run:
 
-  1. .github/actions/setup-vcvars   -> exports CC, CXX, CMAKE, NINJA,
-                                       TOOLCHAIN_FILE via $GITHUB_ENV.
-  2. .github/actions/setup-snapdragon-sdks -> exports OPENCL_SDK_ROOT,
-                                       HEXAGON_SDK_ROOT, HEXAGON_TOOLS_ROOT,
-                                       WINDOWS_SDK_BIN via $GITHUB_ENV.
+  1. .github/actions/setup-vcvars           -> exports VCVARS_BAT, VCVARS_ARGS,
+                                               LLVM_BIN, CC, CXX, CMAKE, NINJA,
+                                               TOOLCHAIN_FILE via $GITHUB_ENV.
+  2. .github/actions/setup-snapdragon-sdks  -> exports OPENCL_SDK_ROOT,
+                                               HEXAGON_SDK_ROOT, HEXAGON_TOOLS_ROOT,
+                                               WINDOWS_SDK_BIN via $GITHUB_ENV.
   3. "Configure HTP signing cert" inline step -> exports HEXAGON_HTP_CERT.
+
+This script sources vcvars into its own PowerShell process so the cmake child
+process sees the full vcvars environment (PATH entries for the Windows SDK bin
+dirs, INCLUDE, LIB, etc.) — matching the semantics of `call vcvars && cmake`.
 
 Additional environment inputs read directly here:
   GENIEX_VERSION     (required)  Version string baked into binaries.
@@ -36,6 +41,8 @@ function Require-Env([string]$name) {
 }
 
 Require-Env 'GENIEX_VERSION'
+Require-Env 'VCVARS_BAT'
+Require-Env 'LLVM_BIN'
 Require-Env 'CC'
 Require-Env 'CXX'
 Require-Env 'CMAKE'
@@ -49,6 +56,18 @@ Require-Env 'WINDOWS_SDK_BIN'
 
 $BuildDir      = if ($env:BUILD_DIR)      { $env:BUILD_DIR }      else { 'sdk/build-windows-arm64' }
 $InstallPrefix = if ($env:INSTALL_PREFIX) { $env:INSTALL_PREFIX } else { 'sdk/pkg-geniex' }
+
+# Import the full vcvars environment into this PowerShell process so cmake and
+# its downstream tools (clang, ninja, and crucially inf2cat.exe in the Windows
+# SDK x86 bin dir) see the same PATH/INCLUDE/LIB as `call vcvars && cmake`.
+$envDump = cmd /c "`"$env:VCVARS_BAT`" $env:VCVARS_ARGS && set"
+foreach ($line in $envDump) {
+  if ($line -match "^(.+?)=(.*)$") {
+    [Environment]::SetEnvironmentVariable($matches[1], $matches[2], "Process")
+  }
+}
+# Prepend VS-bundled Llvm\bin so unqualified clang lookups hit the right binary.
+$env:PATH = "$env:LLVM_BIN;$env:PATH"
 
 Write-Host "cmake:  $env:CMAKE"
 Write-Host "ninja:  $env:NINJA"
