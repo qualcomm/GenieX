@@ -1,4 +1,4 @@
-name: Reusable CLI Build
+name: Build CLI
 
 on:
   workflow_call:
@@ -56,10 +56,13 @@ jobs:
           name: sdk-pkg-${{ inputs.platform }}
           path: sdk/pkg-geniex/
 
+      # Build just the CLI binary. Skipped when build_installer is set because
+      # the installer target (//cli/release/windows) pulls in //cli/cmd/geniex
+      # as a src and Bazel will build it transitively.
       - name: Build CLI
+        if: ${{ !inputs.build_installer }}
         shell: cmd
-        run: |
-          bazelisk build //cli:artifact --//sdk:sdk_type=local
+        run: bazelisk build //cli:artifact --//sdk:sdk_type=local
 
       - name: Build Windows installer
         if: inputs.build_installer && inputs.platform == 'windows-arm64'

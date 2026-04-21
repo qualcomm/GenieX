@@ -11,20 +11,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-linux-arm64:
-    name: build-linux-arm64
-    uses: ./.github/workflows/reusable-build.yml
+  build-sdk:
+    name: build-sdk (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-arm64
+            runner: windows-arm64
+          # - platform: linux-arm64
+          #   runner: ubuntu-latest
+          # - platform: android-arm64
+          #   runner: ubuntu-latest
+    uses: ./.github/workflows/build-sdk.yml
     secrets: inherit
     with:
-      platform: linux-arm64
-      runner: larger-runner
-      upload_artifact: false
+      platform: ${{ matrix.platform }}
+      runner: ${{ matrix.runner }}
+      upload_artifact: true
 
-  build-windows-arm64:
-    name: build-windows-arm64
-    uses: ./.github/workflows/reusable-build.yml
+  build-cli:
+    name: build-cli (${{ matrix.platform }})
+    needs: [build-sdk]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-arm64
+            runner: windows-arm64
+    uses: ./.github/workflows/build-cli.yml
     secrets: inherit
     with:
-      platform: windows-arm64
-      runner: windows-arm64
-      upload_artifact: false
+      platform: ${{ matrix.platform }}
+      runner: ${{ matrix.runner }}

@@ -24,59 +24,40 @@ jobs:
     uses: ./.github/workflows/lint.yml
     secrets: inherit
 
-  # --- Linux pipeline (commented out until runner is available) ---
-  # build-sdk-linux:
-  #   name: build-sdk-linux
-  #   uses: ./.github/workflows/reusable-build-sdk.yml
-  #   secrets: inherit
-  #   with:
-  #     platform: linux-arm64
-  #     runner: larger-runner
-  #     upload_artifact: true
-  #
-  # build-cli-linux:
-  #   name: build-cli-linux
-  #   needs: [build-sdk-linux]
-  #   uses: ./.github/workflows/reusable-build-cli.yml
-  #   secrets: inherit
-  #   with:
-  #     platform: linux-arm64
-  #     runner: larger-runner
-  #
-  # build-python-linux:
-  #   name: build-python-linux
-  #   needs: [build-sdk-linux]
-  #   uses: ./.github/workflows/reusable-build-python.yml
-  #   secrets: inherit
-  #   with:
-  #     platform: linux-arm64
-  #     runner: larger-runner
-
-  # --- Windows pipeline ---
-  build-sdk-windows:
-    name: build-sdk-windows
+  # SDK matrix. linux-arm64 and android-arm64 are cross-compiled from
+  # x64 Linux hosts; rows are kept commented-out until the cross-compile
+  # paths land in build-sdk.yml / .github/scripts/ci/build-sdk.sh.
+  build-sdk:
+    name: build-sdk (${{ matrix.platform }})
     needs: [lint]
-    uses: ./.github/workflows/reusable-build-sdk.yml
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-arm64
+            runner: windows-arm64
+          # - platform: linux-arm64     # cross-compile from x64 Linux; placeholder
+          #   runner: ubuntu-latest
+          # - platform: android-arm64   # cross-compile from x64 Linux; placeholder
+          #   runner: ubuntu-latest
+    uses: ./.github/workflows/build-sdk.yml
     secrets: inherit
     with:
-      platform: windows-arm64
-      runner: windows-arm64
+      platform: ${{ matrix.platform }}
+      runner: ${{ matrix.runner }}
       upload_artifact: true
 
-  build-cli-windows:
-    name: build-cli-windows
-    needs: [build-sdk-windows]
-    uses: ./.github/workflows/reusable-build-cli.yml
+  build-cli:
+    name: build-cli (${{ matrix.platform }})
+    needs: [build-sdk]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-arm64
+            runner: windows-arm64
+    uses: ./.github/workflows/build-cli.yml
     secrets: inherit
     with:
-      platform: windows-arm64
-      runner: windows-arm64
-
-  # build-python-windows:
-  #   name: build-python-windows
-  #   needs: [build-sdk-windows]
-  #   uses: ./.github/workflows/reusable-build-python.yml
-  #   secrets: inherit
-  #   with:
-  #     platform: windows-arm64
-  #     runner: windows-arm64
+      platform: ${{ matrix.platform }}
+      runner: ${{ matrix.runner }}
