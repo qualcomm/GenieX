@@ -55,7 +55,9 @@ module.exports = async ({ github, context, core }) => {
         ? "text/plain"
         : fileName.endsWith(".exe")
           ? "application/octet-stream"
-          : "application/zip";
+          : fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")
+            ? "application/gzip"
+            : "application/zip";
     await github.rest.repos.uploadReleaseAsset({
       owner,
       repo,

@@ -40,6 +40,14 @@ jobs:
       runner: ${{ matrix.runner }}
       upload_artifact: true
 
+  build-python-sdist:
+    name: build-python-sdist
+    uses: ./.github/workflows/build-python-sdist.yml
+    secrets: inherit
+    with:
+      runner: tetra-runner-17
+      upload_artifact: true
+
   build-cli:
     name: build-cli (${{ matrix.platform }})
     needs: [build-sdk]
@@ -64,6 +72,7 @@ jobs:
     needs:
       - build-sdk
       - build-cli
+      - build-python-sdist
     timeout-minutes: 20
     permissions:
       contents: write
@@ -89,6 +98,11 @@ jobs:
           name: geniex-cli-installer-windows-arm64
           path: .
 
+      - uses: actions/download-artifact@v5
+        with:
+          name: geniex-python-sdist
+          path: .
+
       - name: Package artifacts and write SHA256 sidecars
         id: assets
         run: |
@@ -100,7 +114,7 @@ jobs:
           cp .github/certs/hexagon/ggml-htp-v1.cer ggml-htp-v1.cer
           # Per-file .sha256 sidecars (one hash per file) — friendlier for
           # winget manifests and download-script consumers than a combined sums file.
-          files=$(ls *.zip *.exe *.cer)
+          files=$(ls *.zip *.exe *.cer *.tar.gz)
           for f in $files; do sha256sum "$f" > "$f.sha256"; done
           {
             echo "files<<EOF"

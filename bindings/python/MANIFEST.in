@@ -1,0 +1,9 @@
+include setup.py
+include _sdk_fetch.py
+include README.md
+include LICENSE
+include pyproject.toml
+recursive-include geniex *.py *.pyi py.typed
+global-exclude __pycache__
+global-exclude *.py[cod]
+prune geniex/lib

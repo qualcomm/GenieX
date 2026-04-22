@@ -47,6 +47,15 @@ jobs:
       runner: ${{ matrix.runner }}
       upload_artifact: true
 
+  build-python-sdist:
+    name: build-python-sdist
+    needs: [lint]
+    uses: ./.github/workflows/build-python-sdist.yml
+    secrets: inherit
+    with:
+      runner: tetra-runner-17
+      upload_artifact: true
+
   build-cli:
     name: build-cli (${{ matrix.platform }})
     needs: [build-sdk]

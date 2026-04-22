@@ -1,0 +1,73 @@
+name: Build Python sdist
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: tetra-runner-17
+      upload_artifact:
+        description: "Whether to upload the sdist artifact"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-python-sdist:
+    name: build-python-sdist
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Detect build version
+        id: version
+        uses: ./.github/actions/version
+
+      - name: Stamp geniex/_version.py
+        shell: bash
+        env:
+          PEP_VERSION: ${{ steps.version.outputs.python_version }}
+          RELEASE_TAG: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          {
+            printf '__version__ = "%s"\n' "$PEP_VERSION"
+            printf '__release_tag__ = "%s"\n' "$RELEASE_TAG"
+          } > bindings/python/geniex/_version.py
+          cat bindings/python/geniex/_version.py
+
+      - name: Build sdist
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --upgrade pip build
+          python3 -m build --sdist bindings/python --outdir dist/
+          ls -la dist/
+
+      - name: Verify sdist contains no prebuilt libs
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball=$(ls dist/geniex-*.tar.gz | head -n1)
+          if tar -tzf "$tarball" | grep -E 'geniex/lib/'; then
+            echo "sdist unexpectedly contains geniex/lib/ — should be pure Python" >&2
+            exit 1
+          fi
+
+      - name: Upload sdist artifact
+        if: inputs.upload_artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: geniex-python-sdist
+          path: dist/geniex-*.tar.gz
+          retention-days: 7
