@@ -1,12 +1,8 @@
 package com.geniex.sdk
 
-import android.system.Os
-import com.geniex.sdk.GeniexSdk.Companion.KEY_NPU_LIB_FOLDER_PATH
 import com.geniex.sdk.bean.CVCreateInput
 import com.geniex.sdk.bean.CVResult
-import com.geniex.sdk.bean.RerankerCreateInput
 import com.geniex.sdk.jni.Cv
-import com.geniex.sdk.utils.ModeConfigUtil
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -48,19 +44,7 @@ class CvWrapper private constructor(
         fun dispatcher(dispatcher: CoroutineDispatcher) = apply { this.dispatcher = dispatcher }
 
         fun createInput(cvCreateInput: CVCreateInput) =
-            apply {
-                val npu_model_folder_path = ModeConfigUtil.getNpuModelFolderPath(
-                    cvCreateInput.plugin_id,
-                    cvCreateInput.config
-                )
-                val npu_lib_folder_path = ModeConfigUtil.getNpuLibFolderPath(cvCreateInput.config)
-                this.cvCreateInput = cvCreateInput.copy(
-                    config = cvCreateInput.config.copy(
-                        npu_lib_folder_path = npu_lib_folder_path,
-                        npu_model_folder_path = npu_model_folder_path
-                    )
-                )
-            }
+            apply { this.cvCreateInput = cvCreateInput }
 
         /**
          * Build the CvWrapper instance and initialize the native handle

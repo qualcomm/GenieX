@@ -26,8 +26,6 @@ class GeniexSdk private constructor() {
      */
     fun init(context: Context, callback: InitCallback? = null) {
         val nativeLibPath = context.applicationInfo.nativeLibraryDir
-        val npuLibFolderPath = nativeLibPath
-        Os.setenv(KEY_NPU_LIB_FOLDER_PATH, npuLibFolderPath, true)
         Os.setenv("ADSP_LIBRARY_PATH", nativeLibPath, true)
 
         extractHtpAssets(context)
@@ -159,7 +157,6 @@ class GeniexSdk private constructor() {
 
     companion object {
         private const val TAG = "GeniexSdk"
-        internal const val KEY_NPU_LIB_FOLDER_PATH = "key_npu_lib_folder_path"
         internal const val KEY_QNN_HTP_PATH = "GENIEX_QNN_HTP_PATH"
         private val HTP_ASSET_DIRS = listOf("htp-files", "htp-files-v81", "htp-files-v85")
         const val PLUGIN_ID_NPU = "npu"

@@ -1,11 +1,8 @@
 package com.geniex.sdk
 
-import android.system.Os
 import android.util.Log
-import com.geniex.sdk.GeniexSdk.Companion.KEY_NPU_LIB_FOLDER_PATH
 import com.geniex.sdk.bean.*
 import com.geniex.sdk.jni.Vlm
-import com.geniex.sdk.utils.ModeConfigUtil
 import java.io.Closeable
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -49,20 +46,8 @@ private constructor(
         private var dispatcher: CoroutineDispatcher = Dispatchers.IO
 
         /** Sets the VLM creation input (required). */
-        fun vlmCreateInput(vlmCreateInput: VlmCreateInput) = apply {
-            val npu_model_folder_path = ModeConfigUtil.getNpuModelFolderPath(
-                vlmCreateInput.plugin_id,
-                vlmCreateInput.model_path,
-                vlmCreateInput.config
-            )
-            val npu_lib_folder_path = ModeConfigUtil.getNpuLibFolderPath(vlmCreateInput.config)
-            this.vlmCreateInput = vlmCreateInput.copy(
-                config = vlmCreateInput.config.copy(
-                    npu_lib_folder_path = npu_lib_folder_path,
-                    npu_model_folder_path = npu_model_folder_path
-                )
-            )
-        }
+        fun vlmCreateInput(vlmCreateInput: VlmCreateInput) =
+            apply { this.vlmCreateInput = vlmCreateInput }
 
         /** Sets the coroutine dispatcher (default = [Dispatchers.IO]). */
         fun dispatcher(dispatcher: CoroutineDispatcher) = apply { this.dispatcher = dispatcher }

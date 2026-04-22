@@ -1,13 +1,9 @@
 package com.geniex.sdk
 
-import android.system.Os
-import com.geniex.sdk.GeniexSdk.Companion.KEY_NPU_LIB_FOLDER_PATH
-import com.geniex.sdk.bean.ProfilingData
 import com.geniex.sdk.bean.RerankConfig
 import com.geniex.sdk.bean.RerankerCreateInput
 import com.geniex.sdk.bean.RerankerOutputResult
 import com.geniex.sdk.jni.Reranker
-import com.geniex.sdk.utils.ModeConfigUtil
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -32,20 +28,7 @@ class RerankerWrapper private constructor(
         private var dispatcher: CoroutineDispatcher = Dispatchers.IO
 
         fun rerankerCreateInput(rerankerCreateInput: RerankerCreateInput) =
-            apply {
-                val npu_model_folder_path = ModeConfigUtil.getNpuModelFolderPath(
-                    rerankerCreateInput.plugin_id,
-                    rerankerCreateInput.model_path,
-                    rerankerCreateInput.config
-                )
-                val npu_lib_folder_path = ModeConfigUtil.getNpuLibFolderPath(rerankerCreateInput.config)
-                this.rerankerCreateInput = rerankerCreateInput.copy(
-                    config = rerankerCreateInput.config.copy(
-                        npu_lib_folder_path = npu_lib_folder_path,
-                        npu_model_folder_path = npu_model_folder_path
-                    )
-                )
-            }
+            apply { this.rerankerCreateInput = rerankerCreateInput }
 
         fun dispatcher(dispatcher: CoroutineDispatcher) = apply { this.dispatcher = dispatcher }
 

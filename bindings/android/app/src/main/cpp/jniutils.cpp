@@ -338,16 +338,6 @@ geniex_ModelConfig extract_model_config(JNIEnv* env, jobject configObj) {
     fid            = env->GetFieldID(cls, "verbose", "Z");
     config.verbose = env->GetBooleanField(configObj, fid);
 
-    // npu_model_folder_path -> qnn_model_folder_path (Java to C++ mapping)
-    fid                          = env->GetFieldID(cls, "npu_model_folder_path", "Ljava/lang/String;");
-    jstr                         = (jstring)env->GetObjectField(configObj, fid);
-    config.qnn_model_folder_path = jstr ? hold_c_str(jstring2str(env, jstr)) : nullptr;
-
-    // npu_lib_folder_path -> qnn_lib_folder_path (Java to C++ mapping)
-    fid                        = env->GetFieldID(cls, "npu_lib_folder_path", "Ljava/lang/String;");
-    jstr                       = (jstring)env->GetObjectField(configObj, fid);
-    config.qnn_lib_folder_path = jstr ? hold_c_str(jstring2str(env, jstr)) : nullptr;
-
     return config;
 }
 jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data) {

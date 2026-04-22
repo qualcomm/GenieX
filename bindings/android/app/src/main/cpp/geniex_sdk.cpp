@@ -24,22 +24,13 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
     fflush(stdout);
     fflush(stderr);
 
-    setenv("GENIEX_TOKEN",
-        "key/"
-        "eyJhY2NvdW50Ijp7ImlkIjoiNDI1Y2JiNWQtNjk1NC00NDYxLWJiOWMtYzhlZjBiY2JlYzA2In0sInByb2R1Y3QiOnsiaWQiOiJkYjI4ZTNmYy"
-        "1mMjU4LTQ4ZTctYmNkYi0wZmE4YjRkYTJhNWYifSwicG9saWN5Ijp7ImlkIjoiMmYyOWQyMjctNDVkZS00MzQ3LTg0YTItMjUwNTYwMmEzYzMy"
-        "IiwiZHVyYXRpb24iOjMxMTA0MDAwMH0sInVzZXIiOnsiaWQiOiI3MGE2YzA4NS1jYjc3LTQ3YmEtOWUxNC1lNjFjYTA2ZThmZjUiLCJlbWFpbC"
-        "I6ImFsYW40QG5leGE0YWkuY29tIn0sImxpY2Vuc2UiOnsiaWQiOiI4OTlhZGQ2NS1lOTI2LTQ2M2ItODllNi0xMjc0NzM3ZjA1MzYiLCJjcmVh"
-        "dGVkIjoiMjAyNS0wOS0wNlQwMDo1MzozNi4yMDNaIiwiZXhwaXJ5IjoiMjAzNS0xMi0zMVQyMzo1OTo1OS4wMDBaIn19."
-        "BXoUHIEzFMuuZbBT7RvsKO9nTi5950C6kHO64blF7XBnfKvZ6ClA8a55tmszI1ZWdngzpNFTzMM5PV5euuzMCA==",
-        1);
     geniex_init();
     return JNI_VERSION_1_6;
 }
 
 using namespace jniutils;
 
-extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_NexaSdk_registerPlugin(
+extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_GeniexSdk_registerPlugin(
     JNIEnv* env, jobject thiz, jstring plugin_lib_path) {
     // Get the native library path from the application context
     std::string plugin_lib_path_str = jstring2str(env, plugin_lib_path);

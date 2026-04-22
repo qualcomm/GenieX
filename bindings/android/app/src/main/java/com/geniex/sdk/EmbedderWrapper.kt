@@ -1,19 +1,13 @@
 package com.geniex.sdk
 
-import android.system.Os
-import android.text.TextUtils
-import com.geniex.sdk.GeniexSdk.Companion.KEY_NPU_LIB_FOLDER_PATH
-import com.geniex.sdk.GeniexSdk.Companion.PLUGIN_ID_NPU
 import com.geniex.sdk.bean.EmbedResult
 import com.geniex.sdk.bean.EmbedderCreateInput
 import com.geniex.sdk.bean.EmbeddingConfig
 import com.geniex.sdk.jni.Embedder
-import com.geniex.sdk.utils.ModeConfigUtil
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.Closeable
-import java.io.File
 
 // EmbedderWrapper - provides high-level API for embedder operations with coroutine support
 class EmbedderWrapper private constructor(
@@ -34,20 +28,7 @@ class EmbedderWrapper private constructor(
         private var dispatcher: CoroutineDispatcher = Dispatchers.IO
 
         fun embedderCreateInput(embedderCreateInput: EmbedderCreateInput) =
-            apply {
-                val npu_model_folder_path = ModeConfigUtil.getNpuModelFolderPath(
-                    embedderCreateInput.plugin_id,
-                    embedderCreateInput.model_path,
-                    embedderCreateInput.config
-                )
-                val npu_lib_folder_path = ModeConfigUtil.getNpuLibFolderPath(embedderCreateInput.config)
-                this.embedderCreateInput = embedderCreateInput.copy(
-                    config = embedderCreateInput.config.copy(
-                        npu_lib_folder_path = npu_lib_folder_path,
-                        npu_model_folder_path = npu_model_folder_path
-                    )
-                )
-            }
+            apply { this.embedderCreateInput = embedderCreateInput }
 
         fun dispatcher(dispatcher: CoroutineDispatcher) = apply { this.dispatcher = dispatcher }
 
@@ -90,13 +71,6 @@ class EmbedderWrapper private constructor(
         runCatching { embedder.listLoras(handle) }
     }
 
-    //    suspend fun getProfilingData(): Result<ProfilingData> = withContext(dispatcher) {
-//        runCatching {
-//            val data = ProfilingData()
-//            val ret = embedder.getProfilingData(handle, data)
-//            if (ret == 0) data else throw RuntimeException("JNI error: $ret")
-//        }
-//    }
     override fun close() {
         destroy()
     }

@@ -1,7 +1,7 @@
 package com.geniex.sdk.bean
 
 /**
- * Model configuration corresponding to the native `ml_ModelConfig` struct.
+ * Model configuration corresponding to the native `geniex_ModelConfig` struct.
  */
 data class ModelConfig(
     /** Text context size, 0 = use model default */
@@ -35,21 +35,6 @@ data class ModelConfig(
     /** Content of the chat template file (optional) */
     val chat_template_content: String = "",
 
-    /** System library path for NPU (optional) */
-    val system_library_path: String = "",
-
-    /** Backend library path for NPU (optional) */
-    val backend_library_path: String = "",
-
-    /** Extension library path for NPU (optional) */
-    val extension_library_path: String = "",
-
-    /** Config file path for NPU (optional) */
-    val config_file_path: String = "",
-
-    /** Embedded tokens path for NPU (optional) */
-    val embedded_tokens_path: String = "",
-
     /** Maximum number of tokens to generate */
     val max_tokens: Int = 2048,
 
@@ -57,16 +42,4 @@ data class ModelConfig(
     val enable_thinking: Boolean = false,
 
     val verbose: Boolean = false,
-
-    /**
-     *
-     * NPU native library dir. The default path is
-     * @see android.content.pm.ApplicationInfo.nativeLibraryDir
-     */
-    val npu_lib_folder_path:String? = null,
-
-    /**
-     * NPU loaded model's dir.
-     */
-    val npu_model_folder_path:String? = null
 )

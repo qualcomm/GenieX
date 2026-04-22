@@ -1,0 +1,19 @@
+[
+  {
+    "id": "Qwen3-0.6B-GGUF",
+    "displayName": "Qwen3-0.6B-GGUF",
+    "modelName": "Qwen3-0.6B-Q8_0.gguf",
+    "versionCode": 1,
+    "modelUrl": "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf"
+  },
+  {
+    "id": "granite4_micro",
+    "displayName": "Granite4-Micro-NPU",
+    "modelName": "geniex.json",
+    "type": "chat",
+    "versionCode": 1,
+    "pluginIds": 17,
+    "baseUrl": "https://localhost/",
+    "modelUrl": "geniex.json"
+  }
+]

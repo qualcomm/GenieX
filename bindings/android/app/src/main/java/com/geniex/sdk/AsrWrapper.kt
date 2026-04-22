@@ -7,7 +7,6 @@ import com.geniex.sdk.bean.AsrTranscribeInput
 import com.geniex.sdk.bean.AsrTranscribeOutput
 import com.geniex.sdk.callback.AsrTranscriptionCallback
 import com.geniex.sdk.jni.Asr
-import com.geniex.sdk.utils.ModeConfigUtil
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -47,20 +46,7 @@ class AsrWrapper private constructor(
         var dispatcher: CoroutineDispatcher = Dispatchers.IO
 
         fun asrCreateInput(input: AsrCreateInput) =
-            apply {
-                val npu_model_folder_path = ModeConfigUtil.getNpuModelFolderPath(
-                    input.plugin_id,
-                    input.model_path,
-                    input.config
-                )
-                val npu_lib_folder_path = ModeConfigUtil.getNpuLibFolderPath(input.config)
-                this.asrCreateInput = input.copy(
-                    config = input.config.copy(
-                        npu_lib_folder_path = npu_lib_folder_path,
-                        npu_model_folder_path = npu_model_folder_path
-                    )
-                )
-            }
+            apply { this.asrCreateInput = input }
 
         fun dispatcher(dispatcher: CoroutineDispatcher) = apply { this.dispatcher = dispatcher }
 

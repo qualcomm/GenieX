@@ -4,7 +4,6 @@ import com.geniex.sdk.bean.TtsCreateInput
 import com.geniex.sdk.bean.TtsSynthesizeInput
 import com.geniex.sdk.bean.TtsSynthesizeOutput
 import com.geniex.sdk.jni.Tts
-import com.geniex.sdk.utils.ModeConfigUtil
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,20 +35,7 @@ class TtsWrapper private constructor(
         var dispatcher: CoroutineDispatcher = Dispatchers.IO
 
         fun ttsCreateInput(input: TtsCreateInput) =
-            apply {
-                val npu_model_folder_path = ModeConfigUtil.getNpuModelFolderPath(
-                    input.plugin_id,
-                    input.model_path,
-                    input.config
-                )
-                val npu_lib_folder_path = ModeConfigUtil.getNpuLibFolderPath(input.config)
-                this.ttsCreateInput = input.copy(
-                    config = input.config.copy(
-                        npu_lib_folder_path = npu_lib_folder_path,
-                        npu_model_folder_path = npu_model_folder_path
-                    )
-                )
-            }
+            apply { this.ttsCreateInput = input }
 
         fun dispatcher(dispatcher: CoroutineDispatcher) = apply { this.dispatcher = dispatcher }
 

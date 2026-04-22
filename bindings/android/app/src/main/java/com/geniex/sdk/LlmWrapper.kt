@@ -1,10 +1,6 @@
 package com.geniex.sdk
 
-import android.system.Os
-import android.text.TextUtils
 import android.util.Log
-import com.geniex.sdk.GeniexSdk.Companion.KEY_NPU_LIB_FOLDER_PATH
-import com.geniex.sdk.GeniexSdk.Companion.PLUGIN_ID_NPU
 import com.geniex.sdk.bean.ChatMessage
 import com.geniex.sdk.bean.GenerationConfig
 import com.geniex.sdk.bean.LLMTokenCallback
@@ -12,11 +8,7 @@ import com.geniex.sdk.bean.LlmApplyChatTemplateOutput
 import com.geniex.sdk.bean.LlmCreateInput
 import com.geniex.sdk.bean.LlmGenerateResult
 import com.geniex.sdk.bean.LlmStreamResult
-import com.geniex.sdk.bean.ModelConfig
-import com.geniex.sdk.bean.ProfilingData
-import com.geniex.sdk.bean.SamplerConfig
 import com.geniex.sdk.jni.Llm
-import com.geniex.sdk.utils.ModeConfigUtil
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
@@ -24,7 +16,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
 import java.io.Closeable
-import java.io.File
 
 // LlmWrapper - provides high-level API for LLM operations with coroutine support
 class LlmWrapper private constructor(
@@ -46,20 +37,7 @@ class LlmWrapper private constructor(
         private var dispatcher: CoroutineDispatcher = Dispatchers.IO
 
         fun llmCreateInput(llmCreateInput: LlmCreateInput) =
-            apply {
-                val npu_model_folder_path = ModeConfigUtil.getNpuModelFolderPath(
-                    llmCreateInput.plugin_id,
-                    llmCreateInput.model_path,
-                    llmCreateInput.config
-                )
-                val npu_lib_folder_path = ModeConfigUtil.getNpuLibFolderPath(llmCreateInput.config)
-                this.llmCreateInput = llmCreateInput.copy(
-                    config = llmCreateInput.config.copy(
-                        npu_lib_folder_path = npu_lib_folder_path,
-                        npu_model_folder_path = npu_model_folder_path
-                    )
-                )
-            }
+            apply { this.llmCreateInput = llmCreateInput }
 
         fun dispatcher(dispatcher: CoroutineDispatcher) = apply { this.dispatcher = dispatcher }
 

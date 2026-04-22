@@ -1,19 +1,12 @@
-import com.android.build.api.variant.LibraryVariant
-import com.android.build.gradle.api.BaseVariant
-
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
 }
 
-apply {
-    from("update.gradle")
-}
-
 android {
     namespace = "com.geniex.sdk"
     compileSdk = 35
-    ndkVersion = "29.0.13846066"
+    ndkVersion = "29.0.14206865"
 
     defaultConfig {
         minSdk = 27
@@ -23,10 +16,7 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags += "-std=c++17"
-                arguments += listOf(
-                    "-DGENIEX_DL=OFF",
-//                    "-DGENIEX_ANDROID=ON"
-                )
+                arguments += listOf("-DGENIEX_DL=OFF")
             }
         }
         ndk {
@@ -43,6 +33,9 @@ android {
             )
         }
     }
+    packaging {
+        jniLibs.useLegacyPackaging = true
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -56,95 +49,55 @@ android {
             version = "3.22.1"
         }
     }
-    buildFeatures {
-//        viewBinding = true
-    }
 }
 
-afterEvaluate {
-    android.libraryVariants.forEach {
-        registerCopyBridgeLibsTask(it)
+// Copy the prebuilt geniex libraries from sdk/pkg-geniex so they get packaged
+// into jniLibs (and therefore into the final APK of any consumer).
+val pkgGeniexDir = file("$projectDir/../../../sdk/pkg-geniex")
+val jniOutDir = file("$projectDir/src/main/jniLibs/arm64-v8a")
+val htpAssetsDir = file("$projectDir/src/main/assets/qairt")
+
+val copyBridgeLibs = tasks.register<Copy>("copyBridgeLibs") {
+    require(pkgGeniexDir.exists()) {
+        "SDK package not found at ${pkgGeniexDir.absolutePath}"
     }
+    val libDir = File(pkgGeniexDir, "lib")
+    from(libDir) { include("libgeniex.so") }
+    from(File(libDir, "llama_cpp")) {
+        include("*.so")
+        exclude("*.a")
+        // The SDK package ships multiple libgeniex_plugin.so variants, one per backend.
+        // They must be renamed to coexist in the flat APK jniLibs directory.
+        rename("libgeniex_plugin\\.so", "libgeniex_plugin_cpu_gpu.so")
+    }
+    from(File(libDir, "qairt")) {
+        include("libgeniex_core.so", "libgeniex_plugin.so")
+        rename("libgeniex_plugin\\.so", "libgeniex_plugin_npu.so")
+    }
+    from(File(libDir, "qairt/htp-files")) {
+        include("*.so")
+    }
+    from(File(projectDir, "extLibs/arm64-v8a")) { include("*.so") }
+    into(jniOutDir)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
-fun registerCopyBridgeLibsTask(variant: BaseVariant) {
-    // Use SDK install directory structure
-    val sdkInstallDir = File(projectDir,"./../../../build-android/install")
-    println("SDK install directory: $sdkInstallDir")
-    require(sdkInstallDir.exists()) {
-        "SDK install directory not found at: ${sdkInstallDir.absolutePath}.\n" +
-        "Please run: cd sdk && cmake --install build-arm64-android-snapdragon-release --prefix ../build-android/install"
+// Non-.so artifacts (e.g. libqnnhtpv81.cat) cannot live under jni/, so they
+// continue to ship as assets for consumers to extract at runtime.
+val copyHtpAssets = tasks.register<Copy>("copyHtpAssets") {
+    from(File(pkgGeniexDir, "lib/qairt/htp-files")) {
+        exclude("*.so")
     }
+    into(File(htpAssetsDir, "htp-files"))
+    includeEmptyDirs = false
+}
 
-    val sdkLibDir = File(sdkInstallDir, "lib")
-    val cap = variant.name.replaceFirstChar { it.uppercase() }
-
-    val jniOutDir = File(projectDir, "src/main/jniLibs/arm64-v8a")
-    if (!jniOutDir.exists()) {
-        jniOutDir.mkdirs()
-    }
-    println("Copying SDK libraries to ${jniOutDir.absolutePath}")
-
-    val copyTask = tasks.register<Copy>("copyBridgeLibs$cap") {
-        // Copy main SDK library
-        from(sdkLibDir) {
-            include("libgeniex.so")
-        }
-        // Copy llama_cpp plugin and dependencies
-        from(File(sdkLibDir, "llama_cpp")) {
-            include("*.so")
-            exclude("*.a")  // Exclude static libraries
-        }
-        // Copy external libs if they exist
-        from(File(projectDir, "extLibs/arm64-v8a")) {
-            include("*.so")
-        }
-
-        into(jniOutDir)
-        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-        eachFile {
-            if (name == "libgeniex_plugin.so") {
-                // Rename plugin to include backend name
-                path = "libgeniex_plugin_llama_cpp.so"
-                println("Found geniex plugin, rename to: $path")
-            } else {
-                path = name
-            }
-        }
-    }
-
-    // Copy HTP assets for QAIRT plugin (if exists)
-    val htpAssetsDir = File(projectDir, "src/main/assets/qairt")
-    val qnnLibDir = File(sdkLibDir, "qairt")
-    val copyHtpTask = tasks.register<Copy>("copyHtpAssets$cap") {
-        from(qnnLibDir) {
-            include("htp-files*/**")
-        }
-        into(htpAssetsDir)
-        includeEmptyDirs = false
-    }
-
-    listOf(
-//        "merge${cap}NativeLibs",
-//        "merge${cap}JniLibs",
-//        "pre${cap}Build"
-        "preBuild"
-    ).forEach { n ->
-        tasks.matching { it.name == n }.configureEach {
-            dependsOn(copyTask)
-            dependsOn(copyHtpTask)
-        }
-    }
+tasks.matching { it.name == "preBuild" }.configureEach {
+    dependsOn(copyBridgeLibs)
+    dependsOn(copyHtpAssets)
 }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
-//    implementation(libs.androidx.appcompat)
-//    implementation(libs.material)
-//    implementation(libs.androidx.constraintlayout)
-//    testImplementation(libs.junit)
-//    androidTestImplementation(libs.androidx.junit)
-//    androidTestImplementation(libs.androidx.espresso.core)
     implementation(libs.kotlinx.coroutines.android)
 }

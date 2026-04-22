@@ -132,38 +132,6 @@ geniex_CVModelConfig extract_cv_model_config(JNIEnv* env, jobject inputObj) {
         }
     }
 
-    // === npu_model_folder_path -> qnn_model_folder_path (Java to C++ mapping) ===
-    fid = env->GetFieldID(cls, "npu_model_folder_path", "Ljava/lang/String;");
-    if (check_jni_exception(env, "GetFieldID(npu_model_folder_path)") || !fid) {
-        LOGe("extract_cv_model_config field 'npu_model_folder_path' not found");
-    } else {
-        jstr = (jstring)env->GetObjectField(inputObj, fid);
-        if (check_jni_exception(env, "GetObjectField(npu_model_folder_path)") || !jstr) {
-            LOGd("extract_cv_model_config 'npu_model_folder_path' is null");
-        } else {
-            std::string s             = jstring2str(env, jstr);
-            out.qnn_model_folder_path = hold_c_str(s);
-            LOGd("extract_cv_model_config npu_model_folder_path (qnn) = %s", s.c_str());
-            env->DeleteLocalRef(jstr);
-        }
-    }
-
-    // === npu_lib_folder_path -> qnn_lib_folder_path (Java to C++ mapping) ===
-    fid = env->GetFieldID(cls, "npu_lib_folder_path", "Ljava/lang/String;");
-    if (check_jni_exception(env, "GetFieldID(npu_lib_folder_path)") || !fid) {
-        LOGe("extract_cv_model_config field 'npu_lib_folder_path' not found");
-    } else {
-        jstr = (jstring)env->GetObjectField(inputObj, fid);
-        if (check_jni_exception(env, "GetObjectField(npu_lib_folder_path)") || !jstr) {
-            LOGd("extract_cv_model_config 'npu_lib_folder_path' is null");
-        } else {
-            std::string s           = jstring2str(env, jstr);
-            out.qnn_lib_folder_path = hold_c_str(s);
-            LOGd("extract_cv_model_config npu_lib_folder_path (qnn) = %s", s.c_str());
-            env->DeleteLocalRef(jstr);
-        }
-    }
-
     return out;
 }
 

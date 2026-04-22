@@ -36,10 +36,6 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Llm_create(
         LOGd("  model_name: %s", create_input.model_name);
         LOGd("  model_path: %s", create_input.model_path ? create_input.model_path : "(null)");
         LOGd("  tokenizer_path: %s", create_input.tokenizer_path ? create_input.tokenizer_path : "(null)");
-        LOGd("  config.npu_model_folder_path (qnn): %s",
-            create_input.config.qnn_model_folder_path ? create_input.config.qnn_model_folder_path : "(null)");
-        LOGd("  config.npu_lib_folder_path (qnn): %s",
-            create_input.config.qnn_lib_folder_path ? create_input.config.qnn_lib_folder_path : "(null)");
         LOGd("  config.max_tokens: %d", create_input.config.max_tokens);
         LOGd("  config.enable_thinking: %s", create_input.config.enable_thinking ? "true" : "false");
         LOGd("  config.verbose: %s", create_input.config.verbose ? "true" : "false");
