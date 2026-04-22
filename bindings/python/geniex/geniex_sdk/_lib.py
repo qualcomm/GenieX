@@ -14,6 +14,10 @@
 
 """Shared library loader with automatic dev / release path discovery.
 
+The sibling ``GENIEX_SDK_DOWNLOAD_URL`` env var is **build-time only** —
+consumed by ``setup.py`` when pip assembles a wheel from the sdist — and
+has no effect here at runtime.
+
 Search order
 ------------
 1. ``GENIEX_LIB_PATH`` env var — path to the lib directory or the library file itself.
