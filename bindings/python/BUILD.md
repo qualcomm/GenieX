@@ -35,7 +35,14 @@ command downloads the SDK zip matching your platform from the same GitHub
 Release tag and bundles its `lib/` tree into the wheel.
 
 ```bash
+# From GitHub Release
 pip install https://github.com/qcom-ai-hub/geniex/releases/download/v0.1.0-alpha.1/geniex-0.1.0a1.tar.gz
+
+# From TestPyPI (pre-release tags are auto-published). --extra-index-url is
+# required so runtime deps (huggingface_hub, filelock) resolve from real PyPI.
+pip install --index-url https://test.pypi.org/simple/ \
+            --extra-index-url https://pypi.org/simple/ \
+            geniex==0.1.0a1
 ```
 
 ### Build-time env vars (setup.py)

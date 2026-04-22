@@ -132,3 +132,27 @@ jobs:
           script: |
             const release = require('./.github/scripts/release.js');
             await release({ github, context, core });
+
+  # Push the sdist to TestPyPI for pre-release tags (v*-alpha.*, v*-beta.*,
+  # v*-rc.*). Stable tags skip this job — they go to production PyPI via a
+  # separate flow (not yet wired up).
+  publish-testpypi:
+    name: publish-testpypi
+    runs-on: ubuntu-latest
+    needs: [build-python-sdist]
+    if: contains(github.event.inputs.release_tag || github.ref_name, '-')
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: geniex-python-sdist
+          path: dist/
+
+      - name: Publish sdist to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          user: __token__
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          packages-dir: dist/
+          skip-existing: true
