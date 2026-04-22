@@ -3,7 +3,9 @@
     "id": "Qwen3-0.6B-GGUF",
     "displayName": "Qwen3-0.6B-GGUF",
     "modelName": "Qwen3-0.6B-Q8_0.gguf",
+    "type": "chat",
     "versionCode": 1,
+    "pluginIds": 7,
     "modelUrl": "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q8_0.gguf"
   },
   {
@@ -12,7 +14,7 @@
     "modelName": "geniex.json",
     "type": "chat",
     "versionCode": 1,
-    "pluginIds": 17,
+    "pluginIds": 4,
     "baseUrl": "https://localhost/",
     "modelUrl": "geniex.json"
   }

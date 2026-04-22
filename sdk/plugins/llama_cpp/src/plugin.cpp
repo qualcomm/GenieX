@@ -82,11 +82,11 @@ class LlamaPlugin : public Plugin {
         }
 #endif  // GENIEX_DL
 
-#ifdef __ANDROID__
+        // #ifdef __ANDROID__
         // Harcoding to use 4 hexagon devices for Hexagon to make GPT-OSS work
-        setenv("GGML_HEXAGON_NDEV", "4", 1);
-        GENIEX_LOG_DEBUG("Set GGML_HEXAGON_NDEV=4 for Hexagon backend");
-#endif  // __ANDROID__
+        //         setenv("GGML_HEXAGON_NDEV", "4", 1);
+        //         GENIEX_LOG_DEBUG("Set GGML_HEXAGON_NDEV=4 for Hexagon backend");
+        // #endif  // __ANDROID__
 
         llama_backend_init();
     }

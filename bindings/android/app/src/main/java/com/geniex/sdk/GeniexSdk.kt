@@ -32,8 +32,8 @@ class GeniexSdk private constructor() {
 
         val exceptionResult = StringBuilder()
         arrayOf(
-            PluginIdValue.CPU_GPU.value,
-            PluginIdValue.NPU.value
+            PluginIdValue.LLAMA_CPP.value,
+            PluginIdValue.QAIRT.value
         ).forEach { pluginName ->
             File(
                 nativeLibPath,
@@ -159,8 +159,8 @@ class GeniexSdk private constructor() {
         private const val TAG = "GeniexSdk"
         internal const val KEY_QNN_HTP_PATH = "GENIEX_QNN_HTP_PATH"
         private val HTP_ASSET_DIRS = listOf("htp-files", "htp-files-v81", "htp-files-v85")
-        const val PLUGIN_ID_NPU = "npu"
-        const val PLUGIN_ID_CPU_GPU = "cpu_gpu"
+        const val PLUGIN_ID_QAIRT = "qairt"
+        const val PLUGIN_ID_LLAMA_CPP = "llama_cpp"
 
         init {
             System.loadLibrary("npu_jni")

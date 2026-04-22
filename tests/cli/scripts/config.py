@@ -19,22 +19,22 @@ from cases import *
 
 PLUGIN_MAP = {
     'Linux': {
-        'x86_64': ['cpu_gpu', 'geniexml'],
-        'arm64': ['cpu_gpu'],
+        'x86_64': ['llama_cpp', 'geniexml'],
+        'arm64': ['llama_cpp'],
     },
     'Windows': {
-        'x86_64': ['cpu_gpu'],
-        'arm64': ['cpu_gpu', 'npu', 'geniexml'],
+        'x86_64': ['llama_cpp'],
+        'arm64': ['llama_cpp', 'qairt', 'geniexml'],
     },
     'Darwin': {
-        'x86_64': ['cpu_gpu'],
-        'arm64': ['cpu_gpu', 'metal'],
+        'x86_64': ['llama_cpp'],
+        'arm64': ['llama_cpp', 'metal'],
     },
 }
 
 # (plugin, model_id, cases)
 TESTCASE_MAP: dict[str, dict[str, dict[str, list[type[BaseCase]]]]] = {
-    'cpu_gpu': {
+    'llama_cpp': {
         'llm': {
             'Qwen/Qwen3-1.7B-GGUF:Q8_0': [MultiRound],
             # 'ggml-org/gemma-3-4b-it-GGUF:F16': [MultiRound, ImageMultiRound],
@@ -51,7 +51,7 @@ TESTCASE_MAP: dict[str, dict[str, dict[str, list[type[BaseCase]]]]] = {
         'cv': {},
         'image_gen': {},
     },
-    'npu': {
+    'qairt': {
         'llm': {
             'NexaAI/Granite-4-Micro-NPU': [MultiRound],
             'NexaAI/phi4-mini-npu-turbo': [MultiRound],
