@@ -90,9 +90,11 @@ def fetch(pkg_dir: Path, release_tag: str) -> None:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
             z.extractall(tmp_path)
         # Archive contains sdk-pkg-<platform>/lib/... (see release.yml).
-        candidates = [p for p in tmp_path.rglob('libgeniex.so')] + \
-                     [p for p in tmp_path.rglob('geniex.dll')] + \
-                     [p for p in tmp_path.rglob('libgeniex.dylib')]
+        candidates = (
+            list(tmp_path.rglob('libgeniex.so'))
+            + list(tmp_path.rglob('geniex.dll'))
+            + list(tmp_path.rglob('libgeniex.dylib'))
+        )
         if not candidates:
             raise RuntimeError(f'SDK zip {asset} has no libgeniex library')
         src_lib_dir = candidates[0].parent
