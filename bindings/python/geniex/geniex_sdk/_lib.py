@@ -110,9 +110,17 @@ def _setup_env(lib_path: str, plugin_path: str, extra_dirs: list[str] | None = N
     if extra_dirs:
         preload_dirs.extend(extra_dirs)
 
+    # On Windows, os.add_dll_directory() must happen BEFORE loading any DLL so
+    # that LoadLibrary can find transitive dependencies (PATH changes have no
+    # effect on DLL search paths for already-running processes on Windows 8+).
+    if sys.platform == 'win32':
+        for d in preload_dirs:
+            if os.path.isdir(d):
+                os.add_dll_directory(d)
+
     _preload_shared_libs(preload_dirs)
 
-    # Also update LD_LIBRARY_PATH for any child processes the user might spawn.
+    # Also update LD_LIBRARY_PATH / PATH for child processes the user might spawn.
     key = 'PATH' if sys.platform == 'win32' else 'LD_LIBRARY_PATH'
     existing = os.environ.get(key, '')
     extra = os.pathsep.join(preload_dirs)
