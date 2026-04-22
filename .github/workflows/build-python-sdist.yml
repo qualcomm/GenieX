@@ -7,7 +7,7 @@ on:
         description: "Runner label"
         required: false
         type: string
-        default: tetra-runner-17
+        default: ubuntu-latest
       upload_artifact:
         description: "Whether to upload the sdist artifact"
         required: false

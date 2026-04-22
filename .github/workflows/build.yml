@@ -53,7 +53,7 @@ jobs:
     uses: ./.github/workflows/build-python-sdist.yml
     secrets: inherit
     with:
-      runner: tetra-runner-17
+      runner: ubuntu-latest
       upload_artifact: true
 
   build-cli:
