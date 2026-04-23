@@ -23,6 +23,13 @@ module.exports = async ({ github, context, core }) => {
     if (release) break;
   }
 
+  // Merge htpNote into the release body, replacing any stale HTP section from a
+  // prior run (e.g. self-signed → Microsoft-signed once the S3 bundle lands).
+  const mergeHtpNote = (body) => {
+    const base = (body || "").replace(/## Hexagon HTP[\s\S]*$/m, "").trimEnd();
+    return base ? `${base}\n\n${htpNote}` : htpNote;
+  };
+
   if (!release) {
     core.info(`Release ${VERSION} not found, creating (draft=${isDraft})...`);
     const created = await github.rest.repos.createRelease({
@@ -35,17 +42,14 @@ module.exports = async ({ github, context, core }) => {
       draft: isDraft,
     });
     release = created.data;
-  } else if (LLAMA_SHA) {
-    // Idempotent re-run (e.g. after signed bundle becomes available): refresh HTP note.
-    const existing = release.body || "";
-    const stripped = existing.replace(/## Hexagon HTP[\s\S]*$/m, "").trimEnd();
-    const updated = stripped ? `${stripped}\n\n${htpNote}` : htpNote;
-    if (updated !== existing) {
+  } else {
+    const body = mergeHtpNote(release.body);
+    if (body !== release.body) {
       const patched = await github.rest.repos.updateRelease({
         owner,
         repo,
         release_id: release.id,
-        body: updated,
+        body,
       });
       release = patched.data;
     }
