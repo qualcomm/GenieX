@@ -80,7 +80,9 @@ Each native SDK gates a specific plugin/backend. They're all independent, so you
 
 The `llama_cpp` and `qairt` plugins can both drive the NPU, but via **two separate user-space stacks** (ggml-hexagon skels vs. QNN) that consume **different model formats** (GGUF vs. QAIRT `.bin` shards). They are not substitutes for each other.
 
-Minimal Snapdragon build that still exercises the NPU: disable `GGML_HEXAGON` and `GGML_OPENCL`, keep `GENIEX_PLUGIN_QAIRT=ON`. llama.cpp runs CPU-only; the QAIRT plugin drives the NPU through its bundled libs.
+Minimal Snapdragon build that still exercises the NPU: disable `GGML_HEXAGON` and `GGML_OPENCL`, keep `GENIEX_PLUGIN_QAIRT=ON`. llama.cpp runs CPU-only; the QAIRT plugin drives the NPU through its bundled libs. This is the `arm64-windows-snapdragon-cpu-release` preset.
+
+Full NPU+GPU build (`arm64-windows-snapdragon-release` preset) additionally requires the Hexagon SDK, OpenCL SDK, WDK (for `inf2cat.exe`), a self-signed HTP signing cert (`.pfx`), and Windows test-signing to be enabled. See `docs/run.md` for the cert + test-signing setup, and `CLAUDE.md` §onboarding steps 6–8 for the full env-var checklist.
 
 ## Notes
 

@@ -30,8 +30,31 @@ powershell -NoProfile -Command "(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Wind
 # If enabling Dev Mode is blocked by corp policy, alternatives are documented under
 # "Platform gotchas → Windows symlinks" below.
 
-# 6. (Optional) Hexagon/OpenCL env vars — only if building llama.cpp NPU/GPU backends
-echo "HEXAGON_SDK_ROOT=$HEXAGON_SDK_ROOT OPENCL_SDK_ROOT=$OPENCL_SDK_ROOT"
+# 6. (Optional) Full Snapdragon-release prerequisites — only if building the
+#    llama.cpp NPU (Hexagon) + GPU (OpenCL) backends via the
+#    `arm64-windows-snapdragon-release` preset. Skip if using `-cpu-release`.
+powershell -NoProfile -Command "@('HEXAGON_SDK_ROOT','HEXAGON_TOOLS_ROOT','OPENCL_SDK_ROOT','HEXAGON_HTP_CERT','WINDOWS_SDK_BIN') | ForEach-Object { [PSCustomObject]@{ Name=\$_; Machine=[Environment]::GetEnvironmentVariable(\$_,'Machine') } } | Format-List"
+# Expected values (all five must be set, typically at Machine scope via `setx /M`):
+#   HEXAGON_SDK_ROOT   = C:\Qualcomm\Hexagon_SDK\6.4.0.2
+#   HEXAGON_TOOLS_ROOT = C:\Qualcomm\Hexagon_SDK\6.4.0.2\tools\HEXAGON_Tools\19.0.04
+#   OPENCL_SDK_ROOT    = C:\Qualcomm\OpenCL_SDK\2.3.2
+#   HEXAGON_HTP_CERT   = C:\Users\<user>\Certs\ggml-htp-v1.pfx   ← MUST be .pfx, not .cer
+#   WINDOWS_SDK_BIN    = C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0
+#                        ← version dir only. CMake appends /arm64 and /x86 on top
+#                        (ggml-hexagon/CMakeLists.txt:92-93), so a trailing \arm64
+#                        here makes find_program(INF2CAT ...) fail with "Could NOT find INF2CAT".
+
+# 7. (Same as #6) WDK for inf2cat.exe — required to generate the libggml-htp.cat catalog
+ls "/c/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x86/Inf2Cat.exe"
+# NOT shipped with plain Windows SDK. Must install the full WDK via `wdksetup.exe`
+# (~1 GB). The WDK VSIX plugin from the VS Installer does NOT ship Inf2Cat.exe.
+
+# 8. (Same as #6) Test-signing + HTP cert trust (required to LOAD the signed .cat at runtime)
+powershell -NoProfile -Command "bcdedit /enum | Select-String testsigning"
+# Expected: testsigning             Yes
+# Also: ggml-htp-v1.cer must be imported into BOTH Trusted Root Certification
+# Authorities AND Trusted Publishers (Local Machine). See docs/run.md §3 cert
+# setup + §2 cert generation (makecert + pvk2pfx).
 ```
 
 ### If something is missing
@@ -45,6 +68,10 @@ echo "HEXAGON_SDK_ROOT=$HEXAGON_SDK_ROOT OPENCL_SDK_ROOT=$OPENCL_SDK_ROOT"
 | Submodules | `git submodule update --init --recursive` | Without these, CMake fails in `plugins/qairt` or `plugins/llama_cpp`. |
 | Developer Mode | Settings UI only — cannot be scripted reliably. See "Platform gotchas" for workarounds when blocked. |
 | Go (for direct `go build`) | Not needed when using Bazel — `rules_go` provides a hermetic Go 1.24.13 toolchain (pinned in `MODULE.bazel`). Only install Go if you're going the `cli/Makefile` route. |
+| Hexagon SDK / OpenCL SDK | See `third-party/llama.cpp/docs/backend/snapdragon/windows.md` — pinned to Hexagon SDK 6.4.0.2 + Hexagon Tools 19.0.04, Adreno OpenCL SDK 2.3.2. Extract each to `C:\Qualcomm\...`. Only required for the `-release` preset (not `-cpu-release`). |
+| WDK (for `inf2cat.exe`) | Install via `wdksetup.exe` from MS (~1 GB). **Not** the VSIX plugin from VS Installer — that one does not ship `Inf2Cat.exe`. Required only for `-release` preset. |
+| HTP signing cert (`.pfx`) | Generate locally with `makecert` + `pvk2pfx` (see `docs/run.md` §2). Point `HEXAGON_HTP_CERT` at the `.pfx` (not `.cer`). Downloaded `.cer` files from other people's signed binaries are unusable — they have no private key, and importing random third-party roots is a security risk. |
+| Test-signing + cert trust | `bcdedit /set TESTSIGNING ON` (reboot), then `certlm.msc` (elevated) → import `ggml-htp-v1.cer` into **both** Trusted Root CAs and Trusted Publishers. Non-elevated `certlm.msc` silently errors with "store was read only". |
 
 ### Known transient: Go module proxy flake during CLI build
 
@@ -84,6 +111,38 @@ bazelisk run //cli/cmd/geniex:geniex -- list    # empty table proves plugin chai
 ```
 
 **Important: always launch the CLI via `bazelisk run`, not the raw exe.** The exe at `bazel-bin/cli/cmd/geniex/geniex_/geniex.exe` fails with `error while loading shared libraries` unless the runfiles env (`RUNFILES_DIR` / `RUNFILES_MANIFEST_FILE`) is set — which `bazelisk run` does automatically. Note: when stdout is a tty, the DLL-load error is silently swallowed and the exe appears to "succeed" with exit 0 and empty output. Always redirect stdout/stderr to files if a run seems suspicious.
+
+## Full Snapdragon build (Hexagon NPU + Adreno GPU)
+
+Swap `-cpu-release` for `-release` once the prerequisites in onboarding steps #6–#8 are satisfied. The preset wires up `GGML_HEXAGON=ON`, `GGML_OPENCL=ON`, `GENIEX_PLUGIN_QAIRT=ON`. Key extras vs. the cpu-release path:
+
+- **Path-length workaround**: the Hexagon toolchain enforces a 250-char limit, so `subst G: C:\path\to\geniex` and build from `G:\sdk`.
+- **Code-signing step**: build invokes `inf2cat` → `signtool` to produce and sign `libggml-htp.cat` using `HEXAGON_HTP_CERT`. If the inf2cat step fails with "libggml-htp-v*.so is missing or cannot be decompressed", it's a ninja race (cat step ran before the `.so`s finished writing) — just re-run `cmake --build`.
+- **Install layout** adds these over `-cpu-release`:
+  - `sdk/pkg-geniex/lib/llama_cpp/ggml-hexagon.dll`
+  - `sdk/pkg-geniex/lib/llama_cpp/ggml-opencl.dll`
+  - `sdk/pkg-geniex/lib/llama_cpp/libggml-htp-v{68,69,73,75,79,81}.so` + `libggml-htp.cat`
+- **Runtime verify**: `signtool verify /v /pa sdk\pkg-geniex\lib\llama_cpp\libggml-htp.cat` should show `Issued to: GGML.HTP.v1` and `Successfully verified`.
+
+## Running on a specific backend (CLI)
+
+The CLI has **no** `--device` / `--backend` flag. Backend selection is driven by the `DeviceId` field in the model's `geniex.json` manifest at `%USERPROFILE%\.cache\geniex\models\<name>\geniex.json`. Device name strings the `llama_cpp` plugin recognises (from `sdk/plugins/llama_cpp/src/llm.cpp:73-114`):
+
+| Target      | `DeviceId` value                  | Notes |
+|-------------|-----------------------------------|-------|
+| Hexagon NPU | `HTP0` (or `HTP0,HTP1,HTP2,HTP3`) | Starting with `HTP0` also forces KV cache to Q8_0 + flash-attn ON (`llm.cpp:136-140`); plugin auto-sets `GGML_HEXAGON_NDEV=4`. |
+| Adreno GPU  | `GPUOpenCL`                       | Use `-n 999` on `infer` to offload all layers. |
+| CPU         | `CPU` or empty                    | Default. |
+
+End-to-end (PowerShell) for a local GGUF:
+
+```powershell
+bazelisk run //cli/cmd/geniex:geniex -- pull <name> --model-hub localfs --local-path <dir> --model-type llm
+# Then flip DeviceId in %USERPROFILE%\.cache\geniex\models\<name>\geniex.json and
+bazelisk run //cli/cmd/geniex:geniex -- infer <name> -p "..."
+```
+
+See `RUN_LOCAL_MODEL.md` (repo root, temp) for the full PowerShell recipe including the `ConvertFrom-Json` / `ConvertTo-Json` one-liner to flip `DeviceId`. Note: `localfs` pull names the model using the last two path components (e.g. `modelfiles` dir under `NexaAI` → model name `NexaAI/<folder>`).
 
 ## Build system
 
@@ -185,7 +244,11 @@ Key structural points worth knowing before changing things:
     3. **Run the shell elevated** — Administrator tokens always have the privilege.
     4. If all three are blocked by corp policy: file a ticket with IT for option 2, or fall back to `cli/Makefile` (non-Bazel Go build using junctions, which don't need the privilege). Commenting out the two `.bazelrc` lines is a last resort and likely requires patching `sdk/runfiles.bzl` to use `symlinks=` / `files=` instead of `root_symlinks=`.
 - **Windows ARM64 (Snapdragon)**: Hexagon toolchain enforces a 250-character path limit. Use `subst G: C:\path\to\geniex` before building `sdk/`.
-- **Hexagon NPU (`llama_cpp` + HTP)**: loading `libggml-htp.cat` on Windows requires `bcdedit /set TESTSIGNING ON` **and** importing `ggml-htp-v1.cer` into *both* `Trusted Root Certification Authorities` and `Trusted Publishers` (Local Machine). See `docs/run.md` for the full procedure.
+- **Hexagon NPU (`llama_cpp` + HTP)**: loading `libggml-htp.cat` on Windows requires `bcdedit /set TESTSIGNING ON` **and** importing `ggml-htp-v1.cer` into *both* `Trusted Root Certification Authorities` and `Trusted Publishers` (Local Machine). See `docs/run.md` for the full procedure. Recurring traps:
+    - `HEXAGON_HTP_CERT` must point at the `.pfx`, not the `.cer` (signtool needs the private key).
+    - `WINDOWS_SDK_BIN` must be the version dir, not the arch subdir — CMake appends `/arm64` and `/x86` itself (`ggml-hexagon/CMakeLists.txt:92-95`). Trailing `\arm64` → `Could NOT find INF2CAT`.
+    - `inf2cat.exe` lives in the **WDK** (install via `wdksetup.exe`), not the Windows SDK and not the WDK-as-VSIX from VS Installer.
+    - `certlm.msc` must be launched elevated or imports fail with "store was read only".
 - **Python + `llama-cpp-python` conflict**: do not install both in the same env — both ship llama.cpp DLLs and collide at load time. Use separate virtualenvs.
 - **pybind11**: never hold pybind objects/functions in global scope (statics, ctor/dtor bodies, C++ struct members). Keep them strictly local — see the pybind docs linked from `sdk/README.md`.
 
