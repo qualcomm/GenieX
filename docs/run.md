@@ -43,11 +43,30 @@ Every `v*` tag publishes the Windows ARM64 installer on the GitHub Releases page
 Open `https://github.com/qcom-ai-hub/geniex/releases` and grab:
 
 - `geniex-cli-setup.exe` — the installer
-- `ggml-htp-v1.cer` — HTP ops-library signing certificate (required for NPU)
+- `geniex-sdk-windows-arm64-<tag>.zip` — the SDK
 
-### 2. Install the HTP signing certificate (required before first NPU run)
+The SDK filename tells you which HTP signing flavor you got:
 
-The `llama_cpp` Hexagon backend loads `libggml-htp.cat`, which is signed by a self-signed test cert. Windows refuses to load it until you both enable test signing **and** trust the cert.
+| Filename                                           | HTP signing         | Extra setup needed                          |
+|----------------------------------------------------|---------------------|---------------------------------------------|
+| `geniex-sdk-windows-arm64-<tag>.zip`               | Microsoft-signed    | None — skip to Run.                         |
+| `geniex-sdk-windows-arm64-<tag>-selfsigned.zip`    | Self-signed (test)  | See **Self-signed fallback** below.         |
+
+If the release also has a `ggml-htp-v1.cer` asset attached, you're on the
+self-signed flavor.
+
+### 2. Run
+
+1. Install with `geniex-cli-setup.exe`.
+2. Download a model: `hf download yichqian/geniex-qairt-models --local-dir=geniex-qairt-models`
+3. `geniex.exe pull local/granite4_micro --model-hub localfs --local-path <abs-path>\geniex-qairt-models\granite4_micro`
+4. `geniex.exe infer local/granite4_micro`
+
+### Self-signed fallback
+
+Only needed when the release you downloaded ships the `-selfsigned` SDK +
+`ggml-htp-v1.cer`. In that case Windows refuses to load `libggml-htp.cat` until
+you both enable test signing **and** trust the cert.
 
 1. **Enable test signing** (elevated PowerShell, then reboot):
    ```powershell
@@ -67,19 +86,3 @@ The `llama_cpp` Hexagon backend loads `libggml-htp.cat`, which is signed by a se
    ```
 
 Background / original upstream instructions: `third-party/llama.cpp/docs/backend/snapdragon/windows.md`.
-
-### 3. Run
-
-1. Install with `geniex-cli-setup.exe`.
-2. Download a model: `hf download yichqian/geniex-qairt-models --local-dir=geniex-qairt-models`
-3. `geniex.exe pull local/granite4_micro --model-hub localfs --local-path <abs-path>\geniex-qairt-models\granite4_micro`
-4. `geniex.exe infer local/granite4_micro`
-
-with `llama_cpp` backend, need on extra step:
-
-- Get builder's certificate, `ggml-htp-v1.cer`.
-- follow [document](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/windows.md#enable-npu-driver-test-signatures)
-  - disable secure boot
-  - enable test signing
-  - _skip_ create certificate
-  - import certificate with `certlm`
