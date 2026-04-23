@@ -17,27 +17,13 @@ package types
 type ModelType string
 
 const (
-	ModelTypeLLM      ModelType = "llm"
-	ModelTypeVLM      ModelType = "vlm"
-	// ModelTypeEmbedder ModelType = "embedder"
-	// ModelTypeReranker ModelType = "reranker"
-	// ModelTypeTTS      ModelType = "tts"
-	// ModelTypeASR      ModelType = "asr"
-	// ModelTypeDiarize  ModelType = "diarize"
-	// ModelTypeCV       ModelType = "cv"
-	// ModelTypeImageGen ModelType = "image_gen"
+	ModelTypeLLM ModelType = "llm"
+	ModelTypeVLM ModelType = "vlm"
 )
 
 var AllModelTypes = []ModelType{
 	ModelTypeLLM,
 	ModelTypeVLM,
-	// ModelTypeEmbedder,
-	// ModelTypeReranker,
-	// ModelTypeTTS,
-	// ModelTypeASR,
-	// ModelTypeDiarize,
-	// ModelTypeCV,
-	// ModelTypeImageGen,
 }
 
 type ModelFileInfo struct {

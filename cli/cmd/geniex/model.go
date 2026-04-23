@@ -58,7 +58,7 @@ func pull() *cobra.Command {
 	pullCmd.Flags().SortFlags = false
 	pullCmd.Flags().StringVarP(&modelHub, "model-hub", "", "", "specify model hub to use: volces|modelscope|s3|hf|localfs")
 	pullCmd.Flags().StringVarP(&localPath, "local-path", "", "", "[localfs] path to local directory")
-	pullCmd.Flags().StringVarP(&modelType, "model-type", "", "", "specify model type to use: [llm|vlm|embedder|reranker|tts|asr|diarize|cv|image_gen]")
+	pullCmd.Flags().StringVarP(&modelType, "model-type", "", "", "specify model type to use: [llm|vlm]")
 
 	pullCmd.Run = func(cmd *cobra.Command, args []string) {
 		name, quant := normalizeModelName(args[0])
