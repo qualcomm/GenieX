@@ -3,7 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "store",
     srcs = [
-        "config.go",
         "errors.go",
         "lock.go",
         "manager.go",

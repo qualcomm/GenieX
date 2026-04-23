@@ -3,8 +3,6 @@ load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
 go_library(
     name = "geniex_lib",
     srcs = [
-        "config.go",
-        "function_call.go",
         "infer.go",
         "main.go",
         "model.go",
@@ -18,7 +16,6 @@ go_library(
     deps = [
         "//bindings/go:geniex_sdk_go",
         "//cli/cmd/geniex/common",
-        "//cli/cmd/geniex/logic",
         "//cli/internal/config",
         "//cli/internal/downloader",
         "//cli/internal/model_hub",
