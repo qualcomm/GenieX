@@ -111,3 +111,25 @@ adb push pkg-geniex /data/local/tmp/geniex
 adb push Qwen3-0.6B-Q4_0.gguf /data/local/tmp/geniex/modelfiles/llama_cpp/
 adb shell "cd /data/local/tmp/geniex && LD_LIBRARY_PATH=./lib:./lib/llama_cpp GENIEX_PLUGIN_PATH=./lib ./bin/geniex_test_llm"
 ```
+
+# Build Android
+
+1. Start container
+   1. Follow [llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/README.md#android) to start the docker container.
+2. Install system dependencies in root shell
+   1. Run `docker exec -u 0 -it <container_id> bash` to get into the container with root access.
+   2. Run `apt update -y && apt install -y make gcc` to install make and gcc.
+   3. **Exit** and return to previous **normal user** shell.
+3. Setup rust toolchain
+   1. Run `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` to install Rust toolchain.
+   2. Run `source $HOME/.cargo/env` to load Rust environment variables.
+   3. Run `rustup target add aarch64-linux-android` to add
+4. Build SDK
+   1. `cd sdk`
+   2. `cmake --preset arm64-android-snapdragon-debug -B build-android .`
+   3. `cmake --build build-android -j`
+   4. `cmake --install build-android --prefix pkg-geniex`
+5. Build Android App
+   1. On the host machine with the Android SDK and Gradle installed, or if you manually install the Android SDK inside the container, the process will be much more complex.
+   2. `cd examples/android`
+      3 `gradle build` to build the Android app with the local SDK.
