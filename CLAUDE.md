@@ -124,6 +124,118 @@ Swap `-cpu-release` for `-release` once the prerequisites in onboarding steps #6
   - `sdk/pkg-geniex/lib/llama_cpp/libggml-htp-v{68,69,73,75,79,81}.so` + `libggml-htp.cat`
 - **Runtime verify**: `signtool verify /v /pa sdk\pkg-geniex\lib\llama_cpp\libggml-htp.cat` should show `Issued to: GGML.HTP.v1` and `Successfully verified`.
 
+## Android build + on-device QAIRT NPU inference (adb)
+
+End-to-end recipe for cross-compiling the SDK + doctest suite on Windows and running QAIRT NPU inference in `adb shell`. llama.cpp plugin is **off** — this exercises only the QAIRT plugin via its bundled QNN libs.
+
+### One-time prerequisites
+
+1. **Android NDK** via Android Studio → More Actions → SDK Manager → **SDK Tools** tab. To pick a specific NDK version (not just the default), tick **"Show Package Details"** (bottom-right checkbox) — the "NDK (Side by side)" row expands to list all versions. The latest (e.g. `30.x`) works fine; none of the llama.cpp-specific r27 workarounds apply here since we build with `GENIEX_PLUGIN_LLAMA_CPP=OFF`. Lands at `C:\Users\zhic\AppData\Local\Android\Sdk\ndk\<version>\`. The `SDK Platforms` tab (API level installs) is **irrelevant** — the NDK ships its own sysroot.
+2. **Set `ANDROID_NDK_ROOT` permanently** — open a PowerShell and run `setx ANDROID_NDK_ROOT "C:\Users\zhic\AppData\Local\Android\Sdk\ndk\<version>"`. Must open a **new** shell to see it (`setx` only affects future processes). Verify: `ls "$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake"` should exist.
+3. **Rust android target**: `rustup target add aarch64-linux-android` (~50 MB, tokenizers-cpp cross-compile needs it — this is in addition to the host target).
+4. **Ninja on PATH** — required because the android preset uses Ninja (see pitfall below). VS ships one bundled; prepend it per-shell: `export PATH="/c/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja:$PATH"`. No separate install needed.
+
+### Build (~5 min first time, mostly Rust)
+
+```bash
+export PATH="/c/Program Files/Microsoft Visual Studio/18/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/Ninja:$PATH"
+cd sdk
+
+# CRITICAL: -G Ninja is not optional here even though the preset is "Ninja-shaped".
+# The `arm64-android-snapdragon` preset doesn't pin a generator, so CMake defaults
+# to Visual Studio and fails with:
+#   "MSBuild ... VCTargetsPath.vcxproj ... BaseOutputPath/OutputPath property is not set"
+# Always pass -G Ninja explicitly (or add "generator": "Ninja" to the preset).
+cmake --preset arm64-android-snapdragon-release -G Ninja \
+      -DGENIEX_PLUGIN_LLAMA_CPP=OFF \
+      -DGENIEX_PLUGIN_QAIRT=ON \
+      -DGENIEX_TEST=ON
+# Note: the preset inherits `snapdragon` which sets GENIEX_PLUGIN_LLAMA_CPP=ON, so the
+# explicit -D override is required to keep llama.cpp out of the android build.
+# The "Manually-specified variables were not used" warnings for GGML_HEXAGON,
+# HEXAGON_*_ROOT, WINDOWS_SDK_BIN etc. are benign — those are Windows-only vars from
+# the inherited `snapdragon` preset block and the android path doesn't consume them.
+
+cmake --build --preset arm64-android-snapdragon-release -j 8
+cmake --install build-arm64-android-snapdragon-release --prefix pkg-geniex-android
+```
+
+Install layout (the invariants you'll push to the device):
+
+```
+sdk/pkg-geniex-android/
+├── bin/geniex_test_llm            ← doctest exe; also _vlm, _embedding, _asr, ...
+└── lib/
+    ├── libgeniex.so
+    └── qairt/
+        ├── libgeniex_plugin.so    ← discovered via GENIEX_PLUGIN_PATH (registry.cpp:177 scans subdirs)
+        ├── libgeniex_core.so
+        └── htp-files/             ← 31 QNN skel/stub libs copied from third-party/geniex-qairt/third-party/android/
+                                   ←   (V73, V75, V79, V81, ...)
+```
+
+### Adding a QAIRT model the plugin doesn't already know about
+
+A model that exists in `third-party/geniex-qairt/models/<name>/<name>.h` (e.g. `llama3_2_1b`) is **not** automatically usable — three files in `sdk/` need edits:
+
+1. `sdk/plugins/qairt/include/llm_model_registry.h` — `#include "<name>.h"` at the top + add `{"<registry-id>", {<namespace>::makePipeline}},` to the registry. The registry-id is what gets passed as the test's second tuple element / `model_name` in `geniex_LlmCreateInput`.
+2. `sdk/plugins/qairt/src/CMakeLists.txt` — add `PRIVATE ${GENIEX_QAIRT_DIR}/models/<name>` (and any transitively-included siblings, e.g. `llama3_2` requires `llama3` too for `llama3.h`) to the `target_include_directories(geniex_qairt BEFORE ...)` block.
+3. `sdk/tests/src/llm.cpp` — add an entry inside the `__ANDROID__` qairt block. **The `model_path` field is used only for its parent directory** (see `plugins/qairt/src/llm.cpp:45` — `fs::path(input->model_path).parent_path()`), so any file in the folder works; `tokenizer.json` is a safe pick that always exists. Missing folders trigger a graceful skip via `g_test_summary.add_skipped_model`.
+
+After edits, re-run `cmake --build --preset ...` — only `geniex_qairt` + `geniex_test_llm` recompile (~1 min). Then `cmake --install` again to refresh `pkg-geniex-android/`.
+
+### Push to the phone (Git Bash requires path-conv bypass)
+
+```bash
+# WITHOUT these two exports, Git Bash / MSYS mangles '/data/local/tmp/...' into
+# 'C:/Program Files/Git/data/local/tmp/...' and adb fails with:
+#   adb: error: failed to copy '...' to 'C:/Program Files/Git/data/local/tmp/...':
+#   remote secure_mkdirs() failed: No such file or directory
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
+DEV=/data/local/tmp/geniex
+PKG=/c/Users/zhic/code/geniex/sdk/pkg-geniex-android
+
+adb shell "mkdir -p $DEV/lib $DEV/bin $DEV/modelfiles"
+adb push "$PKG/lib/libgeniex.so"    $DEV/lib/
+adb push "$PKG/lib/qairt"           $DEV/lib/          # → $DEV/lib/qairt/{libgeniex_plugin.so, libgeniex_core.so, htp-files/}
+adb push "$PKG/bin/geniex_test_llm" $DEV/bin/
+adb shell "chmod 755 $DEV/bin/geniex_test_llm"
+
+# Model: push the whole folder. Model-path strings in sdk/tests/src/llm.cpp are
+# literal — folder names must match exactly. `.bin` shards transfer at ~40 MB/s
+# over USB, so a 1.3 GB Llama-3.2-1B export lands in ~30 s.
+adb push "<local-model-dir>/<model-folder-name>" $DEV/modelfiles/
+```
+
+### Run
+
+```bash
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+adb shell 'cd /data/local/tmp/geniex && \
+  LD_LIBRARY_PATH=/data/local/tmp/geniex/lib:/data/local/tmp/geniex/lib/qairt \
+  ADSP_LIBRARY_PATH=/data/local/tmp/geniex/lib/qairt/htp-files \
+  GENIEX_PLUGIN_PATH=/data/local/tmp/geniex/lib \
+  ./bin/geniex_test_llm --test-suite=qairt --subcase="<model-test-id>/GenerateStream"'
+```
+
+Role of each env var:
+- `LD_LIBRARY_PATH` — Android linker finds `libgeniex.so` (direct dep of the test exe) and then `libgeniex_plugin.so` / `libgeniex_core.so` transitively once the plugin is dlopen'd.
+- `ADSP_LIBRARY_PATH` — QNN HTP runtime uses this to locate the per-arch skel libs (`libQnnHtpV79Skel.so`, `libQnnHtpV81Skel.so`, ...) that get uploaded to the Hexagon DSP. Without it, you'll see `Detected HTP arch: vNN` but model creation will fail deeper in. HTP arch is auto-detected at runtime (e.g. Snapdragon 8 Gen 3 / Elite → v79).
+- `GENIEX_PLUGIN_PATH` — `sdk/src/registry.cpp:157` scans this directory for subdirs containing `libgeniex_plugin.so`. Pointing it at `$DEV/lib` makes it find `$DEV/lib/qairt/libgeniex_plugin.so`.
+
+### Verifying tokens actually generated
+
+- **Passing assertion counts are not enough** to prove text came out; the test only asserts `generated_tokens > 0` and `full_text != nullptr`. To see the actual output:
+  - **`GenerateStream`** subcase prints tokens live via `std::cout << token << std::flush` in the streaming callback — this bypasses logger verbosity and always shows up in adb output.
+  - **`GenerateBasic`** subcase calls `GENIEX_LOG_INFO("{}", output)` which the Android log level tends to suppress in captured stdout. Use `--success` to at least see `prompt_tokens = N, generated_tokens = M` in the assertion dump.
+- Subcase filter syntax: `--subcase="<model-test-id>/<TestName>"` where `<model-test-id>` is the **first** tuple element of the test's `SetupMap` entry (e.g. `llama_v3_2_1b_instruct`, not the registry id `llama3_2-1b`). Drop the filter to run every test×model pair the plugin supports; entries whose files aren't on the device print `Model file not found … Skipping tests` and continue.
+
+### Notes
+
+- The Android path is **independent** of the Kotlin/JNI bindings under `bindings/android/`. `bindings/android/` builds its own `libgeniex_bridge.so` via Gradle + NDK for Android apps; the `sdk/pkg-geniex-android/` produced here is the raw C-ABI SDK for direct native / adb-shell consumption. Don't cross the streams — each has its own `libgeniex*.so` output.
+- All 31 HTP skel/stub libs shipped in `third-party/geniex-qairt/third-party/android/` are QAIRT v2.43.1.260218 and forward-compatible with older model export versions — a model compiled against QAIRT v2.42 runs fine on the v2.43 runtime.
+
 ## Running on a specific backend (CLI)
 
 The CLI has **no** `--device` / `--backend` flag. Backend selection is driven by the `DeviceId` field in the model's `geniex.json` manifest at `%USERPROFILE%\.cache\geniex\models\<name>\geniex.json`. Device name strings the `llama_cpp` plugin recognises (from `sdk/plugins/llama_cpp/src/llm.cpp:73-114`):

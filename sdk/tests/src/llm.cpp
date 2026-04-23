@@ -95,6 +95,12 @@ Setup<Param, geniex_LLM> setup_guard(
                     "/data/local/tmp/geniex/modelfiles/Qwen3-4B-Instruct-2507-NPU/"
                     "weights-1-3.nexa",
                     std::nullopt},
+                {"llama_v3_2_1b_instruct",
+                    "llama3_2-1b",
+                    "/data/local/tmp/geniex/modelfiles/"
+                    "llama_v3_2_1b_instruct-genie-w4-qualcomm_snapdragon_x_elite/"
+                    "tokenizer.json",
+                    std::nullopt},
 #elif defined(_WIN32)
                 {"granite4_micro", "granite4", "modelfiles/qairt/granite4_micro/tokenizer.json", std::nullopt},
                 {"phi4", "phi4", "modelfiles/qairt/phi4/tokenizer.json", std::nullopt},

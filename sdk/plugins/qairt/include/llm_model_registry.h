@@ -12,6 +12,7 @@
 #include "phi4.h"
 #include "phi3_5.h"
 #include "granite4.h"
+#include "llama3_2.h"
 
 namespace geniex {
 
@@ -29,6 +30,7 @@ inline const std::unordered_map<std::string, LlmModelEntry>& llm_model_registry(
         {"phi3.5",         {phi3_5::makePipeline}},
         {"phi3.5-aihub",   {phi3_5_aihub::makePipeline}},
         {"granite4",       {granite4_micro::makePipeline}},
+        {"llama3_2-1b",    {llama3_2_1b::makePipeline}},
     };
     return registry;
 }
