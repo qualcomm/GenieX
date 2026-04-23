@@ -148,12 +148,12 @@ jobs:
           fi
           zip -r "geniex-sdk-windows-arm64-${RELEASE_TAG}${sdk_suffix}.zip" sdk-pkg-windows-arm64
 
-          files=$(ls *.zip *.exe *.tar.gz *.cer 2>/dev/null)
-          for f in $files; do sha256sum "$f" > "$f.sha256"; done
+          shopt -s nullglob
+          files=(*.zip *.exe *.tar.gz *.cer)
+          for f in "${files[@]}"; do sha256sum "$f" > "$f.sha256"; done
           {
             echo "files<<EOF"
-            echo "$files"
-            for f in $files; do echo "$f.sha256"; done
+            for f in "${files[@]}"; do echo "$f"; echo "$f.sha256"; done
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
