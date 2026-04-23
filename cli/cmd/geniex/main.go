@@ -29,7 +29,6 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 )
 
 var (
@@ -66,18 +65,6 @@ func RootCmd() *cobra.Command {
 			// 	}
 			// }
 
-			// license
-			if os.Getenv("GENIEX_TOKEN") == "" {
-				license, err := store.Get().ConfigGet("license")
-				if err != nil || license == "" {
-					slog.Warn("license is not set", "err", err)
-				} else if err := os.Setenv("GENIEX_TOKEN", license); err != nil {
-					panic(err)
-				}
-			} else {
-				slog.Warn("license is set by env, ignore config")
-			}
-
 			return nil
 		},
 	}
@@ -97,7 +84,6 @@ func RootCmd() *cobra.Command {
 		pull(), remove(), clean(), list(),
 		infer(), functionCall(),
 		serve(), run(),
-		_config(),
 		version(), update(),
 	)
 
