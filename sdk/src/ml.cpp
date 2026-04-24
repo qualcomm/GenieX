@@ -114,7 +114,7 @@ void geniex_free(void* ptr) {
 
 // Version
 
-constexpr const char* version = build_config::kBridgeVersion;
+const char* version = build_config::kBridgeVersion;
 
 const char* geniex_version() { return version; }
 
