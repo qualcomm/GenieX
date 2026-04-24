@@ -91,6 +91,7 @@ Remove-Item -Recurse -Force $BuildDir -ErrorAction SilentlyContinue
   -DGENIEX_DL=ON `
   -DGENIEX_PLUGIN_LLAMA_CPP=ON `
   -DGENIEX_PLUGIN_QAIRT=ON `
+  -DGENIEX_MODEL_MANAGER=ON `
   -DGGML_OPENCL=ON `
   -DGGML_HEXAGON=ON `
   "-DCMAKE_PREFIX_PATH=$env:OPENCL_SDK_ROOT" `

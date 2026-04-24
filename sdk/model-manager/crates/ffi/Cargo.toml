@@ -1,0 +1,12 @@
+[package]
+name = "model-manager-ffi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "geniex_model"
+crate-type = ["staticlib"]
+
+[dependencies]
+model-manager-core = { path = "../core" }
+tokio = { workspace = true }

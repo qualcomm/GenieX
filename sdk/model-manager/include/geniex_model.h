@@ -1,0 +1,230 @@
+#pragma once
+
+/**
+ * @file geniex_model.h
+ * @brief C API for model management: download, local storage, and path resolution.
+ *
+ * Implemented in Rust (sdk/model-manager), compiled to libgeniex_model.a and
+ * linked into libgeniex.so via the GENIEX_MODEL_MANAGER CMake option.
+ *
+ * Memory convention (mirrors geniex.h):
+ *   - All output char* fields are heap-allocated; free them with geniex_free().
+ *   - Dedicated _free helpers (geniex_model_paths_free, geniex_model_list_free)
+ *     free their members and zero the struct.
+ *   - Input pointers are caller-owned and never freed by this library.
+ *
+ * Error codes reuse the geniex_ErrorCode range defined in geniex.h (negative = error).
+ */
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "geniex.h" /* GENIEX_API, geniex_ErrorCode, geniex_Path, geniex_free() */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ============================================================
+ *  Initialization
+ * ============================================================ */
+
+/**
+ * @brief Initialize the model manager.
+ *
+ * Must be called before any other geniex_model_* function.
+ *
+ * `data_dir` precedence: argument → `GENIEX_DATADIR` env → `~/.cache/geniex`.
+ *
+ * Calling this function more than once per process is a programmer error;
+ * a warning is logged via geniex_set_log and
+ * GENIEX_ERROR_COMMON_INVALID_INPUT is returned. The first successful
+ * call is authoritative.
+ *
+ * HuggingFace tokens are a per-pull concern — see
+ * `geniex_ModelPullInput.hf_token` — and are deliberately NOT accepted
+ * here, so that callers can rotate credentials between downloads.
+ *
+ * @param data_dir  Local cache directory, or NULL to fall back to env/default.
+ * @return GENIEX_SUCCESS on success, negative geniex_ErrorCode on failure.
+ */
+GENIEX_API int32_t geniex_model_init(geniex_Path data_dir);
+
+/**
+ * @brief Deinitialize the model manager and release resources.
+ * @return GENIEX_SUCCESS.
+ */
+GENIEX_API int32_t geniex_model_deinit(void);
+
+/* ============================================================
+ *  Model type
+ * ============================================================ */
+
+typedef enum {
+    GENIEX_MODEL_TYPE_LLM = 0,
+    GENIEX_MODEL_TYPE_VLM = 1,
+} geniex_ModelType;
+
+/* ============================================================
+ *  Path resolution
+ * ============================================================ */
+
+/**
+ * @brief Resolved absolute file paths for a loaded model.
+ *
+ * All non-NULL char* fields are heap-allocated.
+ * Free the entire struct with geniex_model_paths_free().
+ */
+typedef struct {
+    char* model_path;     /**< Main model file (absolute path).          */
+    char* mmproj_path;    /**< Multimodal projection file. NULL if unused. */
+    char* tokenizer_path; /**< Tokenizer file. NULL if unused.            */
+    char* model_dir;      /**< Model directory (always set).              */
+    char* model_name;     /**< Architecture name, e.g. "qwen3-4b".       */
+    char* plugin_id;      /**< Plugin ID, e.g. "llama_cpp".               */
+    char* device_id;      /**< Device ID. NULL means default device.      */
+} geniex_ModelPaths;
+
+/**
+ * @brief Get resolved file paths for a model.
+ *
+ * @param model_name  "org/repo" or "org/repo:quant".
+ *                    If quant is omitted the first downloaded quantization is used.
+ * @param out_paths   Populated on success. Call geniex_model_paths_free() when done.
+ * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
+ */
+GENIEX_API int32_t geniex_model_get_paths(const char* model_name, geniex_ModelPaths* out_paths);
+
+/** Free all heap strings inside geniex_ModelPaths and zero the struct. */
+GENIEX_API void geniex_model_paths_free(geniex_ModelPaths* paths);
+
+/* ============================================================
+ *  Local cache management
+ * ============================================================ */
+
+typedef struct {
+    char**  names; /**< Heap-allocated array of "org/repo" strings. */
+    int32_t count;
+} geniex_ModelListOutput;
+
+/**
+ * @brief List all locally cached models.
+ * @param output  Populated on success. Call geniex_model_list_free() when done.
+ * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
+ */
+GENIEX_API int32_t geniex_model_list(geniex_ModelListOutput* output);
+
+/** Free the names array and zero the struct. */
+GENIEX_API void geniex_model_list_free(geniex_ModelListOutput* output);
+
+/**
+ * @brief Delete a cached model from disk.
+ * @param model_name  "org/repo" format.
+ * @return GENIEX_SUCCESS, or GENIEX_ERROR_COMMON_FILE_NOT_FOUND if not cached.
+ */
+GENIEX_API int32_t geniex_model_remove(const char* model_name);
+
+/**
+ * @brief Delete all cached models.
+ * @param removed_count  Set to the number of deleted models. May be NULL.
+ * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
+ */
+GENIEX_API int32_t geniex_model_clean(int32_t* removed_count);
+
+/**
+ * @brief Get the model type of a cached model.
+ * @param model_name  "org/repo" format.
+ * @param out_type    Set on success.
+ * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
+ */
+GENIEX_API int32_t geniex_model_get_type(const char* model_name, geniex_ModelType* out_type);
+
+/* ============================================================
+ *  Download
+ * ============================================================ */
+
+typedef enum {
+    GENIEX_HUB_AUTO        = 0, /**< Automatic hub selection              */
+    GENIEX_HUB_HUGGINGFACE = 1, /**< HuggingFace Hub                      */
+    GENIEX_HUB_MODELSCOPE  = 2, /**< ModelScope (mainland China preferred) */
+    GENIEX_HUB_S3          = 3, /**< AWS S3 (nexa-model-hub-bucket)        */
+    GENIEX_HUB_VOLCES      = 4, /**< Volces TOS (mainland China preferred) */
+    /**
+     * Local filesystem — not a real hub. The value 127 (0x7F) keeps it
+     * well separated from real hub identifiers so future additions won't
+     * collide, and signals "this isn't a remote source" at a glance.
+     */
+    GENIEX_HUB_LOCALFS = 127,
+} geniex_HubSource;
+
+/**
+ * @brief Per-file download progress, as reported to the user callback.
+ *
+ * Lifetimes: `file_name` and the enclosing array are library-owned and
+ * valid only for the duration of the callback. Callbacks must copy any
+ * data they wish to retain.
+ */
+typedef struct {
+    const char* file_name; /**< Relative path within the model directory. */
+    int64_t     downloaded_bytes;
+    int64_t     total_bytes; /**< -1 if unknown */
+} geniex_FileProgress;
+
+/**
+ * @brief Progress callback invoked periodically during a pull.
+ *
+ * @param files       Array of per-file progress entries (one per file being fetched).
+ * @param file_count  Length of `files`.
+ * @param user_data   Caller-provided pointer (as passed to geniex_model_pull).
+ * @return true to continue, false to cancel the download.
+ */
+typedef bool (*geniex_download_progress_cb)(const geniex_FileProgress* files, int32_t file_count, void* user_data);
+
+typedef struct {
+    const char*      model_name; /**< "org/repo" or short alias                    */
+    const char*      quant;      /**< Quantization hint. NULL for auto-select      */
+    geniex_HubSource hub;        /**< Use GENIEX_HUB_AUTO for automatic selection  */
+    geniex_Path      local_path; /**< Required only when hub == GENIEX_HUB_LOCALFS */
+    /**
+     * HuggingFace bearer token for this pull. NULL falls back to the
+     * `GENIEX_HFTOKEN` environment variable; if that is also unset the
+     * download proceeds anonymously (subject to HF rate limits). Only
+     * consulted when `hub == GENIEX_HUB_HUGGINGFACE`.
+     */
+    const char*                 hf_token;
+    geniex_download_progress_cb on_progress; /**< NULL to suppress progress reporting           */
+    void*                       user_data;   /**< Forwarded to on_progress                      */
+} geniex_ModelPullInput;
+
+/**
+ * @brief Download a model (blocking).
+ *
+ * Supports resume: partially downloaded files are continued from where they
+ * left off.  On success the model is immediately available via geniex_model_get_paths().
+ *
+ * @param input  Pull parameters. Must not be NULL.
+ * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
+ */
+GENIEX_API int32_t geniex_model_pull(const geniex_ModelPullInput* input);
+
+/* ============================================================
+ *  Platform alias resolution
+ * ============================================================ */
+
+/**
+ * @brief Resolve a short alias to the canonical "org/repo" name for the
+ *        current OS and CPU architecture.
+ *
+ * Example: "qwen3"   → "NexaAI/Qwen3-4B-GGUF"   (x86-64)
+ *          "qwen3vl" → "NexaAI/Qwen3-VL-4B-NPU"  (Windows arm64)
+ *
+ * @param alias         Short model name.
+ * @param out_full_name Set to a heap-allocated string on success.
+ *                      Free with geniex_free().
+ * @return GENIEX_SUCCESS if resolved, GENIEX_ERROR_COMMON_INVALID_INPUT if unknown alias.
+ */
+GENIEX_API int32_t geniex_model_resolve_alias(const char* alias, char** out_full_name);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif

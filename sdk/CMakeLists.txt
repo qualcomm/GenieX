@@ -37,6 +37,7 @@ option(GENIEX_PLUGIN_LLAMA_CPP  "Enable llama.cpp backend"       ON)
 option(GENIEX_PLUGIN_QAIRT      "Enable QAIRT backend"           ON)
 option(GENIEX_DEBUG             "Enable debug mode"              ON)
 option(GENIEX_TEST              "Enable unit tests"              ON)
+option(GENIEX_MODEL_MANAGER     "Enable model manager"           OFF)
 
 message(STATUS "=============== Options ===============")
 message(STATUS "GENIEX_VERSION:          ${GENIEX_VERSION}")
@@ -44,7 +45,46 @@ message(STATUS "GENIEX_PLUGIN_LLAMA_CPP: ${GENIEX_PLUGIN_LLAMA_CPP}")
 message(STATUS "GENIEX_PLUGIN_QAIRT:     ${GENIEX_PLUGIN_QAIRT}")
 message(STATUS "GENIEX_DEBUG:            ${GENIEX_DEBUG}")
 message(STATUS "GENIEX_TEST:             ${GENIEX_TEST}")
+message(STATUS "GENIEX_MODEL_MANAGER:    ${GENIEX_MODEL_MANAGER}")
 message(STATUS "=======================================")
+
+# ===============================================================================
+# Rust Model Manager (optional)
+# ===============================================================================
+if(GENIEX_MODEL_MANAGER)
+    set(RUST_MM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/model-manager")
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set(RUST_PROFILE "debug")
+        set(RUST_BUILD_FLAG "")
+    else()
+        set(RUST_PROFILE "release")
+        set(RUST_BUILD_FLAG "--release")
+    endif()
+    set(RUST_TARGET_DIR "${RUST_MM_DIR}/target/${RUST_PROFILE}")
+
+    # cargo's static-library output file name is platform-dependent:
+    # Windows produces `<crate>.lib`, everything else produces
+    # `lib<crate>.a`. We export RUST_MODEL_LIB as the absolute path the
+    # linker will consume, and use the same path as the custom-command
+    # output so ninja can track it as a build artifact.
+    if(WIN32)
+        set(RUST_MODEL_LIB "${RUST_TARGET_DIR}/geniex_model.lib")
+    else()
+        set(RUST_MODEL_LIB "${RUST_TARGET_DIR}/libgeniex_model.a")
+    endif()
+
+    add_custom_command(
+        OUTPUT "${RUST_MODEL_LIB}"
+        COMMAND cargo build ${RUST_BUILD_FLAG}
+                --manifest-path "${RUST_MM_DIR}/Cargo.toml"
+        WORKING_DIRECTORY "${RUST_MM_DIR}"
+        COMMENT "Building model manager (${RUST_PROFILE})"
+        VERBATIM
+    )
+    add_custom_target(model_manager_build
+        DEPENDS "${RUST_MODEL_LIB}"
+    )
+endif()
 
 enable_testing()
 

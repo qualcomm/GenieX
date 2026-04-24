@@ -1,0 +1,167 @@
+//! Orchestrates a model download: resolve manifest, fetch files with
+//! per-file atomicity + resume markers, then atomically publish the manifest.
+//!
+//! Layout during/after a pull of `org/repo`:
+//!
+//! ```text
+//! models/
+//! └── org/repo/
+//!     ├── .lock                 # cross-process exclusive lock
+//!     ├── .inflight/            # present only during a pull (sentinel)
+//!     │   └── geniex.json       # staged manifest; renamed into place on success
+//!     ├── model.gguf            # downloaded file
+//!     ├── model.gguf.progress   # resume marker; content = [0x01] (whole-file done)
+//!     └── geniex.json           # published only when every file is complete
+//! ```
+//!
+//! The `.inflight/` sentinel makes [`crate::store::Store::list`] skip
+//! incomplete pulls, so a crashed or killed process never exposes a
+//! "half-downloaded" model.
+//!
+//! `.progress` marker format matches the Go CLI
+//! (`cli/internal/model_hub/model_hub.go`): a byte array of length
+//! `ceil(size / chunk_size)` where each `0x01` byte signals a completed
+//! chunk. The current Rust implementation downloads whole files (hf-hub
+//! v0.4 has no chunking API), so the marker is always a single `0x01`
+//! byte — but the format is forward-compatible with the Go layout.
+
+use std::fs;
+use std::path::Path;
+
+use crate::error::Result;
+use crate::hub::{hf::HfHub, localfs::LocalFsHub, HubSource, ModelHub, ProgressCallback};
+use crate::manifest::ModelManifest;
+use crate::manifest_builder::{infer_manifest_from_names, ManifestHint};
+use crate::store::{Store, INFLIGHT_DIR, MANIFEST_FILE};
+use crate::validation::validate_model_name;
+
+pub const PROGRESS_SUFFIX: &str = ".progress";
+
+pub struct PullRequest {
+    /// "org/repo" (already resolved from any short alias by the caller).
+    pub model_name: String,
+    pub hub: HubSource,
+    /// HuggingFace bearer token for this pull. `None` means anonymous;
+    /// rate limits will apply. This is intentionally per-pull rather than
+    /// stored in the Store so callers can rotate credentials.
+    pub hf_token: Option<String>,
+    pub on_progress: Option<ProgressCallback>,
+    pub hint: ManifestHint,
+}
+
+/// Download a model, writing its manifest only after all files are present.
+pub fn pull(store: &Store, req: PullRequest) -> Result<()> {
+    validate_model_name(&req.model_name)?;
+
+    let hub: Box<dyn ModelHub> = match &req.hub {
+        HubSource::HuggingFace => Box::new(HfHub::new(req.hf_token.clone())?),
+        HubSource::LocalFs(path) => Box::new(LocalFsHub::new(path.clone())),
+    };
+
+    store.with_model_lock(&req.model_name, || {
+        pull_locked(store, hub.as_ref(), &req)
+    })
+}
+
+fn pull_locked(store: &Store, hub: &dyn ModelHub, req: &PullRequest) -> Result<()> {
+    let dest_dir = store.model_file_path(&req.model_name, "")?;
+    fs::create_dir_all(&dest_dir)?;
+
+    let inflight_dir = dest_dir.join(INFLIGHT_DIR);
+    fs::create_dir_all(&inflight_dir)?;
+
+    // 1. Resolve manifest: prefer an explicit geniex.json from the hub,
+    //    otherwise infer one from the remote file listing.
+    let (remote_files, hub_manifest) = hub.list_files(&req.model_name)?;
+    let mut manifest: ModelManifest = match hub_manifest {
+        Some(m) => m,
+        None => {
+            let names: Vec<String> = remote_files
+                .iter()
+                .filter(|f| f.name != "geniex.json")
+                .map(|f| f.name.clone())
+                .collect();
+            let mut sizes = std::collections::HashMap::new();
+            for f in &remote_files {
+                sizes.insert(f.name.clone(), f.size);
+            }
+            infer_manifest_from_names(&req.model_name, &names, &sizes, req.hint.clone())?
+        }
+    };
+
+    // Make sure the manifest's `Name` matches what the user asked for; a
+    // mismatch would cause `Store::list` / `get_manifest` to misfile it.
+    manifest.name = req.model_name.clone();
+
+    // 2. Build the list of files we actually need to fetch.
+    let files = files_to_download(&manifest, &dest_dir);
+
+    // 3. Fetch files we don't yet have.
+    hub.download(
+        &req.model_name,
+        &files,
+        &dest_dir,
+        req.on_progress.as_ref(),
+    )?;
+
+    // 4. Write per-file .progress markers (whole-file granularity for now).
+    for f in &files {
+        let marker_path = dest_dir.join(format!("{}{}", f, PROGRESS_SUFFIX));
+        if let Some(parent) = marker_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&marker_path, [0x01u8])?;
+    }
+
+    // 5. Persist the manifest (staged then atomic rename).
+    let staged = inflight_dir.join(MANIFEST_FILE);
+    fs::write(&staged, serde_json::to_string(&manifest)?)?;
+    let final_path = dest_dir.join(MANIFEST_FILE);
+    fs::rename(&staged, &final_path)?;
+
+    // 6. Clear the in-flight marker.
+    let _ = fs::remove_dir_all(&inflight_dir);
+
+    Ok(())
+}
+
+/// Decide which files listed in the manifest still need fetching, based
+/// on existing `.progress` markers. Whole-file granularity for now.
+fn files_to_download(manifest: &ModelManifest, dest_dir: &Path) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+
+    let mut push_if_needed = |name: &str| {
+        if name.is_empty() {
+            return;
+        }
+        let marker = dest_dir.join(format!("{}{}", name, PROGRESS_SUFFIX));
+        if marker.exists() {
+            // Any non-zero byte signals completion for this simple-file mode.
+            if let Ok(data) = fs::read(&marker) {
+                if data.iter().any(|b| *b != 0) {
+                    return;
+                }
+            }
+        }
+        out.push(name.to_string());
+    };
+
+    for f in manifest.model_file.values() {
+        if f.downloaded {
+            push_if_needed(&f.name);
+        }
+    }
+    if manifest.mmproj_file.downloaded {
+        push_if_needed(&manifest.mmproj_file.name);
+    }
+    if manifest.tokenizer_file.downloaded {
+        push_if_needed(&manifest.tokenizer_file.name);
+    }
+    for f in &manifest.extra_files {
+        if f.downloaded {
+            push_if_needed(&f.name);
+        }
+    }
+
+    out
+}

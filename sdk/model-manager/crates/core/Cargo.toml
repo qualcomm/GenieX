@@ -1,0 +1,14 @@
+[package]
+name = "model-manager-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+hf-hub = { workspace = true }
+fs2 = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
