@@ -67,13 +67,13 @@ inline QnnRuntimeConfig make_qnn_runtime_config(const std::filesystem::path& mod
 
 #if not defined(__ANDROID__)  // android has flattened directory
     if (!backend_dir.empty()) {
-        backend_dir = backend_dir / "qairt";
+        backend_dir = backend_dir / "qairt" / "htp-files";
     }
 #endif  // not __ANDROID__
 
     GENIEX_LOG_DEBUG("Setting ADSP_LIBRARY_PATH to {}", backend_dir.string());
 #if defined(WIN32)
-    _putenv_s("ADSP_LIBRARY_PATH", backend_dir.wstring().c_str());
+    _putenv_s("ADSP_LIBRARY_PATH", backend_dir.string().c_str());
 #else
     setenv("ADSP_LIBRARY_PATH", backend_dir.string().c_str(), 1);
 #endif
