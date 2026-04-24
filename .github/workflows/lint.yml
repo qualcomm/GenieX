@@ -42,13 +42,15 @@ jobs:
       - name: Resolve C/C++ file list
         id: file-list
         run: |
+          # --diff-filter=d excludes deleted files so the linter isn't
+          # asked to scan paths that no longer exist in the working tree.
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}..HEAD)
+            files=$(git diff --name-only --diff-filter=d ${{ github.event.pull_request.base.sha }}..HEAD)
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             git fetch --no-tags --depth=1 origin master
             base_ref=$(git merge-base HEAD origin/master || true)
             if [ -n "$base_ref" ]; then
-              files=$(git diff --name-only "$base_ref"..HEAD)
+              files=$(git diff --name-only --diff-filter=d "$base_ref"..HEAD)
             else
               files=$(git ls-files)
             fi
@@ -124,13 +126,15 @@ jobs:
       - name: Resolve Python file list
         id: py-file-list
         run: |
+          # --diff-filter=d excludes deleted files so the linter isn't
+          # asked to scan paths that no longer exist in the working tree.
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            files=$(git diff --name-only ${{ github.event.pull_request.base.sha }}..HEAD)
+            files=$(git diff --name-only --diff-filter=d ${{ github.event.pull_request.base.sha }}..HEAD)
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             git fetch --no-tags --depth=1 origin master
             base_ref=$(git merge-base HEAD origin/master || true)
             if [ -n "$base_ref" ]; then
-              files=$(git diff --name-only "$base_ref"..HEAD)
+              files=$(git diff --name-only --diff-filter=d "$base_ref"..HEAD)
             else
               files=$(git ls-files)
             fi
