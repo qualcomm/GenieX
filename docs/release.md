@@ -15,25 +15,91 @@ workflow**) is safe — assets are replaced.
 
 ## Versioning
 
-| Bump  | Trigger                                                  |
-|-------|----------------------------------------------------------|
-| MAJOR | Breaking change to CLI flags, SDK headers, Python API, config. |
-| MINOR | New feature or backend/model support.                    |
-| PATCH | Bug fix, dep bump, doc/CI change.                        |
+Tags are [SemVer 2.0](https://semver.org/) with a `v` prefix: `vX.Y.Z`
+for stable, `vX.Y.Z-<channel>.<n>` for pre-releases.
 
-While on `0.y.z`, MINOR may carry breaking changes — flag them in the notes.
+### What each digit means
 
-Pre-releases use `vX.Y.Z-<channel>.<n>`, counter resets per `X.Y.Z`:
+| Bump  | Meaning                                                            | Example triggers                                                                                   |
+|-------|--------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|
+| MAJOR (`X`) | Breaking change to any public surface. Consumers must adapt.  | CLI flag removed/renamed, SDK header signature changed, Python API removed, config key renamed.    |
+| MINOR (`Y`) | Backwards-compatible feature addition.                        | New backend, new model support, new CLI subcommand, new SDK function (existing ones unchanged).    |
+| PATCH (`Z`) | Backwards-compatible fix or cleanup.                          | Bug fix, dependency bump, doc/CI-only change, internal refactor.                                   |
 
-- `alpha.n` — shape may still move. May be tagged on a feature branch to share
-  test builds before merge; treat these tags as disposable and don't rebase
-  the underlying commit after tagging.
-- `beta.n`  — feature frozen, seeking feedback. Tag on `master`.
-- `rc.n`    — release candidate. Tag on `master`. For internal pre-ship
-  verification only; only bug fixes between `rc.n` and stable.
+**Project is still pre-1.0 (`X = 0`).** Do **not** bump MAJOR while the
+project is private / unreleased — keep `X = 0`. Breaking changes bump
+**MINOR** (`0.Y → 0.(Y+1)`, resetting `Z` to 0) and must be flagged in
+the release notes. The project will graduate to `X = 1` only when it is
+publicly released and ready to commit to backwards compatibility.
 
-Always pass through at least one `-rc` on `master` before stable. Don't re-use
-or move published tags — retract via a new patch.
+### What each channel means
+
+Pre-release channels communicate **how ready a build is**. Ordering:
+`alpha < beta < rc < stable`.
+
+| Channel  | Audience / purpose                                             | Allowed branch        | Still allowed to change          |
+|----------|----------------------------------------------------------------|-----------------------|----------------------------------|
+| `alpha.n` | Share in-progress builds. Shape of features may still move.   | feature branch or master | Anything, including breaking.  |
+| `beta.n`  | Feature-complete for the target `X.Y.Z`; seeking feedback.    | `master`              | Bug fixes and polish only.       |
+| `rc.n`    | Release candidate. Treat as "will ship unless we find a bug". | `master`              | Bug fixes only.                  |
+| stable    | Published release.                                             | `master`              | Nothing — cut a new PATCH/MINOR. |
+
+Rules:
+
+- **Always pass through at least one `-rc.n` on `master` before stable.**
+- **A stable tag must be on a commit whose HTP bundle is Microsoft-signed** —
+  not self-signed. See [Hexagon HTP signing](#hexagon-htp-signing); if
+  unsure, check the latest release run (`gh run list --workflow release.yml --limit 5`)
+  and confirm the SDK artifact name does **not** end in `-selfsigned`. If
+  it does, ask the user to complete the signing promotion first.
+- **Don't re-use or move published tags.** Retract via a new patch.
+- **`alpha.n` tags on feature branches are disposable** — don't rebase
+  the tagged commit afterward.
+
+### Decision procedure (how to pick the next tag)
+
+This is the algorithm `/release` follows. Apply it in order.
+
+1. **Find the latest stable tag** `v0.A.B` — `gh release list --limit 20`
+   (filter out pre-releases). If none exists, the target is `v0.1.0`
+   and skip to step 3.
+2. **Decide the target `X.Y.Z`** by scanning `git log v0.A.B..HEAD`:
+   - any commit introducing a breaking change → target is `v0.(A+1).0`
+     (while `X = 0`, breaking bumps MINOR, not MAJOR)
+   - else any commit adding a feature → target is `v0.(A+1).0`
+   - else → target is `v0.A.(B+1)`
+
+   Look at both the commit subjects and the diff when the subject is
+   ambiguous — Conventional-Commits-style prefixes (`feat:`, `fix:`,
+   `feat!:`) are a hint, not a contract; the repo does not enforce them.
+3. **Pick the channel** based on where you are in the cycle for that
+   target `X.Y.Z`:
+   - First tag toward a new target, on a feature branch → `alpha.1`
+   - First tag toward a new target, on `master`       → `rc.1`
+     (skip beta unless the user asks for one; most cycles go straight
+     to rc)
+   - Already in cycle → advance within the current channel (`-rc.1`
+     → `-rc.2`) or move forward one channel (`-beta.3` → `-rc.1`,
+     resetting `n`). **Channels only move forward on a given `X.Y.Z`.**
+   - All `-rc.n` green + HTP signed → cut bare `vX.Y.Z`.
+4. **If a breaking change lands mid-cycle** that raises the target,
+   abandon the current `X.Y.Z` (leave existing tags in place — don't
+   retract) and restart at `v0.(new)-alpha.1` / `-rc.1`.
+5. **Counter `n`** resets per `X.Y.Z` **and** per channel:
+   `0.4.0-alpha.{1,2}` → `0.4.0-beta.{1}` → `0.4.0-rc.{1,2}` →
+   `0.4.0`.
+
+#### Worked examples
+
+- Latest stable is `v0.3.2`. `git log v0.3.2..HEAD` contains one `fix:`
+  and one `docs:`. On `master`, first tag → `v0.3.3-rc.1`. After QA →
+  `v0.3.3`.
+- Latest stable is `v0.3.2`. Log contains a `feat:` adding a new
+  backend. On a feature branch → `v0.4.0-alpha.1`. After merge to
+  `master` → `v0.4.0-rc.1` → `v0.4.0`.
+- On `v0.4.0-rc.2`, a CLI flag rename (breaking) lands. Target rises
+  from `0.4.0` to `0.5.0`. Leave `-rc.2` alone; next tag is
+  `v0.5.0-alpha.1` or `v0.5.0-rc.1` depending on the branch.
 
 ## Hexagon HTP signing
 
