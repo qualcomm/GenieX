@@ -83,6 +83,8 @@ Remove-Item -Recurse -Force $BuildDir -ErrorAction SilentlyContinue
   "-DCMAKE_CXX_COMPILER=$env:CXX" `
   "-DCMAKE_TOOLCHAIN_FILE=$env:TOOLCHAIN_FILE" `
   -DCMAKE_BUILD_TYPE=Release `
+  -DCMAKE_C_COMPILER_LAUNCHER=ccache `
+  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache `
   "-DGENIEX_VERSION=$env:GENIEX_VERSION" `
   -DGENIEX_TEST=OFF `
   -DGENIEX_DEBUG=OFF `
