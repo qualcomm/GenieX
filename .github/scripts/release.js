@@ -1,5 +1,5 @@
 module.exports = async ({ github, context, core }) => {
-  const { VERSION, FILES } = process.env;
+  const { VERSION, FILES, HTP_SIGNED, LLAMA_SHA } = process.env;
   const owner = context.repo.owner;
   const repo = context.repo.repo;
 
@@ -8,6 +8,11 @@ module.exports = async ({ github, context, core }) => {
 
   // Any SemVer pre-release (e.g. v1.2.3-rc.1, v1.2.3-alpha.1) is published as draft.
   const isDraft = VERSION.includes("-");
+
+  const htpNote =
+    HTP_SIGNED === "true"
+      ? `## Hexagon HTP\n\nMicrosoft-signed HTP catalog (llama.cpp @ \`${LLAMA_SHA}\`). No cert import required on Windows on Snapdragon.`
+      : `## Hexagon HTP\n\nSelf-signed HTP catalog (llama.cpp @ \`${LLAMA_SHA}\`). End users must enable test signing and import \`ggml-htp-v1.cer\` per [docs/run.md](../blob/${VERSION}/docs/run.md).\n\nOperators: ship \`libggml-htp-to-sign-${LLAMA_SHA}.zip\` to the signing pipeline, then upload the signed result as \`libggml-htp-${LLAMA_SHA}.zip\` to \`s3://qaihub-public-assets/llama-cpp/\` and re-run this release.`;
 
   let release;
   for await (const res of github.paginate.iterator(
@@ -18,6 +23,13 @@ module.exports = async ({ github, context, core }) => {
     if (release) break;
   }
 
+  // Merge htpNote into the release body, replacing any stale HTP section from a
+  // prior run (e.g. self-signed → Microsoft-signed once the S3 bundle lands).
+  const mergeHtpNote = (body) => {
+    const base = (body || "").replace(/## Hexagon HTP[\s\S]*$/m, "").trimEnd();
+    return base ? `${base}\n\n${htpNote}` : htpNote;
+  };
+
   if (!release) {
     core.info(`Release ${VERSION} not found, creating (draft=${isDraft})...`);
     const created = await github.rest.repos.createRelease({
@@ -25,10 +37,22 @@ module.exports = async ({ github, context, core }) => {
       repo,
       tag_name: VERSION,
       name: VERSION,
+      body: htpNote,
       generate_release_notes: true,
       draft: isDraft,
     });
     release = created.data;
+  } else {
+    const body = mergeHtpNote(release.body);
+    if (body !== release.body) {
+      const patched = await github.rest.repos.updateRelease({
+        owner,
+        repo,
+        release_id: release.id,
+        body,
+      });
+      release = patched.data;
+    }
   }
 
   const existingAssets = (
