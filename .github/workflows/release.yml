@@ -48,9 +48,55 @@ jobs:
       runner: ubuntu-latest
       upload_artifact: true
 
+  overlay-htp:
+    name: overlay-htp (windows-arm64)
+    runs-on: ubuntu-latest
+    needs: [build-sdk]
+    timeout-minutes: 10
+    outputs:
+      signed: ${{ steps.htp.outputs.signed }}
+      llama_sha: ${{ steps.htp.outputs.llama_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Init llama.cpp submodule
+        run: git submodule update --init --depth=1 third-party/llama.cpp
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: sdk-pkg-windows-arm64
+          path: sdk-pkg-windows-arm64
+
+      - name: Overlay Microsoft-signed HTP bundle from S3 (if available)
+        id: htp
+        run: |
+          set -euo pipefail
+          sha=$(git -C third-party/llama.cpp rev-parse --short=6 HEAD)
+          url="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/llama-cpp/libggml-htp-${sha}.zip"
+          if curl -fsSL -o htp-signed.zip "$url"; then
+            unzip -o htp-signed.zip -d sdk-pkg-windows-arm64/lib/llama_cpp/
+            signed=true
+          else
+            signed=false
+          fi
+          rm -f htp-signed.zip
+          echo "Signed HTP bundle for llama.cpp @ ${sha}: ${signed}"
+          echo "signed=${signed}" >> "$GITHUB_OUTPUT"
+          echo "llama_sha=${sha}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: sdk-pkg-windows-arm64
+          path: sdk-pkg-windows-arm64/
+          retention-days: 1
+          overwrite: true
+
   build-cli:
     name: build-cli (${{ matrix.platform }})
-    needs: [build-sdk]
+    needs: [overlay-htp]
     strategy:
       fail-fast: false
       matrix:
@@ -70,7 +116,7 @@ jobs:
     name: publish-github-release
     runs-on: ubuntu-latest
     needs:
-      - build-sdk
+      - overlay-htp
       - build-cli
       - build-python-sdist
     timeout-minutes: 20
@@ -105,21 +151,35 @@ jobs:
 
       - name: Package artifacts and write SHA256 sidecars
         id: assets
+        env:
+          HTP_SIGNED: ${{ needs.overlay-htp.outputs.signed }}
+          LLAMA_SHA: ${{ needs.overlay-htp.outputs.llama_sha }}
         run: |
           set -euo pipefail
-          zip -r "geniex-sdk-windows-arm64-${RELEASE_TAG}.zip" sdk-pkg-windows-arm64
+          HTP_DIR=sdk-pkg-windows-arm64/lib/llama_cpp
+
           mv geniex-cli-setup.exe "geniex-cli-installer-windows-arm64-${RELEASE_TAG}.exe"
-          # Ship the HTP signing public cert so end users can add it to
-          # Trusted Root + Trusted Publishers on WoS devices.
-          cp .github/certs/hexagon/ggml-htp-v1.cer ggml-htp-v1.cer
-          # Per-file .sha256 sidecars (one hash per file) — friendlier for
-          # winget manifests and download-script consumers than a combined sums file.
-          files=$(ls *.zip *.exe *.cer *.tar.gz)
-          for f in $files; do sha256sum "$f" > "$f.sha256"; done
+
+          sdk_suffix=""
+          if [[ "$HTP_SIGNED" != "true" ]]; then
+            sdk_suffix="-selfsigned"
+            # Self-signed: ship the public cert (users import it) and a to-sign
+            # bundle (operator submits it for real signing).
+            cp .github/certs/hexagon/ggml-htp-v1.cer .
+            mkdir to-sign
+            cp "$HTP_DIR"/libggml-htp-v*.so to-sign/
+            cp "$HTP_DIR"/libggml-htp.cat to-sign/
+            cp third-party/llama.cpp/ggml/src/ggml-hexagon/libggml-htp.inf to-sign/
+            (cd to-sign && zip -r "../libggml-htp-to-sign-${LLAMA_SHA}.zip" .)
+          fi
+          zip -r "geniex-sdk-windows-arm64-${RELEASE_TAG}${sdk_suffix}.zip" sdk-pkg-windows-arm64
+
+          shopt -s nullglob
+          files=(*.zip *.exe *.tar.gz *.cer)
+          for f in "${files[@]}"; do sha256sum "$f" > "$f.sha256"; done
           {
             echo "files<<EOF"
-            echo "$files"
-            for f in $files; do echo "$f.sha256"; done
+            for f in "${files[@]}"; do echo "$f"; echo "$f.sha256"; done
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -128,6 +188,8 @@ jobs:
         env:
           VERSION: ${{ env.RELEASE_TAG }}
           FILES: ${{ steps.assets.outputs.files }}
+          HTP_SIGNED: ${{ needs.overlay-htp.outputs.signed }}
+          LLAMA_SHA: ${{ needs.overlay-htp.outputs.llama_sha }}
         with:
           script: |
             const release = require('./.github/scripts/release.js');
