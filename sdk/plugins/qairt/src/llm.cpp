@@ -45,7 +45,7 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     fs::path model_path(input->model_path);
     fs::path model_dir = model_path.parent_path();
 
-    QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(model_dir, nullptr);
+    QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(model_dir);
 
     // Discover .bin model shards
     auto bin_shards = qairt::runtime::collect_bin_files(model_dir);
