@@ -8,3 +8,5 @@ bazel-*
 CMakeUserPresets.json
 
 modelfiles/*
+
+CLAUDE.local.md
