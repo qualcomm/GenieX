@@ -196,68 +196,6 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 			PluginID: manifest.PluginId,
 			DeviceID: manifest.DeviceId,
 		})
-	case reflect.TypeFor[geniex_sdk.Embedder]():
-		t, e = geniex_sdk.NewEmbedder(geniex_sdk.EmbedderCreateInput{
-			ModelName: manifest.ModelName,
-			ModelPath: modelfile,
-			PluginID:  manifest.PluginId,
-			DeviceID:  manifest.DeviceId,
-		})
-	case reflect.TypeFor[geniex_sdk.Reranker]():
-		t, e = geniex_sdk.NewReranker(geniex_sdk.RerankerCreateInput{
-			ModelName: manifest.ModelName,
-			ModelPath: modelfile,
-			PluginID:  manifest.PluginId,
-			DeviceID:  manifest.DeviceId,
-		})
-	case reflect.TypeFor[geniex_sdk.TTS]():
-		t, e = geniex_sdk.NewTTS(geniex_sdk.TtsCreateInput{
-			ModelName: manifest.ModelName,
-			ModelPath: modelfile,
-			PluginID:  manifest.PluginId,
-			DeviceID:  manifest.DeviceId,
-		})
-	case reflect.TypeFor[geniex_sdk.ASR]():
-		t, e = geniex_sdk.NewASR(geniex_sdk.AsrCreateInput{
-			ModelName: manifest.ModelName,
-			ModelPath: modelfile,
-			Config: geniex_sdk.ASRModelConfig{
-				NCtx:       param.NCtx,
-				NGpuLayers: param.NGpuLayers,
-			},
-			PluginID: manifest.PluginId,
-			DeviceID: manifest.DeviceId,
-		})
-	case reflect.TypeFor[geniex_sdk.Diarize]():
-		t, e = geniex_sdk.NewDiarize(geniex_sdk.DiarizeCreateInput{
-			ModelName: manifest.ModelName,
-			ModelPath: modelfile,
-			Config: geniex_sdk.DiarizeModelConfig{
-				NCtx:       param.NCtx,
-				NGpuLayers: param.NGpuLayers,
-			},
-			PluginID: manifest.PluginId,
-			DeviceID: manifest.DeviceId,
-		})
-	case reflect.TypeFor[geniex_sdk.CV]():
-		t, e = geniex_sdk.NewCV(geniex_sdk.CVCreateInput{
-			ModelName: manifest.ModelName,
-			Config: geniex_sdk.CVModelConfig{
-				DetModelPath: modelfile,
-				RecModelPath: modelfile,
-			},
-			PluginID: manifest.PluginId,
-			DeviceID: manifest.DeviceId,
-		})
-	case reflect.TypeFor[geniex_sdk.ImageGen]():
-		// For image generation models, use the model directory path instead of specific file
-		modelDir := s.ModelfilePath(manifest.Name, "")
-		t, e = geniex_sdk.NewImageGen(geniex_sdk.ImageGenCreateInput{
-			ModelName: manifest.ModelName,
-			ModelPath: modelDir,
-			PluginID:  manifest.PluginId,
-			DeviceID:  manifest.DeviceId,
-		})
 	default:
 		panic(fmt.Sprintf("not support type: %+#v", t))
 	}
