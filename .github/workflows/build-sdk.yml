@@ -53,6 +53,31 @@ jobs:
         id: version
         uses: ./.github/actions/version
 
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-sdk-${{ inputs.platform }}-${{ github.sha }}
+          restore-keys: ccache-sdk-${{ inputs.platform }}-
+
+      - name: Install and configure ccache (Linux)
+        if: inputs.platform == 'linux-arm64'
+        shell: bash
+        run: |
+          command -v ccache || sudo apt-get install -y ccache
+          echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
+          ccache --max-size=1G
+
+      - name: Install and configure ccache (Windows)
+        if: inputs.platform == 'windows-arm64'
+        shell: powershell
+        run: |
+          if (-not (Get-Command ccache -ErrorAction SilentlyContinue)) {
+            choco install ccache --no-progress -y
+          }
+          Add-Content $env:GITHUB_ENV "CCACHE_DIR=${{ github.workspace }}/.ccache"
+          ccache --max-size=1G
+
       - name: Setup Snapdragon SDKs
         if: inputs.platform == 'windows-arm64'
         uses: ./.github/actions/setup-snapdragon-sdks
@@ -86,6 +111,16 @@ jobs:
         env:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
         run: powershell -NoProfile -ExecutionPolicy Bypass -File .github/scripts/ci/build-sdk.ps1
+
+      - name: ccache stats (Linux)
+        if: always() && inputs.platform == 'linux-arm64'
+        shell: bash
+        run: ccache --show-stats --verbose || true
+
+      - name: ccache stats (Windows)
+        if: always() && inputs.platform == 'windows-arm64'
+        shell: powershell
+        run: ccache --show-stats --verbose; $true
 
       - name: Upload SDK artifact
         if: inputs.upload_artifact
