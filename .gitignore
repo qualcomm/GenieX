@@ -1,6 +1,9 @@
 .venv
-.claude
 .vscode
+
+# Claude Code: track shared config, ignore per-user overrides.
+.claude/settings.local.json
+.claude/.credentials.json
 
 bazel-*
 

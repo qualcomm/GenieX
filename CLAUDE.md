@@ -1,29 +1,20 @@
 # CLAUDE.md
 
-## Cutting a release tag
+## Project
 
-When the user asks you to cut a release / bump the version / tag a version,
-read [docs/release.md](docs/release.md) (especially the **Versioning** section)
-and choose the tag yourself. Do NOT ask the user to pick the tag.
+Multi-platform AI inference runtime (Snapdragon / Hexagon focus).
+Languages: C/C++ (SDK), Go (CLI), Python (bindings), Java/JNI (Android).
+Build systems: Bazel (CLI) + CMake (SDK).
 
-Steps:
+## Hard constraints
 
-1. Run `gh release list --limit 10` to see the current latest tag.
-2. Read [docs/release.md](docs/release.md) so the tag you pick follows the
-   documented rules (MAJOR/MINOR/PATCH bump triggers, alpha/beta/rc channel
-   semantics, which branch each channel is tagged on).
-3. Inspect recent commits since the last tag (`git log <last-tag>..HEAD
-   --oneline`) to decide the bump and channel:
-   - Breaking public-surface change → MAJOR (or MINOR while on `0.y.z`, and
-     call it out in the PR description).
-   - New feature / backend → MINOR.
-   - Bug fix / dep / doc / CI → PATCH.
-   - On a feature branch before merge → `-alpha.n`.
-   - On `master`, pre-stable internal verification → `-rc.n`.
-   - On `master`, going live → bare `vX.Y.Z`.
-4. State the chosen tag and the one-line reason before tagging. Confirm with
-   the user only if the commit range is ambiguous (e.g. a mix of breaking and
-   non-breaking changes that could plausibly be MAJOR or MINOR).
-5. `git tag <tag> && git push origin <tag>`.
+- **Never move or reuse a published git tag.** If the wrong tag shipped, cut a higher one.
+- Do not modify third-party code.
+- **Before committing code**, run the same lint/format checks CI runs. The authoritative list is [.github/workflows/lint.yml](.github/workflows/lint.yml) — currently `clang-format-20` on touched C/C++ under `sdk/`, `cli/`, `bindings/python/`; `ruff check` + `ruff format --check` on `bindings/python/**/*.py`; `go mod tidy` clean in `cli/`. If CI adds a check, this rule follows — re-read the workflow.
+- **When changing public SDK headers under [sdk/include/](sdk/include/)**, the FFI surface in every binding must be updated in the same change, or the binding will crash at load/call time. Bindings to check: [bindings/python/geniex/geniex_sdk/_api.py](bindings/python/geniex/geniex_sdk/_api.py) + [_types.py](bindings/python/geniex/geniex_sdk/_types.py) (ctypes), [bindings/go/](bindings/go/) (cgo), [bindings/android/app/src/main/cpp/](bindings/android/app/src/main/cpp/) (JNI). After updating one, ask the user whether the others also need to change.
 
-Do not move or reuse published tags.
+## Workflows
+
+- Build anything (CLI / SDK bridge / release installer) → run `/build`.
+- Cut a release / bump the version → run `/release`.
+- Onboarding the AI setup itself → see [docs/AI.md](docs/AI.md).
