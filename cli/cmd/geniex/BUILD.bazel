@@ -19,6 +19,7 @@ go_library(
         "//cli/internal/config",
         "//cli/internal/downloader",
         "//cli/internal/model_hub",
+        "//cli/internal/model_hub/aihub",
         "//cli/internal/record",
         "//cli/internal/render",
         "//cli/internal/store",

@@ -16,9 +16,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -30,7 +33,9 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
@@ -40,6 +45,7 @@ var (
 	modelHub  string
 	localPath string
 	modelType string
+	chipset   string
 )
 
 // pull creates a command to download and cache a model by name.
@@ -59,16 +65,43 @@ func pull() *cobra.Command {
 	pullCmd.Flags().StringVarP(&modelHub, "model-hub", "", "", "specify model hub to use: volces|modelscope|s3|hf|localfs")
 	pullCmd.Flags().StringVarP(&localPath, "local-path", "", "", "[localfs] path to local directory")
 	pullCmd.Flags().StringVarP(&modelType, "model-type", "", "", "specify model type to use: [llm|vlm]")
+	pullCmd.Flags().StringVarP(&chipset, "chipset", "", "", "[qairt] target chipset, e.g. qualcomm-snapdragon-x-elite (required for AI Hub qairt models)")
 
 	pullCmd.Run = func(cmd *cobra.Command, args []string) {
+		// Try the AI Hub (qairt) path first for bare ids (no "/") that aren't
+		// registered as llama.cpp shortcuts. On miss, fall through to HF.
+		rawName, _ := splitQuant(args[0])
+		if !strings.Contains(rawName, "/") {
+			if _, isShortcut := config.GetModelMapping(rawName); !isShortcut {
+				err := tryPullAIHubModel(context.TODO(), rawName, chipset)
+				if err == nil {
+					return
+				}
+				if !errors.Is(err, aihub.ErrModelNotFound) {
+					os.Exit(1)
+				}
+				slog.Debug("pull: not an AI Hub model, falling through", "id", rawName, "err", err)
+			}
+		}
+
 		name, quant := normalizeModelName(args[0])
-		err := pullModel(name, quant)
-		if err != nil {
+		if err := pullModel(name, quant); err != nil {
 			os.Exit(1)
 		}
 	}
 
 	return pullCmd
+}
+
+// splitQuant peels a trailing ":<quant>" suffix off a user-supplied model
+// argument, matching normalizeModelName's parsing without any HF/NexaAI
+// normalization.
+func splitQuant(arg string) (string, string) {
+	parts := strings.SplitN(arg, ":", 2)
+	if len(parts) == 2 {
+		return parts[0], strings.ToUpper(parts[1])
+	}
+	return parts[0], ""
 }
 
 // remove creates a command to delete a cached model by name.
@@ -796,4 +829,153 @@ func detectMacOSBundles(files []model_hub.ModelFileInfo) []string {
 	sort.Strings(bundles)
 
 	return bundles
+}
+
+// =============== AI Hub (qairt) pull flow ===============
+
+// tryPullAIHubModel resolves the id against the AI Hub manifest and, on a
+// match, downloads the chipset-specific zip asset, unzips it flat, and
+// writes a synthesised geniex.json under qai-hub/<id>/.
+//
+// Returns aihub.ErrModelNotFound when the id is not published on AI Hub, so
+// the caller can fall back to the HuggingFace flow. All other errors are
+// terminal.
+func tryPullAIHubModel(ctx context.Context, id, chipset string) error {
+	cacheDir := filepath.Join(store.Get().DataPath(), "aihub")
+	client := aihub.NewClient(cacheDir)
+	defer client.Close()
+
+	spin := render.NewSpinner("fetching AI Hub manifest...")
+	spin.Start()
+	manifest, err := client.LoadManifest(ctx)
+	if err != nil {
+		spin.Stop()
+		fmt.Println(render.GetTheme().Error.Sprintf("Failed to fetch AI Hub manifest: %s", err))
+		return err
+	}
+	model, err := client.LookupModel(id)
+	spin.Stop()
+	if err != nil {
+		return err // ErrModelNotFound -> caller falls back to HF
+	}
+
+	if _, rerr := aihub.RuntimeForDomain(model.Domain); rerr != nil {
+		fmt.Println(render.GetTheme().Error.Sprintf(
+			"AI Hub model %s has domain %s, which the CLI doesn't support yet (LLM/VLM only).",
+			id, model.Domain))
+		return rerr
+	}
+	if chipset == "" {
+		if ra, rerr := client.LoadReleaseAssets(ctx, manifest, id); rerr == nil {
+			fmt.Println(render.GetTheme().Error.Sprintf(
+				"--chipset is required for AI Hub model %q. Supported chipsets:", id))
+			for _, c := range aihub.SupportedChipsetsFor(ra) {
+				fmt.Println(render.GetTheme().Error.Sprintf("  - %s", c))
+			}
+		} else {
+			fmt.Println(render.GetTheme().Error.Sprintf(
+				"--chipset is required for AI Hub model %q.", id))
+		}
+		return fmt.Errorf("--chipset not provided")
+	}
+
+	spin = render.NewSpinner("resolving download asset...")
+	spin.Start()
+	plat, err := client.LoadPlatform(ctx, manifest)
+	if err != nil {
+		spin.Stop()
+		fmt.Println(render.GetTheme().Error.Sprintf("Failed to load platform.json: %s", err))
+		return err
+	}
+	ra, err := client.LoadReleaseAssets(ctx, manifest, id)
+	if err != nil {
+		spin.Stop()
+		if errors.Is(err, aihub.ErrNoReleaseAssets) {
+			fmt.Println(render.GetTheme().Error.Sprintf(
+				"AI Hub model %q has no downloadable release assets published.", id))
+		} else {
+			fmt.Println(render.GetTheme().Error.Sprintf("Failed to load release assets: %s", err))
+		}
+		return err
+	}
+	asset, err := aihub.Match(ra, plat, model.Domain, chipset)
+	spin.Stop()
+	if err != nil {
+		fmt.Println(render.GetTheme().Error.Sprintf("%s", err))
+		return err
+	}
+
+	zipSize, err := headContentLength(ctx, asset.DownloadURL)
+	if err != nil {
+		fmt.Println(render.GetTheme().Error.Sprintf("Failed to HEAD %s: %s", asset.DownloadURL, err))
+		return err
+	}
+
+	modelTypeStr := types.ModelTypeLLM
+	if model.Domain == aihub.DomainMultimodal {
+		modelTypeStr = types.ModelTypeVLM
+	}
+	mf := types.ModelManifest{
+		Name:          "qai-hub/" + id,
+		ModelName:     id,
+		ModelType:     modelTypeStr,
+		PluginId:      "qairt",
+		DeviceId:      asset.Chipset,
+		MinSDKVersion: config.MinSDKVersion,
+	}
+
+	// Already-downloaded short-circuit: same check the HF path does.
+	if existing, gerr := store.Get().GetManifest(mf.Name); gerr == nil {
+		allDownloaded := true
+		for _, f := range existing.ModelFile {
+			if !f.Downloaded {
+				allDownloaded = false
+				break
+			}
+		}
+		if allDownloaded && existing.DeviceId == asset.Chipset {
+			fmt.Println(render.GetTheme().Info.Sprint("Already downloaded"))
+			return nil
+		}
+	}
+
+	slog.Info("AI Hub pull",
+		"id", id, "chipset", asset.Chipset, "runtime", asset.Runtime,
+		"precision", asset.Precision, "url", asset.DownloadURL, "size", zipSize)
+
+	infoCh, errCh := store.Get().PullZipAsset(ctx, mf, asset.DownloadURL, zipSize)
+	bar := render.NewProgressBar(zipSize, "downloading")
+	for pg := range infoCh {
+		bar.Set(pg.TotalDownloaded)
+	}
+	bar.Exit()
+	for e := range errCh {
+		bar.Clear()
+		fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", e))
+		return e
+	}
+
+	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success!"))
+	return nil
+}
+
+// headContentLength issues a HEAD against url and returns its Content-Length.
+func headContentLength(ctx context.Context, url string) (int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("HEAD %s: %s", url, resp.Status)
+	}
+	if resp.ContentLength <= 0 {
+		return 0, fmt.Errorf("HEAD %s: missing Content-Length", url)
+	}
+	return resp.ContentLength, nil
 }

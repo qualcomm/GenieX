@@ -3,6 +3,11 @@
 set(BUILD_EXAMPLES OFF)
 set(GENIEX_BUILD_VLM OFF)
 
+# Path used by plugins/qairt/src/CMakeLists.txt to locate per-model headers
+# (models/qwen3, models/phi4, ...). Match sdk/cmake/qairt.cmake.
+set(GENIEX_QAIRT_DIR "${CMAKE_SOURCE_DIR}/../third-party/geniex-qairt"
+    CACHE PATH "Path to geniex-qairt source directory")
+
 # Keep Rust artifact paths short on Windows to avoid MAX_PATH linker failures
 # in third-party/tokenizers-cpp when building QAIRT dependencies.
 if(WIN32)

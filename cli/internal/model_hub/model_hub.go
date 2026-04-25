@@ -33,6 +33,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"resty.dev/v3"
 
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/downloader"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
@@ -251,6 +252,120 @@ func StartDownload(ctx context.Context, modelName, outputPath string, files []Mo
 			_ = os.Remove(p)
 		}
 		slog.Info("download complete", "model", modelName, "outputPath", outputPath)
+	}()
+
+	return resCh, errCh
+}
+
+// StartDownloadURL downloads a single remote URL into a specific file on
+// disk using the same chunked, resumable, parallel machinery as StartDownload.
+// Used by the AI Hub (qairt) flow, where the asset is a single .zip whose
+// direct URL is resolved before the download begins.
+//
+// outputDir must exist. dstName is the basename under outputDir. A sidecar
+// <dstName>.progress marker file is created for resume support and removed
+// on clean completion. size must be the exact Content-Length of the URL.
+func StartDownloadURL(ctx context.Context, urlStr, outputDir, dstName string, size int64) (chan types.DownloadInfo, chan error) {
+	const maxConcurrency = 8
+	resCh := make(chan types.DownloadInfo)
+	errCh := make(chan error, maxConcurrency)
+
+	slog.Info("Starting URL download", "url", urlStr, "outputDir", outputDir, "file", dstName, "size", size)
+
+	go func() {
+		defer close(errCh)
+		defer close(resCh)
+
+		if size <= 0 {
+			errCh <- fmt.Errorf("StartDownloadURL: invalid size %d", size)
+			return
+		}
+		if err := os.MkdirAll(outputDir, 0o755); err != nil {
+			errCh <- fmt.Errorf("create outputDir: %w", err)
+			return
+		}
+
+		chunkSize := max(minChunkSize, size/128)
+		nChunks := int((size + chunkSize - 1) / chunkSize)
+		outPath := filepath.Join(outputDir, dstName)
+		markerPath := outPath + ProgressSuffix
+
+		markers, err := os.ReadFile(markerPath)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			errCh <- err
+			return
+		}
+		if err != nil || len(markers) != nChunks {
+			markers = make([]byte, nChunks)
+			if werr := os.WriteFile(markerPath, markers, 0o644); werr != nil {
+				errCh <- werr
+				return
+			}
+		}
+
+		file, err := os.OpenFile(outPath, os.O_RDWR|os.O_CREATE, 0o644)
+		if err != nil {
+			errCh <- err
+			return
+		}
+		if fi, _ := file.Stat(); fi == nil || fi.Size() < size {
+			if err := file.Truncate(size); err != nil {
+				file.Close()
+				errCh <- err
+				return
+			}
+		}
+		file.Close()
+
+		hd := downloader.NewDownloader("")
+
+		var downloaded int64
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(maxConcurrency)
+
+		for i, marker := range markers {
+			if marker == 0x01 {
+				downloaded += min(chunkSize, size-int64(i)*chunkSize)
+				continue
+			}
+			offset := int64(i) * chunkSize
+			limit := min(chunkSize, size-offset)
+			idx := i
+			g.Go(func() error {
+				f, err := os.OpenFile(outPath, os.O_WRONLY, 0o644)
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+				if _, err := f.Seek(offset, io.SeekStart); err != nil {
+					return err
+				}
+				if err := hd.DownloadChunk(gctx, urlStr, offset, limit, f); err != nil {
+					return err
+				}
+				m, err := os.OpenFile(markerPath, os.O_WRONLY, 0o644)
+				if err != nil {
+					return err
+				}
+				defer m.Close()
+				if _, err := m.WriteAt([]byte{0x01}, int64(idx)); err != nil {
+					return err
+				}
+
+				resCh <- types.DownloadInfo{
+					TotalDownloaded: atomic.AddInt64(&downloaded, limit),
+					TotalSize:       size,
+				}
+				return nil
+			})
+		}
+
+		if err := g.Wait(); err != nil {
+			errCh <- err
+			return
+		}
+		_ = os.Remove(markerPath)
+		slog.Info("url download complete", "url", urlStr, "outPath", outPath)
 	}()
 
 	return resCh, errCh
