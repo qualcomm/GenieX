@@ -78,14 +78,10 @@ func pull() *cobra.Command {
 		// The repo name is treated as the model's display_name in the manifest.
 		rawName, _ := splitQuant(args[0])
 		if org, repo, ok := splitOrgRepo(rawName); ok && slices.Contains(aiHubOrgs, org) {
-			err := tryPullAIHubModel(context.TODO(), rawName, repo, noConfigCache)
-			if err == nil {
-				return
-			}
-			if !errors.Is(err, aihub.ErrModelNotFound) {
+			if err := tryPullAIHubModel(context.TODO(), rawName, repo, noConfigCache); err != nil {
 				os.Exit(1)
 			}
-			slog.Debug("pull: not an AI Hub model, falling through", "org", org, "display_name", repo, "err", err)
+			return
 		}
 
 		name, quant := normalizeModelName(args[0])
