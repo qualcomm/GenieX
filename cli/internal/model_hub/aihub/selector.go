@@ -20,6 +20,8 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+
+	"github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm"
 )
 
 // Errors returned by Match. Callers pattern-match these so they can print
@@ -65,19 +67,19 @@ func (e *ChipsetNotAvailableError) Is(target error) bool {
 	return target == ErrChipsetNotAvailable
 }
 
-// RuntimeForDomain maps a MODEL_DOMAIN_* value to the runtime enum the CLI
+// RuntimeForDomain maps a ModelDomain enum value to the runtime enum the CLI
 // knows how to download + execute. Returns ErrUnsupportedDomain otherwise.
-func RuntimeForDomain(domain string) (string, error) {
+func RuntimeForDomain(domain qaihm.ModelDomain) (qaihm.Runtime, error) {
 	switch domain {
 	case DomainGenerativeAI, DomainMultimodal:
 		return RuntimeGenie, nil
 	default:
-		return "", fmt.Errorf("%w: %s", ErrUnsupportedDomain, domain)
+		return 0, fmt.Errorf("%w: %s", ErrUnsupportedDomain, domain)
 	}
 }
 
 // ResolveChipset looks up the user-supplied chipset string against
-// platform.json, matching either Chipset.Name or any of its aliases. It
+// platform.json, matching either ChipsetInfo.Name or any of its aliases. It
 // returns the canonical name.
 func ResolveChipset(plat *Platform, chipset string) (string, error) {
 	if plat == nil {
@@ -88,14 +90,13 @@ func ResolveChipset(plat *Platform, chipset string) (string, error) {
 	}
 
 	target := strings.ToLower(strings.TrimSpace(chipset))
-	for i := range plat.Chipsets {
-		cs := &plat.Chipsets[i]
-		if strings.ToLower(cs.Name) == target {
-			return cs.Name, nil
+	for _, cs := range plat.GetChipsets() {
+		if strings.ToLower(cs.GetName()) == target {
+			return cs.GetName(), nil
 		}
-		for _, a := range cs.Aliases {
+		for _, a := range cs.GetAliases() {
 			if strings.ToLower(a) == target {
-				return cs.Name, nil
+				return cs.GetName(), nil
 			}
 		}
 	}
@@ -107,8 +108,8 @@ func ResolveChipset(plat *Platform, chipset string) (string, error) {
 // that appear in the given release assets. Used only for error messages.
 func SupportedChipsetsFor(ra *ReleaseAssets) []string {
 	seen := make(map[string]struct{})
-	for _, a := range ra.Assets {
-		seen[a.Chipset] = struct{}{}
+	for _, a := range ra.GetAssets() {
+		seen[a.GetChipset()] = struct{}{}
 	}
 	names := make([]string, 0, len(seen))
 	for n := range seen {
@@ -123,8 +124,8 @@ func SupportedChipsetsFor(ra *ReleaseAssets) []string {
 // Platform aliases, and assets are filtered by both. If multiple candidates
 // remain (e.g. several precisions) the first in publication order wins and
 // the choice is logged at debug level.
-func Match(ra *ReleaseAssets, plat *Platform, domain, chipset string) (*Asset, error) {
-	if ra == nil || len(ra.Assets) == 0 {
+func Match(ra *ReleaseAssets, plat *Platform, domain qaihm.ModelDomain, chipset string) (*Asset, error) {
+	if ra == nil || len(ra.GetAssets()) == 0 {
 		return nil, errors.New("aihub: empty release assets")
 	}
 
@@ -138,17 +139,16 @@ func Match(ra *ReleaseAssets, plat *Platform, domain, chipset string) (*Asset, e
 		return nil, err
 	}
 
-	avail := make([]Availability, 0, len(ra.Assets))
+	avail := make([]Availability, 0, len(ra.GetAssets()))
 	var candidates []*Asset
-	for i := range ra.Assets {
-		a := &ra.Assets[i]
+	for _, a := range ra.GetAssets() {
 		avail = append(avail, Availability{
-			Chipset: a.Chipset, Runtime: a.Runtime, Precision: a.Precision,
+			Chipset: a.GetChipset(), Runtime: a.GetRuntime().String(), Precision: a.GetPrecision().String(),
 		})
-		if a.Chipset != canonical {
+		if a.GetChipset() != canonical {
 			continue
 		}
-		if a.Runtime != runtime {
+		if a.GetRuntime() != runtime {
 			continue
 		}
 		candidates = append(candidates, a)
@@ -163,11 +163,11 @@ func Match(ra *ReleaseAssets, plat *Platform, domain, chipset string) (*Asset, e
 	if len(candidates) > 1 {
 		extras := make([]string, 0, len(candidates))
 		for _, c := range candidates {
-			extras = append(extras, c.Precision)
+			extras = append(extras, c.GetPrecision().String())
 		}
 		slog.Debug("aihub: multiple assets match, picking first",
-			"model", ra.ModelID, "chipset", canonical, "runtime", runtime,
-			"picked", candidates[0].Precision, "available", extras)
+			"model", ra.GetModelId(), "chipset", canonical, "runtime", runtime,
+			"picked", candidates[0].GetPrecision(), "available", extras)
 	}
 
 	return candidates[0], nil

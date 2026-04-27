@@ -24,57 +24,25 @@
 // one Asset to download.
 package aihub
 
-// Model domain enum values published in manifest.json.
-const (
-	DomainGenerativeAI = "MODEL_DOMAIN_GENERATIVE_AI"
-	DomainMultimodal   = "MODEL_DOMAIN_MULTIMODAL"
-	DomainComputer     = "MODEL_DOMAIN_COMPUTER_VISION"
+import (
+	"github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm"
 )
 
-// Runtime enum values used by release-assets.json. Only GENIE is consumed.
-const RuntimeGenie = "RUNTIME_GENIE"
+// Domain enum values used for supported-domain checks.
+var (
+	DomainGenerativeAI = qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI
+	DomainMultimodal   = qaihm.ModelDomain_MODEL_DOMAIN_MULTIMODAL
+)
 
-// Manifest mirrors the top-level manifest.json.
-type Manifest struct {
-	Version     string  `json:"version"`
-	PlatformURL string  `json:"platform_url"`
-	Models      []Model `json:"models"`
-}
+// RuntimeGenie is the runtime enum value the CLI downloads and executes.
+var RuntimeGenie = qaihm.Runtime_RUNTIME_GENIE
 
-type Model struct {
-	ID           string       `json:"id"`
-	Domain       string       `json:"domain"`
-	ManifestURLs ManifestURLs `json:"manifest_urls"`
-}
-
-type ManifestURLs struct {
-	ReleaseAssets string `json:"release_assets,omitempty"`
-}
-
-// Platform mirrors the chipset table from platform.json. Only Name + Aliases
-// are consumed by the selector; HTPVersion is kept for schema round-trip tests
-// and potential future compatibility checks.
-type Platform struct {
-	AIHMVersion string    `json:"aihm_version"`
-	Chipsets    []Chipset `json:"chipsets"`
-}
-
-type Chipset struct {
-	Name       string   `json:"name"`
-	Aliases    []string `json:"aliases"`
-	HTPVersion int      `json:"htp_version"`
-}
-
-// ReleaseAssets mirrors release-assets.json for one model.
-type ReleaseAssets struct {
-	AIHMVersion string  `json:"aihm_version"`
-	ModelID     string  `json:"model_id"`
-	Assets      []Asset `json:"assets"`
-}
-
-type Asset struct {
-	Precision   string `json:"precision"`
-	Runtime     string `json:"runtime"`
-	Chipset     string `json:"chipset"`
-	DownloadURL string `json:"download_url"`
-}
+// Type aliases so call-sites outside this package don't need to import qaihm
+// directly for the types they reference.
+type (
+	Manifest      = qaihm.ReleaseManifest
+	Model         = qaihm.ManifestModelEntry
+	Platform      = qaihm.PlatformInfo
+	ReleaseAssets = qaihm.ModelReleaseAssets
+	Asset         = qaihm.ModelReleaseAssets_AssetDetails
+)
