@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write # needed for OIDC federation with AWS (role: github-bitsyfactory)
 
 concurrency:
   group: release-${{ github.workflow }}-${{ github.ref }}
@@ -195,34 +196,74 @@ jobs:
             const release = require('./.github/scripts/release.js');
             await release({ github, context, core });
 
+      # Re-publish the packaged SDK zip(s) as a dedicated artifact so
+      # publish-s3 can pick them up. The `sdk-pkg-windows-arm64` artifact
+      # holds the *unpacked* pkg tree, not the final `geniex-sdk-*.zip`.
+      - name: Upload packaged SDK zips for S3 job
+        uses: actions/upload-artifact@v5
+        with:
+          name: geniex-sdk-release-zips
+          path: |
+            geniex-sdk-windows-arm64-*.zip
+            geniex-sdk-windows-arm64-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 1
+
   publish-s3:
     name: publish-s3-release
     runs-on: ubuntu-latest
     needs: [publish-github-release]
+    permissions:
+      contents: read
+      id-token: write # OIDC token minting for AWS role assumption
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
 
     steps:
-      - name: Download packaged SDK release artifact
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Download packaged SDK release zips
         uses: actions/download-artifact@v5
         with:
-          name: sdk-pkg-windows-arm64
+          name: geniex-sdk-release-zips
           path: .
 
-      - name: Upload geniex-sdk-windows-arm64-${RELEASE_TAG}${sdk_suffix}.zip to S3
+      # OIDC federation — no long-lived AWS keys. The role is pre-provisioned
+      # by the org for any repo under qcom-ai-hub/*. Writes creds into the
+      # `bitsy` AWS CLI profile and blanks out AWS_* env vars so subsequent
+      # `aws` calls must use --profile (matches helper-action contract).
+      - name: Configure AWS credentials (bitsyfactory role)
+        uses: ./.github/actions/configure-multiple-aws-roles
+        with:
+          profile: bitsy
+          aws-region: us-west-2
+          role-to-assume: arn:aws:iam::234967179373:role/github-bitsyfactory
+          role-session-name: geniex-release-${{ github.run_id }}
+
+      - name: Upload SDK zip(s) to S3
         shell: bash
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: us-west-1
-          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+          AWS_PROFILE: bitsy
+          AWS_DEFAULT_REGION: us-west-2
         run: |
+          set -euo pipefail
+          shopt -s nullglob
+          uploaded=0
           for suffix in "" "-selfsigned"; do
             zipfile="geniex-sdk-windows-arm64-${RELEASE_TAG}${suffix}.zip"
             if [ -f "$zipfile" ]; then
-              aws s3 cp "$zipfile" "s3://qaihub-public-assets/qai-hub-geniex/${RELEASE_TAG}/$zipfile"
+              aws s3 cp "$zipfile"        "s3://qaihub-public-assets/qai-hub-geniex/${RELEASE_TAG}/$zipfile"
+              aws s3 cp "$zipfile.sha256" "s3://qaihub-public-assets/qai-hub-geniex/${RELEASE_TAG}/$zipfile.sha256"
+              uploaded=$((uploaded + 1))
             fi
           done
-
-      # Add additional upload steps for CLI and sdist if needed, or extend the composite action to handle all artifacts
+          if [ "$uploaded" -eq 0 ]; then
+            echo "::error::No geniex-sdk-windows-arm64-${RELEASE_TAG}*.zip found to upload"
+            exit 1
+          fi
 
   # Push the sdist to TestPyPI for pre-release tags (v*-alpha.*, v*-beta.*,
   # v*-rc.*). Stable tags skip this job — they go to production PyPI via a

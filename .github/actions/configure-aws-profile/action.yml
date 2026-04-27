@@ -1,0 +1,25 @@
+name: Configure AWS profile
+
+description: Modifies the AWS credentials file for the supplied profile
+
+inputs:
+  profile:
+    description: Name of the profile
+    required: true
+  aws-region:
+    description: AWS Region, e.g. us-east-2
+    required: true
+  aws-access-key-id:
+    description: AWS Access Key ID
+    required: true
+  aws-secret-access-key:
+    description: AWS Secret Access Key
+    required: true
+  aws-session-token:
+    description: AWS Session Token.
+    required: true
+
+runs:
+  using: 'node24'
+  main: 'index.js'
+  post: 'cleanup.js'

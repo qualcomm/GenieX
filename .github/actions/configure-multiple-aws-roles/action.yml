@@ -1,0 +1,158 @@
+# Copied from https://github.com/Moulick/configure-multiple-aws-roles
+
+name: Configure Multiple AWS Roles
+
+description: Drop-in replacement for aws-actions/configure-aws-credentials with additional features to configure multiple AWS roles.
+
+inputs:
+  # Additional inputs vs aws-actions/configure-aws-credentials@v4
+  profile:
+    required: false
+    description: Name of profile to be created
+    default: "default"
+
+  # Copied from aws-actions/configure-aws-credentials@v4
+  aws-region:
+    description: AWS Region, e.g. us-east-2
+    required: true
+  role-to-assume:
+    description: The Amazon Resource Name (ARN) of the role to assume. Use the provided credentials to assume an IAM role and configure the Actions environment with the assumed role credentials rather than with the provided credentials.
+    required: false
+  aws-access-key-id:
+    description: AWS Access Key ID. Provide this key if you want to assume a role using access keys rather than a web identity token.
+    required: false
+  aws-secret-access-key:
+    description: AWS Secret Access Key. Required if aws-access-key-id is provided.
+    required: false
+  aws-session-token:
+    description: AWS Session Token.
+    required: false
+  web-identity-token-file:
+    description: Use the web identity token file from the provided file system path in order to assume an IAM role using a web identity, e.g. from within an Amazon EKS worker node.
+    required: false
+  role-chaining:
+    description: Use existing credentials from the environment to assume a new role, rather than providing credentials as inputs.
+    required: false
+  audience:
+    description: The audience to use for the OIDC provider
+    required: false
+    default: sts.amazonaws.com
+  http-proxy:
+    description: Proxy to use for the AWS SDK agent
+    required: false
+  mask-aws-account-id:
+    description: Whether to mask the AWS account ID for these credentials as a secret value. By default the account ID will not be masked
+    required: false
+  role-duration-seconds:
+    description: Role duration in seconds.
+    default: 7200
+    required: false
+  role-external-id:
+    description: The external ID of the role to assume.
+    required: false
+  role-session-name:
+    description: "Role session name (default: GitHubActions)"
+    required: false
+  role-skip-session-tagging:
+    description: Skip session tagging during role assumption
+    required: false
+  inline-session-policy:
+    description: Define an inline session policy to use when assuming a role
+    required: false
+  managed-session-policies:
+    description: Define a list of managed session policies to use when assuming a role
+    required: false
+  unset-current-credentials:
+    description: Whether to unset the existing credentials in your runner. May be useful if you run this action multiple times in the same job
+    required: false
+    default: "true" # Setting to true by default as recommended by the official action if called multiple times in the same job
+  disable-retry:
+    description: Whether to disable the retry and backoff mechanism when the assume role call fails. By default the retry mechanism is enabled
+    required: false
+  retry-max-attempts:
+    description: The maximum number of attempts it will attempt to retry the assume role call. By default it will retry 12 times
+    required: false
+  special-characters-workaround:
+    description: Some environments do not support special characters in AWS_SECRET_ACCESS_KEY. This option will retry fetching credentials until the secret access key does not contain special characters. This option overrides disable-retry and retry-max-attempts. This option is disabled by default
+    required: false
+
+outputs:
+  aws-account-id:
+    description: The AWS account ID for the provided credentials
+    value: ${{ steps.aws-credentials.outputs.aws-account-id }}
+  aws-access-key-id:
+    description: The AWS access key ID for the provided credentials
+    value: ${{ steps.aws-credentials.outputs.aws-access-key-id }}
+  aws-secret-access-key:
+    description: The AWS secret access key for the provided credentials
+    value: ${{ steps.aws-credentials.outputs.aws-secret-access-key }}
+  aws-session-token:
+    description: The AWS session token for the provided credentials
+    value: ${{ steps.aws-credentials.outputs.aws-session-token }}
+  # Adding this output just in case someone needs it, it's the same as the input anyways
+  profile:
+    description: The name of the profile that was configured
+    value: ${{ steps.save-to-profile.outputs.profile }}
+
+runs:
+  using: composite
+  steps:
+    - name: Get AWS Credentials
+      id: aws-credentials
+      uses: aws-actions/configure-aws-credentials@v6
+      with:
+        output-credentials: true
+
+        aws-region: ${{ inputs.aws-region }}
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-access-key-id: ${{ inputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ inputs.aws-secret-access-key }}
+        aws-session-token: ${{ inputs.aws-session-token }}
+        web-identity-token-file: ${{ inputs.web-identity-token-file }}
+        role-chaining: ${{ inputs.role-chaining }}
+        audience: ${{ inputs.audience }}
+        http-proxy: ${{ inputs.http-proxy }}
+        mask-aws-account-id: ${{ inputs.mask-aws-account-id }}
+        role-duration-seconds: ${{ inputs.role-duration-seconds }}
+        role-external-id: ${{ inputs.role-external-id }}
+        role-session-name: ${{ inputs.role-session-name }}
+        role-skip-session-tagging: ${{ inputs.role-skip-session-tagging }}
+        inline-session-policy: ${{ inputs.inline-session-policy }}
+        managed-session-policies: ${{ inputs.managed-session-policies }}
+        unset-current-credentials: ${{ inputs.unset-current-credentials }}
+        disable-retry: ${{ inputs.disable-retry }}
+        retry-max-attempts: ${{ inputs.retry-max-attempts }}
+        special-characters-workaround: ${{ inputs.special-characters-workaround }}
+
+    - uses: "./.github/actions/configure-aws-profile"
+      with:
+        profile: ${{ inputs.profile }}
+        aws-region: ${{ inputs.aws-region }}
+        aws-access-key-id: ${{ steps.aws-credentials.outputs.aws-access-key-id }}
+        aws-secret-access-key: ${{ steps.aws-credentials.outputs.aws-secret-access-key }}
+        aws-session-token: ${{ steps.aws-credentials.outputs.aws-session-token }}
+
+    # configure-aws-profile above sets the AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and
+    # AWS_SESSION_TOKEN environment variables. If these environment variables are set,
+    # they take precedence over *any* other AWS credential configuration, such as the credentials
+    # file or the AWS_PROFILE environment variable.
+    # This means that if configure-multiple-aws-roles is called multiple times, the last role
+    # that it is called for will be the AWS credentials used by the AWS CLI and SDKs for the rest
+    # of the job. We call this action multiple times and we explicitly want to use roles based
+    # on the AWS_PROFILE environment variable, so we unset these three environment variables.
+
+    - name: Set environment variables to blank values
+      if: runner.os != 'Windows'
+      shell: bash
+      run: |
+        echo 'AWS_ACCESS_KEY_ID=' >> $GITHUB_ENV
+        echo 'AWS_SECRET_ACCESS_KEY=' >> $GITHUB_ENV
+        echo 'AWS_SESSION_TOKEN=' >> $GITHUB_ENV
+
+    - name: Set environment variables to blank values
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        "AWS_ACCESS_KEY_ID=" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "AWS_SECRET_ACCESS_KEY=" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+        "AWS_SESSION_TOKEN=" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
