@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -22,6 +23,7 @@ import (
 	"os"
 	"path/filepath"
 	// "reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -35,6 +37,7 @@ import (
 	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
 	// "github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/logic"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/record"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
@@ -239,6 +242,17 @@ func ensureModelAvailable(s *store.Store, name string, quant string) (*types.Mod
 	manifest, err := s.GetManifest(name)
 	if errors.Is(err, os.ErrNotExist) {
 		fmt.Println(render.GetTheme().Info.Sprintf("model not found, start download"))
+		// Try AI Hub path first for allowlisted orgs (e.g. "qualcomm/<repo>").
+		if org, repo, ok := splitOrgRepo(name); ok && slices.Contains(aiHubOrgs, org) {
+			aiErr := tryPullAIHubModel(context.Background(), name, repo, false)
+			if aiErr == nil {
+				manifest, err = s.GetManifest(name)
+				return manifest, err
+			}
+			if !errors.Is(aiErr, aihub.ErrModelNotFound) {
+				return nil, fmt.Errorf("download model failed")
+			}
+		}
 		err = pullModel(name, quant)
 		if err != nil {
 			return nil, fmt.Errorf("download model failed")

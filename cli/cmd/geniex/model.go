@@ -48,6 +48,10 @@ var (
 	noConfigCache bool
 )
 
+// aiHubOrgs is the allowlist of HuggingFace org names that are routed to
+// the AI Hub (S3/QAIRT) pull path instead of the standard HF path.
+var aiHubOrgs = []string{"qualcomm"}
+
 // pull creates a command to download and cache a model by name.
 // Usage: geniex pull <model-name>
 func pull() *cobra.Command {
@@ -69,14 +73,12 @@ func pull() *cobra.Command {
 
 	// aiHubOrgs is the allowlist of HuggingFace org names that are routed to
 	// the AI Hub (S3/QAIRT) pull path instead of the standard HF path.
-	aiHubOrgs := []string{"qualcomm"}
-
 	pullCmd.Run = func(cmd *cobra.Command, args []string) {
 		// Route to AI Hub when the user supplies "<allowlisted-org>/<repo>".
 		// The repo name is treated as the model's display_name in the manifest.
 		rawName, _ := splitQuant(args[0])
 		if org, repo, ok := splitOrgRepo(rawName); ok && slices.Contains(aiHubOrgs, org) {
-			err := tryPullAIHubModel(context.TODO(), repo, noConfigCache)
+			err := tryPullAIHubModel(context.TODO(), rawName, repo, noConfigCache)
 			if err == nil {
 				return
 			}
@@ -847,12 +849,13 @@ func detectMacOSBundles(files []model_hub.ModelFileInfo) []string {
 
 // tryPullAIHubModel resolves the display_name against the AI Hub manifest and,
 // on a match, downloads the chipset-specific zip asset, unzips it flat, and
-// writes a synthesised geniex.json under qai-hub/<id>/.
+// writes a synthesised geniex.json keyed by storedName (the original org/repo
+// the user typed).
 //
 // Returns aihub.ErrModelNotFound when the display_name is not published on AI
 // Hub, so the caller can fall back to the HuggingFace flow. All other errors
 // are terminal.
-func tryPullAIHubModel(ctx context.Context, displayName string, noConfigCache bool) error {
+func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noConfigCache bool) error {
 	cacheDir := filepath.Join(store.Get().DataPath(), "aihub")
 	client := aihub.NewClient(cacheDir)
 	defer client.Close()
@@ -934,7 +937,7 @@ func tryPullAIHubModel(ctx context.Context, displayName string, noConfigCache bo
 		modelTypeStr = types.ModelTypeVLM
 	}
 	mf := types.ModelManifest{
-		Name:          "qai-hub/" + model.GetId(),
+		Name:          storedName,
 		ModelName:     model.GetId(),
 		ModelType:     modelTypeStr,
 		PluginId:      "qairt",
