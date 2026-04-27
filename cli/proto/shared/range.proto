@@ -1,0 +1,28 @@
+// ---------------------------------------------------------------------
+// Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+// ---------------------------------------------------------------------
+syntax = "proto3";
+
+package qaihm;
+
+option go_package = "github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm;qaihm";
+
+message IntRange {
+  // If unset, no min / max applies.
+  optional int64 min = 1;
+  optional int64 max = 2;
+}
+
+message DoubleRange {
+  // If unset, no min / max applies.
+  optional double min = 1;
+  optional double max = 2;
+}
+
+message Range {
+  oneof type {
+    IntRange int_r = 1;
+    DoubleRange double_r = 2;
+  }
+}

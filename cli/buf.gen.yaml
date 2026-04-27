@@ -1,0 +1,6 @@
+version: v2
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: gen/qaihm
+    opt:
+      - paths=source_relative

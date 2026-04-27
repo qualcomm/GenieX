@@ -1,0 +1,6 @@
+package(default_visibility = ["//cli/proto:__pkg__"])
+
+filegroup(
+    name = "proto_srcs",
+    srcs = glob(["*.proto"]),
+)
