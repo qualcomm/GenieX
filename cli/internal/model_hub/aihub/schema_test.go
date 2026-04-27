@@ -17,7 +17,9 @@ package aihub
 import (
 	"testing"
 
-	"github.com/bytedance/sonic"
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm"
 )
 
 // Minimal samples pulled from the real AI Hub JSONs attached to the
@@ -95,50 +97,50 @@ const sampleReleaseAssetsJSON = `{
 }`
 
 func TestUnmarshalManifest(t *testing.T) {
-	var m Manifest
-	if err := sonic.UnmarshalString(sampleManifestJSON, &m); err != nil {
+	var m qaihm.ReleaseManifest
+	if err := protojson.Unmarshal([]byte(sampleManifestJSON), &m); err != nil {
 		t.Fatalf("unmarshal manifest: %v", err)
 	}
-	if m.Version != "0.51.1.dev1" {
-		t.Errorf("bad version: %s", m.Version)
+	if m.GetVersion() != "0.51.1.dev1" {
+		t.Errorf("bad version: %s", m.GetVersion())
 	}
-	if len(m.Models) != 2 {
-		t.Fatalf("expected 2 models, got %d", len(m.Models))
+	if len(m.GetModels()) != 2 {
+		t.Fatalf("expected 2 models, got %d", len(m.GetModels()))
 	}
-	if m.Models[0].ID != "qwen3_4b_instruct_2507" {
-		t.Errorf("unexpected first model: %+v", m.Models[0])
+	if m.GetModels()[0].GetId() != "qwen3_4b_instruct_2507" {
+		t.Errorf("unexpected first model: %+v", m.GetModels()[0])
 	}
-	if m.Models[0].ManifestURLs.ReleaseAssets == "" {
+	if m.GetModels()[0].GetManifestUrls().GetReleaseAssets() == "" {
 		t.Errorf("qwen3 should have release_assets url")
 	}
-	if m.Models[1].ManifestURLs.ReleaseAssets != "" {
+	if m.GetModels()[1].GetManifestUrls().GetReleaseAssets() != "" {
 		t.Errorf("baichuan2 should NOT have release_assets url")
 	}
 }
 
 func TestUnmarshalPlatformAndReleaseAssets(t *testing.T) {
-	var p Platform
-	if err := sonic.UnmarshalString(samplePlatformJSON, &p); err != nil {
+	var p qaihm.PlatformInfo
+	if err := protojson.Unmarshal([]byte(samplePlatformJSON), &p); err != nil {
 		t.Fatalf("unmarshal platform: %v", err)
 	}
-	if len(p.Chipsets) != 2 {
-		t.Fatalf("expected 2 chipsets, got %d", len(p.Chipsets))
+	if len(p.GetChipsets()) != 2 {
+		t.Fatalf("expected 2 chipsets, got %d", len(p.GetChipsets()))
 	}
-	if p.Chipsets[0].HTPVersion != 73 {
-		t.Errorf("bad htp_version: %d", p.Chipsets[0].HTPVersion)
+	if p.GetChipsets()[0].GetHtpVersion() != 73 {
+		t.Errorf("bad htp_version: %d", p.GetChipsets()[0].GetHtpVersion())
 	}
 
-	var ra ReleaseAssets
-	if err := sonic.UnmarshalString(sampleReleaseAssetsJSON, &ra); err != nil {
+	var ra qaihm.ModelReleaseAssets
+	if err := protojson.Unmarshal([]byte(sampleReleaseAssetsJSON), &ra); err != nil {
 		t.Fatalf("unmarshal release assets: %v", err)
 	}
-	if ra.ModelID != "qwen3_4b_instruct_2507" {
-		t.Errorf("bad model_id: %s", ra.ModelID)
+	if ra.GetModelId() != "qwen3_4b_instruct_2507" {
+		t.Errorf("bad model_id: %s", ra.GetModelId())
 	}
-	if len(ra.Assets) != 2 {
-		t.Fatalf("expected 2 assets, got %d", len(ra.Assets))
+	if len(ra.GetAssets()) != 2 {
+		t.Fatalf("expected 2 assets, got %d", len(ra.GetAssets()))
 	}
-	if ra.Assets[0].Runtime != RuntimeGenie {
-		t.Errorf("bad runtime: %s", ra.Assets[0].Runtime)
+	if ra.GetAssets()[0].GetRuntime() != RuntimeGenie {
+		t.Errorf("bad runtime: %s", ra.GetAssets()[0].GetRuntime())
 	}
 }

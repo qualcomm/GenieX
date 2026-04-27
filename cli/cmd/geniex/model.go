@@ -859,10 +859,10 @@ func tryPullAIHubModel(ctx context.Context, id, chipset string) error {
 		return err // ErrModelNotFound -> caller falls back to HF
 	}
 
-	if _, rerr := aihub.RuntimeForDomain(model.Domain); rerr != nil {
+	if _, rerr := aihub.RuntimeForDomain(model.GetDomain()); rerr != nil {
 		fmt.Println(render.GetTheme().Error.Sprintf(
 			"AI Hub model %s has domain %s, which the CLI doesn't support yet (LLM/VLM only).",
-			id, model.Domain))
+			id, model.GetDomain()))
 		return rerr
 	}
 	if chipset == "" {
@@ -898,21 +898,21 @@ func tryPullAIHubModel(ctx context.Context, id, chipset string) error {
 		}
 		return err
 	}
-	asset, err := aihub.Match(ra, plat, model.Domain, chipset)
+	asset, err := aihub.Match(ra, plat, model.GetDomain(), chipset)
 	spin.Stop()
 	if err != nil {
 		fmt.Println(render.GetTheme().Error.Sprintf("%s", err))
 		return err
 	}
 
-	zipSize, err := headContentLength(ctx, asset.DownloadURL)
+	zipSize, err := headContentLength(ctx, asset.GetDownloadUrl())
 	if err != nil {
-		fmt.Println(render.GetTheme().Error.Sprintf("Failed to HEAD %s: %s", asset.DownloadURL, err))
+		fmt.Println(render.GetTheme().Error.Sprintf("Failed to HEAD %s: %s", asset.GetDownloadUrl(), err))
 		return err
 	}
 
 	modelTypeStr := types.ModelTypeLLM
-	if model.Domain == aihub.DomainMultimodal {
+	if model.GetDomain() == aihub.DomainMultimodal {
 		modelTypeStr = types.ModelTypeVLM
 	}
 	mf := types.ModelManifest{
@@ -920,7 +920,7 @@ func tryPullAIHubModel(ctx context.Context, id, chipset string) error {
 		ModelName:     id,
 		ModelType:     modelTypeStr,
 		PluginId:      "qairt",
-		DeviceId:      asset.Chipset,
+		DeviceId:      asset.GetChipset(),
 		MinSDKVersion: config.MinSDKVersion,
 	}
 
@@ -933,17 +933,17 @@ func tryPullAIHubModel(ctx context.Context, id, chipset string) error {
 				break
 			}
 		}
-		if allDownloaded && existing.DeviceId == asset.Chipset {
+		if allDownloaded && existing.DeviceId == asset.GetChipset() {
 			fmt.Println(render.GetTheme().Info.Sprint("Already downloaded"))
 			return nil
 		}
 	}
 
 	slog.Info("AI Hub pull",
-		"id", id, "chipset", asset.Chipset, "runtime", asset.Runtime,
-		"precision", asset.Precision, "url", asset.DownloadURL, "size", zipSize)
+		"id", id, "chipset", asset.GetChipset(), "runtime", asset.GetRuntime(),
+		"precision", asset.GetPrecision(), "url", asset.GetDownloadUrl(), "size", zipSize)
 
-	infoCh, errCh := store.Get().PullZipAsset(ctx, mf, asset.DownloadURL, zipSize)
+	infoCh, errCh := store.Get().PullZipAsset(ctx, mf, asset.GetDownloadUrl(), zipSize)
 	bar := render.NewProgressBar(zipSize, "downloading")
 	for pg := range infoCh {
 		bar.Set(pg.TotalDownloaded)

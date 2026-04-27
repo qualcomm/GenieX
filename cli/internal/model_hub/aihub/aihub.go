@@ -26,9 +26,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bytedance/sonic"
+	"google.golang.org/protobuf/encoding/protojson"
 	"resty.dev/v3"
 
+	"github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 )
 
@@ -54,7 +55,7 @@ type Client struct {
 
 	http *resty.Client
 
-	modelIndex map[string]*Model
+	modelIndex map[string]*qaihm.ManifestModelEntry
 }
 
 // NewClient builds a Client rooted at cacheDir (typically <data-dir>/aihub).
@@ -95,7 +96,7 @@ func (c *Client) Close() error {
 // LoadManifest fetches the manifest.json for the pinned aihm release (the
 // public bucket has no `latest` alias) and builds an O(1) model lookup index
 // on first success.
-func (c *Client) LoadManifest(ctx context.Context) (*Manifest, error) {
+func (c *Client) LoadManifest(ctx context.Context) (*qaihm.ReleaseManifest, error) {
 	url := fmt.Sprintf("%s/releases/%s/manifest.json", c.baseURL, c.version)
 	cachePath := filepath.Join(c.cacheDir, fmt.Sprintf("manifest-%s.json", sanitizeForFilename(c.version)))
 
@@ -104,14 +105,14 @@ func (c *Client) LoadManifest(ctx context.Context) (*Manifest, error) {
 		return nil, fmt.Errorf("load manifest: %w", err)
 	}
 
-	var m Manifest
-	if err := sonic.Unmarshal(data, &m); err != nil {
+	var m qaihm.ReleaseManifest
+	if err := protojson.Unmarshal(data, &m); err != nil {
 		return nil, fmt.Errorf("parse manifest: %w", err)
 	}
 
-	c.modelIndex = make(map[string]*Model, len(m.Models))
-	for i := range m.Models {
-		c.modelIndex[m.Models[i].ID] = &m.Models[i]
+	c.modelIndex = make(map[string]*qaihm.ManifestModelEntry, len(m.GetModels()))
+	for _, model := range m.GetModels() {
+		c.modelIndex[model.GetId()] = model
 	}
 
 	return &m, nil
@@ -119,7 +120,7 @@ func (c *Client) LoadManifest(ctx context.Context) (*Manifest, error) {
 
 // LookupModel returns the Model entry for id, or ErrModelNotFound.
 // Must be called after LoadManifest has succeeded.
-func (c *Client) LookupModel(id string) (*Model, error) {
+func (c *Client) LookupModel(id string) (*qaihm.ManifestModelEntry, error) {
 	if c.modelIndex == nil {
 		return nil, errors.New("aihub: LookupModel called before LoadManifest")
 	}
@@ -131,21 +132,21 @@ func (c *Client) LookupModel(id string) (*Model, error) {
 }
 
 // LoadPlatform fetches and caches platform.json (referenced by manifest).
-func (c *Client) LoadPlatform(ctx context.Context, m *Manifest) (*Platform, error) {
-	if m == nil || m.PlatformURL == "" {
+func (c *Client) LoadPlatform(ctx context.Context, m *qaihm.ReleaseManifest) (*qaihm.PlatformInfo, error) {
+	if m == nil || m.GetPlatformUrl() == "" {
 		return nil, errors.New("aihub: manifest has no platform_url")
 	}
 
-	cacheName := fmt.Sprintf("platform-%s.json", sanitizeForFilename(m.Version))
+	cacheName := fmt.Sprintf("platform-%s.json", sanitizeForFilename(m.GetVersion()))
 	cachePath := filepath.Join(c.cacheDir, cacheName)
 
-	data, err := c.fetchJSON(ctx, m.PlatformURL, cachePath)
+	data, err := c.fetchJSON(ctx, m.GetPlatformUrl(), cachePath)
 	if err != nil {
 		return nil, fmt.Errorf("load platform: %w", err)
 	}
 
-	var p Platform
-	if err := sonic.Unmarshal(data, &p); err != nil {
+	var p qaihm.PlatformInfo
+	if err := protojson.Unmarshal(data, &p); err != nil {
 		return nil, fmt.Errorf("parse platform: %w", err)
 	}
 	return &p, nil
@@ -153,26 +154,26 @@ func (c *Client) LoadPlatform(ctx context.Context, m *Manifest) (*Platform, erro
 
 // LoadReleaseAssets fetches release-assets.json for a given model id.
 // Returns ErrNoReleaseAssets if the manifest entry lacks the URL.
-func (c *Client) LoadReleaseAssets(ctx context.Context, m *Manifest, id string) (*ReleaseAssets, error) {
+func (c *Client) LoadReleaseAssets(ctx context.Context, m *qaihm.ReleaseManifest, id string) (*qaihm.ModelReleaseAssets, error) {
 	model, err := c.LookupModel(id)
 	if err != nil {
 		return nil, err
 	}
-	if model.ManifestURLs.ReleaseAssets == "" {
+	if model.GetManifestUrls().GetReleaseAssets() == "" {
 		return nil, ErrNoReleaseAssets
 	}
 
 	cacheName := fmt.Sprintf("release-assets-%s-%s.json",
-		sanitizeForFilename(id), sanitizeForFilename(m.Version))
+		sanitizeForFilename(id), sanitizeForFilename(m.GetVersion()))
 	cachePath := filepath.Join(c.cacheDir, cacheName)
 
-	data, err := c.fetchJSON(ctx, model.ManifestURLs.ReleaseAssets, cachePath)
+	data, err := c.fetchJSON(ctx, model.GetManifestUrls().GetReleaseAssets(), cachePath)
 	if err != nil {
 		return nil, fmt.Errorf("load release assets for %s: %w", id, err)
 	}
 
-	var ra ReleaseAssets
-	if err := sonic.Unmarshal(data, &ra); err != nil {
+	var ra qaihm.ModelReleaseAssets
+	if err := protojson.Unmarshal(data, &ra); err != nil {
 		return nil, fmt.Errorf("parse release assets: %w", err)
 	}
 	return &ra, nil

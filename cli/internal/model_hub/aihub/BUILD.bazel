@@ -13,10 +13,11 @@ go_library(
     importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub",
     visibility = ["//cli:__subpackages__"],
     deps = [
+        "//cli/gen/qaihm",
         "//cli/internal/config",
         "//cli/internal/types",
-        "@com_github_bytedance_sonic//:sonic",
         "@dev_resty_v3//:resty",
+        "@org_golang_google_protobuf//encoding/protojson",
     ],
 )
 
@@ -28,5 +29,8 @@ go_test(
         "unzip_test.go",
     ],
     embed = [":aihub"],
-    deps = ["@com_github_bytedance_sonic//:sonic"],
+    deps = [
+        "//cli/gen/qaihm",
+        "@org_golang_google_protobuf//encoding/protojson",
+    ],
 )

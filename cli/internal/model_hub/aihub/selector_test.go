@@ -18,17 +18,19 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/bytedance/sonic"
+	"google.golang.org/protobuf/encoding/protojson"
+
+	"github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm"
 )
 
 func loadFixtures(t *testing.T) (*Platform, *ReleaseAssets) {
 	t.Helper()
-	var p Platform
-	if err := sonic.UnmarshalString(samplePlatformJSON, &p); err != nil {
+	var p qaihm.PlatformInfo
+	if err := protojson.Unmarshal([]byte(samplePlatformJSON), &p); err != nil {
 		t.Fatalf("unmarshal platform: %v", err)
 	}
-	var ra ReleaseAssets
-	if err := sonic.UnmarshalString(sampleReleaseAssetsJSON, &ra); err != nil {
+	var ra qaihm.ModelReleaseAssets
+	if err := protojson.Unmarshal([]byte(sampleReleaseAssetsJSON), &ra); err != nil {
 		t.Fatalf("unmarshal release assets: %v", err)
 	}
 	return &p, &ra
@@ -65,13 +67,13 @@ func TestMatch_HappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if asset.Chipset != "qualcomm-snapdragon-x-elite" {
-		t.Errorf("wrong chipset: %s", asset.Chipset)
+	if asset.GetChipset() != "qualcomm-snapdragon-x-elite" {
+		t.Errorf("wrong chipset: %s", asset.GetChipset())
 	}
-	if asset.Runtime != RuntimeGenie {
-		t.Errorf("wrong runtime: %s", asset.Runtime)
+	if asset.GetRuntime() != RuntimeGenie {
+		t.Errorf("wrong runtime: %s", asset.GetRuntime())
 	}
-	if asset.DownloadURL == "" {
+	if asset.GetDownloadUrl() == "" {
 		t.Errorf("missing download_url")
 	}
 }
@@ -96,7 +98,7 @@ func TestMatch_ChipsetNotAvailable(t *testing.T) {
 func TestMatch_UnsupportedDomain(t *testing.T) {
 	p, ra := loadFixtures(t)
 
-	_, err := Match(ra, p, DomainComputer, "qualcomm-snapdragon-x-elite")
+	_, err := Match(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_COMPUTER_VISION, "qualcomm-snapdragon-x-elite")
 	if !errors.Is(err, ErrUnsupportedDomain) {
 		t.Errorf("expected ErrUnsupportedDomain, got %v", err)
 	}
