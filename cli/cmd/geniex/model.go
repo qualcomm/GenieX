@@ -857,7 +857,10 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 	model, err := client.LookupModelByDisplayName(displayName)
 	spin.Stop()
 	if err != nil {
-		fmt.Println(render.GetTheme().Error.Sprintf("Model %q not found in AI Hub manifest.", displayName))
+		fmt.Println(render.GetTheme().Error.Sprintf(
+				"Model %q not found from AI Hub.\n"+
+					"  Browse available models: https://aihub.qualcomm.com/models",
+				displayName))
 		return err
 	}
 
@@ -901,7 +904,25 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 	asset, err := aihub.Match(ra, plat, model.GetDomain(), chipset)
 	spin.Stop()
 	if err != nil {
-		fmt.Println(render.GetTheme().Error.Sprintf("%s", err))
+		var cnae *aihub.ChipsetNotAvailableError
+		if errors.As(err, &cnae) {
+			availableChipsets := make([]string, 0, len(cnae.Available))
+			seen := make(map[string]struct{})
+			for _, a := range cnae.Available {
+				if _, ok := seen[a.Chipset]; !ok {
+					seen[a.Chipset] = struct{}{}
+					availableChipsets = append(availableChipsets, a.Chipset)
+				}
+			}
+			sort.Strings(availableChipsets)
+			fmt.Println(render.GetTheme().Error.Sprintf(
+				"No geniex asset found for model=%q, chipset=%q.\n"+
+					"  Model is available for: %s\n"+
+					"  Browse available models: https://aihub.qualcomm.com/models",
+				displayName, chipset, strings.Join(availableChipsets, ", ")))
+		} else {
+			fmt.Println(render.GetTheme().Error.Sprintf("%s", err))
+		}
 		return err
 	}
 
