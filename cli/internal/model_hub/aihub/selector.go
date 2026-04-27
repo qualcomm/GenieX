@@ -71,17 +71,17 @@ func (e *ChipsetNotAvailableError) Is(target error) bool {
 // knows how to download + execute. Returns ErrUnsupportedDomain otherwise.
 func RuntimeForDomain(domain qaihm.ModelDomain) (qaihm.Runtime, error) {
 	switch domain {
-	case DomainGenerativeAI, DomainMultimodal:
-		return RuntimeGenie, nil
+	case qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI, qaihm.ModelDomain_MODEL_DOMAIN_MULTIMODAL:
+		return qaihm.Runtime_RUNTIME_GENIE, nil
 	default:
 		return 0, fmt.Errorf("%w: %s", ErrUnsupportedDomain, domain)
 	}
 }
 
-// ResolveChipset looks up the user-supplied chipset string against
+// resolveChipset looks up the user-supplied chipset string against
 // platform.json, matching either ChipsetInfo.Name or any of its aliases. It
 // returns the canonical name.
-func ResolveChipset(plat *Platform, chipset string) (string, error) {
+func resolveChipset(plat *qaihm.PlatformInfo, chipset string) (string, error) {
 	if plat == nil {
 		return "", errors.New("aihub: nil platform")
 	}
@@ -106,7 +106,7 @@ func ResolveChipset(plat *Platform, chipset string) (string, error) {
 
 // SupportedChipsetsFor returns the sorted list of canonical chipset names
 // that appear in the given release assets. Used only for error messages.
-func SupportedChipsetsFor(ra *ReleaseAssets) []string {
+func SupportedChipsetsFor(ra *qaihm.ModelReleaseAssets) []string {
 	seen := make(map[string]struct{})
 	for _, a := range ra.GetAssets() {
 		seen[a.GetChipset()] = struct{}{}
@@ -124,7 +124,7 @@ func SupportedChipsetsFor(ra *ReleaseAssets) []string {
 // Platform aliases, and assets are filtered by both. If multiple candidates
 // remain (e.g. several precisions) the first in publication order wins and
 // the choice is logged at debug level.
-func Match(ra *ReleaseAssets, plat *Platform, domain qaihm.ModelDomain, chipset string) (*Asset, error) {
+func Match(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qaihm.ModelDomain, chipset string) (*qaihm.ModelReleaseAssets_AssetDetails, error) {
 	if ra == nil || len(ra.GetAssets()) == 0 {
 		return nil, errors.New("aihub: empty release assets")
 	}
@@ -134,13 +134,13 @@ func Match(ra *ReleaseAssets, plat *Platform, domain qaihm.ModelDomain, chipset 
 		return nil, err
 	}
 
-	canonical, err := ResolveChipset(plat, chipset)
+	canonical, err := resolveChipset(plat, chipset)
 	if err != nil {
 		return nil, err
 	}
 
 	avail := make([]Availability, 0, len(ra.GetAssets()))
-	var candidates []*Asset
+	var candidates []*qaihm.ModelReleaseAssets_AssetDetails
 	for _, a := range ra.GetAssets() {
 		avail = append(avail, Availability{
 			Chipset: a.GetChipset(), Runtime: a.GetRuntime().String(), Precision: a.GetPrecision().String(),

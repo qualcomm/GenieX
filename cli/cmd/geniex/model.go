@@ -28,6 +28,8 @@ import (
 	"strings"
 
 	"github.com/bytedance/sonic"
+
+	"github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm"
 	"github.com/charmbracelet/huh"
 	"github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -846,12 +848,12 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 		fetchOpts = append(fetchOpts, aihub.WithNoCache())
 	}
 
-	spin := render.NewSpinner("fetching AI Hub manifest...")
+	spin := render.NewSpinner("fetching AI Hub model index...")
 	spin.Start()
 	manifest, err := client.LoadManifest(ctx, fetchOpts...)
 	if err != nil {
 		spin.Stop()
-		fmt.Println(render.GetTheme().Error.Sprintf("Failed to fetch AI Hub manifest: %s", err))
+		fmt.Println(render.GetTheme().Error.Sprintf("Failed to fetch AI Hub model index: %s", err))
 		return err
 	}
 	model, err := client.LookupModelByDisplayName(displayName)
@@ -882,7 +884,7 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 		}
 	}
 
-	spin = render.NewSpinner("resolving download asset...")
+	spin = render.NewSpinner("resolving model asset...")
 	spin.Start()
 	plat, err := client.LoadPlatform(ctx, manifest, fetchOpts...)
 	if err != nil {
@@ -933,7 +935,7 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 	}
 
 	modelTypeStr := types.ModelTypeLLM
-	if model.GetDomain() == aihub.DomainMultimodal {
+	if model.GetDomain() == qaihm.ModelDomain_MODEL_DOMAIN_MULTIMODAL {
 		modelTypeStr = types.ModelTypeVLM
 	}
 	mf := types.ModelManifest{
