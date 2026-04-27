@@ -141,16 +141,16 @@ func configSetCmd() *cobra.Command {
 
 // hostOSType maps runtime.GOOS to the protobuf OperatingSystemType used in
 // DeviceInfo so we can filter the device list to only relevant entries.
-func hostOSType() qaihm.OperatingSystemType {
+// Returns an error for operating systems the CLI does not support.
+func hostOSType() (qaihm.OperatingSystemType, error) {
 	switch runtime.GOOS {
 	case "windows":
-		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_WINDOWS
+		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_WINDOWS, nil
 	case "linux":
-		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_LINUX
-	case "android":
-		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_ANDROID
+		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_LINUX, nil
 	default:
-		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_UNSPECIFIED
+		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_UNSPECIFIED,
+			fmt.Errorf("unsupported operating system %q for AI Hub device selection", runtime.GOOS)
 	}
 }
 
@@ -176,11 +176,15 @@ func pickDevice(ctx context.Context, noConfigCache bool) error {
 		return err
 	}
 
-	osType := hostOSType()
+	osType, err := hostOSType()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprint(err.Error()))
+		return err
+	}
+
 	var options []huh.Option[string]
 	for _, d := range plat.GetDevices() {
-		if osType != qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_UNSPECIFIED &&
-			d.GetOs().GetOstype() != osType {
+		if d.GetOs().GetOstype() != osType {
 			continue
 		}
 		if d.GetChipset() == "" {
