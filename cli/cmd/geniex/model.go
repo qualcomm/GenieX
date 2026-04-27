@@ -76,9 +76,8 @@ func pull() *cobra.Command {
 	pullCmd.Run = func(cmd *cobra.Command, args []string) {
 		// Route to AI Hub when the user supplies "<allowlisted-org>/<repo>".
 		// The repo name is treated as the model's display_name in the manifest.
-		rawName, _ := splitQuant(args[0])
-		if org, repo, ok := splitOrgRepo(rawName); ok && slices.Contains(aiHubOrgs, org) {
-			if err := tryPullAIHubModel(context.TODO(), rawName, repo, noConfigCache); err != nil {
+		if org, repo, ok := splitOrgRepo(args[0]); ok && slices.Contains(aiHubOrgs, org) {
+			if err := tryPullAIHubModel(context.TODO(), args[0], repo, noConfigCache); err != nil {
 				os.Exit(1)
 			}
 			return
@@ -91,17 +90,6 @@ func pull() *cobra.Command {
 	}
 
 	return pullCmd
-}
-
-// splitQuant peels a trailing ":<quant>" suffix off a user-supplied model
-// argument, matching normalizeModelName's parsing without any HF/NexaAI
-// normalization.
-func splitQuant(arg string) (string, string) {
-	parts := strings.SplitN(arg, ":", 2)
-	if len(parts) == 2 {
-		return parts[0], strings.ToUpper(parts[1])
-	}
-	return parts[0], ""
 }
 
 // splitOrgRepo splits "org/repo" into (org, repo, true).
