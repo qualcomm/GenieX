@@ -25,12 +25,12 @@ inline const std::unordered_map<std::string, LlmModelEntry>& llm_model_registry(
         // Only namespaces that actually exist in the pinned geniex-qairt
         // submodule are wired in. *_aihub / phi4 / granite4 entries will
         // be restored once the submodule bumps.
-        {"qwen3-4b-base", {qwen3_4b::makePipeline}},
-        {"qwen3-4b-instruct", {qwen3_4b_instruct_2507::makePipeline}},
-        {"qwen3-8b", {qwen3_8b::makePipeline}},
-        {"phi3.5", {phi3_5::makePipeline}},
-        {"llama3_2-1b", {llama3_2_1b::makePipeline}},
-        {"llama3_2-3b", {llama3_2_3b::makePipeline}},
+        {"qwen3_4b", {qwen3_4b::makePipeline}},
+        {"qwen3_4b_instruct_2507", {qwen3_4b_instruct_2507::makePipeline}},
+        {"qwen3_8b", {qwen3_8b::makePipeline}},
+        {"phi_3_5_mini_instruct", {phi3_5::makePipeline}},
+        {"llama_v3_2_1b_instruct", {llama3_2_1b::makePipeline}},
+        {"llama_v3_2_3b_instruct", {llama3_2_3b::makePipeline}},
     };
     return registry;
 }
