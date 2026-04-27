@@ -874,17 +874,15 @@ func tryPullAIHubModel(ctx context.Context, id string, noConfigCache bool) error
 		return rerr
 	}
 	if chipset == "" {
-		if ra, rerr := client.LoadReleaseAssets(ctx, manifest, id, fetchOpts...); rerr == nil {
-			fmt.Println(render.GetTheme().Error.Sprintf(
-				"Device not configured for AI Hub model %q. Run \"geniex config set device\" to select your device. Supported chipsets:", id))
-			for _, c := range aihub.SupportedChipsetsFor(ra) {
-				fmt.Println(render.GetTheme().Error.Sprintf("  - %s", c))
-			}
-		} else {
-			fmt.Println(render.GetTheme().Error.Sprintf(
-				"Device not configured. Run \"geniex config set device\" to select your device."))
+		fmt.Println(render.GetTheme().Info.Sprint("No device configured. Please select your device first."))
+		if err := pickDevice(ctx, noConfigCache); err != nil {
+			return err
 		}
-		return fmt.Errorf("device not configured")
+		// Re-read the chipset that was just saved by pickDevice.
+		chipset, _, _ = store.Get().ConfigGet(store.ConfigKeyDevice)
+		if chipset == "" {
+			return fmt.Errorf("device not configured")
+		}
 	}
 
 	spin = render.NewSpinner("resolving download asset...")
