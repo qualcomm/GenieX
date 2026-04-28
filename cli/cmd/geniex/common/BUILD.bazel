@@ -6,7 +6,6 @@ go_library(
         "log.go",
         "process.go",
         "repl.go",
-        "util_darwin.go",
         "util_linux.go",
         "util_windows.go",
     ],
@@ -22,12 +21,6 @@ go_library(
         "@com_github_lmittmann_tint//:tint",
     ] + select({
         "@io_bazel_rules_go//go/platform:android": [
-            "@org_golang_x_sys//unix",
-        ],
-        "@io_bazel_rules_go//go/platform:darwin": [
-            "@org_golang_x_sys//unix",
-        ],
-        "@io_bazel_rules_go//go/platform:ios": [
             "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:linux": [

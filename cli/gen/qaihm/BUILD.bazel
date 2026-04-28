@@ -11,7 +11,20 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "qaihm",
-    srcs = glob(["*.pb.go"]),
+    srcs = [
+        "info.pb.go",
+        "manifest.pb.go",
+        "model_metadata.pb.go",
+        "numerics.pb.go",
+        "perf.pb.go",
+        "platform.pb.go",
+        "precision.pb.go",
+        "range.pb.go",
+        "release_assets.pb.go",
+        "runtime.pb.go",
+        "tensor_spec.pb.go",
+        "tool_versions.pb.go",
+    ],
     importpath = "github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm",
     visibility = ["//cli:__subpackages__"],
     deps = [

@@ -1,6 +1,6 @@
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
-load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load(":runfiles.bzl", "sdk_local_bundle")
 
 package(default_visibility = ["//visibility:public"])
@@ -10,43 +10,60 @@ package(default_visibility = ["//visibility:public"])
 string_flag(
     name = "sdk_type",
     build_setting_default = "local",
-    values = ["s3", "local", "bazel"],
+    values = [
+        "s3",
+        "local",
+        "bazel",
+    ],
 )
 
-config_setting(name = "s3_sdk", flag_values = { ":sdk_type": "s3" })
-config_setting(name = "local_sdk", flag_values = { ":sdk_type": "local" })
+config_setting(
+    name = "s3_sdk",
+    flag_values = {":sdk_type": "s3"},
+)
+
+config_setting(
+    name = "local_sdk",
+    flag_values = {":sdk_type": "local"},
+)
 
 # local
 
 sdk_local_bundle(
     name = "local_sdk_runtime",
     data = select({
-        "@platforms//os:windows": glob([
-            "pkg-geniex/lib/**/*.dll",
-            "pkg-geniex/lib/**/*.so",
-            "pkg-geniex/lib/**/*.cat",
-        ], allow_empty = True),
-        "@platforms//os:linux": glob([
-            "pkg-geniex/lib/**/*.so",
-            "pkg-geniex/lib/**/*.so.*",
-        ], allow_empty = True),
+        "@platforms//os:windows": glob(
+            [
+                "pkg-geniex/lib/**/*.dll",
+                "pkg-geniex/lib/**/*.so",
+                "pkg-geniex/lib/**/*.cat",
+            ],
+            allow_empty = True,
+        ),
+        "@platforms//os:linux": glob(
+            [
+                "pkg-geniex/lib/**/*.so",
+                "pkg-geniex/lib/**/*.so.*",
+            ],
+            allow_empty = True,
+        ),
     }),
     strip_prefix = "sdk/pkg-geniex/lib/",
 )
 
 cc_library(
     name = "local_sdk_lib",
-    hdrs = ["pkg-geniex/include/geniex.h"],
-    includes = ["pkg-geniex/include"],
     srcs = select({
         "@platforms//os:windows": ["pkg-geniex/lib/geniex.dll"],
         "@platforms//os:linux": ["pkg-geniex/lib/libgeniex.so"],
     }),
+    hdrs = ["pkg-geniex/include/geniex.h"],
+    data = [":local_sdk_runtime"],
+    includes = ["pkg-geniex/include"],
     linkopts = select({
         "@platforms//os:linux": ["-Wl,-rpath,."],
         "//conditions:default": [],
     }),
-    data = [":local_sdk_runtime"],
 )
 
 # exported targets

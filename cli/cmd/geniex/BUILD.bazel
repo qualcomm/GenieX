@@ -17,10 +17,10 @@ go_library(
     deps = [
         "//bindings/go:geniex_sdk_go",
         "//cli/cmd/geniex/common",
+        "//cli/gen/qaihm",
         "//cli/internal/config",
         "//cli/internal/downloader",
         "//cli/internal/model_hub",
-        "//cli/gen/qaihm",
         "//cli/internal/model_hub/aihub",
         "//cli/internal/record",
         "//cli/internal/render",

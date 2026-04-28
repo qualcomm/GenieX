@@ -53,9 +53,6 @@ type ModelHub interface {
 }
 
 var hubs = []ModelHub{
-	NewVolces(),
-	NewModelScope(),
-	NewS3(),
 	NewHuggingFace(),
 }
 

@@ -8,7 +8,7 @@ genrule(
     ],
     outs = ["geniex-cli-setup.exe"],
     cmd_bat = " ".join([
-        '$(location @innosetup//:iscc) /Q',
+        "$(location @innosetup//:iscc) /Q",
         '"/O$(@D)"',
         '"/DVersion=$(VERSION)"',
         '"/DCliExe=%CD%\\$(location //cli/cmd/geniex)"',
