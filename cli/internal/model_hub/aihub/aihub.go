@@ -222,7 +222,6 @@ func (c *Client) LoadReleaseAssets(ctx context.Context, m *qaihm.ReleaseManifest
 }
 
 // fetchDirect fetches url and returns the body bytes without touching disk.
-// Use this for resources that must never be cached (e.g. release-assets.json).
 func (c *Client) fetchDirect(ctx context.Context, url string) ([]byte, error) {
 	slog.Debug("aihub: fetching (no-cache)", "url", url)
 	resp, err := c.http.R().SetContext(ctx).Get(url)
