@@ -11,7 +11,7 @@
 #define portable_strdup strdup
 #endif
 
-#include "llm_model_registry.h"
+#include "llm_model_registry.h"  // provided by geniex-qairt/models/
 #include "logging.h"
 #include "pipeline/llm_pipeline.h"
 #include "qnn_runtime_utils.h"
