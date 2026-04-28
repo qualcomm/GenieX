@@ -11,19 +11,46 @@ on:
         required: true
         type: string
 
+# Workflow-level permissions are minimal. id-token: write is scoped to the
+# single job that needs OIDC (publish-s3-release), per least-privilege.
 permissions:
   contents: read
-  id-token: write # needed for OIDC federation with AWS (role: github-bitsyfactory)
 
 concurrency:
   group: release-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  # Single source of truth for RELEASE_TAG. Also fails fast (before burning
+  # ~20 min of build time) on a tag that doesn't satisfy SemVer 2.0.
+  resolve-tag:
+    name: resolve-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      is_prerelease: ${{ steps.resolve.outputs.is_prerelease }}
+    steps:
+      - id: resolve
+        env:
+          RAW_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
+          [[ "${RAW_TAG}" =~ $semver ]] || { echo "Invalid SemVer 2.0 tag: ${RAW_TAG}"; exit 1; }
+          echo "tag=${RAW_TAG}" >> "$GITHUB_OUTPUT"
+          # Pre-release = tag contains a hyphen (e.g. v1.2.3-alpha.1, -rc.1).
+          if [[ "${RAW_TAG}" == *-* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # SDK matrix. linux-arm64 / android-arm64 are cross-compiled from x64 Linux;
   # placeholders kept commented-out until the cross-compile paths land.
   build-sdk:
     name: build-sdk (${{ matrix.platform }})
+    needs: [resolve-tag]
     strategy:
       fail-fast: false
       matrix:
@@ -43,6 +70,7 @@ jobs:
 
   build-python-sdist:
     name: build-python-sdist
+    needs: [resolve-tag]
     uses: ./.github/workflows/build-python-sdist.yml
     secrets: inherit
     with:
@@ -117,6 +145,7 @@ jobs:
     name: publish-github-release
     runs-on: ubuntu-latest
     needs:
+      - resolve-tag
       - overlay-htp
       - build-cli
       - build-python-sdist
@@ -124,15 +153,9 @@ jobs:
     permissions:
       contents: write
     env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      RELEASE_TAG: ${{ needs.resolve-tag.outputs.tag }}
 
     steps:
-      - name: Validate release tag (SemVer 2.0)
-        run: |
-          set -euo pipefail
-          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
-          [[ "${RELEASE_TAG}" =~ $semver ]] || { echo "Invalid SemVer 2.0 tag: ${RELEASE_TAG}"; exit 1; }
-
       - uses: actions/checkout@v6
 
       - uses: actions/download-artifact@v5
@@ -209,15 +232,17 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  publish-s3:
+  publish-s3-release:
     name: publish-s3-release
     runs-on: ubuntu-latest
-    needs: [publish-github-release]
+    needs:
+      - resolve-tag
+      - publish-github-release
     permissions:
       contents: read
       id-token: write # OIDC token minting for AWS role assumption
     env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+      RELEASE_TAG: ${{ needs.resolve-tag.outputs.tag }}
 
     steps:
       - uses: actions/checkout@v6
@@ -271,8 +296,10 @@ jobs:
   publish-testpypi:
     name: publish-testpypi
     runs-on: ubuntu-latest
-    needs: [build-python-sdist]
-    if: contains(github.event.inputs.release_tag || github.ref_name, '-')
+    needs:
+      - resolve-tag
+      - build-python-sdist
+    if: needs.resolve-tag.outputs.is_prerelease == 'true'
     timeout-minutes: 10
     steps:
       - uses: actions/download-artifact@v5
