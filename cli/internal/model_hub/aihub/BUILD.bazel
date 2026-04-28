@@ -1,0 +1,34 @@
+# gazelle:resolve go resty.dev/v3 @dev_resty_v3//:resty
+
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "aihub",
+    srcs = [
+        "aihub.go",
+        "selector.go",
+        "unzip.go",
+    ],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub",
+    visibility = ["//cli:__subpackages__"],
+    deps = [
+        "//cli/gen/qaihm",
+        "//cli/internal/config",
+        "//cli/internal/types",
+        "@dev_resty_v3//:resty",
+        "@org_golang_google_protobuf//encoding/protojson",
+    ],
+)
+
+go_test(
+    name = "aihub_test",
+    srcs = [
+        "selector_test.go",
+        "unzip_test.go",
+    ],
+    embed = [":aihub"],
+    deps = [
+        "//cli/gen/qaihm",
+        "@org_golang_google_protobuf//encoding/protojson",
+    ],
+)

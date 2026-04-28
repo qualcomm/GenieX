@@ -39,6 +39,8 @@ type ModelManifest struct {
 	PluginId      string
 	DeviceId      string
 	MinSDKVersion string
+	// Precision is the quantization precision selected at pull time
+	Precision     string
 
 	ModelFile     map[string]ModelFileInfo // quant -> modelfile
 	MMProjFile    ModelFileInfo

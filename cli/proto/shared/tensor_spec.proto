@@ -1,0 +1,84 @@
+// ---------------------------------------------------------------------
+// Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+// ---------------------------------------------------------------------
+//
+// Tensor specification types for model I/O.
+//
+// Defines the core types for specifying tensor metadata:
+// - TensorSpec: Specification for a tensor (shape, dtype, metadata)
+// - IoType: Semantic type of a tensor (image, tensor)
+// - ColorFormat: Color format for image tensors
+// - ImageMetadata: Metadata for image tensors
+//
+// These types are used in model.get_input_spec() and in metadata.yaml files.
+syntax = "proto3";
+
+package qaihm;
+
+option go_package = "github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm;qaihm";
+
+import "shared/range.proto";
+
+enum DType {
+  DTYPE_UNSPECIFIED = 0;
+  DTYPE_FLOAT16 = 1;
+  DTYPE_FLOAT32 = 2;
+  DTYPE_FLOAT64 = 3;
+  DTYPE_INT8 = 4;
+  DTYPE_INT16 = 5;
+  DTYPE_INT32 = 6;
+  DTYPE_INT64 = 7;
+  DTYPE_UINT8 = 8;
+  DTYPE_UINT16 = 9;
+  DTYPE_UINT32 = 10;
+  DTYPE_UINT64 = 11;
+  DTYPE_BOOL = 12;
+}
+
+// Semantic type of an input/output tensor.
+enum IoType {
+  IO_TYPE_UNSPECIFIED = 0;
+  IO_TYPE_TENSOR = 1;
+  IO_TYPE_IMAGE = 2;
+  IO_TYPE_BBOX = 3;
+}
+
+// Color channel format for image tensors.
+enum ColorFormat {
+  COLOR_FORMAT_UNSPECIFIED = 0;
+  COLOR_FORMAT_RGB = 1;
+  COLOR_FORMAT_BGR = 2;
+  COLOR_FORMAT_GRAYSCALE = 3;
+}
+
+// Metadata specific to image tensor inputs.
+// Groups image-related metadata fields like color format and value range.
+message ImageMetadata {
+  ColorFormat color_format = 1;
+}
+
+// Quantization parameters for a tensor.
+message QuantizationParameters {
+  double scale = 1;
+  int32 zero_point = 2;
+}
+
+// Specification for an input or output tensor.
+message TensorSpec {
+  // Generic Tensor Metadata
+  string name = 1;
+  repeated int32 shape = 2;
+  DType dtype = 3;
+  optional QuantizationParameters quantization_parameters = 4;
+  optional string description = 5;
+
+  // Tensor value range.
+  optional Range value_range = 6;
+
+  // IMAGE for image tensors, TENSOR for generic tensors.
+  IoType io_type = 7;
+
+  // Image-specific metadata (color_format). Only used when io_type is IMAGE.
+  optional ImageMetadata image_metadata = 8;
+}

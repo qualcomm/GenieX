@@ -1,0 +1,31 @@
+// ---------------------------------------------------------------------
+// Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+// ---------------------------------------------------------------------
+syntax = "proto3";
+
+package qaihm;
+
+option go_package = "github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm;qaihm";
+
+import "info.proto";
+
+message ModelManifestUrls {
+  string info = 1;
+  string perf = 2;
+  string numerics = 3;
+  string release_assets = 4;
+}
+
+message ManifestModelEntry {
+  string id = 1;
+  string display_name = 2;
+  ModelDomain domain = 3;
+  ModelManifestUrls manifest_urls = 4;
+}
+
+message ReleaseManifest {
+  string version = 1;
+  string platform_url = 2;
+  repeated ManifestModelEntry models = 3;
+}

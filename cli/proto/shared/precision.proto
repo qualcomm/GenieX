@@ -1,0 +1,43 @@
+// ---------------------------------------------------------------------
+// Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+// ---------------------------------------------------------------------
+syntax = "proto3";
+
+package qaihm;
+
+option go_package = "github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm;qaihm";
+
+enum Precision {
+  PRECISION_UNSPECIFIED = 0;
+  // No quantization (floating point)
+  PRECISION_FLOAT = 1;
+  // 8-bit weights, 8-bit activations
+  PRECISION_W8A8 = 2;
+  // 8-bit weights, 16-bit activations
+  PRECISION_W8A16 = 3;
+  // 16-bit weights, 16-bit activations
+  PRECISION_W16A16 = 4;
+  // 4-bit weights, 16-bit activations
+  PRECISION_W4A16 = 5;
+  // 4-bit weights only
+  PRECISION_W4 = 6;
+  // 8-bit w/a with 16-bit int override
+  PRECISION_W8A8_MIXED_INT16 = 7;
+  // 8-bit w, 16-bit a with 16-bit int override
+  PRECISION_W8A16_MIXED_INT16 = 8;
+  // 8-bit w/a with FP16 override
+  PRECISION_W8A8_MIXED_FP16 = 9;
+  // 8-bit w, 16-bit a with FP16 override
+  PRECISION_W8A16_MIXED_FP16 = 10;
+  // GGUF format (llama.cpp)
+  PRECISION_MXFP4 = 11;
+  // GGUF format (llama.cpp)
+  PRECISION_Q8_0 = 12;
+  // GGUF format (llama.cpp)
+  PRECISION_Q4_0 = 13;
+  // Component with multiple precisions, no float layers
+  PRECISION_MIXED = 14;
+  // Component with multiple precisions, at least one float layer
+  PRECISION_MIXED_WITH_FLOAT = 15;
+}

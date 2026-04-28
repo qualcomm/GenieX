@@ -84,6 +84,7 @@ func RootCmd() *cobra.Command {
 		pull(), remove(), clean(), list(),
 		infer(),
 		serve(), run(),
+		configCmd(),
 		version(), update(),
 	)
 

@@ -1,0 +1,117 @@
+// ---------------------------------------------------------------------
+// Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+// ---------------------------------------------------------------------
+//
+// Metadata schema for model I/O specifications.
+//
+// Defines the structure for metadata.json files that document
+// model input/output specifications and quantization parameters for a single
+// exported model.
+syntax = "proto3";
+
+package qaihm;
+
+option go_package = "github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm;qaihm";
+
+import "shared/precision.proto";
+import "shared/runtime.proto";
+import "shared/tensor_spec.proto";
+import "shared/tool_versions.proto";
+
+// Metadata for a single exported model file.
+//
+// Represents the I/O specifications for one exported model component,
+// including input/output tensor shapes, dtypes, and quantization parameters.
+message ModelFileMetadata {
+  string filename = 1;
+
+  repeated TensorSpec inputs = 2;
+
+  repeated TensorSpec outputs = 3;
+}
+
+message SupplementaryFileMetadata {
+  string filename = 1;
+
+  string description = 2;
+}
+
+message GenieChatTemplate {
+  string global_prefix = 1;
+  string system_prefix = 2;
+  string system_suffix = 3;
+  string user_prefix = 4;
+  string user_suffix = 5;
+  string assistant_prefix = 6;
+  string assistant_suffix = 7;
+  string vision_start = 8;
+  string vision_end = 9;
+  string default_system_prompt = 10;
+}
+
+message GenieMetadata {
+  GenieChatTemplate chat_template = 1;
+  repeated int32 context_lengths = 2;
+  bool supports_streaming = 3;
+  bool supports_vision = 4;
+  optional GeniePipeline pipeline = 5;
+  repeated GenieSampleInput sample_inputs = 6;
+  optional GenieVisionPreprocessing vision_preprocessing = 7;
+  bool supports_thinking = 8;
+
+  message GeniePipeline {
+    map<string, string> nodes = 1;
+    repeated GeniePipelineConnection connections = 2;
+
+    message GeniePipelineConnection {
+      string producer_node = 1;
+      string producer_node_io = 2;
+      string consumer_node = 3;
+      string consumer_node_io = 4;
+    }
+  }
+
+  message GenieSampleInput {
+    string node = 1;
+    string node_io = 2;
+    string file = 3;
+  }
+
+  message GenieVisionPreprocessing {
+    int32 image_width = 1;
+    int32 image_height = 2;
+    int32 patch_size = 3;
+    int32 temporal_patch_size = 4;
+    int32 spatial_merge_size = 5;
+    repeated double normalize_mean = 6;
+    repeated double normalize_std = 7;
+  }
+}
+
+// Metadata for a model that may have multiple model files.
+//
+// For single-file models (e.g., ResNet50), this will have one entry.
+// For multi-file models (e.g., Stable Diffusion with text_encoder.bin, unet.bin, vae_decoder.bin),
+// this will have multiple entries mapping model file names to their metadata.
+message ModelMetadata {
+  string aihm_version = 1;
+
+  string model_id = 2;
+  string model_name = 3;
+
+  // Export configuration
+  Runtime runtime = 4;
+  Precision precision = 5;
+  ToolVersions tool_versions = 6;
+
+  // Model files & supplementary data
+  repeated ModelFileMetadata model_files = 7;
+
+  // Optional list of supplementary files included in the export that are not model files
+  // (e.g., labels, config files). Can be populated by the model's write_supplementary_files method.
+  repeated SupplementaryFileMetadata supplementary_files = 8;
+
+  // Optional Genie SDK metadata for on-device deployment.
+  optional GenieMetadata genie = 9;
+}

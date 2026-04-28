@@ -62,6 +62,7 @@ use_repo(
     "com_github_spf13_viper",
     "com_github_valyala_fasthttp",
     "dev_resty_v3",
+    "org_golang_google_protobuf",
     "org_golang_x_image",
     "org_golang_x_sync",
     "org_golang_x_sys",

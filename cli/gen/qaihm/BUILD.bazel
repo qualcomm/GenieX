@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+# Generated protobuf Go stubs for the qaihm proto package.
+#
+# These files are checked in and should NOT be edited by hand.
+# To regenerate after updating .proto files in cli/proto/:
+#
+#   cd cli && buf generate
+#
+# Then commit the updated *.pb.go files.
+
+go_library(
+    name = "qaihm",
+    srcs = glob(["*.pb.go"]),
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm",
+    visibility = ["//cli:__subpackages__"],
+    deps = [
+        "@org_golang_google_protobuf//reflect/protoreflect",
+        "@org_golang_google_protobuf//runtime/protoimpl",
+    ],
+)
