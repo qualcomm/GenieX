@@ -6,7 +6,6 @@ go_library(
     name = "aihub",
     srcs = [
         "aihub.go",
-        "schema.go",
         "selector.go",
         "unzip.go",
     ],
@@ -24,7 +23,6 @@ go_library(
 go_test(
     name = "aihub_test",
     srcs = [
-        "schema_test.go",
         "selector_test.go",
         "unzip_test.go",
     ],

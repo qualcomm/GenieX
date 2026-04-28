@@ -204,6 +204,13 @@ func list() *cobra.Command {
 			tw.AppendHeader(table.Row{"NAME", "SIZE", "QUANTS"})
 			for _, model := range models {
 				tw.AppendRow(table.Row{model.Name, humanize.IBytes(uint64(model.GetSize())), strings.Join(func() []string {
+					// AI Hub (qairt) models store their precision in the Precision field.
+					if model.PluginId == "qairt" {
+						if model.Precision != "" {
+							return []string{model.Precision}
+						}
+						return []string{}
+					}
 					quants := make([]string, 0)
 					if !slices.Contains([]string{"llama_cpp"}, model.PluginId) {
 						return quants
@@ -903,7 +910,7 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 		}
 		return err
 	}
-	asset, err := aihub.Match(ra, plat, model.GetDomain(), chipset)
+	candidates, err := aihub.MatchAll(ra, plat, model.GetDomain(), chipset)
 	spin.Stop()
 	if err != nil {
 		var cnae *aihub.ChipsetNotAvailableError
@@ -928,6 +935,25 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 		return err
 	}
 
+	// If multiple precision variants are available, let the user choose.
+	var asset *qaihm.ModelReleaseAssets_AssetDetails
+	if len(candidates) == 1 {
+		asset = candidates[0]
+	} else {
+		options := make([]huh.Option[*qaihm.ModelReleaseAssets_AssetDetails], 0, len(candidates))
+		for _, c := range candidates {
+			label := strings.TrimPrefix(c.GetPrecision().String(), "PRECISION_")
+			options = append(options, huh.NewOption(label, c))
+		}
+		if err := huh.NewSelect[*qaihm.ModelReleaseAssets_AssetDetails]().
+			Title("Choose a precision variant to download").
+			Options(options...).
+			Value(&asset).
+			Run(); err != nil {
+			return err
+		}
+	}
+
 	zipSize, err := headContentLength(ctx, asset.GetDownloadUrl())
 	if err != nil {
 		fmt.Println(render.GetTheme().Error.Sprintf("Failed to HEAD %s: %s", asset.GetDownloadUrl(), err))
@@ -938,6 +964,7 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 	if model.GetDomain() == qaihm.ModelDomain_MODEL_DOMAIN_MULTIMODAL {
 		modelTypeStr = types.ModelTypeVLM
 	}
+	precisionLabel := strings.TrimPrefix(asset.GetPrecision().String(), "PRECISION_")
 	mf := types.ModelManifest{
 		Name:          storedName,
 		ModelName:     model.GetId(),
@@ -945,6 +972,7 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 		PluginId:      "qairt",
 		DeviceId:      asset.GetChipset(),
 		MinSDKVersion: config.MinSDKVersion,
+		Precision:     precisionLabel,
 	}
 
 	// Already-downloaded short-circuit: same check the HF path does.

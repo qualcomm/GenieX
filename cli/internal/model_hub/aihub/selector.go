@@ -119,12 +119,12 @@ func SupportedChipsetsFor(ra *qaihm.ModelReleaseAssets) []string {
 	return names
 }
 
-// Match picks exactly one Asset for the requested chipset + model domain:
-// domain is mapped to a runtime, chipset is resolved to canonical form via
-// Platform aliases, and assets are filtered by both. If multiple candidates
-// remain (e.g. several precisions) the first in publication order wins and
-// the choice is logged at debug level.
-func Match(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qaihm.ModelDomain, chipset string) (*qaihm.ModelReleaseAssets_AssetDetails, error) {
+// MatchAll returns all assets that match the requested chipset + model domain,
+// sorted by Precision enum value for deterministic ordering.
+//
+// Returns ChipsetNotAvailableError (wrapping ErrChipsetNotAvailable) when no
+// asset matches the requested chipset.
+func MatchAll(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qaihm.ModelDomain, chipset string) ([]*qaihm.ModelReleaseAssets_AssetDetails, error) {
 	if ra == nil || len(ra.GetAssets()) == 0 {
 		return nil, errors.New("aihub: empty release assets")
 	}
@@ -160,15 +160,32 @@ func Match(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qaihm.
 			Available: avail,
 		}
 	}
+
+	// Sort by Precision enum int value for deterministic display order.
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].GetPrecision() < candidates[j].GetPrecision()
+	})
+
+	return candidates, nil
+}
+
+// Match picks exactly one asset for the requested chipset + model domain.
+// When multiple precision variants are available, the one with the lowest
+// Precision enum value is returned. Prefer MatchAll when the caller wants to
+// let the user choose a precision interactively.
+func Match(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qaihm.ModelDomain, chipset string) (*qaihm.ModelReleaseAssets_AssetDetails, error) {
+	candidates, err := MatchAll(ra, plat, domain, chipset)
+	if err != nil {
+		return nil, err
+	}
 	if len(candidates) > 1 {
 		extras := make([]string, 0, len(candidates))
 		for _, c := range candidates {
 			extras = append(extras, c.GetPrecision().String())
 		}
 		slog.Debug("aihub: multiple assets match, picking first",
-			"model", ra.GetModelId(), "chipset", canonical, "runtime", runtime,
+			"model", ra.GetModelId(), "chipset", chipset, "runtime", candidates[0].GetRuntime(),
 			"picked", candidates[0].GetPrecision(), "available", extras)
 	}
-
 	return candidates[0], nil
 }
