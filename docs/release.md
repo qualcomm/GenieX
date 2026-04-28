@@ -39,14 +39,14 @@ Pre-release channels communicate **how ready a build is**. Ordering:
 
 | Channel  | Audience / purpose                                             | Allowed branch        | Still allowed to change          |
 |----------|----------------------------------------------------------------|-----------------------|----------------------------------|
-| `alpha.n` | Share in-progress builds. Shape of features may still move.   | feature branch or master | Anything, including breaking.  |
-| `beta.n`  | Feature-complete for the target `X.Y.Z`; seeking feedback.    | `master`              | Bug fixes and polish only.       |
-| `rc.n`    | Release candidate. Treat as "will ship unless we find a bug". | `master`              | Bug fixes only.                  |
-| stable    | Published release.                                             | `master`              | Nothing — cut a new PATCH/MINOR. |
+| `alpha.n` | Share in-progress builds. Shape of features may still move.   | feature branch or main | Anything, including breaking.   |
+| `beta.n`  | Feature-complete for the target `X.Y.Z`; seeking feedback.    | `main`                | Bug fixes and polish only.       |
+| `rc.n`    | Release candidate. Treat as "will ship unless we find a bug". | `main`                | Bug fixes only.                  |
+| stable    | Published release.                                             | `main`                | Nothing — cut a new PATCH/MINOR. |
 
 Rules:
 
-- **Always pass through at least one `-rc.n` on `master` before stable.**
+- **Always pass through at least one `-rc.n` on `main` before stable.**
 - **A stable tag must be on a commit whose HTP bundle is Microsoft-signed** —
   not self-signed. See [Hexagon HTP signing](#hexagon-htp-signing); if
   unsure, check the latest release run (`gh run list --workflow release.yml --limit 5`)
@@ -75,7 +75,7 @@ This is the algorithm `/release` follows. Apply it in order.
 3. **Pick the channel** based on where you are in the cycle for that
    target `X.Y.Z`:
    - First tag toward a new target, on a feature branch → `alpha.1`
-   - First tag toward a new target, on `master`       → `rc.1`
+   - First tag toward a new target, on `main`         → `rc.1`
      (skip beta unless the user asks for one; most cycles go straight
      to rc)
    - Already in cycle → advance within the current channel (`-rc.1`
@@ -92,11 +92,11 @@ This is the algorithm `/release` follows. Apply it in order.
 #### Worked examples
 
 - Latest stable is `v0.3.2`. `git log v0.3.2..HEAD` contains one `fix:`
-  and one `docs:`. On `master`, first tag → `v0.3.3-rc.1`. After QA →
+  and one `docs:`. On `main`, first tag → `v0.3.3-rc.1`. After QA →
   `v0.3.3`.
 - Latest stable is `v0.3.2`. Log contains a `feat:` adding a new
   backend. On a feature branch → `v0.4.0-alpha.1`. After merge to
-  `master` → `v0.4.0-rc.1` → `v0.4.0`.
+  `main` → `v0.4.0-rc.1` → `v0.4.0`.
 - On `v0.4.0-rc.2`, a CLI flag rename (breaking) lands. Target rises
   from `0.4.0` to `0.5.0`. Leave `-rc.2` alone; next tag is
   `v0.5.0-alpha.1` or `v0.5.0-rc.1` depending on the branch.

@@ -101,14 +101,14 @@ Format: `<type>/<short-topic>`.
 | Type       | Use for                                   | Example                       |
 |------------|-------------------------------------------|-------------------------------|
 | `feat`     | New feature work.                         | `feat/ccache-sdk-build`       |
-| `fix`      | Non-urgent bug fix targeting master.      | `fix/windows-dll-directory`   |
+| `fix`      | Non-urgent bug fix targeting main.        | `fix/windows-dll-directory`   |
 | `hotfix`   | Urgent fix for a shipped release.         | `hotfix/signing-regression`   |
 | `chore`    | Tooling, deps, infra.                     | `chore/claude-framework`      |
 | `docs`     | Documentation only.                       | `docs/release-procedure`      |
 | `ci`       | CI config only.                           | `ci/add-windows-runner`       |
 | `release`  | Long-lived release-prep branches (rare). | `release/0.5`                 |
 
-Base: `master`. Tag policy (which channels may be cut from which
+Base: `main`. Tag policy (which channels may be cut from which
 branches) lives in [docs/release.md](docs/release.md).
 
 ### Personal dev branches
@@ -157,7 +157,7 @@ After updating one, ask whether the others need to move too.
 
 ## 5. Opening a PR
 
-- **Base**: `master`.
+- **Base**: `main`.
 - **Merge strategy**: squash merge. The final commit is the PR title,
   so **the PR title MUST follow the Conventional Commits format**
   defined in § 1. Reviewers and agents reject titles that do not.

@@ -22,7 +22,7 @@ same session.
 ## Non-negotiable guardrails
 
 - **Only ever rewrite the current feature branch.** Refuse if the branch
-  is `master`, or if the current HEAD is already merged.
+  is `main`, or if the current HEAD is already merged.
 - **Always `--force-with-lease`**, never `--force`.
 - Before touching history, surface the proposed final shape (one line
   per planned commit) and get explicit user approval.
@@ -31,7 +31,7 @@ same session.
 
 ## Flow
 
-1. Identify the base: `git merge-base HEAD origin/master` (or whatever
+1. Identify the base: `git merge-base HEAD origin/main` (or whatever
    the PR targets). Show `git log --oneline <base>..HEAD`.
 2. Read the combined diff (`git diff <base>..HEAD`) to understand what
    actually changed, not just what the existing commit messages claim.
