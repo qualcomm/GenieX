@@ -60,11 +60,7 @@ py_library(
 genrule(
     name = "geniex_sdist",
     srcs = glob(
-        [
-            "geniex/**/*.py",
-            "geniex/**/*.pyi",
-            "geniex/py.typed",
-        ],
+        ["geniex/**/*.py"],
         exclude = ["geniex/_version.py"],
     ) + [
         "pyproject.toml",
