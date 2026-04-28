@@ -131,19 +131,101 @@ func GetFileContent(ctx context.Context, modelName, fileName string) ([]byte, er
 
 // Batch download
 
-type downloadTask struct {
-	OutputPath string
-	ModelName  string
-	FileName   string
-	Offset     int64
-	Limit      int64
-	MarkerPath string
-	ChunkIndex int
-}
-
 const (
 	minChunkSize = 16 * 1024 * 1024 // 16MiB
 )
+
+// chunkFetcher writes the bytes [offset, offset+limit) of some remote resource
+// into w. Implementations must be safe for concurrent use.
+type chunkFetcher func(ctx context.Context, offset, limit int64, w io.Writer) error
+
+// downloadChunked is the shared engine behind StartDownload and
+// StartDownloadURL. It pre-allocates outPath to size bytes, initialises (or
+// reuses) a marker sidecar file for resume support, and dispatches missing
+// chunks to the errgroup g. Completed-chunk progress is reported on resCh.
+//
+// downloaded must be a pointer to the caller's running total (shared across
+// multiple files in StartDownload). totalSize is the grand total used only for
+// progress reporting.
+//
+// The caller is responsible for calling g.Wait() and removing markerPath on
+// clean completion.
+func downloadChunked(
+	ctx context.Context,
+	outPath, markerPath string,
+	size, totalSize int64,
+	downloaded *int64,
+	g *errgroup.Group,
+	resCh chan<- types.DownloadInfo,
+	fetch chunkFetcher,
+) error {
+	chunkSize := max(minChunkSize, size/128)
+	nChunks := int((size + chunkSize - 1) / chunkSize)
+
+	// Initialise or reuse marker file.
+	markers, err := os.ReadFile(markerPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err != nil || len(markers) != nChunks {
+		markers = make([]byte, nChunks)
+		if werr := os.WriteFile(markerPath, markers, 0o644); werr != nil {
+			return werr
+		}
+	}
+
+	// Pre-allocate output file.
+	f, err := os.OpenFile(outPath, os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		return err
+	}
+	if fi, _ := f.Stat(); fi == nil || fi.Size() < size {
+		if err := f.Truncate(size); err != nil {
+			f.Close()
+			return err
+		}
+	}
+	f.Close()
+
+	// Dispatch chunks.
+	for i, marker := range markers {
+		if marker == 0x01 {
+			// Already downloaded; count it toward progress immediately.
+			atomic.AddInt64(downloaded, min(chunkSize, size-int64(i)*chunkSize))
+			continue
+		}
+		offset := int64(i) * chunkSize
+		limit := min(chunkSize, size-offset)
+		idx := i
+		g.Go(func() error {
+			f, err := os.OpenFile(outPath, os.O_WRONLY, 0o644)
+			if err != nil {
+				return err
+			}
+			defer f.Close()
+			if _, err := f.Seek(offset, io.SeekStart); err != nil {
+				return err
+			}
+			if err := fetch(ctx, offset, limit, f); err != nil {
+				return err
+			}
+			m, err := os.OpenFile(markerPath, os.O_WRONLY, 0o644)
+			if err != nil {
+				return err
+			}
+			defer m.Close()
+			if _, err := m.WriteAt([]byte{0x01}, int64(idx)); err != nil {
+				return err
+			}
+			resCh <- types.DownloadInfo{
+				TotalDownloaded: atomic.AddInt64(downloaded, limit),
+				TotalSize:       totalSize,
+			}
+			return nil
+		})
+	}
+	return nil
+}
 
 func StartDownload(ctx context.Context, modelName, outputPath string, files []ModelFileInfo) (resChan chan types.DownloadInfo, errChan chan error) {
 	slog.Info("Starting download", "model", modelName, "outputPath", outputPath, "files", files)
@@ -181,66 +263,18 @@ func StartDownload(ctx context.Context, modelName, outputPath string, files []Mo
 				errCh <- fmt.Errorf("failed to create directory: %v, %s", err, f.Name)
 				return
 			}
-			chunkSize := max(minChunkSize, f.Size/128)
-			nChunks := int((f.Size + chunkSize - 1) / chunkSize)
 			outPath := filepath.Join(outputPath, f.Name)
 			markerPath := filepath.Join(outputPath, f.Name+ProgressSuffix)
-
-			markers, err := os.ReadFile(markerPath)
-			if err != nil && !errors.Is(err, os.ErrNotExist) {
-				errCh <- err
-				return
-			}
-			if err != nil || len(markers) != nChunks {
-				markers = make([]byte, nChunks)
-				if err := os.WriteFile(markerPath, markers, 0o644); err != nil {
-					errCh <- err
-					return
-				}
-			}
-			file, err := os.OpenFile(outPath, os.O_RDWR|os.O_CREATE, 0o644)
-			if err != nil {
-				errCh <- err
-				return
-			}
-			if fi, _ := file.Stat(); fi == nil || fi.Size() < f.Size {
-				if err := file.Truncate(f.Size); err != nil {
-					file.Close()
-					errCh <- err
-					return
-				}
-			}
-			file.Close()
 			markerPaths = append(markerPaths, markerPath)
 
-			slog.Info("Download file", "name", f.Name, "size", f.Size, "chunkSize", chunkSize)
+			slog.Info("Download file", "name", f.Name, "size", f.Size)
 
-			for i, marker := range markers {
-				if marker == 0x01 {
-					downloaded += min(chunkSize, f.Size-int64(i)*chunkSize)
-					continue
-				}
-				offset := int64(i) * chunkSize
-				t := downloadTask{
-					OutputPath: outputPath,
-					ModelName:  modelName,
-					FileName:   f.Name,
-					Offset:     offset,
-					Limit:      min(chunkSize, f.Size-offset),
-					MarkerPath: markerPath,
-					ChunkIndex: i,
-				}
-				g.Go(func() error {
-					if err := doTask(gctx, hub, t); err != nil {
-						slog.Error("Download task failed", "task", t, "error", err)
-						return err
-					}
-					resCh <- types.DownloadInfo{
-						TotalDownloaded: atomic.AddInt64(&downloaded, t.Limit),
-						TotalSize:       totalSize,
-					}
-					return nil
-				})
+			fetch := func(ctx context.Context, offset, limit int64, w io.Writer) error {
+				return hub.GetFileContent(ctx, modelName, f.Name, offset, limit, w)
+			}
+			if err := downloadChunked(gctx, outPath, markerPath, f.Size, totalSize, &downloaded, g, resCh, fetch); err != nil {
+				errCh <- err
+				return
 			}
 		}
 
@@ -285,79 +319,21 @@ func StartDownloadURL(ctx context.Context, urlStr, outputDir, dstName string, si
 			return
 		}
 
-		chunkSize := max(minChunkSize, size/128)
-		nChunks := int((size + chunkSize - 1) / chunkSize)
 		outPath := filepath.Join(outputDir, dstName)
 		markerPath := outPath + ProgressSuffix
 
-		markers, err := os.ReadFile(markerPath)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			errCh <- err
-			return
-		}
-		if err != nil || len(markers) != nChunks {
-			markers = make([]byte, nChunks)
-			if werr := os.WriteFile(markerPath, markers, 0o644); werr != nil {
-				errCh <- werr
-				return
-			}
-		}
-
-		file, err := os.OpenFile(outPath, os.O_RDWR|os.O_CREATE, 0o644)
-		if err != nil {
-			errCh <- err
-			return
-		}
-		if fi, _ := file.Stat(); fi == nil || fi.Size() < size {
-			if err := file.Truncate(size); err != nil {
-				file.Close()
-				errCh <- err
-				return
-			}
-		}
-		file.Close()
-
 		hd := downloader.NewDownloader("")
+		fetch := func(ctx context.Context, offset, limit int64, w io.Writer) error {
+			return hd.DownloadChunk(ctx, urlStr, offset, limit, w)
+		}
 
 		var downloaded int64
 		g, gctx := errgroup.WithContext(ctx)
 		g.SetLimit(maxConcurrency)
 
-		for i, marker := range markers {
-			if marker == 0x01 {
-				downloaded += min(chunkSize, size-int64(i)*chunkSize)
-				continue
-			}
-			offset := int64(i) * chunkSize
-			limit := min(chunkSize, size-offset)
-			idx := i
-			g.Go(func() error {
-				f, err := os.OpenFile(outPath, os.O_WRONLY, 0o644)
-				if err != nil {
-					return err
-				}
-				defer f.Close()
-				if _, err := f.Seek(offset, io.SeekStart); err != nil {
-					return err
-				}
-				if err := hd.DownloadChunk(gctx, urlStr, offset, limit, f); err != nil {
-					return err
-				}
-				m, err := os.OpenFile(markerPath, os.O_WRONLY, 0o644)
-				if err != nil {
-					return err
-				}
-				defer m.Close()
-				if _, err := m.WriteAt([]byte{0x01}, int64(idx)); err != nil {
-					return err
-				}
-
-				resCh <- types.DownloadInfo{
-					TotalDownloaded: atomic.AddInt64(&downloaded, limit),
-					TotalSize:       size,
-				}
-				return nil
-			})
+		if err := downloadChunked(gctx, outPath, markerPath, size, size, &downloaded, g, resCh, fetch); err != nil {
+			errCh <- err
+			return
 		}
 
 		if err := g.Wait(); err != nil {
@@ -436,29 +412,6 @@ func getHub(ctx context.Context, modelName string) (ModelHub, error) {
 	}
 
 	return nil, errUnavailable
-}
-
-func doTask(ctx context.Context, hub ModelHub, task downloadTask) error {
-	slog.Debug("Downloading chunk", "OutputPath", task.OutputPath, "model", task.ModelName, "file", task.FileName, "offset", task.Offset, "limit", task.Limit)
-
-	file, err := os.OpenFile(filepath.Join(task.OutputPath, task.FileName), os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	if _, err := file.Seek(task.Offset, io.SeekStart); err != nil {
-		return err
-	}
-	if err := hub.GetFileContent(ctx, task.ModelName, task.FileName, task.Offset, task.Limit, file); err != nil {
-		return err
-	}
-	marker, err := os.OpenFile(task.MarkerPath, os.O_WRONLY, 0o644)
-	if err != nil {
-		return err
-	}
-	defer marker.Close()
-	_, _ = marker.WriteAt([]byte{0x01}, int64(task.ChunkIndex))
-	return nil
 }
 
 func code2error(client *resty.Client, response *resty.Response) error {
