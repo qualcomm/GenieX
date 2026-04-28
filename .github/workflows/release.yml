@@ -33,18 +33,27 @@ jobs:
     steps:
       - id: resolve
         env:
-          RAW_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
         run: |
           set -euo pipefail
           semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
-          [[ "${RAW_TAG}" =~ $semver ]] || { echo "Invalid SemVer 2.0 tag: ${RAW_TAG}"; exit 1; }
-          echo "tag=${RAW_TAG}" >> "$GITHUB_OUTPUT"
+          [[ "${TAG}" =~ $semver ]] || { echo "::error::Invalid SemVer 2.0 tag: ${TAG}"; exit 1; }
           # Pre-release = tag contains a hyphen (e.g. v1.2.3-alpha.1, -rc.1).
-          if [[ "${RAW_TAG}" == *-* ]]; then
-            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          # Stable releases are immutable; refuse to overwrite an existing one.
+          # Pre-releases may be re-cut during iteration.
+          if [[ "${TAG}" == *-* ]]; then
+            is_prerelease=true
           else
-            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+            is_prerelease=false
+            if gh release view "${TAG}" --json id >/dev/null 2>&1; then
+              echo "::error::Stable release ${TAG} already exists — refusing to overwrite."
+              exit 1
+            fi
           fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
 
   # SDK matrix. linux-arm64 / android-arm64 are cross-compiled from x64 Linux;
   # placeholders kept commented-out until the cross-compile paths land.
@@ -273,22 +282,13 @@ jobs:
         env:
           AWS_PROFILE: bitsy
           AWS_DEFAULT_REGION: us-west-2
+          S3_PREFIX: s3://qaihub-public-assets/qai-hub-geniex/${{ needs.resolve-tag.outputs.tag }}/
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          uploaded=0
-          for suffix in "" "-selfsigned"; do
-            zipfile="geniex-sdk-windows-arm64-${RELEASE_TAG}${suffix}.zip"
-            if [ -f "$zipfile" ]; then
-              aws s3 cp "$zipfile"        "s3://qaihub-public-assets/qai-hub-geniex/${RELEASE_TAG}/$zipfile"
-              aws s3 cp "$zipfile.sha256" "s3://qaihub-public-assets/qai-hub-geniex/${RELEASE_TAG}/$zipfile.sha256"
-              uploaded=$((uploaded + 1))
-            fi
-          done
-          if [ "$uploaded" -eq 0 ]; then
-            echo "::error::No geniex-sdk-windows-arm64-${RELEASE_TAG}*.zip found to upload"
-            exit 1
-          fi
+          # The download-artifact step above guarantees >=1 zip; if-no-files-found:error
+          # on the producer side fails the build before we get here. sync also handles
+          # the sha256 sidecars in one shot.
+          aws s3 sync . "${S3_PREFIX}" --exclude '*' --include 'geniex-sdk-windows-arm64-*.zip*'
 
   # Push the sdist to TestPyPI for pre-release tags (v*-alpha.*, v*-beta.*,
   # v*-rc.*). Stable tags skip this job — they go to production PyPI via a
