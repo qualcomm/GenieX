@@ -1,7 +1,7 @@
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@rules_cc//cc:defs.bzl", "cc_import", "cc_library")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
-load(":runfiles.bzl", "sdk_local_bundle")
+load("//scripts:runfiles_symlink.bzl", "runfiles_symlinks")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -29,7 +29,7 @@ config_setting(
 
 # local
 
-sdk_local_bundle(
+runfiles_symlinks(
     name = "local_sdk_runtime",
     data = select({
         "@platforms//os:windows": glob(

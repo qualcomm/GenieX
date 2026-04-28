@@ -15,6 +15,7 @@ build  --experimental_output_directory_naming_scheme=diff_against_dynamic_baseli
 
 # protoc
 build  --experimental_proto_descriptor_sets_include_source_info
+build  --@com_google_protobuf//bazel/toolchains:prefer_prebuilt_protoc
 
 # windows
 startup --windows_enable_symlinks

@@ -1,8 +1,8 @@
 # gazelle:resolve go resty.dev/v3 @dev_resty_v3//:resty
 
-load("@rules_multirun//:defs.bzl", "multirun")
 load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
+load("//scripts:multirun.bzl", "multirun")
 
 package(default_visibility = ["//visibility:public"])
 
