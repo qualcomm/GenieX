@@ -44,17 +44,21 @@ Bazel requires symlink support on Windows. To enable this:
 
 If you want to manually run the generated executable, you can find it in `bazel-bin/cli/cmd/geniex/geniex_/` and runtime files in `bazel-bin/cli/cmd/geniex/geniex_/geniex.runfiles/_main`.
 
-# Geniex SDK
+## Geniex Python Bindings
 
-## Build Bridge/Plugin First (Required for local SDK)
+See [bindings/python/README.md](../bindings/python/README.md) for build and install instructions for the Python bindings.
+
+## Geniex SDK
+
+### Build Bridge/Plugin First (Required for local SDK)
 
 Build and install the SDK bridge and plugins into `sdk/pkg-geniex` first, then run CLI.
 
 Use the SDK subproject instructions in `sdk/README.md` and the platform-specific steps in the [Build & Install](#build--install) section below.
 
-## Build & Install
+### Build & Install
 
-### Linux
+#### Linux
 
 ```bash
 cd sdk
@@ -63,7 +67,7 @@ cmake --build build -j
 cmake --install build --prefix pkg-geniex
 ```
 
-### Windows ARM64 (Snapdragon)
+#### Windows ARM64 (Snapdragon)
 
 > [!NOTE]
 > The Hexagon toolchain has a 250-character path limit. Use `subst` to shorten the source path before building:
@@ -80,7 +84,7 @@ cmake --build --preset arm64-windows-snapdragon-release -j 8
 cmake --install build-arm64-windows-snapdragon-release --prefix pkg-geniex
 ```
 
-### Android (cross-compilation from Linux)
+#### Android (cross-compilation from Linux)
 
 ```bash
 docker run --rm -u $(id -u):$(id -g) \

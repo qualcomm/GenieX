@@ -1,6 +1,7 @@
 # Geniex
 
 WIP, see [build.md](./docs/build.md) and [run.md](./docs/run.md).
+Contributing rules (commits, branches, PR format): [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Directory Structure
 
