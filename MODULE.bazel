@@ -5,6 +5,7 @@ module(name = "geniex")
 bazel_dep(name = "gazelle", version = "0.50.0", repo_name = "bazel_gazelle")
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "rules_pkg", version = "1.2.0")
+bazel_dep(name = "rules_multirun", version = "0.13.0")
 
 innosetup_repo = use_repo_rule("//cli/release/windows:iscc.bzl", "innosetup_repository")
 innosetup_repo(name = "innosetup")

@@ -23,7 +23,7 @@ go_proto_library(
     proto = ":qaihm_proto",
 )
 
-# Run `bazelisk run //cli/internal/qaihm:write_pb_go` to generate .pb.go files for development use.
+# Run `bazelisk run //cli/internal/qaihm:gen_pb_go` to generate .pb.go files for development use.
 # These are not used in the build, but are needed for development and debugging.
 filegroup(
     name = "_qaihm_pb_go_srcs",
@@ -32,23 +32,36 @@ filegroup(
 )
 
 write_file(
-    name = "_write_pb_go_src",
-    out = "write_pb_go.py",
+    name = "_gen_pb_go_src",
+    out = "gen_pb_go.py",
     content = [
-        "import os, shutil, sys",
+        "import os, shutil",
         "from pathlib import Path",
-        "from python.runfiles import runfiles",
         "dst = Path(os.environ['BUILD_WORKSPACE_DIRECTORY']) / 'cli/internal/qaihm'",
         "for p in dst.glob('*.pb.go'): p.unlink()",
-        "r = runfiles.Create()",
-        "for a in sys.argv[1:]: shutil.copyfile(r.Rlocation(a), dst / Path(a).name)",
+        "root = Path(os.environ.get('RUNFILES_DIR') or os.path.dirname(__file__) + '.runfiles')",
+        "for src in root.rglob('*.pb.go'): shutil.copyfile(src, dst / src.name)",
     ],
 )
 
 py_binary(
-    name = "write_pb_go",
-    srcs = [":_write_pb_go_src"],
-    args = ["$(rlocationpaths :_qaihm_pb_go_srcs)"],
+    name = "gen_pb_go",
+    srcs = [":_gen_pb_go_src"],
     data = [":_qaihm_pb_go_srcs"],
-    deps = ["@rules_python//python/runfiles"],
+)
+
+write_file(
+    name = "_clean_pb_go_src",
+    out = "clean_pb_go.py",
+    content = [
+        "import os",
+        "from pathlib import Path",
+        "dst = Path(os.environ['BUILD_WORKSPACE_DIRECTORY']) / 'cli/internal/qaihm'",
+        "for p in dst.glob('*.pb.go'): p.unlink()",
+    ],
+)
+
+py_binary(
+    name = "clean_pb_go",
+    srcs = [":_clean_pb_go_src"],
 )

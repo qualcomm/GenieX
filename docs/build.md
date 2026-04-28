@@ -23,7 +23,8 @@ There are also some optional flags for `bazelisk run`:
 
 There also some useful targets for testing and development:
 
-- `bazelisk run //cli/internal/qaihm:write_pb_go` Generates golang bindings for the qaihm protobuf, used for development.
+- `bazelisk run //cli:gen` Generates development files, like protobuf golang bindings.
+- `bazelisk run //cli:clean` Clean development files.
 
 ## Package Release
 
