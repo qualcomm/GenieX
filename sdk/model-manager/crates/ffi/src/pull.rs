@@ -130,10 +130,13 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
             Err(c) => return c,
         };
 
-        // `quant` is currently advisory; per-quant file selection happens
-        // later when the store resolves paths, not during pull itself.
-        let _quant = unsafe { cstr_to_str(inp.quant) };
-        let hint = ManifestHint::default();
+        // Thread `quant` into the manifest hint so `pull` only fetches
+        // the requested quantization instead of every GGUF in the repo.
+        let quant = unsafe { cstr_to_str(inp.quant) }.map(str::to_string);
+        let hint = ManifestHint {
+            quant,
+            ..ManifestHint::default()
+        };
 
         // Explicit token wins; env var is the fallback; anonymous otherwise.
         let hf_token = unsafe { cstr_to_str(inp.hf_token) }

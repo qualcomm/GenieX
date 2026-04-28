@@ -31,8 +31,8 @@ genrule(
 
 # Low-level ctypes binding layer.
 py_library(
-    name = "geniex_sdk_py",
-    srcs = glob(["geniex/geniex_sdk/*.py"]),
+    name = "geniex_ffi_py",
+    srcs = glob(["geniex/_ffi/*.py"]),
     imports = ["."],
 )
 
@@ -45,7 +45,7 @@ py_library(
         exclude = ["geniex/_version.py"],
     ) + [":gen_version"],
     imports = ["."],
-    deps = [":geniex_sdk_py"],
+    deps = [":geniex_ffi_py"],
 )
 
 # Source distribution (sdist) — the only published Python artifact.

@@ -285,3 +285,63 @@ class geniex_GetDeviceListOutput(Structure):
         ('device_names', POINTER(c_char_p)),
         ('device_count', c_int32),
     ]
+
+
+# ---------------------------------------------------------------------------
+# Model-manager structs (mirrors sdk/model-manager/include/geniex_model.h)
+# ---------------------------------------------------------------------------
+
+# geniex_ModelType enum
+GENIEX_MODEL_TYPE_LLM = 0
+GENIEX_MODEL_TYPE_VLM = 1
+
+# geniex_HubSource enum
+GENIEX_HUB_AUTO = 0
+GENIEX_HUB_HUGGINGFACE = 1
+GENIEX_HUB_MODELSCOPE = 2
+GENIEX_HUB_S3 = 3
+GENIEX_HUB_VOLCES = 4
+GENIEX_HUB_LOCALFS = 127
+
+
+class geniex_ModelPaths(Structure):
+    _fields_ = [
+        ('model_path', c_char_p),
+        ('mmproj_path', c_char_p),
+        ('tokenizer_path', c_char_p),
+        ('model_dir', c_char_p),
+        ('model_name', c_char_p),
+        ('plugin_id', c_char_p),
+        ('device_id', c_char_p),
+    ]
+
+
+class geniex_ModelListOutput(Structure):
+    _fields_ = [
+        ('names', POINTER(c_char_p)),
+        ('count', c_int32),
+    ]
+
+
+class geniex_FileProgress(Structure):
+    _fields_ = [
+        ('file_name', c_char_p),
+        ('downloaded_bytes', c_int64),
+        ('total_bytes', c_int64),
+    ]
+
+
+# bool (*)(const geniex_FileProgress* files, int32_t file_count, void* user_data)
+geniex_download_progress_cb = CFUNCTYPE(c_bool, POINTER(geniex_FileProgress), c_int32, c_void_p)
+
+
+class geniex_ModelPullInput(Structure):
+    _fields_ = [
+        ('model_name', c_char_p),
+        ('quant', c_char_p),
+        ('hub', c_int32),
+        ('local_path', c_char_p),
+        ('hf_token', c_char_p),
+        ('on_progress', geniex_download_progress_cb),
+        ('user_data', c_void_p),
+    ]

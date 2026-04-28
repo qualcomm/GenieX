@@ -22,6 +22,11 @@ pub struct ManifestHint {
     pub plugin_id: Option<String>,
     /// Force this model_name; otherwise derived from `name`.
     pub model_name: Option<String>,
+    /// Restrict the inferred manifest to a single quantization. When set,
+    /// GGUFs whose extracted quant tag doesn't match are excluded from
+    /// `model_file`, so `pull` only fetches the requested quant. An
+    /// unrecognised value is an error rather than a silent no-op.
+    pub quant: Option<String>,
 }
 
 /// Quantization priority order (earlier = preferred). Mirrors the Go CLI.
@@ -99,6 +104,19 @@ pub fn infer_manifest_from_names(
             "no recognizable model files found for '{}'",
             name
         )));
+    }
+
+    // If the caller asked for a specific quant, drop everything else.
+    if let Some(ref wanted) = hint.quant {
+        if !ggufs.is_empty() && !ggufs.contains_key(wanted) {
+            let mut available: Vec<&String> = ggufs.keys().collect();
+            available.sort();
+            return Err(Error::ManifestInferenceFailed(format!(
+                "requested quant {:?} not found; available: {:?}",
+                wanted, available
+            )));
+        }
+        ggufs.retain(|k, _| k == wanted);
     }
 
     // Pick one file per quant (prefer the largest — the actual weights).
@@ -310,6 +328,26 @@ mod tests {
         assert_eq!(extract_quant("model-Q4_K_M.gguf"), Some("Q4_K_M".to_string()));
         assert_eq!(extract_quant("model-Q8_0.gguf"), Some("Q8_0".to_string()));
         assert_eq!(extract_quant("model.gguf"), None);
+    }
+
+    #[test]
+    fn quant_hint_filters_ggufs() {
+        let (names, sizes) = sizes_of(&[
+            ("model-Q4_0.gguf", 900_000),
+            ("model-Q4_K_M.gguf", 1_000_000),
+            ("model-Q8_0.gguf", 1_800_000),
+        ]);
+        let hint = ManifestHint { quant: Some("Q4_0".to_string()), ..Default::default() };
+        let m = infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, hint).unwrap();
+        assert_eq!(m.model_file.len(), 1);
+        assert_eq!(m.model_file.get("Q4_0").unwrap().name, "model-Q4_0.gguf");
+    }
+
+    #[test]
+    fn quant_hint_rejects_unknown_quant() {
+        let (names, sizes) = sizes_of(&[("model-Q4_K_M.gguf", 1_000_000)]);
+        let hint = ManifestHint { quant: Some("Q2_K".to_string()), ..Default::default() };
+        assert!(infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, hint).is_err());
     }
 
     #[test]

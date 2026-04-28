@@ -30,6 +30,9 @@ from ._types import (
     geniex_LlmCreateInput,
     geniex_LlmGenerateInput,
     geniex_LlmGenerateOutput,
+    geniex_ModelListOutput,
+    geniex_ModelPaths,
+    geniex_ModelPullInput,
     geniex_VlmApplyChatTemplateInput,
     geniex_VlmApplyChatTemplateOutput,
     geniex_VlmCreateInput,
@@ -138,6 +141,40 @@ def _bind_all() -> None:
         POINTER(geniex_VlmApplyChatTemplateOutput),
     ]
     lib.geniex_vlm_apply_chat_template.restype = c_int32
+
+    # Model manager
+    lib.geniex_model_init.argtypes = [c_char_p]
+    lib.geniex_model_init.restype = c_int32
+
+    lib.geniex_model_deinit.argtypes = []
+    lib.geniex_model_deinit.restype = c_int32
+
+    lib.geniex_model_pull.argtypes = [POINTER(geniex_ModelPullInput)]
+    lib.geniex_model_pull.restype = c_int32
+
+    lib.geniex_model_list.argtypes = [POINTER(geniex_ModelListOutput)]
+    lib.geniex_model_list.restype = c_int32
+
+    lib.geniex_model_list_free.argtypes = [POINTER(geniex_ModelListOutput)]
+    lib.geniex_model_list_free.restype = None
+
+    lib.geniex_model_remove.argtypes = [c_char_p]
+    lib.geniex_model_remove.restype = c_int32
+
+    lib.geniex_model_clean.argtypes = [POINTER(c_int32)]
+    lib.geniex_model_clean.restype = c_int32
+
+    lib.geniex_model_get_paths.argtypes = [c_char_p, POINTER(geniex_ModelPaths)]
+    lib.geniex_model_get_paths.restype = c_int32
+
+    lib.geniex_model_paths_free.argtypes = [POINTER(geniex_ModelPaths)]
+    lib.geniex_model_paths_free.restype = None
+
+    lib.geniex_model_get_type.argtypes = [c_char_p, POINTER(c_int32)]
+    lib.geniex_model_get_type.restype = c_int32
+
+    lib.geniex_model_resolve_alias.argtypes = [c_char_p, POINTER(c_char_p)]
+    lib.geniex_model_resolve_alias.restype = c_int32
 
 
 _bound = False

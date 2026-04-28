@@ -1,168 +1,141 @@
-# geniex — Python Bindings
+# geniex
 
-Python bindings for the GenieX SDK, enabling AI model inference on Qualcomm
-platforms.
+Python bindings for the **GenieX SDK** — run LLMs and VLMs locally on
+Qualcomm platforms (CPU, GPU, Hexagon NPU) with a single `pip install`.
 
-## Installation
-
-The published artifact is a **source distribution (sdist)**. When `pip install`
-assembles a wheel from the sdist, a custom `build_py` command downloads the
-SDK zip matching your platform from the same GitHub Release tag, verifies
-its SHA-256 sidecar, and bundles the `lib/` tree into the resulting wheel.
+## Install
 
 ```bash
-# From GitHub Release (canonical)
-pip install https://github.com/qcom-ai-hub/geniex/releases/download/v0.0.3-alpha.1/geniex-0.0.3a1.tar.gz
-
-# From TestPyPI (pre-release tags are auto-published). --extra-index-url is
-# required so runtime deps (huggingface_hub, filelock) resolve from real PyPI.
-pip install --index-url https://test.pypi.org/simple/ \
-            --extra-index-url https://pypi.org/simple/ \
-            geniex==0.0.3a1
+pip install geniex
 ```
 
-### Supported platforms (automatic download)
+Supported platforms (wheels auto-provision the native SDK on install):
 
-| `sys.platform` | `machine()` | Release asset |
-|----------------|-------------|---------------|
-| `win32`        | `arm64`     | `geniex-sdk-windows-arm64-<tag>.zip` |
-| `linux`        | `aarch64` / `arm64` | `geniex-sdk-linux-arm64-<tag>.zip` |
+| OS      | Arch      |
+|---------|-----------|
+| Linux   | aarch64   |
+| Windows | arm64     |
 
-On any other platform `pip install` aborts with a clear message — see
-[Unsupported platform](#unsupported-platform) below.
+Python 3.10+ required.
 
-### Build-time env vars
-
-| Var | Purpose |
-|-----|---------|
-| `GENIEX_SDK_DOWNLOAD_URL` | Override the SDK zip base URL (e.g. internal mirror, `file:///...` for offline testing). The asset name `geniex-sdk-<platform>-<tag>.zip` is appended. |
-| `GENIEX_SKIP_SDK_DOWNLOAD` | Set to `1` to skip the download entirely — useful for unsupported platforms or when you plan to provide libs via `GENIEX_LIB_PATH` at runtime. |
-
-### Runtime env var
-
-| Var | Purpose |
-|-----|---------|
-| `GENIEX_LIB_PATH` | Directory (or file) pointing to an already-built `libgeniex.so` / `geniex.dll`. Overrides all auto-discovery. |
-
-### Unsupported platform
-
-`pip install` aborts with a clear error message. Two workarounds:
-
-1. Build the SDK locally (see [Build SDK from source](#build-sdk-from-source)),
-   then:
-   ```bash
-   GENIEX_SKIP_SDK_DOWNLOAD=1 pip install <sdist-url>
-   export GENIEX_LIB_PATH=/path/to/sdk/pkg-geniex/lib/
-   ```
-2. Or copy `sdk/pkg-geniex/lib` into `bindings/python/geniex/lib/` before
-   invoking `pip install bindings/python/` from a repo checkout.
-
-## Quick Start
+## Library usage
 
 ```python
 from geniex import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
-    "/path/to/model.gguf",
-    device_map="auto",   # "auto" | "cpu" | "qairt:NPU"
+    "qwen3",               # short alias, HF repo id, or local GGUF path
+    device_map="auto",     # "auto" | "<plugin>" | "<plugin>:<device>"
 )
 
 messages = [{"role": "user", "content": "What is 2+2?"}]
-text = model.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
 
-# Batch generation
-output = model.generate(text, max_new_tokens=256)
+# One-shot
+output = model.generate(prompt, max_new_tokens=256)
 print(output.text)
-print(f"[{output.profile.generated_tokens} tokens, {output.profile.decode_speed:.1f} tok/s]")
+print(f"[{output.profile.generated_tokens} tok, "
+      f"{output.profile.decode_speed:.1f} tok/s, stop={output.profile.stop_reason}]")
 
 # Streaming
-for token in model.generate(text, max_new_tokens=256, stream=True):
-    print(token, end="", flush=True)
+streamer = model.generate(prompt, max_new_tokens=256, stream=True)
+for chunk in streamer:
+    print(chunk, end="", flush=True)
 
 model.close()
 ```
 
-## Supported Backends
+`from_pretrained` accepts any of: a short alias (resolved via the bundled
+registry), a HuggingFace `org/repo` (optionally `org/repo:quant`), or a
+local path to a `.gguf` file or a pre-downloaded directory.
 
-| Backend | Device | Notes |
-|---------|--------|-------|
-| `llama_cpp` | CPU | Default, all platforms |
-| `qairt` | NPU | Qualcomm Snapdragon only |
+### VLM
 
-## Requirements
+```python
+from geniex import AutoModelForVision2Seq
 
-- Python 3.10+
-- `huggingface_hub`, `filelock` (installed automatically)
-
-## Dev mode (from a repo checkout)
-
-Build the SDK in-tree and let `_lib.py` auto-discover it from
-`sdk/pkg-geniex/lib/` — no env vars needed.
-
-```bash
-cd sdk
-cmake --preset default          # native Linux x86_64
-cmake --build --preset default
-cmake --install build-default --prefix pkg-geniex
-
-python bindings/python/examples/llm.py --model /path/to/model.gguf
+model = AutoModelForVision2Seq.from_pretrained("qwen3vl", device_map="auto")
+messages = [{
+    "role": "user",
+    "content": [
+        {"type": "image", "image": "/path/to/image.jpg"},
+        {"type": "text", "text": "Describe the image."},
+    ],
+}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
+print(model.generate(prompt, images=["/path/to/image.jpg"]).text)
 ```
 
-**Other platforms:** `--preset arm64-linux-snapdragon-release`,
-`arm64-windows-snapdragon-release`, or `arm64-android-snapdragon-release`.
-Always run `cmake --install` after building.
+### Model management
 
-**Override:** set `GENIEX_LIB_PATH=/path/to/lib/dir/` to force a specific
-library directory.
+The same model manager the CLI uses is available programmatically:
 
-## Build SDK from source
+```python
+from geniex import model_manager as mm
 
-Prerequisites: Python 3.10+, CMake 3.20+, C++ compiler (GCC / Clang / MSVC).
-
-Full platform-specific build instructions (Linux, Windows ARM64 + Hexagon,
-Android cross-compile) live in [`docs/build.md`](../../docs/build.md).
-After `cmake --install`, the libs land in `sdk/pkg-geniex/lib/` and both the
-dev-mode path and `GENIEX_LIB_PATH` pick them up.
-
-## Build the sdist locally
-
-```bash
-python -m pip install build
-python -m build --sdist bindings/python --outdir dist/
-# produces dist/geniex-<version>.tar.gz — no native libs inside
+mm.pull("qwen3")                      # alias or "org/repo[:quant]"
+paths = mm.get_paths("qwen3")         # resolved local paths
+mm.list_models()                      # cached models
+mm.remove("qwen3")
 ```
 
-The sdist is pure Python; SDK libs are fetched later at install time.
+### Plugin / device enumeration
 
-### End-to-end local test with a file mirror
+```python
+from geniex import get_plugin_list, get_device_list
 
-```bash
-# 1. Produce a local SDK zip (example: arm64 Linux)
-cd sdk && cmake --preset arm64-linux-snapdragon-release && \
-  cmake --build --preset arm64-linux-snapdragon-release && \
-  cmake --install build-arm64-linux-snapdragon-release --prefix pkg-geniex
-mkdir -p /tmp/geniex-mirror
-(cd sdk && zip -r /tmp/geniex-mirror/geniex-sdk-linux-arm64-v0.0.3-alpha.1.zip pkg-geniex)
-sha256sum /tmp/geniex-mirror/geniex-sdk-linux-arm64-v0.0.3-alpha.1.zip \
-  > /tmp/geniex-mirror/geniex-sdk-linux-arm64-v0.0.3-alpha.1.zip.sha256
-
-# 2. Install the sdist pointing at the mirror
-GENIEX_SDK_DOWNLOAD_URL=file:///tmp/geniex-mirror \
-  pip install dist/geniex-0.0.3a1.tar.gz
-
-# 3. Smoke test
-python -c "import geniex; geniex.init(); print(geniex.version())"
+for plugin in get_plugin_list():
+    print(plugin, get_device_list(plugin))
 ```
 
-## Bazel
+Pass a concrete id as `device_map="<plugin>:<device_id>"`. Device ids
+vary per host (e.g. `CPU`, `CUDA0`, `Vulkan0`, `HTP` — see
+[Supported backends](#supported-backends)).
+
+## CLI
+
+After install, the `geniex-py` console script is on your `$PATH` (the
+name avoids clashing with the Go `geniex` binary when both are
+installed):
 
 ```bash
-bazelisk build //bindings/python:geniex_sdist                                  # dev (0.0.0.dev0)
-bazelisk build //bindings/python:geniex_sdist --define=VERSION=v0.0.3-alpha.1  # release
+geniex-py chat qwen3                       # interactive chat (auto-downloads)
+geniex-py chat NexaAI/Qwen3-4B-GGUF --quant Q4_K_M
+geniex-py chat /path/to/model.gguf --system "You are a concise assistant."
+
+geniex-py pull qwen3                       # download into the cache only
+geniex-py ls                               # list cached models (table)
+geniex-py ls qwen3                         # show one model's geniex.json
+geniex-py rm qwen3                         # remove from cache
+geniex-py devices                          # list plugins and their devices
 ```
 
-Output: `bazel-bin/bindings/python/geniex_sdist.tar.gz`. Same tarball shape
-as `python -m build --sdist`; same install behavior.
+Inside chat: `/reset` clears history, `/exit` or Ctrl-D quits, Ctrl-C
+interrupts the current reply. `geniex-py <cmd> --help` for all flags.
+
+## Supported backends
+
+| Plugin      | Accelerators                          | Notes                                                                                |
+|-------------|---------------------------------------|--------------------------------------------------------------------------------------|
+| `llama_cpp` | CPU / GPU / NPU (via ggml backends)   | Default. Devices available depend on the host build (e.g. CUDA, Metal, Vulkan, HTP). |
+| `qairt`     | Hexagon NPU                           | Qualcomm Snapdragon only.                                                            |
+
+## Environment variables
+
+| Var                | Purpose                                              |
+|--------------------|------------------------------------------------------|
+| `GENIEX_DATADIR`   | Model cache directory (default: `~/.cache/geniex`).  |
+| `GENIEX_HFTOKEN`   | HuggingFace token for gated repos.                   |
+| `GENIEX_LIB_PATH`  | Point at a pre-built `libgeniex.so` / `geniex.dll`.  |
+
+## Building from source
+
+See [BUILD.md](BUILD.md) for dev-mode setup, building the SDK, building
+the sdist, and the TestPyPI smoke-test workflow.
 
 ## License
 

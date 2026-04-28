@@ -147,7 +147,7 @@ def _find_release(name: str) -> tuple[str, str] | None:
                 llama_cpp/            ← plugin subdir scanned by C library
                     libgeniex_plugin.so
     """
-    # This file is at: site-packages/geniex/geniex_sdk/_lib.py
+    # This file is at: site-packages/geniex/_ffi/_lib.py
     # geniex package root is two levels up.
     pkg_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     lib_path = os.path.join(pkg_root, 'lib', name)

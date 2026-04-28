@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from ..geniex_sdk._types import geniex_ProfileData
+from .._ffi._types import geniex_ProfileData
 
 _THINK_RE = re.compile(r'<think>(.*?)</think>', re.DOTALL)
 

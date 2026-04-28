@@ -16,14 +16,12 @@ from __future__ import annotations
 
 from ctypes import byref, c_void_p, pointer, string_at
 
-from .generation.output import GenerateOutput, ProfileData
-from .generation.streamer import TextIteratorStreamer
-from .geniex_sdk._api import (
+from ._ffi._api import (
     _check,
     _str_list_to_c,
     load_library,
 )
-from .geniex_sdk._types import (
+from ._ffi._types import (
     geniex_GenerationConfig,
     geniex_KvCacheLoadInput,
     geniex_KvCacheLoadOutput,
@@ -43,6 +41,8 @@ from .geniex_sdk._types import (
     geniex_VlmGenerateInput,
     geniex_VlmGenerateOutput,
 )
+from .generation.output import GenerateOutput, ProfileData
+from .generation.streamer import TextIteratorStreamer
 from .tokenizer import ModelTokenizer
 
 

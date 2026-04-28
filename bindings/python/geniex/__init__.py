@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from . import model_manager
+from ._ffi._api import deinit, get_device_list, get_plugin_list, init, version
 from ._version import __version__
 from .auto import AutoModelForCausalLM, AutoModelForVision2Seq
 from .generation import GenerateOutput, ProfileData, TextIteratorStreamer
-from .geniex_sdk._api import deinit, init, version
 from .modeling import GeniexLLM, GeniexVLM
 
 __all__ = [
@@ -30,4 +31,7 @@ __all__ = [
     'init',
     'deinit',
     'version',
+    'get_plugin_list',
+    'get_device_list',
+    'model_manager',
 ]
