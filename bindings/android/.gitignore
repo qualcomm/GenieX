@@ -27,7 +27,6 @@
 .gradle/
 build/
 */build/
-!gradle/wrapper/gradle-wrapper.jar
 
 # === Log/OS Files ===
 *.log
@@ -70,6 +69,8 @@ fabric.properties
 *.jar
 *.war
 *.ear
+# Gradle wrapper jar must be checked in so CI / fresh clones can run ./gradlew.
+!gradle/wrapper/gradle-wrapper.jar
 
 # === Generated Files ===
 gen/
