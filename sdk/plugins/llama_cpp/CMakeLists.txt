@@ -63,6 +63,9 @@ add_subdirectory(./src)
 set(LLAMA_LIBS mtmd llama ggml ggml-base ggml-cpu ggml-vulkan ggml-opencl ggml-hexagon)
 foreach(dep IN LISTS LLAMA_LIBS)
     if(TARGET ${dep})
+        # disable version numbers in so file names
+        set_property(TARGET ${dep} PROPERTY VERSION)
+        set_property(TARGET ${dep} PROPERTY SOVERSION)
         install(TARGETS ${dep}
             LIBRARY DESTINATION lib/llama_cpp
             RUNTIME DESTINATION lib/llama_cpp)
