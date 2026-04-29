@@ -60,11 +60,15 @@ jobs:
           key: ccache-sdk-${{ inputs.platform }}-${{ github.sha }}
           restore-keys: ccache-sdk-${{ inputs.platform }}-
 
-      - name: Install and configure ccache (Linux)
+      - name: Install Linux cross-compile toolchain
         if: inputs.platform == 'linux-arm64'
         shell: bash
         run: |
-          command -v ccache || sudo apt-get install -y ccache
+          sudo apt-get update
+          # ccache for build cache; make + aarch64-linux-gnu-{gcc,g++} are the
+          # tools the arm64-linux-gnu.cmake toolchain file expects.
+          sudo apt-get install -y --no-install-recommends \
+            ccache make gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
           echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
           ccache --max-size=1G
 
