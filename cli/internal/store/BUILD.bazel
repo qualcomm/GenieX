@@ -15,6 +15,7 @@ go_library(
         "//cli/internal/config",
         "//cli/internal/model_hub",
         "//cli/internal/model_hub/aihub",
+        "//cli/internal/render",
         "//cli/internal/types",
         "@com_github_bytedance_sonic//:sonic",
         "@com_github_gofrs_flock//:flock",

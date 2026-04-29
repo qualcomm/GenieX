@@ -28,6 +28,7 @@ import (
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
@@ -400,6 +401,7 @@ func (s *Store) PullZipAsset(
 		}
 
 		zipPath := filepath.Join(partialDir, zipName)
+		fmt.Println(render.GetTheme().Info.Sprintf("Extracting %s...", zipName))
 		res, err := aihub.ExtractFlat(zipPath, partialDir)
 		if err != nil {
 			errC <- fmt.Errorf("unzip %s: %w", zipName, err)
