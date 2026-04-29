@@ -2,11 +2,12 @@
 #define MyAppPublisher "GenieX"
 #define MyAppExeName "geniex.exe"
 #define MyAppIconName "geniex.ico"
+#define MyAppGuid "e9b30237-d65d-4a79-a7c0-f4e217e78f54"
 #define LauncherTarget "powershell.exe"
 #define LauncherArgs "-NoExit -Command geniex"
 
 [Setup]
-AppId={{e9b30237-d65d-4a79-a7c0-f4e217e78f54}}
+AppId={{{#MyAppGuid}}
 AppName={#MyAppName}
 AppVersion={#Version}
 AppPublisher={#MyAppPublisher}
@@ -26,11 +27,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Files]
-; CLI executable (path injected via iscc /DCliExe=...)
-Source: "{#CliExe}"; DestDir: "{app}"; Flags: ignoreversion
-; SDK runtime libraries (path injected via iscc /DSdkDir=...)
-Source: "{#SdkDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-; Shared icon for shortcuts and uninstall entry
+#include ArtifactIss
 Source: "{#MyAppIconName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Registry]
@@ -51,19 +48,21 @@ Name: "{userdesktop}\{#MyAppName}"; Filename: "{#LauncherTarget}"; Parameters: "
 [UninstallRun]
 Filename: "taskkill.exe"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden
 
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
+
 [Code]
 const
   EnvironmentKey = 'Environment';
 
 function InitializeSetup(): Boolean;
 var
-  UninstallString: String;
-  ResultCode: Integer;
+  UninstallKey, UninstallString, Dummy: String;
+  ResultCode, Waited: Integer;
 begin
   Result := True;
-  if not RegQueryStringValue(HKCU,
-       'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#SetupSetting("AppId")}_is1',
-       'UninstallString', UninstallString) then
+  UninstallKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{{#MyAppGuid}}_is1';
+  if not RegQueryStringValue(HKCU, UninstallKey, 'UninstallString', UninstallString) then
     Exit;
 
   if MsgBox('Existing version detected.'#13#10 +
@@ -75,11 +74,25 @@ begin
     Exit;
   end;
 
-  if (not Exec(RemoveQuotes(UninstallString), '/SILENT', '', SW_HIDE, ewWaitUntilTerminated, ResultCode))
+  if (not Exec(RemoveQuotes(UninstallString), '/SILENT', '', SW_SHOW, ewWaitUntilTerminated, ResultCode))
      or (ResultCode <> 0) then
   begin
     MsgBox(Format('Uninstall failed (ErrCode: %d).', [ResultCode]), mbError, MB_OK);
     Result := False;
+    Exit;
+  end;
+
+  Waited := 0;
+  while RegQueryStringValue(HKCU, UninstallKey, 'UninstallString', Dummy) do
+  begin
+    if Waited >= 30000 then
+    begin
+      MsgBox('Timed out waiting for the previous version to finish uninstalling.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+    Sleep(500);
+    Waited := Waited + 500;
   end;
 end;
 

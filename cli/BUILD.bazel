@@ -1,6 +1,6 @@
 # gazelle:resolve go resty.dev/v3 @dev_resty_v3//:resty
 
-load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
+load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_filegroup", "pkg_files", "strip_prefix")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
 load("//scripts:multirun.bzl", "multirun")
 
@@ -32,13 +32,19 @@ multirun(
 pkg_files(
     name = "_artifact_bin",
     srcs = ["//cli/cmd/geniex"],
+    attributes = pkg_attributes(mode = "0755"),
     strip_prefix = strip_prefix.files_only(),
 )
 
-pkg_zip(
-    name = "artifact",
+pkg_filegroup(
+    name = "_artifact",
     srcs = [
         ":_artifact_bin",
         "//sdk:artifact",
     ],
+)
+
+pkg_zip(
+    name = "artifact",
+    srcs = [":_artifact"],
 )
