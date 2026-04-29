@@ -288,7 +288,16 @@ jobs:
           # The download-artifact step above guarantees >=1 zip; if-no-files-found:error
           # on the producer side fails the build before we get here. sync also handles
           # the sha256 sidecars in one shot.
-          aws s3 sync . "${S3_PREFIX}" --exclude '*' --include 'geniex-sdk-windows-arm64-*.zip*'
+          #
+          # --acl public-read is required: the bucket policy only grants anonymous
+          # s3:GetObject on qai-hub-models/wheels, so uploads under qai-hub-geniex/
+          # must carry a per-object public-read ACL to be fetchable by
+          # `pip install` (bindings/python/_sdk_fetch.py). The `github-bitsyfactory`
+          # role is allowed to set this ACL; Block Public Access must leave
+          # IgnorePublicAcls=false on the bucket (confirmed with bucket owner).
+          aws s3 sync . "${S3_PREFIX}" \
+            --exclude '*' --include 'geniex-sdk-windows-arm64-*.zip*' \
+            --acl public-read
 
   # Push the sdist to TestPyPI for pre-release tags (v*-alpha.*, v*-beta.*,
   # v*-rc.*). Stable tags skip this job — they go to production PyPI via a

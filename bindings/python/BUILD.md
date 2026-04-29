@@ -38,8 +38,13 @@ Any other platform aborts `pip install` with a clear error — see
 
 | Var                        | Purpose                                                                                                                                                                  |
 |----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `GENIEX_SDK_DOWNLOAD_URL`  | Override the SDK zip base URL (internal mirror, `file:///...` for offline testing). The asset name `geniex-sdk-<platform>-<tag>.zip` is appended.                        |
+| `GENIEX_SDK_DOWNLOAD_URL`  | Override the SDK zip base URL (internal mirror, `file:///...` for offline testing). The asset name `geniex-sdk-<platform>-<tag>.zip` is appended. Pins a single source — disables the S3/GitHub fallback. |
 | `GENIEX_SKIP_SDK_DOWNLOAD` | Set to `1` to skip the download — useful for unsupported platforms or when you'll provide libs via `GENIEX_LIB_PATH` at runtime.                                          |
+
+Default fetch order: the installer tries the public S3 mirror first
+(`qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/<tag>/...`)
+and falls back to the matching GitHub Release asset on any network,
+HTTP, or SHA-256 error.
 
 ## Runtime environment variable
 

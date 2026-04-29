@@ -9,9 +9,12 @@
 """Install-time SDK fetcher.
 
 Invoked from setup.py during wheel assembly. Downloads the SDK zip matching
-the current platform + release tag from GitHub Releases (or a mirror set via
-GENIEX_SDK_DOWNLOAD_URL), verifies its SHA-256 sidecar, and extracts lib/
-into the package tree so package-data picks it up.
+the current platform + release tag, verifies its SHA-256 sidecar, and
+extracts lib/ into the package tree so package-data picks it up.
+
+By default the fetcher tries the public S3 mirror first and falls back to
+the GitHub Release asset. Set ``GENIEX_SDK_DOWNLOAD_URL`` to pin a single
+source (internal mirror, ``file://`` path, etc.) — that disables fallback.
 
 Skipped when:
   - geniex/lib/ already exists (cached / pre-staged build)
@@ -27,11 +30,13 @@ import platform
 import shutil
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
 
 DEFAULT_BASE_URL = 'https://github.com/qcom-ai-hub/geniex/releases/download'
+DEFAULT_S3_BASE_URL = 'https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex'
 
 # (sys.platform, platform.machine().lower()) -> release asset platform triple.
 PLATFORM_MAP = {
@@ -56,9 +61,37 @@ def _detect_platform() -> str:
     return plat
 
 
-def _download(url: str) -> bytes:
-    with urllib.request.urlopen(url) as resp:
-        return resp.read()
+def _try_download(url: str) -> bytes | None:
+    """Fetch `url`; return bytes on success or None on network/HTTP failure."""
+    try:
+        with urllib.request.urlopen(url) as resp:
+            return resp.read()
+    except (urllib.error.URLError, TimeoutError) as exc:
+        print(f'[geniex] source unavailable: {url} ({exc})', file=sys.stderr)
+        return None
+
+
+def _try_source(base: str, asset: str) -> tuple[bytes, str] | str:
+    """Try one base URL. Return (zip_bytes, source_url) on success,
+    or a failure-reason string on any error (network, missing sidecar,
+    SHA mismatch, corrupt)."""
+    zip_url = f'{base.rstrip("/")}/{asset}'
+    sha_url = f'{zip_url}.sha256'
+
+    zip_bytes = _try_download(zip_url)
+    if zip_bytes is None:
+        return f'{zip_url}: download failed'
+
+    sha_bytes = _try_download(sha_url)
+    if sha_bytes is None:
+        return f'{sha_url}: download failed'
+
+    want = sha_bytes.decode().strip().split()[0]
+    got = hashlib.sha256(zip_bytes).hexdigest()
+    if got.lower() != want.lower():
+        return f'{zip_url}: SHA256 mismatch (expected {want}, got {got})'
+
+    return zip_bytes, zip_url
 
 
 def fetch(pkg_dir: Path, release_tag: str) -> None:
@@ -72,18 +105,33 @@ def fetch(pkg_dir: Path, release_tag: str) -> None:
         return
 
     plat = _detect_platform()
-    base = os.environ.get('GENIEX_SDK_DOWNLOAD_URL', f'{DEFAULT_BASE_URL}/{release_tag}').rstrip('/')
     asset = f'geniex-sdk-{plat}-{release_tag}.zip'
-    zip_url = f'{base}/{asset}'
-    sha_url = f'{zip_url}.sha256'
 
-    print(f'[geniex] Downloading SDK: {zip_url}')
-    zip_bytes = _download(zip_url)
-    sha_line = _download(sha_url).decode().strip()
-    want = sha_line.split()[0]
-    got = hashlib.sha256(zip_bytes).hexdigest()
-    if got.lower() != want.lower():
-        raise RuntimeError(f'SHA256 mismatch for {asset}: expected {want}, got {got}')
+    override = os.environ.get('GENIEX_SDK_DOWNLOAD_URL')
+    if override:
+        sources = [('override', override.rstrip('/'))]
+    else:
+        sources = [
+            ('s3', f'{DEFAULT_S3_BASE_URL}/{release_tag}'),
+            ('github', f'{DEFAULT_BASE_URL}/{release_tag}'),
+        ]
+
+    errors = []
+    zip_bytes: bytes | None = None
+    used_name = used_url = ''
+    for name, base in sources:
+        print(f'[geniex] Trying {name}: {base}/{asset}')
+        result = _try_source(base, asset)
+        if isinstance(result, tuple):
+            zip_bytes, used_url = result
+            used_name = name
+            break
+        errors.append(result)
+
+    if zip_bytes is None:
+        raise RuntimeError('Failed to fetch SDK from all sources:\n  - ' + '\n  - '.join(errors))
+
+    print(f'[geniex] SDK fetched from {used_name}: {used_url}')
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
