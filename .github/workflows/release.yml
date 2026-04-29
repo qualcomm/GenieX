@@ -55,8 +55,8 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
 
-  # SDK matrix. linux-arm64 / android-arm64 are cross-compiled from x64 Linux;
-  # placeholders kept commented-out until the cross-compile paths land.
+  # SDK matrix. android-arm64 remains commented-out until its cross-compile
+  # path lands (tracked separately).
   build-sdk:
     name: build-sdk (${{ matrix.platform }})
     needs: [resolve-tag]
@@ -66,8 +66,8 @@ jobs:
         include:
           - platform: windows-arm64
             runner: windows-arm64
-          # - platform: linux-arm64
-          #   runner: ubuntu-latest
+          - platform: linux-arm64
+            runner: ubuntu-latest
           # - platform: android-arm64
           #   runner: ubuntu-latest
     uses: ./.github/workflows/build-sdk.yml
@@ -298,6 +298,28 @@ jobs:
           aws s3 sync . "${S3_PREFIX}" \
             --exclude '*' --include 'geniex-sdk-windows-arm64-*.zip*' \
             --acl public-read
+
+  # Publish the linux-arm64 CLI Docker image to GHCR. Runs in parallel with
+  # publish-github-release / publish-s3-release — it only needs resolve-tag
+  # + the linux-arm64 SDK artifact. `:latest` is only moved for stable tags,
+  # matching publish-github-release's prerelease treatment.
+  publish-docker:
+    name: publish-docker (linux-arm64)
+    needs:
+      - resolve-tag
+      - build-sdk
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-docker.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-latest
+      push: true
+      image_tags: |
+        ghcr.io/qcom-ai-hub/geniex-cli:${{ needs.resolve-tag.outputs.tag }}
+        ghcr.io/qcom-ai-hub/geniex-cli:${{ needs.resolve-tag.outputs.tag }}-linux-arm64
+        ${{ needs.resolve-tag.outputs.is_prerelease == 'false' && 'ghcr.io/qcom-ai-hub/geniex-cli:latest' || '' }}
 
   # Push the sdist to TestPyPI for pre-release tags (v*-alpha.*, v*-beta.*,
   # v*-rc.*). Stable tags skip this job — they go to production PyPI via a

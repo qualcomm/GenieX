@@ -1,0 +1,157 @@
+name: Build Docker
+
+# Reusable workflow: build the linux-arm64 GenieX-CLI Docker image from the
+# sdk-pkg-linux-arm64 artifact produced upstream by build-sdk. PR-time
+# callers pass push=false to validate the image builds and loads; release-
+# time callers pass push=true plus image_tags to push to GHCR.
+#
+# The workflow expects a prior job in the same run to have uploaded
+# sdk-pkg-linux-arm64 via actions/upload-artifact.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: ubuntu-latest
+      push:
+        description: "Push the image to ghcr.io (release-time only)"
+        required: false
+        type: boolean
+        default: false
+      image_tags:
+        description: "Newline-separated list of fully-qualified image tags. Required when push=true."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  build-docker:
+    name: build-docker
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Detect build version
+        id: version
+        uses: ./.github/actions/version
+
+      - name: Download linux-arm64 SDK artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: sdk-pkg-linux-arm64
+          path: sdk/pkg-geniex/
+
+      - name: Install aarch64 cross-compiler
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
+      # CGO against the downloaded SDK headers/libs. The CLI links
+      # libgeniex.so with an rpath of `$ORIGIN` so the binary resolves the
+      # SDK shared libraries placed next to it inside /opt/geniex/.
+      - name: Cross-build geniex CLI (linux/arm64)
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+          GOOS: linux
+          GOARCH: arm64
+          CC: aarch64-linux-gnu-gcc
+          CXX: aarch64-linux-gnu-g++
+          CGO_CFLAGS: "-I${{ github.workspace }}/sdk/pkg-geniex/include"
+          CGO_LDFLAGS: "-L${{ github.workspace }}/sdk/pkg-geniex/lib -lgeniex -Wl,-rpath,$ORIGIN"
+          VERSION: ${{ steps.version.outputs.version }}
+        working-directory: cli
+        run: |
+          set -euo pipefail
+          mkdir -p "${{ github.workspace }}/docker-context/geniex"
+          go build -trimpath \
+            -ldflags "-X main.Version=${VERSION}" \
+            -tags avx \
+            -o "${{ github.workspace }}/docker-context/geniex/geniex" \
+            ./cmd/geniex
+
+      - name: Assemble Docker build context
+        shell: bash
+        run: |
+          set -euo pipefail
+          ctx="${{ github.workspace }}/docker-context"
+          # Layout matches the Dockerfile's `COPY geniex/ /opt/geniex/`.
+          # Binary already in ${ctx}/geniex/geniex.
+          # Ship the SDK shared libraries next to the binary so $ORIGIN rpath
+          # resolves them.
+          cp -a sdk/pkg-geniex/lib/. "${ctx}/geniex/"
+          cp cli/release/linux/Dockerfile "${ctx}/Dockerfile"
+          echo "Context tree:"
+          find "${ctx}" -maxdepth 3 -printf "  %p\n" | head -40
+
+      - name: Set up QEMU (for linux/arm64 buildx)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: inputs.push
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate image_tags on push
+        if: inputs.push
+        shell: bash
+        env:
+          TAGS: ${{ inputs.image_tags }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${TAGS// }" ]]; then
+            echo "::error::push=true requires a non-empty image_tags input."
+            exit 1
+          fi
+
+      # PR-time: build for the local daemon so we can smoke-test. Release-
+      # time: push straight to the registry (no local load, builds on the
+      # buildx builder's arm64 emulator).
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: docker-context
+          file: docker-context/Dockerfile
+          platforms: linux/arm64
+          push: ${{ inputs.push }}
+          load: ${{ !inputs.push }}
+          tags: ${{ inputs.push && inputs.image_tags || format('geniex-cli:{0}', github.sha) }}
+          provenance: false
+
+      - name: Smoke test image (PR path only)
+        if: ${{ !inputs.push }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/arm64 "geniex-cli:${{ github.sha }}" --help

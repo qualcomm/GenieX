@@ -72,6 +72,9 @@ cmake --build build -j
 cmake --install build --prefix pkg-geniex
 ```
 
+Release tags (`v*`) also publish a prebuilt linux/arm64 CLI image to
+`ghcr.io/qcom-ai-hub/geniex-cli:<tag>`.
+
 #### Windows ARM64 (Snapdragon)
 
 > [!NOTE]
