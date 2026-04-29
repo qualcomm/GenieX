@@ -1,0 +1,98 @@
+name: Build Android AAR
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: "Runner label"
+        required: false
+        type: string
+        default: "ubuntu-latest"
+      upload_artifact:
+        description: "Whether to upload the AAR artifact"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-aar:
+    name: build-android-aar
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Download Android SDK package
+        uses: actions/download-artifact@v5
+        with:
+          name: sdk-pkg-android-arm64
+          path: sdk/pkg-geniex
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # ubuntu-latest ships the Android SDK at $ANDROID_SDK_ROOT but
+      # sdkmanager lives under cmdline-tools/latest/bin/ and is not on PATH.
+      # Install exactly the packages the Gradle module declares (compileSdk=35,
+      # ndkVersion=29.0.14206865, cmake=3.22.1) via the bundled sdkmanager
+      # rather than a third-party action, to stay within the org's allowlist.
+      - name: Install Android SDK packages (sdkmanager)
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${ANDROID_SDK_ROOT:?ANDROID_SDK_ROOT must be set on the runner}"
+          sdkmanager_bin="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$sdkmanager_bin" ] || {
+            echo "::error::sdkmanager not found at $sdkmanager_bin"; exit 1;
+          }
+          yes | "$sdkmanager_bin" --licenses >/dev/null 2>&1 || true
+          "$sdkmanager_bin" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "cmake;3.22.1" \
+            "ndk;29.0.14206865"
+          echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-android-${{ hashFiles('bindings/android/**/*.gradle*', 'bindings/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-android-
+
+      - name: Assemble release AAR
+        working-directory: bindings/android
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Collect AAR
+        id: aar
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="bindings/android/app/build/outputs/aar/app-release.aar"
+          [ -f "$src" ] || { echo "::error::AAR not found at $src"; exit 1; }
+          mkdir -p dist-aar
+          cp "$src" dist-aar/geniex-android-aar.aar
+          echo "path=dist-aar/geniex-android-aar.aar" >> "$GITHUB_OUTPUT"
+
+      - name: Upload AAR artifact
+        if: inputs.upload_artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: geniex-android-aar
+          path: dist-aar/geniex-android-aar.aar
+          if-no-files-found: error
+          retention-days: 1

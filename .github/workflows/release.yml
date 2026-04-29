@@ -55,8 +55,8 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
 
-  # SDK matrix. linux-arm64 / android-arm64 are cross-compiled from x64 Linux;
-  # placeholders kept commented-out until the cross-compile paths land.
+  # SDK matrix. linux-arm64 is cross-compiled from x64 Linux and remains
+  # commented-out until a dedicated use case requires it.
   build-sdk:
     name: build-sdk (${{ matrix.platform }})
     needs: [resolve-tag]
@@ -66,15 +66,24 @@ jobs:
         include:
           - platform: windows-arm64
             runner: windows-arm64
+          - platform: android-arm64
+            runner: ubuntu-latest
           # - platform: linux-arm64
-          #   runner: ubuntu-latest
-          # - platform: android-arm64
           #   runner: ubuntu-latest
     uses: ./.github/workflows/build-sdk.yml
     secrets: inherit
     with:
       platform: ${{ matrix.platform }}
       runner: ${{ matrix.runner }}
+      upload_artifact: true
+
+  build-android-aar:
+    name: build-android-aar
+    needs: [build-sdk]
+    uses: ./.github/workflows/build-android-aar.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-latest
       upload_artifact: true
 
   build-python-sdist:
@@ -158,6 +167,7 @@ jobs:
       - overlay-htp
       - build-cli
       - build-python-sdist
+      - build-android-aar
     timeout-minutes: 20
     permissions:
       contents: write
@@ -182,6 +192,11 @@ jobs:
           name: geniex-python-sdist
           path: .
 
+      - uses: actions/download-artifact@v5
+        with:
+          name: geniex-android-aar
+          path: .
+
       - name: Package artifacts and write SHA256 sidecars
         id: assets
         env:
@@ -192,6 +207,7 @@ jobs:
           HTP_DIR=sdk-pkg-windows-arm64/lib/llama_cpp
 
           mv geniex-cli-setup.exe "geniex-cli-installer-windows-arm64-${RELEASE_TAG}.exe"
+          mv geniex-android-aar.aar "geniex-android-aar-${RELEASE_TAG}.aar"
 
           sdk_suffix=""
           if [[ "$HTP_SIGNED" != "true" ]]; then
@@ -208,7 +224,7 @@ jobs:
           zip -r "geniex-sdk-windows-arm64-${RELEASE_TAG}${sdk_suffix}.zip" sdk-pkg-windows-arm64
 
           shopt -s nullglob
-          files=(*.zip *.exe *.tar.gz *.cer)
+          files=(*.zip *.exe *.tar.gz *.cer *.aar)
           for f in "${files[@]}"; do sha256sum "$f" > "$f.sha256"; done
           {
             echo "files<<EOF"
