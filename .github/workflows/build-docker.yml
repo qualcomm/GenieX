@@ -27,6 +27,9 @@ on:
         type: string
         default: ""
 
+# Permissions are inherited from the caller. Callers that only need to load
+# the image locally (PR-time) don't need `packages: write`; the release-time
+# caller explicitly declares `packages: write` when invoking this workflow.
 permissions:
   contents: read
 
@@ -35,9 +38,6 @@ jobs:
     name: build-docker
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 45
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - name: Checkout source

@@ -75,12 +75,11 @@ jobs:
   #     platform: ${{ matrix.platform }}
   #     runner: ${{ matrix.runner }}
 
-  # TEMP bisect: comment build-docker to isolate startup failure.
-  # build-docker:
-  #   name: build-docker (linux-arm64)
-  #   needs: [build-sdk]
-  #   uses: ./.github/workflows/build-docker.yml
-  #   secrets: inherit
-  #   with:
-  #     runner: ubuntu-latest
-  #     push: false
+  build-docker:
+    name: build-docker (linux-arm64)
+    needs: [build-sdk]
+    uses: ./.github/workflows/build-docker.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-latest
+      push: false
