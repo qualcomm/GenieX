@@ -64,6 +64,10 @@ jobs:
           # ${ctx}/geniex/ so the Dockerfile's `COPY geniex/ /opt/geniex/`
           # picks up both the binary and its shared-library dependencies.
           unzip -q cli-artifact/artifact.zip -d "${ctx}/geniex/"
+          # Bazel pkg_zip doesn't preserve the unix exec bit, so the geniex
+          # binary comes out of unzip as mode 0644 and the Dockerfile's
+          # ENTRYPOINT can't exec it. Restore +x before the image build.
+          chmod +x "${ctx}/geniex/geniex"
           cp cli/release/linux/Dockerfile "${ctx}/Dockerfile"
           echo "Context tree:"
           find "${ctx}" -maxdepth 3 -printf "  %p\n" | head -40
