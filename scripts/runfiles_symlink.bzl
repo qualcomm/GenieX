@@ -1,4 +1,4 @@
-def _sdk_local_bundle_impl(ctx):
+def _runfiles_symlinks_impl(ctx):
     root_symlinks = {}
     strip_prefix = ctx.attr.strip_prefix
 
@@ -15,8 +15,8 @@ def _sdk_local_bundle_impl(ctx):
         data_runfiles = runfiles,
     )
 
-sdk_local_bundle = rule(
-    implementation = _sdk_local_bundle_impl,
+runfiles_symlinks = rule(
+    implementation = _runfiles_symlinks_impl,
     attrs = {
         "data": attr.label_list(allow_files = True),
         "strip_prefix": attr.string(mandatory = True),

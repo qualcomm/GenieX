@@ -1,5 +1,8 @@
+# gazelle:resolve go resty.dev/v3 @dev_resty_v3//:resty
+
 load("@rules_pkg//pkg:mappings.bzl", "pkg_files", "strip_prefix")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
+load("//scripts:multirun.bzl", "multirun")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -8,6 +11,20 @@ exports_files(["go.mod"])
 alias(
     name = "cli",
     actual = "//cli/cmd/geniex",
+)
+
+multirun(
+    name = "gen",
+    commands = [
+        "//cli/internal/qaihm:gen_pb_go",
+    ],
+)
+
+multirun(
+    name = "clean",
+    commands = [
+        "//cli/internal/qaihm:clean_pb_go",
+    ],
 )
 
 # package artifact

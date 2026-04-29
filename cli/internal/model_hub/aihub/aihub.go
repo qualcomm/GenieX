@@ -29,7 +29,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"resty.dev/v3"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 )
 

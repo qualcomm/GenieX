@@ -13,13 +13,18 @@ Then just build and run cli with `bazelisk run //cli -- infer Qwen/Qwen3-0.6B-GG
 > Before running CLI with local SDK linkage, you must build and install the bridge first.
 > Bazel local mode expects `sdk/pkg-geniex/lib/geniex.dll` (Windows) or `sdk/pkg-geniex/lib/libgeniex.so` (Linux) to already exist.
 
-## Build Flags
+## Build Options
 
 There are also some optional flags for `bazelisk run`:
 
 - `--//sdk:sdk_type=s3` WIP
 - `--//sdk:sdk_type=local` default behavior, force local build of sdk instead of using prebuilt binaries, you should manually build the sdk first, see [Build SDK](#build-sdk) section below
 - `--//sdk:sdk_type=bazel` WIP
+
+There also some useful targets for testing and development:
+
+- `bazelisk run //cli:gen` Generates development files, like protobuf golang bindings.
+- `bazelisk run //cli:clean` Clean development files.
 
 ## Package Release
 

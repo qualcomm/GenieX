@@ -29,10 +29,10 @@ import (
 
 	"github.com/bytedance/sonic"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm"
 	"github.com/charmbracelet/huh"
 	"github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/spf13/cobra"
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
@@ -259,12 +259,6 @@ func pullModel(name string, quant string) error {
 	}
 	if modelHub != "" {
 		switch strings.ToLower(modelHub) {
-		case "volces":
-			model_hub.SetHub(model_hub.NewVolces())
-		case "ms", "modelscope":
-			model_hub.SetHub(model_hub.NewModelScope())
-		case "s3":
-			model_hub.SetHub(model_hub.NewS3())
 		case "hf", "huggingface":
 			model_hub.SetHub(model_hub.NewHuggingFace())
 		case "local", "localfs":
@@ -867,9 +861,9 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 	spin.Stop()
 	if err != nil {
 		fmt.Println(render.GetTheme().Error.Sprintf(
-				"Model %q not found from AI Hub.\n"+
-					"  Browse available models: https://aihub.qualcomm.com/models",
-				displayName))
+			"Model %q not found from AI Hub.\n"+
+				"  Browse available models: https://aihub.qualcomm.com/models",
+			displayName))
 		return err
 	}
 
@@ -1030,3 +1024,4 @@ func headContentLength(ctx context.Context, url string) (int64, error) {
 	}
 	return resp.ContentLength, nil
 }
+

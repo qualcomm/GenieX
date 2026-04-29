@@ -20,7 +20,7 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 )
 
 // Minimal samples pulled from the real AI Hub JSONs attached to the

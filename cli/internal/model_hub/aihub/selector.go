@@ -21,7 +21,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/gen/qaihm"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 )
 
 // Errors returned by Match. Callers pattern-match these so they can print

@@ -22,5 +22,3 @@ go_library(
         "@com_github_openai_openai_go_v3//shared/constant",
     ],
 )
-
-

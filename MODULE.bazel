@@ -6,16 +6,24 @@ bazel_dep(name = "gazelle", version = "0.50.0", repo_name = "bazel_gazelle")
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "rules_pkg", version = "1.2.0")
 
+# innosetup
 innosetup_repo = use_repo_rule("//cli/release/windows:iscc.bzl", "innosetup_repository")
 innosetup_repo(name = "innosetup")
+
+# protobuf, with windows arm64 patch
+bazel_dep(name = "protobuf", version = "33.4", repo_name = "com_google_protobuf")
+prebuilt_protoc = use_repo_rule("//scripts:prebuilt_protoc.bzl", "prebuilt_protoc")
+prebuilt_protoc(
+    name = "prebuilt_protoc_windows_arm64",
+    cpu = "arm64",
+    os = "windows",
+)
+register_toolchains("@prebuilt_protoc_windows_arm64//:prebuilt_toolchain")
 
 # ============ c/cpp ============
 
 bazel_dep(name = "rules_cc", version = "0.2.17")
 bazel_dep(name = "platforms", version = "1.0.0")
-
-s3_sdk_repository = use_repo_rule("//sdk:s3_sdk_download.bzl", "s3_sdk_download")
-s3_sdk_repository(name = "s3_sdk")
 
 # ============ go ============
 
@@ -39,10 +47,6 @@ go_deps = use_extension("@bazel_gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//cli:go.mod")
 use_repo(
     go_deps,
-    "com_github_aws_aws_sdk_go_v2",
-    "com_github_aws_aws_sdk_go_v2_config",
-    "com_github_aws_aws_sdk_go_v2_service_s3",
-    "com_github_aws_smithy_go",
     "com_github_bytedance_sonic",
     "com_github_charmbracelet_huh",
     "com_github_charmbracelet_huh_spinner",
@@ -69,12 +73,11 @@ use_repo(
     "org_golang_x_term",
 )
 
-
 # ============ python ============
 
 bazel_dep(name = "rules_python", version = "1.9.0")
 
-python = use_extension("@rules_python//python:extensions.bzl", "python")
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(python_version = "3.12")
 
 # bazel_dep(
