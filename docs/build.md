@@ -1,72 +1,76 @@
-# Build CLI
+# Build
 
-This repository uses Bazel and Bazelisk for SDK and plugin builds.
+The CLI is built with [Bazelisk](https://github.com/bazelbuild/bazelisk) (Bazel launcher); the SDK bridge and native plugins are built with CMake. Bazel fetches all CLI-side dependencies automatically.
 
 Install Bazelisk:
 
 - Windows: `winget install --id Bazel.Bazelisk`
 - Linux: install `bazelisk` from your package manager
 
-Then just build and run cli with `bazelisk run //cli -- infer Qwen/Qwen3-0.6B-GGUF`, all dependencies will be automatically downloaded and built by Bazel.
+Quick smoke test:
+
+```bash
+bazelisk run //cli -- infer Qwen/Qwen3-0.6B-GGUF
+```
+
+> `//cli` is a convenience alias for `//cli/cmd/geniex:geniex`. Both are used interchangeably in these docs.
 
 > [!IMPORTANT]
-> Before running CLI with local SDK linkage, you must build and install the bridge first.
-> Bazel local mode expects `sdk/pkg-geniex/lib/geniex.dll` (Windows) or `sdk/pkg-geniex/lib/libgeniex.so` (Linux) to already exist.
+> When running the CLI in local-SDK mode (the default), build and install the SDK bridge into `sdk/pkg-geniex/` **first** — Bazel expects `sdk/pkg-geniex/lib/geniex.dll` (Windows) or `sdk/pkg-geniex/lib/libgeniex.so` (Linux) to already exist. See [Build the SDK](#build-the-sdk) below.
 
-## Build Options
+## CLI build options
 
-There are also some optional flags for `bazelisk run`:
+Flags for `bazelisk run`:
 
-- `--//sdk:sdk_type=s3` WIP
-- `--//sdk:sdk_type=local` default behavior, force local build of sdk instead of using prebuilt binaries, you should manually build the sdk first, see [Build SDK](#build-sdk) section below
-- `--//sdk:sdk_type=bazel` WIP
+| Flag                          | Meaning                                                                 |
+|-------------------------------|-------------------------------------------------------------------------|
+| `--//sdk:sdk_type=local`      | Default. Link against a locally built SDK in `sdk/pkg-geniex`.          |
+| `--//sdk:sdk_type=s3`         | WIP.                                                                    |
+| `--//sdk:sdk_type=bazel`      | WIP.                                                                    |
 
-There also some useful targets for testing and development:
+Development targets:
 
-- `bazelisk run //cli:gen` Generates development files, like protobuf golang bindings.
-- `bazelisk run //cli:clean` Clean development files.
-- `bazelisk run //cli/release/linux:docker` Build and load docker image for linux release.
+- `bazelisk run //cli:gen` — generate development files (protobuf Go bindings).
+- `bazelisk run //cli:clean` — clean generated files.
+- `bazelisk run //cli/release/linux:docker` — build and load the Docker image for the Linux release.
 
-## Package Release
+Package release artifacts:
 
-- `bazelisk build //cli:artifact -> bazel-bin/cli/artifact.zip`.
-- `bazelisk build //cli/release/windows -> bazel-bin/cli/release/windows/geniex-cli-setup.exe`.
-- `bazelisk build //cli/release/linux -> bazel-bin/cli/release/linux/geniex-cli-docker.tar`.
+| Target                                | Output                                             |
+|---------------------------------------|----------------------------------------------------|
+| `bazelisk build //cli:artifact`       | `bazel-bin/cli/artifact.zip`                       |
+| `bazelisk build //cli/release/windows`| `bazel-bin/cli/release/windows/geniex-cli-setup.exe` |
+| `bazelisk build //cli/release/linux`  | `bazel-bin/cli/release/linux/geniex-cli-docker.tar` |
 
-## Tips
+Generated executable (for manual invocation): `bazel-bin/cli/cmd/geniex/geniex_/`, with runtime files under `geniex.runfiles/_main`.
 
-### Windows Symlink Requirements
+## Python bindings
 
-Bazel requires symlink support on Windows. To enable this:
+See [bindings/python/README.md](../bindings/python/README.md).
 
-1. **Enable Developer Mode**: Settings → Privacy & Security → For developers → Developer Mode (toggle on)
-2. **Grant Create Symlink Permission**:
-   - Open Group Policy Editor: `gpedit.msc`
-   - Navigate to: Computer Configuration → Windows Settings → Security Settings → Local Policies → User Rights Assignment
-   - Find "Create symbolic links" and add your user account
-   - Alternatively, set registry key: `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System` → `LocalAccountTokenFilterPolicy` = 1 (DWORD)
-3. **Enable Long Paths**: Settings → Privacy & Security → For developers → Long paths (toggle on)
-4. If you still encounter symlink issues, comment out `startup --windows_enable_symlinks` in `.bazelrc`, but be aware this may cause other issues due to how the SDK is structured.
+## Windows prerequisites
 
-### Running the CLI
+### Symlink support (Bazel)
 
-If you want to manually run the generated executable, you can find it in `bazel-bin/cli/cmd/geniex/geniex_/` and runtime files in `bazel-bin/cli/cmd/geniex/geniex_/geniex.runfiles/_main`.
+1. Enable **Developer Mode**: Settings → Privacy & Security → For developers.
+2. Grant **Create symbolic links** rights via `gpedit.msc` → Computer Configuration → Windows Settings → Security Settings → Local Policies → User Rights Assignment, or set `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\LocalAccountTokenFilterPolicy = 1` (DWORD).
+3. Enable **Long paths**: Settings → Privacy & Security → For developers.
+4. If symlink errors persist, comment out `startup --windows_enable_symlinks` in `.bazelrc` — but be aware this can break other SDK paths.
 
-# Geniex Python Bindings
+### Native SDKs (for full Snapdragon build)
 
-See [bindings/python/README.md](../bindings/python/README.md) for build and install instructions for the Python bindings.
+The `arm64-windows-snapdragon-release` preset requires:
 
-# Geniex SDK
+- **Hexagon SDK** — `HEXAGON_SDK_ROOT`, `HEXAGON_TOOLS_ROOT`
+- **OpenCL SDK** — `OPENCL_SDK_ROOT` (headers + `OpenCL.lib`; runtime ICD ships with the Snapdragon GPU driver)
+- **Windows Driver Kit** — provides `inf2cat.exe`
+- **Self-signed HTP cert** (`.pfx`) and Windows test-signing enabled — see [run.md § Self-signed fallback](run.md#self-signed-fallback) for cert generation and test-signing setup
 
-### Build Bridge/Plugin First (Required for local SDK)
+For a minimal NPU build that skips Hexagon/OpenCL and drives the NPU only through QAIRT, use the `arm64-windows-snapdragon-cpu-release` preset instead.
 
-Build and install the SDK bridge and plugins into `sdk/pkg-geniex` first, then run CLI.
+## Build the SDK
 
-Use the SDK subproject instructions in `sdk/README.md` and the platform-specific steps in the [Build & Install](#build--install) section below.
-
-### Build & Install
-
-#### Linux ARM64
+### Linux
 
 ```bash
 cd sdk
@@ -75,10 +79,10 @@ cmake --build build -j
 cmake --install build --prefix pkg-geniex
 ```
 
-#### Windows ARM64 (Snapdragon)
+### Windows ARM64 (Snapdragon)
 
 > [!NOTE]
-> The Hexagon toolchain has a 250-character path limit. Use `subst` to shorten the source path before building:
+> The Hexagon toolchain has a 250-character path limit. Shorten the source path with `subst` before building:
 >
 > ```powershell
 > subst G: C:\path\to\geniex
@@ -92,36 +96,53 @@ cmake --build --preset arm64-windows-snapdragon-release -j 8
 cmake --install build-arm64-windows-snapdragon-release --prefix pkg-geniex
 ```
 
-#### Android (cross-compilation from Linux)
+Swap the preset to `arm64-windows-snapdragon-cpu-release` for the QAIRT-only minimal build described above.
 
-See [Build Android](#build-android) section below for detailed instructions. The general steps are:
+### Android (cross-compile from Linux)
 
-Test through ADB shell:
+Start the Snapdragon Android toolchain container — follow [llama.cpp's instructions](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/README.md#android) to launch:
 
+```bash
+docker run --rm -u $(id -u):$(id -g) \
+    --volume $(pwd):/workspace \
+    --platform linux/amd64 \
+    ghcr.io/snapdragon-toolchain/arm64-android:v0.3
 ```
+
+Install build tools and Rust inside the container:
+
+```bash
+# Root shell (docker exec -u 0 -it <container_id> bash):
+apt update -y && apt install -y make gcc
+# Exit back to the normal user shell, then:
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+rustup target add aarch64-linux-android
+```
+
+Build the SDK with the `arm64-android-snapdragon-debug` preset:
+
+```bash
+cd sdk
+cmake --preset arm64-android-snapdragon-debug -B build-android .
+cmake --build build-android -j
+cmake --install build-android --prefix pkg-geniex
+```
+
+Deploy and smoke-test on device:
+
+```bash
 adb push pkg-geniex /data/local/tmp/geniex
 adb push Qwen3-0.6B-Q4_0.gguf /data/local/tmp/geniex/modelfiles/llama_cpp/
-adb shell "cd /data/local/tmp/geniex && LD_LIBRARY_PATH=./lib:./lib/llama_cpp GENIEX_PLUGIN_PATH=./lib ./bin/geniex_test_llm"
+adb shell "cd /data/local/tmp/geniex && \
+  LD_LIBRARY_PATH=./lib:./lib/llama_cpp \
+  GENIEX_PLUGIN_PATH=./lib \
+  ./bin/geniex_test_llm"
 ```
 
-# Build Android
+Build the Android app (requires Android SDK + Gradle on the host — installing them inside the container is possible but significantly more complex):
 
-1. Start container
-   1. Follow [llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/README.md#android) to start the docker container.
-2. Install system dependencies in root shell
-   1. Run `docker exec -u 0 -it <container_id> bash` to get into the container with root access.
-   2. Run `apt update -y && apt install -y make gcc` to install make and gcc.
-   3. **Exit** and return to previous **normal user** shell.
-3. Setup rust toolchain
-   1. Run `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh` to install Rust toolchain.
-   2. Run `source $HOME/.cargo/env` to load Rust environment variables.
-   3. Run `rustup target add aarch64-linux-android` to add
-4. Build SDK
-   1. `cd sdk`
-   2. `cmake --preset arm64-android-snapdragon-debug -B build-android .`
-   3. `cmake --build build-android -j`
-   4. `cmake --install build-android --prefix pkg-geniex`
-5. Build Android App
-   1. On the host machine with the Android SDK and Gradle installed, or if you manually install the Android SDK inside the container, the process will be much more complex.
-   2. `cd examples/android`
-      3 `gradle build` to build the Android app with the local SDK.
+```bash
+cd examples/android
+gradle build
+```
