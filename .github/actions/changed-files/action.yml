@@ -1,0 +1,81 @@
+name: Changed Files
+description: >-
+  Resolve the set of changed files for the current event, filtered by
+  include/exclude regex patterns.
+
+inputs:
+  include:
+    description: "Extended-regex pattern to include (egrep). Required."
+    required: true
+  exclude:
+    description: "Extended-regex pattern to exclude (egrep). Optional."
+    required: false
+    default: ""
+
+outputs:
+  files:
+    description: "Newline-separated list of matching, still-present files."
+    value: ${{ steps.resolve.outputs.files }}
+  any:
+    description: "'true' if at least one file matched, else 'false'."
+    value: ${{ steps.resolve.outputs.any }}
+
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PUSH_BEFORE: ${{ github.event.before }}
+        PUSH_AFTER: ${{ github.event.after }}
+        INCLUDE: ${{ inputs.include }}
+        EXCLUDE: ${{ inputs.exclude }}
+      run: |
+        set -euo pipefail
+
+        if [ "$EVENT_NAME" = "pull_request" ]; then
+          files=$(git diff --name-only --diff-filter=d "${PR_BASE_SHA}..HEAD")
+        elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+          git fetch --no-tags --depth=1 origin main
+          base=$(git merge-base HEAD origin/main || true)
+          if [ -n "$base" ]; then
+            files=$(git diff --name-only --diff-filter=d "${base}..HEAD")
+          else
+            files=$(git ls-files)
+          fi
+        elif [ "$EVENT_NAME" = "push" ]; then
+          if [ -n "${PUSH_BEFORE:-}" ] \
+             && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ] \
+             && git cat-file -e "$PUSH_BEFORE" 2>/dev/null; then
+            files=$(git diff --name-only --diff-filter=d "${PUSH_BEFORE}..${PUSH_AFTER}")
+          else
+            files=$(git ls-files)
+          fi
+        else
+          files=$(git ls-files)
+        fi
+
+        filtered=$(printf '%s\n' "$files" | grep -E "$INCLUDE" || true)
+        if [ -n "$EXCLUDE" ]; then
+          filtered=$(printf '%s\n' "$filtered" | grep -vE "$EXCLUDE" || true)
+        fi
+
+        if [ -n "$filtered" ]; then
+          filtered=$(printf '%s\n' "$filtered" | while IFS= read -r f; do
+            [ -n "$f" ] && [ -f "$f" ] && printf '%s\n' "$f"
+          done)
+        fi
+
+        if [ -z "$filtered" ]; then
+          echo "files=" >> "$GITHUB_OUTPUT"
+          echo "any=false" >> "$GITHUB_OUTPUT"
+        else
+          {
+            echo "files<<__EOF__"
+            echo "$filtered"
+            echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+          echo "any=true" >> "$GITHUB_OUTPUT"
+        fi

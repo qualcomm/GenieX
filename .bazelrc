@@ -23,3 +23,7 @@ build --enable_runfiles
 
 # build info inject — override with --define=VERSION=0.1.0 for releases
 common --define=VERSION=0.0.0.dev0
+
+# Disk cache — CI restores/saves it via actions/cache.
+# bazel-cache-epoch: 1 (bump to bust a corrupted cache)
+build --disk_cache=~/.cache/bazel-disk

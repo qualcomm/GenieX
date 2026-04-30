@@ -3,14 +3,6 @@ name: Build SDK
 on:
   workflow_call:
     inputs:
-      platform:
-        description: "Target platform: linux-arm64, android-arm64 or windows-arm64"
-        required: true
-        type: string
-      runner:
-        description: "Runner label"
-        required: true
-        type: string
       upload_artifact:
         description: "Whether to upload SDK artifact"
         required: false
@@ -26,14 +18,24 @@ permissions:
   contents: read
 
 jobs:
-  build-sdk:
-    name: build-sdk
-    runs-on: ${{ inputs.runner }}
+  build:
+    name: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-arm64
+            runner: windows-arm64
+          - platform: linux-arm64
+            runner: ubuntu-latest
+          - platform: android-arm64
+            runner: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
 
     steps:
       - name: Configure Windows Git
-        if: inputs.platform == 'windows-arm64'
+        if: matrix.platform == 'windows-arm64'
         shell: cmd
         run: |
           echo C:\Program Files\Git\bin>>%GITHUB_PATH%
@@ -45,7 +47,7 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: recursive
           token: ${{ secrets.GH_PAT }}
 
@@ -54,40 +56,38 @@ jobs:
         uses: ./.github/actions/version
 
       - name: Restore ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/.ccache
-          key: ccache-sdk-${{ inputs.platform }}-${{ github.sha }}
-          restore-keys: ccache-sdk-${{ inputs.platform }}-
+          key: ccache-sdk-${{ matrix.platform }}-${{ github.sha }}
+          restore-keys: ccache-sdk-${{ matrix.platform }}-
 
-      # Linux and Android builds both run inside a docker toolchain container;
-      # ccache is apt-installed there. Host only needs to own the cache
-      # directory so actions/cache persists it across runs.
+      # Linux/Android ccache lives in the toolchain container; host just
+      # owns the dir so actions/cache can persist it.
       - name: Prepare ccache dir (Linux/Android)
-        if: inputs.platform == 'linux-arm64' || inputs.platform == 'android-arm64'
+        if: matrix.platform == 'linux-arm64' || matrix.platform == 'android-arm64'
         shell: bash
         run: mkdir -p "${{ github.workspace }}/.ccache"
 
       - name: Install and configure ccache (Windows)
-        if: inputs.platform == 'windows-arm64'
+        if: matrix.platform == 'windows-arm64'
         shell: powershell
         run: |
           if (-not (Get-Command ccache -ErrorAction SilentlyContinue)) {
             choco install ccache --no-progress -y
           }
-          # Set in-process before calling ccache: $GITHUB_ENV only affects
-          # subsequent steps, so `ccache --max-size` here would otherwise edit
-          # the default per-user config instead of the workspace one.
+          # $GITHUB_ENV only applies to later steps — set in-process too
+          # so `ccache --max-size` below edits the workspace config.
           $env:CCACHE_DIR = "${{ github.workspace }}/.ccache"
           Add-Content $env:GITHUB_ENV "CCACHE_DIR=$env:CCACHE_DIR"
           ccache --max-size=1G
 
       - name: Setup Snapdragon SDKs
-        if: inputs.platform == 'windows-arm64'
+        if: matrix.platform == 'windows-arm64'
         uses: ./.github/actions/setup-snapdragon-sdks
 
       - name: Configure HTP signing cert
-        if: inputs.platform == 'windows-arm64'
+        if: matrix.platform == 'windows-arm64'
         shell: powershell
         run: |
           $ErrorActionPreference = "Stop"
@@ -98,18 +98,15 @@ jobs:
           Write-Host "HEXAGON_HTP_CERT=$dst"
 
       - name: Build SDK (Linux, Snapdragon toolchain container)
-        if: inputs.platform == 'linux-arm64'
+        if: matrix.platform == 'linux-arm64'
         shell: bash
         env:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
           EXTRA_CMAKE_FLAGS: ${{ inputs.extra_cmake_flags }}
         run: |
           set -euo pipefail
-          # Run as root so we can apt-install make/build-essential/ccache and
-          # rustup toolchain, then chown outputs back to the runner user so
-          # actions/upload-artifact and actions/cache can read them. The
-          # container ships HEXAGON_SDK_ROOT / HEXAGON_TOOLS_ROOT /
-          # OPENCL_SDK_ROOT pre-configured so the preset picks them up.
+          # Runs as root to apt-install toolchain bits; chown back to
+          # the runner UID so upload-artifact / cache can read the tree.
           uid="$(id -u)"
           gid="$(id -g)"
           docker run --rm \
@@ -126,29 +123,24 @@ jobs:
             bash -eux -c '
               git config --global --add safe.directory "*"
               apt-get update -y
-              # Rust build scripts (proc-macro2, quote) link host-native
-              # executables, so we need the host glibc dev package alongside
-              # make/gcc/ccache/curl. build-essential covers Scrt1.o/crt*.o/libc.
+              # build-essential needed for Rust proc-macro host linking.
               apt-get install -y --no-install-recommends build-essential ccache make curl ca-certificates
               curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
               export PATH="$HOME/.cargo/bin:$PATH"
               rustup target add aarch64-unknown-linux-gnu
-              bash .github/scripts/ci/build-sdk.sh
+              bash .github/scripts/sdk-linux-android.sh
               chown -R "$HOST_UID:$HOST_GID" sdk .ccache || true
             '
 
       - name: Build SDK (Android, Snapdragon toolchain container)
-        if: inputs.platform == 'android-arm64'
+        if: matrix.platform == 'android-arm64'
         shell: bash
         env:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
           EXTRA_CMAKE_FLAGS: ${{ inputs.extra_cmake_flags }}
         run: |
           set -euo pipefail
-          # Run as root so we can apt-install make/gcc/ccache and rustup
-          # toolchain, then chown outputs back to the runner user so
-          # actions/upload-artifact and actions/cache can read them. Mirrors
-          # the setup documented in docs/build.md for this container.
+          # See Linux job above for the root + chown rationale.
           uid="$(id -u)"
           gid="$(id -g)"
           docker run --rm \
@@ -165,46 +157,42 @@ jobs:
             bash -eux -c '
               git config --global --add safe.directory "*"
               apt-get update -y
-              # build-essential (not just gcc) is required because Rust build
-              # scripts in tokenizers-cpp link host-native executables and need
-              # Scrt1.o / crti.o / crtn.o / libc from libc6-dev.
+              # build-essential needed for Rust proc-macro host linking.
               apt-get install -y --no-install-recommends build-essential ccache curl ca-certificates
               curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
               export PATH="$HOME/.cargo/bin:$PATH"
               rustup target add aarch64-linux-android
-              bash .github/scripts/ci/build-sdk.sh
+              bash .github/scripts/sdk-linux-android.sh
               chown -R "$HOST_UID:$HOST_GID" sdk .ccache || true
             '
 
       - name: Setup VS toolchain (Windows)
-        if: inputs.platform == 'windows-arm64'
+        if: matrix.platform == 'windows-arm64'
         uses: ./.github/actions/setup-vcvars
 
       - name: Build SDK (Windows)
-        if: inputs.platform == 'windows-arm64'
+        if: matrix.platform == 'windows-arm64'
         shell: powershell
         env:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File .github/scripts/ci/build-sdk.ps1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .github/scripts/sdk-windows.ps1
 
-      # Observability for cache hit rate and the effective size cap. Never fail
-      # the job on a stats read. On Linux/Android ccache lives inside the
-      # toolchain container (not on the host), so we just report the cache
-      # dir size on disk — enough to confirm the cache is warming up.
+      # On Linux/Android ccache runs inside the container; only the on-disk
+      # size is visible from the host. Never fail the job on a stats read.
       - name: ccache stats (Linux/Android)
-        if: inputs.platform == 'linux-arm64' || inputs.platform == 'android-arm64'
+        if: matrix.platform == 'linux-arm64' || matrix.platform == 'android-arm64'
         shell: bash
         run: du -sh "${{ github.workspace }}/.ccache" 2>/dev/null || true
 
       - name: ccache stats (Windows)
-        if: inputs.platform == 'windows-arm64'
+        if: matrix.platform == 'windows-arm64'
         shell: powershell
         run: ccache --show-stats --verbose; $true
 
       - name: Upload SDK artifact
         if: inputs.upload_artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
-          name: sdk-pkg-${{ inputs.platform }}
+          name: sdk-${{ matrix.platform }}
           path: sdk/pkg-geniex/
           retention-days: 1

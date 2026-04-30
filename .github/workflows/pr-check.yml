@@ -1,0 +1,76 @@
+name: PR Check
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, ready_for_review]
+    paths:
+      - "sdk/**"
+      - "cli/**"
+      - "bindings/python/**"
+      - "bindings/go/**"
+      - "bindings/android/**"
+      - ".github/**"
+  # Seeds ccache on main so the first PR run off a new base hits warm.
+  push:
+    branches: [main]
+    paths:
+      - "sdk/**"
+      - ".github/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Draft PRs run lint only; ready_for_review triggers the full graph.
+jobs:
+  lint:
+    name: lint
+    uses: ./.github/workflows/_lint.yml
+    secrets: inherit
+
+  build-sdk:
+    name: build-sdk
+    needs: [lint]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_build-sdk.yml
+    secrets: inherit
+    with:
+      upload_artifact: true
+
+  build-python-sdist:
+    name: build-python-sdist
+    needs: [lint]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_build-python-sdist.yml
+    secrets: inherit
+    with:
+      upload_artifact: true
+
+  build-cli:
+    name: build-cli
+    needs: [build-sdk]
+    uses: ./.github/workflows/_build-cli.yml
+    secrets: inherit
+    with:
+      upload_artifact: true
+
+  build-android-aar:
+    name: build-android-aar
+    needs: [build-sdk]
+    uses: ./.github/workflows/_build-android-aar.yml
+    secrets: inherit
+    with:
+      upload_artifact: true
+
+  build-docker:
+    name: build-docker
+    needs: [build-cli]
+    uses: ./.github/workflows/_build-docker.yml
+    secrets: inherit
+    with:
+      push: false

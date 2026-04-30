@@ -3,11 +3,6 @@ name: Build Python sdist
 on:
   workflow_call:
     inputs:
-      runner:
-        description: "Runner label"
-        required: false
-        type: string
-        default: ubuntu-latest
       upload_artifact:
         description: "Whether to upload the sdist artifact"
         required: false
@@ -18,16 +13,15 @@ permissions:
   contents: read
 
 jobs:
-  build-python-sdist:
-    name: build-python-sdist
-    runs-on: ${{ inputs.runner }}
+  build:
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
       - name: Checkout source
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Detect build version
         id: version
@@ -66,8 +60,8 @@ jobs:
 
       - name: Upload sdist artifact
         if: inputs.upload_artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
-          name: geniex-python-sdist
+          name: python-sdist
           path: dist/geniex-*.tar.gz
           retention-days: 7
