@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       platform:
-        description: "Target platform: linux-arm64 or windows-arm64"
+        description: "Target platform: linux-arm64, android-arm64 or windows-arm64"
         required: true
         type: string
       runner:
@@ -68,6 +68,13 @@ jobs:
           echo "CCACHE_DIR=${{ github.workspace }}/.ccache" >> $GITHUB_ENV
           ccache --max-size=1G
 
+      # Android builds run inside a docker container; ccache is installed there.
+      # Host only needs to own the cache directory so actions/cache persists it.
+      - name: Prepare ccache dir (Android)
+        if: inputs.platform == 'android-arm64'
+        shell: bash
+        run: mkdir -p "${{ github.workspace }}/.ccache"
+
       - name: Install and configure ccache (Windows)
         if: inputs.platform == 'windows-arm64'
         shell: powershell
@@ -98,8 +105,48 @@ jobs:
         shell: bash
         env:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
+          PLATFORM: linux-arm64
           EXTRA_CMAKE_FLAGS: ${{ inputs.extra_cmake_flags }}
         run: bash .github/scripts/ci/build-sdk.sh
+
+      - name: Build SDK (Android, Snapdragon toolchain container)
+        if: inputs.platform == 'android-arm64'
+        shell: bash
+        env:
+          GENIEX_VERSION: ${{ steps.version.outputs.version }}
+          EXTRA_CMAKE_FLAGS: ${{ inputs.extra_cmake_flags }}
+        run: |
+          set -euo pipefail
+          # Run as root so we can apt-install make/gcc/ccache and rustup
+          # toolchain, then chown outputs back to the runner user so
+          # actions/upload-artifact and actions/cache can read them. Mirrors
+          # the setup documented in docs/build.md for this container.
+          uid="$(id -u)"
+          gid="$(id -g)"
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e GENIEX_VERSION \
+            -e EXTRA_CMAKE_FLAGS \
+            -e PLATFORM=android-arm64 \
+            -e CCACHE_DIR=/workspace/.ccache \
+            -e HOST_UID="$uid" \
+            -e HOST_GID="$gid" \
+            --platform linux/amd64 \
+            ghcr.io/snapdragon-toolchain/arm64-android:v0.3 \
+            bash -eux -c '
+              git config --global --add safe.directory "*"
+              apt-get update -y
+              # build-essential (not just gcc) is required because Rust build
+              # scripts in tokenizers-cpp link host-native executables and need
+              # Scrt1.o / crti.o / crtn.o / libc from libc6-dev.
+              apt-get install -y --no-install-recommends build-essential ccache curl ca-certificates
+              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+              export PATH="$HOME/.cargo/bin:$PATH"
+              rustup target add aarch64-linux-android
+              bash .github/scripts/ci/build-sdk.sh
+              chown -R "$HOST_UID:$HOST_GID" sdk .ccache || true
+            '
 
       - name: Setup VS toolchain (Windows)
         if: inputs.platform == 'windows-arm64'
@@ -111,16 +158,6 @@ jobs:
         env:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
         run: powershell -NoProfile -ExecutionPolicy Bypass -File .github/scripts/ci/build-sdk.ps1
-
-      - name: ccache stats (Linux)
-        if: always() && inputs.platform == 'linux-arm64'
-        shell: bash
-        run: ccache --show-stats --verbose || true
-
-      - name: ccache stats (Windows)
-        if: always() && inputs.platform == 'windows-arm64'
-        shell: powershell
-        run: ccache --show-stats --verbose; $true
 
       - name: Upload SDK artifact
         if: inputs.upload_artifact
