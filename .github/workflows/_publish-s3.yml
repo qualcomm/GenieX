@@ -36,7 +36,7 @@ jobs:
           submodules: false
 
       - name: Download packaged SDK release zips
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: sdk-release-zips
           path: .

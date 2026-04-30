@@ -69,7 +69,7 @@ jobs:
         uses: ./.github/actions/version
 
       - name: Download linux-arm64 SDK artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: sdk-linux-arm64
           path: sdk/pkg-geniex/
@@ -77,7 +77,7 @@ jobs:
       # Bazel disk cache — shared key prefix with _build-cli.yml since both
       # consume //cli/* targets. See _build-cli.yml for the rationale.
       - name: Restore Bazel disk cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/bazel-disk
           key: bazel-cli-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'cli/**/BUILD.bazel', 'cli/**/*.bzl') }}

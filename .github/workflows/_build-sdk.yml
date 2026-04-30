@@ -59,7 +59,7 @@ jobs:
         uses: ./.github/actions/version
 
       - name: Restore ccache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/.ccache
           key: ccache-sdk-${{ matrix.platform }}-${{ github.sha }}
@@ -208,7 +208,7 @@ jobs:
 
       - name: Upload SDK artifact
         if: inputs.upload_artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: sdk-${{ matrix.platform }}
           path: sdk/pkg-geniex/

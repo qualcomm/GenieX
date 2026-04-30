@@ -45,27 +45,27 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: sdk-windows-arm64
           path: sdk-windows-arm64
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: cli-installer-windows-arm64
           path: .
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: cli-linux-arm64
           path: cli-linux-arm64/
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: python-sdist
           path: .
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: android-aar
           path: .
@@ -113,7 +113,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Publish release
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           VERSION: ${{ env.RELEASE_TAG }}
           FILES: ${{ steps.assets.outputs.files }}
@@ -126,7 +126,7 @@ jobs:
       # _publish-s3 can pick them up. The `sdk-windows-arm64` artifact
       # holds the *unpacked* pkg tree, not the final `geniex-sdk-*.zip`.
       - name: Upload packaged SDK zips for S3 job
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: sdk-release-zips
           path: |

@@ -103,7 +103,7 @@ jobs:
       - name: Init llama.cpp submodule
         run: git submodule update --init --depth=1 third-party/llama.cpp
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: sdk-windows-arm64
           path: sdk-windows-arm64
@@ -125,7 +125,7 @@ jobs:
           echo "signed=${signed}" >> "$GITHUB_OUTPUT"
           echo "llama_sha=${sha}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: sdk-windows-arm64
           path: sdk-windows-arm64/

@@ -60,7 +60,7 @@ jobs:
 
       - name: Upload sdist artifact
         if: inputs.upload_artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: python-sdist
           path: dist/geniex-*.tar.gz
