@@ -29,6 +29,12 @@ jobs:
           fetch-depth: 1
           submodules: false
 
+      # Gradle's internal git init prints an 'init.defaultBranch' advice
+      # on every run. Set it explicitly so the log stays warning-clean.
+      - name: Silence git init.defaultBranch hint
+        shell: bash
+        run: git config --global init.defaultBranch main
+
       - name: Download Android SDK package
         uses: actions/download-artifact@v5
         with:
