@@ -55,6 +55,18 @@ jobs:
           name: sdk-pkg-${{ inputs.platform }}
           path: sdk/pkg-geniex/
 
+      # Bazel disk cache (hot path for //cli builds). Key narrows to the
+      # per-runner-OS CLI build inputs — changes to MODULE.bazel.lock or any
+      # cli BUILD file bust the primary key; the restore-keys prefix still
+      # covers warm-start rehydration.
+      - name: Restore Bazel disk cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-cli-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'cli/**/BUILD.bazel', 'cli/**/*.bzl') }}
+          restore-keys: |
+            bazel-cli-${{ runner.os }}-
+
       # Build just the CLI binary on Windows. Skipped when build_installer is
       # set because the installer target (//cli/release/windows) pulls in
       # //cli/cmd/geniex as a src and Bazel will build it transitively.

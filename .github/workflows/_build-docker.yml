@@ -76,6 +76,16 @@ jobs:
           name: sdk-pkg-linux-arm64
           path: sdk/pkg-geniex/
 
+      # Bazel disk cache — shared key prefix with _build-cli.yml since both
+      # consume //cli/* targets. See _build-cli.yml for the rationale.
+      - name: Restore Bazel disk cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-cli-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'cli/**/BUILD.bazel', 'cli/**/*.bzl') }}
+          restore-keys: |
+            bazel-cli-${{ runner.os }}-
+
       # Bazel drives everything: CLI build (via //cli:_artifact), base
       # image pick, apt layer materialization, tarball assembly.
       # //cli/release/linux is an alias for the OCI tarball at
