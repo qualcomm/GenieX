@@ -1,15 +1,5 @@
 name: Publish GitHub Release
 
-# Packages per-target artifacts into release-ready files (with SemVer
-# suffix and sha256 sidecars) and publishes them to a GitHub Release via
-# .github/scripts/release.js. Self-signed HTP path is handled here too —
-# when overlay-htp did NOT find a Microsoft-signed bundle on S3, we ship
-# the public cert + a to-sign bundle so operators can finish signing
-# out-of-band.
-#
-# Re-uploads the packaged SDK zip as `sdk-release-zips` so the
-# _publish-s3 reusable can pick it up downstream.
-
 on:
   workflow_call:
     inputs:
@@ -27,9 +17,6 @@ on:
 
 permissions:
   contents: read
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   publish:
@@ -79,9 +66,7 @@ jobs:
           mv geniex-cli-setup.exe "geniex-cli-installer-windows-arm64-${RELEASE_TAG}.exe"
           mv geniex-android-aar.aar "geniex-android-aar-${RELEASE_TAG}.aar"
 
-          # Repackage the Linux CLI pkg_zip as a versioned tar.gz for the
-          # GitHub Release. Unpack into a named dir first so the archive
-          # root is `geniex-cli-linux-arm64-<tag>/` rather than loose files.
+          # Staging dir → archive root matches the installer convention.
           staged="geniex-cli-linux-arm64-${RELEASE_TAG}"
           mkdir -p "${staged}"
           unzip -q cli-linux-arm64/artifact.zip -d "${staged}"
@@ -92,8 +77,7 @@ jobs:
           sdk_suffix=""
           if [[ "$HTP_SIGNED" != "true" ]]; then
             sdk_suffix="-selfsigned"
-            # Self-signed: ship the public cert (users import it) and a to-sign
-            # bundle (operator submits it for real signing).
+            # Ship cert (users import) + to-sign bundle (operator finishes out-of-band).
             cp .github/certs/hexagon/ggml-htp-v1.cer .
             mkdir to-sign
             cp "$HTP_DIR"/libggml-htp-v*.so to-sign/
@@ -122,9 +106,8 @@ jobs:
             const release = require('./.github/scripts/release.js');
             await release({ github, context, core });
 
-      # Re-publish the packaged SDK zip(s) as a dedicated artifact so
-      # _publish-s3 can pick them up. The `sdk-windows-arm64` artifact
-      # holds the *unpacked* pkg tree, not the final `geniex-sdk-*.zip`.
+      # Re-upload as a dedicated artifact for _publish-s3 (the original
+      # sdk-windows-arm64 artifact holds the unpacked tree, not the zip).
       - name: Upload packaged SDK zips for S3 job
         uses: actions/upload-artifact@v7
         with:

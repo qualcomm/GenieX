@@ -1,10 +1,5 @@
 name: Publish TestPyPI
 
-# Pushes the Python sdist to TestPyPI. Caller gates this on
-# is_prerelease == 'true' (stable tags belong on production PyPI,
-# wired up separately in _publish-pypi.yml once Trusted Publishing
-# lands).
-
 on:
   workflow_call:
     inputs:
@@ -14,9 +9,6 @@ on:
 
 permissions:
   contents: read
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   publish:
@@ -35,8 +27,5 @@ jobs:
           password: ${{ secrets.TEST_PYPI_API_TOKEN }}
           packages-dir: dist/
           skip-existing: true
-          # Using an API token (not OIDC Trusted Publishing), so explicitly
-          # turn attestations off to silence the action's 'attestations
-          # input ignored' annotation. Re-enable once we migrate to
-          # Trusted Publishing.
+          # API-token auth, not Trusted Publishing — attestations are a no-op.
           attestations: false

@@ -1,20 +1,12 @@
 name: Test
 
-# Scaffolding for the future test harness. The shape the harness will take:
-#   build-sdk (matrix) -> build-python-wheel (platform) -> pytest (plugin matrix)
-# Coverage target: llama_cpp (cpu/gpu/npu) + qairt, per platform.
-# Trigger target: PR label / workflow_dispatch for integration; nightly cron
-# for perf (separate file). For now this stays a stub so the slot exists
-# and the name is reserved.
+# Placeholder for the pytest-via-FFI harness (matrix: plugin x platform).
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   test:
@@ -23,6 +15,4 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Placeholder
-        run: |
-          echo "TODO(cicd-refactor): wire pytest via python bindings FFI."
-          echo "Planned matrix: plugin={llama_cpp-cpu,llama_cpp-gpu,llama_cpp-npu,qairt} x platform={windows,linux,android}-arm64"
+        run: 'echo "TODO: wire pytest harness."'

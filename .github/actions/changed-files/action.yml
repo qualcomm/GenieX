@@ -1,8 +1,7 @@
 name: Changed Files
 description: >-
-  Resolve the list of changed files vs the PR base (or origin/main on manual
-  dispatch), filtered by include/exclude regex patterns. Extracted from the
-  per-linter duplication previously inlined in lint.yml.
+  Resolve the set of changed files for the current event, filtered by
+  include/exclude regex patterns.
 
 inputs:
   include:
@@ -36,13 +35,6 @@ runs:
       run: |
         set -euo pipefail
 
-        # Resolve the file set based on trigger type:
-        #   pull_request       -> diff vs base.sha
-        #   workflow_dispatch  -> diff vs origin/main merge-base (fallback: ls-files)
-        #   push               -> diff between before..after (fallback: ls-files
-        #                         if before is zero / unreachable, e.g. first push)
-        #   anything else      -> whole tree
-        # --diff-filter=d skips deletes so we don't hand the caller a ghost path.
         if [ "$EVENT_NAME" = "pull_request" ]; then
           files=$(git diff --name-only --diff-filter=d "${PR_BASE_SHA}..HEAD")
         elif [ "$EVENT_NAME" = "workflow_dispatch" ]; then
@@ -70,7 +62,6 @@ runs:
           filtered=$(printf '%s\n' "$filtered" | grep -vE "$EXCLUDE" || true)
         fi
 
-        # Strip rename/delete ghosts that survived the filter.
         if [ -n "$filtered" ]; then
           filtered=$(printf '%s\n' "$filtered" | while IFS= read -r f; do
             [ -n "$f" ] && [ -f "$f" ] && printf '%s\n' "$f"

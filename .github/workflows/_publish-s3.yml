@@ -1,12 +1,5 @@
 name: Publish S3
 
-# Uploads the packaged SDK zip(s) (produced by _publish-github-release's
-# Package step and re-uploaded as `sdk-release-zips`) to the public S3
-# bucket. Downstream consumer is bindings/python/_sdk_fetch.py.
-#
-# OIDC-only: no long-lived AWS keys. The github-bitsyfactory role is
-# pre-provisioned for any repo under qcom-ai-hub/*.
-
 on:
   workflow_call:
     inputs:
@@ -16,9 +9,6 @@ on:
 
 permissions:
   contents: read
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   publish:
@@ -57,10 +47,8 @@ jobs:
           S3_PREFIX: s3://qaihub-public-assets/qai-hub-geniex/${{ inputs.release_tag }}/
         run: |
           set -euo pipefail
-          # --acl public-read is required: the bucket policy only grants anonymous
-          # s3:GetObject on qai-hub-models/wheels, so uploads under qai-hub-geniex/
-          # must carry a per-object public-read ACL to be fetchable by
-          # `pip install` (bindings/python/_sdk_fetch.py).
+          # --acl public-read: bucket policy only grants anonymous GetObject on
+          # qai-hub-models/wheels, so per-object ACL is needed under our prefix.
           aws s3 sync . "${S3_PREFIX}" \
             --exclude '*' --include 'geniex-sdk-windows-arm64-*.zip*' \
             --acl public-read

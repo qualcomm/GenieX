@@ -24,9 +24,8 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      # Gradle's internal git init prints an 'init.defaultBranch' advice
-      # on every run. Set it explicitly so the log stays warning-clean.
-      - name: Silence git init.defaultBranch hint
+      # Silences the default-branch hint gradle's internal git init prints.
+      - name: Configure git
         shell: bash
         run: git config --global init.defaultBranch main
 
@@ -42,11 +41,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      # ubuntu-latest ships the Android SDK at $ANDROID_SDK_ROOT but
-      # sdkmanager lives under cmdline-tools/latest/bin/ and is not on PATH.
-      # Install exactly the packages the Gradle module declares (compileSdk=35,
-      # ndkVersion=29.0.14206865, cmake=3.22.1) via the bundled sdkmanager
-      # rather than a third-party action, to stay within the org's allowlist.
+      # Versions must match bindings/android/app/build.gradle.kts.
       - name: Install Android SDK packages (sdkmanager)
         shell: bash
         run: |

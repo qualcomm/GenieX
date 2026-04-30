@@ -11,16 +11,11 @@ on:
       - "bindings/go/**"
       - "bindings/android/**"
       - ".github/**"
-  # Seed per-platform ccache entries on main so first-time PR runs hit the
-  # restore-keys prefix (scoped to base branch) instead of cold-compiling.
+  # Seeds ccache on main so the first PR run off a new base hits warm.
   push:
     branches: [main]
     paths:
       - "sdk/**"
-      - "cli/**"
-      - "bindings/python/**"
-      - "bindings/go/**"
-      - "bindings/android/**"
       - ".github/**"
   workflow_dispatch:
 
@@ -31,12 +26,7 @@ concurrency:
   group: pr-check-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Draft PRs run lint only — contributors use draft to park in-progress
-# work, so burning ~10min of SDK compile on every push is waste. Marking
-# the PR ready_for_review fires a new event that re-triggers the
-# workflow and runs the full build graph. `push` (main ccache seed) and
-# `workflow_dispatch` don't carry a draft flag, so the filter only
-# kicks in on pull_request.
+# Draft PRs run lint only; ready_for_review triggers the full graph.
 jobs:
   lint:
     name: lint

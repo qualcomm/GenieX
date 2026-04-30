@@ -11,8 +11,6 @@ on:
         required: true
         type: string
 
-# Workflow-level permissions are minimal. id-token: write and contents: write
-# are scoped to the specific publish reusables that need them.
 permissions:
   contents: read
 
@@ -20,12 +18,9 @@ concurrency:
   group: release-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
-  # Single source of truth for RELEASE_TAG. Also fails fast (before burning
-  # ~20 min of build time) on a tag that doesn't satisfy SemVer 2.0.
+  # Validates SemVer + prevents overwriting an existing stable release
+  # before any build runs.
   resolve-tag:
     name: resolve-tag
     runs-on: ubuntu-latest
@@ -43,9 +38,7 @@ jobs:
           set -euo pipefail
           semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
           [[ "${TAG}" =~ $semver ]] || { echo "::error::Invalid SemVer 2.0 tag: ${TAG}"; exit 1; }
-          # Pre-release = tag contains a hyphen (e.g. v1.2.3-alpha.1, -rc.1).
-          # Stable releases are immutable; refuse to overwrite an existing one.
-          # Pre-releases may be re-cut during iteration.
+          # Stable tags are immutable; prereleases (hyphen-bearing) may be re-cut.
           if [[ "${TAG}" == *-* ]]; then
             is_prerelease=true
           else
@@ -58,7 +51,6 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
 
-  # ── Build fan-out ────────────────────────────────────────────────
   build-sdk:
     name: build-sdk
     needs: [resolve-tag]
@@ -83,9 +75,7 @@ jobs:
     with:
       upload_artifact: true
 
-  # Overlay the Microsoft-signed HTP bundle (if available on S3) onto the
-  # Windows SDK pkg tree. Kept inline rather than turned into a reusable
-  # because it's tightly coupled to release-time S3 URL conventions.
+  # Inlined because it's tied to release-time S3 URL conventions.
   overlay-htp:
     name: overlay-htp (windows-arm64)
     runs-on: ubuntu-latest
@@ -138,14 +128,9 @@ jobs:
     uses: ./.github/workflows/_build-cli.yml
     secrets: inherit
     with:
-      # Installer is windows-only; the linux matrix cell ignores this flag.
       build_installer: true
       upload_artifact: true
 
-  # Windows Authenticode signing for the CLI installer (not the HTP driver —
-  # that signing happens during _build-sdk.yml). Placeholder today; the
-  # stage exists so the DAG + artifact flow can be validated end-to-end
-  # before the real signer lands.
   sign-windows:
     name: sign-windows
     needs: [build-cli]
@@ -154,7 +139,6 @@ jobs:
     with:
       artifact_name: cli-installer-windows-arm64
 
-  # ── Publish fan-out (runs in parallel) ──────────────────────────
   publish-github-release:
     name: publish-github-release
     needs:
@@ -193,8 +177,6 @@ jobs:
       tag: ${{ needs.resolve-tag.outputs.tag }}
       is_prerelease: ${{ needs.resolve-tag.outputs.is_prerelease == 'true' }}
 
-  # TestPyPI — pre-release tags only. Stable tags go to production PyPI
-  # via publish-pypi below.
   publish-testpypi:
     name: publish-testpypi
     needs: [resolve-tag, build-python-sdist]
@@ -204,7 +186,6 @@ jobs:
     with:
       release_tag: ${{ needs.resolve-tag.outputs.tag }}
 
-  # Production PyPI — stable tags only. Stub today.
   publish-pypi:
     name: publish-pypi
     needs: [resolve-tag, build-python-sdist]
@@ -214,8 +195,6 @@ jobs:
     with:
       release_tag: ${{ needs.resolve-tag.outputs.tag }}
 
-  # Maven Central for the Android AAR. Stub today; runs for every tag once
-  # wired up, distinguishing pre/stable via the artifact version.
   publish-maven:
     name: publish-maven
     needs: [resolve-tag, build-android-aar]
@@ -225,7 +204,6 @@ jobs:
       release_tag: ${{ needs.resolve-tag.outputs.tag }}
       is_prerelease: ${{ needs.resolve-tag.outputs.is_prerelease == 'true' }}
 
-  # Winget — stable tags only. Stub today.
   publish-winget:
     name: publish-winget
     needs: [resolve-tag, build-cli, sign-windows]

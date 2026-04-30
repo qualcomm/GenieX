@@ -1,13 +1,7 @@
 name: Sign Windows Artifacts
 
-# Authenticode signing placeholder for the geniex CLI installer and any
-# bundled DLLs. Distinct from the Hexagon HTP driver/catalog signing that
-# already happens during _build-sdk.yml on Windows — this step covers
-# end-user-visible PE files (geniex-cli-setup.exe, geniex.dll, ...) the
-# way Windows SmartScreen expects. Real signer (Azure Key Vault +
-# AzureSignTool / ESRP / .pfx secret) is deferred; this reusable only
-# exists so release.yml can wire the stage in and the artifact flow can
-# be proven end-to-end.
+# Placeholder for Authenticode signing of the CLI installer.
+# Distinct from the HTP driver catalog signed in _build-sdk.yml.
 
 on:
   workflow_call:
@@ -20,9 +14,6 @@ on:
 permissions:
   contents: read
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   sign:
     runs-on: ubuntu-latest
@@ -30,6 +21,4 @@ jobs:
     steps:
       - name: Placeholder
         shell: bash
-        run: |
-          echo "TODO(cicd-refactor): wire signtool / AzureSignTool for ${{ inputs.artifact_name }}."
-          echo "Until then, the downstream installer is self-signed-equivalent (unsigned)."
+        run: 'echo "TODO: sign ${{ inputs.artifact_name }}."'

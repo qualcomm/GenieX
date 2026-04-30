@@ -1,8 +1,5 @@
 name: Lint
 
-# Reusable only: pr-check.yml is the single entry point that runs lint,
-# so keeping pull_request / workflow_dispatch triggers here would double
-# up (two 'Lint' runs on every push).
 on:
   workflow_call:
 
@@ -22,11 +19,7 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
 
-      # Install clang-format 20 via apt on the runner. Third-party actions
-      # for clang-format exist (e.g. jidicula/clang-format-action) but the
-      # org allowlist does not include them, and getting a new action
-      # allowlisted is a multi-week review. apt-install is ~30s once the
-      # runner is cached.
+      # jidicula/clang-format-action isn't on the org allowlist, so apt.
       - name: Install clang-format
         run: |
           set -euo pipefail
@@ -142,9 +135,7 @@ jobs:
         with:
           include: '^sdk/model-manager/.*\.rs$'
 
-      # Ubuntu runner ships rustup; install a fresh stable toolchain with
-      # rustfmt. A dedicated action (dtolnay/rust-toolchain) would be
-      # cleaner but isn't on the org allowlist. rustup is cheap.
+      # dtolnay/rust-toolchain isn't on the org allowlist, so rustup.
       - name: Install rustfmt
         if: steps.files.outputs.any == 'true'
         run: |
@@ -153,8 +144,6 @@ jobs:
           rustup default stable
           cargo fmt --version
 
-      # cargo fmt walks the whole workspace, so file-list only gates whether
-      # we bother running at all — once it's running, it checks everything.
       - name: cargo fmt --check
         if: steps.files.outputs.any == 'true'
         run: cargo fmt --manifest-path sdk/model-manager/Cargo.toml --all --check

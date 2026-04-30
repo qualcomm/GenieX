@@ -19,9 +19,6 @@ permissions:
 
 jobs:
   build:
-    # Matrix lives in the reusable so callers (pr-check.yml, release.yml)
-    # don't fan out into three sibling top-level nodes — GitHub UI folds
-    # the three variants under the single `build-sdk` caller job.
     name: ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -65,9 +62,8 @@ jobs:
           key: ccache-sdk-${{ matrix.platform }}-${{ github.sha }}
           restore-keys: ccache-sdk-${{ matrix.platform }}-
 
-      # Linux and Android builds both run inside a docker toolchain container;
-      # ccache is apt-installed there. Host only needs to own the cache
-      # directory so actions/cache persists it across runs.
+      # Linux/Android ccache lives in the toolchain container; host just
+      # owns the dir so actions/cache can persist it.
       - name: Prepare ccache dir (Linux/Android)
         if: matrix.platform == 'linux-arm64' || matrix.platform == 'android-arm64'
         shell: bash
@@ -80,9 +76,8 @@ jobs:
           if (-not (Get-Command ccache -ErrorAction SilentlyContinue)) {
             choco install ccache --no-progress -y
           }
-          # Set in-process before calling ccache: $GITHUB_ENV only affects
-          # subsequent steps, so `ccache --max-size` here would otherwise edit
-          # the default per-user config instead of the workspace one.
+          # $GITHUB_ENV only applies to later steps — set in-process too
+          # so `ccache --max-size` below edits the workspace config.
           $env:CCACHE_DIR = "${{ github.workspace }}/.ccache"
           Add-Content $env:GITHUB_ENV "CCACHE_DIR=$env:CCACHE_DIR"
           ccache --max-size=1G
@@ -110,11 +105,8 @@ jobs:
           EXTRA_CMAKE_FLAGS: ${{ inputs.extra_cmake_flags }}
         run: |
           set -euo pipefail
-          # Run as root so we can apt-install make/build-essential/ccache and
-          # rustup toolchain, then chown outputs back to the runner user so
-          # actions/upload-artifact and actions/cache can read them. The
-          # container ships HEXAGON_SDK_ROOT / HEXAGON_TOOLS_ROOT /
-          # OPENCL_SDK_ROOT pre-configured so the preset picks them up.
+          # Runs as root to apt-install toolchain bits; chown back to
+          # the runner UID so upload-artifact / cache can read the tree.
           uid="$(id -u)"
           gid="$(id -g)"
           docker run --rm \
@@ -131,9 +123,7 @@ jobs:
             bash -eux -c '
               git config --global --add safe.directory "*"
               apt-get update -y
-              # Rust build scripts (proc-macro2, quote) link host-native
-              # executables, so we need the host glibc dev package alongside
-              # make/gcc/ccache/curl. build-essential covers Scrt1.o/crt*.o/libc.
+              # build-essential needed for Rust proc-macro host linking.
               apt-get install -y --no-install-recommends build-essential ccache make curl ca-certificates
               curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
               export PATH="$HOME/.cargo/bin:$PATH"
@@ -150,10 +140,7 @@ jobs:
           EXTRA_CMAKE_FLAGS: ${{ inputs.extra_cmake_flags }}
         run: |
           set -euo pipefail
-          # Run as root so we can apt-install make/gcc/ccache and rustup
-          # toolchain, then chown outputs back to the runner user so
-          # actions/upload-artifact and actions/cache can read them. Mirrors
-          # the setup documented in docs/build.md for this container.
+          # See Linux job above for the root + chown rationale.
           uid="$(id -u)"
           gid="$(id -g)"
           docker run --rm \
@@ -170,9 +157,7 @@ jobs:
             bash -eux -c '
               git config --global --add safe.directory "*"
               apt-get update -y
-              # build-essential (not just gcc) is required because Rust build
-              # scripts in tokenizers-cpp link host-native executables and need
-              # Scrt1.o / crti.o / crtn.o / libc from libc6-dev.
+              # build-essential needed for Rust proc-macro host linking.
               apt-get install -y --no-install-recommends build-essential ccache curl ca-certificates
               curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
               export PATH="$HOME/.cargo/bin:$PATH"
@@ -192,10 +177,8 @@ jobs:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
         run: powershell -NoProfile -ExecutionPolicy Bypass -File .github/scripts/sdk-windows.ps1
 
-      # Observability for cache hit rate and the effective size cap. Never fail
-      # the job on a stats read. On Linux/Android ccache lives inside the
-      # toolchain container (not on the host), so we just report the cache
-      # dir size on disk — enough to confirm the cache is warming up.
+      # On Linux/Android ccache runs inside the container; only the on-disk
+      # size is visible from the host. Never fail the job on a stats read.
       - name: ccache stats (Linux/Android)
         if: matrix.platform == 'linux-arm64' || matrix.platform == 'android-arm64'
         shell: bash

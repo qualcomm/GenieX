@@ -24,9 +24,6 @@ build --enable_runfiles
 # build info inject — override with --define=VERSION=0.1.0 for releases
 common --define=VERSION=0.0.0.dev0
 
-# Local + CI disk cache. CI jobs restore/save ~/.cache/bazel-disk via
-# actions/cache; locally it just accelerates repeat builds. Bazel creates
-# the directory on demand and tolerates a missing/empty cache.
-# Bump this counter if you ever need to bust a corrupted cache without
-# waiting for hashFiles to roll: # bazel-cache-epoch: 1
+# Disk cache — CI restores/saves it via actions/cache.
+# bazel-cache-epoch: 1 (bump to bust a corrupted cache)
 build --disk_cache=~/.cache/bazel-disk

@@ -56,10 +56,6 @@ jobs:
           name: sdk-${{ matrix.platform }}
           path: sdk/pkg-geniex/
 
-      # Bazel disk cache (hot path for //cli builds). Key narrows to the
-      # per-runner-OS CLI build inputs — changes to MODULE.bazel.lock or any
-      # cli BUILD file bust the primary key; the restore-keys prefix still
-      # covers warm-start rehydration.
       - name: Restore Bazel disk cache
         uses: actions/cache@v5
         with:
@@ -68,9 +64,8 @@ jobs:
           restore-keys: |
             bazel-cli-${{ runner.os }}-
 
-      # Build just the CLI binary on Windows. Skipped when build_installer is
-      # set because the installer target (//cli/release/windows) pulls in
-      # //cli/cmd/geniex as a src and Bazel will build it transitively.
+      # Windows: installer target pulls cli/cmd/geniex transitively, so
+      # skip this step when build_installer is set.
       - name: Build CLI (Windows)
         if: matrix.platform == 'windows-arm64' && !inputs.build_installer
         shell: cmd
