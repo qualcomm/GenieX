@@ -60,22 +60,11 @@ jobs:
           key: ccache-sdk-${{ inputs.platform }}-${{ github.sha }}
           restore-keys: ccache-sdk-${{ inputs.platform }}-
 
-      - name: Install and configure ccache (Linux)
-        if: inputs.platform == 'linux-arm64'
-        shell: bash
-        run: |
-          command -v ccache || sudo apt-get install -y ccache
-          # Export in-process before calling ccache: $GITHUB_ENV only affects
-          # subsequent steps, so `ccache --max-size` here would otherwise edit
-          # the default per-user config instead of the workspace one.
-          export CCACHE_DIR="${{ github.workspace }}/.ccache"
-          echo "CCACHE_DIR=${CCACHE_DIR}" >> "$GITHUB_ENV"
-          ccache --max-size=1G
-
-      # Android builds run inside a docker container; ccache is installed there.
-      # Host only needs to own the cache directory so actions/cache persists it.
-      - name: Prepare ccache dir (Android)
-        if: inputs.platform == 'android-arm64'
+      # Linux and Android builds both run inside a docker toolchain container;
+      # ccache is apt-installed there. Host only needs to own the cache
+      # directory so actions/cache persists it across runs.
+      - name: Prepare ccache dir (Linux/Android)
+        if: inputs.platform == 'linux-arm64' || inputs.platform == 'android-arm64'
         shell: bash
         run: mkdir -p "${{ github.workspace }}/.ccache"
 
@@ -108,14 +97,45 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "HEXAGON_HTP_CERT=$dst"
           Write-Host "HEXAGON_HTP_CERT=$dst"
 
-      - name: Build SDK (Linux)
+      - name: Build SDK (Linux, Snapdragon toolchain container)
         if: inputs.platform == 'linux-arm64'
         shell: bash
         env:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
-          PLATFORM: linux-arm64
           EXTRA_CMAKE_FLAGS: ${{ inputs.extra_cmake_flags }}
-        run: bash .github/scripts/ci/build-sdk.sh
+        run: |
+          set -euo pipefail
+          # Run as root so we can apt-install make/build-essential/ccache and
+          # rustup toolchain, then chown outputs back to the runner user so
+          # actions/upload-artifact and actions/cache can read them. The
+          # container ships HEXAGON_SDK_ROOT / HEXAGON_TOOLS_ROOT /
+          # OPENCL_SDK_ROOT pre-configured so the preset picks them up.
+          uid="$(id -u)"
+          gid="$(id -g)"
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e GENIEX_VERSION \
+            -e EXTRA_CMAKE_FLAGS \
+            -e PLATFORM=linux-arm64 \
+            -e CCACHE_DIR=/workspace/.ccache \
+            -e HOST_UID="$uid" \
+            -e HOST_GID="$gid" \
+            --platform linux/amd64 \
+            ghcr.io/snapdragon-toolchain/arm64-linux:v0.1 \
+            bash -eux -c '
+              git config --global --add safe.directory "*"
+              apt-get update -y
+              # Rust build scripts (proc-macro2, quote) link host-native
+              # executables, so we need the host glibc dev package alongside
+              # make/gcc/ccache/curl. build-essential covers Scrt1.o/crt*.o/libc.
+              apt-get install -y --no-install-recommends build-essential ccache make curl ca-certificates
+              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+              export PATH="$HOME/.cargo/bin:$PATH"
+              rustup target add aarch64-unknown-linux-gnu
+              bash .github/scripts/ci/build-sdk.sh
+              chown -R "$HOST_UID:$HOST_GID" sdk .ccache || true
+            '
 
       - name: Build SDK (Android, Snapdragon toolchain container)
         if: inputs.platform == 'android-arm64'
@@ -168,11 +188,13 @@ jobs:
         run: powershell -NoProfile -ExecutionPolicy Bypass -File .github/scripts/ci/build-sdk.ps1
 
       # Observability for cache hit rate and the effective size cap. Never fail
-      # the job on a stats read.
-      - name: ccache stats (Linux)
-        if: inputs.platform == 'linux-arm64'
+      # the job on a stats read. On Linux/Android ccache lives inside the
+      # toolchain container (not on the host), so we just report the cache
+      # dir size on disk — enough to confirm the cache is warming up.
+      - name: ccache stats (Linux/Android)
+        if: inputs.platform == 'linux-arm64' || inputs.platform == 'android-arm64'
         shell: bash
-        run: ccache --show-stats --verbose || true
+        run: du -sh "${{ github.workspace }}/.ccache" 2>/dev/null || true
 
       - name: ccache stats (Windows)
         if: inputs.platform == 'windows-arm64'

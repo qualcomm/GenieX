@@ -56,13 +56,20 @@ jobs:
           name: sdk-pkg-${{ inputs.platform }}
           path: sdk/pkg-geniex/
 
-      # Build just the CLI binary. Skipped when build_installer is set because
-      # the installer target (//cli/release/windows) pulls in //cli/cmd/geniex
-      # as a src and Bazel will build it transitively.
-      - name: Build CLI
-        if: ${{ !inputs.build_installer }}
+      # Build just the CLI binary on Windows. Skipped when build_installer is
+      # set because the installer target (//cli/release/windows) pulls in
+      # //cli/cmd/geniex as a src and Bazel will build it transitively.
+      - name: Build CLI (Windows)
+        if: inputs.platform == 'windows-arm64' && !inputs.build_installer
         shell: cmd
         run: bazelisk build //cli:artifact --//sdk:sdk_type=local
+
+      - name: Build CLI (Linux)
+        if: inputs.platform == 'linux-arm64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bazelisk build //cli:artifact --//sdk:sdk_type=local
 
       - name: Build Windows installer
         if: inputs.build_installer && inputs.platform == 'windows-arm64'
@@ -80,4 +87,12 @@ jobs:
         with:
           name: geniex-cli-installer-windows-arm64
           path: bazel-bin/cli/release/windows/geniex-cli-setup.exe
+          retention-days: 1
+
+      - name: Upload Linux CLI artifact
+        if: inputs.upload_artifact && inputs.platform == 'linux-arm64'
+        uses: actions/upload-artifact@v5
+        with:
+          name: geniex-cli-linux-arm64
+          path: bazel-bin/cli/artifact.zip
           retention-days: 1

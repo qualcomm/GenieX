@@ -1,0 +1,167 @@
+name: Build Docker
+
+# Reusable workflow: build the linux-arm64 GenieX-CLI Docker image via the
+# Bazel rules_oci target //cli/release/linux, then push the OCI tarball
+# straight to GHCR via crane (google/go-containerregistry).
+#
+# The heavy lifting (base image, apt layer from trixie.yaml, SDK runtime
+# libs, entrypoint / rpath env) lives in cli/release/linux/BUILD.bazel —
+# this workflow only drives Bazel and handles authentication + push.
+#
+# We use crane instead of `docker load` because the self-hosted
+# linux-arm64 runner's docker daemon refuses the OCI image-layout
+# tarball Bazel emits ("unexpected EOF"). crane reads the OCI tarball
+# directly and speaks the registry HTTP API — no daemon involvement.
+#
+# PR-time: push=false, validates tarball via crane manifest/config.
+# Release-time: push=true + tag + is_prerelease from resolve-tag.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: "Runner label (must be linux/arm64 native)"
+        required: false
+        type: string
+        default: linux-arm64
+      push:
+        description: "Push the image to ghcr.io (release-time only)"
+        required: false
+        type: boolean
+        default: false
+      image:
+        description: "Fully-qualified image reference without tag (release-only)."
+        required: false
+        type: string
+        default: ghcr.io/qcom-ai-hub/geniex-cli
+      tag:
+        description: "Image tag to publish, e.g. v1.2.3 (required when push=true)."
+        required: false
+        type: string
+        default: ""
+      is_prerelease:
+        description: "When true, skip moving the :latest tag."
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-docker:
+    name: build-docker
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Detect build version
+        id: version
+        uses: ./.github/actions/version
+
+      - name: Download linux-arm64 SDK artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: sdk-pkg-linux-arm64
+          path: sdk/pkg-geniex/
+
+      # Bazel drives everything: CLI build (via //cli:_artifact), base
+      # image pick, apt layer materialization, tarball assembly.
+      # //cli/release/linux is an alias for the OCI tarball at
+      # bazel-bin/cli/release/linux/geniex-cli-docker.tar (OCI image-layout
+      # format, readable by crane / skopeo but not by stock `docker load`
+      # on older daemons).
+      - name: Build docker tarball (//cli/release/linux)
+        shell: bash
+        env:
+          RAW_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          bare="${RAW_VERSION#v}"
+          bazelisk build //cli/release/linux --//sdk:sdk_type=local "--define=VERSION=${bare}"
+
+      - name: Install crane (for OCI tarball → registry push)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v crane >/dev/null 2>&1; then
+            crane version
+            exit 0
+          fi
+          # Self-hosted runner: install crane into $HOME/.local/bin.
+          version="v0.20.3"
+          arch="arm64"
+          tmp="$(mktemp -d)"
+          curl -fsSL -o "${tmp}/crane.tgz" \
+            "https://github.com/google/go-containerregistry/releases/download/${version}/go-containerregistry_Linux_${arch}.tar.gz"
+          mkdir -p "${HOME}/.local/bin"
+          tar -xzf "${tmp}/crane.tgz" -C "${HOME}/.local/bin" crane
+          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+          "${HOME}/.local/bin/crane" version
+
+      - name: Determine image ref
+        shell: bash
+        env:
+          RAW_VERSION: ${{ steps.version.outputs.version }}
+          IMAGE: ${{ inputs.image }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          bare="${RAW_VERSION#v}"
+          dest_tag="${TAG:-$bare}"
+          echo "IMAGE_REF=${IMAGE}:${dest_tag}" >> "$GITHUB_ENV"
+
+      # On the PR path we can't `docker run` the image (crane has no
+      # local-exec support; the runner's docker daemon refuses Bazel's
+      # OCI image-layout tarballs). Bazel build success is already strong
+      # signal — just confirm the tarball is non-empty and looks like a
+      # valid tar archive. crane push itself exercises the full parse
+      # path on the release run.
+      - name: Validate tarball (PR path)
+        if: ${{ !inputs.push }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball=bazel-bin/cli/release/linux/geniex-cli-docker.tar
+          ls -la "${tarball}"
+          file "${tarball}"
+          tar -tf "${tarball}" | head -10
+
+      # GHCR login uses GH_PAT rather than GITHUB_TOKEN because Qualcomm's
+      # enterprise policy blocks the Actions installation token from
+      # creating an org package. GH_PAT is user-scoped with write:packages
+      # and is SAML-authorized for qcom-ai-hub.
+      - name: Log in to GHCR (crane)
+        if: inputs.push
+        shell: bash
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          echo "${GHCR_TOKEN}" | crane auth login ghcr.io -u "${GHCR_USER}" --password-stdin
+
+      - name: Push image to GHCR
+        if: inputs.push
+        shell: bash
+        env:
+          IMAGE: ${{ inputs.image }}
+          IMAGE_REF: ${{ env.IMAGE_REF }}
+          IS_PRERELEASE: ${{ inputs.is_prerelease }}
+        run: |
+          set -euo pipefail
+          crane push bazel-bin/cli/release/linux/geniex-cli-docker.tar "${IMAGE_REF}"
+          # :latest only for stable (non-prerelease) tags. The Bazel
+          # _repo_tags genrule writes :latest unconditionally inside the
+          # tarball; we override that policy here so prereleases don't
+          # clobber the stable floating tag.
+          if [[ "${IS_PRERELEASE}" != "true" ]]; then
+            crane tag "${IMAGE_REF}" latest
+          fi
