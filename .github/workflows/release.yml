@@ -19,8 +19,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Validates SemVer + prevents overwriting an existing stable release
-  # before any build runs.
   resolve-tag:
     name: resolve-tag
     runs-on: ubuntu-latest
@@ -139,8 +137,8 @@ jobs:
     with:
       artifact_name: cli-installer-windows-arm64
 
-  publish-github-release:
-    name: publish-github-release
+  package-release:
+    name: package-release
     needs:
       - resolve-tag
       - overlay-htp
@@ -148,6 +146,18 @@ jobs:
       - build-python-sdist
       - build-android-aar
       - sign-windows
+    uses: ./.github/workflows/_package-release.yml
+    secrets: inherit
+    with:
+      release_tag: ${{ needs.resolve-tag.outputs.tag }}
+      htp_signed: ${{ needs.overlay-htp.outputs.signed }}
+      llama_sha: ${{ needs.overlay-htp.outputs.llama_sha }}
+
+  publish-github-release:
+    name: publish-github-release
+    needs: [resolve-tag, overlay-htp, package-release]
+    permissions:
+      contents: write
     uses: ./.github/workflows/_publish-github-release.yml
     secrets: inherit
     with:
@@ -157,7 +167,10 @@ jobs:
 
   publish-s3:
     name: publish-s3
-    needs: [resolve-tag, publish-github-release]
+    needs: [resolve-tag, package-release]
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/_publish-s3.yml
     secrets: inherit
     with:
