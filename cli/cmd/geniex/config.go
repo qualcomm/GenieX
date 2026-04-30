@@ -26,8 +26,8 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 )
@@ -147,7 +147,7 @@ func hostOSType() (qaihm.OperatingSystemType, error) {
 	case "windows":
 		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_WINDOWS, nil
 	case "linux":
-		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_LINUX, nil
+		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_QC_LINUX, nil
 	default:
 		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_UNSPECIFIED,
 			fmt.Errorf("unsupported operating system %q for AI Hub device selection", runtime.GOOS)
