@@ -15,11 +15,8 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
-	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -28,7 +25,6 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 )
 
 var (
@@ -89,41 +85,6 @@ func RootCmd() *cobra.Command {
 	)
 
 	return rootCmd
-}
-
-func checkDependency() {
-	if _, err := exec.LookPath("sox"); err != nil {
-		fmt.Println(render.GetTheme().Warning.Sprintf("Sox is not installed, some features may not work. Try:"))
-		switch runtime.GOOS {
-		case "darwin":
-			fmt.Println(render.GetTheme().Warning.Sprintf("  brew install sox"))
-		case "linux":
-			fmt.Println(render.GetTheme().Warning.Sprintf("  sudo apt install sox       # Debian/Ubuntu"))
-			fmt.Println(render.GetTheme().Warning.Sprintf("  sudo yum install sox       # RHEL/CentOS/Fedora"))
-			fmt.Println(render.GetTheme().Warning.Sprintf("  sudo pacman -S sox         # Arch Linux"))
-		case "windows":
-			fmt.Println(render.GetTheme().Warning.Sprintf("  winget install --id=ChrisBagwell.SoX -e"))
-			fmt.Println(render.GetTheme().Warning.Sprintf("Then restart your terminal to make sure sox is in PATH"))
-		default:
-			fmt.Println(render.GetTheme().Warning.Sprintf("Please install it manually for your OS: %s\n", runtime.GOOS))
-		}
-	}
-
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		fmt.Println(render.GetTheme().Warning.Sprintf("FFmpeg is not installed, some features may not work. Try:"))
-		switch runtime.GOOS {
-		case "darwin":
-			fmt.Println(render.GetTheme().Warning.Sprintf("  brew install ffmpeg"))
-		case "linux":
-			fmt.Println(render.GetTheme().Warning.Sprintf("  sudo apt install ffmpeg    # Debian/Ubuntu"))
-			fmt.Println(render.GetTheme().Warning.Sprintf("  sudo yum install ffmpeg    # RHEL/CentOS/Fedora"))
-		case "windows":
-			fmt.Println(render.GetTheme().Warning.Sprintf("  winget install --id=BtbN.FFmpeg.GPL -e"))
-			fmt.Println(render.GetTheme().Warning.Sprintf("Then restart your terminal to make sure ffmpeg is in PATH"))
-		default:
-			fmt.Println(render.GetTheme().Warning.Sprintf("Please install it manually for your OS: %s\n", runtime.GOOS))
-		}
-	}
 }
 
 func normalizeModelName(name string) (string, string) {

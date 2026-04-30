@@ -22,7 +22,5 @@ archs:
 
 packages:
   - "ca-certificates"
+  - "libatomic1"
   - "libgomp1"
-  - "curl"
-  - "ffmpeg"
-  - "sox"

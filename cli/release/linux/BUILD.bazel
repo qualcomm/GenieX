@@ -74,7 +74,7 @@ oci_image(
 genrule(
     name = "_repo_tags",
     outs = ["repo_tags.txt"],
-    cmd = "echo ghcr.io/qcom-ai-hub/geniex:latest > $@ && echo ghcr.io/qcom-ai-hub/geniex:$(VERSION) >> $@",
+    cmd = "echo ghcr.io/qcom-ai-hub/geniex-cli:latest > $@ && echo ghcr.io/qcom-ai-hub/geniex-cli:$(VERSION) >> $@",
 )
 
 oci_load(

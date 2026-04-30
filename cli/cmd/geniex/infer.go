@@ -56,8 +56,8 @@ var (
 	hideThink      bool
 	prompt         []string
 	tokenFile      string
-	input        string
-	systemPrompt string
+	input          string
+	systemPrompt   string
 
 	// sampler config
 	temperature       float32
@@ -190,7 +190,6 @@ func infer() *cobra.Command {
 		case types.ModelTypeLLM:
 			err = inferLLM(manifest, quant)
 		case types.ModelTypeVLM:
-			checkDependency()
 			err = inferVLM(manifest, quant)
 		default:
 			panic("not support model type")
@@ -633,4 +632,3 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 
 	return processor.Process()
 }
-
