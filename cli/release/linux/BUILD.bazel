@@ -49,6 +49,7 @@ oci_image(
     },
     tars = [
         ":apt_layer",
+        "lib.tar",
         ":_geniex_files",
         ":_geniex_symlinks",
     ],
