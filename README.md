@@ -1,90 +1,62 @@
 # Geniex
 
-WIP, see [build.md](./docs/build.md) and [run.md](./docs/run.md).
-Contributing rules (commits, branches, PR format): [CONTRIBUTING.md](./CONTRIBUTING.md).
+Multi-platform AI inference runtime for Snapdragon / Hexagon — runs LLMs on NPU, GPU, or CPU through a pluggable C SDK with Go (CLI), Python, and Java (Android) bindings.
 
-## Directory Structure
+> Status: pre-1.0, under active development. Public API and tags may change; see [docs/release.md](docs/release.md).
 
-- All libraries and tools intended for external release are placed in the repository root
-- Dependencies are managed through the build system rather than by directory layout
-- Use a single unified build system to avoid complexity caused by different subprojects using different build tools
+## Backends
 
-## Bazel
+| Backend        | Hardware              | Model format     | Plugin enabled by                          |
+|----------------|-----------------------|------------------|--------------------------------------------|
+| Hexagon (HTP)  | Snapdragon NPU        | GGUF             | `llama_cpp` + `-DGGML_HEXAGON=ON`          |
+| OpenCL         | Adreno GPU            | GGUF             | `llama_cpp` + `-DGGML_OPENCL=ON`           |
+| QAIRT / QNN    | Snapdragon NPU        | QAIRT `.bin`     | `qairt` + `-DGENIEX_PLUGIN_QAIRT=ON`       |
+| CPU            | Any                   | GGUF             | `llama_cpp` (default; disable both flags)  |
 
-:# Code Structure
+The `llama_cpp` and `qairt` plugins both target the NPU but through **separate user-space stacks** (ggml-hexagon DSP skels vs. Qualcomm QNN) that consume **different model formats**. They are not substitutes. QAIRT libs are bundled under `third-party/geniex-qairt/`; Hexagon and OpenCL SDKs are external installs.
 
-```
-.
-├── .github/                  # GitHub workflows and configs
-│   ├── actions/              # reusable actions, like env setup and s3 config
-│   │   ├── env.yml
-│   │   └── s3.yml
-│   ├── scripts/              # reusable scripts used by workflows, like create github release
-│   │   └── release.js
-│   └── workflows/            # github actions workflows, it's simple because we use bazel for everything
-│       ├── build.yml
-│       ├── lint.yml
-│       └── test.yml
-│
-├── .vscode/                  # VS Code debug settings, AI agent rules, LLM prompts
-│
-├── sdk/                      # C API layer (entry for CLI and bindings)
-│   ├── include/              # public C API headers
-│   ├── libs/                 # resource .so files (QAIRT, Hexagon, utility libs)
-│   ├── src/                  # C API source, plugin loading, common utilities
-│   └── BUILD.bazel
-│
-├── third-party/              # third-party dependencies
-│   ├── geniex-proc/          # preprocessing and postprocessing repo
-│   ├── geniex-qairt/         # core runtime
-│   ├── llama.cpp/            # public version, not Qualcomm internal
-│   ├── pybind11/             # for Python binding
-│   └── jni/                  # for Java binding
-│
-├── bindings/                 # language bindings and packaging
-│   ├── python/               # pybind11 code and setup.py for Python package
-│   ├── android/              # JNI code and Maven files for Java package
-│   └── docker/               # Dockerfile and scripts for Docker build/release
-│
-├── cli/                      # command-line interface
-│   ├── main.go               # CLI entry point
-│   ├── server/               # CLI server components
-│   ├── go.mod
-│   └── go.sum
-│
-├── docs/                     # documentation (C API, CLI, Python, Maven, Docker)
-│
-├── scripts/                  # build, release, signing, file upload/download scripts
-│
-├── tests/                    # unit/integration tests for C API, Python, Java
-│   ├── qdc/                  # QDC device connection/testing scripts/configs
-│   ├── include/              # test headers
-│   └── src/                  # test source code
-│
-├── BUILD.bazel               # root BUILD file
-├── MODULE.bazel              # root MODULE file
-├── MODULE.bazel.lock
-├── LICENSE
-└── README.md
+## Quick Start
+
+Install [Bazelisk](https://github.com/bazelbuild/bazelisk):
+
+- Windows: `winget install --id Bazel.Bazelisk`
+- Linux: install `bazelisk` from your package manager
+
+Build and run the CLI — all dependencies are fetched by Bazel:
+
+```bash
+bazelisk run //cli -- infer Qwen/Qwen3-0.6B-GGUF
 ```
 
-## Native dependency matrix
+For Windows ARM64 + NPU builds, Android cross-compilation, Python bindings, and release packaging, see [docs/build.md](docs/build.md). For backend selection, model preparation, and HTP test-signing, see [docs/run.md](docs/run.md).
 
-Each native SDK gates a specific plugin/backend. They're all independent, so you can pick the subset that fits your hardware and goals.
+## Documentation
 
-| Dep | Enabled by | Plugin affected | Hardware target | Bundled in repo? |
-|---|---|---|---|---|
-| **Hexagon SDK** | `-DGGML_HEXAGON=ON` (snapdragon preset) | `llama_cpp` only | Snapdragon NPU (HTP), via `ggml-hexagon` DSP skels | No — external install; `HEXAGON_SDK_ROOT` / `HEXAGON_TOOLS_ROOT` required |
-| **OpenCL SDK** | `-DGGML_OPENCL=ON` (snapdragon preset) | `llama_cpp` only | Adreno GPU | No — external; `OPENCL_SDK_ROOT` needed for headers + `OpenCL.lib`. Runtime ICD ships with the Snapdragon GPU driver |
-| **QAIRT / QNN** | `-DGENIEX_PLUGIN_QAIRT=ON` | `qairt` plugin only | Snapdragon NPU (HTP), via Qualcomm's QNN runtime | **Yes** — `third-party/geniex-qairt/third-party/{windows,android,linux-gcc11.2}/` bundles `QnnHtp.dll`, `Genie.dll`, HTP skels. An externally installed QAIRT is **not** required for building |
-| *(none)* | `-DGGML_HEXAGON=OFF -DGGML_OPENCL=OFF` | `llama_cpp` | CPU | Always works |
+| File | Topic |
+|---|---|
+| [docs/build.md](docs/build.md)       | Build CLI, SDK, and Python bindings (Linux / Windows ARM64 / Android) |
+| [docs/run.md](docs/run.md)           | Backend selection, model pull, Windows self-signed HTP fallback        |
+| [docs/release.md](docs/release.md)   | SemVer tag procedure, channels, Hexagon HTP signing pipeline           |
+| [docs/AI.md](docs/AI.md)             | Claude Code integration (slash commands, skills)                       |
+| [CONTRIBUTING.md](CONTRIBUTING.md)   | Commits, branches, PR format, FFI-update rule                          |
 
-The `llama_cpp` and `qairt` plugins can both drive the NPU, but via **two separate user-space stacks** (ggml-hexagon skels vs. QNN) that consume **different model formats** (GGUF vs. QAIRT `.bin` shards). They are not substitutes for each other.
+## Repository layout
 
-Minimal Snapdragon build that still exercises the NPU: disable `GGML_HEXAGON` and `GGML_OPENCL`, keep `GENIEX_PLUGIN_QAIRT=ON`. llama.cpp runs CPU-only; the QAIRT plugin drives the NPU through its bundled libs. This is the `arm64-windows-snapdragon-cpu-release` preset.
+| Path            | Contents                                                     |
+|-----------------|--------------------------------------------------------------|
+| `sdk/`          | C API: public headers, plugin loader, bundled native libs    |
+| `cli/`          | Go CLI (entry point + server)                                |
+| `bindings/`     | Python (pybind11), Android (JNI), Docker packaging           |
+| `third-party/`  | `geniex-qairt`, `geniex-proc`, `llama.cpp`, `pybind11`, `jni` |
+| `docs/`         | Developer documentation                                      |
+| `examples/`     | Sample apps (Android, ...)                                   |
+| `tests/`        | C API / Python / Java tests, QDC device configs              |
+| `scripts/`      | Build, release, signing, upload/download                     |
 
-Full NPU+GPU build (`arm64-windows-snapdragon-release` preset) additionally requires the Hexagon SDK, OpenCL SDK, WDK (for `inf2cat.exe`), a self-signed HTP signing cert (`.pfx`), and Windows test-signing to be enabled. See `docs/run.md` for the cert + test-signing setup, and `CLAUDE.md` §onboarding steps 6–8 for the full env-var checklist.
+## License
 
-## Notes
+Apache 2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
-- All tutorials, cookbook and sample apps are in a separate repo [geniex-app](https://github.com/geniex-app).
+## Related
+
+Tutorials, cookbooks, and sample apps: [github.com/geniex-app](https://github.com/geniex-app).
