@@ -25,10 +25,10 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      - name: Download packaged SDK release zips
+      - name: Download release assets
         uses: actions/download-artifact@v8
         with:
-          name: sdk-release-zips
+          name: release-assets
           path: .
 
       - name: Configure AWS credentials (bitsyfactory role)
@@ -50,5 +50,7 @@ jobs:
           # --acl public-read: bucket policy only grants anonymous GetObject on
           # qai-hub-models/wheels, so per-object ACL is needed under our prefix.
           aws s3 sync . "${S3_PREFIX}" \
-            --exclude '*' --include 'geniex-sdk-windows-arm64-*.zip*' \
+            --exclude '*' \
+            --include 'geniex-sdk-windows-arm64-*.zip*' \
+            --include 'geniex-sdk-linux-arm64-*.zip*' \
             --acl public-read
