@@ -56,7 +56,11 @@ jobs:
           name: sdk-${{ matrix.platform }}
           path: sdk/pkg-geniex/
 
+      # Skip on Windows: action-cache keys hit but Bazel's internal action
+      # hash doesn't, so we pay ~80s of cache I/O for <2% reuse. Linux sees
+      # ~99% hit, so the cache is worth keeping there.
       - name: Restore Bazel disk cache
+        if: runner.os == 'Linux'
         uses: actions/cache@v5
         with:
           path: ~/.cache/bazel-disk
