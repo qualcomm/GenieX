@@ -21,6 +21,7 @@ archs:
   - "arm64"
 
 packages:
+  - "ca-certificates"
   - "libgomp1"
   - "curl"
   - "ffmpeg"
