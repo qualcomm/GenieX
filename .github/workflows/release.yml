@@ -11,14 +11,17 @@ on:
         required: true
         type: string
 
-# Workflow-level permissions are minimal. id-token: write is scoped to the
-# single job that needs OIDC (publish-s3-release), per least-privilege.
+# Workflow-level permissions are minimal. id-token: write and contents: write
+# are scoped to the specific publish reusables that need them.
 permissions:
   contents: read
 
 concurrency:
   group: release-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   # Single source of truth for RELEASE_TAG. Also fails fast (before burning
@@ -55,6 +58,7 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
 
+  # ── Build fan-out ────────────────────────────────────────────────
   build-sdk:
     name: build-sdk (${{ matrix.platform }})
     needs: [resolve-tag]
@@ -93,6 +97,9 @@ jobs:
       runner: ubuntu-latest
       upload_artifact: true
 
+  # Overlay the Microsoft-signed HTP bundle (if available on S3) onto the
+  # Windows SDK pkg tree. Kept inline rather than turned into a reusable
+  # because it's tightly coupled to release-time S3 URL conventions.
   overlay-htp:
     name: overlay-htp (windows-arm64)
     runs-on: ubuntu-latest
@@ -112,7 +119,7 @@ jobs:
 
       - uses: actions/download-artifact@v5
         with:
-          name: sdk-pkg-windows-arm64
+          name: sdk-windows-arm64
           path: sdk-pkg-windows-arm64
 
       - name: Overlay Microsoft-signed HTP bundle from S3 (if available)
@@ -134,7 +141,7 @@ jobs:
 
       - uses: actions/upload-artifact@v5
         with:
-          name: sdk-pkg-windows-arm64
+          name: sdk-windows-arm64
           path: sdk-pkg-windows-arm64/
           retention-days: 1
           overwrite: true
@@ -160,185 +167,46 @@ jobs:
       build_installer: ${{ matrix.build_installer }}
       upload_artifact: true
 
+  # Windows Authenticode signing for the CLI installer (not the HTP driver —
+  # that signing happens during _build-sdk.yml). Placeholder today; the
+  # stage exists so the DAG + artifact flow can be validated end-to-end
+  # before the real signer lands.
+  sign-windows:
+    name: sign-windows
+    needs: [build-cli]
+    uses: ./.github/workflows/_sign-windows.yml
+    secrets: inherit
+    with:
+      artifact_name: cli-installer-windows-arm64
+
+  # ── Publish fan-out (runs in parallel) ──────────────────────────
   publish-github-release:
     name: publish-github-release
-    runs-on: ubuntu-latest
     needs:
       - resolve-tag
       - overlay-htp
       - build-cli
       - build-python-sdist
       - build-android-aar
-    timeout-minutes: 20
-    permissions:
-      contents: write
-    env:
-      RELEASE_TAG: ${{ needs.resolve-tag.outputs.tag }}
+      - sign-windows
+    uses: ./.github/workflows/_publish-github-release.yml
+    secrets: inherit
+    with:
+      release_tag: ${{ needs.resolve-tag.outputs.tag }}
+      htp_signed: ${{ needs.overlay-htp.outputs.signed }}
+      llama_sha: ${{ needs.overlay-htp.outputs.llama_sha }}
 
-    steps:
-      - uses: actions/checkout@v6
+  publish-s3:
+    name: publish-s3
+    needs: [resolve-tag, publish-github-release]
+    uses: ./.github/workflows/_publish-s3.yml
+    secrets: inherit
+    with:
+      release_tag: ${{ needs.resolve-tag.outputs.tag }}
 
-      - uses: actions/download-artifact@v5
-        with:
-          name: sdk-pkg-windows-arm64
-          path: sdk-pkg-windows-arm64
-
-      - uses: actions/download-artifact@v5
-        with:
-          name: geniex-cli-installer-windows-arm64
-          path: .
-
-      - uses: actions/download-artifact@v5
-        with:
-          name: geniex-cli-linux-arm64
-          path: cli-linux-arm64/
-
-      - uses: actions/download-artifact@v5
-        with:
-          name: geniex-python-sdist
-          path: .
-
-      - uses: actions/download-artifact@v5
-        with:
-          name: geniex-android-aar
-          path: .
-
-      - name: Package artifacts and write SHA256 sidecars
-        id: assets
-        env:
-          HTP_SIGNED: ${{ needs.overlay-htp.outputs.signed }}
-          LLAMA_SHA: ${{ needs.overlay-htp.outputs.llama_sha }}
-        run: |
-          set -euo pipefail
-          HTP_DIR=sdk-pkg-windows-arm64/lib/llama_cpp
-
-          mv geniex-cli-setup.exe "geniex-cli-installer-windows-arm64-${RELEASE_TAG}.exe"
-          mv geniex-android-aar.aar "geniex-android-aar-${RELEASE_TAG}.aar"
-
-          # Repackage the Linux CLI pkg_zip as a versioned tar.gz for the
-          # GitHub Release. Unpack into a named dir first so the archive
-          # root is `geniex-cli-linux-arm64-<tag>/` rather than loose files.
-          staged="geniex-cli-linux-arm64-${RELEASE_TAG}"
-          mkdir -p "${staged}"
-          unzip -q cli-linux-arm64/artifact.zip -d "${staged}"
-          chmod +x "${staged}/geniex"
-          tar -czf "${staged}.tar.gz" "${staged}"
-          rm -rf "${staged}"
-
-          sdk_suffix=""
-          if [[ "$HTP_SIGNED" != "true" ]]; then
-            sdk_suffix="-selfsigned"
-            # Self-signed: ship the public cert (users import it) and a to-sign
-            # bundle (operator submits it for real signing).
-            cp .github/certs/hexagon/ggml-htp-v1.cer .
-            mkdir to-sign
-            cp "$HTP_DIR"/libggml-htp-v*.so to-sign/
-            cp "$HTP_DIR"/libggml-htp.cat to-sign/
-            cp third-party/llama.cpp/ggml/src/ggml-hexagon/libggml-htp.inf to-sign/
-            (cd to-sign && zip -r "../libggml-htp-to-sign-${LLAMA_SHA}.zip" .)
-          fi
-          zip -r "geniex-sdk-windows-arm64-${RELEASE_TAG}${sdk_suffix}.zip" sdk-pkg-windows-arm64
-
-          shopt -s nullglob
-          files=(*.zip *.exe *.tar.gz *.cer *.aar)
-          for f in "${files[@]}"; do sha256sum "$f" > "$f.sha256"; done
-          {
-            echo "files<<EOF"
-            for f in "${files[@]}"; do echo "$f"; echo "$f.sha256"; done
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Publish release
-        uses: actions/github-script@v8
-        env:
-          VERSION: ${{ env.RELEASE_TAG }}
-          FILES: ${{ steps.assets.outputs.files }}
-          HTP_SIGNED: ${{ needs.overlay-htp.outputs.signed }}
-          LLAMA_SHA: ${{ needs.overlay-htp.outputs.llama_sha }}
-        with:
-          script: |
-            const release = require('./.github/scripts/release.js');
-            await release({ github, context, core });
-
-      # Re-publish the packaged SDK zip(s) as a dedicated artifact so
-      # publish-s3 can pick them up. The `sdk-pkg-windows-arm64` artifact
-      # holds the *unpacked* pkg tree, not the final `geniex-sdk-*.zip`.
-      - name: Upload packaged SDK zips for S3 job
-        uses: actions/upload-artifact@v5
-        with:
-          name: geniex-sdk-release-zips
-          path: |
-            geniex-sdk-windows-arm64-*.zip
-            geniex-sdk-windows-arm64-*.zip.sha256
-          if-no-files-found: error
-          retention-days: 1
-
-  publish-s3-release:
-    name: publish-s3-release
-    runs-on: ubuntu-latest
-    needs:
-      - resolve-tag
-      - publish-github-release
-    permissions:
-      contents: read
-      id-token: write # OIDC token minting for AWS role assumption
-    env:
-      RELEASE_TAG: ${{ needs.resolve-tag.outputs.tag }}
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 1
-          submodules: false
-
-      - name: Download packaged SDK release zips
-        uses: actions/download-artifact@v5
-        with:
-          name: geniex-sdk-release-zips
-          path: .
-
-      # OIDC federation — no long-lived AWS keys. The role is pre-provisioned
-      # by the org for any repo under qcom-ai-hub/*. Writes creds into the
-      # `bitsy` AWS CLI profile and blanks out AWS_* env vars so subsequent
-      # `aws` calls must use --profile (matches helper-action contract).
-      - name: Configure AWS credentials (bitsyfactory role)
-        uses: ./.github/actions/configure-multiple-aws-roles
-        with:
-          profile: bitsy
-          aws-region: us-west-2
-          role-to-assume: arn:aws:iam::234967179373:role/github-bitsyfactory
-          role-session-name: geniex-release-${{ github.run_id }}
-
-      - name: Upload SDK zip(s) to S3
-        shell: bash
-        env:
-          AWS_PROFILE: bitsy
-          AWS_DEFAULT_REGION: us-west-2
-          S3_PREFIX: s3://qaihub-public-assets/qai-hub-geniex/${{ needs.resolve-tag.outputs.tag }}/
-        run: |
-          set -euo pipefail
-          # The download-artifact step above guarantees >=1 zip; if-no-files-found:error
-          # on the producer side fails the build before we get here. sync also handles
-          # the sha256 sidecars in one shot.
-          #
-          # --acl public-read is required: the bucket policy only grants anonymous
-          # s3:GetObject on qai-hub-models/wheels, so uploads under qai-hub-geniex/
-          # must carry a per-object public-read ACL to be fetchable by
-          # `pip install` (bindings/python/_sdk_fetch.py). The `github-bitsyfactory`
-          # role is allowed to set this ACL; Block Public Access must leave
-          # IgnorePublicAcls=false on the bucket (confirmed with bucket owner).
-          aws s3 sync . "${S3_PREFIX}" \
-            --exclude '*' --include 'geniex-sdk-windows-arm64-*.zip*' \
-            --acl public-read
-
-  # Publish the linux-arm64 CLI Docker image to GHCR via the Bazel
-  # rules_oci target //cli/release/linux + crane push. `:latest` is only
-  # moved for stable tags (build-docker.yml handles the override).
   publish-docker:
     name: publish-docker (linux-arm64)
-    needs:
-      - resolve-tag
-      - build-cli
+    needs: [resolve-tag, build-cli, sign-windows]
     permissions:
       contents: read
       packages: write
@@ -351,27 +219,44 @@ jobs:
       tag: ${{ needs.resolve-tag.outputs.tag }}
       is_prerelease: ${{ needs.resolve-tag.outputs.is_prerelease == 'true' }}
 
-  # Push the sdist to TestPyPI for pre-release tags (v*-alpha.*, v*-beta.*,
-  # v*-rc.*). Stable tags skip this job — they go to production PyPI via a
-  # separate flow (not yet wired up).
+  # TestPyPI — pre-release tags only. Stable tags go to production PyPI
+  # via publish-pypi below.
   publish-testpypi:
     name: publish-testpypi
-    runs-on: ubuntu-latest
-    needs:
-      - resolve-tag
-      - build-python-sdist
+    needs: [resolve-tag, build-python-sdist, sign-windows]
     if: needs.resolve-tag.outputs.is_prerelease == 'true'
-    timeout-minutes: 10
-    steps:
-      - uses: actions/download-artifact@v5
-        with:
-          name: geniex-python-sdist
-          path: dist/
+    uses: ./.github/workflows/_publish-testpypi.yml
+    secrets: inherit
+    with:
+      release_tag: ${{ needs.resolve-tag.outputs.tag }}
 
-      - name: Publish sdist to TestPyPI
-        uses: pypa/gh-action-pypi-publish@v1.12.4
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
-          packages-dir: dist/
-          skip-existing: true
+  # Production PyPI — stable tags only. Stub today.
+  publish-pypi:
+    name: publish-pypi
+    needs: [resolve-tag, build-python-sdist, sign-windows]
+    if: needs.resolve-tag.outputs.is_prerelease == 'false'
+    uses: ./.github/workflows/_publish-pypi.yml
+    secrets: inherit
+    with:
+      release_tag: ${{ needs.resolve-tag.outputs.tag }}
+
+  # Maven Central for the Android AAR. Stub today; runs for every tag once
+  # wired up, distinguishing pre/stable via the artifact version.
+  publish-maven:
+    name: publish-maven
+    needs: [resolve-tag, build-android-aar, sign-windows]
+    uses: ./.github/workflows/_publish-maven.yml
+    secrets: inherit
+    with:
+      release_tag: ${{ needs.resolve-tag.outputs.tag }}
+      is_prerelease: ${{ needs.resolve-tag.outputs.is_prerelease == 'true' }}
+
+  # Winget — stable tags only. Stub today.
+  publish-winget:
+    name: publish-winget
+    needs: [resolve-tag, build-cli, sign-windows]
+    if: needs.resolve-tag.outputs.is_prerelease == 'false'
+    uses: ./.github/workflows/_publish-winget.yml
+    secrets: inherit
+    with:
+      release_tag: ${{ needs.resolve-tag.outputs.tag }}

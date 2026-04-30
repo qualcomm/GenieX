@@ -1,0 +1,32 @@
+name: Publish Maven
+
+# Publish the Android AAR to Maven Central (or OSSRH staging). Runs for
+# every release tag; differentiate stable vs prerelease via the artifact
+# version string downstream. TODO: wire up gradle-maven-publish-plugin
+# (or mavenPublishing block) + Sonatype credentials.
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+      is_prerelease:
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Placeholder
+        run: |
+          echo "TODO(cicd-refactor): publish Android AAR ${{ inputs.release_tag }} to Maven Central."
+          echo "is_prerelease=${{ inputs.is_prerelease }}"

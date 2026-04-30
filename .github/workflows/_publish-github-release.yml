@@ -1,0 +1,136 @@
+name: Publish GitHub Release
+
+# Packages per-target artifacts into release-ready files (with SemVer
+# suffix and sha256 sidecars) and publishes them to a GitHub Release via
+# .github/scripts/release.js. Self-signed HTP path is handled here too —
+# when overlay-htp did NOT find a Microsoft-signed bundle on S3, we ship
+# the public cert + a to-sign bundle so operators can finish signing
+# out-of-band.
+#
+# Re-uploads the packaged SDK zip as `sdk-release-zips` so the
+# _publish-s3 reusable can pick it up downstream.
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+      htp_signed:
+        description: "Whether overlay-htp landed the MS-signed bundle"
+        required: true
+        type: string
+      llama_sha:
+        description: "Short SHA of third-party/llama.cpp at build time"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      HTP_SIGNED: ${{ inputs.htp_signed }}
+      LLAMA_SHA: ${{ inputs.llama_sha }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: sdk-windows-arm64
+          path: sdk-pkg-windows-arm64
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: cli-installer-windows-arm64
+          path: .
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: cli-linux-arm64
+          path: cli-linux-arm64/
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: python-sdist
+          path: .
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: android-aar
+          path: .
+
+      - name: Package artifacts and write SHA256 sidecars
+        id: assets
+        run: |
+          set -euo pipefail
+          HTP_DIR=sdk-pkg-windows-arm64/lib/llama_cpp
+
+          mv geniex-cli-setup.exe "geniex-cli-installer-windows-arm64-${RELEASE_TAG}.exe"
+          mv geniex-android-aar.aar "geniex-android-aar-${RELEASE_TAG}.aar"
+
+          # Repackage the Linux CLI pkg_zip as a versioned tar.gz for the
+          # GitHub Release. Unpack into a named dir first so the archive
+          # root is `geniex-cli-linux-arm64-<tag>/` rather than loose files.
+          staged="geniex-cli-linux-arm64-${RELEASE_TAG}"
+          mkdir -p "${staged}"
+          unzip -q cli-linux-arm64/artifact.zip -d "${staged}"
+          chmod +x "${staged}/geniex"
+          tar -czf "${staged}.tar.gz" "${staged}"
+          rm -rf "${staged}"
+
+          sdk_suffix=""
+          if [[ "$HTP_SIGNED" != "true" ]]; then
+            sdk_suffix="-selfsigned"
+            # Self-signed: ship the public cert (users import it) and a to-sign
+            # bundle (operator submits it for real signing).
+            cp .github/certs/hexagon/ggml-htp-v1.cer .
+            mkdir to-sign
+            cp "$HTP_DIR"/libggml-htp-v*.so to-sign/
+            cp "$HTP_DIR"/libggml-htp.cat to-sign/
+            cp third-party/llama.cpp/ggml/src/ggml-hexagon/libggml-htp.inf to-sign/
+            (cd to-sign && zip -r "../libggml-htp-to-sign-${LLAMA_SHA}.zip" .)
+          fi
+          zip -r "geniex-sdk-windows-arm64-${RELEASE_TAG}${sdk_suffix}.zip" sdk-pkg-windows-arm64
+
+          shopt -s nullglob
+          files=(*.zip *.exe *.tar.gz *.cer *.aar)
+          for f in "${files[@]}"; do sha256sum "$f" > "$f.sha256"; done
+          {
+            echo "files<<EOF"
+            for f in "${files[@]}"; do echo "$f"; echo "$f.sha256"; done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        uses: actions/github-script@v8
+        env:
+          VERSION: ${{ env.RELEASE_TAG }}
+          FILES: ${{ steps.assets.outputs.files }}
+        with:
+          script: |
+            const release = require('./.github/scripts/release.js');
+            await release({ github, context, core });
+
+      # Re-publish the packaged SDK zip(s) as a dedicated artifact so
+      # _publish-s3 can pick them up. The `sdk-windows-arm64` artifact
+      # holds the *unpacked* pkg tree, not the final `geniex-sdk-*.zip`.
+      - name: Upload packaged SDK zips for S3 job
+        uses: actions/upload-artifact@v5
+        with:
+          name: sdk-release-zips
+          path: |
+            geniex-sdk-windows-arm64-*.zip
+            geniex-sdk-windows-arm64-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 1

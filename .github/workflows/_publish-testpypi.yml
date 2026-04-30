@@ -1,0 +1,42 @@
+name: Publish TestPyPI
+
+# Pushes the Python sdist to TestPyPI. Caller gates this on
+# is_prerelease == 'true' (stable tags belong on production PyPI,
+# wired up separately in _publish-pypi.yml once Trusted Publishing
+# lands).
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: python-sdist
+          path: dist/
+
+      - name: Publish sdist to TestPyPI
+        uses: pypa/gh-action-pypi-publish@v1.12.4
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          packages-dir: dist/
+          skip-existing: true
+          # Using an API token (not OIDC Trusted Publishing), so explicitly
+          # turn attestations off to silence the action's 'attestations
+          # input ignored' annotation. Re-enable once we migrate to
+          # Trusted Publishing.
+          attestations: false

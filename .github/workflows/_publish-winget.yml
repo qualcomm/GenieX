@@ -1,0 +1,29 @@
+name: Publish Winget
+
+# Submit the Windows installer manifest to microsoft/winget-pkgs for stable
+# tags. Prereleases are skipped — winget does not carry preview channels.
+# TODO: wire up vedantmgoyal2009/winget-releaser or the community-maintained
+# equivalent, plus the WINGET_TOKEN fine-grained PAT.
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Placeholder
+        run: |
+          echo "TODO(cicd-refactor): submit winget manifest for ${{ inputs.release_tag }}."
+          echo "Stable-only; caller gates on is_prerelease == 'false'."

@@ -1,0 +1,28 @@
+name: Publish PyPI
+
+# Production PyPI publish for stable tags. Caller gates on
+# is_prerelease == 'false'. TODO: wire up pypi-publish@v1.12.4 with
+# Trusted Publishing (OIDC) once the PyPI project is claimed.
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Placeholder
+        run: |
+          echo "TODO(cicd-refactor): publish ${{ inputs.release_tag }} to PyPI (production)."
+          echo "Prereq: claim PyPI project, configure Trusted Publishing."

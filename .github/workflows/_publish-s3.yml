@@ -1,0 +1,66 @@
+name: Publish S3
+
+# Uploads the packaged SDK zip(s) (produced by _publish-github-release's
+# Package step and re-uploaded as `sdk-release-zips`) to the public S3
+# bucket. Downstream consumer is bindings/python/_sdk_fetch.py.
+#
+# OIDC-only: no long-lived AWS keys. The github-bitsyfactory role is
+# pre-provisioned for any repo under qcom-ai-hub/*.
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Download packaged SDK release zips
+        uses: actions/download-artifact@v5
+        with:
+          name: sdk-release-zips
+          path: .
+
+      - name: Configure AWS credentials (bitsyfactory role)
+        uses: ./.github/actions/configure-multiple-aws-roles
+        with:
+          profile: bitsy
+          aws-region: us-west-2
+          role-to-assume: arn:aws:iam::234967179373:role/github-bitsyfactory
+          role-session-name: geniex-release-${{ github.run_id }}
+
+      - name: Upload SDK zip(s) to S3
+        shell: bash
+        env:
+          AWS_PROFILE: bitsy
+          AWS_DEFAULT_REGION: us-west-2
+          S3_PREFIX: s3://qaihub-public-assets/qai-hub-geniex/${{ inputs.release_tag }}/
+        run: |
+          set -euo pipefail
+          # --acl public-read is required: the bucket policy only grants anonymous
+          # s3:GetObject on qai-hub-models/wheels, so uploads under qai-hub-geniex/
+          # must carry a per-object public-read ACL to be fetchable by
+          # `pip install` (bindings/python/_sdk_fetch.py).
+          aws s3 sync . "${S3_PREFIX}" \
+            --exclude '*' --include 'geniex-sdk-windows-arm64-*.zip*' \
+            --acl public-read
