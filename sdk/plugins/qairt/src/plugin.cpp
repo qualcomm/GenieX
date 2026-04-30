@@ -6,6 +6,7 @@
 #include "build_config.h"
 #include "llm.h"
 #include "logging.h"
+#include "vlm.h"
 
 namespace geniex {
 
@@ -31,11 +32,7 @@ class QairtPlugin : public Plugin {
 
     ILlm* create_llm() override { return new geniex::QairtLlm; }
 
-    IVlm* create_vlm() override {
-        GENIEX_LOG_WARN("QAIRT embedding is not available in this build");
-        return nullptr;
-        // return new geniex::QairtVlm;
-    }
+    IVlm* create_vlm() override { return new geniex::QairtVlm; }
 
     IEmbedding* create_embedding() override {
         GENIEX_LOG_WARN("QAIRT embedding is not available in this build");
