@@ -24,26 +24,29 @@ register_toolchains("@prebuilt_protoc_windows_arm64//:prebuilt_toolchain")
 bazel_dep(name = "rules_oci", version = "2.3.0")
 bazel_dep(name = "rules_distroless", version = "0.8.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.21.1")
-bazel_dep(name = "tar.bzl", version = "0.6.0")
+bazel_dep(name = "tar.bzl", version = "0.7.0")
 tar_toolchains = use_extension("@tar.bzl//tar:extensions.bzl", "toolchains")
 use_repo(tar_toolchains, "bsd_tar_toolchains")
 register_toolchains("@bsd_tar_toolchains//:all")
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
 apt.install(
-    name = "jammy",
-    lock = "//cli/release/linux:jammy.lock.json",
-    manifest = "//cli/release/linux:jammy.yaml",
+    name = "trixie",
+    lock = "//cli/release/linux:trixie.lock.json",
+    manifest = "//cli/release/linux:trixie.yaml",
 )
-use_repo(apt, "jammy")
+use_repo(apt, "trixie")
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 oci.pull(
-    name = "ubuntu",
-    digest = "sha256:962f6cadeae0ea6284001009daa4cc9a8c37e75d1f5191cf0eb83fe565b63dd7",
-    image = "index.docker.io/library/ubuntu",
-    platforms = ["linux/arm64/v8"],
-    tag = "22.04",
+    name = "debian",
+    digest = "sha256:35b8ff74ead4880f22090b617372daff0ccae742eb5674455d542bef71ef1999",
+    image = "index.docker.io/library/debian",
+    platforms = [
+        "linux/amd64",
+        "linux/arm64/v8",
+    ],
+    tag = "13",
 )
-use_repo(oci, "ubuntu", "ubuntu_linux_arm64_v8")
+use_repo(oci, "debian", "debian_linux_amd64", "debian_linux_arm64_v8")
 
 # ============ c/cpp ============
 

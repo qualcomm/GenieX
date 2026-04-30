@@ -1,5 +1,4 @@
 load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
-load("@aspect_bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load(":dedup_tar.bzl", "dedup_tar")
@@ -7,17 +6,9 @@ load(":dedup_tar.bzl", "dedup_tar")
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
-    "jammy.yaml",
-    "jammy.lock.json",
+    "trixie.yaml",
+    "trixie.lock.json",
 ])
-
-platform(
-    name = "linux_arm64",
-    constraint_values = [
-        "@platforms//os:linux",
-        "@platforms//cpu:arm64",
-    ],
-)
 
 # package geniex files
 
@@ -37,21 +28,19 @@ pkg_tar(
 
 # package image
 
-platform_transition_filegroup(
-    name = "apt_jammy_arm64",
-    srcs = ["@jammy//:jammy"],
-    target_platform = ":linux_arm64",
-)
-
 dedup_tar(
     name = "apt_layer",
-    tars = [":apt_jammy_arm64"],
+    tars = ["@trixie"],
 )
 
 oci_image(
     name = "image",
-    base = "@ubuntu_linux_arm64_v8",
+    base = select({
+        "@platforms//cpu:x86_64": "@debian_linux_amd64",
+        "@platforms//cpu:arm64": "@debian_linux_arm64_v8",
+    }),
     entrypoint = ["/opt/geniex/geniex"],
+    env = {"LD_LIBRARY_PATH": "/opt/geniex"},
     exposed_ports = ["18181/tcp"],
     labels = {
         "org.opencontainers.image.title": "GenieX-CLI",

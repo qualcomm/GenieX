@@ -1,0 +1,27 @@
+# Runtime apt packages layered on top of debian:13 for the GenieX-CLI
+# docker image. Mirrors the `apt-get install` list from the legacy Dockerfile.
+#
+# After editing this file, regenerate the lockfile:
+#
+#   bazel run @trixie//:lock
+#
+# Then commit the updated trixie.lock.json alongside this file.
+version: 1
+
+sources:
+  - channel: trixie main
+    url: https://snapshot.debian.org/archive/debian/20260401T000000Z
+  - channel: trixie-updates main
+    url: https://snapshot.debian.org/archive/debian/20260401T000000Z
+  - channel: trixie-security main
+    url: https://snapshot.debian.org/archive/debian-security/20260401T000000Z
+
+archs:
+  - "amd64"
+  - "arm64"
+
+packages:
+  - "libgomp1"
+  - "curl"
+  - "ffmpeg"
+  - "sox"
