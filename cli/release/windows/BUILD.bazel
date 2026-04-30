@@ -1,18 +1,24 @@
+load(":iss_manifest.bzl", "iss_manifest")
+
+iss_manifest(
+    name = "_artifact_iss",
+    src = "//cli:_artifact",
+)
+
 genrule(
     name = "windows_installer",
     srcs = [
         "geniex-cli-setup.iss",
         "geniex.ico",
-        "//cli/cmd/geniex",
-        "//sdk:local_sdk_runtime",
+        ":_artifact_iss",
     ],
     outs = ["geniex-cli-setup.exe"],
     cmd_bat = " ".join([
         "$(location @innosetup//:iscc) /Q",
         '"/O$(@D)"',
         '"/DVersion=$(VERSION)"',
-        '"/DCliExe=%CD%\\$(location //cli/cmd/geniex)"',
-        '"/DSdkDir=%CD%\\sdk\\pkg-geniex\\lib"',
+        '"/DSrcRoot=%CD%"',
+        '"/DArtifactIss=%CD%\\$(RULEDIR)\\_artifact_iss.iss"',
         '"$(location geniex-cli-setup.iss)"',
     ]),
     tools = ["@innosetup//:iscc"],

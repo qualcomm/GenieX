@@ -41,10 +41,7 @@ runfiles_symlinks(
             allow_empty = True,
         ),
         "@platforms//os:linux": glob(
-            [
-                "pkg-geniex/lib/**/*.so",
-                "pkg-geniex/lib/**/*.so.*",
-            ],
+            ["pkg-geniex/lib/**/*.so"],
             allow_empty = True,
         ),
     }),

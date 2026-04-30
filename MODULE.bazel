@@ -20,6 +20,34 @@ prebuilt_protoc(
 )
 register_toolchains("@prebuilt_protoc_windows_arm64//:prebuilt_toolchain")
 
+# oci
+bazel_dep(name = "rules_oci", version = "2.3.0")
+bazel_dep(name = "rules_distroless", version = "0.8.0")
+bazel_dep(name = "aspect_bazel_lib", version = "2.21.1")
+bazel_dep(name = "tar.bzl", version = "0.7.0")
+tar_toolchains = use_extension("@tar.bzl//tar:extensions.bzl", "toolchains")
+use_repo(tar_toolchains, "bsd_tar_toolchains")
+register_toolchains("@bsd_tar_toolchains//:all")
+apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
+apt.install(
+    name = "trixie",
+    lock = "//cli/release/linux:trixie.lock.json",
+    manifest = "//cli/release/linux:trixie.yaml",
+)
+use_repo(apt, "trixie")
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
+oci.pull(
+    name = "debian",
+    digest = "sha256:35b8ff74ead4880f22090b617372daff0ccae742eb5674455d542bef71ef1999",
+    image = "index.docker.io/library/debian",
+    platforms = [
+        "linux/amd64",
+        "linux/arm64/v8",
+    ],
+    tag = "13",
+)
+use_repo(oci, "debian", "debian_linux_amd64", "debian_linux_arm64_v8")
+
 # ============ c/cpp ============
 
 bazel_dep(name = "rules_cc", version = "0.2.17")
@@ -42,7 +70,6 @@ register_toolchains(
 # go toolchain
 go_sdk = use_extension("@io_bazel_rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.24.13")
-
 go_deps = use_extension("@bazel_gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//cli:go.mod")
 use_repo(

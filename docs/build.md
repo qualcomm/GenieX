@@ -25,10 +25,13 @@ There also some useful targets for testing and development:
 
 - `bazelisk run //cli:gen` Generates development files, like protobuf golang bindings.
 - `bazelisk run //cli:clean` Clean development files.
+- `bazelisk run //cli/release/linux:docker` Build and load docker image for linux release.
 
 ## Package Release
 
-Run `bazelisk build //cli/release/windows`, and release executable can be found in `bazel-bin/cli/release/windows/geniex-cli-setup.exe`.
+- `bazelisk build //cli:artifact -> bazel-bin/cli/artifact.zip`.
+- `bazelisk build //cli/release/windows -> bazel-bin/cli/release/windows/geniex-cli-setup.exe`.
+- `bazelisk build //cli/release/linux -> bazel-bin/cli/release/linux/geniex-cli-docker.tar`.
 
 ## Tips
 
@@ -49,11 +52,11 @@ Bazel requires symlink support on Windows. To enable this:
 
 If you want to manually run the generated executable, you can find it in `bazel-bin/cli/cmd/geniex/geniex_/` and runtime files in `bazel-bin/cli/cmd/geniex/geniex_/geniex.runfiles/_main`.
 
-## Geniex Python Bindings
+# Geniex Python Bindings
 
 See [bindings/python/README.md](../bindings/python/README.md) for build and install instructions for the Python bindings.
 
-## Geniex SDK
+# Geniex SDK
 
 ### Build Bridge/Plugin First (Required for local SDK)
 
@@ -63,7 +66,7 @@ Use the SDK subproject instructions in `sdk/README.md` and the platform-specific
 
 ### Build & Install
 
-#### Linux
+#### Linux ARM64
 
 ```bash
 cd sdk
@@ -91,31 +94,11 @@ cmake --install build-arm64-windows-snapdragon-release --prefix pkg-geniex
 
 #### Android (cross-compilation from Linux)
 
-```bash
-docker run --rm -u $(id -u):$(id -g) \
-    --volume $(pwd):/workspace \
-    --platform linux/amd64 \
-    ghcr.io/snapdragon-toolchain/arm64-android:v0.3
+See [Build Android](#build-android) section below for detailed instructions. The general steps are:
 
-apt update && apt install -y make
+Test through ADB shell:
 
-cmake -G "Unix Makefiles" -B build-arm64-android-snapdragon-debug -S . -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake" \
-      -DANDROID_ABI=arm64-v8a \
-      -DANDROID_PLATFORM=android-23 \
-      -DANDROID_STL=c++_static \
-      -DCMAKE_VERBOSE_MAKEFILE=ON \
-      -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-      -DCMAKE_CXX_FLAGS="-Wno-error=unused-function -Wno-error=unused-local-typedef -Wno-error=for-loop-analysis -Wno-error" \
-      -DCMAKE_EXE_LINKER_FLAGS="-Wl,--allow-shlib-undefined" \
-      -DHEXAGON_SDK_ROOT="/opt/hexagon/6.4.0.2" \
-      -DGENIEX_DEBUG=ON \
-      -DGENIEX_PLUGIN_LLAMA_CPP=ON \
-            -DGGML_OPENCL=ON \
-            -DGGML_HEXAGON=on -DPREBUILT_LIB_DIR=android_aarch64
-
-cmake --build build-arm64-android-snapdragon-debug -j 8
-cmake --install build-arm64-android-snapdragon-debug --prefix pkg-geniex
-
+```
 adb push pkg-geniex /data/local/tmp/geniex
 adb push Qwen3-0.6B-Q4_0.gguf /data/local/tmp/geniex/modelfiles/llama_cpp/
 adb shell "cd /data/local/tmp/geniex && LD_LIBRARY_PATH=./lib:./lib/llama_cpp GENIEX_PLUGIN_PATH=./lib ./bin/geniex_test_llm"

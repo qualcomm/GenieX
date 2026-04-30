@@ -1,0 +1,104 @@
+load("@aspect_bazel_lib//lib:copy_file.bzl", "copy_file")
+load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
+load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
+load(":dedup_tar.bzl", "dedup_tar")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files([
+    "trixie.yaml",
+    "trixie.lock.json",
+])
+
+# package geniex files
+
+pkg_tar(
+    name = "_geniex_files",
+    srcs = ["//cli:_artifact"],
+    package_dir = "/opt/geniex",
+)
+
+pkg_tar(
+    name = "_geniex_symlinks",
+    empty_dirs = ["/data"],
+    mode = "0755",
+    symlinks = {
+        "/usr/local/bin/geniex": "/opt/geniex/geniex",
+        "/root/.cache/geniex": "/data",
+    },
+)
+
+# package image
+
+dedup_tar(
+    name = "apt_layer",
+    tars = ["@trixie"],
+)
+
+genrule(
+    name = "_ca_bundle",
+    srcs = [":apt_layer"],
+    outs = ["ca-certificates.crt"],
+    cmd = "tar -xOf $(location :apt_layer) --wildcards './usr/share/ca-certificates/mozilla/*.crt' > $@",
+)
+
+pkg_tar(
+    name = "_ca_bundle_layer",
+    srcs = [":_ca_bundle"],
+    package_dir = "/etc/ssl/certs",
+)
+
+oci_image(
+    name = "image",
+    base = select({
+        "@platforms//cpu:x86_64": "@debian_linux_amd64",
+        "@platforms//cpu:arm64": "@debian_linux_arm64_v8",
+    }),
+    entrypoint = ["/opt/geniex/geniex"],
+    env = {"LD_LIBRARY_PATH": "/opt/geniex"},
+    exposed_ports = ["18181/tcp"],
+    labels = {
+        "org.opencontainers.image.title": "GenieX-CLI",
+        "org.opencontainers.image.description": "GenieX-CLI for running multi models",
+        "org.opencontainers.image.vendor": "GenieX",
+    },
+    tars = [
+        ":apt_layer",
+        ":_ca_bundle_layer",
+        "lib.tar",
+        ":_geniex_files",
+        ":_geniex_symlinks",
+    ],
+)
+
+genrule(
+    name = "_repo_tags",
+    outs = ["repo_tags.txt"],
+    cmd = "echo ghcr.io/qcom-ai-hub/geniex:latest > $@ && echo ghcr.io/qcom-ai-hub/geniex:$(VERSION) >> $@",
+)
+
+oci_load(
+    name = "docker",
+    image = ":image",
+    repo_tags = ":_repo_tags",
+)
+
+# export tarball
+
+filegroup(
+    name = "_docker_tarball",
+    srcs = [":docker"],
+    output_group = "tarball",
+)
+
+copy_file(
+    name = "docker_tarball",
+    src = ":_docker_tarball",
+    out = "geniex-cli-docker.tar",
+    allow_symlink = True,
+)
+
+alias(
+    name = "linux",
+    actual = ":docker_tarball",
+)
