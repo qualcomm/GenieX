@@ -41,6 +41,9 @@ jobs:
 
       - name: Resolve C/C++ file list
         id: file-list
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
         run: |
           # --diff-filter=d excludes deleted files so the linter isn't
           # asked to scan paths that no longer exist in the working tree.
@@ -51,6 +54,16 @@ jobs:
             base_ref=$(git merge-base HEAD origin/main || true)
             if [ -n "$base_ref" ]; then
               files=$(git diff --name-only --diff-filter=d "$base_ref"..HEAD)
+            else
+              files=$(git ls-files)
+            fi
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # Only scan files touched by the pushed commits. Falls back to
+            # ls-files on the first push or a force-push (before == all zeros
+            # or unreachable) — rare on main, which is protected.
+            if [ -n "${PUSH_BEFORE}" ] && [ "${PUSH_BEFORE}" != "0000000000000000000000000000000000000000" ] \
+               && git cat-file -e "${PUSH_BEFORE}" 2>/dev/null; then
+              files=$(git diff --name-only --diff-filter=d "${PUSH_BEFORE}..${PUSH_AFTER}")
             else
               files=$(git ls-files)
             fi
@@ -125,6 +138,9 @@ jobs:
 
       - name: Resolve Python file list
         id: py-file-list
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
         run: |
           # --diff-filter=d excludes deleted files so the linter isn't
           # asked to scan paths that no longer exist in the working tree.
@@ -135,6 +151,13 @@ jobs:
             base_ref=$(git merge-base HEAD origin/main || true)
             if [ -n "$base_ref" ]; then
               files=$(git diff --name-only --diff-filter=d "$base_ref"..HEAD)
+            else
+              files=$(git ls-files)
+            fi
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            if [ -n "${PUSH_BEFORE}" ] && [ "${PUSH_BEFORE}" != "0000000000000000000000000000000000000000" ] \
+               && git cat-file -e "${PUSH_BEFORE}" 2>/dev/null; then
+              files=$(git diff --name-only --diff-filter=d "${PUSH_BEFORE}..${PUSH_AFTER}")
             else
               files=$(git ls-files)
             fi

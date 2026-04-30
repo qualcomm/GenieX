@@ -8,8 +8,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "vlm/vlm_model.h"
 #include "types.h"
+#include "vlm/vlm_model.h"
 
 // Model headers
 #include "qwen2_omni.h"
@@ -31,8 +31,9 @@ struct VlmModelEntry {
     // Build and return a fully-initialised VLMModel.
     // `runtime_cfg` has QNN DLL paths already resolved.
     // `model_dir` is the parent directory of the .nexa file.
-    std::function<std::unique_ptr<VLMModel>(const QnnRuntimeConfig& runtime_cfg,
-                                            const std::filesystem::path& model_dir)> make_model;
+    std::function<std::unique_ptr<VLMModel>(
+        const QnnRuntimeConfig& runtime_cfg, const std::filesystem::path& model_dir)>
+        make_model;
 
     // Which chat-template / preprocessor family this model belongs to.
     VlmProcessorType processor_type;
@@ -48,9 +49,7 @@ namespace vlm_factories {
 // Generic Qwen2-Omni family factory.  Discovers LLM shards, vision encoder
 // bins and audio encoder bins in sub-directories of `model_dir`.
 inline std::unique_ptr<VLMModel> make_qwen2_omni(
-    const QnnRuntimeConfig& runtime_cfg,
-    const std::filesystem::path& model_dir) {
-
+    const QnnRuntimeConfig& runtime_cfg, const std::filesystem::path& model_dir) {
     namespace fs = std::filesystem;
     qwen2_omni::Qwen2OmniConfig config;
 
@@ -61,8 +60,7 @@ inline std::unique_ptr<VLMModel> make_qwen2_omni(
         std::vector<std::string> bins;
         if (!fs::exists(dir) || !fs::is_directory(dir)) return bins;
         for (const auto& e : fs::directory_iterator(dir))
-            if (e.is_regular_file() && e.path().extension() == ".bin")
-                bins.push_back(e.path().string());
+            if (e.is_regular_file() && e.path().extension() == ".bin") bins.push_back(e.path().string());
         std::sort(bins.begin(), bins.end());
         return bins;
     };
@@ -93,13 +91,11 @@ inline std::unique_ptr<VLMModel> make_qwen2_omni(
 
     // ── Vision encoder ──────────────────────────────────────────────────
     auto vit_dir = model_dir / "vit";
-    if (fs::exists(vit_dir))
-        config.vision_config.model_paths = collect_bins(vit_dir);
+    if (fs::exists(vit_dir)) config.vision_config.model_paths = collect_bins(vit_dir);
 
     // ── Audio encoder ───────────────────────────────────────────────────
     auto audio_dir = model_dir / "audio_encoder";
-    if (fs::exists(audio_dir))
-        config.audio_config.model_paths = collect_bins(audio_dir);
+    if (fs::exists(audio_dir)) config.audio_config.model_paths = collect_bins(audio_dir);
 
     return qwen2_omni::makeModel(runtime_cfg, config);
 }
@@ -110,12 +106,9 @@ inline std::unique_ptr<VLMModel> make_qwen2_omni(
 
 inline const std::unordered_map<std::string, VlmModelEntry>& vlm_model_registry() {
     static const std::unordered_map<std::string, VlmModelEntry> registry = {
-        {"omni-neural",
-            {vlm_factories::make_qwen2_omni, VlmProcessorType::kQwen2_5Omni, "qwen2-omni"}},
-        {"auto-neural",
-            {vlm_factories::make_qwen2_omni, VlmProcessorType::kQwen2_5Omni, "qwen2-omni"}},
-        {"qwen3vl",
-            {vlm_factories::make_qwen2_omni, VlmProcessorType::kQwen3VL, "qwen3vl"}},
+        {"omni-neural", {vlm_factories::make_qwen2_omni, VlmProcessorType::kQwen2_5Omni, "qwen2-omni"}},
+        {"auto-neural", {vlm_factories::make_qwen2_omni, VlmProcessorType::kQwen2_5Omni, "qwen2-omni"}},
+        {"qwen3vl", {vlm_factories::make_qwen2_omni, VlmProcessorType::kQwen3VL, "qwen3vl"}},
     };
     return registry;
 }
