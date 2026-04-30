@@ -55,8 +55,6 @@ jobs:
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
 
-  # SDK matrix. linux-arm64 is cross-compiled from x64 Linux and remains
-  # commented-out until a dedicated use case requires it.
   build-sdk:
     name: build-sdk (${{ matrix.platform }})
     needs: [resolve-tag]
@@ -66,10 +64,10 @@ jobs:
         include:
           - platform: windows-arm64
             runner: windows-arm64
+          - platform: linux-arm64
+            runner: ubuntu-latest
           - platform: android-arm64
             runner: ubuntu-latest
-          # - platform: linux-arm64
-          #   runner: ubuntu-latest
     uses: ./.github/workflows/build-sdk.yml
     secrets: inherit
     with:
@@ -151,6 +149,9 @@ jobs:
           - platform: windows-arm64
             runner: windows-arm64
             build_installer: true
+          - platform: linux-arm64
+            runner: linux-arm64
+            build_installer: false
     uses: ./.github/workflows/build-cli.yml
     secrets: inherit
     with:
@@ -189,6 +190,11 @@ jobs:
 
       - uses: actions/download-artifact@v5
         with:
+          name: geniex-cli-linux-arm64
+          path: cli-linux-arm64/
+
+      - uses: actions/download-artifact@v5
+        with:
           name: geniex-python-sdist
           path: .
 
@@ -208,6 +214,16 @@ jobs:
 
           mv geniex-cli-setup.exe "geniex-cli-installer-windows-arm64-${RELEASE_TAG}.exe"
           mv geniex-android-aar.aar "geniex-android-aar-${RELEASE_TAG}.aar"
+
+          # Repackage the Linux CLI pkg_zip as a versioned tar.gz for the
+          # GitHub Release. Unpack into a named dir first so the archive
+          # root is `geniex-cli-linux-arm64-<tag>/` rather than loose files.
+          staged="geniex-cli-linux-arm64-${RELEASE_TAG}"
+          mkdir -p "${staged}"
+          unzip -q cli-linux-arm64/artifact.zip -d "${staged}"
+          chmod +x "${staged}/geniex"
+          tar -czf "${staged}.tar.gz" "${staged}"
+          rm -rf "${staged}"
 
           sdk_suffix=""
           if [[ "$HTP_SIGNED" != "true" ]]; then
@@ -314,6 +330,26 @@ jobs:
           aws s3 sync . "${S3_PREFIX}" \
             --exclude '*' --include 'geniex-sdk-windows-arm64-*.zip*' \
             --acl public-read
+
+  # Publish the linux-arm64 CLI Docker image to GHCR via the Bazel
+  # rules_oci target //cli/release/linux + crane push. `:latest` is only
+  # moved for stable tags (build-docker.yml handles the override).
+  publish-docker:
+    name: publish-docker (linux-arm64)
+    needs:
+      - resolve-tag
+      - build-cli
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build-docker.yml
+    secrets: inherit
+    with:
+      runner: linux-arm64
+      push: true
+      image: ghcr.io/qcom-ai-hub/geniex-cli
+      tag: ${{ needs.resolve-tag.outputs.tag }}
+      is_prerelease: ${{ needs.resolve-tag.outputs.is_prerelease == 'true' }}
 
   # Push the sdist to TestPyPI for pre-release tags (v*-alpha.*, v*-beta.*,
   # v*-rc.*). Stable tags skip this job — they go to production PyPI via a
