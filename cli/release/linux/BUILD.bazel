@@ -20,6 +20,8 @@ pkg_tar(
 
 pkg_tar(
     name = "_geniex_symlinks",
+    empty_dirs = ["/data"],
+    mode = "0755",
     symlinks = {
         "/usr/local/bin/geniex": "/opt/geniex/geniex",
         "/root/.cache/geniex": "/data",
@@ -31,6 +33,19 @@ pkg_tar(
 dedup_tar(
     name = "apt_layer",
     tars = ["@trixie"],
+)
+
+genrule(
+    name = "_ca_bundle",
+    srcs = [":apt_layer"],
+    outs = ["ca-certificates.crt"],
+    cmd = "tar -xOf $(location :apt_layer) --wildcards './usr/share/ca-certificates/mozilla/*.crt' > $@",
+)
+
+pkg_tar(
+    name = "_ca_bundle_layer",
+    srcs = [":_ca_bundle"],
+    package_dir = "/etc/ssl/certs",
 )
 
 oci_image(
@@ -49,6 +64,7 @@ oci_image(
     },
     tars = [
         ":apt_layer",
+        ":_ca_bundle_layer",
         "lib.tar",
         ":_geniex_files",
         ":_geniex_symlinks",
