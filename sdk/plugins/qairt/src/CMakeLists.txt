@@ -1,5 +1,5 @@
 add_library(geniex_qairt SHARED
-    plugin.cpp llm.cpp)
+    plugin.cpp llm.cpp vlm.cpp)
 
 target_compile_features(geniex_qairt PRIVATE cxx_std_20)
 target_compile_definitions(geniex_qairt PUBLIC GENIEX_SHARED)
@@ -18,21 +18,14 @@ foreach(cfg Debug Release RelWithDebInfo MinSizeRel)
 endforeach()
 
 target_include_directories(geniex_qairt BEFORE
-    PRIVATE ${GENIEX_QAIRT_DIR}/core/include
-    PRIVATE ${GENIEX_QAIRT_DIR}/models/qwen3
-    PRIVATE ${GENIEX_QAIRT_DIR}/models/phi4
-    PRIVATE ${GENIEX_QAIRT_DIR}/models/phi3_5
-    PRIVATE ${GENIEX_QAIRT_DIR}/models/granite4
-    PRIVATE ${GENIEX_QAIRT_DIR}/models/llama3
-    PRIVATE ${GENIEX_QAIRT_DIR}/models/llama3_2
-    PRIVATE ${GENIEX_QAIRT_DIR}/models/qwen2-omni
     PRIVATE ${CMAKE_SOURCE_DIR}/third-party/geniex-proc/include)
 target_include_directories(geniex_qairt
     PUBLIC  ${COMMON_INCLUDE}
-    PRIVATE ../include/)
+    PRIVATE ../include/
+    PRIVATE ${CMAKE_SOURCE_DIR}/third-party/geniex-qairt/models)
 
 target_link_libraries(geniex_qairt
-    PRIVATE geniex geniex_core geniex-proc)
+    PRIVATE geniex geniex_core geniex-proc geniex_vlm)
 
 install(TARGETS geniex_qairt
     LIBRARY DESTINATION lib/qairt

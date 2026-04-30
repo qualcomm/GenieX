@@ -1,7 +1,7 @@
 # setup qairt
 
 set(BUILD_EXAMPLES OFF)
-set(GENIEX_BUILD_VLM OFF)
+set(GENIEX_BUILD_VLM ON)
 
 # Keep Rust artifact paths short on Windows to avoid MAX_PATH linker failures
 # in third-party/tokenizers-cpp when building QAIRT dependencies.
