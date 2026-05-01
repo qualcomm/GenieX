@@ -13,11 +13,6 @@ on:
         required: false
         type: string
         default: ""
-      platforms:
-        description: 'JSON array of {platform,runner} entries to build. Defaults to all three.'
-        required: false
-        type: string
-        default: '[{"platform":"windows-arm64","runner":"windows-arm64"},{"platform":"linux-arm64","runner":"ubuntu-latest"},{"platform":"android-arm64","runner":"ubuntu-latest"}]'
 
 permissions:
   contents: read
@@ -28,7 +23,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.platforms) }}
+        include:
+          - platform: windows-arm64
+            runner: windows-arm64
+          - platform: linux-arm64
+            runner: ubuntu-latest
+          - platform: android-arm64
+            runner: ubuntu-latest
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
 
