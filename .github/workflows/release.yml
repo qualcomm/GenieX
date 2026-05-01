@@ -371,6 +371,113 @@ jobs:
           # API-token auth, not Trusted Publishing — attestations are a no-op.
           attestations: false
 
+  # Uploads the AAR to the Sonatype Central Portal under com.qualcomm.qti:geniex-android.
+  # Stable tags only. Default publishingType is USER_MANAGED — upload lands in the Portal
+  # under PENDING → VALIDATED, and an operator clicks Publish in the UI to go live
+  # (Maven Central is immutable, so we keep a human gate on the final button). Flip
+  # `publishing_type` to AUTOMATIC once the release pipeline is trusted end-to-end.
+  # See maven_upload.md for the manual procedure this job mirrors.
+  publish-maven-central:
+    name: publish-maven-central
+    needs: [resolve-tag, build-android-aar]
+    if: needs.resolve-tag.outputs.is_prerelease != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ needs.resolve-tag.outputs.tag }}
+      GROUP_ID: com.qualcomm.qti
+      ARTIFACT_ID: geniex-android
+      PUBLISHING_TYPE: USER_MANAGED
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-aar
+          path: .
+
+      - name: Import GPG signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.gnupg && chmod 700 ~/.gnupg
+          printf '%s\n' "allow-loopback-pinentry" > ~/.gnupg/gpg-agent.conf
+          printf '%s\n' "pinentry-mode loopback" > ~/.gnupg/gpg.conf
+          gpgconf --kill gpg-agent || true
+          # Add trailing newline — GitHub Actions secrets sometimes drop it and
+          # armored GPG blocks fail to parse without it.
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          key_id=$(gpg --list-secret-keys --with-colons | awk -F: '/^sec/{print $5; exit}')
+          [ -n "$key_id" ] || { echo "::error::No signing key imported from MAVEN_GPG_PRIVATE_KEY"; exit 1; }
+          echo "GPG_KEY_ID=${key_id}" >> "$GITHUB_ENV"
+
+      - name: Prepare Maven bundle
+        env:
+          GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_TAG#v}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+          group_path="${GROUP_ID//./\/}"
+          bundle_dir="maven-bundle/${group_path}/${ARTIFACT_ID}/${VERSION}"
+          mkdir -p "${bundle_dir}"
+          base="${ARTIFACT_ID}-${VERSION}"
+
+          cp geniex-android-aar.aar "${bundle_dir}/${base}.aar"
+
+          cat > "${bundle_dir}/${base}.pom" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <project xmlns="http://maven.apache.org/POM/4.0.0">
+          <modelVersion>4.0.0</modelVersion>
+          <groupId>${GROUP_ID}</groupId>
+          <artifactId>${ARTIFACT_ID}</artifactId>
+          <version>${VERSION}</version>
+          <packaging>aar</packaging>
+          <name>${ARTIFACT_ID}</name>
+          <description>Geniex Android AAR - multi-platform AI inference runtime (Snapdragon / Hexagon).</description>
+          <url>https://github.com/qcom-ai-hub/geniex</url>
+          <licenses><license><name>Apache License, Version 2.0</name><url>https://www.apache.org/licenses/LICENSE-2.0.txt</url><distribution>repo</distribution></license></licenses>
+          <developers><developer><id>qualcomm-aisw</id><name>Qualcomm AISW</name><organization>Qualcomm</organization><organizationUrl>https://www.qualcomm.com</organizationUrl></developer></developers>
+          <scm><connection>scm:git:git://github.com/qcom-ai-hub/geniex.git</connection><developerConnection>scm:git:ssh://github.com/qcom-ai-hub/geniex.git</developerConnection><url>https://github.com/qcom-ai-hub/geniex</url></scm>
+          </project>
+          EOF
+
+          # Stub sources/javadoc jars — Central requires both to exist.
+          ( cd "${bundle_dir}" \
+            && printf 'Sources not published for this release.\n' > README.txt \
+            && zip -q "${base}-sources.jar" README.txt \
+            && printf 'Javadoc not published for this release.\n' > README.txt \
+            && zip -q "${base}-javadoc.jar" README.txt \
+            && rm README.txt )
+
+          for f in \
+            "${bundle_dir}/${base}.aar" \
+            "${bundle_dir}/${base}.pom" \
+            "${bundle_dir}/${base}-sources.jar" \
+            "${bundle_dir}/${base}-javadoc.jar"; do
+            gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" \
+                --local-user "$GPG_KEY_ID" --armor --detach-sign --output "${f}.asc" "$f"
+            md5sum  "$f" | awk '{print $1}' > "${f}.md5"
+            sha1sum "$f" | awk '{print $1}' > "${f}.sha1"
+          done
+
+          ( cd maven-bundle && zip -qr ../geniex-android-aar-bundle.zip . )
+          unzip -l geniex-android-aar-bundle.zip
+
+      - name: Upload bundle to Sonatype Central Portal
+        env:
+          BEARER: ${{ secrets.MAVEN_CENTRAL_BEARER_TOKEN }}
+        run: |
+          set -euo pipefail
+          http_code=$(curl -sS -o response.txt -w '%{http_code}' -X POST \
+            "https://central.sonatype.com/api/v1/publisher/upload?publishingType=${PUBLISHING_TYPE}&name=${ARTIFACT_ID}-${VERSION}" \
+            -H "Authorization: Bearer ${BEARER}" \
+            -H "accept: text/plain" \
+            -F "bundle=@geniex-android-aar-bundle.zip")
+          echo "HTTP ${http_code}"
+          cat response.txt; echo
+          [ "$http_code" = "201" ] || { echo "::error::Upload failed (HTTP ${http_code})"; exit 1; }
+          echo "::notice::Deployment uploaded. Validate + click Publish at https://central.sonatype.com/publishing/deployments"
+
   # TODO: production PyPI publish for stable tags (needs Trusted Publishing).
-  # TODO: Maven Central publish for Android AAR.
   # TODO: winget manifest submission for the Windows installer.
