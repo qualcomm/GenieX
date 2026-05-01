@@ -32,4 +32,4 @@ endif()
 add_subdirectory(${GENIEX_QAIRT_DIR} ${CMAKE_BINARY_DIR}/third-party/geniex-qairt EXCLUDE_FROM_ALL)
 
 # Export list of qairt libraries for plugin installation
-set(QAIRT_LIBS geniex_core nexaproc nexa-sampling geniex_vlm)
+set(QAIRT_LIBS geniex_core geniex-proc geniex-proc-vision geniex-proc-audio geniex_vlm)

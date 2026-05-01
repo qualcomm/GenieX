@@ -1,5 +1,5 @@
 add_library(geniex_qairt SHARED
-    plugin.cpp llm.cpp vlm.cpp)
+    plugin.cpp llm.cpp vlm.cpp log_filter.cpp)
 
 target_compile_features(geniex_qairt PRIVATE cxx_std_20)
 target_compile_definitions(geniex_qairt PUBLIC GENIEX_SHARED)

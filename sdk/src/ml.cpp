@@ -2,6 +2,12 @@
 
 #include "geniex.h"
 
+#if defined(_WIN32)
+#define portable_strdup _strdup
+#else
+#define portable_strdup strdup
+#endif
+
 // keep geniex_plugin link openssl
 #ifdef GENIEX_VALIDATION
 #include "openssl/crypto.h"
@@ -141,7 +147,7 @@ int32_t geniex_get_plugin_list(geniex_GetPluginListOutput* output) {
         output->plugin_count = static_cast<int32_t>(plugin_list.size());
 
         for (int32_t i = 0; i < output->plugin_count; i++) {
-            output->plugin_ids[i] = strdup(plugin_list[i].c_str());
+            output->plugin_ids[i] = portable_strdup(plugin_list[i].c_str());
             if (!output->plugin_ids[i]) {
                 GENIEX_LOG_ERROR("failed to duplicate plugin ID at index {}", i);
                 for (int32_t j = 0; j < i; j++) {

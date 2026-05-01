@@ -20,7 +20,7 @@ add_subdirectory(./src)
 
 # setup install
 
-set(QAIRT_LIBS geniex_core nexaproc nexa-sampling geniex_vlm)
+set(QAIRT_LIBS geniex_core geniex-proc geniex-proc-vision geniex-proc-audio geniex_vlm)
 foreach(dep IN LISTS QAIRT_LIBS)
     if(TARGET ${dep})
         install(TARGETS ${dep}
