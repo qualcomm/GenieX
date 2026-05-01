@@ -130,12 +130,16 @@ jobs:
               rustup target add aarch64-unknown-linux-gnu
               # Rust target triple is aarch64-unknown-linux-gnu, but Debian
               # names its cross compiler aarch64-linux-gnu-* (no "unknown").
-              # Recent cc-rs versions stopped stripping "unknown", so point
-              # it at the Debian tools explicitly or onig_sys (pulled in via
-              # tokenizers-cpp) fails custom-build with ToolNotFound.
-              export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
-              export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++
-              export AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar
+              # Recent cc-rs versions stopped stripping "unknown" when deriving
+              # the tool name, so onig_sys (pulled in via tokenizers-cpp) fails
+              # with ToolNotFound. Underscore env-var overrides (CC_aarch64_..
+              # unknown_linux_gnu) are ignored by cc-rs when it has already
+              # synthesized the hyphenated default, so symlink the expected
+              # names onto the real Debian binaries.
+              for tool in gcc g++ ar; do
+                ln -sf "/usr/bin/aarch64-linux-gnu-${tool}" \
+                       "/usr/local/bin/aarch64-unknown-linux-gnu-${tool}"
+              done
               bash .github/scripts/sdk-linux-android.sh
               chown -R "$HOST_UID:$HOST_GID" sdk .ccache || true
             '
