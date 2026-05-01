@@ -22,11 +22,11 @@ bazelisk run //cli -- infer Qwen/Qwen3-0.6B-GGUF
 
 Flags for `bazelisk run`:
 
-| Flag                          | Meaning                                                                 |
-|-------------------------------|-------------------------------------------------------------------------|
-| `--//sdk:sdk_type=local`      | Default. Link against a locally built SDK in `sdk/pkg-geniex`.          |
-| `--//sdk:sdk_type=s3`         | WIP.                                                                    |
-| `--//sdk:sdk_type=bazel`      | WIP.                                                                    |
+| Flag                     | Meaning                                                        |
+| ------------------------ | -------------------------------------------------------------- |
+| `--//sdk:sdk_type=local` | Default. Link against a locally built SDK in `sdk/pkg-geniex`. |
+| `--//sdk:sdk_type=s3`    | WIP.                                                           |
+| `--//sdk:sdk_type=bazel` | WIP.                                                           |
 
 Development targets:
 
@@ -36,11 +36,11 @@ Development targets:
 
 Package release artifacts:
 
-| Target                                | Output                                             |
-|---------------------------------------|----------------------------------------------------|
-| `bazelisk build //cli:artifact`       | `bazel-bin/cli/artifact.zip`                       |
-| `bazelisk build //cli/release/windows`| `bazel-bin/cli/release/windows/geniex-cli-setup.exe` |
-| `bazelisk build //cli/release/linux`  | `bazel-bin/cli/release/linux/geniex-cli-docker.tar` |
+| Target                                 | Output                                               |
+| -------------------------------------- | ---------------------------------------------------- |
+| `bazelisk build //cli:artifact`        | `bazel-bin/cli/artifact.zip`                         |
+| `bazelisk build //cli/release/windows` | `bazel-bin/cli/release/windows/geniex-cli-setup.exe` |
+| `bazelisk build //cli/release/linux`   | `bazel-bin/cli/release/linux/geniex-cli-docker.tar`  |
 
 Generated executable (for manual invocation): `bazel-bin/cli/cmd/geniex/geniex_/`, with runtime files under `geniex.runfiles/_main`.
 
@@ -70,13 +70,35 @@ For a minimal NPU build that skips Hexagon/OpenCL and drives the NPU only throug
 
 ## Build the SDK
 
-### Linux
+### Linux (cross-compile from x86_64)
+
+Start the Snapdragon Linux toolchain container — follow [llama.cpp's instructions](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/linux.md#snapdragon-based-linux-devices) to launch:
+
+```bash
+docker run --rm -u $(id -u):$(id -g) \
+    --volume $(pwd):/workspace \
+    --platform linux/amd64 \
+    ghcr.io/snapdragon-toolchain/arm64-linux:v0.1
+```
+
+Install build tools and Rust inside the container:
+
+```bash
+# Root shell (docker exec -u 0 -it <container_id> bash):
+apt update -y && apt install -y make gcc
+# Exit back to the normal user shell, then:
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source $HOME/.cargo/env
+rustup target add aarch64-unknown-linux-gnu
+```
+
+Build the SDK with the `arm64-linux-snapdragon-debug` preset:
 
 ```bash
 cd sdk
-cmake -S . -B build
-cmake --build build -j
-cmake --install build --prefix pkg-geniex
+cmake --preset arm64-linux-snapdragon-debug -B build-linux .
+cmake --build build-linux -j
+cmake --install build-linux --prefix pkg-geniex
 ```
 
 ### Windows ARM64 (Snapdragon)
