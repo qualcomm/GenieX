@@ -32,11 +32,16 @@ bool shouldSuppress(const char* msg) noexcept {
 
 geniex_LogLevel toSdkLevel(LogLevel lvl) noexcept {
     switch (lvl) {
-        case LogLevel::Trace: return GENIEX_LOG_LEVEL_TRACE;
-        case LogLevel::Debug: return GENIEX_LOG_LEVEL_DEBUG;
-        case LogLevel::Info:  return GENIEX_LOG_LEVEL_INFO;
-        case LogLevel::Warn:  return GENIEX_LOG_LEVEL_WARN;
-        case LogLevel::Error: return GENIEX_LOG_LEVEL_ERROR;
+        case LogLevel::Trace:
+            return GENIEX_LOG_LEVEL_TRACE;
+        case LogLevel::Debug:
+            return GENIEX_LOG_LEVEL_DEBUG;
+        case LogLevel::Info:
+            return GENIEX_LOG_LEVEL_INFO;
+        case LogLevel::Warn:
+            return GENIEX_LOG_LEVEL_WARN;
+        case LogLevel::Error:
+            return GENIEX_LOG_LEVEL_ERROR;
     }
     return GENIEX_LOG_LEVEL_INFO;
 }
