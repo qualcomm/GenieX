@@ -27,7 +27,7 @@ const DefaultAIHubBaseURL = "https://qaihub-public-assets.s3.us-west-2.amazonaws
 // DefaultAIHubVersion is the pinned aihm release the CLI consumes. The public
 // bucket has no `latest` alias; manifests are only at
 // <base>/releases/<version>/manifest.json. Override via GENIEX_AIHUBVERSION.
-const DefaultAIHubVersion = "v0.51.1.dev1"
+const DefaultAIHubVersion = "v0.52.0"
 
 // MinSDKVersion is baked into every geniex.json the CLI synthesises for AI
 // Hub (qairt) model pulls so that older SDKs refuse to load them.
