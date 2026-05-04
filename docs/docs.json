@@ -82,32 +82,6 @@
                   "en/geniex-python/quickstart",
                   "en/geniex-python/api-reference"
                 ]
-              },
-              {
-                "group": "Android SDK",
-                "icon": "android",
-                "pages": [
-                  "en/geniex-android/overview",
-                  "en/geniex-android/quickstart",
-                  "en/geniex-android/model-tutorial",
-                  {
-                    "group": "API Reference",
-                    "pages": [
-                      "en/geniex-android/APIReference",
-                      "en/geniex-android/APIReference_NPU",
-                      "en/geniex-android/APIReference_CPUGPU"
-                    ]
-                  }
-                ]
-              },
-              {
-                "group": "Linux Docker",
-                "icon": "docker",
-                "pages": [
-                  "en/geniex-docker/overview",
-                  "en/geniex-docker/quickstart",
-                  "en/geniex-docker/RestAPI"
-                ]
               }
             ]
           }
