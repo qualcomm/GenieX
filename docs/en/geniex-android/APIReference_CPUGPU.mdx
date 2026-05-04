@@ -1,0 +1,260 @@
+---
+title: CPU / GPU
+description: CPU and GPU-accelerated inference for GenieX Android SDK using GGUF format models.
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+
+## **LLM Usage**
+
+Large Language Models for text generation and chat applications.
+
+### Streaming Conversation
+We support CPU/GPU inference for GGUF format models. You can pick any GGUF models from the community and run with the `cpu_gpu` plugin.
+
+```kotlin
+LlmWrapper.builder()
+    .llmCreateInput(
+        LlmCreateInput(
+            model_name = "", // For GGUF CPU/GPU models, leave model_name empty.
+            model_path = "<your-model-path>",
+            config = ModelConfig(
+                nCtx = 4096,
+                nGpuLayers = 0  // 0 for CPU, > 0 for GPU
+            ),
+            plugin_id = "cpu_gpu",
+            device_id = null  // null for CPU, "gpu" for GPU
+        )
+    )
+    .build()
+    .onSuccess { llmWrapper = it }
+    .onFailure { error -> println("Error: ${error.message}") }
+
+val chatList = arrayListOf(ChatMessage("user", "What is AI?"))
+
+llmWrapper.applyChatTemplate(chatList.toTypedArray(), null, false).onSuccess { template ->
+    val genConfig = GenerationConfig(maxTokens = 2048)
+    
+    llmWrapper.generateStreamFlow(template.formattedText, genConfig).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token -> println(result.text)
+            is LlmStreamResult.Completed -> println("Done!")
+            is LlmStreamResult.Error -> println("Error: ${result.throwable}")
+        }
+    }
+}
+```
+
+### CPU/GPU Configuration
+
+Control whether your model runs on CPU or GPU using a combination of `device_id` and `nGpuLayers`:
+
+**GPU Execution Requirements:**
+- `device_id` must be set to `"gpu"`
+- `nGpuLayers` must be greater than `0` (typically set to `999` to offload all layers)
+
+**CPU Execution:**
+- `device_id` is `null` (default)
+- OR `nGpuLayers` is `0`
+
+#### Example: Running on GPU
+
+```kotlin
+LlmWrapper.builder()
+    .llmCreateInput(
+        LlmCreateInput(
+            model_name = "",
+            model_path = "<your-model-path>",
+            config = ModelConfig(
+                nCtx = 4096,
+                nGpuLayers = 999  // Offload all layers to GPU
+            ),
+            plugin_id = "cpu_gpu",
+            device_id = "gpu"  // Use GPU device
+        )
+    )
+    .build()
+    .onSuccess { llmWrapper = it }
+    .onFailure { error -> println("Error: ${error.message}") }
+```
+
+#### Example: Running on CPU (Default)
+
+```kotlin
+LlmWrapper.builder()
+    .llmCreateInput(
+        LlmCreateInput(
+            model_name = "",
+            model_path = "<your-model-path>",
+            config = ModelConfig(
+                nCtx = 4096,
+                nGpuLayers = 0  // All on CPU
+            ),
+            plugin_id = "cpu_gpu",
+            device_id = null  // Default to CPU
+        )
+    )
+    .build()
+    .onSuccess { llmWrapper = it }
+```
+
+---
+
+## **Multimodal Usage**
+
+Vision-Language Models for image understanding and multimodal applications.
+
+### Streaming Conversation
+We support CPU/GPU inference for GGUF format models.
+
+```kotlin
+VlmWrapper.builder()
+    .vlmCreateInput(
+        VlmCreateInput(
+            model_name = "",  // For GGUF on CPU/GPU, leave empty (no model name needed)
+            model_path = <your-model-path>,
+            mmproj_path = <your-mmproj-path>,  // vision projection weights
+            config = ModelConfig(
+                nCtx = 4096,
+                nGpuLayers = 0  // 0 for CPU, > 0 for GPU
+            ),
+            plugin_id = "cpu_gpu",
+            device_id = null  // null for CPU, "gpu" for GPU
+        )
+    )
+    .build()
+    .onSuccess { vlmWrapper = it }
+    .onFailure { error -> 
+        println("Error: ${error.message}")
+    }
+
+// Use the loaded VLM with image and text
+val contents = listOf(
+    VlmContent("image", <your-image-path>),
+    VlmContent("text", <your-text>)
+)
+
+val chatList = arrayListOf(VlmChatMessage("user", contents))
+
+vlmWrapper.applyChatTemplate(chatList.toTypedArray(), null, false).onSuccess { template ->
+    // Create base GenerationConfig with maxTokens
+    val baseConfig = GenerationConfig(maxTokens = 2048)
+    
+    // Inject media paths from chatList into config
+    val configWithMedia = vlmWrapper.injectMediaPathsToConfig(
+        chatList.toTypedArray(),
+        baseConfig
+    )
+    
+    vlmWrapper.generateStreamFlow(template.formattedText, configWithMedia).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token -> println(result.text)
+            is LlmStreamResult.Completed -> println("Done!")
+            is LlmStreamResult.Error -> println("Error: ${result.throwable}")
+        }
+    }
+}
+```
+
+---
+
+## **ASR Usage**
+
+Automatic Speech Recognition for audio transcription.
+
+### Basic Usage
+We support CPU inference for whisper.cpp models.
+
+```kotlin
+// Load ASR model for whisper.cpp inference
+AsrWrapper.builder()
+    .asrCreateInput(
+        AsrCreateInput(
+            model_name = "",  // Empty for whisper.cpp
+            model_path = <your-model-path>,  // e.g., "ggml-base-q8_0.bin"
+            config = ModelConfig(
+                nCtx = 4096  // Context size (use nCtx instead of max_tokens)
+            ),
+            plugin_id = "whisper_cpp"  // Use whisper.cpp backend
+        )
+    )
+    .build()
+    .onSuccess { asrWrapper = it }
+    .onFailure { error -> 
+        println("Error: ${error.message}")
+    }
+
+// Transcribe audio file
+asrWrapper.transcribe(
+    AsrTranscribeInput(
+        audioPath = <your-audio-path>,  // Path to .wav file (16kHz recommended)
+        language = "en",                // Language code: "en", "zh", "es", etc.
+        timestamps = null               // Optional timestamp format
+    )
+).onSuccess { result ->
+    println("Transcription: ${result.result.transcript}")
+}
+```
+
+---
+
+## **TTS Usage**
+
+Text-to-Speech synthesis for converting text into natural-sounding speech.
+
+### Basic Usage
+
+We support CPU inference for TTS models in GGUF format.
+
+```kotlin
+// Load TTS model for CPU inference
+TtsWrapper.builder()
+    .ttsCreateInput(
+        TtsCreateInput(
+            model_name = "",  // Empty for CPU/GPU models
+            model_path = <your-model-path>,  // Path to TTS model (e.g., Kokoro GGUF model)
+            config = ModelConfig(
+                nCtx = 4096  // Context size
+            ),
+            plugin_id = "tts_cpp"  // Use TTS backend
+        )
+    )
+    .build()
+    .onSuccess { ttsWrapper = it }
+    .onFailure { error -> 
+        println("Error: ${error.message}")
+    }
+
+// Synthesize speech from text
+ttsWrapper.synthesize(
+    TtsSynthesizeInput(
+        textUtf8 = "Hello, this is a text to speech demo using Nexa SDK.",
+        outputPath = <your-output-audio-path>  // Path where audio will be saved (e.g., "/path/to/output.wav")
+    )
+).onSuccess { result ->
+    println("Speech synthesized successfully!")
+    println("Audio saved to: ${result.outputPath}")
+}.onFailure { error ->
+    println("Error during synthesis: ${error.message}")
+}
+```
+
+---
+
+## **Need Help?**
+
+Join our community to get support, share your projects, and connect with other developers.
+
+<CardGroup cols={2}>
+  <Card title="Discord Community" icon="discord" href="https://discord.com/invite/thRu2HaK4D">
+    Get real-time support and chat with the GenieX AI community
+  </Card>
+  <Card title="Slack Community" icon="slack" href="https://join.slack.com/t/nexa-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw">
+    Collaborate with developers and access community resources
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>

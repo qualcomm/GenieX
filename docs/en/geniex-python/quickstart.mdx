@@ -1,0 +1,89 @@
+---
+title: Quickstart
+description: Get started with GenieX AI Python SDK - choose your platform and explore AI capabilities.
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **What is GenieX AI Python SDK?**
+
+The GenieX AI Python SDK provides a comprehensive API for on-device AI inference across multiple modalities. It supports:
+
+- **Large Language Models (LLM)**: Text generation and conversation
+- **Vision-Language Models (VLM)**: Multimodal understanding and generation  
+- **Embedder**: Text vectorization and similarity computation
+- **Reranker**: Document reranking
+- **ASR (Automatic Speech Recognition)**: Speech-to-text transcription
+- **CV (Computer Vision)**: OCR/text recognition
+- **TTS (Text-to-Speech)**: Text-to-speech synthesis
+- **ImageGen**: Image generation from text prompts
+- **Diarize**: Speaker diarization
+
+## **Choose Your Platform**
+
+The SDK supports multiple platforms with optimized backends. Select your platform for detailed setup instructions:
+
+<CardGroup cols={1}>
+  <Card title="Windows ARM64" icon="microchip" href="/en/geniex-python/platform-guides/windows-arm64">
+    **NPU acceleration**<br/>
+    Python 3.11-3.13 ARM64 • Snapdragon X Elite
+  </Card>
+</CardGroup>
+
+## **Quick Overview**
+
+### **Installation**
+
+Follow the platform guide for detailed instructions:
+
+- **Windows ARM64**: `pip install nexaai`
+
+### **Authentication**
+
+Set up your GenieX AI token from [https://sdk.geniex.ai/](https://sdk.geniex.ai/):
+
+```bash
+# Windows
+$env:NEXA_TOKEN="key/your_token_here"
+
+# Linux
+export NEXA_TOKEN="key/your_token_here"
+```
+
+### **Basic Usage**
+
+Here's a simple example to get you started:
+
+```python
+from nexaai import LLM, GenerationConfig, ModelConfig, LlmChatMessage
+
+# Initialize model
+model_name = "NexaAI/Qwen3-0.6B-GGUF"
+config = ModelConfig()
+llm = LLM.from_(model=model_name, config=config)
+
+# Create conversation
+conversation = [
+    LlmChatMessage(role="system", content="You are a helpful assistant."),
+    LlmChatMessage(role="user", content="Hello, how are you?")
+]
+
+# Generate response
+prompt = llm.apply_chat_template(conversation)
+for token in llm.generate_stream(prompt, GenerationConfig(max_tokens=100)):
+    print(token, end="", flush=True)
+```
+
+<Note>
+This is a simplified example. For complete setup instructions, model recommendations, and platform-specific optimizations, please refer to your platform guide above.
+</Note>
+
+## **Next Steps**
+
+1. **Choose your platform** and follow the detailed setup guide
+2. **Explore the [API Reference](/en/geniex-python/api-reference)** for comprehensive documentation
+3. **Check out platform-specific examples** in your chosen guide
+
+<br />
+
+<Feedback/>

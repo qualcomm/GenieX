@@ -1,0 +1,110 @@
+---
+title: "Quickstart"
+description: "Get started with GenieXSDK on Windows ARM64 and Linux ARM64 in 1 minute."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+
+## **Installation & Running Your First Model**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ### **Windows ARM64 Installation**
+
+    Download the installer:
+
+    - [arm64 with Qualcomm NPU support](https://nexa-model-hub-bucket.s3.us-west-1.amazonaws.com/public/nexa_sdk/downloads/nexa-cli_windows_arm64.exe)
+
+    Run the downloaded `.exe` file and follow the installation wizard.
+
+    ### **Running Your First Model**
+
+    Currently, we support LLM and Multimodal models. More model type support is coming soon!
+
+    **Language Model (LLM)**
+
+    ```bash Windows
+    geniex infer NexaAI/Qwen3-0.6B
+    ```
+
+    **Multimodal Model**
+    ```bash Windows
+    geniex infer NexaAI/Qwen2.5-Omni-3B-GGUF
+    ```
+
+    <Tip>To try other GGUF models, visit Hugging Face, copy the path of any compatible GGUF model (e.g., `unsloth/Qwen2.5-VL-3B-Instruct-GGUF`), and replace the model path in the command above.</Tip>
+
+    <Note>Currently, **LLM** (Large Language Model) and **VLM** (Vision Language Model) are in the testing scope. More modalities are coming soon!</Note>
+
+    ### **NPU Acceleration (Snapdragon X Elite)**
+
+    <Warning>
+    **Hardware requirement:** The following NPU-accelerated model currently runs only on Qualcomm Snapdragon X Elite laptops.
+    </Warning>
+
+    If you have a Snapdragon X Elite PC, you can run the flagship OmniNeural-4B model with NPU acceleration:
+
+    **OmniNeural-4B (Multimodal NPU Model)**
+
+    ```bash Windows
+    geniex infer omni-neural
+    ```
+
+    **Voice Input Mode:** Once running, record your voice directly in terminal:
+    ```bash Windows
+    > /mic
+    ```
+    Press CTRL + C to stop recording, then hit enter to send.
+
+    **File Input:** Drag image/audio files into the command line:
+    ```
+    > describe this image '/path/to/image.jpg' '/path/to/audio.wav'
+    ```
+
+    <Info>
+    For detailed NPU setup instructions and advanced features, see the [NPU Guide](/en/geniex-cli/npu).
+    </Info>
+  </Tab>
+
+  <Tab title="Linux ARM64">
+    ### **Linux ARM64 Installation**
+
+    Run the following command to download and install:
+
+    ```bash Linux
+    curl -fsSL /path/to/install.sh -o install.sh && chmod +x install.sh && ./install.sh
+    ```
+
+    ### **Running Your First Model**
+
+    Currently, we support LLM and Multimodal models. More model type support is coming soon!
+
+    **Language Model (LLM)**
+
+    ```bash Linux
+    geniex infer NexaAI/Qwen3-0.6B
+    ```
+
+    **Multimodal Model**
+    ```bash Linux
+    geniex infer NexaAI/Qwen2.5-Omni-3B-GGUF
+    ```
+
+    <Tip>To try other GGUF models, visit Hugging Face, copy the path of any compatible GGUF model (e.g., `unsloth/Qwen2.5-VL-3B-Instruct-GGUF`), and replace the model path in the command above.</Tip>
+
+    <Note>We currently support **LLM** (Large Language Model) and **VLM** (Vision Language Model). More modalities are coming soon!</Note>
+  </Tab>
+</Tabs>
+
+## **Explore CLI Commands**
+
+To see a list of all available CLI commands, run:
+
+```bash
+geniex -h
+```
+
+<br />
+
+<Feedback/>
