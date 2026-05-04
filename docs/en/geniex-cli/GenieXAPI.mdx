@@ -10,7 +10,7 @@ import Feedback from '/snippets/page-feedback.mdx';
 If you haven't already, pull a model before making requests. For example, pull Qwen3:
 
 ```bash bash
-geniex pull NexaAI/Qwen3-0.6B-GGUF
+geniex pull Qualcomm/Qwen3-4B-Instruct
 ```
 
 To use the API, first open a terminal from the project root. Then, start the GenieX server by:
@@ -22,29 +22,6 @@ geniex serve
 The server runs on `http://127.0.0.1:18181` by default. \
 Keep the terminal that runs the server open, and make your requests from another terminal tab. \
 To see a full list of configurable options for the server, run `geniex serve -h`
-
-While you can try out the GenieX server with any HTTP tools, the easiest way to quickly get start is to run
-```
-geniex run NexaAI/Qwen3-0.6B-GGUF
-```
-You may replace the model name with any model names that has been pulled with `geniex pull`. The `run` command will also starts an REPL conversation UI just like `geniex infer`, but fulfilling your chat by sending requests to the server hosted by your `geniex serve` command.
-
-
-## Model Choice
-
-Certain models can only be run on specific platforms. OmniNeural can only be run on a Qualcomm device with NPU. Below is a table that contains example models for each platform for you to try:
-
-| Platform | Modality | Recommended Model |
-|----|-----------|------------------|
-| **Windows Qualcomm ARM64** | LLM | NexaAI/Qwen3-4B-npu |
-| **Windows Qualcomm ARM64** | VLM | NexaAI/OmniNeural-4B |
-| **Windows Qualcomm ARM64** | ASR | NexaAI/parakeet-tdt-0.6b-v3-npu |
-| **Linux ARM64** | LLM | NexaAI/Granite-4.0-h-350M-NPU |
-| **Linux ARM64** | VLM | NexaAI/OmniNeural-4B |
-| **Linux ARM64** | Embedding | NexaAI/EmbedNeural |
-| **Linux ARM64** | Rerank | NexaAI/jina-v2-rerank-npu |
-| **Linux ARM64** | ASR | NexaAI/parakeet-tdt-0.6b-v3-npu |
-
 
 
 ## **/v1/chat/completions**
