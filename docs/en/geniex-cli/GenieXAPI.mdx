@@ -17,7 +17,7 @@ No cloud dependency — just a local endpoint backed by Qualcomm hardware accele
 If you haven't already, pull a model before making requests. For example, pull Qwen3:
 
 ```bash bash
-geniex pull Qualcomm/Qwen3-4B-Instruct
+geniex pull qualcomm/Qwen3-4B-Instruct-2507
 ```
 
 To use the API, first open a terminal from the project root. Then, start the GenieX server by:
@@ -41,7 +41,7 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
 
 ```json Example Value
 {
-  "model": "Qualcomm/Qwen3-4B-Instruct",
+  "model": "qualcomm/Qwen3-4B-Instruct-2507",
   "messages": [
     {"role": "user", "content": "Hello! Briefly introduce yourself."}
   ],
@@ -57,31 +57,21 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
   ```bash Windows (cmd)
   curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"Qualcomm/Qwen3-4B-Instruct\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}], \"max_tokens\": 64}"
   ```
-
-  ```bash Linux
-  curl -X POST http://127.0.0.1:18181/v1/chat/completions \
-    -H "Content-Type: application/json" \
-    -d '{
-      "model": "Qualcomm/Qwen3-4B-Instruct",
-      "messages": [{"role":"user","content":"Hello!"}],
-      "max_tokens": 64
-    }'
-  ```
 </CodeGroup>
 
 ### **Use VLM**
 
 #### **Request body**
 
-`image_url` could one of the following:
+`image_url` can be one of the following:
 
 - A remote URL, e.g., `https://example.com/photo.jpg`
 - A base64-encoded string, e.g., `data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...`
-- A local file path on server machine, which requires the server to have access to the file. e.g., `file:///C:/Users/Username/Pictures/photo.jpg` (Windows) or `file:///home/username/Pictures/photo.jpg` (Linux), `file://` is optional, you can just provide the path like `C:/Users/Username/Pictures/photo.jpg` or `/home/username/Pictures/photo.jpg`.
+- A local file path on the server machine (requires server access to the file), e.g., `C:/Users/Username/Pictures/photo.jpg`. The `file://` prefix is optional.
 
 ```json Example Value
 {
-  "model": "Qualcomm/qwen3vl-GGUF",
+  "model": "qualcomm/Qwen2.5-VL-7B-Instruct",
   "messages": [
     {
       "role": "user",
@@ -98,31 +88,7 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
 
 <CodeGroup>
   ```bash Windows (cmd)
-  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"NexaAI/qwen3vl-GGUF\", \"messages\": [{\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"what is main color of the picture\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"</path/to/image>\"}}]}], \"stream\": false}"
-  ```
-
-  ```bash Linux
-  curl -X POST http://127.0.0.1:18181/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "NexaAI/qwen3vl-GGUF",
-    "messages": [
-      {
-        "role": "user",
-        "content": [
-          {
-            "type": "text",
-            "text": "what is main color of the picture"
-          },
-          {
-            "type": "image_url",
-            "image_url": {"url": "</path/to/image>"}
-          }
-        ]
-      }
-    ],
-    "stream": false
-  }'
+  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"qualcomm/Qwen2.5-VL-7B-Instruct\", \"messages\": [{\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"what is the main color of the picture\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"C:/Users/Username/Pictures/photo.jpg\"}}]}], \"stream\": false}"
   ```
 </CodeGroup>
 
