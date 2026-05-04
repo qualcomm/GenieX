@@ -2,7 +2,7 @@
 
 Multi-platform AI inference runtime for Snapdragon / Hexagon — runs LLMs on NPU, GPU, or CPU through a pluggable C SDK with Go (CLI), Python, and Java (Android) bindings.
 
-> Status: pre-1.0, under active development. Public API and tags may change; see [docs/release.md](docs/release.md).
+> Status: pre-1.0, under active development. Public API and tags may change; see [notes/release.md](notes/release.md).
 
 ## Backends
 
@@ -23,7 +23,7 @@ Release assets live on the [Releases page](https://github.com/qcom-ai-hub/geniex
 
 Download `geniex-cli-installer-windows-arm64-<TAG>.exe` and the matching `geniex-sdk-windows-arm64-<TAG>.zip`, then run the installer.
 
-If the SDK name ends in `-selfsigned`, first follow [docs/run.md § Self-signed fallback](docs/run.md#self-signed-fallback) to import `ggml-htp-v1.cer` and enable test-signing. Full walkthrough: [docs/run.md § Running a prebuilt CI release](docs/run.md#running-a-prebuilt-ci-release-windows-on-snapdragon).
+If the SDK name ends in `-selfsigned`, first follow [notes/run.md § Self-signed fallback](notes/run.md#self-signed-fallback) to import `ggml-htp-v1.cer` and enable test-signing. Full walkthrough: [notes/run.md § Running a prebuilt CI release](notes/run.md#running-a-prebuilt-ci-release-windows-on-snapdragon).
 
 ### Linux (Docker)
 
@@ -74,16 +74,16 @@ API and architecture: [bindings/android/README.md](bindings/android/README.md).
 
 ### SDK zip (integrators)
 
-Extract `geniex-sdk-<os>-arm64-<TAG>.zip` and point your build at its `include/` and `lib/` directories. To build the SDK in-tree instead, see [docs/build.md § Build the SDK](docs/build.md#build-the-sdk).
+Extract `geniex-sdk-<os>-arm64-<TAG>.zip` and point your build at its `include/` and `lib/` directories. To build the SDK in-tree instead, see [notes/build.md § Build the SDK](notes/build.md#build-the-sdk).
 
 ## Documentation
 
 | File                               | Topic                                                                 |
 | ---------------------------------- | --------------------------------------------------------------------- |
-| [docs/build.md](docs/build.md)     | Build CLI, SDK, and Python bindings (Linux / Windows ARM64 / Android) |
-| [docs/run.md](docs/run.md)         | Backend selection, model pull, Windows self-signed HTP fallback       |
-| [docs/release.md](docs/release.md) | SemVer tag procedure, channels, Hexagon HTP signing pipeline          |
-| [docs/AI.md](docs/AI.md)           | Claude Code integration (slash commands, skills)                      |
+| [notes/build.md](notes/build.md)     | Build CLI, SDK, and Python bindings (Linux / Windows ARM64 / Android) |
+| [notes/run.md](notes/run.md)         | Backend selection, model pull, Windows self-signed HTP fallback       |
+| [notes/release.md](notes/release.md) | SemVer tag procedure, channels, Hexagon HTP signing pipeline          |
+| [notes/AI.md](notes/AI.md)           | Claude Code integration (slash commands, skills)                      |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Commits, branches, PR format, FFI-update rule                         |
 
 ## License
