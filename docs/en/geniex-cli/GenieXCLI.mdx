@@ -32,7 +32,7 @@ After running `geniex pull <model-name>`, the CLI will prompt:
 ### **LLM**
 
 ```bash bash
-geniex pull NexaAI/Qwen3-0.6B-GGUF
+geniex pull Qualcomm/Qwen3-4B-Instruct
 ```
 
 ### **VLM**
@@ -91,7 +91,7 @@ Use the `--think` option to control whether the model outputs its internal reaso
 
 Example with reasoning enabled:
 ```bash bash
-geniex infer NexaAI/Qwen3-0.6B-GGUF --think=true
+geniex infer Qualcomm/Qwen3-4B-Instruct --think=true
 ```
 
 ### **VLM**
@@ -130,14 +130,14 @@ You can test it via:
 
 <CodeGroup>
     ```bash Windows (cmd)
-    curl -X POST http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"NexaAI/Qwen3-0.6B-GGUF\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}], \"max_tokens\": 64}"
+    curl -X POST http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"Qualcomm/Qwen3-4B-Instruct\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}], \"max_tokens\": 64}"
     ```
 
     ```bash Linux
     curl -X POST http://127.0.0.1:8080/v1/chat/completions \
     -H "Content-Type: application/json" \
     -d '{
-      "model": "NexaAI/Qwen3-0.6B-GGUF",
+      "model": "Qualcomm/Qwen3-4B-Instruct",
       "messages": [{"role":"user","content":"Hello!"}],
       "max_tokens": 64
     }'
@@ -145,7 +145,7 @@ You can test it via:
 
 </CodeGroup>
 
-This will send a POST request to the local /v1/completions endpoint to prompt the NexaAI/Qwen3-0.6B-GGUF model with "What is the capital of France?" and return a response with up to 100 tokens.
+This will send a POST request to the local /v1/completions endpoint to prompt the Qualcomm/Qwen3-4B-Instruct model with "What is the capital of France?" and return a response with up to 100 tokens.
 
 <br />
 

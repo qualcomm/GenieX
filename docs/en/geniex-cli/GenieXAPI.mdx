@@ -1,6 +1,6 @@
 ---
 title: "REST API"
-description: "Local OpenAI-compatible API for text generation, embeddings, and more"
+description: "Local OpenAI-compatible API for text generation"
 ---
 
 import Feedback from '/snippets/page-feedback.mdx';
@@ -34,7 +34,7 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
 
 ```json Example Value
 {
-  "model": "NexaAI/Qwen3-0.6B-GGUF",
+  "model": "Qualcomm/Qwen3-4B-Instruct",
   "messages": [
     {"role": "user", "content": "Hello! Briefly introduce yourself."}
   ],
@@ -48,14 +48,14 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
 
 <CodeGroup>
   ```bash Windows (cmd)
-  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"NexaAI/Qwen3-0.6B-GGUF\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}], \"max_tokens\": 64}"
+  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"Qualcomm/Qwen3-4B-Instruct\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}], \"max_tokens\": 64}"
   ```
 
   ```bash Linux
   curl -X POST http://127.0.0.1:18181/v1/chat/completions \
     -H "Content-Type: application/json" \
     -d '{
-      "model": "NexaAI/Qwen3-0.6B-GGUF",
+      "model": "Qualcomm/Qwen3-4B-Instruct",
       "messages": [{"role":"user","content":"Hello!"}],
       "max_tokens": 64
     }'
@@ -74,7 +74,7 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
 
 ```json Example Value
 {
-  "model": "NexaAI/qwen3vl-GGUF",
+  "model": "Qualcomm/qwen3vl-GGUF",
   "messages": [
     {
       "role": "user",
@@ -119,138 +119,6 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
   ```
 </CodeGroup>
 
-
-## **/v1/images/generations**
-
-Creates an image based on given a prompt.
-
-<Note>
-  Always make sure the model you select matches your hardware capabilities.
-</Note>
-
-### **Request body**
-
-```json Example Value
-{
-  "model": "NexaAI/Prefect-illustrious-XL-v2.0p",
-  "prompt": "A white cat with blue eyes",
-  "n": 1,
-  "size": "512x512",
-  "response_format": "url"
-}
-```
-
-### **Usage Example**
-
-<CodeGroup>
-  ```bash Windows (cmd)
-  curl -X POST http://127.0.0.1:18181/v1/images/generations -H "Content-Type: application/json" -d "{\"model\":\"NexaAI/Prefect-illustrious-XL-v2.0p\",\"prompt\":\"A white cat with blue eyes\",\"n\":1,\"size\":\"512x512\",\"response_format\":\"url\"}"
-  ```
-
-  ```bash Linux
-  curl -X POST http://127.0.0.1:18181/v1/images/generations \
-    -H "Content-Type: application/json" \
-    -d '{
-      "model": "NexaAI/Prefect-illustrious-XL-v2.0p",
-      "prompt": "A white cat with blue eyes",
-      "n": 1,
-      "size": "512x512",
-      "response_format": "url"
-    }'
-  ```
-</CodeGroup>
-
-
-## **/v1/embeddings**
-
-Creates an embedding for the given input. Use this to convert text (or document chunks) to vectors for indexing.
-
-<Note>
-  Use this endpoint when you need to **convert text or document chunks into vectors** for indexing in a retrieval system.   
-  
-  Make sure you select a model that supports **embeddings** (e.g., `djuna/jina-embeddings-*`). Calling this API with a non-embedding model will result in an error.
-</Note>
-
-### **Minimal request body**
-
-```json Example Value
-{
-  "model": "djuna/jina-embeddings-v2-small-en-Q5_K_M-GGUF",
-  "input": "Hello, world!"
-}
-```
-
-### **Usage Example**
-
-<CodeGroup>
-  ```bash Windows (cmd)
-  curl -X POST http://127.0.0.1:18181/v1/embeddings -H "Content-Type: application/json" -d "{\"model\":\"djuna/jina-embeddings-v2-small-en-Q5_K_M-GGUF\",\"input\":\"Hello, world!\"}"
-  ```
-
-  ```bash Linux
-  curl -X POST http://127.0.0.1:18181/v1/embeddings \
-    -H "Content-Type: application/json" \
-    -d '{
-      "model": "djuna/jina-embeddings-v2-small-en-Q5_K_M-GGUF",
-      "input": "Hello, world!"
-    }'
-  ```
-</CodeGroup>
-
-
-## **/v1/reranking**
-
-Rerank documents based on their relevance to a query. Returns a list of relevance scores aligned with the input order (higher = more relevant).
-
-<Note>
-  Use this endpoint **after a coarse retrieval step** (e.g., embeddings Top-K) to improve final ranking quality.
-
-  Ensure the selected model supports reranking. Calling this API with a non-reranking model will result in an error.
-</Note>
-
-### **Minimal request body**
-
-```json Example Value
-{
-  "model": "NexaAI/jina-v2-rerank-npu",
-  "query": "What is machine learning?",
-  "documents": [
-    "Machine learning is a subset of artificial intelligence.",
-    "Machine learning algorithms learn patterns from data.",
-    "The weather is sunny today.",
-    "Deep learning is a type of machine learning."
-  ],
-  "batch_size": 4,
-  "normalize": true,
-  "normalize_method": "softmax"
-}
-```
-
-### **Usage Example**
-
-<CodeGroup>
-  ```bash Windows (cmd)
-  curl -X POST http://127.0.0.1:18181/v1/reranking -H "Content-Type: application/json" -d "{\"model\":\"NexaAI/jina-v2-rerank-npu\",\"query\":\"What is machine learning?\",\"documents\":[\"Machine learning is a subset of artificial intelligence.\",\"Machine learning algorithms learn patterns from data.\",\"The weather is sunny today.\",\"Deep learning is a type of machine learning.\"],\"batch_size\":4,\"normalize\":true,\"normalize_method\":\"softmax\"}"
-  ```
-
-  ```bash Linux
-  curl -X POST http://127.0.0.1:18181/v1/reranking \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "NexaAI/jina-v2-rerank-npu",
-    "query": "What is machine learning?",
-    "documents": [
-      "Machine learning is a subset of artificial intelligence.",
-      "Machine learning algorithms learn patterns from data.",
-      "The weather is sunny today.",
-      "Deep learning is a type of machine learning."
-    ],
-    "batch_size": 4,
-    "normalize": true,
-    "normalize_method": "softmax"
-  }'
-  ```
-</CodeGroup>
 
 <br />
 
