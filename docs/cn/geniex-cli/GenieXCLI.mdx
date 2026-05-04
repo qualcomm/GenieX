@@ -1,0 +1,70 @@
+---
+title: "CLI 参考"
+description: "本页记录了所有可用的 CLI 命令及使用示例。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **模型推理**
+
+### **geniex pull**
+
+下载模型并存储到本地。
+输入 pull 命令后，系统会引导你完成设置流程，包括选择模型类型、主模型文件、分词器（可选）和附加文件（可选）。
+
+对于 `QAIRT` 插件模型，无需选择量化精度。对于 `llama.cpp` 插件模型，运行 `geniex pull <model-name>` 后，CLI 会提示你选择量化版本（如有多个可用）：
+
+```bash
+Choose a quant version to download
+> Q4_0       [1.2 GiB] (default)
+  Q8_0       [2.0 GiB]
+  F16        [3.8 GiB]
+```
+
+### **geniex infer — LLM**
+
+启动与语言模型的交互式对话。
+
+```bash
+geniex infer Qualcomm/Qwen3-4B
+```
+
+使用 `--think` / `--no-think` 标志控制模型是否在最终回复前输出内部推理过程：
+
+```bash
+geniex infer Qualcomm/Qwen3-4B --think
+geniex infer Qualcomm/Qwen3-4B --no-think
+```
+
+- `--think` — 模型在最终回复前展示推理步骤。
+- `--no-think` — 模型直接回复，不展示推理过程。
+
+### **geniex infer — VLM**
+
+运行视觉语言模型推理，支持纯文本或图像输入：
+
+```bash
+geniex infer Qualcomm/Qwen2.5-VL-7B-Instruct-GGUF
+```
+
+如果只需文本输入，直接启动命令并开始对话即可。
+若需要模型基于图像回复，提供**绝对路径**或直接将图片文件拖入终端，例如：
+
+```bash
+Describe this picture </full/path/to/image.png>
+```
+
+
+## **实用命令**
+
+| 命令 | 说明 | 示例 |
+|---|---|---|
+| `geniex list` | 显示所有已下载模型的名称和大小。 | `geniex list` |
+| `geniex remove <model>` | 按名称删除指定的本地模型。 | `geniex remove unsloth/Qwen3-0.6B-GGUF` |
+| `geniex clean` | 删除所有本地缓存的模型。 | `geniex clean` |
+| `geniex infer -h` | 显示 `geniex infer` 的帮助菜单。 | `geniex infer -h` |
+| `geniex serve -h` | 显示 `geniex serve` 的帮助菜单。 | `geniex serve -h` |
+
+<br />
+
+<Feedback />

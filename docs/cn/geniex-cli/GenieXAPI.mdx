@@ -1,0 +1,132 @@
+---
+title: "本地服务器"
+description: "兼容 OpenAI 协议的本地推理服务器，用于构建应用和智能体工作流"
+---
+
+import Feedback from '/snippets/page-feedback.mdx';
+
+## **概述**
+
+GenieX 内置本地推理服务器，提供 **OpenAI 兼容 API**。
+你可以在设备端运行模型，并将其连接到支持 OpenAI 协议的应用或框架
+——包括 **LangChain** 等智能体工作流、**OpenClaw** 等 AI 原生应用以及你自己的自定义应用。
+无需云端依赖——仅需一个由高通硬件加速支持的本地端点。
+
+## **快速开始**
+
+如果尚未拉取模型，请先下载。例如，拉取 Qwen3：
+
+```bash bash
+geniex pull Qualcomm/Qwen3-4B-Instruct
+```
+
+使用 API 前，先从项目根目录打开终端，然后启动 GenieX 服务器：
+
+```bash bash
+geniex serve
+```
+
+服务器默认运行在 `http://127.0.0.1:18181`。\
+保持运行服务器的终端窗口打开，在另一个终端标签页中发送请求。\
+查看服务器所有可配置选项，运行 `geniex serve -h`
+
+
+## **/v1/chat/completions**
+
+为给定对话创建模型响应。支持 LLM（纯文本）和 VLM（图像+文本）。
+
+### **使用 LLM**
+
+#### **请求体**
+
+```json Example Value
+{
+  "model": "Qualcomm/Qwen3-4B-Instruct",
+  "messages": [
+    {"role": "user", "content": "Hello! Briefly introduce yourself."}
+  ],
+  "max_tokens": 256,
+  "temperature": 0.7,
+  "stream": false
+}
+```
+
+#### **使用示例**
+
+<CodeGroup>
+  ```bash Windows (cmd)
+  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"Qualcomm/Qwen3-4B-Instruct\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}], \"max_tokens\": 64}"
+  ```
+
+  ```bash Linux
+  curl -X POST http://127.0.0.1:18181/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "Qualcomm/Qwen3-4B-Instruct",
+      "messages": [{"role":"user","content":"Hello!"}],
+      "max_tokens": 64
+    }'
+  ```
+</CodeGroup>
+
+### **使用 VLM**
+
+#### **请求体**
+
+`image_url` 可以是以下任一格式：
+
+- 远程 URL，例如 `https://example.com/photo.jpg`
+- Base64 编码字符串，例如 `data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...`
+- 服务器本地文件路径（需服务器有访问权限），例如 `file:///C:/Users/Username/Pictures/photo.jpg`（Windows）或 `file:///home/username/Pictures/photo.jpg`（Linux），`file://` 前缀可选，直接提供路径即可，如 `C:/Users/Username/Pictures/photo.jpg` 或 `/home/username/Pictures/photo.jpg`。
+
+```json Example Value
+{
+  "model": "Qualcomm/qwen3vl-GGUF",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Describe this image succinctly."},
+        {"type": "image_url", "image_url": {"url": "</path/to/image>"}}
+      ]
+    }
+  ]
+}
+```
+
+#### **使用示例**
+
+<CodeGroup>
+  ```bash Windows (cmd)
+  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"NexaAI/qwen3vl-GGUF\", \"messages\": [{\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"what is main color of the picture\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"</path/to/image>\"}}]}], \"stream\": false}"
+  ```
+
+  ```bash Linux
+  curl -X POST http://127.0.0.1:18181/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "NexaAI/qwen3vl-GGUF",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "what is main color of the picture"
+          },
+          {
+            "type": "image_url",
+            "image_url": {"url": "</path/to/image>"}
+          }
+        ]
+      }
+    ],
+    "stream": false
+  }'
+  ```
+</CodeGroup>
+
+
+<br />
+
+<Feedback/>

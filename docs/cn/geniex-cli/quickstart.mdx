@@ -1,0 +1,66 @@
+---
+title: "快速入门"
+description: "在 Windows ARM64 上开始使用 GenieX SDK"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+
+## **安装与运行第一个模型**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ### **Windows ARM64 安装**
+
+    下载安装程序：
+
+    - [GenieX CLI](https://github.com/qcom-ai-hub/geniex/actions/runs/25328234046/artifacts/6787639374)
+
+    运行下载的 `.exe` 文件并按照提示完成安装。
+
+    ### **通过 QAIRT 插件运行第一个模型**
+
+    目前支持 LLM 和多模态模型，更多模型类型即将推出！
+
+    **语言模型（LLM）**
+
+    ```bash Windows
+   geniex infer qualcomm/Qwen3-4B
+   geniex infer qualcomm/Qwen3-4B-Instruct-2507
+    ```
+
+    **多模态模型**
+    ```bash Windows
+    geniex infer qualcomm/Qwen2.5-VL-7B-Instruct
+    ```
+
+    ### **通过 llama.cpp 插件运行第一个模型**
+    **语言模型（LLM）**
+
+    ```bash Windows
+   geniex infer unsloth/Qwen3.5-0.8B-GGUF
+   geniex infer unsloth/Phi-4-mini-instruct-GGUF
+    ```
+
+    **多模态模型**
+    ```bash Windows
+    geniex infer Qualcomm/Qwen2.5-VL-7B
+    ```
+
+    <Tip>如需尝试其他 GGUF 模型，请访问 Hugging Face，复制任意兼容 GGUF 模型的路径（例如 `unsloth/Qwen2.5-VL-3B-Instruct-GGUF`），替换上述命令中的模型路径即可。</Tip>
+
+  </Tab>
+
+</Tabs>
+
+## **浏览 CLI 命令**
+
+查看所有可用 CLI 命令：
+
+```bash
+geniex -h
+```
+
+<br />
+
+<Feedback/>

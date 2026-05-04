@@ -1,0 +1,86 @@
+---
+title: 快速入门
+description: 开始使用 GenieX Python SDK——通过 QAIRT 和 llama.cpp 插件。
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+
+
+## **快速概览**
+
+### **安装**
+
+```bash
+pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ geniex==0.1.1rc1
+```
+这将从 [test PyPI](https://test.pypi.org/project/geniex/) 下载 Python 包。
+
+
+### **LLM 推理**
+
+以下是一个简单的入门示例：
+
+```python
+from geniex import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "qwen3",               # 简称别名、HF 仓库 ID 或本地 GGUF 路径
+    device_map="auto",     # "auto" | "<plugin>" | "<plugin>:<device>"
+)
+
+messages = [{"role": "user", "content": "What is 2+2?"}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
+
+# 一次性生成
+output = model.generate(prompt, max_new_tokens=256)
+print(output.text)
+print(f"[{output.profile.generated_tokens} tok, "
+      f"{output.profile.decode_speed:.1f} tok/s, stop={output.profile.stop_reason}]")
+
+# 流式生成
+streamer = model.generate(prompt, max_new_tokens=256, stream=True)
+for chunk in streamer:
+    print(chunk, end="", flush=True)
+
+model.close()
+```
+
+### **VLM 推理**
+
+以下是一个简单的入门示例：
+
+```python
+from geniex import AutoModelForVision2Seq
+
+model = AutoModelForVision2Seq.from_pretrained("qwen3vl", device_map="auto")
+messages = [{
+    "role": "user",
+    "content": [
+        {"type": "image", "image": "/path/to/image.jpg"},
+        {"type": "text", "text": "Describe the image."},
+    ],
+}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
+print(model.generate(prompt, images=["/path/to/image.jpg"]).text)
+```
+
+### **模型管理**
+CLI 使用的模型管理器同样可以通过代码调用：
+
+```python
+from geniex import model_manager as mm
+
+mm.pull("qwen3")                      # 别名或 "org/repo[:quant]"
+paths = mm.get_paths("qwen3")         # 解析本地路径
+mm.list_models()                      # 已缓存的模型
+mm.remove("qwen3")
+```
+
+<br />
+
+<Feedback/>

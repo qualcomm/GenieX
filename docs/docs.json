@@ -83,6 +83,47 @@
             ]
           }
         ]
+      },
+      {
+        "language": "cn",
+        "tabs": [
+          {
+            "tab": "GenieX",
+            "groups": [
+              {
+                "group": "快速开始",
+                "pages": [
+                  "cn/geniex-cli/overview",
+                  "cn/geniex-cli/quickstart",
+                  {
+                    "group": "支持的模型",
+                    "pages": [
+                      "cn/geniex-cli/npu",
+                      "cn/geniex-cli/gguf"
+                    ]
+                  }
+                ]
+              },
+              {
+                "group": "GenieX CLI",
+                "icon": "code",
+                "pages": [
+                  "cn/geniex-cli/GenieXCLI",
+                  "cn/geniex-cli/GenieXAPI"
+                ]
+              },
+              {
+                "group": "Python 库",
+                "icon": "python",
+                "pages": [
+                  "cn/geniex-python/overview",
+                  "cn/geniex-python/quickstart",
+                  "cn/geniex-python/api-reference"
+                ]
+              }
+            ]
+          }
+        ]
       }
     ]
   }

@@ -1,0 +1,46 @@
+---
+title: "QAIRT 插件"
+description: "通过 QAIRT 插件在骁龙 NPU 上运行 GenieX。"
+---
+
+
+## **支持的模型列表**
+我们精选了一批高质量的 QAIRT `bin` 格式顶尖模型。
+
+| 模型 ID |
+|---|
+| Qualcomm/Qwen3-4B |
+| Qualcomm/Qwen3-4B-Instruct |
+| Qualcomm/Qwen2.5-VL-7B |
+| Llama-v3.1-8B-Instruct |
+| Llama-SEA-LION-v3.5-8B-R |
+| Llama-v3.2-1B-Instruct |
+| Llama-v3.2-3B-Instruct |
+| Llama-v3-8B-Instruct |
+| Llama-v3-ELYZA-JP-8B |
+| Llama3-TAIDE-LX-8B-Chat-Alpha1 |
+
+运行 `Qualcomm` 组织下的模型，以 `Qwen3-4B` 为例：
+
+```bash
+geniex infer qualcomm/Qwen3-4B
+```
+
+运行 `yichqian` 个人 Hugging Face 上的模型，以 `Llama-v3.2-3B-Instruct` 为例，需要先将 HF 权重下载到本地，然后使用本地路径运行：
+
+```bash
+hf auth login  # 按提示粘贴 token
+
+# 仅下载所需的模型文件夹
+hf download yichqian/geniex-qairt-models `
+  --local-dir .\geniex-qairt-models `
+  --include "Llama-v3.2-1B-Instruct/**"
+
+# 使用下载的文件夹路径进行拉取（绝对路径）
+$localPath = (Resolve-Path ".\geniex-qairt-models\Llama-v3.2-1B-Instruct").Path
+geniex pull local/Llama-v3.2-1B-Instruct --model-hub localfs `
+  --local-path $localPath
+
+# 运行推理
+geniex infer local/Llama-v3.2-1B-Instruct
+```

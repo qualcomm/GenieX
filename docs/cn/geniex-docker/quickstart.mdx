@@ -1,0 +1,99 @@
+---
+title: 快速入门
+description: 几分钟内开始在 Linux ARM64 上使用 GenieX SDK Docker。
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **教程视频**
+
+{/* YouTube embed following Mintlify format */}
+<iframe
+  className="w-full aspect-video rounded-xl"
+  src="https://www.youtube.com/embed/auxoXSeMVsg"
+  title="SDK for Linux Tutorial"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowFullScreen
+></iframe>
+
+## **安装**
+
+### **拉取 Docker 镜像**
+
+从 Docker Hub 拉取最新 GenieX SDK Docker 镜像：
+
+```bash bash
+docker pull geniex-ai/geniexsdk:latest
+```
+
+## **使用模式**
+
+GenieX SDK Docker 支持两种使用模式：服务器模式用于 REST API 访问，交互式 CLI 模式用于直接模型推理。
+
+
+### **CLI 模式（交互式）**
+
+以交互式 CLI 模式运行 GenieX SDK 进行直接模型推理：
+
+```bash bash
+export NEXA_TOKEN="YOUR_LONG_TOKEN_HERE"
+docker run --rm -it --privileged \
+  -v /path/to/data:/data \
+  -v /etc/machine-id:/etc/machine-id:ro \
+  -e NEXA_TOKEN \
+  geniex-ai/geniexsdk:latest infer NexaAI/Granite-4.0-h-350M-NPU
+```
+
+<Note>
+`-it` 标志启用交互模式。将 `NexaAI/Granite-4.0-h-350M-NPU` 替换为任意支持的模型名称。完整的支持模型列表请查看[概览](/cn/geniex-docker/overview#支持的模型)页面。
+</Note>
+
+
+### **服务器模式（后台运行）**
+
+以服务器模式运行 GenieX SDK 以暴露 REST API 端点。此模式在后台运行：
+
+```bash bash
+export NEXA_TOKEN="YOUR_LONG_TOKEN_HERE"
+docker run --rm -it --privileged \
+  -v /path/to/data:/data \
+  -v /etc/machine-id:/etc/machine-id:ro \
+  -e NEXA_TOKEN \
+  geniex-ai/geniexsdk:latest pull [MODEL_NAME]
+docker run --rm -d -p 18181:18181 --privileged \
+  -v /path/to/data:/data \
+  -v /etc/machine-id:/etc/machine-id:ro \
+  -e NEXA_TOKEN \
+  geniex-ai/geniexsdk:latest serve
+```
+
+<Note>
+`--privileged` 标志是 NPU 访问所必需的。将 `YOUR_LONG_TOKEN_HERE` 替换为你的实际 GenieX 令牌。你可以在 [sdk.geniex.ai](https://sdk.geniex.ai) 创建账户并在 **Deployment -> Create Token** 中生成令牌。
+</Note>
+
+`geniex serve` 不会自动下载模型。请确保预先下载要使用的模型。
+
+服务器将在 `http://localhost:18181` 上可访问。详细 API 文档请查看 [REST API](/cn/geniex-docker/RestAPI) 页面。
+
+## **下一步**
+
+<CardGroup cols={2}>
+  <Card
+    title="REST API"
+    href="/cn/geniex-docker/RestAPI"
+    icon="code"
+  >
+    了解如何使用 REST API 端点进行聊天补全、嵌入、重排序等操作。
+  </Card>
+  <Card
+    title="NPU 模型"
+    href="/cn/geniex-cli/npu"
+    icon="microchip"
+  >
+    探索适用于高通设备的完整 NPU 优化模型合集。
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>
