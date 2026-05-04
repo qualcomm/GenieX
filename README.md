@@ -77,6 +77,10 @@ API and architecture: [bindings/android/README.md](bindings/android/README.md).
 Extract `geniex-sdk-<os>-arm64-<TAG>.zip` and point your build at its `include/` and `lib/` directories. To build the SDK in-tree instead, see [notes/build.md § Build the SDK](notes/build.md#build-the-sdk).
 
 ## Documentation
+To use `geniex`, please refer to [docs](docs/README.md) for detailed guides and API references.
+
+
+For contribution to this project, see docs below to build and test your changes.
 
 | File                               | Topic                                                                 |
 | ---------------------------------- | --------------------------------------------------------------------- |
