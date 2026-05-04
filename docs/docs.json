@@ -54,11 +54,9 @@
                    {
                     "group": "Device Coverage",
                     "pages": [
-                      "en/geniex-cli/supported-devices",
                       "en/geniex-cli/devices-compute",
                       "en/geniex-cli/devices-mobile",
-                      "en/geniex-cli/devices-iot",
-                      "en/geniex-cli/devices-automotive"
+                      "en/geniex-cli/devices-iot"
                     ]
                   }
                 ]

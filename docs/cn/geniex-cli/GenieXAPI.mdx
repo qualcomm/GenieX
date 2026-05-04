@@ -17,7 +17,7 @@ GenieX 内置本地推理服务器，提供 **OpenAI 兼容 API**。
 如果尚未拉取模型，请先下载。例如，拉取 Qwen3：
 
 ```bash bash
-geniex pull Qualcomm/Qwen3-4B-Instruct
+geniex pull qualcomm/Qwen3-4B-Instruct-2507 
 ```
 
 使用 API 前，先从项目根目录打开终端，然后启动 GenieX 服务器：
@@ -41,7 +41,7 @@ geniex serve
 
 ```json Example Value
 {
-  "model": "Qualcomm/Qwen3-4B-Instruct",
+  "model": "qualcomm/Qwen3-4B-Instruct-2507",
   "messages": [
     {"role": "user", "content": "Hello! Briefly introduce yourself."}
   ],
@@ -55,14 +55,14 @@ geniex serve
 
 <CodeGroup>
   ```bash Windows (cmd)
-  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"Qualcomm/Qwen3-4B-Instruct\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}], \"max_tokens\": 64}"
+  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"qualcomm/Qwen3-4B-Instruct-2507\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}], \"max_tokens\": 64}"
   ```
 
   ```bash Linux
   curl -X POST http://127.0.0.1:18181/v1/chat/completions \
     -H "Content-Type: application/json" \
     -d '{
-      "model": "Qualcomm/Qwen3-4B-Instruct",
+      "model": "qualcomm/Qwen3-4B-Instruct-2507",
       "messages": [{"role":"user","content":"Hello!"}],
       "max_tokens": 64
     }'
@@ -81,7 +81,7 @@ geniex serve
 
 ```json Example Value
 {
-  "model": "Qualcomm/qwen3vl-GGUF",
+  "model": "qualcomm/Qwen2.5-VL-7B-Instruct",
   "messages": [
     {
       "role": "user",
@@ -98,14 +98,14 @@ geniex serve
 
 <CodeGroup>
   ```bash Windows (cmd)
-  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"NexaAI/qwen3vl-GGUF\", \"messages\": [{\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"what is main color of the picture\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"</path/to/image>\"}}]}], \"stream\": false}"
+  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"qualcomm/Qwen2.5-VL-7B-Instruct\", \"messages\": [{\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"what is main color of the picture\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"</path/to/image>\"}}]}], \"stream\": false}"
   ```
 
   ```bash Linux
   curl -X POST http://127.0.0.1:18181/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "NexaAI/qwen3vl-GGUF",
+    "model": "qualcomm/Qwen2.5-VL-7B-Instruct",
     "messages": [
       {
         "role": "user",
