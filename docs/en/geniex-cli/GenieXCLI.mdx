@@ -12,14 +12,14 @@ After entering the pull command, you will be guided through a setup process to c
 
 ### **General Behavior**
 
-After running `geniex pull <model-name>`, the CLI will prompt:
+For QAIRT plugin model, no quantization precision selection is needed. For llama.cpp plugin model, after running `geniex pull <model-name>`, the CLI will prompt:
 
 1. **Quant version selection**\
    If the model supports multiple quantized versions, you will see a menu like this:
 
    ```bash Quant version selection
    Choose a quant version to download
-   > Q4_K_M     [1.2 GiB] (default)
+   > Q4_0       [1.2 GiB] (default)
      Q8_0       [2.0 GiB]
      F16        [3.8 GiB]
    ```
@@ -38,7 +38,7 @@ geniex pull Qualcomm/Qwen3-4B-Instruct
 ### **VLM**
 
 ```bash bash
-geniex pull NexaAI/Qwen2.5-Omni-3B-GGUF
+geniex infer Qwen/Qwen3-VL-2B-Instruct-GGUF
 ```
 
 ## **geniex list**
@@ -86,12 +86,13 @@ geniex infer unsloth/Qwen3-0.6B-GGUF
 ```
 
 Use the `--think` option to control whether the model outputs its internal reasoning process.
-- `--think=false` : The model responds directly without showing reasoning.
-- `--think=true` : The model displays its reasoning steps before the final response.
+- `--no-think` : The model responds directly without showing reasoning.
+- `--think` : The model displays its reasoning steps before the final response.
 
 Example with reasoning enabled:
 ```bash bash
-geniex infer Qualcomm/Qwen3-4B-Instruct --think=true
+geniex infer Qualcomm/Qwen3-4B --think
+geniex infer Qualcomm/Qwen3-4B --no-think
 ```
 
 ### **VLM**
@@ -99,7 +100,7 @@ geniex infer Qualcomm/Qwen3-4B-Instruct --think=true
 Text-only or response from image file (interactive image input):
 
 ```bash bash
-geniex infer NexaAI/Qwen2.5-Omni-3B-GGUF
+geniex infer Qualcomm/Qwen2.5-VL-7B-Instruct-GGUF
 ```
 
 If you only want text input, simply launch the command and begin chatting.\
