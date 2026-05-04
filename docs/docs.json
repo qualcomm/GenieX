@@ -80,7 +80,6 @@
                 "pages": [
                   "en/geniex-python/overview",
                   "en/geniex-python/quickstart",
-                  "en/geniex-python/platform-guides/windows-arm64",
                   "en/geniex-python/api-reference"
                 ]
               },
