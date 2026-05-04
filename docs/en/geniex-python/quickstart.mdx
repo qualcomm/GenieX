@@ -1,34 +1,11 @@
 ---
 title: Quickstart
-description: Get started with GenieX AI Python SDK - choose your platform and explore AI capabilities.
+description: Get started with GenieX Python SDK - through QAIRT and llama.cpp plugins.
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-## **What is GenieX AI Python SDK?**
 
-The GenieX AI Python SDK provides a comprehensive API for on-device AI inference across multiple modalities. It supports:
-
-- **Large Language Models (LLM)**: Text generation and conversation
-- **Vision-Language Models (VLM)**: Multimodal understanding and generation  
-- **Embedder**: Text vectorization and similarity computation
-- **Reranker**: Document reranking
-- **ASR (Automatic Speech Recognition)**: Speech-to-text transcription
-- **CV (Computer Vision)**: OCR/text recognition
-- **TTS (Text-to-Speech)**: Text-to-speech synthesis
-- **ImageGen**: Image generation from text prompts
-- **Diarize**: Speaker diarization
-
-## **Choose Your Platform**
-
-The SDK supports multiple platforms with optimized backends. Select your platform for detailed setup instructions:
-
-<CardGroup cols={1}>
-  <Card title="Windows ARM64" icon="microchip" href="/en/geniex-python/platform-guides/windows-arm64">
-    **NPU acceleration**<br/>
-    Python 3.11-3.13 ARM64 • Snapdragon X Elite
-  </Card>
-</CardGroup>
 
 ## **Quick Overview**
 
@@ -36,19 +13,13 @@ The SDK supports multiple platforms with optimized backends. Select your platfor
 
 Follow the platform guide for detailed instructions:
 
-- **Windows ARM64**: `pip install nexaai`
-
-### **Authentication**
-
-Set up your GenieX AI token from [https://sdk.geniex.ai/](https://sdk.geniex.ai/):
-
+- **Windows ARM64**: 
 ```bash
-# Windows
-$env:NEXA_TOKEN="key/your_token_here"
-
-# Linux
-export NEXA_TOKEN="key/your_token_here"
+pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ geniex==0.1.1rc1
 ```
+This will download the python package from [test PyPI](https://test.pypi.org/project/geniex/)
+
+
 
 ### **Basic Usage**
 
@@ -77,12 +48,6 @@ for token in llm.generate_stream(prompt, GenerationConfig(max_tokens=100)):
 <Note>
 This is a simplified example. For complete setup instructions, model recommendations, and platform-specific optimizations, please refer to your platform guide above.
 </Note>
-
-## **Next Steps**
-
-1. **Choose your platform** and follow the detailed setup guide
-2. **Explore the [API Reference](/en/geniex-python/api-reference)** for comprehensive documentation
-3. **Check out platform-specific examples** in your chosen guide
 
 <br />
 
