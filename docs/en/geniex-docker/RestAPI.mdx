@@ -1,0 +1,56 @@
+---
+title: "REST API"
+description: "Local OpenAI-compatible API for text generation, embeddings, and more"
+---
+
+import Feedback from '/snippets/page-feedback.mdx';
+
+## **Getting Started**
+
+To use the API, first start the GenieXSDK Docker container in server mode:
+
+```bash bash
+export NEXA_TOKEN="YOUR_LONG_TOKEN_HERE"
+docker run --rm -d -p 18181:18181 --privileged \
+  -v /path/to/data:/data \
+  -v /etc/machine-id:/etc/machine-id:ro \
+  -e NEXA_TOKEN \
+  geniex-ai/geniexsdk serve
+```
+
+The server runs on `http://127.0.0.1:18181` by default. Keep the container running, and make your requests from another terminal or application.
+
+<Info>
+You can also access the interactive Swagger UI documentation at [`http://127.0.0.1:18181/docs/ui`](http://127.0.0.1:18181/docs/ui) to explore and test the API endpoints directly from your browser. For a full list of configurable options, refer to the [Quickstart guide](/en/geniex-docker/quickstart).
+</Info>
+
+<Note>
+Replace `YOUR_LONG_TOKEN_HERE` with your actual GenieX token. You can obtain a token by creating an account at [sdk.geniex.ai](https://sdk.geniex.ai) and generating one in **Deployment → Create Token**.
+</Note>
+
+<Note>
+The `--privileged` flag is required for NPU access.
+</Note>
+
+## Model Choice
+
+GenieXSDK Docker supports both Linux ARM64 and x64 architectures. For a complete list of supported models and their Hugging Face links, see the [Quickstart guide](/en/geniex-docker/quickstart#supported-models).
+
+## **API Endpoints**
+
+The GenieXSDK REST API provides OpenAI-compatible endpoints for various AI tasks. For detailed API documentation including request/response formats, examples, and all available endpoints, please refer to the [CLI REST API documentation](/en/geniex-cli/GenieXAPI).
+
+### **Available Endpoints**
+
+- **`/v1/chat/completions`** - Creates model responses for conversations (LLM and VLM)
+- **`/v1/embeddings`** - Creates embeddings for text input
+- **`/v1/reranking`** - Reranks documents based on query relevance
+
+<Info>
+All API endpoints, request/response formats, and usage examples are documented in the [CLI REST API page](/en/geniex-cli/GenieXAPI). The API interface is identical whether running via CLI or Docker - only the server startup method differs.
+</Info>
+
+<br />
+
+<Feedback/>
+

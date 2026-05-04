@@ -181,7 +181,7 @@ nexa infer nexaml/Kokoro-82M-bf16-MLX -m tts --voice-identifier zm_yunyang -p "H
 ```
 - `-m TTS` : Sets the model type to TTS.
 - `--voice-identifier`: Specifies the speaker's voice.
-  <Tip>When no `--voice-identifier` is provided, NexaCLI will return a full list of supported voices in the error message. This is useful for discovering all available voice options.</Tip>
+  <Tip>When no `--voice-identifier` is provided, GenieXCLI will return a full list of supported voices in the error message. This is useful for discovering all available voice options.</Tip>
 - `-p`: The text prompt to synthesize.
 - `-o`: Output file for the generated .wav audio.
 
@@ -207,7 +207,7 @@ nexa infer pqnet/bge-reranker-v2-m3-Q8_0-GGUF -m reranker --query "query" --docu
 
 ## **nexa serve**
 
-Launch the Nexa inference server using REST API.
+Launch the GenieX inference server using REST API.
 
 ### **Helper menu**
 
@@ -248,7 +248,7 @@ This will send a POST request to the local /v1/completions endpoint to prompt th
 
 ## **nexa run**
 
-Connect to a running Nexa server (via OpenAI-compatible API) and start a chat interface. You should start server first.
+Connect to a running GenieX server (via OpenAI-compatible API) and start a chat interface. You should start server first.
 
 ### **Helper menu**
 

@@ -2,10 +2,6 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "Documentations",
-  "logo": {
-    "dark": "/nexalogo_dark.svg",
-    "light": "/nexalogo.svg"
-  },
   "favicon": "/nexalogo.svg",
   "colors": {
     "primary": "#454545",
@@ -24,7 +20,7 @@
     "links": [
       {
         "label": " 7.0K",
-        "href": "https://github.com/NexaAI/nexa-sdk",
+        "href": "https://github.com/geniex-ai/geniex-sdk",
         "icon": "github"
       }
     ]
@@ -34,7 +30,7 @@
       "anchors": [
         {
           "anchor": "Website",
-          "href": "https://nexa.ai/",
+          "href": "https://geniex.ai/",
           "icon": "globe"
         },
         {
@@ -44,7 +40,7 @@
         },
         {
           "anchor": "Slack",
-          "href": "https://join.slack.com/t/nexa-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw",
+          "href": "https://join.slack.com/t/geniex-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw",
           "icon": "Slack"
         }
       ]
@@ -59,24 +55,24 @@
               {
                 "group": "Get Started",
                 "pages": [
-                  "en/nexa-sdk-go/overview",
-                  "en/nexa-sdk-go/quickstart",
+                  "en/geniex-cli/overview",
+                  "en/geniex-cli/quickstart",
                   {
                     "group": "Models Supported",
                     "pages": [
-                      "en/nexa-sdk-go/npu",
-                      "en/nexa-sdk-go/mlx",
-                      "en/nexa-sdk-go/gguf"
+                      "en/geniex-cli/npu",
+                      "en/geniex-cli/mlx",
+                      "en/geniex-cli/gguf"
                     ]
                   }
                 ]
               },
               {
-                "group": "Nexa CLI Usage",
+                "group": "GenieX CLI Usage",
                 "icon": "code",
                 "pages": [
-                  "en/nexa-sdk-go/NexaCLI",
-                  "en/nexa-sdk-go/NexaAPI",
+                  "en/geniex-cli/GenieXCLI",
+                  "en/geniex-cli/GenieXAPI",
                   "en/trouble-shooting/error-code"
                 ]
               },
@@ -84,15 +80,15 @@
                 "group": "Android SDK",
                 "icon": "android",
                 "pages": [
-                  "en/nexa-sdk-android/overview",
-                  "en/nexa-sdk-android/quickstart",
-                  "en/nexa-sdk-android/model-tutorial",
+                  "en/geniex-android/overview",
+                  "en/geniex-android/quickstart",
+                  "en/geniex-android/model-tutorial",
                   {
                     "group": "API Reference",
                     "pages": [
-                      "en/nexa-sdk-android/APIReference",
-                      "en/nexa-sdk-android/APIReference_NPU",
-                      "en/nexa-sdk-android/APIReference_CPUGPU"
+                      "en/geniex-android/APIReference",
+                      "en/geniex-android/APIReference_NPU",
+                      "en/geniex-android/APIReference_CPUGPU"
                     ]
                   }
                 ]
@@ -101,137 +97,26 @@
                 "group": "Linux Docker",
                 "icon": "docker",
                 "pages": [
-                  "en/nexa-sdk-docker/overview",
-                  "en/nexa-sdk-docker/quickstart",
-                  "en/nexa-sdk-docker/RestAPI"
+                  "en/geniex-docker/overview",
+                  "en/geniex-docker/quickstart",
+                  "en/geniex-docker/RestAPI"
                 ]
               },
               {
                 "group": "Python Library",
                 "icon": "python",
                 "pages": [
-                  "en/nexa-sdk-python/overview",
-                  "en/nexa-sdk-python/quickstart",
+                  "en/geniex-python/overview",
+                  "en/geniex-python/quickstart",
                   {
                     "group": "Platform Guides",
                     "pages": [
-                      "en/nexa-sdk-python/platform-guides/macos",
-                      "en/nexa-sdk-python/platform-guides/windows-x64",
-                      "en/nexa-sdk-python/platform-guides/windows-arm64"
+                      "en/geniex-python/platform-guides/macos",
+                      "en/geniex-python/platform-guides/windows-x64",
+                      "en/geniex-python/platform-guides/windows-arm64"
                     ]
                   },
-                  "en/nexa-sdk-python/api-reference"
-                ]
-              },
-              {
-                "group": "iOS & macOS SDK",
-                "icon": "apple",
-                "pages": [
-                  "en/nexa-sdk-ios/overview",
-                  "en/nexa-sdk-ios/quickstart",
-                  "en/nexa-sdk-ios/APIReference"
-                ]
-              },
-              {
-                "group": "Community",
-                "icon": "users",
-                "pages": [
-                  "en/community/wishlist",
-                  "en/community/builder-bounty"
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      {
-        "language": "cn",
-        "tabs": [
-          {
-            "tab": "文档",
-            "groups": [
-              {
-                "group": "快速开始",
-                "pages": [
-                  "cn/nexa-sdk-go/overview",
-                  "cn/nexa-sdk-go/quickstart",
-                  {
-                    "group": "支持的模型",
-                    "pages": [
-                      "cn/nexa-sdk-go/npu",
-                      "cn/nexa-sdk-go/mlx",
-                      "cn/nexa-sdk-go/gguf"
-                    ]
-                  }
-                ]
-              },
-              {
-                "group": "Nexa CLI 使用",
-                "icon": "code",
-                "pages": [
-                  "cn/nexa-sdk-go/NexaCLI",
-                  "cn/nexa-sdk-go/NexaAPI",
-                  "cn/trouble-shooting/error-code"
-                ]
-              },
-              {
-                "group": "Android SDK",
-                "icon": "android",
-                "pages": [
-                  "cn/nexa-sdk-android/overview",
-                  "cn/nexa-sdk-android/quickstart",
-                  "cn/nexa-sdk-android/model-tutorial",
-                  {
-                    "group": "API Reference",
-                    "pages": [
-                      "cn/nexa-sdk-android/APIReference",
-                      "cn/nexa-sdk-android/APIReference_NPU",
-                      "cn/nexa-sdk-android/APIReference_CPUGPU"
-                    ]
-                  }
-                ]
-              },
-              {
-                "group": "Linux Docker",
-                "icon": "docker",
-                "pages": [
-                  "cn/nexa-sdk-docker/overview",
-                  "cn/nexa-sdk-docker/quickstart",
-                  "cn/nexa-sdk-docker/RestAPI"
-                ]
-              },
-              {
-                "group": "Python 库",
-                "icon": "python",
-                "pages": [
-                  "cn/nexa-sdk-python/overview",
-                  "cn/nexa-sdk-python/quickstart",
-                  {
-                    "group": "平台指南",
-                    "pages": [
-                      "cn/nexa-sdk-python/platform-guides/macos",
-                      "cn/nexa-sdk-python/platform-guides/windows-x64",
-                      "cn/nexa-sdk-python/platform-guides/windows-arm64"
-                    ]
-                  },
-                  "cn/nexa-sdk-python/api-reference"
-                ]
-              },
-              {
-                "group": "iOS & macOS SDK",
-                "icon": "apple",
-                "pages": [
-                  "cn/nexa-sdk-ios/overview",
-                  "cn/nexa-sdk-ios/quickstart",
-                  "cn/nexa-sdk-ios/APIReference"
-                ]
-              },
-              {
-                "group": "社区",
-                "icon": "users",
-                "pages": [
-                  "cn/community/wishlist",
-                  "cn/community/builder-bounty"
+                  "en/geniex-python/api-reference"
                 ]
               }
             ]

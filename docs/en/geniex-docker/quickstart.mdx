@@ -1,6 +1,6 @@
 ---
 title: Quickstart
-description: Get started with NexaSDK Docker on Linux ARM64 in minutes.
+description: Get started with GenieXSDK Docker on Linux ARM64 in minutes.
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
@@ -20,20 +20,20 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ### **Pull Docker Image**
 
-Pull the latest NexaSDK Docker image from Docker Hub:
+Pull the latest GenieXSDK Docker image from Docker Hub:
 
 ```bash bash
-docker pull nexa4ai/nexasdk:latest
+docker pull geniex-ai/geniexsdk:latest
 ```
 
 ## **Usage Modes**
 
-NexaSDK Docker supports two usage modes: server mode for REST API access and interactive CLI mode for direct model inference.
+GenieXSDK Docker supports two usage modes: server mode for REST API access and interactive CLI mode for direct model inference.
 
 
 ### **CLI Mode (Interactive)**
 
-Run NexaSDK in interactive CLI mode for direct model inference:
+Run GenieXSDK in interactive CLI mode for direct model inference:
 
 ```bash bash
 export NEXA_TOKEN="YOUR_LONG_TOKEN_HERE"
@@ -41,17 +41,17 @@ docker run --rm -it --privileged \
   -v /path/to/data:/data \
   -v /etc/machine-id:/etc/machine-id:ro \
   -e NEXA_TOKEN \
-  nexa4ai/nexasdk:latest infer NexaAI/Granite-4.0-h-350M-NPU
+  geniex-ai/geniexsdk:latest infer NexaAI/Granite-4.0-h-350M-NPU
 ```
 
 <Note>
-The `-it` flags enable interactive mode. Replace `NexaAI/Granite-4.0-h-350M-NPU` with any supported model name. For a complete list of supported models, see the [Overview](/en/nexa-sdk-docker/overview#supported-models) page.
+The `-it` flags enable interactive mode. Replace `NexaAI/Granite-4.0-h-350M-NPU` with any supported model name. For a complete list of supported models, see the [Overview](/en/geniex-docker/overview#supported-models) page.
 </Note>
 
 
 ### **Server Mode (Detached)**
 
-Run NexaSDK in server mode to expose a REST API endpoint. This mode runs in the background:
+Run GenieXSDK in server mode to expose a REST API endpoint. This mode runs in the background:
 
 ```bash bash
 export NEXA_TOKEN="YOUR_LONG_TOKEN_HERE"
@@ -59,35 +59,35 @@ docker run --rm -it --privileged \
   -v /path/to/data:/data \
   -v /etc/machine-id:/etc/machine-id:ro \
   -e NEXA_TOKEN \
-  nexa4ai/nexasdk:latest pull [MODEL_NAME]
+  geniex-ai/geniexsdk:latest pull [MODEL_NAME]
 docker run --rm -d -p 18181:18181 --privileged \
   -v /path/to/data:/data \
   -v /etc/machine-id:/etc/machine-id:ro \
   -e NEXA_TOKEN \
-  nexa4ai/nexasdk:latest serve
+  geniex-ai/geniexsdk:latest serve
 ```
 
 <Note>
-The `--privileged` flag is required for NPU access. Replace `YOUR_LONG_TOKEN_HERE` with your actual Nexa token. You can obtain a token by creating an account at [sdk.nexa.ai](https://sdk.nexa.ai) and generating one in **Deployment → Create Token**.
+The `--privileged` flag is required for NPU access. Replace `YOUR_LONG_TOKEN_HERE` with your actual GenieX token. You can obtain a token by creating an account at [sdk.geniex.ai](https://sdk.geniex.ai) and generating one in **Deployment → Create Token**.
 </Note>
 
 `nexa serve` won't auto download models. Make sure to pre-download the models you intend to use.
 
-The server will be accessible at `http://localhost:18181`. For detailed API documentation, see the [REST API](/en/nexa-sdk-docker/RestAPI) page.
+The server will be accessible at `http://localhost:18181`. For detailed API documentation, see the [REST API](/en/geniex-docker/RestAPI) page.
 
 ## **Next Steps**
 
 <CardGroup cols={2}>
   <Card
     title="REST API"
-    href="/en/nexa-sdk-docker/RestAPI"
+    href="/en/geniex-docker/RestAPI"
     icon="code"
   >
     Learn how to use the REST API endpoints for chat completions, embeddings, reranking, and more.
   </Card>
   <Card
     title="NPU Models"
-    href="/en/nexa-sdk-go/npu"
+    href="/en/geniex-cli/npu"
     icon="microchip"
   >
     Explore the full collection of NPU-optimized models available for Qualcomm devices.
