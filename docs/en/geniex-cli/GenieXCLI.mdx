@@ -5,16 +5,16 @@ description: "This page documents all available CLI commands with usage examples
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-<Note>Run nexa commands from the nexa executable directory.</Note>
+<Note>Run geniex commands from the geniex executable directory.</Note>
 
-## **nexa pull**
+## **geniex pull**
 
 Download a model and store it locally.
 After entering the pull command, you will be guided through a setup process to choose the model type, main model file, tokenizer (optional), and extra files (optional).
 
 ### **General Behavior**
 
-After running `nexa pull <model-name>`, the CLI will prompt:
+After running `geniex pull <model-name>`, the CLI will prompt:
 
 1. **Quant version selection**\
    If the model supports multiple quantized versions, you will see a menu like this:
@@ -34,94 +34,88 @@ After running `nexa pull <model-name>`, the CLI will prompt:
 ### **LLM**
 
 ```bash bash
-nexa pull NexaAI/Qwen3-0.6B-GGUF
+geniex pull NexaAI/Qwen3-0.6B-GGUF
 ```
 
 ### **VLM**
 
 ```bash bash
-nexa pull NexaAI/Qwen2.5-Omni-3B-GGUF
+geniex pull NexaAI/Qwen2.5-Omni-3B-GGUF
 ```
 
 ### **Function Call**
 ```bash bash
-nexa pull NexaAI/Qwen3-0.6B-GGUF
+geniex pull NexaAI/Qwen3-0.6B-GGUF
 ```
 
 ### **Omni Model**
 
 ```bash bash
-nexa pull NexaAI/Qwen2.5-Omni-3B-GGUF
+geniex pull NexaAI/Qwen2.5-Omni-3B-GGUF
 ```
 
 ### **ASR**
 
 ```bash bash
-nexa pull mlx-community/whisper-tiny
-```
-
-### **TTS**
-
-```bash bash
-nexa pull nexaml/Kokoro-82M-bf16-MLX
+geniex pull NexaAI/parakeet-tdt-0.6b-v3-npu
 ```
 
 ### **Embedder**
 
 ```bash bash
-nexa pull djuna/jina-embeddings-v2-small-en-Q5_K_M-GGUF
+geniex pull djuna/jina-embeddings-v2-small-en-Q5_K_M-GGUF
 ```
 
 ### **Reranker**
 
 ```bash bash
-nexa pull pqnet/bge-reranker-v2-m3-Q8_0-GGUF
+geniex pull pqnet/bge-reranker-v2-m3-Q8_0-GGUF
 ```
 
-## **nexa list**
+## **geniex list**
 
 Display all downloaded models in a table with their names and sizes.
 
 ```bash bash
-nexa list
+geniex list
 ```
 
-## **nexa remove**
+## **geniex remove**
 
 Remove a specific local model by name.
 
 For example, remove the locally downloaded model NexaAI/Qwen3-0.6B-GGUF from the cache directory. This will free up disk space and make the model unavailable for future inference unless re-downloaded.
 
 ```bash bash
-nexa remove NexaAI/Qwen3-0.6B-GGUF
+geniex remove NexaAI/Qwen3-0.6B-GGUF
 ```
 
-## **nexa clean**
+## **geniex clean**
 
 Delete all locally cached models.
 
 ```bash bash
-nexa clean
+geniex clean
 ```
 
-## **nexa infer**
+## **geniex infer**
 
 Run inference with a specified model. The model must be downloaded and cached locally.
 
 ### **Helper menu**
 
 ```bash bash
-nexa infer -h
+geniex infer -h
 ```
 
-Show help menu for `nexa infer`.
+Show help menu for `geniex infer`.
 
 ### **LLM**
 
 Launch an interactive chat session with the language model.
 
 ```bash bash
-nexa infer NexaAI/Qwen3-0.6B-GGUF
+geniex infer NexaAI/Qwen3-0.6B-GGUF
 ```
 
 Use the `--think` option to control whether the model outputs its internal reasoning process.
@@ -130,7 +124,7 @@ Use the `--think` option to control whether the model outputs its internal reaso
 
 Example with reasoning enabled:
 ```bash bash
-nexa infer NexaAI/Qwen3-0.6B-GGUF --think=true
+geniex infer NexaAI/Qwen3-0.6B-GGUF --think=true
 ```
 
 ### **VLM**
@@ -138,7 +132,7 @@ nexa infer NexaAI/Qwen3-0.6B-GGUF --think=true
 Text-only or response from image file (interactive image input):
 
 ```bash bash
-nexa infer NexaAI/Qwen2.5-Omni-3B-GGUF
+geniex infer NexaAI/Qwen2.5-Omni-3B-GGUF
 ```
 
 If you only want text input, simply launch the command and begin chatting.\
@@ -150,7 +144,7 @@ Example prompt: `Describe this picture </path/to/image.png>`
 Text-only or response from audio file (interactive audio output):
 
 ```bash bash
-nexa infer ggml-org/Qwen2.5-Omni-3B-GGUF
+geniex infer ggml-org/Qwen2.5-Omni-3B-GGUF
 ```
 
 If you only want text output, start chatting as usual.<br />
@@ -159,37 +153,20 @@ Example prompt: `Convert this audio into text </path/to/audio.mp3>`
 
 ### **ASR**
 
-<Note>Currently, ASR is only supported on macOS using the mlx runtime.</Note>
-
 Use ASR models to transcribe speech from audio files into text.
 
 ```bash bash
-nexa infer -m asr mlx-community/whisper-tiny  --input < /path/to/audio.wav > --language en
+geniex infer -m asr NexaAI/parakeet-tdt-0.6b-v3-npu --input < /path/to/audio.wav > --language en
 ```
 - `-m asr` : Sets the model type to ASR.
 - `--input` : Specifies the input audio file.
 - `--language` : Sets the language code (e.g., en for English, zh for Chinese).
 
-### **TTS**
-
-<Note>Currently, TTS is only supported on macOS using the mlx runtime.</Note>
-
-Use TTS models to convert input text into spoken audio.
-
-```bash bash
-nexa infer nexaml/Kokoro-82M-bf16-MLX -m tts --voice-identifier zm_yunyang -p "Hello world this is a text to speech test" -o < /path/to/audio.wav >
-```
-- `-m TTS` : Sets the model type to TTS.
-- `--voice-identifier`: Specifies the speaker's voice.
-  <Tip>When no `--voice-identifier` is provided, GenieXCLI will return a full list of supported voices in the error message. This is useful for discovering all available voice options.</Tip>
-- `-p`: The text prompt to synthesize.
-- `-o`: Output file for the generated .wav audio.
-
 ### **Embedder**
 Generate embeddings for multiple pieces of text using an embedding model.
 
 ```bash bash
-nexa infer djuna/jina-embeddings-v2-small-en-Q5_K_M-GGUF -m embedder --prompt "translate to text" --prompt "second"
+geniex infer djuna/jina-embeddings-v2-small-en-Q5_K_M-GGUF -m embedder --prompt "translate to text" --prompt "second"
 ```
 - `-m embedder` : Sets the model type to Embedder.
 - `--prompt` : Provide one or more pieces of text to embed.
@@ -199,30 +176,30 @@ nexa infer djuna/jina-embeddings-v2-small-en-Q5_K_M-GGUF -m embedder --prompt "t
 Use a reranker model to score and sort documents based on relevance to a query.
 
 ```bash bash
-nexa infer pqnet/bge-reranker-v2-m3-Q8_0-GGUF -m reranker --query "query" --document "a" --document "query"
+geniex infer pqnet/bge-reranker-v2-m3-Q8_0-GGUF -m reranker --query "query" --document "a" --document "query"
 ```
 - `-m reranker` : Sets the model type to Reranker.
 - `--query` : The main query string used to evaluate document relevance.
 - `--document` : 	One or more documents to score against the query.
 
-## **nexa serve**
+## **geniex serve**
 
 Launch the GenieX inference server using REST API.
 
 ### **Helper menu**
 
 ```bash bash
-nexa serve -h
+geniex serve -h
 ```
 
-Show help menu for `nexa serve`.
+Show help menu for `geniex serve`.
 
 ### **Start serve**
 
 For example, start a local inference server bound to 127.0.0.1:8080. The server supports OpenAI-compatible APIs, and --keepalive 600 keeps models in memory for 10 minutes between requests.
 
 ```bash bash
-nexa serve --host 127.0.0.1:8080 --keepalive 600
+geniex serve --host 127.0.0.1:8080 --keepalive 600
 ```
 
 You can test it via:
@@ -232,7 +209,7 @@ You can test it via:
     curl -X POST http://127.0.0.1:8080/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"NexaAI/Qwen3-0.6B-GGUF\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}], \"max_tokens\": 64}"
     ```
 
-    ```bash MacOS
+    ```bash Linux
     curl -X POST http://127.0.0.1:8080/v1/chat/completions \
     -H "Content-Type: application/json" \
     -d '{
@@ -244,26 +221,26 @@ You can test it via:
 
 </CodeGroup>
 
-This will send a POST request to the local /v1/completions endpoint to prompt the NexaAI/Qwen3-0.6B-GGUF model with “What is the capital of France?” and return a response with up to 100 tokens.
+This will send a POST request to the local /v1/completions endpoint to prompt the NexaAI/Qwen3-0.6B-GGUF model with "What is the capital of France?" and return a response with up to 100 tokens.
 
-## **nexa run**
+## **geniex run**
 
 Connect to a running GenieX server (via OpenAI-compatible API) and start a chat interface. You should start server first.
 
 ### **Helper menu**
 
 ```bash bash
-nexa run -h
+geniex run -h
 ```
 
-Show help menu for `nexa run`.
+Show help menu for `geniex run`.
 
 ### **Run model**
 
 For example: launch an interactive streaming chat session with the NexaAI/Qwen3-0.6B-GGUF model. The model generates and displays output incrementally as tokens are produced.
 
 ```bash bash
-nexa run NexaAI/Qwen3-0.6B-GGUF
+geniex run NexaAI/Qwen3-0.6B-GGUF
 ```
 
 `--disable-stream|-s`: disable streaming and respond the entire json back.

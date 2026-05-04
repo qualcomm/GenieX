@@ -23,15 +23,7 @@ The GenieX AI Python SDK provides a comprehensive API for on-device AI inference
 
 The SDK supports multiple platforms with optimized backends. Select your platform for detailed setup instructions:
 
-<CardGroup cols={3}>
-  <Card title="macOS" icon="apple" href="/en/geniex-python/platform-guides/macos">
-    **Apple Silicon optimized**<br/>
-    Python 3.10 • MLX backend • Metal acceleration
-  </Card>
-  <Card title="Windows x64" icon="windows" href="/en/geniex-python/platform-guides/windows-x64">
-    **CPU/GPU acceleration**<br/>
-    Python 3.10 • GGUF models • CUDA support
-  </Card>
+<CardGroup cols={1}>
   <Card title="Windows ARM64" icon="microchip" href="/en/geniex-python/platform-guides/windows-arm64">
     **NPU acceleration**<br/>
     Python 3.11-3.13 ARM64 • Snapdragon X Elite
@@ -42,10 +34,8 @@ The SDK supports multiple platforms with optimized backends. Select your platfor
 
 ### **Installation**
 
-Each platform has specific installation requirements. Follow your platform guide for detailed instructions:
+Follow the platform guide for detailed instructions:
 
-- **macOS**: `pip install 'nexaai[mlx]'`
-- **Windows x64**: `pip install nexaai`  
 - **Windows ARM64**: `pip install nexaai`
 
 ### **Authentication**
@@ -53,11 +43,11 @@ Each platform has specific installation requirements. Follow your platform guide
 Set up your GenieX AI token from [https://sdk.geniex.ai/](https://sdk.geniex.ai/):
 
 ```bash
-# Linux/macOS
-export NEXA_TOKEN="key/your_token_here"
-
 # Windows
 $env:NEXA_TOKEN="key/your_token_here"
+
+# Linux
+export NEXA_TOKEN="key/your_token_here"
 ```
 
 ### **Basic Usage**
@@ -67,8 +57,8 @@ Here's a simple example to get you started:
 ```python
 from nexaai import LLM, GenerationConfig, ModelConfig, LlmChatMessage
 
-# Initialize model (platform-specific)
-model_name = "NexaAI/Qwen3-1.7B-4bit-MLX"  # Example for macOS
+# Initialize model
+model_name = "NexaAI/Qwen3-0.6B-GGUF"
 config = ModelConfig()
 llm = LLM.from_(model=model_name, config=config)
 

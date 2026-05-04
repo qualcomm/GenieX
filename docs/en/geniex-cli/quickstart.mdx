@@ -1,6 +1,6 @@
 ---
 title: "Quickstart"
-description: "Get started with GenieXSDK on MacOS, Windows, and Linux in 1 minute."
+description: "Get started with GenieXSDK on Windows ARM64 and Linux ARM64 in 1 minute."
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
@@ -9,80 +9,6 @@ import Feedback from "/snippets/page-feedback.mdx";
 ## **Installation & Running Your First Model**
 
 <Tabs>
-  <Tab title="MacOS">
-    ### **MacOS Installation**
-
-    Download the appropriate installer for your Mac:
-
-    - [arm64 with Apple Neural Engine support](https://nexa-model-hub-bucket.s3.us-west-1.amazonaws.com/public/nexa_sdk/downloads/nexa-cli_macos_arm64.pkg)
-    - [x86_64](https://nexa-model-hub-bucket.s3.us-west-1.amazonaws.com/public/nexa_sdk/downloads/nexa-cli_macos_x86_64.pkg)
-
-    Run the downloaded `.pkg` file and follow the installation wizard.
-
-    ### **Running Your First Model**
-
-    MacOS supports both MLX (Apple Silicon optimized) and GGUF models.
-
-    <Tabs>
-      <Tab title="MLX Models (Recommended for Apple Silicon)">
-        **Language Model (LLM)**
-
-        ```bash MacOS
-        nexa infer NexaAI/Qwen3-4B-4bit-MLX
-        ```
-
-        **Multimodal Model**
-        ```bash MacOS
-        nexa infer NexaAI/gemma-3n-E4B-it-4bit-MLX
-        ```
-        <Note>Many MLX models in the Hugging Face <code>mlx-community</code> have quality issues and may not run locally. We recommend using models from [our collection](https://huggingface.co/NexaAI/collections) for best results.</Note>
-      </Tab>
-
-      <Tab title="GGUF Models">
-        **Language Model (LLM)**
-
-        ```bash MacOS
-        nexa infer NexaAI/Qwen3-0.6B
-        ```
-
-        **Multimodal Model**
-        ```bash MacOS
-        nexa infer NexaAI/Qwen2.5-Omni-3B-GGUF
-        ```
-        <Tip>To try other GGUF models, visit Hugging Face, copy the path of any compatible GGUF model (e.g., `unsloth/Qwen2.5-VL-3B-Instruct-GGUF`), and replace the model path in the command above.</Tip>
-      </Tab>
-    </Tabs>
-  </Tab>
-
-  <Tab title="Windows x64">
-    ### **Windows x64 Installation**
-
-    Download the installer:
-
-    - [x86_64 with Intel NPU support](https://nexa-model-hub-bucket.s3.us-west-1.amazonaws.com/public/nexa_sdk/downloads/nexa-cli_windows_x86_64.exe)
-
-    Run the downloaded `.exe` file and follow the installation wizard.
-
-    ### **Running Your First Model**
-
-    Currently, we support LLM and Multimodal models. More model type support is coming soon!
-
-    **Language Model (LLM)**
-
-    ```bash Windows
-    nexa infer NexaAI/Qwen3-0.6B
-    ```
-
-    **Multimodal Model**
-    ```bash Windows
-    nexa infer NexaAI/Qwen2.5-Omni-3B-GGUF
-    ```
-
-    <Tip>To try other GGUF models, visit Hugging Face, copy the path of any compatible GGUF model (e.g., `unsloth/Qwen2.5-VL-3B-Instruct-GGUF`), and replace the model path in the command above.</Tip>
-
-    <Note>Currently, **LLM** (Large Language Model) and **VLM** (Vision Language Model) are in the testing scope. More modalities are coming soon!</Note>
-  </Tab>
-
   <Tab title="Windows ARM64">
     ### **Windows ARM64 Installation**
 
@@ -99,12 +25,12 @@ import Feedback from "/snippets/page-feedback.mdx";
     **Language Model (LLM)**
 
     ```bash Windows
-    nexa infer NexaAI/Qwen3-0.6B
+    geniex infer NexaAI/Qwen3-0.6B
     ```
 
     **Multimodal Model**
     ```bash Windows
-    nexa infer NexaAI/Qwen2.5-Omni-3B-GGUF
+    geniex infer NexaAI/Qwen2.5-Omni-3B-GGUF
     ```
 
     <Tip>To try other GGUF models, visit Hugging Face, copy the path of any compatible GGUF model (e.g., `unsloth/Qwen2.5-VL-3B-Instruct-GGUF`), and replace the model path in the command above.</Tip>
@@ -122,7 +48,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     **OmniNeural-4B (Multimodal NPU Model)**
 
     ```bash Windows
-    nexa infer omni-neural
+    geniex infer omni-neural
     ```
 
     **Voice Input Mode:** Once running, record your voice directly in terminal:
@@ -141,8 +67,8 @@ import Feedback from "/snippets/page-feedback.mdx";
     </Info>
   </Tab>
 
-  <Tab title="Linux">
-    ### **Linux Installation**
+  <Tab title="Linux ARM64">
+    ### **Linux ARM64 Installation**
 
     Run the following command to download and install:
 
@@ -157,12 +83,12 @@ import Feedback from "/snippets/page-feedback.mdx";
     **Language Model (LLM)**
 
     ```bash Linux
-    nexa infer NexaAI/Qwen3-0.6B
+    geniex infer NexaAI/Qwen3-0.6B
     ```
 
     **Multimodal Model**
     ```bash Linux
-    nexa infer NexaAI/Qwen2.5-Omni-3B-GGUF
+    geniex infer NexaAI/Qwen2.5-Omni-3B-GGUF
     ```
 
     <Tip>To try other GGUF models, visit Hugging Face, copy the path of any compatible GGUF model (e.g., `unsloth/Qwen2.5-VL-3B-Instruct-GGUF`), and replace the model path in the command above.</Tip>
@@ -175,19 +101,9 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 To see a list of all available CLI commands, run:
 
-<CodeGroup>
-```bash MacOS
-nexa -h
+```bash
+geniex -h
 ```
-
-```bash Windows
-nexa -h
-```
-
-```bash Linux
-nexa -h
-```
-</CodeGroup>
 
 <br />
 

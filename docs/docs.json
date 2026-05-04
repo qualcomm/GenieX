@@ -61,7 +61,6 @@
                     "group": "Models Supported",
                     "pages": [
                       "en/geniex-cli/npu",
-                      "en/geniex-cli/mlx",
                       "en/geniex-cli/gguf"
                     ]
                   }
@@ -108,14 +107,7 @@
                 "pages": [
                   "en/geniex-python/overview",
                   "en/geniex-python/quickstart",
-                  {
-                    "group": "Platform Guides",
-                    "pages": [
-                      "en/geniex-python/platform-guides/macos",
-                      "en/geniex-python/platform-guides/windows-x64",
-                      "en/geniex-python/platform-guides/windows-arm64"
-                    ]
-                  },
+                  "en/geniex-python/platform-guides/windows-arm64",
                   "en/geniex-python/api-reference"
                 ]
               }

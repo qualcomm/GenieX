@@ -10,45 +10,40 @@ import Feedback from '/snippets/page-feedback.mdx';
 If you haven't already, pull a model before making requests. For example, pull Qwen3:
 
 ```bash bash
-nexa pull NexaAI/Qwen3-0.6B-GGUF
+geniex pull NexaAI/Qwen3-0.6B-GGUF
 ```
 
 To use the API, first open a terminal from the project root. Then, start the GenieX server by:
 
 ```bash bash
-nexa serve
+geniex serve
 ```
 
 The server runs on `http://127.0.0.1:18181` by default. \
 Keep the terminal that runs the server open, and make your requests from another terminal tab. \
-To see a full list of configurable options for the server, run `nexa serve -h`
+To see a full list of configurable options for the server, run `geniex serve -h`
 
 While you can try out the GenieX server with any HTTP tools, the easiest way to quickly get start is to run
 ```
-nexa run NexaAI/Qwen3-0.6B-GGUF
+geniex run NexaAI/Qwen3-0.6B-GGUF
 ```
-You may replace the model name with any model names that has been pulled with `nexa pull`. The `run` command will also starts an REPL conversation UI just like `nexa infer`, but fulfilling your chat by sending requests to the server hosted by your `nexa serve` command.
+You may replace the model name with any model names that has been pulled with `geniex pull`. The `run` command will also starts an REPL conversation UI just like `geniex infer`, but fulfilling your chat by sending requests to the server hosted by your `geniex serve` command.
 
 
 ## Model Choice
 
-Certain models can only be run on specific platforms. For example, MLX models can only be run on MacOS 13+ devices. OmniNeural can only be run on a Qualcomm laptop with NPU. Below is a table that contains example models for each OS for you to try:
+Certain models can only be run on specific platforms. OmniNeural can only be run on a Qualcomm device with NPU. Below is a table that contains example models for each platform for you to try:
 
-| OS | Modality | Recommended Model |
+| Platform | Modality | Recommended Model |
 |----|-----------|------------------|
-| **macOS** | LLM | NexaAI/gpt-oss-20b-MLX-4bit |
-| **macOS** | VLM | NexaAI/gemma-3n-E4B-it-4bit-MLX |
-| **macOS** | Image Generation | NexaAI/sdxl-turbo |
-| **macOS** | ASR | NexaAI/whisper-large-v3-turbo-MLX |
-| **macOS** | TTS | NexaAI/Kokoro-82M-bf16-MLX |
-| **Windows x86** | LLM | NexaAI/Qwen3-4B-GGUF |
-| **Windows x86** | VLM | NexaAI/gemma-3n |
-| **Windows x86** | Image Generation | NexaAI/Prefect-illustrious-XL-v2.0p |
 | **Windows Qualcomm ARM64** | LLM | NexaAI/Qwen3-4B-npu |
 | **Windows Qualcomm ARM64** | VLM | NexaAI/OmniNeural-4B |
 | **Windows Qualcomm ARM64** | ASR | NexaAI/parakeet-tdt-0.6b-v3-npu |
-| **Windows AMD NPU** | Image Generation | NexaAI/sdxl-turbo-amd-npu |
-| **Windows Intel NPU** | LLM | NexaAI/llama-3.1-8B-intel-npu |
+| **Linux ARM64** | LLM | NexaAI/Granite-4.0-h-350M-NPU |
+| **Linux ARM64** | VLM | NexaAI/OmniNeural-4B |
+| **Linux ARM64** | Embedding | NexaAI/EmbedNeural |
+| **Linux ARM64** | Rerank | NexaAI/jina-v2-rerank-npu |
+| **Linux ARM64** | ASR | NexaAI/parakeet-tdt-0.6b-v3-npu |
 
 
 
@@ -79,7 +74,7 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
   curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"NexaAI/Qwen3-0.6B-GGUF\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}], \"max_tokens\": 64}"
   ```
 
-  ```bash MacOS
+  ```bash Linux
   curl -X POST http://127.0.0.1:18181/v1/chat/completions \
     -H "Content-Type: application/json" \
     -d '{
@@ -98,7 +93,7 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
 
 - A remote URL, e.g., `https://example.com/photo.jpg`
 - A base64-encoded string, e.g., `data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...`
-- A local file path on server machine, which requires the server to have access to the file. e.g., `file:///C:/Users/Username/Pictures/photo.jpg` (Windows) or `file:///Users/Username/Pictures/photo.jpg` (MacOS/Linux), `file://` is optional, you can just provide the path like `C:/Users/Username/Pictures/photo.jpg` or `/Users/Username/Pictures/photo.jpg`.
+- A local file path on server machine, which requires the server to have access to the file. e.g., `file:///C:/Users/Username/Pictures/photo.jpg` (Windows) or `file:///home/username/Pictures/photo.jpg` (Linux), `file://` is optional, you can just provide the path like `C:/Users/Username/Pictures/photo.jpg` or `/home/username/Pictures/photo.jpg`.
 
 ```json Example Value
 {
@@ -122,7 +117,7 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
   curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"NexaAI/qwen3vl-GGUF\", \"messages\": [{\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"what is main color of the picture\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"</path/to/image>\"}}]}], \"stream\": false}"
   ```
 
-  ```bash MacOS
+  ```bash Linux
   curl -X POST http://127.0.0.1:18181/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -153,10 +148,6 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
 Creates an image based on given a prompt.
 
 <Note>
-  The example below uses `NexaAI/Prefect-illustrious-XL-v2.0p-fp16-cuda` as the model, which is recommended for most CUDA (NVIDIA GPU) environments.  
-
-  If you are running on **Apple Silicon**, use an MLX-compatible model (e.g., `nexaml/sdxl-turbo-ryzen-ai`).  
-
   Always make sure the model you select matches your hardware capabilities.
 </Note>
 
@@ -164,7 +155,7 @@ Creates an image based on given a prompt.
 
 ```json Example Value
 {
-  "model": "NexaAI/Prefect-illustrious-XL-v2.0p-fp16-cuda",
+  "model": "NexaAI/Prefect-illustrious-XL-v2.0p",
   "prompt": "A white cat with blue eyes",
   "n": 1,
   "size": "512x512",
@@ -176,14 +167,14 @@ Creates an image based on given a prompt.
 
 <CodeGroup>
   ```bash Windows (cmd)
-  curl -X POST http://127.0.0.1:18181/v1/images/generations -H "Content-Type: application/json" -d "{\"model\":\"NexaAI/Prefect-illustrious-XL-v2.0p-fp16-cuda\",\"prompt\":\"A white cat with blue eyes\",\"n\":1,\"size\":\"512x512\",\"response_format\":\"url\"}"
+  curl -X POST http://127.0.0.1:18181/v1/images/generations -H "Content-Type: application/json" -d "{\"model\":\"NexaAI/Prefect-illustrious-XL-v2.0p\",\"prompt\":\"A white cat with blue eyes\",\"n\":1,\"size\":\"512x512\",\"response_format\":\"url\"}"
   ```
 
-  ```bash MacOS
+  ```bash Linux
   curl -X POST http://127.0.0.1:18181/v1/images/generations \
     -H "Content-Type: application/json" \
     -d '{
-      "model": "stabilityai/sdxl-turbo",
+      "model": "NexaAI/Prefect-illustrious-XL-v2.0p",
       "prompt": "A white cat with blue eyes",
       "n": 1,
       "size": "512x512",
@@ -219,7 +210,7 @@ Creates an embedding for the given input. Use this to convert text (or document 
   curl -X POST http://127.0.0.1:18181/v1/embeddings -H "Content-Type: application/json" -d "{\"model\":\"djuna/jina-embeddings-v2-small-en-Q5_K_M-GGUF\",\"input\":\"Hello, world!\"}"
   ```
 
-  ```bash MacOS
+  ```bash Linux
   curl -X POST http://127.0.0.1:18181/v1/embeddings \
     -H "Content-Type: application/json" \
     -d '{
@@ -265,7 +256,7 @@ Rerank documents based on their relevance to a query. Returns a list of relevanc
   curl -X POST http://127.0.0.1:18181/v1/reranking -H "Content-Type: application/json" -d "{\"model\":\"NexaAI/jina-v2-rerank-npu\",\"query\":\"What is machine learning?\",\"documents\":[\"Machine learning is a subset of artificial intelligence.\",\"Machine learning algorithms learn patterns from data.\",\"The weather is sunny today.\",\"Deep learning is a type of machine learning.\"],\"batch_size\":4,\"normalize\":true,\"normalize_method\":\"softmax\"}"
   ```
 
-  ```bash MacOS
+  ```bash Linux
   curl -X POST http://127.0.0.1:18181/v1/reranking \
   -H "Content-Type: application/json" \
   -d '{
