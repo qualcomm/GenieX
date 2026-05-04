@@ -38,6 +38,7 @@ jobs:
           mint export --output site.zip
           mkdir _site
           unzip site.zip -d _site
+          echo "geniex.github.io" > _site/CNAME
 
       - uses: actions/configure-pages@v5
 
@@ -51,7 +52,7 @@ jobs:
     timeout-minutes: 5
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: https://geniex.github.io
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
