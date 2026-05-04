@@ -1,0 +1,378 @@
+---
+title: NPU
+description: GenieX Android SDK 使用高通 Hexagon NPU 的 NPU 加速推理。
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+
+## **模型名称映射**
+所有 NPU 模型使用内部名称映射，请相应填写插件 ID。
+
+| 模型名称 | 插件 ID | Hugging Face 仓库名称 |
+|------------|-----------|------------|
+| omni-neural | npu | NexaAI/OmniNeural-4B-mobile |
+| phi3.5 | npu | NexaAI/phi3.5-mini-npu-mobile |
+| phi4 | npu | NexaAI/phi4-mini-npu-mobile |
+| granite4 | npu | NexaAI/Granite-4-Micro-NPU-mobile |
+| embed-gemma | npu | NexaAI/embeddinggemma-300m-npu-mobile |
+| qwen3-4b | npu | NexaAI/Qwen3-4B-Instruct-2507-npu-mobile |
+| llama3-3b | npu | NexaAI/Llama3.2-3B-NPU-Turbo-NPU-mobile |
+| liquid-v2 | npu | NexaAI/LFM2-1.2B-npu-mobile |
+| paddleocr | npu | NexaAI/paddleocr-npu-mobile |
+| parakeet | npu | NexaAI/parakeet-tdt-0.6b-v3-npu-mobile |
+| yolo26x | npu | NexaAI/yolo26x-npu-mobile |
+| yolo26l | npu | NexaAI/yolo26l-npu-mobile |
+| yolo26m | npu | NexaAI/yolo26m-npu-mobile |
+| yolo26s | npu | NexaAI/yolo26s-npu-mobile |
+| yolo26n | npu | NexaAI/yolo26n-npu-mobile |
+| depth-anything-v2 | npu | NexaAI/depth-anything-v2-npu-mobile |
+
+<Note>
+除上述 NEXA 优化模型外，**社区中任何 GGUF 模型**也可在高通 Hexagon NPU 上运行。使用 `cpu_gpu` 插件并设置 `device_id = "dev0"`，由 GGML Hexagon 后端驱动。
+</Note>
+
+---
+
+## **两种 NPU 运行方式**
+
+你可以通过**两种不同方式**在高通 Hexagon NPU 上运行模型：
+
+### 1) 通过 "npu" 插件使用 NEXA 模型
+- 使用 `npu` 插件
+- 从上表中选择支持的 **NEXA 模型**并相应设置 `model_name`
+
+### 2) 通过 GGML Hexagon 后端使用 GGUF 模型
+- 加载 **GGUF 模型**
+- 使用 `cpu_gpu` 插件
+- 设置 `device_id` 为 `dev0`
+- 在 `ModelConfig` 中设置 `nGpuLayers > 0`
+
+## **LLM 使用**
+
+大语言模型，用于文本生成和对话应用。
+
+### 1) NEXA 模型（"npu" 插件）
+支持 NEXA 格式模型的 NPU 推理。
+
+```kotlin
+LlmWrapper.builder()
+    .llmCreateInput(
+        LlmCreateInput(
+            model_name = "liquid-v2",
+            model_path = <your-model-folder-path>,
+            config = ModelConfig(
+                    max_tokens = 2048
+            ),
+        ),
+        plugin_id = "npu"
+    )
+    .build()
+    .onSuccess { llmWrapper = it }
+
+val chatList = arrayListOf(ChatMessage("user", "What is AI?"))
+
+llmWrapper.applyChatTemplate(chatList.toTypedArray(), null, false).onSuccess { template ->
+    llmWrapper.generateStreamFlow(template.formattedText, GenerationConfig()).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token -> println(result.text)
+            is LlmStreamResult.Completed -> println("Done!")
+            is LlmStreamResult.Error -> println("Error: ${result.throwable}")
+        }
+    }
+}
+```
+
+### 2) Hexagon NPU 上的 GGUF 模型（GGML Hexagon 后端）
+通过 `cpu_gpu` 插件配合 `device_id = "dev0"` 和 `nGpuLayers > 0` 在 Hexagon NPU 上运行 GGUF 模型。
+
+```kotlin
+LlmWrapper.builder()
+    .llmCreateInput(
+        LlmCreateInput(
+            model_name = "", // GGUF：model_name 留空
+            model_path = "<your-gguf-model-path>", // 如 /data/data/<com.your.app>/files/models/gpt-oss-GGUF/gpt-oss-Q4_0.gguf
+            config = ModelConfig(
+                nCtx = 4096,
+                nGpuLayers = 999 // > 0 启用卸载；999 尝试卸载所有层
+            ),
+            plugin_id = "cpu_gpu",
+            device_id = "dev0"  // 使用 NPU 设备运行 GPT-OSS 20B 等模型
+        )
+    )
+    .build()
+    .onSuccess { llmWrapper = it }
+    .onFailure { error -> println("Error: ${error.message}") }
+```
+
+---
+
+## **多模态使用**
+
+视觉语言模型，用于图像理解和多模态应用。
+
+### 1) NEXA 模型（"npu" 插件）
+支持 NEXA 格式模型的 NPU 推理。
+
+```kotlin
+VlmWrapper.builder()
+    .vlmCreateInput(
+        VlmCreateInput(
+            model_name = "omni-neural",  // NPU 插件的模型名称
+            model_path = <your-model-folder-path>,
+            config = ModelConfig(
+                max_tokens = 2048,
+                enable_thinking = false
+            ),
+            plugin_id = "npu"  // 使用 NPU 后端
+        )
+    )
+    .build()
+    .onSuccess { vlmWrapper = it }
+    .onFailure { error -> 
+        println("Error: ${error.message}")
+    }
+
+// 使用已加载的 VLM 处理图像和文本
+val contents = listOf(
+    VlmContent("image", <your-image-path>),
+    VlmContent("text", <your-text>)
+)
+
+val chatList = arrayListOf(VlmChatMessage("user", contents))
+
+vlmWrapper.applyChatTemplate(chatList.toTypedArray(), null, false).onSuccess { template ->
+    val config = vlmWrapper.injectMediaPathsToConfig(chatList.toTypedArray(), GenerationConfig())
+    vlmWrapper.generateStreamFlow(template.formattedText, config).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token -> println(result.text)
+            is LlmStreamResult.Completed -> println("Done!")
+            is LlmStreamResult.Error -> println("Error: ${result.throwable}")
+        }
+    }
+}
+```
+
+### 2) Hexagon NPU 上的 GGUF 模型（GGML Hexagon 后端）
+通过 `cpu_gpu` 插件配合 `device_id = "dev0"` 和 `nGpuLayers > 0` 在 Hexagon NPU 上运行 GGUF VLM。
+
+```kotlin
+VlmWrapper.builder()
+    .vlmCreateInput(
+        VlmCreateInput(
+            model_name = "",  // GGUF：model_name 留空
+            model_path = <your-gguf-model-path>,
+            mmproj_path = <your-mmproj-path>,  // 视觉投影权重
+            config = ModelConfig(
+                nCtx = 4096,
+                nGpuLayers = 999 // > 0 启用卸载；999 尝试卸载所有层
+            ),
+            plugin_id = "cpu_gpu",
+            device_id = "dev0"
+        )
+    )
+    .build()
+    .onSuccess { vlmWrapper = it }
+    .onFailure { error -> 
+        println("Error: ${error.message}")
+    }
+
+// 使用已加载的 VLM 处理图像和文本
+val contents = listOf(
+    VlmContent("image", <your-image-path>),
+    VlmContent("text", "<your-text>")
+)
+
+val chatList = arrayListOf(VlmChatMessage("user", contents))
+
+vlmWrapper.applyChatTemplate(chatList.toTypedArray(), null, false).onSuccess { template ->
+    val baseConfig = GenerationConfig(maxTokens = 2048)
+    val configWithMedia = vlmWrapper.injectMediaPathsToConfig(
+        chatList.toTypedArray(),
+        baseConfig
+    )
+    vlmWrapper.generateStreamFlow(template.formattedText, configWithMedia).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token -> println(result.text)
+            is LlmStreamResult.Completed -> println("Done!")
+            is LlmStreamResult.Error -> println("Error: ${result.throwable}")
+        }
+    }
+}
+```
+
+---
+
+## **嵌入使用**
+
+生成向量嵌入，用于语义搜索和 RAG 应用。
+
+### 基本用法
+
+```kotlin
+// 加载嵌入模型用于 NPU 推理
+EmbedderWrapper.builder()
+    .embedderCreateInput(
+        EmbedderCreateInput(
+            model_name = "embed-gemma",  // NPU 插件的模型名称
+            model_path = <your-model-folder-path>,
+            tokenizer_path = <your-tokenizer-path>,  // 可选
+            config = ModelConfig(
+                max_tokens = 2048
+            ),
+            plugin_id = "npu",  // 使用 NPU 后端
+            device_id = null    // 可选设备 ID
+        )
+    )
+    .build()
+    .onSuccess { embedderWrapper = it }
+    .onFailure { error -> 
+        println("Error: ${error.message}")
+    }
+
+// 为多段文本生成嵌入向量
+val texts = arrayOf(<your-text1>, <your-text2>, ...)
+
+embedderWrapper.embed(texts, EmbeddingConfig()).onSuccess { embeddings ->
+    val dimension = embeddings.size / texts.size
+    println("Dimension: $dimension")
+    println("First 5 values: ${embeddings.take(5)}")
+}
+```
+
+---
+
+## **ASR 使用**
+
+自动语音识别，用于音频转录。
+
+### 基本用法
+
+```kotlin
+// 加载 ASR 模型用于 NPU 推理
+AsrWrapper.builder()
+    .asrCreateInput(
+        AsrCreateInput(
+            model_name = "parakeet",  // NPU 插件的模型名称
+            model_path = <your-model-folder-path>,
+            config = ModelConfig(
+                max_tokens = 2048
+            ),
+            plugin_id = "npu"  // 使用 NPU 后端
+        )
+    )
+    .build()
+    .onSuccess { asrWrapper = it }
+    .onFailure { error -> 
+        println("Error: ${error.message}")
+    }
+
+// 转录音频文件
+asrWrapper.transcribe(
+    AsrTranscribeInput(
+        audioPath = <your-audio-path>,  // .wav、.mp3 等
+        language = "en",                // 语言代码："en"、"zh"、"es" 等
+        timestamps = null               // 可选时间戳格式
+    )
+).onSuccess { result ->
+    println("Transcription: ${result.result.transcript}")
+}
+```
+
+---
+
+## **重排序使用**
+
+基于查询相关性对文档进行重排序，提升搜索相关性。
+
+### 基本用法
+
+```kotlin
+// 加载重排序模型用于 NPU 推理
+RerankerWrapper.builder()
+    .rerankerCreateInput(
+        RerankerCreateInput(
+            model_name = "jina-rerank",  // NPU 插件的模型名称
+            model_path = <your-model-folder-path>,
+            tokenizer_path = <your-tokenizer-path>,  // 可选
+            config = ModelConfig(
+                max_tokens = 2048
+            ),
+            plugin_id = "npu",  // 使用 NPU 后端
+            device_id = null    // 可选设备 ID
+        )
+    )
+    .build()
+    .onSuccess { rerankerWrapper = it }
+    .onFailure { error -> 
+        println("Error: ${error.message}")
+    }
+
+// 基于查询相关性对文档重排序
+val query = "What is machine learning?"
+val docs = arrayOf("ML is AI subset", "Weather forecast", "Deep learning tutorial")
+
+rerankerWrapper.rerank(query, docs, RerankConfig()).onSuccess { result ->
+    result.scores?.withIndex()?.sortedByDescending { it.value }?.forEach { (idx, score) ->
+        println("Score: ${"%.4f".format(score)} - ${docs[idx]}")
+    }
+}
+```
+
+---
+
+## **CV 使用**
+
+计算机视觉模型，用于 OCR、目标检测和图像分类。
+
+### 基本用法
+
+```kotlin
+// 加载 PaddleOCR 模型用于 NPU 推理
+CvWrapper.builder()
+    .createInput(
+        CVCreateInput(
+            model_name = "paddleocr",  // 模型名称
+            config = CVModelConfig(
+                capabilities = CVCapability.OCR,
+                det_model_path = <your-det-model-folder-path>,
+                rec_model_path = <your-rec-model-path>,
+                char_dict_path = <your-char-dict-path>,
+                qnn_model_folder_path = <your-qnn-model-folder-path>,  // NPU 用
+                qnn_lib_folder_path = <your-qnn-lib-folder-path>       // NPU 用
+            ),
+            plugin_id = "npu"  // 使用 NPU 后端
+        )
+    )
+    .build()
+    .onSuccess { cvWrapper = it }
+    .onFailure { error -> 
+        println("Error: ${error.message}")
+    }
+
+// 对图像执行 OCR
+cvWrapper.infer(<your-image-path>).onSuccess { results ->
+    results.forEach { result ->
+        println("Text: ${result.text}, Confidence: ${result.confidence}")
+    }
+}
+```
+
+---
+
+## **需要帮助？**
+
+加入我们的社区获取支持、分享项目并与其他开发者交流。
+
+<CardGroup cols={2}>
+  <Card title="Discord 社区" icon="discord" href="https://discord.com/invite/thRu2HaK4D">
+    获取实时支持，与 GenieX AI 社区交流
+  </Card>
+  <Card title="Slack 社区" icon="slack" href="https://join.slack.com/t/nexa-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw">
+    与开发者协作，访问社区资源
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>

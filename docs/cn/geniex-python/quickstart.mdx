@@ -1,34 +1,31 @@
 ---
-title: Quickstart
-description: Get started with GenieX Python SDK - through QAIRT and llama.cpp plugins.
+title: 快速入门
+description: 开始使用 GenieX Python SDK——通过 QAIRT 和 llama.cpp 插件。
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
 
 
-## **Quick Overview**
+## **快速概览**
 
-### **Installation**
+### **安装**
 
 ```bash
 pip install -i https://test.pypi.org/simple/ geniex
 ```
-This will download the python package from [test PyPI](https://test.pypi.org/project/geniex/)
+这将从 [test PyPI](https://test.pypi.org/project/geniex/) 下载 Python 包。
 
-### **Follow Jupyter Notebook Guide**
 
-For quick onboarding, we recommend following the Jupyter Notebook guide [here](https://github.com/qualcomm/nexa-sdk/blob/main/examples/python/windows.ipynb). It provides a step-by-step walkthrough of setting up the environment and running inference with the GenieX Python SDK.
+### **LLM 推理**
 
-### **LLM Inference**
-
-Here's a simple example to get you started:
+以下是一个简单的入门示例：
 
 ```python
 from geniex import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
-    "qualcomm/Qwen3-4B-Instruct-2507",               # short alias, HF repo id, or local GGUF path
+    "qwen3",               # 简称别名、HF 仓库 ID 或本地 GGUF 路径
     device_map="auto",     # "auto" | "<plugin>" | "<plugin>:<device>"
 )
 
@@ -37,13 +34,13 @@ prompt = model.tokenizer.apply_chat_template(
     messages, tokenize=False, add_generation_prompt=True,
 )
 
-# One-shot
+# 一次性生成
 output = model.generate(prompt, max_new_tokens=256)
 print(output.text)
 print(f"[{output.profile.generated_tokens} tok, "
       f"{output.profile.decode_speed:.1f} tok/s, stop={output.profile.stop_reason}]")
 
-# Streaming
+# 流式生成
 streamer = model.generate(prompt, max_new_tokens=256, stream=True)
 for chunk in streamer:
     print(chunk, end="", flush=True)
@@ -51,15 +48,15 @@ for chunk in streamer:
 model.close()
 ```
 
-### **VLM Inference**
+### **VLM 推理**
 
-First, download a sample image:
+首先，下载一张示例图片：
 
 ```bash
 curl -o demo.jpeg https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg
 ```
 
-Then run inference using the full path to the downloaded image:
+然后使用下载图片的完整路径运行推理：
 
 ```python
 import os
@@ -81,15 +78,15 @@ prompt = model.tokenizer.apply_chat_template(
 print(model.generate(prompt, images=[image_path]).text)
 ```
 
-### **Model Management**
-The same model manager the CLI uses is available programmatically:
+### **模型管理**
+CLI 使用的模型管理器同样可以通过代码调用：
 
 ```python
 from geniex import model_manager as mm
 
-mm.pull("qwen3")                      # alias or "org/repo[:quant]"
-paths = mm.get_paths("qwen3")         # resolved local paths
-mm.list_models()                      # cached models
+mm.pull("qwen3")                      # 别名或 "org/repo[:quant]"
+paths = mm.get_paths("qwen3")         # 解析本地路径
+mm.list_models()                      # 已缓存的模型
 mm.remove("qwen3")
 ```
 

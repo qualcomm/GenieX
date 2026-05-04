@@ -1,0 +1,69 @@
+---
+title: 概览
+description: 从这里开始设置和探索 GenieX Android SDK，在 Android 设备上运行最新模型。
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **Android SDK（Beta）**
+
+<img
+  className="block dark:hidden"
+  src="/Mintlify-image/Android.jpeg"
+  alt="GenieX Android SDK"
+/>
+<img
+  className="hidden dark:block"
+  src="/Mintlify-image/Android.jpeg"
+  alt="GenieX Android SDK"
+/>
+
+
+GenieX Android SDK 为 Android 应用提供设备端 AI 推理能力。它基于 GenieX AI 的专有 GenieXML 引擎构建，使开发者能够直接在 Android 设备上运行大语言模型（LLM）、视觉语言模型（VLM）、嵌入模型、语音识别（ASR）、重排序和计算机视觉模型，支持 NPU、GPU 和 CPU 推理。
+
+## **为什么选择移动端 NPU**
+
+{/* YouTube embed following Mintlify format */}
+<iframe
+  className="w-full aspect-video rounded-xl"
+  src="https://www.youtube.com/embed/Qvdtqq-0mqA"
+  title="Why NPU on Mobile"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowFullScreen
+></iframe>
+
+## **核心特性**
+
+- **多种模型类型**：支持 LLM、VLM、嵌入模型、ASR、重排序和计算机视觉模型
+- **硬件加速**：支持 CPU、GPU 和 NPU（高通 Hexagon NPU）
+- **易于集成**：简洁的 Kotlin/Java API，采用 Builder 模式
+
+## **支持的模型**
+
+以下模型在 Android ARM64 上支持 NPU 加速：
+
+| 模态 | 模型 |
+|----------|-------|
+| **LLM** | [`NexaAI/Qwen3-4B-Instruct-2507`](https://huggingface.co/NexaAI/Qwen3-4B-Instruct-2507-npu-mobile)<br/>[`NexaAI/Llama3.2-3B-NPU-Turbo`](https://huggingface.co/NexaAI/Llama3.2-3B-NPU-Turbo-NPU-mobile)<br/>[`NexaAI/Granite-4-Micro`](https://huggingface.co/NexaAI/Granite-4-Micro-NPU-mobile)<br/>[`NexaAI/phi3.5-mini`](https://huggingface.co/NexaAI/phi3.5-mini-npu-mobile)<br/>[`NexaAI/phi4-mini`](https://huggingface.co/NexaAI/phi4-mini-npu-mobile)<br/>[`NexaAI/LFM2-1.2B-npu`](https://huggingface.co/NexaAI/LFM2-1.2B-npu-mobile) |
+| **VLM** | [`NexaAI/OmniNeural-4B`](https://huggingface.co/NexaAI/OmniNeural-4B-mobile) |
+| **嵌入** | [`NexaAI/embeddinggemma-300m-npu`](https://huggingface.co/NexaAI/embeddinggemma-300m-npu-mobile) |
+| **ASR** | [`NexaAI/parakeet-tdt-0.6b-v3-npu`](https://huggingface.co/NexaAI/parakeet-tdt-0.6b-v3-npu-mobile) |
+| **CV** | [`NexaAI/paddleocr`](https://huggingface.co/NexaAI/paddleocr-npu-mobile)<br/>[`NexaAI/yolo26x`](https://huggingface.co/NexaAI/yolo26x-npu-mobile)<br/>[`NexaAI/yolo26l`](https://huggingface.co/NexaAI/yolo26l-npu-mobile)<br/>[`NexaAI/yolo26m`](https://huggingface.co/NexaAI/yolo26m-npu-mobile)<br/>[`NexaAI/yolo26s`](https://huggingface.co/NexaAI/yolo26s-npu-mobile)<br/>[`NexaAI/yolo26n`](https://huggingface.co/NexaAI/yolo26n-npu-mobile)<br/>[`NexaAI/depth-anything-v2`](https://huggingface.co/NexaAI/depth-anything-v2-npu-mobile) |
+
+<Note>
+除上述 NEXA 优化模型外，**社区中任何 GGUF 模型**也可在高通 Hexagon NPU 上运行。使用 `cpu_gpu` 插件并设置 `device_id = "dev0"`，由 GGML Hexagon 后端驱动。
+</Note>
+
+## **开始使用**
+
+<Card
+  title="Android 快速入门"
+  href="/cn/geniex-android/quickstart"
+  icon="rocket"
+>
+  几分钟内开始使用 GenieX Android SDK。按照分步指南将 AI 模型集成到你的 Android 应用中。
+</Card>
+
+<br />
+
+<Feedback/>

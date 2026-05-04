@@ -1,13 +1,13 @@
 ---
-title: "QAIRT Plugin"
-description: "Running Geniex through QAIRT plugin on Snapdragon NPU."
+title: "QAIRT 插件"
+description: "通过 QAIRT 插件在骁龙 NPU 上运行 GenieX。"
 ---
 
 
-## **Supported Model List**
-We curated a list of top, high quality models in QAIRT `bin` format.
+## **支持的模型列表**
+我们精选了一批高质量的 QAIRT `bin` 格式顶尖模型。
 
-| Model ID | Resources |
+| 模型 ID | resources |
 |---|---|
 | qualcomm/Qwen3-4B | Qualcomm AI Hub |
 | qualcomm/Qwen3-4B-Instruct |  Qualcomm AI Hub |
@@ -20,27 +20,27 @@ We curated a list of top, high quality models in QAIRT `bin` format.
 | Llama-v3-ELYZA-JP-8B | Self converted and uploaded to personal Hugging Face |
 | Llama3-TAIDE-LX-8B-Chat-Alpha1 | Self converted and uploaded to personal Hugging Face |
 
-To run a model on `Qualcomm` org, take `Qwen3-4B` for example, simply run:
+运行 `Qualcomm` 组织下的模型，以 `Qwen3-4B` 为例：
 
 ```bash
 geniex infer qualcomm/Qwen3-4B
 ```
 
-To run a model on `yichqian` personal huggingface, take `Llama-v3.2-3B-Instruct` for example, you need to firstly download the HF weights locally then run with the local path:
+运行 `yichqian` 个人 Hugging Face 上的模型，以 `Llama-v3.2-3B-Instruct` 为例，需要先将 HF 权重下载到本地，然后使用本地路径运行：
 
 ```bash
-hf auth login  # paste token when prompted
+hf auth login  # 按提示粘贴 token
 
-# Download only the model folder you want
+# 仅下载所需的模型文件夹
 hf download yichqian/geniex-qairt-models `
   --local-dir .\geniex-qairt-models `
   --include "Llama-v3.2-1B-Instruct/**"
 
-# Pull using the downloaded folder directly (absolute path)
+# 使用下载的文件夹路径进行拉取（绝对路径）
 $localPath = (Resolve-Path ".\geniex-qairt-models\Llama-v3.2-1B-Instruct").Path
 geniex pull local/Llama-v3.2-1B-Instruct --model-hub localfs `
   --local-path $localPath
 
-# Run inference on the same model name
+# 运行推理
 geniex infer local/Llama-v3.2-1B-Instruct
 ```

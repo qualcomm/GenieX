@@ -1,0 +1,339 @@
+---
+title: 基础
+description: GenieX Android SDK 的 API 结构和配置选项。
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+
+## **插件选择**
+
+根据模型类型和格式选择合适的后端插件。
+
+```kotlin
+val plugin_id: String?  // 使用的后端插件
+```
+
+**可用插件：**
+- `"cpu_gpu"` - GGUF 后端，支持 CPU/GPU/Hexagon NPU（LLM、VLM）。通过 `device_id` + `nGpuLayers` 选择设备。
+- `"npu"` - NPU 后端，用于 NEXA 格式模型（LLM、VLM、嵌入、ASR、CV、重排序）
+- `"whisper_cpp"` - Whisper.cpp 后端，用于 ASR
+- `"tts_cpp"` - TTS 后端，用于文字转语音
+
+---
+
+## **设备选择**
+
+控制模型运行在哪个硬件设备上。
+
+```kotlin
+val device_id: String?  // 模型使用的设备
+```
+
+**可用值：**
+- `null` - CPU（默认）
+- `"gpu"` - 通过 OpenCL 进行 GPU 加速
+- `"dev0"` - 高通 Hexagon NPU 加速
+
+<Note>
+**GGUF 硬件加速（`plugin_id = "cpu_gpu"`）：**
+- **GPU**：设置 `device_id = "gpu"` 并在 `ModelConfig` 中设置 `nGpuLayers > 0`
+- **Hexagon NPU（GGML 后端）**：设置 `device_id = "dev0"` 并在 `ModelConfig` 中设置 `nGpuLayers > 0`
+
+如果 `nGpuLayers = 0`（或 `device_id = null`），模型将在 CPU 上运行。
+</Note>
+
+---
+
+## **LLM 数据结构**
+
+### LlmCreateInput
+
+```kotlin
+data class LlmCreateInput(
+    val model_name: String? = null,      // 模型名称（NPU 必填，CPU/GPU 留空）
+    val model_path: String,              // 模型文件或文件夹路径
+    val tokenizer_path: String? = null,  // 可选分词器路径
+    val config: ModelConfig,             // 模型配置
+    val plugin_id: String? = null,       // "npu"、"cpu_gpu" 等
+    val device_id: String? = null        // null、"gpu"、"dev0"
+)
+```
+
+### ChatMessage
+
+```kotlin
+data class ChatMessage(
+    val role: String,        // "system"、"user"、"assistant"
+    val content: String      // 消息文本
+)
+```
+
+### GenerationConfig
+
+```kotlin
+data class GenerationConfig(
+    val maxTokens: Int? = null,           // 生成的最大 token 数
+    val temperature: Float = 0.7f,        // 采样温度
+    val topP: Float = 0.9f,              // 核采样
+    val topK: Int = 40,                  // Top-K 采样
+    val repeatPenalty: Float = 1.1f,     // 重复惩罚
+    val seed: Int = -1                   // 随机种子（-1 为随机）
+)
+```
+
+### LlmStreamResult
+
+```kotlin
+sealed class LlmStreamResult {
+    data class Token(val text: String) : LlmStreamResult()
+    object Completed : LlmStreamResult()
+    data class Error(val throwable: Throwable) : LlmStreamResult()
+}
+```
+
+---
+
+## **多模态数据结构**
+
+### VlmCreateInput
+
+```kotlin
+data class VlmCreateInput(
+    val model_name: String? = null,            // 模型名称（NPU 必填）
+    val model_path: String,                    // VLM 模型路径
+    val tokenizer_path: String? = null,        // 可选分词器路径
+    val mmproj_path: String? = null,           // 视觉投影权重（GGUF 模型用）
+    val config: ModelConfig,                   // 模型配置
+    val plugin_id: String? = null,             // "npu" 用于 NPU，"cpu_gpu" 用于 CPU/GPU
+    val device_id: String? = null              // null 用于 CPU，"gpu" 用于 GPU，"dev0" 用于 NPU
+)
+```
+
+### VlmChatMessage
+
+```kotlin
+data class VlmChatMessage(
+    val role: String,                          // "system"、"user"、"assistant"
+    val contents: List<VlmContent>             // 混合文本/图像/音频内容
+)
+```
+
+### VlmContent
+
+```kotlin
+data class VlmContent(
+    val type: String,                          // "text"、"image"、"audio"
+    val content: String                        // 文本或文件路径
+)
+```
+
+---
+
+## **嵌入数据结构**
+
+### EmbedderCreateInput
+
+```kotlin
+data class EmbedderCreateInput(
+    val model_name: String? = null,            // NPU 模型名称
+    val model_path: String,                    // 嵌入模型路径
+    val tokenizer_path: String? = null,        // 分词器路径
+    val config: ModelConfig,                   // 模型配置
+    val plugin_id: String? = null,             // "npu" 用于 NPU，null 用于 CPU
+    val device_id: String? = null              // 设备 ID（可选）
+)
+```
+
+### EmbeddingConfig
+
+```kotlin
+data class EmbeddingConfig(
+    val normalize: Boolean = true              // 归一化嵌入向量（默认：true）
+)
+```
+
+---
+
+## **ASR 数据结构**
+
+### AsrCreateInput
+
+```kotlin
+data class AsrCreateInput(
+    val model_name: String? = null,            // NPU 模型名称
+    val model_path: String,                    // ASR 模型路径
+    val config: ModelConfig,                   // 模型配置
+    val plugin_id: String? = null,             // "whisper_cpp" 用于 whisper.cpp，"npu" 用于 NPU
+    val device_id: String? = null              // 设备 ID（可选）
+)
+```
+
+### AsrTranscribeInput
+
+```kotlin
+data class AsrTranscribeInput(
+    val audioPath: String,                     // 音频文件路径（.wav、.mp3 等）
+    val language: String,                      // 语言代码："en"、"zh"、"es" 等
+    val timestamps: String? = null             // 可选：时间戳格式
+)
+```
+
+### AsrTranscriptionResult
+
+```kotlin
+data class AsrTranscriptionResult(
+    val result: AsrResult,                     // 转录结果
+    val profileData: String                    // 性能指标
+)
+```
+
+---
+
+## **TTS 数据结构**
+
+### TtsCreateInput
+
+```kotlin
+data class TtsCreateInput(
+    val model_name: String? = null,            // 模型名称（CPU/GPU 留空）
+    val model_path: String,                    // TTS 模型路径
+    val vocoder_path: String? = null,          // 可选声码器路径
+    val config: ModelConfig,                   // 模型配置
+    val plugin_id: String? = null,             // "tts_cpp" 用于 TTS 后端
+    val device_id: String? = null              // 设备 ID（可选）
+)
+```
+
+### TtsSynthesizeInput
+
+```kotlin
+data class TtsSynthesizeInput(
+    val textUtf8: String,                      // 要合成的文本（UTF-8 编码）
+    val config: TtsConfig? = null,             // 可选 TTS 配置
+    val outputPath: String? = null             // 可选输出文件路径（null 为自动生成）
+)
+```
+
+### TtsConfig
+
+```kotlin
+data class TtsConfig(
+    val voice: String? = null,                 // 语音标识符
+    val speed: Float = 1.0f,                   // 语速（1.0 = 正常）
+    val seed: Int = -1,                        // 随机种子（-1 为随机）
+    val sampleRate: Int = 22050                // 输出采样率（Hz）
+)
+```
+
+### TtsSynthesizeOutput
+
+```kotlin
+data class TtsSynthesizeOutput(
+    val outputPath: String,                    // 生成的音频文件路径
+    val profileData: String                    // 性能指标
+)
+```
+
+---
+
+## **重排序数据结构**
+
+### RerankerCreateInput
+
+```kotlin
+data class RerankerCreateInput(
+    val model_name: String? = null,            // NPU 模型名称
+    val model_path: String,                    // 重排序模型路径
+    val tokenizer_path: String? = null,        // 分词器路径
+    val config: ModelConfig,                   // 模型配置
+    val plugin_id: String? = null,             // "npu" 用于 NPU，null 用于 CPU
+    val device_id: String? = null              // 设备 ID（可选）
+)
+```
+
+### RerankConfig
+
+```kotlin
+data class RerankConfig(
+    val topN: Int? = null                      // 仅返回前 N 个结果（null = 全部）
+)
+```
+
+### RerankerResult
+
+```kotlin
+data class RerankerResult(
+    val scores: FloatArray,                    // 相关性分数（0.0 - 1.0）
+    val scoreCount: Int,                       // 分数数量
+    val profileData: String                    // 性能指标
+)
+```
+
+---
+
+## **计算机视觉数据结构**
+
+### CVCreateInput
+
+```kotlin
+data class CVCreateInput(
+    val model_name: String,                    // 模型名称："paddleocr" 等
+    val config: CVModelConfig,                 // CV 模型配置
+    val plugin_id: String? = null              // "npu" 用于 NPU，"cpu_gpu" 用于 CPU/GPU
+)
+```
+
+### CVModelConfig
+
+```kotlin
+data class CVModelConfig(
+    val capabilities: CVCapability,            // OCR、DETECTION、CLASSIFICATION
+    val det_model_path: String? = null,        // 检测模型路径
+    val rec_model_path: String? = null,        // 识别模型路径
+    val char_dict_path: String? = null,        // 字符字典路径
+    val qnn_model_folder_path: String? = null, // QNN 模型文件夹（NPU）
+    val qnn_lib_folder_path: String? = null    // QNN 库路径（NPU）
+)
+```
+
+### CVCapability
+
+```kotlin
+enum class CVCapability {
+    OCR,                                       // 光学字符识别
+    DETECTION,                                 // 目标检测
+    CLASSIFICATION                             // 图像分类
+}
+```
+
+### CVResult
+
+```kotlin
+data class CVResult(
+    val text: String,                          // 识别文本（OCR）
+    val confidence: Float,                     // 置信度（0.0 - 1.0）
+    val boundingBox: BoundingBox?,             // 边界框坐标
+    val label: String?,                        // 类别标签（分类）
+    val score: Float                           // 检测/分类分数
+)
+```
+
+---
+
+## **需要帮助？**
+
+加入我们的社区获取支持、分享项目并与其他开发者交流。
+
+<CardGroup cols={2}>
+  <Card title="Discord 社区" icon="discord" href="https://discord.com/invite/thRu2HaK4D">
+    获取实时支持，与 GenieX AI 社区交流
+  </Card>
+  <Card title="Slack 社区" icon="slack" href="https://join.slack.com/t/nexa-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw">
+    与开发者协作，访问社区资源
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>
