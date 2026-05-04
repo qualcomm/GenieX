@@ -54,9 +54,11 @@
                    {
                     "group": "Device Coverage",
                     "pages": [
-                      "en/geniex-cli/windows-arm64",
-                      "en/geniex-cli/linux-arm64",
-                      "en/geniex-cli/android"
+                      "en/geniex-cli/supported-devices",
+                      "en/geniex-cli/devices-compute",
+                      "en/geniex-cli/devices-mobile",
+                      "en/geniex-cli/devices-iot",
+                      "en/geniex-cli/devices-automotive"
                     ]
                   }
                 ]
