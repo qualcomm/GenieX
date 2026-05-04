@@ -1,0 +1,36 @@
+---
+title: "模型教程"
+description: 分步指南：下载、加载并在示例应用中与模型对话。
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **LFM2-24B-A2B-Preview-GGUF**
+
+本教程对应 geniex-sdk Android README 中的 [Tutorial: LFM2-24B-A2B-Preview-GGUF](https://github.com/geniex-ai/geniex-sdk/blob/main/bindings/android/README.md#tutorial-lfm2-24b-a2b-preview-gguf) 部分，使用示例应用中的 [LFM2-24B-A2B-Preview-GGUF](https://huggingface.co/NexaAI/LFM2-24B-A2B-Preview-GGUF) 模型。
+
+### **步骤**
+
+<Steps>
+  <Step title="安装应用">
+    安装示例应用（APK 或从源码构建）。APK 下载和源码构建步骤请参见 GitHub Android README 中的 [Quick Start with APK](https://github.com/geniex-ai/geniex-sdk/blob/main/bindings/android/README.md#quick-start-with-apk) 和 [Build from Source](https://github.com/geniex-ai/geniex-sdk/blob/main/bindings/android/README.md#build-from-source)。
+  </Step>
+  <Step title="选择模型">
+    打开模型选择器（模型名称旁的下拉菜单），选择 **LFM2-24B-A2B-Preview-GGUF**。
+    <img src="https://raw.githubusercontent.com/geniex-ai/geniex-sdk/main/assets/lfm0.png" alt="选择模型" style={{ borderRadius: '0.5rem', marginTop: '0.75rem', maxWidth: '240px', width: '100%', height: 'auto' }} />
+  </Step>
+  <Step title="下载">
+    点击 **Download** 将模型下载到设备。等待下载完成。
+  </Step>
+  <Step title="加载">
+    点击 **Load**。弹出**加载模型配置**对话框：选择 **CPU**、**GPU** 或 **NPU**（高通 NPU），然后点击 **SURE**。模型加载完成后，聊天区域即可使用。
+    <img src="https://raw.githubusercontent.com/geniex-ai/geniex-sdk/main/assets/lfm1.png" alt="加载模型配置" style={{ borderRadius: '0.5rem', marginTop: '0.75rem', maxWidth: '240px', width: '100%', height: 'auto' }} />
+  </Step>
+  <Step title="对话">
+    在底部输入框中输入消息，点击 **Send** 获取回复。使用 **Clear** 清除输入或对话。
+    <img src="https://raw.githubusercontent.com/geniex-ai/geniex-sdk/main/assets/lfm2.png" alt="对话" style={{ borderRadius: '0.5rem', marginTop: '0.75rem', maxWidth: '240px', width: '100%', height: 'auto' }} />
+  </Step>
+</Steps>
+
+<br />
+<Feedback />

@@ -6,8 +6,27 @@ module.exports = async ({ github, context, core }) => {
   const fs = require("fs");
   const path = require("path");
 
+  const MAX_RETRIES = 2;
+  const RETRY_DELAY_MS = 5000;
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  async function withRetry(fn, label) {
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        if (attempt === MAX_RETRIES) throw err;
+        core.warning(
+          `${label}: attempt ${attempt}/${MAX_RETRIES} failed (${err.message}), retrying in ${RETRY_DELAY_MS}ms...`,
+        );
+        await sleep(RETRY_DELAY_MS * attempt);
+      }
+    }
+  }
+
   // Any SemVer pre-release (e.g. v1.2.3-rc.1, v1.2.3-alpha.1) is published as draft.
-  const isDraft = VERSION.includes("-");
+  const shouldPublish = !VERSION.includes("-");
 
   const htpNote =
     HTP_SIGNED === "true"
@@ -31,7 +50,7 @@ module.exports = async ({ github, context, core }) => {
   };
 
   if (!release) {
-    core.info(`Release ${VERSION} not found, creating (draft=${isDraft})...`);
+    core.info(`Release ${VERSION} not found, creating as draft...`);
     const created = await github.rest.repos.createRelease({
       owner,
       repo,
@@ -39,17 +58,25 @@ module.exports = async ({ github, context, core }) => {
       name: VERSION,
       body: htpNote,
       generate_release_notes: true,
-      draft: isDraft,
+      draft: true,
     });
     release = created.data;
   } else {
+    // If a prior run published the release, revert to draft so we can upload assets.
+    const needsDraft = !release.draft;
     const body = mergeHtpNote(release.body);
-    if (body !== release.body) {
+    if (needsDraft || body !== release.body) {
+      core.info(
+        needsDraft
+          ? `Release ${VERSION} is published; reverting to draft for asset upload...`
+          : `Updating release body...`,
+      );
       const patched = await github.rest.repos.updateRelease({
         owner,
         repo,
         release_id: release.id,
         body,
+        draft: true,
       });
       release = patched.data;
     }
@@ -64,39 +91,76 @@ module.exports = async ({ github, context, core }) => {
   ).data;
 
   const files = FILES.split("\n").map((f) => f.trim()).filter(Boolean);
+  const uploaded = [];
+  const failed = [];
+
   for (const fileName of files) {
-    const duplicate = existingAssets.find((a) => a.name === fileName);
-    if (duplicate) {
-      await github.rest.repos.deleteReleaseAsset({
-        owner,
-        repo,
-        asset_id: duplicate.id,
-      });
+    try {
+      const duplicate = existingAssets.find((a) => a.name === fileName);
+      if (duplicate) {
+        await withRetry(
+          () =>
+            github.rest.repos.deleteReleaseAsset({
+              owner,
+              repo,
+              asset_id: duplicate.id,
+            }),
+          `Delete existing ${fileName}`,
+        );
+      }
+      const data = fs.readFileSync(path.join(process.cwd(), fileName));
+      const contentType =
+        fileName.endsWith(".txt") || fileName.endsWith(".sha256")
+          ? "text/plain"
+          : fileName.endsWith(".exe")
+            ? "application/octet-stream"
+            : fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")
+              ? "application/gzip"
+              : fileName.endsWith(".aar")
+                ? "application/java-archive"
+                : "application/zip";
+      await withRetry(
+        () =>
+          github.rest.repos.uploadReleaseAsset({
+            owner,
+            repo,
+            release_id: release.id,
+            name: fileName,
+            data,
+            headers: {
+              "content-type": contentType,
+              "content-length": data.length,
+            },
+          }),
+        `Upload ${fileName}`,
+      );
+      uploaded.push(fileName);
+      core.info(`Uploaded ${fileName}`);
+    } catch (err) {
+      failed.push({ file: fileName, error: err.message });
+      core.error(`Failed to upload ${fileName}: ${err.message}`);
     }
-    const data = fs.readFileSync(path.join(process.cwd(), fileName));
-    const contentType =
-      fileName.endsWith(".txt") || fileName.endsWith(".sha256")
-        ? "text/plain"
-        : fileName.endsWith(".exe")
-          ? "application/octet-stream"
-          : fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")
-            ? "application/gzip"
-            : fileName.endsWith(".aar")
-              ? "application/java-archive"
-              : "application/zip";
-    await github.rest.repos.uploadReleaseAsset({
+  }
+
+  // Publish the release (remove draft status) regardless of upload failures —
+  // ship whatever assets succeeded rather than blocking the entire release.
+  if (shouldPublish) {
+    core.info(`Publishing release ${VERSION} (${uploaded.length}/${files.length} assets)...`);
+    const published = await github.rest.repos.updateRelease({
       owner,
       repo,
       release_id: release.id,
-      name: fileName,
-      data,
-      headers: {
-        "content-type": contentType,
-        "content-length": data.length,
-      },
+      draft: false,
     });
-    core.info(`Uploaded ${fileName}`);
+    release = published.data;
   }
 
   core.info(`Release ${VERSION} is ready: ${release.html_url}`);
+
+  if (failed.length > 0) {
+    const summary = failed.map((f) => `  - ${f.file}: ${f.error}`).join("\n");
+    core.setFailed(
+      `${failed.length}/${files.length} asset(s) failed to upload:\n${summary}`,
+    );
+  }
 };

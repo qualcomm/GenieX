@@ -1,0 +1,260 @@
+---
+title: CPU / GPU
+description: GenieX Android SDK 使用 GGUF 格式模型的 CPU 和 GPU 加速推理。
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+
+## **LLM 使用**
+
+大语言模型，用于文本生成和对话应用。
+
+### 流式对话
+支持 GGUF 格式模型的 CPU/GPU 推理。你可以从社区选择任意 GGUF 模型，通过 `cpu_gpu` 插件运行。
+
+```kotlin
+LlmWrapper.builder()
+    .llmCreateInput(
+        LlmCreateInput(
+            model_name = "", // GGUF CPU/GPU 模型，model_name 留空
+            model_path = "<your-model-path>",
+            config = ModelConfig(
+                nCtx = 4096,
+                nGpuLayers = 0  // 0 为 CPU，> 0 为 GPU
+            ),
+            plugin_id = "cpu_gpu",
+            device_id = null  // null 为 CPU，"gpu" 为 GPU
+        )
+    )
+    .build()
+    .onSuccess { llmWrapper = it }
+    .onFailure { error -> println("Error: ${error.message}") }
+
+val chatList = arrayListOf(ChatMessage("user", "What is AI?"))
+
+llmWrapper.applyChatTemplate(chatList.toTypedArray(), null, false).onSuccess { template ->
+    val genConfig = GenerationConfig(maxTokens = 2048)
+    
+    llmWrapper.generateStreamFlow(template.formattedText, genConfig).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token -> println(result.text)
+            is LlmStreamResult.Completed -> println("Done!")
+            is LlmStreamResult.Error -> println("Error: ${result.throwable}")
+        }
+    }
+}
+```
+
+### CPU/GPU 配置
+
+通过 `device_id` 和 `nGpuLayers` 的组合控制模型运行在 CPU 还是 GPU 上：
+
+**GPU 运行要求：**
+- `device_id` 必须设为 `"gpu"`
+- `nGpuLayers` 必须大于 `0`（通常设为 `999` 以卸载所有层）
+
+**CPU 运行：**
+- `device_id` 为 `null`（默认）
+- 或 `nGpuLayers` 为 `0`
+
+#### 示例：在 GPU 上运行
+
+```kotlin
+LlmWrapper.builder()
+    .llmCreateInput(
+        LlmCreateInput(
+            model_name = "",
+            model_path = "<your-model-path>",
+            config = ModelConfig(
+                nCtx = 4096,
+                nGpuLayers = 999  // 卸载所有层到 GPU
+            ),
+            plugin_id = "cpu_gpu",
+            device_id = "gpu"  // 使用 GPU 设备
+        )
+    )
+    .build()
+    .onSuccess { llmWrapper = it }
+    .onFailure { error -> println("Error: ${error.message}") }
+```
+
+#### 示例：在 CPU 上运行（默认）
+
+```kotlin
+LlmWrapper.builder()
+    .llmCreateInput(
+        LlmCreateInput(
+            model_name = "",
+            model_path = "<your-model-path>",
+            config = ModelConfig(
+                nCtx = 4096,
+                nGpuLayers = 0  // 全部在 CPU 上
+            ),
+            plugin_id = "cpu_gpu",
+            device_id = null  // 默认为 CPU
+        )
+    )
+    .build()
+    .onSuccess { llmWrapper = it }
+```
+
+---
+
+## **多模态使用**
+
+视觉语言模型，用于图像理解和多模态应用。
+
+### 流式对话
+支持 GGUF 格式模型的 CPU/GPU 推理。
+
+```kotlin
+VlmWrapper.builder()
+    .vlmCreateInput(
+        VlmCreateInput(
+            model_name = "",  // CPU/GPU 上的 GGUF，留空（无需模型名称）
+            model_path = <your-model-path>,
+            mmproj_path = <your-mmproj-path>,  // 视觉投影权重
+            config = ModelConfig(
+                nCtx = 4096,
+                nGpuLayers = 0  // 0 为 CPU，> 0 为 GPU
+            ),
+            plugin_id = "cpu_gpu",
+            device_id = null  // null 为 CPU，"gpu" 为 GPU
+        )
+    )
+    .build()
+    .onSuccess { vlmWrapper = it }
+    .onFailure { error -> 
+        println("Error: ${error.message}")
+    }
+
+// 使用已加载的 VLM 处理图像和文本
+val contents = listOf(
+    VlmContent("image", <your-image-path>),
+    VlmContent("text", <your-text>)
+)
+
+val chatList = arrayListOf(VlmChatMessage("user", contents))
+
+vlmWrapper.applyChatTemplate(chatList.toTypedArray(), null, false).onSuccess { template ->
+    // 创建基础 GenerationConfig
+    val baseConfig = GenerationConfig(maxTokens = 2048)
+    
+    // 将 chatList 中的媒体路径注入配置
+    val configWithMedia = vlmWrapper.injectMediaPathsToConfig(
+        chatList.toTypedArray(),
+        baseConfig
+    )
+    
+    vlmWrapper.generateStreamFlow(template.formattedText, configWithMedia).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token -> println(result.text)
+            is LlmStreamResult.Completed -> println("Done!")
+            is LlmStreamResult.Error -> println("Error: ${result.throwable}")
+        }
+    }
+}
+```
+
+---
+
+## **ASR 使用**
+
+自动语音识别，用于音频转录。
+
+### 基本用法
+支持 whisper.cpp 模型的 CPU 推理。
+
+```kotlin
+// 加载 ASR 模型用于 whisper.cpp 推理
+AsrWrapper.builder()
+    .asrCreateInput(
+        AsrCreateInput(
+            model_name = "",  // whisper.cpp 留空
+            model_path = <your-model-path>,  // 如 "ggml-base-q8_0.bin"
+            config = ModelConfig(
+                nCtx = 4096  // 上下文大小（使用 nCtx 而非 max_tokens）
+            ),
+            plugin_id = "whisper_cpp"  // 使用 whisper.cpp 后端
+        )
+    )
+    .build()
+    .onSuccess { asrWrapper = it }
+    .onFailure { error -> 
+        println("Error: ${error.message}")
+    }
+
+// 转录音频文件
+asrWrapper.transcribe(
+    AsrTranscribeInput(
+        audioPath = <your-audio-path>,  // .wav 文件路径（建议 16kHz）
+        language = "en",                // 语言代码："en"、"zh"、"es" 等
+        timestamps = null               // 可选时间戳格式
+    )
+).onSuccess { result ->
+    println("Transcription: ${result.result.transcript}")
+}
+```
+
+---
+
+## **TTS 使用**
+
+文字转语音合成，将文本转换为自然语音。
+
+### 基本用法
+
+支持 GGUF 格式 TTS 模型的 CPU 推理。
+
+```kotlin
+// 加载 TTS 模型用于 CPU 推理
+TtsWrapper.builder()
+    .ttsCreateInput(
+        TtsCreateInput(
+            model_name = "",  // CPU/GPU 模型留空
+            model_path = <your-model-path>,  // TTS 模型路径（如 Kokoro GGUF 模型）
+            config = ModelConfig(
+                nCtx = 4096  // 上下文大小
+            ),
+            plugin_id = "tts_cpp"  // 使用 TTS 后端
+        )
+    )
+    .build()
+    .onSuccess { ttsWrapper = it }
+    .onFailure { error -> 
+        println("Error: ${error.message}")
+    }
+
+// 从文本合成语音
+ttsWrapper.synthesize(
+    TtsSynthesizeInput(
+        textUtf8 = "Hello, this is a text to speech demo using Nexa SDK.",
+        outputPath = <your-output-audio-path>  // 音频保存路径（如 "/path/to/output.wav"）
+    )
+).onSuccess { result ->
+    println("Speech synthesized successfully!")
+    println("Audio saved to: ${result.outputPath}")
+}.onFailure { error ->
+    println("Error during synthesis: ${error.message}")
+}
+```
+
+---
+
+## **需要帮助？**
+
+加入我们的社区获取支持、分享项目并与其他开发者交流。
+
+<CardGroup cols={2}>
+  <Card title="Discord 社区" icon="discord" href="https://discord.com/invite/thRu2HaK4D">
+    获取实时支持，与 GenieX AI 社区交流
+  </Card>
+  <Card title="Slack 社区" icon="slack" href="https://join.slack.com/t/nexa-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw">
+    与开发者协作，访问社区资源
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>

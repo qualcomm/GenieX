@@ -1,0 +1,135 @@
+---
+title: 快速入门
+description: 几分钟内开始使用 GenieX AI Android SDK。
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **教程视频**
+
+{/* YouTube embed following Mintlify format */}
+<iframe
+  className="w-full aspect-video rounded-xl"
+  src="https://www.youtube.com/embed/v_bASJDlhME"
+  title="GenieX AI Android SDK Quickstart Tutorial"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowFullScreen
+></iframe>
+
+## **安装**
+
+GenieX AI Android SDK 可从 Maven Central 获取，最新版本为 [0.0.24](https://repo1.maven.org/maven2/ai/nexa/core/0.0.24/)。你也可以在 [Maven Repository](https://mvnrepository.com/artifact/ai.nexa/core) 查看（更新略慢于 Maven Central）。
+
+### **添加依赖**
+
+在 `app/build.gradle.kts` 中添加以下内容以导入 GenieX SDK：
+
+```kotlin
+android{
+  packagingOptions {
+    jniLibs.useLegacyPackaging = true
+  }
+}
+dependencies {
+  implementation("ai.nexa:core:0.0.24")
+}
+```
+<Note>
+  默认仓库为 mavenCentral()。你也可以在 settings.gradle.kts 中添加 GitHub 原始仓库：
+  ```kotlin
+  dependencyResolutionManagement{
+      repositories {
+          maven {
+              url = uri("https://raw.githubusercontent.com/NexaAI/core/main")
+          }
+      }
+  }
+  ```
+</Note>
+
+## **运行第一个模型**
+
+<Steps>
+  <Step title="初始化 SDK">
+    在 Android 应用中初始化 GenieX SDK：
+
+    ```kotlin
+    NexaSdk.getInstance().init(this)
+    ```
+  </Step>
+
+  <Step title="下载并加载模型">
+    创建 VLM 包装器并加载用于 NPU 推理的模型。你可以从 Hugging Face 下载 [OmniNeural-4B 模型](https://huggingface.co/NexaAI/OmniNeural-4B-mobile)，并将其放置在应用有权访问的文件夹中，例如：`/data/data/${your-app-packagename}/files/models/OmniNeural-4B`
+
+    ```kotlin
+    VlmWrapper.builder()
+        .vlmCreateInput(
+            VlmCreateInput(
+                model_name = "omni-neural",
+                model_path = <your-model-file-absolute-path>,
+                config = ModelConfig(
+                    max_tokens = 2048,
+                    enable_thinking = false
+                ),
+                plugin_id = "npu"
+            )
+        )
+        .build()
+        .onSuccess { vlmWrapper = it }
+    ```
+
+    <Note>
+      应用需要对模型文件夹有访问权限。例如在示例应用中，model_path 设置为 `/data/data/com.nexa.demo/files/models/OmniNeural-4B/files-1-1.nexa`
+    </Note>
+  </Step>
+
+  <Step title="生成内容">
+    使用已加载的模型生成响应：
+
+    ```kotlin
+    vlmWrapper.generateStreamFlow("Who are you?", GenerationConfig()).collect { result ->
+        println(result)
+    }
+    ```
+  </Step>
+</Steps>
+
+## **支持的模型**
+
+我们为你精选了兼容模型合集：
+
+<CardGroup cols={2}>
+  <Card title="NPU 模型" icon="microchip" href="https://huggingface.co/collections/NexaAI/qualcomm-npu-mobile">
+    针对高通 NPU 优化的模型
+  </Card>
+  <Card title="GGUF 模型" icon="file-code">
+    任何 GGUF 格式的 LLM 和 VLM 模型
+  </Card>
+</CardGroup>
+
+## **设备兼容性**
+
+<AccordionGroup>
+  <Accordion title="NPU 支持" icon="microchip">
+    - 高通骁龙 8 Elite
+    - 高通骁龙 8 Elite Gen 5
+  </Accordion>
+  
+  <Accordion title="GPU 支持" icon="bolt">
+    - 高通 Adreno GPU
+  </Accordion>
+  
+  <Accordion title="CPU 支持" icon="memory">
+    - ARM64-v8a
+  </Accordion>
+</AccordionGroup>
+
+## **下一步**
+
+<Card title="API 参考" icon="book" href="/cn/geniex-android/APIReference">
+  查看所有模型类型的详细文档，了解其用法。
+</Card>
+
+<br />
+
+<Feedback/>
