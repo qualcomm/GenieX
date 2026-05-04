@@ -12,14 +12,13 @@ We curated a list of top, high quality models in QAIRT `bin` format.
 | Qualcomm/Qwen3-4B |
 | Qualcomm/Qwen3-4B-Instruct |
 | Qualcomm/Qwen2.5-VL-7B |
-| DavidQian/Llama-v3.1-8B-Instruct |
-| DavidQian/Llama-SEA-LION-v3.5-8B-R |
-| DavidQian/Llama-v3.2-1B-Instruct |
-| DavidQian/Llama-v3.2-3B-Instruct |
-| DavidQian/Llama-v3.2-3B-Instruct-SSD |
-| DavidQian/Llama-v3-8B-Instruct |
-| DavidQian/Llama-v3-ELYZA-JP-8B |
-| DavidQian/Llama3-TAIDE-LX-8B-Chat-Alpha1 |
+| Llama-v3.1-8B-Instruct |
+| Llama-SEA-LION-v3.5-8B-R |
+| Llama-v3.2-1B-Instruct |
+| Llama-v3.2-3B-Instruct |
+| Llama-v3-8B-Instruct |
+| Llama-v3-ELYZA-JP-8B |
+| Llama3-TAIDE-LX-8B-Chat-Alpha1 |
 
 To run a model on `Qualcomm` org, take `Qwen3-4B` for example, simply run:
 
@@ -27,8 +26,21 @@ To run a model on `Qualcomm` org, take `Qwen3-4B` for example, simply run:
 geniex infer qualcomm/Qwen3-4B
 ```
 
-To run a model on `DavidQian` org, take `Llama-v3.2-3B-Instruct` for example, you need to firstly download the HF weights locally then run with the local path:
+To run a model on `yichqian` personal huggingface, take `Llama-v3.2-3B-Instruct` for example, you need to firstly download the HF weights locally then run with the local path:
+
 ```bash
-hf download DavidQian/Llama-v3.2-3B-Instruct --local-dir ./models/Llama-v3.2-3B-Instruct
-geniex infer ./models/Llama-v3.2-3B-Instruct
+hf auth login  # paste token when prompted
+
+# Download only the model folder you want
+hf download yichqian/geniex-qairt-models `
+  --local-dir .\geniex-qairt-models `
+  --include "Llama-v3.2-1B-Instruct/**"
+
+# Pull using the downloaded folder directly (absolute path)
+$localPath = (Resolve-Path ".\geniex-qairt-models\Llama-v3.2-1B-Instruct").Path
+geniex pull local/Llama-v3.2-1B-Instruct --model-hub localfs `
+  --local-path $localPath
+
+# Run inference on the same model name
+geniex infer local/Llama-v3.2-1B-Instruct
 ```
