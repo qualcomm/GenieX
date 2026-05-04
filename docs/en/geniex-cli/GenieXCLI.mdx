@@ -55,6 +55,45 @@ Describe this picture </full/path/to/image.png>
 ```
 
 
+## **Configuration Flags**
+
+These flags can be passed to `geniex infer` to control model loading and generation behavior.
+
+### Sampler Flags
+
+Control how the model selects tokens during generation.
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `--temperature` | float | — | Sampling temperature. Higher values increase randomness. |
+| `--top-p` | float | — | Top-p (nucleus) sampling threshold. |
+| `--top-k` | int | — | Top-k sampling. Only consider the top-k most likely tokens. |
+| `--min-p` | float | — | Min-p sampling threshold. |
+| `--repetition-penalty` | float | `1` | Penalize repeated tokens. Values > 1 reduce repetition. |
+| `--presence-penalty` | float | — | Penalize tokens that have appeared at all. |
+| `--frequency-penalty` | float | — | Penalize tokens proportional to their frequency. |
+| `--seed` | int | — | Random seed for reproducible outputs. |
+| `--grammar-path` | string | — | Path to a GBNF grammar file for constrained generation. |
+| `--grammar-string` | string | — | Inline grammar in GBNF string format. |
+| `--enable-json` | — | — | Force JSON-only output. |
+
+### Model Flags
+
+Control model loading, context, and generation limits.
+
+| Flag | Type | Default | Description |
+|---|---|---|---|
+| `-n`, `--ngl` | int | `999` | Number of layers to offload to GPU. |
+| `--nctx` | int | `4096` | Context window size (max input + output tokens). |
+| `--max-tokens` | int | `2048` | Maximum tokens to generate per response. |
+| `--stop` | string[] | — | Stop sequences (can be specified multiple times). |
+| `--stop-file` | string | — | File containing stop sequences (one per line). |
+| `--enable-think` | — | `true` | Enable thinking mode for reasoning models. |
+| `--hide-think` | — | — | Hide the model's internal reasoning from output. |
+| `-s`, `--system-prompt` | string | — | System prompt to set model behavior. |
+
+---
+
 ## **Utility Commands**
 
 | Command | Description | Example |

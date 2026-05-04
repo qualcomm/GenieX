@@ -9,6 +9,8 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 The GenieX Python SDK follows the same design patterns as Hugging Face `transformers` — use `AutoModel*.from_pretrained()` to load a model, then call `.generate()` for inference.
 
+---
+
 ## AutoModelForCausalLM
 
 Factory for loading text-only causal language models. Returns a [`GeniexLLM`](#geniexllm) instance.
@@ -17,8 +19,8 @@ Factory for loading text-only causal language models. Returns a [`GeniexLLM`](#g
 from geniex import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
-    "Qualcomm/Qwen3-4B-Instruct",   # HuggingFace repo id, short alias, or local path
-    device_map="auto",               # "auto" | "<plugin>" | "<plugin>:<device>"
+    "Qualcomm/Qwen3-4B-Instruct",
+    device_map="auto",
 )
 ```
 
@@ -26,21 +28,28 @@ model = AutoModelForCausalLM.from_pretrained(
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `model_name_or_path` | `str` | *required* | HuggingFace repo id (e.g. `"Qualcomm/Qwen3-4B-Instruct"`), short alias (e.g. `"qwen3"`), or local path. |
-| `model_name` | `str \| None` | `None` | Override the registry model name (e.g. `"granite4"` for QAIRT). Defaults to `model_name_or_path`. |
-| `quant` | `str \| None` | `None` | Quantization variant (e.g. `"Q4_K_M"`). Used to filter files when downloading from HuggingFace Hub. |
+| `model_name_or_path` | `str` | *required* | HuggingFace repo id, short alias (e.g. `"qwen3"`), or local path. |
 | `device_map` | `str` | `"auto"` | `"auto"` picks the first available plugin/device. Also accepts `"<plugin_id>"` or `"<plugin_id>:<device_id>"`. |
+| `quant` | `str \| None` | `None` | Quantization variant (e.g. `"Q4_K_M"`). Filters files when downloading from Hub. |
 | `n_ctx` | `int` | `0` | Context length (`0` = model default). |
 | `n_gpu_layers` | `int` | `-1` | Layers to offload to GPU (`-1` = all). |
+| `enable_thinking` | `bool` | `False` | Enable thinking mode (e.g. Qwen reasoning models). |
+| `system_prompt` | `str` | — | System prompt to prepend. |
+
+<Expandable title="Additional parameters">
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `model_name` | `str \| None` | `None` | Override the registry model name (e.g. `"granite4"` for QAIRT). |
 | `tokenizer_path` | `str \| None` | `None` | Override tokenizer file path. |
 | `license_id` | `str \| None` | `None` | NPU licence ID. |
 | `license_key` | `str \| None` | `None` | NPU licence key. |
 | `hf_token` | `str \| None` | `None` | HuggingFace bearer token for gated models. |
-| `enable_thinking` | `bool` | `False` | Enable thinking mode (e.g. Qwen reasoning models). |
 | `n_threads` | `int` | — | Number of threads for inference. |
 | `n_batch` | `int` | — | Batch size for prompt processing. |
 | `max_tokens` | `int` | — | Maximum tokens for generation. |
-| `system_prompt` | `str` | — | System prompt to prepend. |
+
+</Expandable>
 
 **Returns:** [`GeniexLLM`](#geniexllm)
 
@@ -89,6 +98,12 @@ print(output.text)
 | `top_p` | `float` | `0.9` | Nucleus sampling threshold. |
 | `top_k` | `int` | `40` | Top-k sampling. |
 | `min_p` | `float` | `0.0` | Minimum probability threshold. |
+| `stream` | `bool` | `False` | If `True`, returns a [`TextIteratorStreamer`](#textiteratorstreamer) instead. |
+
+<Expandable title="Penalty and advanced parameters">
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
 | `repetition_penalty` | `float` | `1.1` | Repetition penalty. |
 | `presence_penalty` | `float` | `0.0` | Presence penalty. |
 | `frequency_penalty` | `float` | `0.0` | Frequency penalty. |
@@ -96,7 +111,8 @@ print(output.text)
 | `stop` | `list[str] \| None` | `None` | Stop sequences. |
 | `grammar` | `str \| None` | `None` | GBNF grammar string for constrained generation. |
 | `json_mode` | `bool` | `False` | Force JSON output. |
-| `stream` | `bool` | `False` | If `True`, returns a [`TextIteratorStreamer`](#textiteratorstreamer) instead. |
+
+</Expandable>
 
 **Returns:** [`GenerateOutput`](#generateoutput) (or [`TextIteratorStreamer`](#textiteratorstreamer) when `stream=True`)
 
@@ -104,21 +120,9 @@ print(output.text)
 
 Resets conversation state and clears the KV cache.
 
-### `save_kv_cache(path)`
+### `save_kv_cache(path)` / `load_kv_cache(path)`
 
-Saves the current key-value cache to a file.
-
-| Parameter | Type | Description |
-|---|---|---|
-| `path` | `str` | File path to save the cache. |
-
-### `load_kv_cache(path)`
-
-Loads a previously saved key-value cache from a file.
-
-| Parameter | Type | Description |
-|---|---|---|
-| `path` | `str` | File path to load the cache from. |
+Save or load the key-value cache to/from a file path (`str`).
 
 ### `close()`
 
@@ -151,13 +155,9 @@ print(output.text)
 
 **Returns:** [`GenerateOutput`](#generateoutput) (or [`TextIteratorStreamer`](#textiteratorstreamer) when `stream=True`)
 
-### `reset()`
+### `reset()` / `close()`
 
-Resets conversation state and clears the KV cache.
-
-### `close()`
-
-Releases the model handle and frees resources. Supports context-manager usage.
+Same as [`GeniexLLM`](#geniexllm).
 
 ---
 
@@ -196,24 +196,29 @@ Returned by `model.generate()`.
 
 | Attribute | Type | Description |
 |---|---|---|
-| `text` | `str` | The generated text (with thinking tags stripped if present). |
-| `thinking` | `str \| None` | The model's reasoning content (extracted from `<think>` tags), or `None`. |
+| `text` | `str` | The generated text (thinking tags stripped if present). |
+| `thinking` | `str \| None` | The model's reasoning content, or `None`. |
 | `profile` | [`ProfileData`](#profiledata) | Performance metrics. |
 
 ### ProfileData
 
-Performance profiling data for a generation call.
-
 | Attribute | Type | Description |
 |---|---|---|
 | `ttft` | `int` | Time to first token (ms). |
-| `prompt_time` | `int` | Prompt processing time (ms). |
-| `decode_time` | `int` | Decode time (ms). |
 | `prompt_tokens` | `int` | Number of prompt tokens. |
 | `generated_tokens` | `int` | Number of generated tokens. |
 | `prefill_speed` | `float` | Prefill speed (tokens/s). |
 | `decode_speed` | `float` | Decode speed (tokens/s). |
 | `stop_reason` | `str \| None` | Why generation stopped (e.g. `"eos"`, `"limit"`). |
+
+<Expandable title="All timing fields">
+
+| Attribute | Type | Description |
+|---|---|---|
+| `prompt_time` | `int` | Prompt processing time (ms). |
+| `decode_time` | `int` | Decode time (ms). |
+
+</Expandable>
 
 ### TextIteratorStreamer
 
@@ -224,14 +229,13 @@ streamer = model.generate(prompt, max_new_tokens=256, stream=True)
 for chunk in streamer:
     print(chunk, end="", flush=True)
 
-# After iteration, the final output is available:
-final = streamer.output  # GenerateOutput
+final = streamer.output  # GenerateOutput available after iteration
 ```
 
 | Method / Property | Description |
 |---|---|
 | `__iter__()` | Yields `str` chunks as they are generated. |
-| `output` | `GenerateOutput \| None` — the complete result, available after iteration finishes. |
+| `output` | `GenerateOutput \| None` — available after iteration finishes. |
 | `cancel()` | Stop generation at the next token boundary. |
 
 ---
@@ -243,16 +247,23 @@ The same model manager the CLI uses is available programmatically via `geniex.mo
 ```python
 from geniex import model_manager as mm
 
-mm.pull("qwen3")                       # download by alias or "org/repo[:quant]"
-models = mm.list_models()              # list cached model names
-paths  = mm.get_paths("qwen3")        # resolve to local file paths
-mtype  = mm.get_type("qwen3")         # "llm" or "vlm"
-name   = mm.resolve_alias("qwen3")    # "Qualcomm/Qwen3-4B-Instruct"
-mm.remove("qwen3")                    # delete one cached model
-mm.clean()                            # delete all cached models
+mm.pull("qwen3")
+models = mm.list_models()
+paths  = mm.get_paths("qwen3")
+mm.remove("qwen3")
 ```
 
-### `pull()`
+| Function | Description |
+|---|---|
+| `pull(model_name, ...)` | Download a model by alias or `org/repo[:quant]`. |
+| `list_models()` | Returns `list[str]` of cached model names. |
+| `get_paths(model_name)` | Returns `ModelPaths` with resolved local file paths. |
+| `get_type(model_name)` | Returns `"llm"` or `"vlm"`. |
+| `resolve_alias(alias)` | Resolves a short alias to canonical `org/repo`. |
+| `remove(model_name)` | Delete a cached model from disk. |
+| `clean()` | Remove all cached models. Returns count removed. |
+
+<Expandable title="pull() parameters">
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -263,13 +274,9 @@ mm.clean()                            # delete all cached models
 | `hf_token` | `str \| None` | `None` | HuggingFace bearer token. |
 | `on_progress` | `Callable \| None` | `None` | Callback `(files: list[FileProgress]) -> bool`; return `False` to cancel. |
 
-### `list_models()` → `list[str]`
+</Expandable>
 
-Returns cached model names.
-
-### `get_paths(model_name)` → `ModelPaths`
-
-Resolves a model name to absolute local paths.
+<Expandable title="ModelPaths attributes">
 
 | Attribute | Type | Description |
 |---|---|---|
@@ -281,35 +288,19 @@ Resolves a model name to absolute local paths.
 | `tokenizer_path` | `str \| None` | Tokenizer file path. |
 | `device_id` | `str \| None` | Device identifier. |
 
-### `get_type(model_name)` → `str`
-
-Returns `"llm"` or `"vlm"`.
-
-### `resolve_alias(alias)` → `str`
-
-Resolves a short alias (e.g. `"qwen3"`) to a canonical `org/repo`.
-
-### `remove(model_name)` → `None`
-
-Deletes a cached model from disk.
-
-### `clean()` → `int`
-
-Removes all cached models. Returns the count removed.
+</Expandable>
 
 ---
 
 ## Runtime Functions
 
-Top-level functions for managing the GenieX runtime.
-
 | Function | Description |
 |---|---|
-| `geniex.init()` | Initialize the GenieX runtime. Called automatically on first model load. |
+| `geniex.init()` | Initialize the runtime. Called automatically on first model load. |
 | `geniex.deinit()` | Shut down the runtime and release resources. |
 | `geniex.version()` | Returns the SDK version string. |
-| `geniex.get_plugin_list()` | Returns `list[str]` of available plugin IDs (e.g. `["llama_cpp"]`). |
-| `geniex.get_device_list(plugin_id)` | Returns `list[tuple[str, str]]` of `(device_id, device_name)` pairs for a plugin. |
+| `geniex.get_plugin_list()` | Returns `list[str]` of available plugin IDs. |
+| `geniex.get_device_list(plugin_id)` | Returns `list[tuple[str, str]]` of `(device_id, device_name)` pairs. |
 
 <br />
 
