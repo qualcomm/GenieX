@@ -29,16 +29,6 @@
           "anchor": "Website",
           "href": "https://aihub.qualcomm.com/",
           "icon": "globe"
-        },
-        {
-          "anchor": "Discord",
-          "href": "https://discord.com/invite/thRu2HaK4D",
-          "icon": "Discord"
-        },
-        {
-          "anchor": "Slack",
-          "href": "https://join.slack.com/t/geniex-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw",
-          "icon": "Slack"
         }
       ]
     },
@@ -55,10 +45,18 @@
                   "en/geniex-cli/overview",
                   "en/geniex-cli/quickstart",
                   {
-                    "group": "Models Supported",
+                    "group": "Supported Models",
                     "pages": [
                       "en/geniex-cli/npu",
                       "en/geniex-cli/gguf"
+                    ]
+                  },
+                   {
+                    "group": "Device Coverage",
+                    "pages": [
+                      "en/geniex-cli/windows-arm64",
+                      "en/geniex-cli/linux-arm64",
+                      "en/geniex-cli/android"
                     ]
                   }
                 ]
