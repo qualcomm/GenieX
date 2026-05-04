@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Documentations",
+  "name": "GenieX",
   "favicon": "/nexalogo.svg",
   "colors": {
     "primary": "#454545",
@@ -16,21 +16,18 @@
       "projectToken": "c6b9c6db0dc18d2cafe5c9926f87ae93"
     }
   },
-  "navbar": {
-    "links": [
-      {
-        "label": " 7.0K",
-        "href": "https://github.com/geniex-ai/geniex-sdk",
-        "icon": "github"
-      }
-    ]
-  },
+  "topbarLinks": [
+    {
+      "type": "github",
+      "url": "https://github.com/qualcomm/nexa-sdk"
+    }
+  ],
   "navigation": {
     "global": {
       "anchors": [
         {
           "anchor": "Website",
-          "href": "https://geniex.ai/",
+          "href": "https://aihub.qualcomm.com/",
           "icon": "globe"
         },
         {
@@ -50,7 +47,7 @@
         "language": "en",
         "tabs": [
           {
-            "tab": "Documentations",
+            "tab": "GenieX",
             "groups": [
               {
                 "group": "Get Started",
@@ -80,34 +77,7 @@
                 "pages": [
                   "en/geniex-python/overview",
                   "en/geniex-python/quickstart",
-                  "en/geniex-python/platform-guides/windows-arm64",
                   "en/geniex-python/api-reference"
-                ]
-              },
-              {
-                "group": "Android SDK",
-                "icon": "android",
-                "pages": [
-                  "en/geniex-android/overview",
-                  "en/geniex-android/quickstart",
-                  "en/geniex-android/model-tutorial",
-                  {
-                    "group": "API Reference",
-                    "pages": [
-                      "en/geniex-android/APIReference",
-                      "en/geniex-android/APIReference_NPU",
-                      "en/geniex-android/APIReference_CPUGPU"
-                    ]
-                  }
-                ]
-              },
-              {
-                "group": "Linux Docker",
-                "icon": "docker",
-                "pages": [
-                  "en/geniex-docker/overview",
-                  "en/geniex-docker/quickstart",
-                  "en/geniex-docker/RestAPI"
                 ]
               }
             ]

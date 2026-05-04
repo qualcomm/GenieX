@@ -1,402 +1,315 @@
 ---
 title: "API Reference"
-description: "Complete API documentation for all GenieX AI Python SDK modules and classes."
+description: "Complete API documentation for the GenieX Python SDK."
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-# GenieX AI Python SDK API Reference
+# GenieX Python SDK API Reference
 
-This document provides comprehensive API documentation for all modules and classes in the GenieX AI Python SDK. For platform-specific setup and complete examples, please refer to the platform guides:
+The GenieX Python SDK follows the same design patterns as Hugging Face `transformers` — use `AutoModel*.from_pretrained()` to load a model, then call `.generate()` for inference.
 
-- [Windows ARM64 Guide](/en/geniex-python/platform-guides/windows-arm64) - NPU acceleration
+## AutoModelForCausalLM
 
-## Core Modules
-
-### LLM (Large Language Model)
-
-The `LLM` class provides text generation and conversation capabilities.
-
-#### Initialization
+Factory for loading text-only causal language models. Returns a [`GeniexLLM`](#geniexllm) instance.
 
 ```python
-from nexaai import LLM, ModelConfig
-
-# Initialize LLM
-config = ModelConfig()
-llm = LLM.from_(model="model_name_or_path", config=config, plugin_id="cpu_gpu", device_id="cpu")
-```
-
-#### Core Methods
-
-**`generate_stream(prompt, config=None)`**
-- Generates text tokens in streaming fashion
-- Parameters:
-  - `prompt` (str): Input prompt
-  - `config` (GenerationConfig, optional): Generation configuration
-- Returns: Generator yielding text tokens, returns `GenerateResult` when exhausted
-
-**`generate(prompt, config=None, on_token=None)`**
-- Generates text with optional streaming token callback
-- Parameters:
-  - `prompt` (str): Input prompt
-  - `config` (GenerationConfig, optional): Generation configuration
-  - `on_token` (Callable[[str], bool], optional): Callback function for streaming tokens
-- Returns: `GenerateResult` containing the generated text and profile data
-
-**`apply_chat_template(messages, tools=None, enable_thinking=False)`**
-- Applies chat template to conversation
-- Parameters:
-  - `messages` (List[LlmChatMessage]): Conversation history
-  - `tools` (str, optional): Optional tool JSON string
-  - `enable_thinking` (bool): Enable thinking mode
-- Returns: Formatted prompt string
-
-**`reset()`**
-- Resets conversation state and clears KV cache
-
-**`save_kv_cache(path)`**
-- Saves key-value cache to file
-- Parameters:
-  - `path` (str): File path to save cache
-
-**`load_kv_cache(path)`**
-- Loads key-value cache from file
-- Parameters:
-  - `path` (str): File path to load cache
-
-### VLM (Vision Language Model)
-
-The `VLM` class provides multimodal understanding and generation capabilities.
-
-#### Initialization
-
-```python
-from nexaai import VLM, ModelConfig
-
-# Initialize VLM
-config = ModelConfig()
-vlm = VLM.from_(model="model_name_or_path", config=config, plugin_id="cpu_gpu", device_id="")
-```
-
-#### Core Methods
-
-**`generate_stream(prompt, config=None)`**
-- Generates text tokens in streaming fashion
-- Parameters:
-  - `prompt` (str): Input prompt
-  - `config` (GenerationConfig, optional): Generation configuration with image_paths/audio_paths
-- Returns: Generator yielding text tokens, returns `GenerateResult` when exhausted
-
-**`generate(prompt, config=None, on_token=None)`**
-- Generates text with optional streaming token callback
-- Parameters:
-  - `prompt` (str): Input prompt
-  - `config` (GenerationConfig, optional): Generation configuration
-  - `on_token` (Callable[[str], bool], optional): Callback function for streaming tokens
-- Returns: `GenerateResult` containing the generated text and profile data
-
-**`apply_chat_template(messages, tools=None, enable_thinking=False)`**
-- Applies chat template to multimodal conversation
-- Parameters:
-  - `messages` (List[VlmChatMessage]): Multimodal conversation history
-  - `tools` (str, optional): Optional tool JSON string
-  - `enable_thinking` (bool): Enable thinking mode
-- Returns: Formatted prompt string
-
-**`reset()`**
-- Resets conversation state and clears KV cache
-
-### ASR (Automatic Speech Recognition)
-
-The `ASR` class provides speech-to-text transcription capabilities.
-
-#### Initialization
-
-```python
-from nexaai import ASR
-
-# Initialize ASR
-asr = ASR.from_(model="model_name_or_path", plugin_id="cpu_gpu", device_id="cpu")
-```
-
-#### Core Methods
-
-**`transcribe(audio_path, language=None, timestamps=None, beam_size=5)`**
-- Transcribes audio file to text
-- Parameters:
-  - `audio_path` (str): Path to audio file
-  - `language` (str, optional): Language code ("en", "zh", or None for auto-detect)
-  - `timestamps` (str, optional): Timestamp format ("none", "segment", "word")
-  - `beam_size` (int): Beam size for decoding (default: 5)
-- Returns: `TranscribeResult` containing transcript, confidence scores, timestamps, and profile data
-
-**`list_supported_languages()`**
-- Lists supported languages
-- Returns: List of language codes
-
-**`stream_begin(language=None, on_transcription=None, chunk_duration=0.5, overlap_duration=0.1, sample_rate=16000, max_queue_size=10, buffer_size=4096, timestamps=None, beam_size=5)`**
-- Begins streaming ASR transcription
-- Parameters:
-  - `language` (str, optional): Language code
-  - `on_transcription` (Callable[[str], None], optional): Callback function for transcription results
-  - `chunk_duration` (float): Audio chunk duration in seconds
-  - `overlap_duration` (float): Overlap duration in seconds
-  - `sample_rate` (int): Audio sample rate
-  - `max_queue_size` (int): Maximum queue size
-  - `buffer_size` (int): Buffer size
-  - `timestamps` (str, optional): Timestamp format
-  - `beam_size` (int): Beam size for decoding
-
-**`stream_push_audio(audio_data)`**
-- Pushes audio data for streaming transcription
-- Parameters:
-  - `audio_data` (List[float]): List of audio samples (float values)
-
-**`stream_stop(graceful=True)`**
-- Stops streaming transcription
-- Parameters:
-  - `graceful` (bool): If True, wait for current processing to complete
-
-### Embedder
-
-The `Embedder` class provides text vectorization and similarity computation.
-
-#### Initialization
-
-```python
-from nexaai import Embedder
-
-# Initialize Embedder
-embedder = Embedder.from_(model="model_name_or_path", plugin_id="cpu_gpu")
-```
-
-#### Core Methods
-
-**`embed(texts=None, input_ids=None, image_paths=None, task_type=None, batch_size=32, normalize=False, normalize_method=None)`**
-- Generates embeddings for texts, tokens, or images
-- Parameters:
-  - `texts` (List[str], optional): List of text strings to embed
-  - `input_ids` (List[List[int]], optional): List of token ID sequences (alternative to texts)
-  - `image_paths` (List[str], optional): List of image file paths to embed
-  - `task_type` (str, optional): Task type for embedding (e.g., "classification", "retrieval")
-  - `batch_size` (int): Batch size for processing (default: 32)
-  - `normalize` (bool): Whether to normalize embeddings (default: False)
-  - `normalize_method` (str, optional): Normalization method (e.g., "l2")
-- Returns: `EmbedResult` containing embeddings and profile data
-
-**`embedding_dim()`**
-- Returns the dimension of embeddings
-- Returns: Integer dimension size
-
-### Reranker
-
-The `Reranker` class provides document reranking capabilities.
-
-#### Initialization
-
-```python
-from nexaai import Reranker
-
-# Initialize Reranker
-reranker = Reranker.from_(model="model_name_or_path", plugin_id="cpu_gpu")
-```
-
-#### Core Methods
-
-**`rerank(query, documents, batch_size=32, normalize=False, normalize_method=None)`**
-- Reranks documents based on query relevance
-- Parameters:
-  - `query` (str): Search query
-  - `documents` (List[str]): List of documents to rank
-  - `batch_size` (int): Batch size for processing (default: 32)
-  - `normalize` (bool): Whether to normalize scores (default: False)
-  - `normalize_method` (str, optional): Normalization method
-- Returns: `RerankResult` containing scores and profile data
-
-### CV (Computer Vision)
-
-The `CV` class provides computer vision capabilities including OCR.
-
-#### Initialization
-
-```python
-from nexaai import CV
-
-# Initialize CV Model
-cv = CV.from_(model="model_name_or_path", capabilities=0, plugin_id="cpu_gpu")
-```
-
-#### Core Methods
-
-**`infer(input_image_path)`**
-- Performs inference on image
-- Parameters:
-  - `input_image_path` (str): Path to input image
-- Returns: `CVResult` containing detection/classification results
-
-### Diarize
-
-The `Diarize` class provides speaker diarization capabilities.
-
-#### Initialization
-
-```python
-from nexaai import Diarize
-
-# Initialize Diarize
-diarize = Diarize.from_(model="model_name_or_path", plugin_id="cpu_gpu", device_id="cpu")
-```
-
-#### Core Methods
-
-**`infer(audio_path, min_speakers=None, max_speakers=None)`**
-- Performs speaker diarization on audio file
-- Parameters:
-  - `audio_path` (str): Path to the audio file
-  - `min_speakers` (int, optional): Minimum number of speakers
-  - `max_speakers` (int, optional): Maximum number of speakers
-- Returns: `DiarizeResult` containing speech segments and metadata
-
-### TTS (Text-to-Speech)
-
-The `TTS` class provides text-to-speech synthesis capabilities.
-
-#### Initialization
-
-```python
-from nexaai import TTS
-
-# Initialize TTS
-tts = TTS.from_(model="model_name_or_path", plugin_id="cpu_gpu", device_id="cpu")
-```
-
-#### Core Methods
-
-**`synthesize(text, output_path, voice=None, speed=1.0, seed=-1, sample_rate=22050)`**
-- Synthesizes text to speech
-- Parameters:
-  - `text` (str): Text to synthesize
-  - `output_path` (str): Path to save the audio file
-  - `voice` (str, optional): Voice identifier. If None, uses default
-  - `speed` (float): Speech speed multiplier (default: 1.0)
-  - `seed` (int): Random seed. -1 for random (default: -1)
-  - `sample_rate` (int): Audio sample rate (default: 22050)
-- Returns: `SynthesizeResult` containing audio file path and metadata
-
-**`list_available_voices()`**
-- Lists available voices
-- Returns: List of voice identifiers
-
-### ImageGen
-
-The `ImageGen` class provides image generation capabilities.
-
-#### Initialization
-
-```python
-from nexaai import ImageGen, ModelConfig
-
-# Initialize ImageGen
-config = ModelConfig()
-imagegen = ImageGen.from_(model="model_name_or_path", config=config, plugin_id="cpu_gpu", device_id="cpu")
-```
-
-#### Core Methods
-
-**`txt2img(prompt, output_path, negative_prompts=None, height=512, width=512, method='ddpm', steps=50, guidance_scale=7.5, eta=0.0, seed=-1, strength=1.0)`**
-- Generates image from text prompt
-- Parameters:
-  - `prompt` (str): Text prompt for image generation
-  - `output_path` (str): Path to save the generated image
-  - `negative_prompts` (List[str], optional): List of negative prompts
-  - `height` (int): Image height in pixels (default: 512)
-  - `width` (int): Image width in pixels (default: 512)
-  - `method` (str): Sampling method (e.g., 'ddpm', 'ddim') (default: 'ddpm')
-  - `steps` (int): Number of diffusion steps (default: 50)
-  - `guidance_scale` (float): Guidance scale for classifier-free guidance (default: 7.5)
-  - `eta` (float): Eta parameter for DDIM (default: 0.0)
-  - `seed` (int): Random seed. -1 for random (default: -1)
-  - `strength` (float): Strength parameter (default: 1.0)
-- Returns: `ImageGenResult` containing output image path
-
-**`img2img(init_image_path, prompt, output_path, negative_prompts=None, height=512, width=512, method='ddpm', steps=50, guidance_scale=7.5, eta=0.0, seed=-1, strength=0.8)`**
-- Generates image from existing image and text prompt
-- Parameters:
-  - `init_image_path` (str): Path to the initial image
-  - `prompt` (str): Text prompt for image generation
-  - `output_path` (str): Path to save the generated image
-  - `negative_prompts` (List[str], optional): List of negative prompts
-  - `height` (int): Image height in pixels (default: 512)
-  - `width` (int): Image width in pixels (default: 512)
-  - `method` (str): Sampling method (e.g., 'ddpm', 'ddim') (default: 'ddpm')
-  - `steps` (int): Number of diffusion steps (default: 50)
-  - `guidance_scale` (float): Guidance scale for classifier-free guidance (default: 7.5)
-  - `eta` (float): Eta parameter for DDIM (default: 0.0)
-  - `seed` (int): Random seed. -1 for random (default: -1)
-  - `strength` (float): Strength parameter (0.0-1.0) (default: 0.8)
-- Returns: `ImageGenResult` containing output image path
-
-## Configuration Classes
-
-### ModelConfig
-
-General model configuration.
-
-```python
-from nexaai import ModelConfig
-
-config = ModelConfig()
-# Default configuration is usually sufficient for most use cases
-```
-
-### GenerationConfig
-
-Text generation configuration.
-
-```python
-from nexaai import GenerationConfig
-
-config = GenerationConfig(
-    max_tokens=100,           # Maximum tokens to generate
-    image_paths=["path/to/image.jpg"],  # Image paths for VLM (optional)
-    audio_paths=["path/to/audio.wav"],  # Audio paths for VLM (optional)
+from geniex import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qualcomm/Qwen3-4B-Instruct",   # HuggingFace repo id, short alias, or local path
+    device_map="auto",               # "auto" | "<plugin>" | "<plugin>:<device>"
 )
 ```
 
-## Message Classes
+### `from_pretrained()`
 
-### LlmChatMessage
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `model_name_or_path` | `str` | *required* | HuggingFace repo id (e.g. `"Qualcomm/Qwen3-4B-Instruct"`), short alias (e.g. `"qwen3"`), or local path. |
+| `model_name` | `str \| None` | `None` | Override the registry model name (e.g. `"granite4"` for QAIRT). Defaults to `model_name_or_path`. |
+| `quant` | `str \| None` | `None` | Quantization variant (e.g. `"Q4_K_M"`). Used to filter files when downloading from HuggingFace Hub. |
+| `device_map` | `str` | `"auto"` | `"auto"` picks the first available plugin/device. Also accepts `"<plugin_id>"` or `"<plugin_id>:<device_id>"`. |
+| `n_ctx` | `int` | `0` | Context length (`0` = model default). |
+| `n_gpu_layers` | `int` | `-1` | Layers to offload to GPU (`-1` = all). |
+| `tokenizer_path` | `str \| None` | `None` | Override tokenizer file path. |
+| `license_id` | `str \| None` | `None` | NPU licence ID. |
+| `license_key` | `str \| None` | `None` | NPU licence key. |
+| `hf_token` | `str \| None` | `None` | HuggingFace bearer token for gated models. |
+| `enable_thinking` | `bool` | `False` | Enable thinking mode (e.g. Qwen reasoning models). |
+| `n_threads` | `int` | — | Number of threads for inference. |
+| `n_batch` | `int` | — | Batch size for prompt processing. |
+| `max_tokens` | `int` | — | Maximum tokens for generation. |
+| `system_prompt` | `str` | — | System prompt to prepend. |
 
-Represents a single message in a conversation for LLM.
+**Returns:** [`GeniexLLM`](#geniexllm)
 
-```python
-from nexaai import LlmChatMessage
+---
 
-message = LlmChatMessage(role="user", content="Hello, how are you?")
-```
+## AutoModelForVision2Seq
 
-### VlmChatMessage
-
-Represents a multimodal message with multiple content types for VLM.
-
-```python
-from nexaai import VlmChatMessage, VlmContent
-
-contents = [
-    VlmContent(type="text", text="Describe this image"),
-    VlmContent(type="image", text="path/to/image.jpg")
-]
-message = VlmChatMessage(role="user", contents=contents)
-```
-
-### VlmContent
-
-Represents individual content within a multimodal message.
+Factory for loading vision-language / multimodal models. Returns a [`GeniexVLM`](#geniexvlm) instance.
 
 ```python
-from nexaai import VlmContent
+from geniex import AutoModelForVision2Seq
+
+model = AutoModelForVision2Seq.from_pretrained("qwen3vl", device_map="auto")
 ```
+
+### `from_pretrained()`
+
+Accepts all the same parameters as [`AutoModelForCausalLM.from_pretrained()`](#from_pretrained) plus:
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `mmproj_path` | `str \| None` | `None` | Path to the multimodal projector file. Auto-resolved when downloading from Hub. |
+
+**Returns:** [`GeniexVLM`](#geniexvlm)
+
+---
+
+## GeniexLLM
+
+Text-only language model instance returned by `AutoModelForCausalLM.from_pretrained()`.
+
+### `generate()`
+
+Run text generation from a formatted prompt string.
+
+```python
+output = model.generate(prompt, max_new_tokens=256)
+print(output.text)
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `prompt` | `str` | *required* | The formatted prompt string (use `model.tokenizer.apply_chat_template()` to build it). |
+| `max_new_tokens` | `int` | `512` | Maximum number of tokens to generate. |
+| `temperature` | `float` | `0.7` | Sampling temperature. |
+| `top_p` | `float` | `0.9` | Nucleus sampling threshold. |
+| `top_k` | `int` | `40` | Top-k sampling. |
+| `min_p` | `float` | `0.0` | Minimum probability threshold. |
+| `repetition_penalty` | `float` | `1.1` | Repetition penalty. |
+| `presence_penalty` | `float` | `0.0` | Presence penalty. |
+| `frequency_penalty` | `float` | `0.0` | Frequency penalty. |
+| `seed` | `int` | `-1` | Random seed (`-1` = random). |
+| `stop` | `list[str] \| None` | `None` | Stop sequences. |
+| `grammar` | `str \| None` | `None` | GBNF grammar string for constrained generation. |
+| `json_mode` | `bool` | `False` | Force JSON output. |
+| `stream` | `bool` | `False` | If `True`, returns a [`TextIteratorStreamer`](#textiteratorstreamer) instead. |
+
+**Returns:** [`GenerateOutput`](#generateoutput) (or [`TextIteratorStreamer`](#textiteratorstreamer) when `stream=True`)
+
+### `reset()`
+
+Resets conversation state and clears the KV cache.
+
+### `save_kv_cache(path)`
+
+Saves the current key-value cache to a file.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `path` | `str` | File path to save the cache. |
+
+### `load_kv_cache(path)`
+
+Loads a previously saved key-value cache from a file.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `path` | `str` | File path to load the cache from. |
+
+### `close()`
+
+Releases the model handle and frees resources. Also supports context-manager usage:
+
+```python
+with AutoModelForCausalLM.from_pretrained("qwen3") as model:
+    output = model.generate(prompt)
+```
+
+---
+
+## GeniexVLM
+
+Vision-language model instance returned by `AutoModelForVision2Seq.from_pretrained()`.
+
+### `generate()`
+
+Same parameters as [`GeniexLLM.generate()`](#generate) plus:
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `images` | `list[str] \| None` | `None` | List of image file paths for the model to process. |
+| `audios` | `list[str] \| None` | `None` | List of audio file paths for the model to process. |
+
+```python
+output = model.generate(prompt, images=["/path/to/image.jpg"], max_new_tokens=256)
+print(output.text)
+```
+
+**Returns:** [`GenerateOutput`](#generateoutput) (or [`TextIteratorStreamer`](#textiteratorstreamer) when `stream=True`)
+
+### `reset()`
+
+Resets conversation state and clears the KV cache.
+
+### `close()`
+
+Releases the model handle and frees resources. Supports context-manager usage.
+
+---
+
+## ModelTokenizer
+
+Accessed via `model.tokenizer`. Provides a `transformers`-compatible chat template interface.
+
+### `apply_chat_template()`
+
+Formats a list of chat messages using the model's built-in chat template.
+
+```python
+messages = [{"role": "user", "content": "What is 2+2?"}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `messages` | `list[dict]` | *required* | List of message dicts with `"role"` and `"content"` keys. |
+| `tokenize` | `bool` | `False` | Must be `False` — standalone tokenization is not supported. |
+| `add_generation_prompt` | `bool` | `True` | Whether to append the generation prompt suffix. |
+| `enable_thinking` | `bool` | `False` | Enable thinking mode (e.g. Qwen reasoning models). |
+| `tools` | `list[dict] \| str \| None` | `None` | Tool definitions as a list of dicts or pre-serialised JSON string. |
+
+**Returns:** `str` — formatted prompt ready for `model.generate()`.
+
+---
+
+## Output Classes
+
+### GenerateOutput
+
+Returned by `model.generate()`.
+
+| Attribute | Type | Description |
+|---|---|---|
+| `text` | `str` | The generated text (with thinking tags stripped if present). |
+| `thinking` | `str \| None` | The model's reasoning content (extracted from `<think>` tags), or `None`. |
+| `profile` | [`ProfileData`](#profiledata) | Performance metrics. |
+
+### ProfileData
+
+Performance profiling data for a generation call.
+
+| Attribute | Type | Description |
+|---|---|---|
+| `ttft` | `int` | Time to first token (ms). |
+| `prompt_time` | `int` | Prompt processing time (ms). |
+| `decode_time` | `int` | Decode time (ms). |
+| `prompt_tokens` | `int` | Number of prompt tokens. |
+| `generated_tokens` | `int` | Number of generated tokens. |
+| `prefill_speed` | `float` | Prefill speed (tokens/s). |
+| `decode_speed` | `float` | Decode speed (tokens/s). |
+| `stop_reason` | `str \| None` | Why generation stopped (e.g. `"eos"`, `"limit"`). |
+
+### TextIteratorStreamer
+
+Returned by `model.generate(..., stream=True)`. Yields decoded text chunks as they are generated.
+
+```python
+streamer = model.generate(prompt, max_new_tokens=256, stream=True)
+for chunk in streamer:
+    print(chunk, end="", flush=True)
+
+# After iteration, the final output is available:
+final = streamer.output  # GenerateOutput
+```
+
+| Method / Property | Description |
+|---|---|
+| `__iter__()` | Yields `str` chunks as they are generated. |
+| `output` | `GenerateOutput \| None` — the complete result, available after iteration finishes. |
+| `cancel()` | Stop generation at the next token boundary. |
+
+---
+
+## Model Manager
+
+The same model manager the CLI uses is available programmatically via `geniex.model_manager`.
+
+```python
+from geniex import model_manager as mm
+
+mm.pull("qwen3")                       # download by alias or "org/repo[:quant]"
+models = mm.list_models()              # list cached model names
+paths  = mm.get_paths("qwen3")        # resolve to local file paths
+mtype  = mm.get_type("qwen3")         # "llm" or "vlm"
+name   = mm.resolve_alias("qwen3")    # "Qualcomm/Qwen3-4B-Instruct"
+mm.remove("qwen3")                    # delete one cached model
+mm.clean()                            # delete all cached models
+```
+
+### `pull()`
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `model_name` | `str` | *required* | `org/repo` or a short alias. |
+| `quant` | `str \| None` | `None` | Quantization hint (e.g. `"Q4_K_M"`). |
+| `hub` | `str` | `"auto"` | `"auto"` \| `"hf"` \| `"localfs"`. |
+| `local_path` | `str \| None` | `None` | Source directory (required when `hub="localfs"`). |
+| `hf_token` | `str \| None` | `None` | HuggingFace bearer token. |
+| `on_progress` | `Callable \| None` | `None` | Callback `(files: list[FileProgress]) -> bool`; return `False` to cancel. |
+
+### `list_models()` → `list[str]`
+
+Returns cached model names.
+
+### `get_paths(model_name)` → `ModelPaths`
+
+Resolves a model name to absolute local paths.
+
+| Attribute | Type | Description |
+|---|---|---|
+| `model_path` | `str` | Path to the main model file. |
+| `model_dir` | `str` | Directory containing the model. |
+| `model_name` | `str` | Canonical model name. |
+| `plugin_id` | `str` | Plugin identifier. |
+| `mmproj_path` | `str \| None` | Multimodal projector path (VLM only). |
+| `tokenizer_path` | `str \| None` | Tokenizer file path. |
+| `device_id` | `str \| None` | Device identifier. |
+
+### `get_type(model_name)` → `str`
+
+Returns `"llm"` or `"vlm"`.
+
+### `resolve_alias(alias)` → `str`
+
+Resolves a short alias (e.g. `"qwen3"`) to a canonical `org/repo`.
+
+### `remove(model_name)` → `None`
+
+Deletes a cached model from disk.
+
+### `clean()` → `int`
+
+Removes all cached models. Returns the count removed.
+
+---
+
+## Runtime Functions
+
+Top-level functions for managing the GenieX runtime.
+
+| Function | Description |
+|---|---|
+| `geniex.init()` | Initialize the GenieX runtime. Called automatically on first model load. |
+| `geniex.deinit()` | Shut down the runtime and release resources. |
+| `geniex.version()` | Returns the SDK version string. |
+| `geniex.get_plugin_list()` | Returns `list[str]` of available plugin IDs (e.g. `["llama_cpp"]`). |
+| `geniex.get_device_list(plugin_id)` | Returns `list[tuple[str, str]]` of `(device_id, device_name)` pairs for a plugin. |
 
 <br />
 

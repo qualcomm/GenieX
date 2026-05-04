@@ -11,43 +11,75 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ### **Installation**
 
-Follow the platform guide for detailed instructions:
-
-- **Windows ARM64**: 
 ```bash
 pip install --index-url https://pypi.org/simple/ --extra-index-url https://test.pypi.org/simple/ geniex==0.1.1rc1
 ```
 This will download the python package from [test PyPI](https://test.pypi.org/project/geniex/)
 
 
-
-### **Basic Usage**
+### **LLM Inference**
 
 Here's a simple example to get you started:
 
 ```python
-from nexaai import LLM, GenerationConfig, ModelConfig, LlmChatMessage
+from geniex import AutoModelForCausalLM
 
-# Initialize model
-model_name = "Qualcomm/Qwen3-4B-Instruct"
-config = ModelConfig()
-llm = LLM.from_(model=model_name, config=config)
+model = AutoModelForCausalLM.from_pretrained(
+    "qwen3",               # short alias, HF repo id, or local GGUF path
+    device_map="auto",     # "auto" | "<plugin>" | "<plugin>:<device>"
+)
 
-# Create conversation
-conversation = [
-    LlmChatMessage(role="system", content="You are a helpful assistant."),
-    LlmChatMessage(role="user", content="Hello, how are you?")
-]
+messages = [{"role": "user", "content": "What is 2+2?"}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
 
-# Generate response
-prompt = llm.apply_chat_template(conversation)
-for token in llm.generate_stream(prompt, GenerationConfig(max_tokens=100)):
-    print(token, end="", flush=True)
+# One-shot
+output = model.generate(prompt, max_new_tokens=256)
+print(output.text)
+print(f"[{output.profile.generated_tokens} tok, "
+      f"{output.profile.decode_speed:.1f} tok/s, stop={output.profile.stop_reason}]")
+
+# Streaming
+streamer = model.generate(prompt, max_new_tokens=256, stream=True)
+for chunk in streamer:
+    print(chunk, end="", flush=True)
+
+model.close()
 ```
 
-<Note>
-This is a simplified example. For complete setup instructions, model recommendations, and platform-specific optimizations, please refer to your platform guide above.
-</Note>
+### **VLM Inference**
+
+Here's a simple example to get you started:
+
+```python
+from geniex import AutoModelForVision2Seq
+
+model = AutoModelForVision2Seq.from_pretrained("qwen3vl", device_map="auto")
+messages = [{
+    "role": "user",
+    "content": [
+        {"type": "image", "image": "/path/to/image.jpg"},
+        {"type": "text", "text": "Describe the image."},
+    ],
+}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
+print(model.generate(prompt, images=["/path/to/image.jpg"]).text)
+```
+
+### **Model Management**
+The same model manager the CLI uses is available programmatically:
+
+```python
+from geniex import model_manager as mm
+
+mm.pull("qwen3")                      # alias or "org/repo[:quant]"
+paths = mm.get_paths("qwen3")         # resolved local paths
+mm.list_models()                      # cached models
+mm.remove("qwen3")
+```
 
 <br />
 

@@ -2,28 +2,49 @@
 
 ## Prerequisites
 
-Before you begin, make sure you have:
+Before you begin, make sure you have **Node.js 20 or later** installed.
 
-- Node.js (^16.20 || ^18.18 || >=20.17).
+<details>
+<summary><strong>Install Node.js (includes npm)</strong></summary>
 
+**macOS** (via Homebrew):
+
+```bash
+brew install node
+```
+
+**Windows** (via winget):
+
+```bash
+winget install OpenJS.NodeJS.LTS
+```
+
+After installing, verify with:
+
+```bash
+node -v
+npm -v
+```
+
+</details>
 
 ## Install and Use Mintlify Locally
 
-**1.** Install the [CLI](https://www.npmjs.com/package/mint):
+**1.** Install the Mintlify [CLI](https://www.npmjs.com/package/mint):
 
-```
+```bash
 npm i -g mint
 ```
 
-**2.** Navigate to the docs directory (where the docs.json file is located) and execute the following command:
+**2.** Navigate to the docs directory (where `docs.json` is located) and start the local preview:
 
-```
+```bash
 mint dev
 ```
 
-Alternatively, if you do not want to install the CLI globally, you can use a run a one-time script:
+Alternatively, without installing the CLI globally:
 
-```
+```bash
 npx mint dev
 ```
 
