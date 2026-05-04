@@ -23,7 +23,7 @@ Example — run a local GGUF on the Hexagon NPU (PowerShell):
 
 ```powershell
 # 1. Register the file (the last path segment becomes the model namespace)
-bazelisk run //cli -- pull NexaAI/Qwen3-0.6B-GGUF `
+bazelisk run //cli -- pull Qualcomm/Qwen3-4B-Instruct`
   --model-hub localfs `
   --local-path C:\path\to\modelfiles `
   --model-type llm
@@ -35,7 +35,7 @@ $j.DeviceId = "HTP0"    # or "GPUOpenCL" or "CPU"
 $j | ConvertTo-Json -Depth 20 | Set-Content $m
 
 # 3. Run
-bazelisk run //cli -- infer NexaAI/Qwen3-0.6B-GGUF -p "Hello"
+bazelisk run //cli -- infer Qualcomm/Qwen3-4B-Instruct -p "Hello"
 ```
 
 Sanity-check with `-v`: look for `Found device: HTP0` / `Found device: GPUOpenCL`. If you see `Device '…' not found, skipping`, the plugin loaded but the backend DLL did not — verify test-signing is still on (for HTP) or that `ggml-opencl.dll` is present in `sdk/pkg-geniex/lib/llama_cpp/`.

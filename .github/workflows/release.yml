@@ -352,7 +352,6 @@ jobs:
   publish-testpypi:
     name: publish-testpypi
     needs: [resolve-tag, build-python-sdist]
-    if: needs.resolve-tag.outputs.is_prerelease == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

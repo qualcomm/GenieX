@@ -71,8 +71,17 @@
                 "icon": "code",
                 "pages": [
                   "en/geniex-cli/GenieXCLI",
-                  "en/geniex-cli/GenieXAPI",
-                  "en/trouble-shooting/error-code"
+                  "en/geniex-cli/GenieXAPI"
+                ]
+              },
+              {
+                "group": "Python Library",
+                "icon": "python",
+                "pages": [
+                  "en/geniex-python/overview",
+                  "en/geniex-python/quickstart",
+                  "en/geniex-python/platform-guides/windows-arm64",
+                  "en/geniex-python/api-reference"
                 ]
               },
               {
@@ -99,16 +108,6 @@
                   "en/geniex-docker/overview",
                   "en/geniex-docker/quickstart",
                   "en/geniex-docker/RestAPI"
-                ]
-              },
-              {
-                "group": "Python Library",
-                "icon": "python",
-                "pages": [
-                  "en/geniex-python/overview",
-                  "en/geniex-python/quickstart",
-                  "en/geniex-python/platform-guides/windows-arm64",
-                  "en/geniex-python/api-reference"
                 ]
               }
             ]

@@ -1,67 +1,34 @@
 ---
-title: "NPU Models"
-description: "Optimized format for running models on Neural Processing Units, enabling efficient, low-latency inference on edge and specialized hardware."
+title: "QAIRT Plugin"
+description: "Running Geniex through QAIRT plugin on Snapdragon NPU."
 ---
 
-## 🖥️ **Supported Devices**
-
-NPU models are supported on Qualcomm Neural Processing Units (NPUs):
-
-- **GenieX CLI**: Qualcomm Snapdragon NPU PC
-- **GenieXML**: Any Qualcomm NPU device ([contact us](https://sdk.geniex.ai/) to request access)
-
-## ⚙️ **Prerequisites**
-
-- If you haven't already, install the geniex-SDK.
-- All NPU models require an access token before usage:
-  - **Create an account or log in** at [sdk.geniex.ai](https://sdk.geniex.ai)  
-  - **Generate a token**: Go to **Deployment → Create Token**  
-  - **Activate your SDK**: Run the following command on the terminal to set your license:
-  ```bash bash
-  geniex config set license '<your_token_here>'
-  ```
-
-## **LLM - Language Models**
-📝 Language models in NPU format. Try out this quick example:
-
-Try it out:
-```bash bash
-geniex infer NexaAI/qwen3-4B-npu
-```
-
-<Check>
-⌨️  Once model loads, type or paste multi-line text directly into the CLI to chat with the model.
-</Check>
-
----
-## **LMM - Multimodal Models** 
-🖼️ Language models that also accept vision and/or audio inputs. LMM in NPU formats. Try out this quick example:
-
-```bash bash
-geniex infer NexaAI/OmniNeural-4B
-```
-
-<Check>
-⌨️  Drag photos or audio clips directly into the CLI — you can even drop multiple images at once!
-</Check>
 
 ## **Supported Model List**
-We curated a list of top, high quality models in NPU format.
-<Card
-  icon="computer"
-  title="Models for Qualcomm NPU"
-  href="https://huggingface.co/collections/NexaAI/qualcomm-npu-68a56499963641acb2f1eab7"
-  cta="View Huggingface Collection 🤗"
-></Card>
+We curated a list of top, high quality models in QAIRT `bin` format.
 
-For more advanced models, you may visit the [GenieX Model Hub](https://sdk.geniex.ai/model). Also, access token is required to download and use these models. To get access token, You can check the **Prerequisites** section of this page.
+| Model ID |
+|---|
+| Qualcomm/Qwen3-4B |
+| Qualcomm/Qwen3-4B-Instruct |
+| Qualcomm/Qwen2.5-VL-7B |
+| DavidQian/Llama-v3.1-8B-Instruct |
+| DavidQian/Llama-SEA-LION-v3.5-8B-R |
+| DavidQian/Llama-v3.2-1B-Instruct |
+| DavidQian/Llama-v3.2-3B-Instruct |
+| DavidQian/Llama-v3.2-3B-Instruct-SSD |
+| DavidQian/Llama-v3-8B-Instruct |
+| DavidQian/Llama-v3-ELYZA-JP-8B |
+| DavidQian/Llama3-TAIDE-LX-8B-Chat-Alpha1 |
 
-## 🙋 **Request New Models**
+To run a model on `Qualcomm` org, take `Qwen3-4B` for example, simply run:
 
-Missing a model? Vote for it on the **[GenieX Wishlist](/en/community/wishlist)** — we build the most-voted models fast!
+```bash
+geniex infer qualcomm/Qwen3-4B
+```
 
-You can also submit an issue on the <a href="https://github.com/geniex-ai/geniex-sdk/issues" target="_blank">geniex-sdk GitHub</a> or request in our Discord/Slack community.
-
-<br />
-
-<Feedback/>
+To run a model on `DavidQian` org, take `Llama-v3.2-3B-Instruct` for example, you need to firstly download the HF weights locally then run with the local path:
+```bash
+hf download DavidQian/Llama-v3.2-3B-Instruct --local-dir ./models/Llama-v3.2-3B-Instruct
+geniex infer ./models/Llama-v3.2-3B-Instruct
+```
