@@ -3,7 +3,7 @@ let githubStarsCache = null;
 async function fetchGithubStars() {
   if (githubStarsCache != null) return githubStarsCache;
 
-  const res = await fetch("https://api.github.com/repos/NexaAI/nexa-sdk");
+  const res = await fetch("https://api.github.com/repos/geniex-ai/geniex-sdk");
   const data = await res.json();
 
   githubStarsCache = data;

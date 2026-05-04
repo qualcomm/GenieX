@@ -1,0 +1,72 @@
+---
+title: "GGUF Models"
+description: "GGUF models are a popular open format for running large language models efficiently on a wide range of hardware, including Windows ARM64 and Linux ARM64. Enjoy fast, local inference with broad model compatibility!"
+---
+import Feedback from "/snippets/page-feedback.mdx";
+
+
+## ⚙️ **Prerequisites**
+
+- If you haven't already, install the geniex-SDK.
+- Below are the GGUF-compatible model types you can experiment with right away.
+
+## **LLM - Language Models**
+📝 Language models in GGUF format. Try out this quick example:
+
+Try it out:
+```bash bash
+geniex infer NexaAI/Qwen3-0.6B
+```
+
+<Check>
+⌨️  This will spawn an interactive REPL conversation session with the model.
+</Check>
+
+---
+## **LMM - Multimodal Models** 
+🖼️ Multimodal models that accept vision and/or audio inputs. Try out this quick example:
+
+```bash bash
+geniex infer NexaAI/Qwen2.5-Omni-3B-GGUF
+```
+
+<Check>
+⌨️  Drag images and audio files to the conversation input to chat with images / audio.
+</Check>
+
+## **Supported Model List**
+We curated a list of top, high quality models in GGUF format.
+<Columns cols={2}>
+<Card
+  icon="text"
+  title="LLMs for GGUF"
+  href="https://huggingface.co/collections/NexaAI/llm-gguf-687edb7a94b7dda443a01f1d"
+  cta="View Huggingface Collection 🤗"
+></Card>
+<Card
+  icon="eye"
+  title="Multimodal for GGUF"
+  href="https://huggingface.co/collections/NexaAI/multimodal-gguf-687edb2e756650304c73d8da"
+  cta="View Huggingface Collection 🤗"
+></Card>
+</Columns>
+
+<Tip>To try other GGUF models, visit Hugging Face, copy the path of any compatible GGUF model (e.g., `unsloth/Qwen2.5-VL-3B-Instruct-GGUF`), and replace the model path in the command above.</Tip>
+
+For more advanced models, you may visit the [GenieX Model Hub](https://sdk.geniex.ai/model). Also, access token is required to download and use these models. To get access token:
+  - **Create an account** at [sdk.geniex.ai](https://sdk.geniex.ai)  
+  - **Generate a token**: Go to **Deployment → Create Token**  
+  - **Activate your SDK**: Run the following command on the terminal to set your license:
+  ```bash bash
+  geniex config set license '<your_token_here>'
+  ```
+
+## 🙋 **Request New Models**
+
+Missing a model? Vote for it on the **[GenieX Wishlist](/en/community/wishlist)** — we build the most-voted models fast!
+
+You can also submit an issue on the <a href="https://github.com/geniex-ai/geniex-sdk/issues" target="_blank">geniex-sdk GitHub</a> or request in our Discord/Slack community.
+
+<br />
+
+<Feedback/>

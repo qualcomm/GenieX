@@ -1,0 +1,135 @@
+---
+title: Quickstart
+description: Get started with GenieX AI SDK for Android in minutes.
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **Tutorial Video**
+
+{/* YouTube embed following Mintlify format */}
+<iframe
+  className="w-full aspect-video rounded-xl"
+  src="https://www.youtube.com/embed/v_bASJDlhME"
+  title="GenieX AI Android SDK Quickstart Tutorial"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowFullScreen
+></iframe>
+
+## **Installation**
+
+GenieX AI Android SDK is available from Maven Central, the latest version is [0.0.24](https://repo1.maven.org/maven2/ai/nexa/core/0.0.24/). You can also find it on [Maven Repository](https://mvnrepository.com/artifact/ai.nexa/core) which updates a bit slower than Maven Central.
+
+### **Add Dependency**
+
+Add the following to your `app/build.gradle.kts` to import GenieXSDK:
+
+```kotlin
+android{
+  packagingOptions {
+    jniLibs.useLegacyPackaging = true
+  }
+}
+dependencies {
+  implementation("ai.nexa:core:0.0.24")
+}
+```
+<Note>
+  The default repository is mavenCentral(). You can also add github's raw repository in the settings.gradle.kts:
+  ```kotlin
+  dependencyResolutionManagement{
+      repositories {
+          maven {
+              url = uri("https://raw.githubusercontent.com/NexaAI/core/main")
+          }
+      }
+  }
+  ```
+</Note>
+
+## **Run Your First Model**
+
+<Steps>
+  <Step title="Initialize SDK">
+    Initialize the GenieXSDK in your Android application:
+
+    ```kotlin
+    NexaSdk.getInstance().init(this)
+    ```
+  </Step>
+
+  <Step title="Download and Load Model">
+    Create a VLM wrapper and load a model for NPU inference. You can download [OmniNeural-4B model](https://huggingface.co/NexaAI/OmniNeural-4B-mobile) from huggingface and place it in the folder that your app has permission to access, for example:  `/data/data/${your-app-packagename}/files/models/OmniNeural-4B`
+
+    ```kotlin
+    VlmWrapper.builder()
+        .vlmCreateInput(
+            VlmCreateInput(
+                model_name = "omni-neural",
+                model_path = <your-model-file-absolute-path>,
+                config = ModelConfig(
+                    max_tokens = 2048,
+                    enable_thinking = false
+                ),
+                plugin_id = "npu"
+            )
+        )
+        .build()
+        .onSuccess { vlmWrapper = it }
+    ```
+
+    <Note>
+      Your app should have permission to access the model folder. For example, in the demo, the model_path is set to `/data/data/com.nexa.demo/files/models/OmniNeural-4B/files-1-1.nexa`
+    </Note>
+  </Step>
+
+  <Step title="Generate Content">
+    Use the loaded model to generate responses:
+
+    ```kotlin
+    vlmWrapper.generateStreamFlow("Who are you?", GenerationConfig()).collect { result ->
+        println(result)
+    }
+    ```
+  </Step>
+</Steps>
+
+## **Supported Models**
+
+We've curated collections of compatible models for you to explore:
+
+<CardGroup cols={2}>
+  <Card title="NPU Models" icon="microchip" href="https://huggingface.co/collections/NexaAI/qualcomm-npu-mobile">
+    Optimized models for Qualcomm NPU
+  </Card>
+  <Card title="GGUF Models" icon="file-code">
+    Any GGUF format LLM and VLM models
+  </Card>
+</CardGroup>
+
+## **Device Compatibility**
+
+<AccordionGroup>
+  <Accordion title="NPU Support" icon="microchip">
+    - Qualcomm Snapdragon 8 Elite
+    - Qualcomm Snapdragon 8 Elite Gen 5
+  </Accordion>
+  
+  <Accordion title="GPU Support" icon="bolt">
+    - Qualcomm Adreno GPU
+  </Accordion>
+  
+  <Accordion title="CPU Support" icon="memory">
+    - ARM64-v8a
+  </Accordion>
+</AccordionGroup>
+
+## **Next Steps**
+
+<Card title="API Reference" icon="book" href="/en/geniex-android/APIReference">
+  Explore detailed documentation for all model types and learn their usage.
+</Card>
+
+<br />
+
+<Feedback/>

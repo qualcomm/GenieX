@@ -1,0 +1,339 @@
+---
+title: Basics
+description: API structures and configuration options for GenieX Android SDK.
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+
+## **Plugin Selection**
+
+Choose the appropriate backend plugin for your model type and format.
+
+```kotlin
+val plugin_id: String?  // Backend plugin to use
+```
+
+**Available Plugins:**
+- `"cpu_gpu"` - GGUF backend for CPU/GPU/Hexagon NPU (LLM, VLM). Device is selected via `device_id` + `nGpuLayers`.
+- `"npu"` - NPU backend for NEXA format models (LLM, VLM, Embeddings, ASR, CV, Rerank)
+- `"whisper_cpp"` - Whisper.cpp backend for ASR
+- `"tts_cpp"` - TTS backend for text-to-speech
+
+---
+
+## **Device Selection**
+
+Control which hardware device processes your model.
+
+```kotlin
+val device_id: String?  // Device to use for the model
+```
+
+**Available Values:**
+- `null` - CPU (default)
+- `"gpu"` - GPU acceleration via OpenCL
+- `"dev0"` - Qualcomm Hexagon NPU acceleration
+
+<Note>
+**Hardware Acceleration with GGUF (`plugin_id = "cpu_gpu"`):**
+- **GPU**: set `device_id = "gpu"` and set `nGpuLayers > 0` in `ModelConfig`
+- **Hexagon NPU (GGML backend)**: set `device_id = "dev0"` and set `nGpuLayers > 0` in `ModelConfig`
+
+If `nGpuLayers = 0` (or `device_id = null`), the model runs on CPU.
+</Note>
+
+---
+
+## **LLM Data Structures**
+
+### LlmCreateInput
+
+```kotlin
+data class LlmCreateInput(
+    val model_name: String? = null,      // Model name (required for NPU, empty for CPU/GPU)
+    val model_path: String,              // Path to model file or folder
+    val tokenizer_path: String? = null,  // Optional tokenizer path
+    val config: ModelConfig,             // Model configuration
+    val plugin_id: String? = null,       // "npu", "cpu_gpu", etc.
+    val device_id: String? = null        // null, "gpu", "dev0"
+)
+```
+
+### ChatMessage
+
+```kotlin
+data class ChatMessage(
+    val role: String,        // "system", "user", "assistant"
+    val content: String      // Message text
+)
+```
+
+### GenerationConfig
+
+```kotlin
+data class GenerationConfig(
+    val maxTokens: Int? = null,           // Maximum tokens to generate
+    val temperature: Float = 0.7f,        // Sampling temperature
+    val topP: Float = 0.9f,              // Nucleus sampling
+    val topK: Int = 40,                  // Top-K sampling
+    val repeatPenalty: Float = 1.1f,     // Repetition penalty
+    val seed: Int = -1                   // Random seed (-1 for random)
+)
+```
+
+### LlmStreamResult
+
+```kotlin
+sealed class LlmStreamResult {
+    data class Token(val text: String) : LlmStreamResult()
+    object Completed : LlmStreamResult()
+    data class Error(val throwable: Throwable) : LlmStreamResult()
+}
+```
+
+---
+
+## **Multimodal Data Structures**
+
+### VlmCreateInput
+
+```kotlin
+data class VlmCreateInput(
+    val model_name: String? = null,            // Model name (required for NPU)
+    val model_path: String,                    // Path to VLM model
+    val tokenizer_path: String? = null,        // Optional tokenizer path
+    val mmproj_path: String? = null,           // Vision projection weights (for GGUF models)
+    val config: ModelConfig,                   // Model configuration
+    val plugin_id: String? = null,             // "npu" for NPU, "cpu_gpu" for CPU/GPU
+    val device_id: String? = null              // null for CPU, "gpu" for GPU, "dev0" for NPU
+)
+```
+
+### VlmChatMessage
+
+```kotlin
+data class VlmChatMessage(
+    val role: String,                          // "system", "user", "assistant"
+    val contents: List<VlmContent>             // Mixed text/image/audio content
+)
+```
+
+### VlmContent
+
+```kotlin
+data class VlmContent(
+    val type: String,                          // "text", "image", "audio"
+    val content: String                        // Text or file path
+)
+```
+
+---
+
+## **Embeddings Data Structures**
+
+### EmbedderCreateInput
+
+```kotlin
+data class EmbedderCreateInput(
+    val model_name: String? = null,            // Model name for NPU
+    val model_path: String,                    // Path to embedder model
+    val tokenizer_path: String? = null,        // Path to tokenizer
+    val config: ModelConfig,                   // Model configuration
+    val plugin_id: String? = null,             // "npu" for NPU, null for CPU
+    val device_id: String? = null              // Device ID (optional)
+)
+```
+
+### EmbeddingConfig
+
+```kotlin
+data class EmbeddingConfig(
+    val normalize: Boolean = true              // Normalize embeddings (default: true)
+)
+```
+
+---
+
+## **ASR Data Structures**
+
+### AsrCreateInput
+
+```kotlin
+data class AsrCreateInput(
+    val model_name: String? = null,            // Model name for NPU
+    val model_path: String,                    // Path to ASR model
+    val config: ModelConfig,                   // Model configuration
+    val plugin_id: String? = null,             // "whisper_cpp" for whisper.cpp, "npu" for NPU
+    val device_id: String? = null              // Device ID (optional)
+)
+```
+
+### AsrTranscribeInput
+
+```kotlin
+data class AsrTranscribeInput(
+    val audioPath: String,                     // Path to audio file (.wav, .mp3, etc.)
+    val language: String,                      // Language code: "en", "zh", "es", etc.
+    val timestamps: String? = null             // Optional: timestamp format
+)
+```
+
+### AsrTranscriptionResult
+
+```kotlin
+data class AsrTranscriptionResult(
+    val result: AsrResult,                     // Transcription result
+    val profileData: String                    // Performance metrics
+)
+```
+
+---
+
+## **TTS Data Structures**
+
+### TtsCreateInput
+
+```kotlin
+data class TtsCreateInput(
+    val model_name: String? = null,            // Model name (empty for CPU/GPU)
+    val model_path: String,                    // Path to TTS model
+    val vocoder_path: String? = null,          // Optional vocoder path
+    val config: ModelConfig,                   // Model configuration
+    val plugin_id: String? = null,             // "tts_cpp" for TTS backend
+    val device_id: String? = null              // Device ID (optional)
+)
+```
+
+### TtsSynthesizeInput
+
+```kotlin
+data class TtsSynthesizeInput(
+    val textUtf8: String,                      // Text to synthesize (UTF-8 encoding)
+    val config: TtsConfig? = null,             // Optional TTS configuration
+    val outputPath: String? = null             // Optional output file path (null for auto-generated)
+)
+```
+
+### TtsConfig
+
+```kotlin
+data class TtsConfig(
+    val voice: String? = null,                 // Voice identifier
+    val speed: Float = 1.0f,                   // Speech speed (1.0 = normal)
+    val seed: Int = -1,                        // Random seed (-1 for random)
+    val sampleRate: Int = 22050                // Output sample rate in Hz
+)
+```
+
+### TtsSynthesizeOutput
+
+```kotlin
+data class TtsSynthesizeOutput(
+    val outputPath: String,                    // Path to generated audio file
+    val profileData: String                    // Performance metrics
+)
+```
+
+---
+
+## **Rerank Data Structures**
+
+### RerankerCreateInput
+
+```kotlin
+data class RerankerCreateInput(
+    val model_name: String? = null,            // Model name for NPU
+    val model_path: String,                    // Path to reranker model
+    val tokenizer_path: String? = null,        // Path to tokenizer
+    val config: ModelConfig,                   // Model configuration
+    val plugin_id: String? = null,             // "npu" for NPU, null for CPU
+    val device_id: String? = null              // Device ID (optional)
+)
+```
+
+### RerankConfig
+
+```kotlin
+data class RerankConfig(
+    val topN: Int? = null                      // Return only top N results (null = all)
+)
+```
+
+### RerankerResult
+
+```kotlin
+data class RerankerResult(
+    val scores: FloatArray,                    // Relevance scores (0.0 - 1.0)
+    val scoreCount: Int,                       // Number of scores
+    val profileData: String                    // Performance metrics
+)
+```
+
+---
+
+## **Computer Vision Data Structures**
+
+### CVCreateInput
+
+```kotlin
+data class CVCreateInput(
+    val model_name: String,                    // Model name: "paddleocr", etc.
+    val config: CVModelConfig,                 // CV model configuration
+    val plugin_id: String? = null              // "npu" for NPU, "cpu_gpu" for CPU/GPU
+)
+```
+
+### CVModelConfig
+
+```kotlin
+data class CVModelConfig(
+    val capabilities: CVCapability,            // OCR, DETECTION, CLASSIFICATION
+    val det_model_path: String? = null,        // Detection model path
+    val rec_model_path: String? = null,        // Recognition model path
+    val char_dict_path: String? = null,        // Character dictionary path
+    val qnn_model_folder_path: String? = null, // QNN model folder (NPU)
+    val qnn_lib_folder_path: String? = null    // QNN library path (NPU)
+)
+```
+
+### CVCapability
+
+```kotlin
+enum class CVCapability {
+    OCR,                                       // Optical Character Recognition
+    DETECTION,                                 // Object detection
+    CLASSIFICATION                             // Image classification
+}
+```
+
+### CVResult
+
+```kotlin
+data class CVResult(
+    val text: String,                          // Recognized text (OCR)
+    val confidence: Float,                     // Confidence score (0.0 - 1.0)
+    val boundingBox: BoundingBox?,             // Bounding box coordinates
+    val label: String?,                        // Class label (classification)
+    val score: Float                           // Detection/classification score
+)
+```
+
+---
+
+## **Need Help?**
+
+Join our community to get support, share your projects, and connect with other developers.
+
+<CardGroup cols={2}>
+  <Card title="Discord Community" icon="discord" href="https://discord.com/invite/thRu2HaK4D">
+    Get real-time support and chat with the GenieX AI community
+  </Card>
+  <Card title="Slack Community" icon="slack" href="https://join.slack.com/t/nexa-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw">
+    Collaborate with developers and access community resources
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>
