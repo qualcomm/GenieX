@@ -132,12 +132,17 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     cpar.kv_unified      = true;   // use unified KV cache
     cpar.no_perf         = false;  // enable performance counters
 
-    std::string device_id_str(input->device_id ? input->device_id : "");
-    if (device_id_str.find("HTP0") != std::string::npos) {
-        cpar.type_k          = GGML_TYPE_Q8_0;
-        cpar.type_v          = GGML_TYPE_Q8_0;
-        cpar.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-    };
+    // NOTE: temporarily disabled — the device-id-substring-triggered KV quant +
+    // flash-attn toggle was hurting HTP duty cycle vs. upstream llama-cli with
+    // the same --device HTP0 -ngl 999. Restore (or make config-driven) once
+    // investigated. See notes/run.md.
+    //
+    // std::string device_id_str(input->device_id ? input->device_id : "");
+    // if (device_id_str.find("HTP0") != std::string::npos) {
+    //     cpar.type_k          = GGML_TYPE_Q8_0;
+    //     cpar.type_v          = GGML_TYPE_Q8_0;
+    //     cpar.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
+    // };
 
     this->ctx = llama_init_from_model(this->model, cpar);
     if (!this->ctx) {

@@ -25,7 +25,7 @@ from geniex import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
     "qwen3",               # short alias, HF repo id, or local GGUF path
-    device_map="auto",     # "auto" | "cpu" | "gpu" | "npu"
+    device_map="auto",     # "auto" | "cpu" | "gpu" | "npu" | "hybrid"
                            # | "<plugin>" | "<plugin>:<device>"
 )
 
@@ -93,19 +93,20 @@ for plugin in get_plugin_list():
     print(plugin, get_device_list(plugin))
 ```
 
-For the default `llama_cpp` plugin you can also use the friendly
-aliases `device_map="cpu"`, `"gpu"`, or `"npu"` (equivalent to
-`"llama_cpp:cpu"` / `":gpu"` / `":npu"`), which translate to:
+Friendly aliases accepted by `device_map`:
 
-| Alias | Resolves to                          | Notes                                      |
-|-------|--------------------------------------|--------------------------------------------|
-| `cpu` | no device id, `n_gpu_layers=0`       | Pure CPU.                                  |
-| `gpu` | `GPUOpenCL`, `n_gpu_layers=999`      | Adreno via `ggml-opencl`.                  |
-| `npu` | no device id, `n_gpu_layers=999`     | Lets llama.cpp pick Hexagon layer-by-layer and fall back to CPU where needed — the fast hybrid path. To pin to a specific HTP device, pass e.g. `device_map="llama_cpp:HTP0"` or `"llama_cpp:HTP0,HTP1,HTP2,HTP3"`. |
+| Alias    | llama_cpp resolves to              | qairt resolves to | Notes                                                                                                                |
+|----------|------------------------------------|-------------------|----------------------------------------------------------------------------------------------------------------------|
+| `cpu`    | empty `device_id`, `ngl=0`         | `NPU` + warning   | Pure CPU for `llama_cpp`. QAIRT is NPU-only; other aliases are coerced with a stderr warning (no hard error).        |
+| `gpu`    | `GPUOpenCL`                        | `NPU` + warning   | Adreno via `ggml-opencl`.                                                                                            |
+| `npu`    | `HTP0`                             | `NPU`             | Pinned single-session HTP. Deterministic; slower than `hybrid` on LLMs (~30% TTFT).                                  |
+| `hybrid` | empty `device_id`, `ngl=999`       | `NPU` + warning   | llama.cpp's per-tensor HTP+CPU scheduler — the fast path on Snapdragon. Used as the default when `device_map="auto"`. |
 
-Or pass a concrete id as `device_map="<plugin>:<device_id>"`. Device
-ids vary per host (e.g. `CPU`, `CUDA0`, `Vulkan0`, `HTP0` — see
-[Supported backends](#supported-backends)).
+`device_map="auto"` (the default) picks `hybrid` for `llama_cpp` and
+`npu` for `qairt`. Pass a concrete id as `device_map="<plugin>:<device_id>"`
+for full control (e.g. `"llama_cpp:HTP0,HTP1,HTP2,HTP3"`). Run
+`geniex-py devices` or `geniex._ffi.get_device_list(plugin)` to
+enumerate what your host actually exposes.
 
 ## CLI
 

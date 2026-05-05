@@ -394,8 +394,9 @@ def _build_parser() -> argparse.ArgumentParser:
         '--device',
         default='auto',
         help=(
-            "'auto' | 'cpu' | 'gpu' | 'npu' | '<plugin>' | '<plugin>:<device>' "
-            "(run 'geniex-py devices' to list concrete ids)"
+            "'auto' | 'cpu' | 'gpu' | 'npu' | 'hybrid' | '<plugin>' | "
+            "'<plugin>:<device>' (default: hybrid for llama_cpp, npu for "
+            "qairt; run 'geniex-py devices' to list concrete ids)"
         ),
     )
     chat.set_defaults(func=_cmd_chat)

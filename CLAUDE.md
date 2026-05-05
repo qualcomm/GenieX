@@ -11,7 +11,7 @@ Build systems: Bazel (CLI) + CMake (SDK).
 - **Never move or reuse a published git tag.** If the wrong tag shipped, cut a higher one.
 - Do not modify third-party code.
 - **Follow [CONTRIBUTING.md](CONTRIBUTING.md)** for branch naming, commit / PR title format, pre-commit checks, and the FFI-update rule when changing public SDK headers.
-- **`llama_cpp` NPU selection: leave `device_id` null, never pin to `"HTP0"`.** Setting `device_id` makes the plugin call `mpar.devices = {HTP0}`, which disables llama.cpp's per-tensor hybrid dispatch (HTP for supported ops, CPU for fallbacks) and tanks performance by ~30–50%. For `--device npu` / `device_map="npu"`, pass `device_id=""` + `n_gpu_layers=999` and let llama.cpp place layers. Only set an explicit `"HTP0"` / `"HTP0,HTP1,..."` when the user has typed that literal id — see [notes/run.md § NPU device selection](notes/run.md#npu-device-selection-llama_cpp).
+- **Device mapping lives in `bindings/go/device.go` — CLI, pybind, and Android all call into the same table.** Aliases: `cpu` / `gpu` / `npu` / `hybrid`, with `npu` = pin `HTP0` and `hybrid` = empty `device_id` + `n_gpu_layers=999` (llama.cpp's per-tensor HTP+CPU scheduler, the fast path on Snapdragon). Default when the user passes nothing: `hybrid` for `llama_cpp`, `npu` for `qairt`. QAIRT is NPU-only — other aliases are coerced with a warning, never an error. When changing any of this, update all three bindings and re-sync the table in [notes/run.md § Device mapping](notes/run.md#device-mapping).
 
 ## Workflows
 

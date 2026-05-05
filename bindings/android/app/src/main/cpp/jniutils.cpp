@@ -34,52 +34,62 @@ std::string jstring2str(JNIEnv* env, jstring jstr) {
     return result;
 }
 
-/**
- * Translate user-friendly device_id to internal device string.
- * This abstracts the internal device naming from SDK users.
- *
- * Mappings:
- *   - "npu" (NPU)  -> "HTP0" (all Hexagon cores)
- *   - "gpu"  (GPU)  -> "GPUOpenCL"
- *   - null/empty    -> null (default CPU)
- *   - other values  -> passed through unchanged
- */
+// Friendly device aliases mirrored across bindings/go/device.go and
+// bindings/python/geniex/auto.py. `npu` pins to a single HTP session;
+// `hybrid` leaves device_id empty with a high ngl so llama.cpp's
+// per-tensor scheduler runs (the fast path on Snapdragon).
+static constexpr const char* kPluginLlamaCpp = "llama_cpp";
+static constexpr const char* kPluginQairt    = "qairt";
+
 std::string translate_device_id(const std::string& device_id) {
-    if (device_id.empty()) {
-        return device_id;
-    }
-    if (device_id == "npu") {
-        LOGi("[JNI] translate_device_id: 'npu' -> 'HTP0,HTP1,HTP2,HTP3'");
-        return "HTP0";
-    }
-    if (device_id == "gpu") {
-        LOGi("[JNI] translate_device_id: 'gpu' -> 'GPUOpenCL'");
-        return "GPUOpenCL";
-    }
-    // Pass through other values unchanged
+    if (device_id.empty()) return device_id;
+    if (device_id == "cpu") return "";
+    if (device_id == "gpu") return "GPUOpenCL";
+    if (device_id == "npu") return "HTP0";
+    if (device_id == "hybrid") return "";
+    // Concrete id (e.g. "HTP0,HTP1,HTP2,HTP3") — pass through.
     LOGi("[JNI] translate_device_id: '%s' passed through unchanged", device_id.c_str());
     return device_id;
 }
 
-/**
- * Resolves the effective device_id string to set on a create-input struct.
- *
- * When device_id is unset (empty) and plugin_id is "llama_cpp", the device
- * defaults to NPU ("HTP0,HTP1,HTP2,HTP3") instead of CPU.  For all other
- * cases the normal translate_device_id() mapping applies.
- */
-static std::string resolve_llama_cpp_device_default(const char* plugin_id, const std::string& raw_device_id) {
-    if (raw_device_id.empty()) {
-        if (plugin_id && std::string(plugin_id) == "llama_cpp") {
-            LOGi(
-                "[JNI] resolve_device: plugin_id='llama_cpp', device_id unset -> defaulting to NPU "
-                "'HTP0,HTP1,HTP2,HTP3'");
-            return "HTP0,HTP1,HTP2,HTP3";
-        }
-        return raw_device_id;
+ResolvedDevice resolve_device(const char* plugin_id, const std::string& raw) {
+    ResolvedDevice r;
+    const std::string plugin = plugin_id ? plugin_id : "";
+
+    // Empty / "auto" → plugin-specific default.
+    std::string alias = raw;
+    if (alias.empty() || alias == "auto") {
+        alias = (plugin == kPluginQairt) ? std::string("npu") : std::string("hybrid");
     }
-    return translate_device_id(raw_device_id);
+
+    // QAIRT is NPU-only; coerce other aliases with a warning.
+    if (plugin == kPluginQairt) {
+        if (alias != "npu") {
+            r.warning = "qairt plugin only supports NPU inference; ignoring device_id='"
+                      + alias + "' and running on NPU";
+            LOGi("[JNI] resolve_device: %s", r.warning.c_str());
+        }
+        r.device_id = "NPU";
+        return r;
+    }
+
+    if (alias == "cpu") {
+        r.device_id    = "";
+        r.ngl_override = 0;
+    } else if (alias == "gpu") {
+        r.device_id = "GPUOpenCL";
+    } else if (alias == "npu") {
+        r.device_id = "HTP0";
+    } else if (alias == "hybrid") {
+        r.device_id    = "";
+        r.ngl_override = 999;
+    } else {
+        // Concrete id — pass through.
+        r.device_id = alias;
+    }
+    return r;
 }
+
 
 std::vector<std::string> jstringArray2vec(JNIEnv* env, jobjectArray arr) {
     std::vector<std::string> vec;
@@ -502,27 +512,21 @@ geniex_LlmCreateInput extract_llm_create_input(JNIEnv* env, jobject inputObj) {
     }
 
     // === device_id ===
-    LOGi("[JNI] [extract] locating field 'device_id' (Ljava/lang/String;)");
+    std::string raw_dev;
     fid = env->GetFieldID(cls, "device_id", "Ljava/lang/String;");
-    if (checkAndLogJniException(env, "GetFieldID(device_id)") || !fid) {
-        LOGe("[JNI] [extract] field 'device_id' not found");
-    } else {
+    if (fid) {
         jstr = (jstring)env->GetObjectField(inputObj, fid);
-        if (checkAndLogJniException(env, "GetObjectField(device_id)") || !jstr) {
-            std::string resolved = resolve_llama_cpp_device_default(out.plugin_id, "");
-            if (!resolved.empty()) {
-                out.device_id = hold_c_str(resolved);
-                LOGi("[JNI] [extract] device_id = %s (defaulted)", resolved.c_str());
-            } else {
-                LOGi("[JNI] [extract] device_id = (null)");
-            }
-        } else {
-            std::string s          = jstring2str(env, jstr);
-            std::string translated = translate_device_id(s);
-            out.device_id          = hold_c_str(translated);
-            LOGi("[JNI] [extract] device_id = %s (translated from %s)", translated.c_str(), s.c_str());
+        if (jstr) {
+            raw_dev = jstring2str(env, jstr);
             env->DeleteLocalRef(jstr);
         }
+    }
+    {
+        ResolvedDevice r = resolve_device(out.plugin_id, raw_dev);
+        out.device_id    = r.device_id.empty() ? nullptr : hold_c_str(r.device_id);
+        if (r.ngl_override >= 0) out.config.n_gpu_layers = r.ngl_override;
+        LOGi("[JNI] [extract] device_id = %s, n_gpu_layers = %d (from raw='%s')",
+             r.device_id.empty() ? "(null)" : r.device_id.c_str(), out.config.n_gpu_layers, raw_dev.c_str());
     }
 
     env->DeleteLocalRef(cls);
@@ -584,25 +588,21 @@ geniex_VlmCreateInput extract_vlm_create_input(JNIEnv* env, jobject inputObj) {
     }
 
     // device_id : String
-    fid = env->GetFieldID(cls, "device_id", "Ljava/lang/String;");
-    if (fid) {
-        jstr = (jstring)env->GetObjectField(inputObj, fid);
-        if (jstr) {
-            std::string s          = jstring2str(env, jstr);
-            std::string translated = translate_device_id(s);
-            out.device_id          = hold_c_str(translated);
-            LOGi("[JNI] [extract_vlm] device_id = %s", translated.c_str());
-            env->DeleteLocalRef(jstr);
-        } else {
-            std::string resolved = resolve_llama_cpp_device_default(out.plugin_id, "");
-            if (!resolved.empty()) {
-                out.device_id = hold_c_str(resolved);
-                LOGi("[JNI] [extract_vlm] device_id = %s", resolved.c_str());
-            } else {
-                out.device_id = nullptr;
-                LOGi("[JNI] [extract_vlm] device_id = (null)");
+    {
+        std::string raw_dev;
+        fid = env->GetFieldID(cls, "device_id", "Ljava/lang/String;");
+        if (fid) {
+            jstr = (jstring)env->GetObjectField(inputObj, fid);
+            if (jstr) {
+                raw_dev = jstring2str(env, jstr);
+                env->DeleteLocalRef(jstr);
             }
         }
+        ResolvedDevice r = resolve_device(out.plugin_id, raw_dev);
+        out.device_id    = r.device_id.empty() ? nullptr : hold_c_str(r.device_id);
+        if (r.ngl_override >= 0) out.config.n_gpu_layers = r.ngl_override;
+        LOGi("[JNI] [extract_vlm] device_id = %s, n_gpu_layers = %d (from raw='%s')",
+             r.device_id.empty() ? "(null)" : r.device_id.c_str(), out.config.n_gpu_layers, raw_dev.c_str());
     }
 
     env->DeleteLocalRef(cls);
@@ -690,24 +690,21 @@ geniex_EmbedderCreateInput extract_embedder_create_input(JNIEnv* env, jobject in
     }
 
     // device_id: String (optional)
-    fid = env->GetFieldID(cls, "device_id", "Ljava/lang/String;");
-    if (fid) {
-        jstr = (jstring)env->GetObjectField(inputObj, fid);
-        if (jstr) {
-            std::string s          = jstring2str(env, jstr);
-            std::string translated = translate_device_id(s);
-            out.device_id          = hold_c_str(translated);
-            LOGi("[JNI] [extract_embedder] device_id = %s (translated from %s)", translated.c_str(), s.c_str());
-            env->DeleteLocalRef(jstr);
-        } else {
-            std::string resolved = resolve_llama_cpp_device_default(out.plugin_id, "");
-            if (!resolved.empty()) {
-                out.device_id = hold_c_str(resolved);
-                LOGi("[JNI] [extract_embedder] device_id = %s (defaulted)", resolved.c_str());
-            } else {
-                LOGi("[JNI] [extract_embedder] device_id = (null)");
+    {
+        std::string raw_dev;
+        fid = env->GetFieldID(cls, "device_id", "Ljava/lang/String;");
+        if (fid) {
+            jstr = (jstring)env->GetObjectField(inputObj, fid);
+            if (jstr) {
+                raw_dev = jstring2str(env, jstr);
+                env->DeleteLocalRef(jstr);
             }
         }
+        ResolvedDevice r = resolve_device(out.plugin_id, raw_dev);
+        out.device_id    = r.device_id.empty() ? nullptr : hold_c_str(r.device_id);
+        if (r.ngl_override >= 0) out.config.n_gpu_layers = r.ngl_override;
+        LOGi("[JNI] [extract_embedder] device_id = %s, n_gpu_layers = %d (from raw='%s')",
+             r.device_id.empty() ? "(null)" : r.device_id.c_str(), out.config.n_gpu_layers, raw_dev.c_str());
     }
 
     env->DeleteLocalRef(cls);
@@ -795,24 +792,21 @@ geniex_RerankerCreateInput extract_reranker_create_input(JNIEnv* env, jobject in
     }
 
     // device_id: String (optional)
-    fid = env->GetFieldID(cls, "device_id", "Ljava/lang/String;");
-    if (fid) {
-        jstr = (jstring)env->GetObjectField(inputObj, fid);
-        if (jstr) {
-            std::string s          = jstring2str(env, jstr);
-            std::string translated = translate_device_id(s);
-            out.device_id          = hold_c_str(translated);
-            LOGi("[JNI] [extract_reranker] device_id = %s (translated from %s)", translated.c_str(), s.c_str());
-            env->DeleteLocalRef(jstr);
-        } else {
-            std::string resolved = resolve_llama_cpp_device_default(out.plugin_id, "");
-            if (!resolved.empty()) {
-                out.device_id = hold_c_str(resolved);
-                LOGi("[JNI] [extract_reranker] device_id = %s (defaulted)", resolved.c_str());
-            } else {
-                LOGi("[JNI] [extract_reranker] device_id = (null)");
+    {
+        std::string raw_dev;
+        fid = env->GetFieldID(cls, "device_id", "Ljava/lang/String;");
+        if (fid) {
+            jstr = (jstring)env->GetObjectField(inputObj, fid);
+            if (jstr) {
+                raw_dev = jstring2str(env, jstr);
+                env->DeleteLocalRef(jstr);
             }
         }
+        ResolvedDevice r = resolve_device(out.plugin_id, raw_dev);
+        out.device_id    = r.device_id.empty() ? nullptr : hold_c_str(r.device_id);
+        if (r.ngl_override >= 0) out.config.n_gpu_layers = r.ngl_override;
+        LOGi("[JNI] [extract_reranker] device_id = %s, n_gpu_layers = %d (from raw='%s')",
+             r.device_id.empty() ? "(null)" : r.device_id.c_str(), out.config.n_gpu_layers, raw_dev.c_str());
     }
 
     env->DeleteLocalRef(cls);

@@ -10,9 +10,8 @@ data class VlmCreateInput(
      */
     override val plugin_id: String? = null,
     /**
-     * Device to use for the model, NULL for default device.
-     * When using the [PluginIdValue.LLAMA_CPP] plugin, The default value is [DeviceIdValue.CPU],
-     * you can use either the [DeviceIdValue.GPU] or the [DeviceIdValue.NPU].
+     * Device alias. `null` selects the plugin default ([DeviceIdValue.HYBRID]
+     * for `llama_cpp`, [DeviceIdValue.NPU] for `qairt`).
      */
     override val device_id: String? = null,
 ) : CreateInputBase

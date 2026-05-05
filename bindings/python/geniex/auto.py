@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from ctypes import byref, c_void_p
 
 from . import model_manager as _mm
@@ -24,68 +25,100 @@ from ._ffi._api import _check, ensure_init, get_plugin_list, load_library
 from ._ffi._types import geniex_LlmCreateInput, geniex_ModelConfig, geniex_VlmCreateInput
 from .modeling import GeniexLLM, GeniexVLM
 
-# llama_cpp friendly-name mapping.
+PLUGIN_LLAMA_CPP = 'llama_cpp'
+PLUGIN_QAIRT = 'qairt'
+
+# Friendly device aliases shared with the CLI (bindings/go/device.go) and
+# Android bindings. Each entry is (device_id, ngl_override); ``None`` for
+# ``ngl_override`` means "don't override the caller's ``n_gpu_layers``".
 #
-# Key insight: llama.cpp's *best* NPU/GPU path is when ``device_id`` is left
-# unset and ``n_gpu_layers`` is high. Then llama.cpp assigns each tensor to
-# whichever backend supports it (HTP for computable ops, CPU for fallbacks),
-# which is its built-in hybrid execution. Passing ``device_id="HTP0"`` forces
-# ``mpar.devices = {HTP0}`` and disables that hybrid assignment — slower.
-#
-# So:
-#   cpu → empty device id + n_gpu_layers=0     (pure CPU)
-#   gpu → "GPUOpenCL"      + n_gpu_layers=None (Adreno; GPU must be explicit)
-#   npu → empty device id  + n_gpu_layers=None (hybrid HTP+CPU, fast path)
-#
-# If you need to pin to a specific HTP device, pass the literal id as
-# ``device_map="llama_cpp:HTP0"`` / ``"llama_cpp:HTP0,HTP1,HTP2,HTP3"``.
+# ``hybrid`` leaves ``device_id`` empty so llama.cpp's per-tensor scheduler
+# places each op on HTP or CPU as appropriate — the fast path on Snapdragon.
+# ``npu`` pins to a single HTP session (slower, but deterministic).
 _LLAMA_CPP_DEVICE_ALIASES: dict[str, tuple[str, int | None]] = {
     'cpu': ('', 0),
     'gpu': ('GPUOpenCL', None),
-    'npu': ('', None),
+    'npu': ('HTP0', 999),
+    'hybrid': ('', None),
 }
+
+
+def _default_mode(plugin_id: str) -> str:
+    """Default device alias when the user passes ``auto``/empty."""
+    return 'npu' if plugin_id == PLUGIN_QAIRT else 'hybrid'
 
 
 def _resolve_device(device_map: str) -> tuple[str | None, str | None, int | None]:
     """Return ``(plugin_id, device_id, ngl_override)`` from a ``device_map`` string.
 
     Accepted forms:
-      - ``"auto"`` — pick the first plugin and let it choose its own default device.
-      - ``"<plugin_id>"`` — use this plugin, let it pick the default device.
+      - ``"auto"`` / empty — pick the first plugin; ``llama_cpp`` defaults to
+        the ``hybrid`` alias (fast HTP+CPU scheduler), ``qairt`` to ``npu``.
+      - ``"<plugin_id>"`` — use this plugin with its default alias.
       - ``"<plugin_id>:<device_id>"`` — fully specified.
-      - ``"cpu"`` / ``"gpu"`` / ``"npu"`` — friendly alias for
+      - ``"cpu"`` / ``"gpu"`` / ``"npu"`` / ``"hybrid"`` — friendly alias for
         ``llama_cpp:<translated>``; see :data:`_LLAMA_CPP_DEVICE_ALIASES`.
-      - ``"llama_cpp:cpu"`` / ``"llama_cpp:gpu"`` / ``"llama_cpp:npu"`` — same
-        translation applied to the device portion.
+      - ``"llama_cpp:<alias>"`` / ``"qairt:<alias>"`` — same translation on
+        the device portion. ``qairt`` only has an NPU device; non-NPU
+        aliases are coerced to ``npu`` with a warning on stderr.
 
     ``ngl_override`` is non-None when the alias implies a specific
-    ``n_gpu_layers`` value (``cpu`` → 0). Concrete ggml device ids and
-    non-friendly plugin names are passed through unchanged.
+    ``n_gpu_layers`` value (``cpu`` → 0, ``hybrid`` → 999). Concrete ggml
+    device ids (e.g. ``HTP0,HTP1,HTP2,HTP3``) pass through unchanged.
 
-    Device ids are plugin-specific (e.g. for ``llama_cpp`` they come from
-    ``ggml_backend_dev_name()`` and vary by build / host hardware). Call
+    Device ids are plugin-specific — call
     :func:`geniex._ffi.get_device_list` to enumerate them at runtime.
     """
-    if device_map == 'auto' or not device_map:
+    if not device_map or device_map == 'auto':
         plugins = get_plugin_list()
         if not plugins:
             return None, None, None
-        # Plugin only — leave device_id unset so the plugin chooses its own
-        # default layout (hybrid HTP+CPU for llama_cpp on Snapdragon).
-        return plugins[0], None, None
+        plugin_id = plugins[0]
+        return _translate_alias(plugin_id, _default_mode(plugin_id))
 
-    # Bare friendly name → llama_cpp:<alias>
-    if device_map.lower() in _LLAMA_CPP_DEVICE_ALIASES:
-        device_id, ngl = _LLAMA_CPP_DEVICE_ALIASES[device_map.lower()]
-        return 'llama_cpp', device_id or None, ngl
+    key = device_map.lower()
+
+    # Bare friendly name — pick the first plugin and translate.
+    if key in _LLAMA_CPP_DEVICE_ALIASES:
+        plugins = get_plugin_list()
+        plugin_id = plugins[0] if plugins else PLUGIN_LLAMA_CPP
+        return _translate_alias(plugin_id, key)
 
     if ':' in device_map:
         plugin_id, device_id = device_map.split(':', 1)
-        if plugin_id == 'llama_cpp' and device_id.lower() in _LLAMA_CPP_DEVICE_ALIASES:
-            translated, ngl = _LLAMA_CPP_DEVICE_ALIASES[device_id.lower()]
-            return plugin_id, translated or None, ngl
+        if device_id.lower() in _LLAMA_CPP_DEVICE_ALIASES:
+            return _translate_alias(plugin_id, device_id.lower())
+        # qairt only exposes a single NPU device — coerce with a warning.
+        if plugin_id == PLUGIN_QAIRT and device_id.upper() != 'NPU':
+            print(
+                f'warning: qairt plugin only supports NPU inference; '
+                f'ignoring device_map={device_map!r} and running on NPU',
+                file=sys.stderr,
+            )
+            return plugin_id, 'NPU', None
         return plugin_id, device_id, None
-    return device_map, None, None
+
+    # Bare plugin id (e.g. "llama_cpp", "qairt") — translate via the
+    # plugin's default alias.
+    return _translate_alias(device_map, _default_mode(device_map))
+
+
+def _translate_alias(plugin_id: str, alias: str) -> tuple[str, str | None, int | None]:
+    """Apply a friendly alias (``cpu|gpu|npu|hybrid``) to a plugin.
+
+    qairt only has one device; non-NPU aliases are coerced to ``npu``
+    with a warning.
+    """
+    if plugin_id == PLUGIN_QAIRT:
+        if alias != 'npu':
+            print(
+                f'warning: qairt plugin only supports NPU inference; '
+                f'ignoring device_map={alias!r} and running on NPU',
+                file=sys.stderr,
+            )
+        return plugin_id, 'NPU', None
+    device_id, ngl = _LLAMA_CPP_DEVICE_ALIASES[alias]
+    return plugin_id, device_id or None, ngl
 
 
 def _resolve_local_anchor(path: str) -> str:
@@ -174,17 +207,20 @@ class AutoModelForCausalLM:
                         Defaults to model_name_or_path when not set.
             quant: Quantization variant (e.g. 'Q4_K_M').  Used to filter files
                 when downloading from HuggingFace Hub.
-            device_map: 'auto' | 'cpu' | 'gpu' | 'npu' | '<plugin_id>' |
-                '<plugin_id>:<device_id>'. The friendly aliases
-                (``cpu|gpu|npu``) target the ``llama_cpp`` plugin; ``npu``
-                in particular leaves ``device_id`` unset so llama.cpp's
-                hybrid HTP+CPU scheduler runs (see
-                :data:`_LLAMA_CPP_DEVICE_ALIASES`). Run ``geniex-py devices``
-                (or :func:`geniex._ffi.get_device_list`) to enumerate
-                concrete device ids available on this machine.
+            device_map: ``'auto'`` | ``'cpu'`` | ``'gpu'`` | ``'npu'`` |
+                ``'hybrid'`` | ``'<plugin_id>'`` |
+                ``'<plugin_id>:<device_id>'``. The default (``'auto'``)
+                maps to ``hybrid`` for ``llama_cpp`` (fast per-tensor
+                HTP+CPU scheduling) and to ``npu`` for ``qairt``.
+                ``hybrid`` leaves ``device_id`` empty with
+                ``n_gpu_layers=999``; ``npu`` pins to ``HTP0``. Run
+                ``geniex-py devices`` (or
+                :func:`geniex._ffi.get_device_list`) to list concrete
+                device ids available on this machine.
             n_ctx: Context length (0 = model default).
             n_gpu_layers: Layers to offload to GPU/NPU (999 = offload all).
-                Forced to 0 when ``device_map`` resolves to CPU.
+                Forced to 0 when ``device_map`` resolves to CPU, and to
+                999 when it resolves to ``hybrid``.
             tokenizer_path: Optional override for tokenizer file path.
             license_id: NPU licence ID.
             license_key: NPU licence key.
@@ -243,17 +279,16 @@ class AutoModelForVision2Seq:
         Args:
             model_name_or_path: HuggingFace repo id or local path.
             quant: Quantization variant.
-            device_map: 'auto' | 'cpu' | 'gpu' | 'npu' | '<plugin_id>' |
-                '<plugin_id>:<device_id>'. The friendly aliases
-                (``cpu|gpu|npu``) target the ``llama_cpp`` plugin; ``npu``
-                in particular leaves ``device_id`` unset so llama.cpp's
-                hybrid HTP+CPU scheduler runs (see
-                :data:`_LLAMA_CPP_DEVICE_ALIASES`). Run ``geniex-py devices``
-                (or :func:`geniex._ffi.get_device_list`) to enumerate
-                concrete device ids available on this machine.
+            device_map: ``'auto'`` | ``'cpu'`` | ``'gpu'`` | ``'npu'`` |
+                ``'hybrid'`` | ``'<plugin_id>'`` |
+                ``'<plugin_id>:<device_id>'``. Default (``'auto'``) maps
+                to ``hybrid`` for ``llama_cpp`` and ``npu`` for ``qairt``.
+                See :class:`AutoModelForCausalLM.from_pretrained` for
+                full semantics.
             n_ctx: Context length (0 = model default).
             n_gpu_layers: Layers to offload to GPU/NPU (999 = offload all).
-                Forced to 0 when ``device_map`` resolves to CPU.
+                Forced to 0 when ``device_map`` resolves to CPU, and to
+                999 when it resolves to ``hybrid``.
             mmproj_path: Path to the multimodal projector file.
             tokenizer_path: Optional override for tokenizer file path.
             license_id: NPU licence ID.
