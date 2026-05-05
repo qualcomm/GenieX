@@ -49,20 +49,26 @@ module.exports = async ({ github, context, core }) => {
     return base ? `${base}\n\n${htpNote}` : htpNote;
   };
 
-  if (!release) {
-    core.info(`Release ${VERSION} not found, creating as draft...`);
+  async function createDraftRelease(body) {
     const created = await github.rest.repos.createRelease({
       owner,
       repo,
       tag_name: VERSION,
       name: VERSION,
-      body: htpNote,
+      body,
       generate_release_notes: true,
       draft: true,
     });
-    release = created.data;
+    return created.data;
+  }
+
+  if (!release) {
+    core.info(`Release ${VERSION} not found, creating as draft...`);
+    release = await createDraftRelease(htpNote);
   } else {
-    // If a prior run published the release, revert to draft so we can upload assets.
+    // If a prior run published the release, revert to draft so we can upload
+    // assets. GitHub's "immutable releases" feature may block this update — in
+    // that case delete the existing release and recreate as a fresh draft.
     const needsDraft = !release.draft;
     const body = mergeHtpNote(release.body);
     if (needsDraft || body !== release.body) {
@@ -71,14 +77,31 @@ module.exports = async ({ github, context, core }) => {
           ? `Release ${VERSION} is published; reverting to draft for asset upload...`
           : `Updating release body...`,
       );
-      const patched = await github.rest.repos.updateRelease({
-        owner,
-        repo,
-        release_id: release.id,
-        body,
-        draft: true,
-      });
-      release = patched.data;
+      try {
+        const patched = await github.rest.repos.updateRelease({
+          owner,
+          repo,
+          release_id: release.id,
+          body,
+          draft: true,
+        });
+        release = patched.data;
+      } catch (err) {
+        // 422 = immutable release — cannot revert to draft. Delete and recreate.
+        if (err.status === 422) {
+          core.warning(
+            `Cannot revert release to draft (immutable). Deleting and recreating...`,
+          );
+          await github.rest.repos.deleteRelease({
+            owner,
+            repo,
+            release_id: release.id,
+          });
+          release = await createDraftRelease(body);
+        } else {
+          throw err;
+        }
+      }
     }
   }
 
