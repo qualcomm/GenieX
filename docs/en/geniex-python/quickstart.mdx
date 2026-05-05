@@ -90,23 +90,6 @@ prompt = model.tokenizer.apply_chat_template(
 print(model.generate(prompt, images=[image_path]).text)
 ```
 
-### **Model Management**
-The same model manager the CLI uses is available programmatically:
-
-```python
-from geniex import model_manager as mm
-
-MODEL = "Qwen/Qwen3-0.6B-GGUF"
-mm.pull(MODEL)
-print(f"✓ pull complete: {MODEL}")
-paths = mm.get_paths(MODEL)
-print(f"✓ model path:    {paths}")
-local_models = mm.list_models()
-print(f"✓ local models:  {local_models}")
-mm.remove(MODEL)
-print(f"✓ model removed: {MODEL}")
-```
-
 <br />
 
 <Feedback/>

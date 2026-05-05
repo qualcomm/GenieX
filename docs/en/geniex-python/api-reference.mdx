@@ -238,10 +238,15 @@ The same model manager the CLI uses is available programmatically via `geniex.mo
 ```python
 from geniex import model_manager as mm
 
-mm.pull("qwen3")
-models = mm.list_models()
-paths  = mm.get_paths("qwen3")
-mm.remove("qwen3")
+MODEL = "Qwen/Qwen3-0.6B-GGUF"
+mm.pull(MODEL)
+print(f"✓ pull complete: {MODEL}")
+paths = mm.get_paths(MODEL)
+print(f"✓ model path:    {paths}")
+local_models = mm.list_models()
+print(f"✓ local models:  {local_models}")
+mm.remove(MODEL)
+print(f"✓ model removed: {MODEL}")
 ```
 
 | Function | Description |
