@@ -26,7 +26,7 @@ decisions Claude should make.
    not contain the bridge artifact for their platform, build the SDK
    bridge first, then do the dev run.
 
-## If docs/build.md and this file disagree
+## If notes/build.md and this file disagree
 
 Trust [notes/build.md](../../notes/build.md). Tell the user this file is
 stale and suggest updating it.

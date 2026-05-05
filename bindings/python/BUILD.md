@@ -91,7 +91,7 @@ library directory.
 Prerequisites: Python 3.10+, CMake 3.20+, C++ compiler (GCC / Clang / MSVC).
 
 Full platform-specific build instructions (Linux, Windows ARM64 + Hexagon,
-Android cross-compile) live in [`docs/build.md`](../../docs/build.md).
+Android cross-compile) live in [`notes/build.md`](../../notes/build.md).
 After `cmake --install`, the libs land in `sdk/pkg-geniex/lib/` and both
 dev mode and `GENIEX_LIB_PATH` pick them up.
 

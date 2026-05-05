@@ -70,7 +70,7 @@ guardrails the agent must enforce.
   `X`.** Breaking changes bump MINOR; see the Versioning section of
   the doc.
 
-## If docs/release.md and this file disagree
+## If notes/release.md and this file disagree
 
 Trust [notes/release.md](../../notes/release.md). Tell the user this
 file is stale and suggest updating it.

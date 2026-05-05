@@ -2,7 +2,7 @@
 
 Rules contributors — human and AI — follow when committing, branching, and opening pull requests.
 
-The rules are **SemVer-driven**: commit messages and PR titles must encode enough information for [`/release`](.claude/commands/release.md) (and future automation) to derive the next version tag deterministically. The full tag procedure lives in [docs/release.md](docs/release.md).
+The rules are **SemVer-driven**: commit messages and PR titles must encode enough information for [`/release`](.claude/commands/release.md) (and future automation) to derive the next version tag deterministically. The full tag procedure lives in [notes/release.md](notes/release.md).
 
 ## 1. Commits — Conventional Commits
 
@@ -80,7 +80,7 @@ Format: `<type>/<short-topic>`. Base branch is `main`.
 | `ci`      | CI config only.                            | `ci/add-windows-runner`     |
 | `release` | Long-lived release-prep branches (rare).   | `release/0.5`               |
 
-Tag policy (which channels may be cut from which branches) lives in [docs/release.md](docs/release.md).
+Tag policy (which channels may be cut from which branches) lives in [notes/release.md](notes/release.md).
 
 ### Personal dev branches
 
@@ -98,7 +98,7 @@ Run the same checks CI runs — the authoritative list is [.github/workflows/lin
 
 When CI adds a check, this section needs no edit — the workflow is the source of truth.
 
-Tests: see the section of [docs/build.md](docs/build.md) matching your target.
+Tests: see the section of [notes/build.md](notes/build.md) matching your target.
 
 ## 4. Changing public SDK headers
 
@@ -121,4 +121,4 @@ After updating one binding, ask whether the others need to move too.
 
 ## 6. Releases
 
-See [docs/release.md](docs/release.md). The [`/release`](.claude/commands/release.md) slash command walks through the tag format, channel semantics (`alpha` / `beta` / `rc` / stable), and decision procedure.
+See [notes/release.md](notes/release.md). The [`/release`](.claude/commands/release.md) slash command walks through the tag format, channel semantics (`alpha` / `beta` / `rc` / stable), and decision procedure.
