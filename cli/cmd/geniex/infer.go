@@ -359,7 +359,7 @@ func resolveDevice(manifest *types.ModelManifest) (deviceID string, nglOverride 
 		deviceID = ""
 	case "gpu":
 		nglOverride = 999
-		deviceID = ""
+		deviceID = "GPUOpenCL"
 	case "npu":
 		nglOverride = 999
 		if deviceID == "" {
