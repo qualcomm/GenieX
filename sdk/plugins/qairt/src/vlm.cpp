@@ -93,8 +93,11 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
 
-    // Optional files
-    llm_cfg.embedding_path  = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
+    // Embedding table (optional - AI Hub models do embedding on-device)
+    llm_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embedding_weights.raw");
+    if (llm_cfg.embedding_path.empty()) {
+        llm_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
+    }
     llm_cfg.htp_config_path = qairt::runtime::find_optional_file(model_dir, "htp_backend_ext_config.json");
 
     // ── Vision encoder config ─────────────────────────────────────────────────
@@ -270,6 +273,8 @@ int32_t QairtVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
         output->profile_data.stop_reason = kStopUser;
     else
         output->profile_data.stop_reason = kStopEos;
+
+    return GENIEX_SUCCESS;
 }
 
 }  // namespace geniex

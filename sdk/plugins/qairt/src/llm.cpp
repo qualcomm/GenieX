@@ -72,7 +72,10 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     }
 
     // Embedding table (optional - AI Hub models do embedding on-device)
-    model_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
+    model_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embedding_weights.raw");
+    if (model_cfg.embedding_path.empty()) {
+        model_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
+    }
 
     // HTP backend config
     model_cfg.htp_config_path = qairt::runtime::find_optional_file(model_dir, "htp_backend_ext_config.json");
