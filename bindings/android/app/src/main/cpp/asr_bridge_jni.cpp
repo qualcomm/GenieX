@@ -190,11 +190,12 @@ geniex_AsrCreateInput extract_asr_create_input(JNIEnv* env, jobject inputObj) {
     out.plugin_id = getStringField(env, cls, inputObj, "plugin_id");
     // Resolve user-friendly device_id (cpu/gpu/npu/hybrid) via the shared
     // helper so qairt falls back to NPU with a warning instead of erroring.
-    const char* raw_device_id = getStringField(env, cls, inputObj, "device_id");
+    const char*              raw_device_id = getStringField(env, cls, inputObj, "device_id");
     jniutils::ResolvedDevice rdev = jniutils::resolve_device(out.plugin_id, raw_device_id ? raw_device_id : "");
     out.device_id                 = rdev.device_id.empty() ? nullptr : jniutils::hold_c_str(rdev.device_id);
-    LOGd("device_id resolved: raw=%s, device_id=%s", raw_device_id ? raw_device_id : "(null)",
-         rdev.device_id.empty() ? "(null)" : rdev.device_id.c_str());
+    LOGd("device_id resolved: raw=%s, device_id=%s",
+        raw_device_id ? raw_device_id : "(null)",
+        rdev.device_id.empty() ? "(null)" : rdev.device_id.c_str());
     out.license_id  = getStringField(env, cls, inputObj, "license_id");
     out.license_key = getStringField(env, cls, inputObj, "license_key");
 

@@ -195,9 +195,10 @@ geniex_CVCreateInput extract_cv_create_input(JNIEnv* env, jobject inputObj) {
             }
         }
         ResolvedDevice rdev = resolve_device(out.plugin_id, raw_dev);
-        out.device_id = rdev.device_id.empty() ? nullptr : hold_c_str(rdev.device_id);
+        out.device_id       = rdev.device_id.empty() ? nullptr : hold_c_str(rdev.device_id);
         LOGd("extract_cv_create_input device_id = %s (from raw='%s')",
-             rdev.device_id.empty() ? "(null)" : rdev.device_id.c_str(), raw_dev.c_str());
+            rdev.device_id.empty() ? "(null)" : rdev.device_id.c_str(),
+            raw_dev.c_str());
     }
 
     // === license_id ===

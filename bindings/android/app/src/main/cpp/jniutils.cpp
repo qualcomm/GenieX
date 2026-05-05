@@ -53,7 +53,7 @@ std::string translate_device_id(const std::string& device_id) {
 }
 
 ResolvedDevice resolve_device(const char* plugin_id, const std::string& raw) {
-    ResolvedDevice r;
+    ResolvedDevice    r;
     const std::string plugin = plugin_id ? plugin_id : "";
 
     // Empty / "auto" → plugin-specific default.
@@ -65,8 +65,8 @@ ResolvedDevice resolve_device(const char* plugin_id, const std::string& raw) {
     // QAIRT is NPU-only; coerce other aliases with a warning.
     if (plugin == kPluginQairt) {
         if (alias != "npu") {
-            r.warning = "qairt plugin only supports NPU inference; ignoring device_id='"
-                      + alias + "' and running on NPU";
+            r.warning =
+                "qairt plugin only supports NPU inference; ignoring device_id='" + alias + "' and running on NPU";
             LOGi("[JNI] resolve_device: %s", r.warning.c_str());
         }
         r.device_id = "NPU";
@@ -89,7 +89,6 @@ ResolvedDevice resolve_device(const char* plugin_id, const std::string& raw) {
     }
     return r;
 }
-
 
 std::vector<std::string> jstringArray2vec(JNIEnv* env, jobjectArray arr) {
     std::vector<std::string> vec;
@@ -526,7 +525,9 @@ geniex_LlmCreateInput extract_llm_create_input(JNIEnv* env, jobject inputObj) {
         out.device_id    = r.device_id.empty() ? nullptr : hold_c_str(r.device_id);
         if (r.ngl_override >= 0) out.config.n_gpu_layers = r.ngl_override;
         LOGi("[JNI] [extract] device_id = %s, n_gpu_layers = %d (from raw='%s')",
-             r.device_id.empty() ? "(null)" : r.device_id.c_str(), out.config.n_gpu_layers, raw_dev.c_str());
+            r.device_id.empty() ? "(null)" : r.device_id.c_str(),
+            out.config.n_gpu_layers,
+            raw_dev.c_str());
     }
 
     env->DeleteLocalRef(cls);
@@ -602,7 +603,9 @@ geniex_VlmCreateInput extract_vlm_create_input(JNIEnv* env, jobject inputObj) {
         out.device_id    = r.device_id.empty() ? nullptr : hold_c_str(r.device_id);
         if (r.ngl_override >= 0) out.config.n_gpu_layers = r.ngl_override;
         LOGi("[JNI] [extract_vlm] device_id = %s, n_gpu_layers = %d (from raw='%s')",
-             r.device_id.empty() ? "(null)" : r.device_id.c_str(), out.config.n_gpu_layers, raw_dev.c_str());
+            r.device_id.empty() ? "(null)" : r.device_id.c_str(),
+            out.config.n_gpu_layers,
+            raw_dev.c_str());
     }
 
     env->DeleteLocalRef(cls);
@@ -704,7 +707,9 @@ geniex_EmbedderCreateInput extract_embedder_create_input(JNIEnv* env, jobject in
         out.device_id    = r.device_id.empty() ? nullptr : hold_c_str(r.device_id);
         if (r.ngl_override >= 0) out.config.n_gpu_layers = r.ngl_override;
         LOGi("[JNI] [extract_embedder] device_id = %s, n_gpu_layers = %d (from raw='%s')",
-             r.device_id.empty() ? "(null)" : r.device_id.c_str(), out.config.n_gpu_layers, raw_dev.c_str());
+            r.device_id.empty() ? "(null)" : r.device_id.c_str(),
+            out.config.n_gpu_layers,
+            raw_dev.c_str());
     }
 
     env->DeleteLocalRef(cls);
@@ -806,7 +811,9 @@ geniex_RerankerCreateInput extract_reranker_create_input(JNIEnv* env, jobject in
         out.device_id    = r.device_id.empty() ? nullptr : hold_c_str(r.device_id);
         if (r.ngl_override >= 0) out.config.n_gpu_layers = r.ngl_override;
         LOGi("[JNI] [extract_reranker] device_id = %s, n_gpu_layers = %d (from raw='%s')",
-             r.device_id.empty() ? "(null)" : r.device_id.c_str(), out.config.n_gpu_layers, raw_dev.c_str());
+            r.device_id.empty() ? "(null)" : r.device_id.c_str(),
+            out.config.n_gpu_layers,
+            raw_dev.c_str());
     }
 
     env->DeleteLocalRef(cls);
