@@ -52,7 +52,7 @@ docker run -it --rm --privileged -v "$PWD/data:/data" \
 ### Python
 
 ```bash
-pip install -i https://test.pypi.org/simple/ geniex
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
 ```
 
 The sdist auto-downloads the matching SDK zip per host at install time. API, CLI (`geniex-py`), and env vars: [bindings/python/README.md](bindings/python/README.md). Install sources (GitHub Release URL, offline mirror): [bindings/python/BUILD.md § Install sources](bindings/python/BUILD.md#install-sources).
