@@ -64,15 +64,13 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
     auto bin_shards = qairt::runtime::collect_bin_files(model_dir);
     if (!resolved_vision_bin.empty()) {
         const fs::path vision_path(resolved_vision_bin);
-        bin_shards.erase(
-            std::remove_if(bin_shards.begin(), bin_shards.end(), [&](const std::string& p) {
-                std::error_code ec;
-                // Primary: filesystem::equivalent handles separator/case/short-name differences
-                //          on Windows by comparing the underlying file identity.
-                if (fs::equivalent(fs::path(p), vision_path, ec)) return true;
-                // Fallback (in case equivalent() errors on a weird path): filename match.
-                return fs::path(p).filename() == vision_path.filename();
-            }),
+        bin_shards.erase(std::remove_if(bin_shards.begin(),
+                             bin_shards.end(),
+                             [&](const std::string& p) {
+                                 std::error_code ec;
+                                 if (fs::equivalent(fs::path(p), vision_path, ec)) return true;
+                                 return fs::path(p).filename() == vision_path.filename();
+                             }),
             bin_shards.end());
     }
     if (bin_shards.empty()) {
