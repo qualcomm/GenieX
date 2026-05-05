@@ -330,7 +330,7 @@ func loadStopSequences() ([]string, error) {
 }
 
 // resolveDevice applies --device flag logic:
-// - QAIRT plugin: always NPU regardless of input
+// - QAIRT plugin: only npu is accepted; cpu/gpu exits with an error
 // - llama.cpp plugin: cpu → ngl=0, gpu → OpenCL backend, npu → HTP backend
 func resolveDevice(manifest *types.ModelManifest) (deviceID string, nglOverride int32) {
 	deviceID = manifest.DeviceId
@@ -347,7 +347,12 @@ func resolveDevice(manifest *types.ModelManifest) (deviceID string, nglOverride 
 	}
 
 	if manifest.PluginId == "qairt" {
-		// QAIRT always runs on NPU
+		// QAIRT models only run on NPU. Reject cpu/gpu rather than silently
+		// coercing — --device cpu/gpu is only meaningful for llama.cpp GGUF models.
+		if dev != "npu" {
+			fmt.Println(render.GetTheme().Error.Sprintf("Error: --device %s is not supported for QAIRT models (%s); QAIRT runs on NPU only. Use a llama.cpp GGUF model for cpu/gpu inference.", dev, manifest.Name))
+			os.Exit(1)
+		}
 		deviceID = "NPU"
 		return
 	}
