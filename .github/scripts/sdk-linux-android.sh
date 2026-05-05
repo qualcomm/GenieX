@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the GenieX SDK on Linux. Drives CMakePresets.json rather than passing
 # toolchain/options ad-hoc so the CI build stays in sync with the presets
-# documented in docs/build.md.
+# documented in notes/build.md.
 #
 # Environment inputs:
 #   GENIEX_VERSION      (required)  Version string baked into binaries.

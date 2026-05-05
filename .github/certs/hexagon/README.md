@@ -4,7 +4,7 @@ These are self-signed test certificates used to sign Hexagon HTP ops libraries
 (`libggml-htp-*.so` → `libggml-htp.cat`) during CI builds. They are only
 shipped to end users when Release CI cannot find a Microsoft-signed bundle for
 the current `third-party/llama.cpp` SHA on S3 — see
-[docs/release.md](../../../docs/release.md#hexagon-htp-signing). When the
+[notes/release.md](../../../notes/release.md#hexagon-htp-signing). When the
 signed bundle is available, Release CI overlays it and drops these certs from
 the release assets.
 

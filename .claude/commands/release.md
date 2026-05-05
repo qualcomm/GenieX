@@ -1,12 +1,12 @@
 ---
-description: Cut and push a SemVer release tag following docs/release.md.
+description: Cut and push a SemVer release tag following notes/release.md.
 ---
 
 # /release
 
 Cut a release tag. The authoritative rules — what each digit means,
 what each channel means, and the decision procedure for picking the
-next tag — live in [docs/release.md](../../docs/release.md). Read it
+next tag — live in [notes/release.md](../../notes/release.md). Read it
 and follow it. This file only captures the operational loop and the
 guardrails the agent must enforce.
 
@@ -14,7 +14,7 @@ guardrails the agent must enforce.
 
 1. **Preconditions.** Working tree clean; branch up to date with its
    remote. Channel/branch constraints are listed in
-   [docs/release.md](../../docs/release.md#what-each-channel-means) —
+   [notes/release.md](../../notes/release.md#what-each-channel-means) —
    check them. If any precondition fails, stop and tell the user.
 
 2. **Gather the inputs the decision procedure needs.** Run these
@@ -29,7 +29,7 @@ guardrails the agent must enforce.
      (`git show --stat <sha>` then `git show <sha>` as needed).
 
 3. **Apply the decision procedure from
-   [docs/release.md](../../docs/release.md#decision-procedure-how-to-pick-the-next-tag)**
+   [notes/release.md](../../notes/release.md#decision-procedure-how-to-pick-the-next-tag)**
    to propose a tag. State the chosen tag plus a one-line reason
    (which bump, which channel, why). Only ask the user to choose if
    the commit range is genuinely ambiguous between two defensible
@@ -43,7 +43,7 @@ guardrails the agent must enforce.
      not self-signed (artifact name must not end in `-selfsigned`).
      If it is self-signed, **stop and warn the user**: stable tags
      require a signed HTP bundle. Point at the signing promotion
-     steps in [docs/release.md](../../docs/release.md#promoting-self-signed--microsoft-signed).
+     steps in [notes/release.md](../../notes/release.md#promoting-self-signed--microsoft-signed).
    - If you cannot determine signing status, ask the user — do not
      proceed on assumption.
 
@@ -56,7 +56,7 @@ guardrails the agent must enforce.
 
 6. **Watch the release workflow** with `gh run watch`. Relay progress;
    if HTP flow branches (hit vs. miss), follow the handling in
-   [docs/release.md](../../docs/release.md#hexagon-htp-signing).
+   [notes/release.md](../../notes/release.md#hexagon-htp-signing).
 
 ## Guardrails
 
@@ -70,7 +70,7 @@ guardrails the agent must enforce.
   `X`.** Breaking changes bump MINOR; see the Versioning section of
   the doc.
 
-## If docs/release.md and this file disagree
+## If notes/release.md and this file disagree
 
-Trust [docs/release.md](../../docs/release.md). Tell the user this
+Trust [notes/release.md](../../notes/release.md). Tell the user this
 file is stale and suggest updating it.

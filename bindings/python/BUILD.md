@@ -21,7 +21,7 @@ The sdist itself is pure Python — it never contains prebuilt libs.
 pip install https://github.com/qcom-ai-hub/geniex/releases/download/v0.0.3-alpha.1/geniex-0.0.3a1.tar.gz
 
 # From TestPyPI (pre-release tags are auto-published)
-pip install -i https://test.pypi.org/simple/ geniex
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
 ```
 
 ### Supported platforms (automatic SDK download)
@@ -91,7 +91,7 @@ library directory.
 Prerequisites: Python 3.10+, CMake 3.20+, C++ compiler (GCC / Clang / MSVC).
 
 Full platform-specific build instructions (Linux, Windows ARM64 + Hexagon,
-Android cross-compile) live in [`docs/build.md`](../../docs/build.md).
+Android cross-compile) live in [`notes/build.md`](../../notes/build.md).
 After `cmake --install`, the libs land in `sdk/pkg-geniex/lib/` and both
 dev mode and `GENIEX_LIB_PATH` pick them up.
 
