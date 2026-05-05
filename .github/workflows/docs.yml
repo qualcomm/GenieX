@@ -38,7 +38,6 @@ jobs:
           mint export --output site.zip
           mkdir _site
           unzip site.zip -d _site
-          echo "geniex.github.io" > _site/CNAME
 
       - uses: actions/configure-pages@v5
 
@@ -52,7 +51,7 @@ jobs:
     timeout-minutes: 5
     environment:
       name: github-pages
-      url: https://geniex.github.io
+      url: https://qcom-ai-hub.github.io/geniex/
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4

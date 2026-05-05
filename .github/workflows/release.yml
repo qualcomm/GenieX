@@ -55,6 +55,7 @@ jobs:
     uses: ./.github/workflows/_build-sdk.yml
     secrets: inherit
     with:
+      version_tag: ${{ needs.resolve-tag.outputs.tag }}
       upload_artifact: true
 
   build-android-aar:
@@ -71,6 +72,7 @@ jobs:
     uses: ./.github/workflows/_build-python-sdist.yml
     secrets: inherit
     with:
+      version_tag: ${{ needs.resolve-tag.outputs.tag }}
       upload_artifact: true
 
   # Overlay the Microsoft-signed HTP bundle from S3 if available; otherwise
@@ -123,10 +125,11 @@ jobs:
 
   build-cli:
     name: build-cli
-    needs: [overlay-htp]
+    needs: [resolve-tag, overlay-htp]
     uses: ./.github/workflows/_build-cli.yml
     secrets: inherit
     with:
+      version_tag: ${{ needs.resolve-tag.outputs.tag }}
       build_installer: true
       upload_artifact: true
 
@@ -344,6 +347,7 @@ jobs:
     uses: ./.github/workflows/_build-docker.yml
     secrets: inherit
     with:
+      version_tag: ${{ needs.resolve-tag.outputs.tag }}
       push: true
       image: ghcr.io/qcom-ai-hub/geniex-cli
       tag: ${{ needs.resolve-tag.outputs.tag }}

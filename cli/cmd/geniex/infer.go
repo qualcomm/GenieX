@@ -58,6 +58,7 @@ var (
 	tokenFile      string
 	input          string
 	systemPrompt   string
+	device         string
 
 	// sampler config
 	temperature       float32
@@ -94,7 +95,8 @@ var (
 	llmFlags = func() *pflag.FlagSet {
 		llmFlags := pflag.NewFlagSet("LLM/VLM Model", pflag.ExitOnError)
 		llmFlags.SortFlags = false
-		llmFlags.Int32VarP(&ngl, "ngl", "n", 999, "num of layers pass to gpu")
+		llmFlags.StringVarP(&device, "device", "d", "npu", "device to run on: cpu, gpu, or npu")
+		llmFlags.Int32VarP(&ngl, "ngl", "n", 999, "number of layers to offload to gpu/npu")
 		llmFlags.Int32VarP(&nctx, "nctx", "", 4096, "context window size")
 		llmFlags.Int32VarP(&maxTokens, "max-tokens", "", 2048, "max tokens")
 		llmFlags.StringArrayVarP(&stop, "stop", "", nil, "stop sequences")
@@ -327,6 +329,44 @@ func loadStopSequences() ([]string, error) {
 	return stopSequences, nil
 }
 
+// resolveDevice applies --device flag logic:
+// - QAIRT plugin: always NPU regardless of input
+// - llama.cpp plugin: cpu → ngl=0, gpu → OpenCL backend, npu → HTP backend
+func resolveDevice(manifest *types.ModelManifest) (deviceID string, nglOverride int32) {
+	deviceID = manifest.DeviceId
+	nglOverride = ngl
+
+	if device == "" {
+		return
+	}
+
+	dev := strings.ToLower(device)
+	if dev != "cpu" && dev != "gpu" && dev != "npu" {
+		fmt.Println(render.GetTheme().Error.Sprintf("Error: invalid --device value %q, must be cpu, gpu, or npu", device))
+		os.Exit(1)
+	}
+
+	if manifest.PluginId == "qairt" {
+		// QAIRT always runs on NPU
+		deviceID = "NPU"
+		return
+	}
+
+	// llama.cpp plugin
+	switch dev {
+	case "cpu":
+		nglOverride = 0
+		deviceID = ""
+	case "gpu":
+		deviceID = "GPUOpenCL"
+	case "npu":
+		if deviceID == "" {
+			deviceID = "HTP0"
+		}
+	}
+	return
+}
+
 func inferLLM(manifest *types.ModelManifest, quant string) error {
 	samplerConfig := &geniex_sdk.SamplerConfig{
 		Temperature:       temperature,
@@ -348,6 +388,9 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 
 	s := store.Get()
 	modelfile := s.ModelfilePath(manifest.Name, manifest.ModelFile[quant].Name)
+
+	deviceID, nglResolved := resolveDevice(manifest)
+
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
 
@@ -355,10 +398,10 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 		ModelName: manifest.ModelName,
 		ModelPath: modelfile,
 		PluginID:  manifest.PluginId,
-		DeviceID:  manifest.DeviceId,
+		DeviceID:  deviceID,
 		Config: geniex_sdk.ModelConfig{
 			NCtx:       nctx,
-			NGpuLayers: ngl,
+			NGpuLayers: nglResolved,
 		},
 	})
 	spin.Stop()
@@ -518,6 +561,9 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 	if manifest.TokenizerFile.Name != "" {
 		tokenizerfile = s.ModelfilePath(manifest.Name, manifest.TokenizerFile.Name)
 	}
+
+	deviceID, nglResolved := resolveDevice(manifest)
+
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
 	p, err := geniex_sdk.NewVLM(geniex_sdk.VlmCreateInput{
@@ -526,10 +572,10 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 		MmprojPath:    mmprojfile,
 		TokenizerPath: tokenizerfile,
 		PluginID:      manifest.PluginId,
-		DeviceID:      manifest.DeviceId,
+		DeviceID:      deviceID,
 		Config: geniex_sdk.ModelConfig{
 			NCtx:       nctx,
-			NGpuLayers: ngl,
+			NGpuLayers: nglResolved,
 		},
 	})
 	spin.Stop()

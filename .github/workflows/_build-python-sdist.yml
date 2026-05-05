@@ -3,6 +3,11 @@ name: Build Python sdist
 on:
   workflow_call:
     inputs:
+      version_tag:
+        description: "Explicit version tag (e.g. v1.2.3-rc.1). Passed to the version action."
+        required: false
+        type: string
+        default: ""
       upload_artifact:
         description: "Whether to upload the sdist artifact"
         required: false
@@ -26,6 +31,8 @@ jobs:
       - name: Detect build version
         id: version
         uses: ./.github/actions/version
+        with:
+          version_tag: ${{ inputs.version_tag }}
 
       - name: Stamp geniex/_version.py
         shell: bash

@@ -31,22 +31,13 @@ model = AutoModelForCausalLM.from_pretrained(
 | `model_name_or_path` | `str` | *required* | HuggingFace repo id, short alias (e.g. `"qwen3"`), or local path. |
 | `device_map` | `str` | `"auto"` | `"auto"` picks the first available plugin/device. Also accepts `"<plugin_id>"` or `"<plugin_id>:<device_id>"`. |
 | `quant` | `str \| None` | `None` | Quantization variant (e.g. `"Q4_K_M"`). Filters files when downloading from Hub. |
-| `n_ctx` | `int` | `0` | Context length (`0` = model default). |
-| `n_gpu_layers` | `int` | `-1` | Layers to offload to GPU (`-1` = all). |
-| `enable_thinking` | `bool` | `False` | Enable thinking mode (e.g. Qwen reasoning models). |
-| `system_prompt` | `str` | — | System prompt to prepend. |
 
 <Expandable title="Additional parameters">
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `model_name` | `str \| None` | `None` | Override the registry model name (e.g. `"granite4"` for QAIRT). |
-| `tokenizer_path` | `str \| None` | `None` | Override tokenizer file path. |
-| `license_id` | `str \| None` | `None` | NPU licence ID. |
-| `license_key` | `str \| None` | `None` | NPU licence key. |
 | `hf_token` | `str \| None` | `None` | HuggingFace bearer token for gated models. |
-| `n_threads` | `int` | — | Number of threads for inference. |
-| `n_batch` | `int` | — | Batch size for prompt processing. |
 | `max_tokens` | `int` | — | Maximum tokens for generation. |
 
 </Expandable>

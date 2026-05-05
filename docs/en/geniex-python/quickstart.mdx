@@ -27,14 +27,23 @@ Here's a simple example to get you started:
 ```python
 from geniex import AutoModelForCausalLM
 
+# GGUF Model Example
 model = AutoModelForCausalLM.from_pretrained(
-    "qualcomm/Qwen3-4B-Instruct-2507",               # short alias, HF repo id, or local GGUF path
-    device_map="auto",     # "auto" | "<plugin>" | "<plugin>:<device>"
+    "Qwen/Qwen3-0.6B-GGUF",     # HF repo id of a GGUF model, or a local path to a .gguf LLM model
+    device_map="llama_cpp",     # format is <plugin>:<device> - device specification is pending, accept plugin id only for now
 )
+
+# QAIRT Model Example
+# model = AutoModelForCausalLM.from_pretrained( 
+#     r"C:\<your_path>\Qwen3-4B-Instruct-2507\",    # replace with your own local path; pass a path to any .bin file from the model folder.
+#     model_name="qwen3_4b_instruct_2507",          # model name is the same as model id used on QAI Hub Model; they can be found from the S3 download URL.
+#     device_map="qairt",                           # device_map must be "qairt" for QAIRT models
+# ) 
+
 
 messages = [{"role": "user", "content": "What is 2+2?"}]
 prompt = model.tokenizer.apply_chat_template(
-    messages, tokenize=False, add_generation_prompt=True,
+    messages, add_generation_prompt=True,
 )
 
 # One-shot
@@ -67,7 +76,7 @@ from geniex import AutoModelForVision2Seq
 
 image_path = os.path.abspath("demo.jpeg")
 
-model = AutoModelForVision2Seq.from_pretrained("qualcomm/Qwen2.5-VL-7B-Instruct", device_map="auto")
+model = AutoModelForVision2Seq.from_pretrained("unsloth/Qwen2.5-VL-3B-Instruct-GGUF", quant="Q8_0", device_map="auto")
 messages = [{
     "role": "user",
     "content": [
@@ -87,10 +96,15 @@ The same model manager the CLI uses is available programmatically:
 ```python
 from geniex import model_manager as mm
 
-mm.pull("qwen3")                      # alias or "org/repo[:quant]"
-paths = mm.get_paths("qwen3")         # resolved local paths
-mm.list_models()                      # cached models
-mm.remove("qwen3")
+MODEL = "Qwen/Qwen3-0.6B-GGUF"
+mm.pull(MODEL)
+print(f"✓ pull complete: {MODEL}")
+paths = mm.get_paths(MODEL)
+print(f"✓ model path:    {paths}")
+local_models = mm.list_models()
+print(f"✓ local models:  {local_models}")
+mm.remove(MODEL)
+print(f"✓ model removed: {MODEL}")
 ```
 
 <br />

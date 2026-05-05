@@ -1,4 +1,11 @@
 name: "Detect build version"
+description: "Derive SDK/CLI version and PEP 440 Python version from a tag."
+
+inputs:
+  version_tag:
+    description: "Explicit version tag override (e.g. v1.2.3-rc.1). When set, GITHUB_REF is ignored."
+    required: false
+    default: ""
 
 outputs:
   version:
@@ -17,11 +24,22 @@ runs:
     - name: Set version outputs
       id: set-version
       shell: bash
+      env:
+        INPUT_VERSION_TAG: ${{ inputs.version_tag }}
       run: |
         set -euo pipefail
         is_prerelease="false"
-        if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+
+        # Use explicit override if provided; otherwise fall back to GITHUB_REF.
+        if [[ -n "${INPUT_VERSION_TAG}" ]]; then
+          version="${INPUT_VERSION_TAG}"
+        elif [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
           version="${GITHUB_REF_NAME}"
+        else
+          version=""
+        fi
+
+        if [[ "${version}" == v* ]]; then
           raw="${version#v}"
 
           # Strip SemVer build metadata (+...) — not meaningful for PEP 440 here.
