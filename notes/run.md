@@ -11,34 +11,64 @@ They are not interchangeable; the plugin is chosen per model.
 
 ## Backend selection (llama_cpp)
 
-`llama_cpp` supports OpenCL and Hexagon on Windows ARM64, and by default uses both. The CLI has no `--device` flag; the backend is driven by the `DeviceId` field in `%USERPROFILE%\.cache\geniex\models\<name>\geniex.json`. Recognized values (from `sdk/plugins/llama_cpp/src/llm.cpp:73-114`):
+`llama_cpp` supports OpenCL and Hexagon on Windows ARM64. The backend is driven by two inputs on `geniex_LlmCreateInput`:
 
-| Target      | `DeviceId`                        | Notes                                                                                              |
-|-------------|-----------------------------------|----------------------------------------------------------------------------------------------------|
-| Hexagon NPU | `HTP0` (or `HTP0,HTP1,HTP2,HTP3`) | Starting with `HTP0` also flips KV cache to Q8_0 + flash-attn ON. Plugin auto-sets `GGML_HEXAGON_NDEV=4`. |
-| Adreno GPU  | `GPUOpenCL`                       | Pass `-n 999` on `infer` so all layers go to the OpenCL device.                                    |
-| CPU         | `CPU` or empty                    | Default.                                                                                           |
+- `device_id` — string, plugin-specific (`HTP0`, `GPUOpenCL`, `CPU`, …).
+- `config.n_gpu_layers` — int; how many layers to offload. `999` = all.
 
-Example — run a local GGUF on the Hexagon NPU (PowerShell):
+### NPU device selection (llama_cpp)
+
+**Critical gotcha: there are two code paths and they behave very differently.**
+
+`sdk/plugins/llama_cpp/src/llm.cpp:73-114` branches on whether `device_id` is non-null:
+
+1. **`device_id` null + `n_gpu_layers=999`** → llama.cpp's **hybrid dispatch**. It inspects each tensor and assigns it to whichever registered backend supports the op (HTP for computable, CPU for fallbacks), using CPU-resident buffers for the fallback tensors. **This is the fast path.** On X1E80100 + Qwen3-1.7B-Q8_0: ~90 tok/s prefill, ~27 tok/s decode, ~200 ms TTFT. Task Manager shows NPU pegged.
+
+2. **`device_id="HTP0"`** → plugin calls `ggml_backend_dev_by_name("HTP0")` and sets `mpar.devices = {HTP0}`. This **pins the model to a single-device layout** and disables per-tensor hybrid assignment. Any op HTP doesn't support gets handled less efficiently. On the same model: ~60 tok/s prefill, ~22 tok/s decode, ~350 ms TTFT. Task Manager shows CPU pegged (because the CPU core driving HTP busy-waits, *plus* all the fallbacks run there). This is the **slow path** and not what the user wants from `--device npu`.
+
+Bonus: when the `device_id` string starts with `"HTP0"`, the plugin also flips KV cache to Q8_0 and enables flash-attn (`llm.cpp:136-140`). That side effect is orthogonal to the perf problem — even with those enabled, path (2) is slower than (1).
+
+**Rule for tooling that wires up `--device npu`:** leave `device_id=""` and set `n_gpu_layers=999`. Only forward a literal `"HTP0"` / `"HTP0,HTP1,HTP2,HTP3"` when the *user* typed that — never synthesize it from a friendly alias.
+
+This regression was introduced in commit `fb98467` (`add device parameter`), which made `resolveDevice()` set `deviceID = "HTP0"` for `--device npu`. First shipped in `v0.1.2-rc.1`, still present in `v0.1.2-rc.2`. The Python binding initially copied the same mistake and was corrected in `bindings/python/geniex/auto.py:_LLAMA_CPP_DEVICE_ALIASES`.
+
+### Device table
+
+| Target      | `device_id` to pass                      | `n_gpu_layers` | Notes                                                                                              |
+|-------------|------------------------------------------|----------------|----------------------------------------------------------------------------------------------------|
+| Hexagon NPU | **empty**                                | `999`          | Fast hybrid path. Let llama.cpp place tensors across HTP + CPU buffers.                           |
+| Adreno GPU  | `GPUOpenCL`                              | `999`          | All layers to OpenCL.                                                                              |
+| Pin to HTP  | `HTP0` or `HTP0,HTP1,HTP2,HTP3`          | `999`          | Slow single-device path; also flips KV cache→Q8_0 + flash-attn. Use only if you explicitly need it. |
+| CPU         | empty                                    | `0`            | Default.                                                                                           |
+
+### Running from the CLI
+
+Use `--device` (`-d`):
 
 ```powershell
-# 1. Register the file (the last path segment becomes the model namespace)
-bazelisk run //cli -- pull Qualcomm/Qwen3-4B-Instruct`
-  --model-hub localfs `
-  --local-path C:\path\to\modelfiles `
-  --model-type llm
-
-# 2. Flip DeviceId
-$m = "$env:USERPROFILE\.cache\geniex\models\NexaAI\Qwen3-0.6B-GGUF\geniex.json"
-$j = Get-Content $m -Raw | ConvertFrom-Json
-$j.DeviceId = "HTP0"    # or "GPUOpenCL" or "CPU"
-$j | ConvertTo-Json -Depth 20 | Set-Content $m
-
-# 3. Run
-bazelisk run //cli -- infer Qualcomm/Qwen3-4B-Instruct -p "Hello"
+geniex infer Qwen/Qwen3-1.7B-GGUF --device npu -p "Hello"
+geniex infer Qwen/Qwen3-1.7B-GGUF --device gpu -p "Hello"
+geniex infer Qwen/Qwen3-1.7B-GGUF --device cpu -p "Hello"
 ```
 
-Sanity-check with `-v`: look for `Found device: HTP0` / `Found device: GPUOpenCL`. If you see `Device '…' not found, skipping`, the plugin loaded but the backend DLL did not — verify test-signing is still on (for HTP) or that `ggml-opencl.dll` is present in `sdk/pkg-geniex/lib/llama_cpp/`.
+Or override `DeviceId` in the per-model manifest:
+
+```powershell
+$m = "$env:USERPROFILE\.cache\geniex\models\NexaAI\Qwen3-0.6B-GGUF\geniex.json"
+$j = Get-Content $m -Raw | ConvertFrom-Json
+$j.DeviceId = ""    # NPU hybrid; or "GPUOpenCL" / "CPU" / literal "HTP0,HTP1,..."
+$j | ConvertTo-Json -Depth 20 | Set-Content $m
+```
+
+### Sanity-checking which path actually ran
+
+The SDK's default log handler is a no-op in release builds (`sdk/src/ml.cpp:36-60`), so `stdout`/`stderr` stays silent and "did it actually use HTP?" is easy to guess wrong. Three ways to check:
+
+- **Python:** set `GENIEX_LOG=INFO`. The Python binding installs a `geniex_set_log` callback that routes SDK messages (`Found device: HTP0`, `Using N device(s)`, etc.) to stderr. If you see `Found device: …` lines, you're on the **slow path**; absence = hybrid path.
+- **Windows:** Task Manager's NPU graph. Hybrid path lights it up; single-device `HTP0` path pegs the CPU instead (the host thread busy-waits HTP the whole inference).
+- **Signature:** on Snapdragon X1E80100 + a 1.7B Q8_0 model, hybrid gives prefill ≳ 80 tok/s and TTFT ≲ 250 ms. Pinned-`HTP0` gives prefill ≲ 65 tok/s and TTFT ≳ 340 ms. Prefill and TTFT separate the two paths more cleanly than decode.
+
+If you see `Device '…' not found, skipping`, the plugin loaded but the backend DLL did not — verify test-signing is still on (for HTP) or that `ggml-opencl.dll` is present in `sdk/pkg-geniex/lib/llama_cpp/`.
 
 > Q4_K_M is a suboptimal quant for HTP — it prefers Q4_0 / Q8_0, so some tensors fall back to CPU. Use Q4_0 for a clean NPU run.
 

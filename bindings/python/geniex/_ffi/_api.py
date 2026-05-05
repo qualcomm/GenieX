@@ -14,7 +14,9 @@
 
 """Bound C functions from libgeniex with argtypes/restype annotations."""
 
-from ctypes import POINTER, byref, c_char_p, c_int32, c_void_p
+import os
+import sys
+from ctypes import CFUNCTYPE, POINTER, byref, c_char_p, c_int32, c_void_p
 
 from ._lib import load_library
 from ._types import (
@@ -39,6 +41,50 @@ from ._types import (
     geniex_VlmGenerateInput,
     geniex_VlmGenerateOutput,
 )
+
+# ---------------------------------------------------------------------------
+# Logging callback
+# ---------------------------------------------------------------------------
+
+# void (*geniex_log_callback)(geniex_LogLevel level, const char* msg)
+# geniex_LogLevel is an int32 enum: 0=TRACE 1=DEBUG 2=INFO 3=WARN 4=ERROR
+geniex_log_callback = CFUNCTYPE(None, c_int32, c_char_p)
+
+_LEVEL_NAMES = {0: 'TRACE', 1: 'DEBUG', 2: 'INFO', 3: 'WARN', 4: 'ERROR'}
+_ENV_LEVELS = {'TRACE': 0, 'DEBUG': 1, 'INFO': 2, 'WARN': 3, 'ERROR': 4}
+
+# Keep a module-level reference so ctypes doesn't garbage-collect the thunk.
+_log_cb: 'geniex_log_callback | None' = None
+
+
+def install_log_callback() -> None:
+    """Route SDK log messages to Python stderr.
+
+    Opt-in via ``GENIEX_LOG`` env var (case-insensitive):
+    ``trace|debug|info|warn|error|off``. No-op when unset or ``off``.
+    Release builds of libgeniex compile out TRACE/DEBUG, so those levels
+    only surface in debug builds.
+    """
+    global _log_cb
+    if _log_cb is not None:
+        return
+
+    requested = os.environ.get('GENIEX_LOG', '').strip().upper()
+    if not requested or requested in {'OFF', 'NONE', '0', 'FALSE'}:
+        return
+    min_level = _ENV_LEVELS.get(requested, _ENV_LEVELS['INFO'])
+
+    def callback(level: int, msg_bytes: bytes) -> None:
+        if level < min_level:
+            return
+        level_name = _LEVEL_NAMES.get(level, f'L{level}')
+        msg = msg_bytes.decode('utf-8', errors='replace') if msg_bytes else ''
+        print(f'[geniex][{level_name}] {msg}', file=sys.stderr, flush=True)
+
+    _log_cb = geniex_log_callback(callback)
+    lib = load_library()
+    lib.geniex_set_log(_log_cb)
+
 
 # ---------------------------------------------------------------------------
 # Error handling
@@ -69,6 +115,9 @@ def _bind_all() -> None:
 
     lib.geniex_get_error_message.argtypes = [c_int32]
     lib.geniex_get_error_message.restype = c_char_p
+
+    lib.geniex_set_log.argtypes = [geniex_log_callback]
+    lib.geniex_set_log.restype = c_int32
 
     lib.geniex_init.argtypes = []
     lib.geniex_init.restype = c_int32
@@ -199,6 +248,7 @@ def init() -> None:
     if _initialized:
         return
     _ensure_bound()
+    install_log_callback()
     lib = load_library()
     _check(lib.geniex_init())
     _initialized = True

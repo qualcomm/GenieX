@@ -20,28 +20,47 @@ import os
 from ctypes import byref, c_void_p
 
 from . import model_manager as _mm
-from ._ffi._api import (
-    _check,
-    ensure_init,
-    get_device_list,
-    get_plugin_list,
-    load_library,
-)
-from ._ffi._types import (
-    geniex_LlmCreateInput,
-    geniex_ModelConfig,
-    geniex_VlmCreateInput,
-)
+from ._ffi._api import _check, ensure_init, get_plugin_list, load_library
+from ._ffi._types import geniex_LlmCreateInput, geniex_ModelConfig, geniex_VlmCreateInput
 from .modeling import GeniexLLM, GeniexVLM
 
+# llama_cpp friendly-name mapping.
+#
+# Key insight: llama.cpp's *best* NPU/GPU path is when ``device_id`` is left
+# unset and ``n_gpu_layers`` is high. Then llama.cpp assigns each tensor to
+# whichever backend supports it (HTP for computable ops, CPU for fallbacks),
+# which is its built-in hybrid execution. Passing ``device_id="HTP0"`` forces
+# ``mpar.devices = {HTP0}`` and disables that hybrid assignment — slower.
+#
+# So:
+#   cpu → empty device id + n_gpu_layers=0     (pure CPU)
+#   gpu → "GPUOpenCL"      + n_gpu_layers=None (Adreno; GPU must be explicit)
+#   npu → empty device id  + n_gpu_layers=None (hybrid HTP+CPU, fast path)
+#
+# If you need to pin to a specific HTP device, pass the literal id as
+# ``device_map="llama_cpp:HTP0"`` / ``"llama_cpp:HTP0,HTP1,HTP2,HTP3"``.
+_LLAMA_CPP_DEVICE_ALIASES: dict[str, tuple[str, int | None]] = {
+    'cpu': ('', 0),
+    'gpu': ('GPUOpenCL', None),
+    'npu': ('', None),
+}
 
-def _resolve_device(device_map: str) -> tuple[str | None, str | None]:
-    """Return ``(plugin_id, device_id)`` from a ``device_map`` string.
+
+def _resolve_device(device_map: str) -> tuple[str | None, str | None, int | None]:
+    """Return ``(plugin_id, device_id, ngl_override)`` from a ``device_map`` string.
 
     Accepted forms:
-      - ``"auto"`` — pick the first plugin and its first device.
+      - ``"auto"`` — pick the first plugin and let it choose its own default device.
       - ``"<plugin_id>"`` — use this plugin, let it pick the default device.
       - ``"<plugin_id>:<device_id>"`` — fully specified.
+      - ``"cpu"`` / ``"gpu"`` / ``"npu"`` — friendly alias for
+        ``llama_cpp:<translated>``; see :data:`_LLAMA_CPP_DEVICE_ALIASES`.
+      - ``"llama_cpp:cpu"`` / ``"llama_cpp:gpu"`` / ``"llama_cpp:npu"`` — same
+        translation applied to the device portion.
+
+    ``ngl_override`` is non-None when the alias implies a specific
+    ``n_gpu_layers`` value (``cpu`` → 0). Concrete ggml device ids and
+    non-friendly plugin names are passed through unchanged.
 
     Device ids are plugin-specific (e.g. for ``llama_cpp`` they come from
     ``ggml_backend_dev_name()`` and vary by build / host hardware). Call
@@ -50,15 +69,23 @@ def _resolve_device(device_map: str) -> tuple[str | None, str | None]:
     if device_map == 'auto' or not device_map:
         plugins = get_plugin_list()
         if not plugins:
-            return None, None
-        plugin_id = plugins[0]
-        devices = get_device_list(plugin_id)
-        device_id = devices[0][0] if devices else None
-        return plugin_id, device_id
+            return None, None, None
+        # Plugin only — leave device_id unset so the plugin chooses its own
+        # default layout (hybrid HTP+CPU for llama_cpp on Snapdragon).
+        return plugins[0], None, None
+
+    # Bare friendly name → llama_cpp:<alias>
+    if device_map.lower() in _LLAMA_CPP_DEVICE_ALIASES:
+        device_id, ngl = _LLAMA_CPP_DEVICE_ALIASES[device_map.lower()]
+        return 'llama_cpp', device_id or None, ngl
+
     if ':' in device_map:
         plugin_id, device_id = device_map.split(':', 1)
-        return plugin_id, device_id
-    return device_map, None
+        if plugin_id == 'llama_cpp' and device_id.lower() in _LLAMA_CPP_DEVICE_ALIASES:
+            translated, ngl = _LLAMA_CPP_DEVICE_ALIASES[device_id.lower()]
+            return plugin_id, translated or None, ngl
+        return plugin_id, device_id, None
+    return device_map, None, None
 
 
 def _resolve_local_anchor(path: str) -> str:
@@ -132,7 +159,7 @@ class AutoModelForCausalLM:
         quant: str | None = None,
         device_map: str = 'auto',
         n_ctx: int = 0,
-        n_gpu_layers: int = -1,
+        n_gpu_layers: int = 999,
         tokenizer_path: str | None = None,
         license_id: str | None = None,
         license_key: str | None = None,
@@ -147,17 +174,25 @@ class AutoModelForCausalLM:
                         Defaults to model_name_or_path when not set.
             quant: Quantization variant (e.g. 'Q4_K_M').  Used to filter files
                 when downloading from HuggingFace Hub.
-            device_map: 'auto' | '<plugin_id>' | '<plugin_id>:<device_id>'.
-                Run ``geniex-py devices`` (or ``geniex._ffi.get_device_list``)
-                to enumerate the device ids available on this machine.
+            device_map: 'auto' | 'cpu' | 'gpu' | 'npu' | '<plugin_id>' |
+                '<plugin_id>:<device_id>'. The friendly aliases
+                (``cpu|gpu|npu``) target the ``llama_cpp`` plugin; ``npu``
+                in particular leaves ``device_id`` unset so llama.cpp's
+                hybrid HTP+CPU scheduler runs (see
+                :data:`_LLAMA_CPP_DEVICE_ALIASES`). Run ``geniex-py devices``
+                (or :func:`geniex._ffi.get_device_list`) to enumerate
+                concrete device ids available on this machine.
             n_ctx: Context length (0 = model default).
-            n_gpu_layers: Layers to offload to GPU (-1 = all).
+            n_gpu_layers: Layers to offload to GPU/NPU (999 = offload all).
+                Forced to 0 when ``device_map`` resolves to CPU.
             tokenizer_path: Optional override for tokenizer file path.
             license_id: NPU licence ID.
             license_key: NPU licence key.
         """
         ensure_init()
-        plugin_id, device_id = _resolve_device(device_map)
+        plugin_id, device_id, ngl_override = _resolve_device(device_map)
+        if ngl_override is not None:
+            n_gpu_layers = ngl_override
         model_path, _mmproj, _tok = _resolve_model_sources(model_name_or_path, quant, hf_token)
         config = _build_model_config(n_ctx, n_gpu_layers, **kwargs)
 
@@ -195,7 +230,7 @@ class AutoModelForVision2Seq:
         quant: str | None = None,
         device_map: str = 'auto',
         n_ctx: int = 0,
-        n_gpu_layers: int = -1,
+        n_gpu_layers: int = 999,
         mmproj_path: str | None = None,
         tokenizer_path: str | None = None,
         license_id: str | None = None,
@@ -208,18 +243,26 @@ class AutoModelForVision2Seq:
         Args:
             model_name_or_path: HuggingFace repo id or local path.
             quant: Quantization variant.
-            device_map: 'auto' | '<plugin_id>' | '<plugin_id>:<device_id>'.
-                Run ``geniex-py devices`` (or ``geniex._ffi.get_device_list``)
-                to enumerate the device ids available on this machine.
+            device_map: 'auto' | 'cpu' | 'gpu' | 'npu' | '<plugin_id>' |
+                '<plugin_id>:<device_id>'. The friendly aliases
+                (``cpu|gpu|npu``) target the ``llama_cpp`` plugin; ``npu``
+                in particular leaves ``device_id`` unset so llama.cpp's
+                hybrid HTP+CPU scheduler runs (see
+                :data:`_LLAMA_CPP_DEVICE_ALIASES`). Run ``geniex-py devices``
+                (or :func:`geniex._ffi.get_device_list`) to enumerate
+                concrete device ids available on this machine.
             n_ctx: Context length (0 = model default).
-            n_gpu_layers: Layers to offload to GPU (-1 = all).
+            n_gpu_layers: Layers to offload to GPU/NPU (999 = offload all).
+                Forced to 0 when ``device_map`` resolves to CPU.
             mmproj_path: Path to the multimodal projector file.
             tokenizer_path: Optional override for tokenizer file path.
             license_id: NPU licence ID.
             license_key: NPU licence key.
         """
         ensure_init()
-        plugin_id, device_id = _resolve_device(device_map)
+        plugin_id, device_id, ngl_override = _resolve_device(device_map)
+        if ngl_override is not None:
+            n_gpu_layers = ngl_override
         model_path, _mmproj, _tok = _resolve_model_sources(model_name_or_path, quant, hf_token)
         config = _build_model_config(n_ctx, n_gpu_layers, **kwargs)
 
