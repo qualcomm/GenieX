@@ -6,7 +6,7 @@ Qualcomm platforms (CPU, GPU, Hexagon NPU) with a single `pip install`.
 ## Install
 
 ```bash
-pip install -i https://test.pypi.org/simple/ geniex
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
 ```
 
 Supported platforms (wheels auto-provision the native SDK on install):

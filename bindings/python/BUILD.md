@@ -21,7 +21,7 @@ The sdist itself is pure Python — it never contains prebuilt libs.
 pip install https://github.com/qcom-ai-hub/geniex/releases/download/v0.0.3-alpha.1/geniex-0.0.3a1.tar.gz
 
 # From TestPyPI (pre-release tags are auto-published)
-pip install -i https://test.pypi.org/simple/ geniex
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
 ```
 
 ### Supported platforms (automatic SDK download)
