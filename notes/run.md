@@ -105,10 +105,10 @@ If you see `Device '…' not found, skipping`, the plugin loaded but the backend
 
 ## Running QAIRT models
 
-QAIRT exposes only its Hexagon NPU device (plugin `qairt`, device_id `NPU`). The device mapping layer coerces `--device cpu` / `gpu` / `hybrid` to `npu` with a stderr warning so existing shell pipelines don't break — expect a line like:
+QAIRT exposes only its Hexagon NPU device (plugin `qairt`, device_id `NPU`). The SDK's `geniex_resolve_device` coerces `--device cpu` / `gpu` / `hybrid` to `npu` with a stderr warning so existing shell pipelines don't break — expect a line like:
 
 ```
-Warning: qairt plugin only supports NPU inference; ignoring --device=cpu and running on NPU
+Warning: qairt plugin only supports NPU inference; ignoring device='cpu' and running on NPU
 ```
 
 QAIRT models need a `geniex.json` to work. See the [granite4_micro example](https://huggingface.co/yichqian/geniex-qairt-models/blob/main/granite4_micro/geniex.json).
