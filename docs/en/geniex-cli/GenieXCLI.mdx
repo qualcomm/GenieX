@@ -10,34 +10,71 @@ import Feedback from "/snippets/page-feedback.mdx";
 ### **geniex pull**
 
 Download a model and store it locally.
-After entering the pull command, you will be guided through a setup process to choose the model type, main model file, tokenizer (optional), and extra files (optional).
 
-For `QAIRT` plugin models, no quantization precision selection is needed. For `llama.cpp` plugin models, after running `geniex pull <model-name>`, the CLI will prompt you to select a quantized version if multiple are available:
+```powershell
+geniex pull <model-name>
+```
 
-```bash
+The CLI guides you through a setup process:
+
+**1. Device selection**
+
+On first run (for both QAIRT and llama.cpp plugins), you will be prompted to select your device:
+```powershell
+Select your device
+┃ > Snapdragon X Elite CRD
+┃   Snapdragon X Plus 8-Core CRD
+┃   Snapdragon X2 Elite CRD
+```
+
+To change your device later:
+```powershell
+geniex config set device
+```
+
+**2. Quantization selection (llama.cpp plugin only)**
+
+For llama.cpp models, the CLI prompts you to pick a quantized version:
+```powershell
 Choose a quant version to download
 > Q4_0       [1.2 GiB] (default)
   Q8_0       [2.0 GiB]
   F16        [3.8 GiB]
 ```
 
+<Tip>`Q4_0` is recommended for best Hexagon NPU performance.</Tip>
+
+QAIRT plugin models come pre-quantized — no selection needed.
+
+
 ### **geniex infer — LLM**
 
 Launch an interactive chat session with a language model.
 
-```bash
-geniex infer Qualcomm/Qwen3-4B
+```powershell
+geniex infer qualcomm/Qwen3-4B
 ```
 
-Use the `--think` / `--no-think` flag to control whether the model outputs its internal reasoning process before the final response:
+**Thinking mode** — control whether the model shows its reasoning before responding:
 
-```bash
-geniex infer Qualcomm/Qwen3-4B --think
-geniex infer Qualcomm/Qwen3-4B --no-think
+```powershell
+geniex infer qualcomm/Qwen3-4B --think      # show reasoning steps
+geniex infer qualcomm/Qwen3-4B --no-think   # respond directly
 ```
 
-- `--think` — The model displays its reasoning steps before the final response.
-- `--no-think` — The model responds directly without showing reasoning.
+**Device selection** — choose which backend to run on (default: `npu`):
+
+```powershell
+# llama.cpp models support all backends
+geniex infer unsloth/Qwen3.5-0.8B-GGUF --device npu
+geniex infer unsloth/Qwen3.5-0.8B-GGUF --device gpu
+geniex infer unsloth/Qwen3.5-0.8B-GGUF --device cpu
+
+# QAIRT models only support NPU
+geniex infer qualcomm/Qwen3-4B --device npu
+```
+
+<Warning>QAIRT models run on NPU only. Using `--device cpu` or `--device gpu` with a QAIRT model will return an error.</Warning>
 
 ### **geniex infer — VLM**
 
