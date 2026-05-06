@@ -13,19 +13,19 @@ import Feedback from "/snippets/page-feedback.mdx";
 
     Download the installer:
 
-    - [GenieX CLI Download](https://github.com/qcom-ai-hub/geniex/actions/runs/25355229954/artifacts/6797986689)
+    - [GenieX CLI Download](https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/release/geniex.zip)
 
-    Run the downloaded `.exe` file and follow the installation.
+    unzip it then run the downloaded `.exe` file and follow the installation. The App is not signed yet, so you need to click "trust" then click "run anyway"
 
     ### **Running Your First Model through QAIRT plugin**
 
     Currently, we support LLM and Multimodal models.
 
     **Language Model (LLM)**
+    Remember to select `Q4_0` as quant type which has the best support with llama.cpp Hexagon backend.
 
     ```bash Windows
    geniex infer qualcomm/Qwen3-4B
-   geniex infer qualcomm/Qwen3-4B-Instruct-2507
     ```
 
     **Multimodal Model**
@@ -38,7 +38,6 @@ import Feedback from "/snippets/page-feedback.mdx";
 
     ```bash Windows
    geniex infer unsloth/Qwen3.5-0.8B-GGUF
-   geniex infer unsloth/Phi-4-mini-instruct-GGUF
     ```
 
     **Multimodal Model**
@@ -46,7 +45,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     geniex infer Qwen/Qwen3-VL-2B-Instruct-GGUF
     ```
 
-    <Tip>To try other GGUF models, visit Hugging Face, copy the path of any compatible GGUF model (e.g., `unsloth/Qwen2.5-VL-3B-Instruct-GGUF`), and replace the model path in the command above.</Tip>
+    <Tip>To try other GGUF models, visit Hugging Face, copy the path of any compatible GGUF model (e.g., `unsloth/Phi-4-mini-instruct-GGUF`), and replace the model path in the command above.</Tip>
 
   </Tab>
 
