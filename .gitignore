@@ -13,3 +13,5 @@ CMakeUserPresets.json
 modelfiles/*
 
 CLAUDE.local.md
+
+*.exe
