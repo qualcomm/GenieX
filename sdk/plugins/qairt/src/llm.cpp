@@ -93,7 +93,7 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
         GENIEX_LOG_ERROR("Failed to create QAIRT LLM pipeline for model: {}", model_name_);
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
-    pipeline_ = std::make_unique<LLMPipeline>(std::move(*pipe));
+    pipeline_      = std::make_unique<LLMPipeline>(std::move(*pipe));
     is_first_turn_ = true;
 
     GENIEX_LOG_DEBUG("QAIRT LLM created successfully: model={}", model_name_);
@@ -128,7 +128,7 @@ int32_t QairtLlm::apply_chat_template(
     if (!input->messages || input->message_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
     // Extract the last user message (and the system message, if this is the first turn).
-    const char* user_message = nullptr;
+    const char* user_message  = nullptr;
     const char* system_prompt = nullptr;
     for (int32_t i = input->message_count - 1; i >= 0; --i) {
         const auto& m = input->messages[i];
@@ -193,7 +193,7 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
     // Generate
     GenerateResult result = pipeline_->generate(input->prompt_utf8, gen_cfg, on_token_fn);
-    is_first_turn_ = false;
+    is_first_turn_        = false;
 
     // Map result to output
     output->full_text = portable_strdup(result.full_text.c_str());
