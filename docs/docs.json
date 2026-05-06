@@ -2,7 +2,6 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "GenieX",
-  "favicon": "/nexalogo.svg",
   "colors": {
     "primary": "#454545",
     "light": "#44b7bd",
@@ -40,10 +39,25 @@
             "tab": "GenieX",
             "groups": [
               {
-                "group": "Get Started",
+                "group": "GenieX CLI",
+                "icon": "code",
                 "pages": [
-                  "en/geniex-cli/overview",
                   "en/geniex-cli/quickstart",
+                  "en/geniex-cli/GenieXAPI",
+                  "en/geniex-cli/GenieXCLI"
+                ]
+              },
+              {
+                "group": "Python Library",
+                "icon": "python",
+                "pages": [
+                  "en/geniex-python/quickstart",
+                  "en/geniex-python/api-reference"
+                ]
+              },
+              {
+                "group": "Misc",
+                "pages": [
                   {
                     "group": "Supported Models",
                     "pages": [
@@ -51,7 +65,7 @@
                       "en/geniex-cli/gguf"
                     ]
                   },
-                   {
+                  {
                     "group": "Device Coverage",
                     "pages": [
                       "en/geniex-cli/devices-compute",
@@ -59,23 +73,6 @@
                       "en/geniex-cli/devices-iot"
                     ]
                   }
-                ]
-              },
-              {
-                "group": "GenieX CLI Usage",
-                "icon": "code",
-                "pages": [
-                  "en/geniex-cli/GenieXCLI",
-                  "en/geniex-cli/GenieXAPI"
-                ]
-              },
-              {
-                "group": "Python Library",
-                "icon": "python",
-                "pages": [
-                  "en/geniex-python/overview",
-                  "en/geniex-python/quickstart",
-                  "en/geniex-python/api-reference"
                 ]
               }
             ]
