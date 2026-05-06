@@ -34,7 +34,9 @@ from geniex import AutoModelForCausalLM
 # GGUF Model Example
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B-GGUF",     # HF repo id of a GGUF model, or a local path to a .gguf LLM model
-    device_map="llama_cpp",     # format is <plugin>:<device> - device specification is pending, accept plugin id only for now
+    device_map="auto",          # "auto" (default) | "cpu" | "gpu" | "npu" | "hybrid"
+                                # | "<plugin>" | "<plugin>:<device>"
+                                # auto -> hybrid for llama_cpp (fast HTP+CPU path), npu for qairt
 )
 
 # QAIRT Model Example

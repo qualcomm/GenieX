@@ -46,6 +46,7 @@ typedef enum {
 
     GENIEX_ERROR_COMMON_UNKNOWN           = -100000, /**< Unknown error */
     GENIEX_ERROR_COMMON_INVALID_INPUT     = -100001, /**< Invalid input parameters or handle */
+    GENIEX_ERROR_COMMON_INVALID_DEVICE    = -100002, /**< Unknown device alias (cpu/gpu/npu/hybrid) */
     GENIEX_ERROR_COMMON_MEMORY_ALLOCATION = -100003, /**< Memory allocation failed */
     GENIEX_ERROR_COMMON_FILE_NOT_FOUND    = -100004, /**< File not found or inaccessible */
     GENIEX_ERROR_COMMON_NOT_INITIALIZED   = -100007, /**< Library not initialized */
@@ -292,6 +293,82 @@ typedef struct {
  * @note The returned device_list TODO
  */
 GENIEX_API int32_t geniex_get_device_list(const geniex_GetDeviceListInput* input, geniex_GetDeviceListOutput* output);
+
+/**
+ * Input for geniex_resolve_device.
+ *
+ * `mode` is a user-facing alias: one of "cpu", "gpu", "npu", "hybrid",
+ * the empty string, or "auto" (both of which mean "let the SDK pick the
+ * plugin's default"). Matching is case-insensitive; surrounding whitespace
+ * is trimmed.
+ *
+ * `model_name` is an optional hint (may be NULL) that lets the SDK apply
+ * model-specific overrides to the "auto" default — e.g. `llama_cpp` models
+ * whose name contains `gpt-oss` default to `npu` instead of `hybrid`
+ * because the hybrid per-tensor scheduler can't place all their ops on
+ * HTP end-to-end.
+ *
+ * `ngl_default` is forwarded as the caller's preferred `n_gpu_layers`
+ * value. The resolver returns it unchanged in `ngl` except when the
+ * alias forces a specific value (cpu → 0, hybrid → 999).
+ */
+typedef struct {
+    geniex_PluginId plugin_id;   /**< Plugin identifier (must be non-NULL) */
+    const char*     model_name;  /**< Optional model name hint; NULL is OK */
+    const char*     mode;        /**< User-facing alias; NULL / "" / "auto" → plugin default */
+    int32_t         ngl_default; /**< Caller's default n_gpu_layers */
+} geniex_ResolveDeviceInput;
+
+/**
+ * Output for geniex_resolve_device.
+ *
+ * `device_id` is the concrete string the SDK plugins expect (e.g.
+ * "HTP0", "GPUOpenCL", "NPU"). It may be NULL, meaning "don't set
+ * device_id on the create input" (the `cpu` and `hybrid` aliases for
+ * llama_cpp). Callers that set the value onto a plugin input must copy
+ * it and then free the output with `geniex_free` (see memory notes).
+ *
+ * `ngl` is the resolved `n_gpu_layers` value, already adjusted for the
+ * alias (cpu → 0, hybrid → 999, otherwise `ngl_default` passes through).
+ *
+ * `warning` is non-NULL when the alias was coerced (e.g. qairt only has
+ * an NPU device, so cpu/gpu/hybrid fall back to NPU with a warning).
+ * Callers should surface the warning and continue — geniex_resolve_device
+ * never returns an error for coerced modes.
+ *
+ * An error (GENIEX_ERROR_COMMON_INVALID_DEVICE) is returned only when
+ * `mode` is a non-empty, non-"auto" string that is not one of the
+ * documented aliases. Both `device_id` and `warning` are heap-allocated;
+ * call `geniex_free` on each non-NULL pointer when done.
+ */
+typedef struct {
+    char*   device_id; /**< Resolved device id; may be NULL (caller must free with geniex_free) */
+    int32_t ngl;       /**< Resolved n_gpu_layers */
+    char*   warning;   /**< Optional coercion warning; may be NULL (caller must free with geniex_free) */
+} geniex_ResolveDeviceOutput;
+
+/**
+ * @brief Resolve a user-facing device alias into the concrete
+ *        (device_id, n_gpu_layers) pair the SDK plugins expect.
+ *
+ * This is the single source of truth for the cpu / gpu / npu / hybrid
+ * alias table. Language bindings (Go CLI, Python, Android/JNI) should
+ * call this instead of reimplementing the mapping locally.
+ *
+ * @param input[in]   Non-NULL pointer to the input struct.
+ * @param output[out] Non-NULL pointer to the output struct. On success,
+ *                    `device_id` / `warning` may be heap-allocated and
+ *                    must be freed by the caller with `geniex_free`.
+ *
+ * @return GENIEX_SUCCESS on success (including coerced aliases, where
+ *         `warning` is populated). Returns GENIEX_ERROR_COMMON_INVALID_INPUT
+ *         if `input` / `output` / `input->plugin_id` is NULL, or
+ *         GENIEX_ERROR_COMMON_INVALID_DEVICE if `mode` is a non-empty
+ *         string that is not a documented alias.
+ *
+ * @thread_safety: Thread-safe (pure function).
+ */
+GENIEX_API int32_t geniex_resolve_device(const geniex_ResolveDeviceInput* input, geniex_ResolveDeviceOutput* output);
 
 /* ====================  Data Structures  ==================================== */
 

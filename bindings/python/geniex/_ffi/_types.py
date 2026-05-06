@@ -287,6 +287,23 @@ class geniex_GetDeviceListOutput(Structure):
     ]
 
 
+class geniex_ResolveDeviceInput(Structure):
+    _fields_ = [
+        ('plugin_id', c_char_p),
+        ('model_name', c_char_p),
+        ('mode', c_char_p),
+        ('ngl_default', c_int32),
+    ]
+
+
+class geniex_ResolveDeviceOutput(Structure):
+    _fields_ = [
+        ('device_id', c_void_p),  # heap char*, caller frees with geniex_free
+        ('ngl', c_int32),
+        ('warning', c_void_p),  # heap char*, caller frees with geniex_free
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Model-manager structs (mirrors sdk/model-manager/include/geniex_model.h)
 # ---------------------------------------------------------------------------

@@ -9,6 +9,46 @@ They are not interchangeable; the plugin is chosen per model.
 
 > For the CI/S3 signing pipeline that backs HTP releases, see [release.md § Hexagon HTP signing](release.md#hexagon-htp-signing).
 
+## Device mapping
+
+The alias table lives in the **SDK**, not in the bindings:
+[`sdk/src/device.cpp`](../sdk/src/device.cpp) exposes
+`geniex_resolve_device` via `sdk/include/geniex.h`. The Go wrapper
+([`bindings/go/device.go`](../bindings/go/device.go)), Python wrapper
+(`resolve_device` in
+[`bindings/python/geniex/_ffi/_api.py`](../bindings/python/geniex/_ffi/_api.py)),
+and Android/JNI wrapper (`resolve_device` in
+[`bindings/android/app/src/main/cpp/jniutils.cpp`](../bindings/android/app/src/main/cpp/jniutils.cpp))
+are all thin FFI shims over that one function. Editing alias semantics
+means editing `sdk/src/device.cpp`, rebuilding the SDK bridge
+(`/build`), and possibly updating all three FFI stubs if the struct
+shape changes (see [CONTRIBUTING.md](../CONTRIBUTING.md) for the
+FFI-sync rule).
+
+| Alias    | `device_id` sent to SDK | `n_gpu_layers` override | Use case                                                                                    |
+|----------|-------------------------|-------------------------|---------------------------------------------------------------------------------------------|
+| `cpu`    | empty                   | `0`                     | Pure CPU.                                                                                   |
+| `gpu`    | `GPUOpenCL`             | (none; caller default)  | Adreno via OpenCL. Pair with a high `--ngl`.                                               |
+| `npu`    | `HTP0`                  | (none; caller default)  | Pinned single-session HTP. Deterministic, slower on LLMs — see § NPU device selection.      |
+| `hybrid` | empty                   | `999`                   | `llama_cpp` fast path: per-tensor HTP+CPU scheduler. Default when nothing is passed.         |
+
+Defaults when the user passes nothing (`--device ""` / `device_map="auto"`):
+`hybrid` for `llama_cpp`, `npu` for `qairt`. QAIRT exposes only one
+device, so `cpu` / `gpu` / `hybrid` against a qairt model get coerced to
+`NPU` with a warning on stderr — the CLI does **not** exit early.
+
+**Model-specific default override**: the SDK also inspects the model
+name when the caller passes no device. Families listed in
+`is_llama_cpp_hybrid_incompatible` ([`sdk/src/device.cpp`](../sdk/src/device.cpp))
+— currently anything whose name contains `gpt-oss` — default to `npu`
+instead of `hybrid`, because the per-tensor hybrid scheduler can't
+place all of their ops on HTP end-to-end. Pass `--device hybrid`
+explicitly to override the override. Adding a new family means editing
+that one function and rebuilding the SDK bridge.
+
+Concrete ids (`HTP0,HTP1,HTP2,HTP3`, `GPUOpenCL`, etc.) pass through
+unchanged when supplied via `<plugin>:<device>` or manifest `DeviceId`.
+
 ## Backend selection (llama_cpp)
 
 `llama_cpp` supports OpenCL and Hexagon on Windows ARM64. The backend is driven by two inputs on `geniex_LlmCreateInput`:
@@ -18,45 +58,36 @@ They are not interchangeable; the plugin is chosen per model.
 
 ### NPU device selection (llama_cpp)
 
-**Critical gotcha: there are two code paths and they behave very differently.**
+`sdk/plugins/llama_cpp/src/llm.cpp:73-114` branches on whether `device_id` is non-null, producing **two runtime paths** with very different performance:
 
-`sdk/plugins/llama_cpp/src/llm.cpp:73-114` branches on whether `device_id` is non-null:
+1. **`device_id` null + `n_gpu_layers=999`** (the `hybrid` alias) → llama.cpp's **per-tensor scheduler**. It inspects each tensor and assigns it to whichever registered backend supports the op (HTP for computable ops, CPU for fallbacks), using CPU-resident buffers for the fallback tensors. **Fast path.** On X1E80100 + Qwen3-1.7B-Q8_0: ~90 tok/s prefill, ~27 tok/s decode, ~200 ms TTFT. Task Manager shows NPU pegged.
 
-1. **`device_id` null + `n_gpu_layers=999`** → llama.cpp's **hybrid dispatch**. It inspects each tensor and assigns it to whichever registered backend supports the op (HTP for computable, CPU for fallbacks), using CPU-resident buffers for the fallback tensors. **This is the fast path.** On X1E80100 + Qwen3-1.7B-Q8_0: ~90 tok/s prefill, ~27 tok/s decode, ~200 ms TTFT. Task Manager shows NPU pegged.
+2. **`device_id="HTP0"`** (the `npu` alias) → plugin calls `ggml_backend_dev_by_name("HTP0")` and sets `mpar.devices = {HTP0}`. This **pins the model to a single-device layout** and disables per-tensor hybrid assignment. Any op HTP doesn't support gets handled less efficiently. On the same model: ~60 tok/s prefill, ~22 tok/s decode, ~350 ms TTFT. Task Manager shows CPU pegged (the host thread driving HTP busy-waits, *plus* all fallbacks run there). Useful when you want deterministic layout / all weights on a known device.
 
-2. **`device_id="HTP0"`** → plugin calls `ggml_backend_dev_by_name("HTP0")` and sets `mpar.devices = {HTP0}`. This **pins the model to a single-device layout** and disables per-tensor hybrid assignment. Any op HTP doesn't support gets handled less efficiently. On the same model: ~60 tok/s prefill, ~22 tok/s decode, ~350 ms TTFT. Task Manager shows CPU pegged (because the CPU core driving HTP busy-waits, *plus* all the fallbacks run there). This is the **slow path** and not what the user wants from `--device npu`.
+Bonus: when the `device_id` string starts with `"HTP0"`, the plugin also flips KV cache to Q8_0 and enables flash-attn (`llm.cpp:136-140`). Orthogonal to perf — path (2) is slower than (1) even with those enabled.
 
-Bonus: when the `device_id` string starts with `"HTP0"`, the plugin also flips KV cache to Q8_0 and enables flash-attn (`llm.cpp:136-140`). That side effect is orthogonal to the perf problem — even with those enabled, path (2) is slower than (1).
+**Rule of thumb:** use `--device hybrid` (or leave `--device` empty) for fastest throughput; use `--device npu` when you need determinism or when debugging placement. Pass literal `"HTP0"` / `"HTP0,HTP1,HTP2,HTP3"` via the manifest `DeviceId` when the user explicitly wants that layout.
 
-**Rule for tooling that wires up `--device npu`:** leave `device_id=""` and set `n_gpu_layers=999`. Only forward a literal `"HTP0"` / `"HTP0,HTP1,HTP2,HTP3"` when the *user* typed that — never synthesize it from a friendly alias.
-
-This regression was introduced in commit `fb98467` (`add device parameter`), which made `resolveDevice()` set `deviceID = "HTP0"` for `--device npu`. First shipped in `v0.1.2-rc.1`, still present in `v0.1.2-rc.2`. The Python binding initially copied the same mistake and was corrected in `bindings/python/geniex/auto.py:_LLAMA_CPP_DEVICE_ALIASES`.
-
-### Device table
-
-| Target      | `device_id` to pass                      | `n_gpu_layers` | Notes                                                                                              |
-|-------------|------------------------------------------|----------------|----------------------------------------------------------------------------------------------------|
-| Hexagon NPU | **empty**                                | `999`          | Fast hybrid path. Let llama.cpp place tensors across HTP + CPU buffers.                           |
-| Adreno GPU  | `GPUOpenCL`                              | `999`          | All layers to OpenCL.                                                                              |
-| Pin to HTP  | `HTP0` or `HTP0,HTP1,HTP2,HTP3`          | `999`          | Slow single-device path; also flips KV cache→Q8_0 + flash-attn. Use only if you explicitly need it. |
-| CPU         | empty                                    | `0`            | Default.                                                                                           |
+History: the `fb98467` commit ("add device parameter") originally made `--device npu` synthesize `device_id="HTP0"`, collapsing the fast path. That was reverted (hybrid became the implicit default), then the two semantics were split into explicit `npu` / `hybrid` aliases to let callers pick.
 
 ### Running from the CLI
 
 Use `--device` (`-d`):
 
 ```powershell
-geniex infer Qwen/Qwen3-1.7B-GGUF --device npu -p "Hello"
-geniex infer Qwen/Qwen3-1.7B-GGUF --device gpu -p "Hello"
-geniex infer Qwen/Qwen3-1.7B-GGUF --device cpu -p "Hello"
+geniex infer Qwen/Qwen3-1.7B-GGUF                 # hybrid (default) for llama.cpp
+geniex infer Qwen/Qwen3-1.7B-GGUF --device npu    # pinned HTP0
+geniex infer Qwen/Qwen3-1.7B-GGUF --device hybrid # explicit hybrid
+geniex infer Qwen/Qwen3-1.7B-GGUF --device gpu
+geniex infer Qwen/Qwen3-1.7B-GGUF --device cpu
 ```
 
-Or override `DeviceId` in the per-model manifest:
+Or override `DeviceId` in the per-model manifest (takes precedence when `--device` is unset and the plugin is not `qairt`):
 
 ```powershell
 $m = "$env:USERPROFILE\.cache\geniex\models\NexaAI\Qwen3-0.6B-GGUF\geniex.json"
 $j = Get-Content $m -Raw | ConvertFrom-Json
-$j.DeviceId = ""    # NPU hybrid; or "GPUOpenCL" / "CPU" / literal "HTP0,HTP1,..."
+$j.DeviceId = ""    # hybrid; or "GPUOpenCL" / "HTP0,HTP1,HTP2,HTP3" / etc.
 $j | ConvertTo-Json -Depth 20 | Set-Content $m
 ```
 
@@ -64,15 +95,21 @@ $j | ConvertTo-Json -Depth 20 | Set-Content $m
 
 The SDK's default log handler is a no-op in release builds (`sdk/src/ml.cpp:36-60`), so `stdout`/`stderr` stays silent and "did it actually use HTP?" is easy to guess wrong. Three ways to check:
 
-- **Python:** set `GENIEX_LOG=INFO`. The Python binding installs a `geniex_set_log` callback that routes SDK messages (`Found device: HTP0`, `Using N device(s)`, etc.) to stderr. If you see `Found device: …` lines, you're on the **slow path**; absence = hybrid path.
-- **Windows:** Task Manager's NPU graph. Hybrid path lights it up; single-device `HTP0` path pegs the CPU instead (the host thread busy-waits HTP the whole inference).
-- **Signature:** on Snapdragon X1E80100 + a 1.7B Q8_0 model, hybrid gives prefill ≳ 80 tok/s and TTFT ≲ 250 ms. Pinned-`HTP0` gives prefill ≲ 65 tok/s and TTFT ≳ 340 ms. Prefill and TTFT separate the two paths more cleanly than decode.
+- **Python:** set `GENIEX_LOG=INFO`. The Python binding installs a `geniex_set_log` callback that routes SDK messages (`Found device: HTP0`, `Using N device(s)`, etc.) to stderr. If you see `Found device: …` lines you're on the **pinned-`HTP0` path** (the `npu` alias); absence = hybrid path.
+- **Windows:** Task Manager's NPU graph. Hybrid lights it up; pinned-`HTP0` pegs the CPU (host thread busy-waits HTP the whole inference).
+- **Signature:** on Snapdragon X1E80100 + a 1.7B Q8_0 model, hybrid gives prefill ≳ 80 tok/s and TTFT ≲ 250 ms; pinned-`HTP0` gives prefill ≲ 65 tok/s and TTFT ≳ 340 ms. Prefill and TTFT separate the two paths more cleanly than decode.
 
 If you see `Device '…' not found, skipping`, the plugin loaded but the backend DLL did not — verify test-signing is still on (for HTP) or that `ggml-opencl.dll` is present in `sdk/pkg-geniex/lib/llama_cpp/`.
 
 > Q4_K_M is a suboptimal quant for HTP — it prefers Q4_0 / Q8_0, so some tensors fall back to CPU. Use Q4_0 for a clean NPU run.
 
 ## Running QAIRT models
+
+QAIRT exposes only its Hexagon NPU device (plugin `qairt`, device_id `NPU`). The SDK's `geniex_resolve_device` coerces `--device cpu` / `gpu` / `hybrid` to `npu` with a stderr warning so existing shell pipelines don't break — expect a line like:
+
+```
+Warning: qairt plugin only supports NPU inference; ignoring device='cpu' and running on NPU
+```
 
 QAIRT models need a `geniex.json` to work. See the [granite4_micro example](https://huggingface.co/yichqian/geniex-qairt-models/blob/main/granite4_micro/geniex.json).
 

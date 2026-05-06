@@ -23,9 +23,11 @@ data class ModelConfig(
     var nSeqMax: Int = 1,
 
     /**
-     * Number of layers to offload to GPU or NPU, 0 = all on CPU
-     * When [InputPluginBase.device_id] is [DeviceIdValue.GPU] or [DeviceIdValue.NPU],
-     * the value of nGpuLayers should be greater than 0 and less than or equal to 999.
+     * Number of layers to offload to GPU / NPU. The JNI layer overrides
+     * this when [InputPluginBase.device_id] is [DeviceIdValue.CPU] (forces
+     * 0) or [DeviceIdValue.HYBRID] (forces 999). For [DeviceIdValue.GPU]
+     * and [DeviceIdValue.NPU] the caller's value is used as-is; set it
+     * to 999 to offload every layer.
      */
     var nGpuLayers: Int = 0,
 

@@ -28,10 +28,27 @@ jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data);
 std::string jstring2str(JNIEnv* env, jstring jstr);
 
 /**
- * Translate user-friendly device_id to internal device string.
- * Mappings: "dev0" -> "HTP0,HTP1,HTP2,HTP3", "gpu" -> "GPUOpenCL"
+ * Result of resolving a (plugin_id, device_id_alias) pair. When
+ * `ngl_override` is non-negative it must be copied into the caller's
+ * `geniex_ModelConfig.n_gpu_layers` to match the alias semantics
+ * (e.g. "cpu" -> 0, "hybrid" -> 999).
  */
-std::string translate_device_id(const std::string& device_id);
+struct ResolvedDevice {
+    std::string device_id;
+    int32_t     ngl_override = -1;  // <0 = leave caller's value untouched
+    std::string warning;            // non-empty when the alias was coerced
+};
+
+/**
+ * Thin wrapper over the SDK's `geniex_resolve_device`. The alias table
+ * (cpu / gpu / npu / hybrid, model-specific overrides, qairt coercion)
+ * lives in `sdk/src/device.cpp` — this helper just marshals the result
+ * into Android-local types so the 8 JNI call sites stay stable.
+ *
+ * `model_name` may be null when unknown; it's only consulted for
+ * model-specific default overrides.
+ */
+ResolvedDevice resolve_device(const char* plugin_id, const char* model_name, const std::string& raw_device_id);
 
 const char* hold_c_str(const std::string& s);
 

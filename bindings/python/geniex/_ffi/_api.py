@@ -35,6 +35,8 @@ from ._types import (
     geniex_ModelListOutput,
     geniex_ModelPaths,
     geniex_ModelPullInput,
+    geniex_ResolveDeviceInput,
+    geniex_ResolveDeviceOutput,
     geniex_VlmApplyChatTemplateInput,
     geniex_VlmApplyChatTemplateOutput,
     geniex_VlmCreateInput,
@@ -136,6 +138,9 @@ def _bind_all() -> None:
 
     lib.geniex_get_device_list.argtypes = [POINTER(geniex_GetDeviceListInput), POINTER(geniex_GetDeviceListOutput)]
     lib.geniex_get_device_list.restype = c_int32
+
+    lib.geniex_resolve_device.argtypes = [POINTER(geniex_ResolveDeviceInput), POINTER(geniex_ResolveDeviceOutput)]
+    lib.geniex_resolve_device.restype = c_int32
 
     # LLM
     lib.geniex_llm_create.argtypes = [POINTER(geniex_LlmCreateInput), POINTER(c_void_p)]
@@ -316,6 +321,41 @@ def get_device_list(plugin_id: str) -> list[tuple[str, str]]:
     if out.device_names:
         lib.geniex_free(out.device_names)
     return result
+
+
+def resolve_device(
+    plugin_id: str,
+    model_name: str | None,
+    mode: str | None,
+    ngl_default: int,
+) -> tuple[str | None, int, str | None]:
+    """Call the SDK's device alias resolver.
+
+    Returns ``(device_id, ngl, warning)``. ``device_id`` is ``None`` when
+    the alias maps to "leave device_id unset" (cpu / hybrid on llama_cpp).
+    ``warning`` is non-None when the alias was coerced (e.g. qairt →
+    NPU). Raises :class:`GeniexError` when ``mode`` is an unknown alias.
+    """
+    _ensure_bound()
+    lib = load_library()
+    inp = geniex_ResolveDeviceInput(
+        plugin_id=plugin_id.encode(),
+        model_name=model_name.encode() if model_name else None,
+        mode=mode.encode() if mode else None,
+        ngl_default=int(ngl_default),
+    )
+    out = geniex_ResolveDeviceOutput()
+    _check(lib.geniex_resolve_device(byref(inp), byref(out)))
+
+    device_id: str | None = None
+    warning: str | None = None
+    if out.device_id:
+        device_id = c_char_p(out.device_id).value.decode()
+        lib.geniex_free(out.device_id)
+    if out.warning:
+        warning = c_char_p(out.warning).value.decode()
+        lib.geniex_free(out.warning)
+    return device_id, int(out.ngl), warning
 
 
 def version() -> str:

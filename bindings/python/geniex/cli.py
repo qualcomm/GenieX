@@ -229,7 +229,7 @@ def _cmd_chat(args: argparse.Namespace) -> int:
         n_ctx=args.n_ctx,
     )
     elapsed = time.monotonic() - t0
-    plugin_id, device_id, _ngl = _resolve_device(args.device)
+    plugin_id, device_id, _ngl = _resolve_device(args.device, args.model)
     where = f'{plugin_id}:{device_id}' if plugin_id and device_id else (plugin_id or args.device)
     print(f'{_DIM}done ({elapsed:.1f}s, {where}){_RESET}')
 
@@ -394,8 +394,9 @@ def _build_parser() -> argparse.ArgumentParser:
         '--device',
         default='auto',
         help=(
-            "'auto' | 'cpu' | 'gpu' | 'npu' | '<plugin>' | '<plugin>:<device>' "
-            "(run 'geniex-py devices' to list concrete ids)"
+            "'auto' | 'cpu' | 'gpu' | 'npu' | 'hybrid' | '<plugin>' | "
+            "'<plugin>:<device>' (default: hybrid for llama_cpp, npu for "
+            "qairt; run 'geniex-py devices' to list concrete ids)"
         ),
     )
     chat.set_defaults(func=_cmd_chat)

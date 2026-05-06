@@ -24,6 +24,8 @@ const char* geniex_get_error_message(const geniex_ErrorCode error_code) {
             return "Unknown error";
         case GENIEX_ERROR_COMMON_INVALID_INPUT:
             return "Invalid input parameters or handle";
+        case GENIEX_ERROR_COMMON_INVALID_DEVICE:
+            return "Unknown device alias (expected one of: cpu, gpu, npu, hybrid)";
         case GENIEX_ERROR_COMMON_MEMORY_ALLOCATION:
             return "Memory allocation failed";
         case GENIEX_ERROR_COMMON_FILE_NOT_FOUND:

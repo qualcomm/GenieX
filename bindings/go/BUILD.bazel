@@ -11,6 +11,7 @@ go_library(
         "asr.go",
         "common.go",
         "cv.go",
+        "device.go",
         "diarize.go",
         "embedder.go",
         "image_gen.go",

@@ -24,23 +24,26 @@ val plugin_id: String?  // Backend plugin to use
 
 ## **Device Selection**
 
-Control which hardware device processes your model.
+Control which hardware device processes your model via a friendly alias.
 
 ```kotlin
-val device_id: String?  // Device to use for the model
+val device_id: String?  // "cpu" | "gpu" | "npu" | "hybrid" | null
 ```
 
-**Available Values:**
-- `null` - CPU (default)
-- `"gpu"` - GPU acceleration via OpenCL
-- `"dev0"` - Qualcomm Hexagon NPU acceleration
+**Available Values** (also exposed as [`DeviceIdValue`](../../../bindings/android/app/src/main/java/com/geniex/sdk/bean/InputPluginBase.kt)):
+
+| Alias      | What it does                                                                                     |
+|------------|--------------------------------------------------------------------------------------------------|
+| `null`     | Plugin default — `hybrid` for `llama_cpp`, `npu` for `qairt`.                                    |
+| `"cpu"`    | Pure CPU. JNI forces `nGpuLayers = 0`.                                                            |
+| `"gpu"`    | Adreno GPU via OpenCL (`llama_cpp` only).                                                         |
+| `"npu"`    | Pinned Hexagon session (`HTP0`). Deterministic layout; slower than `hybrid` on LLMs.              |
+| `"hybrid"` | `llama_cpp` per-tensor HTP+CPU scheduler. JNI forces `nGpuLayers = 999`. Fastest LLM path.        |
 
 <Note>
-**Hardware Acceleration with GGUF (`plugin_id = "cpu_gpu"`):**
-- **GPU**: set `device_id = "gpu"` and set `nGpuLayers > 0` in `ModelConfig`
-- **Hexagon NPU (GGML backend)**: set `device_id = "dev0"` and set `nGpuLayers > 0` in `ModelConfig`
-
-If `nGpuLayers = 0` (or `device_id = null`), the model runs on CPU.
+QAIRT (`plugin_id = "qairt"`) only exposes its NPU device. If you pass
+`"cpu"`, `"gpu"`, or `"hybrid"` with a QAIRT model the JNI logs a
+warning and falls back to NPU — it will not fail the call.
 </Note>
 
 ---

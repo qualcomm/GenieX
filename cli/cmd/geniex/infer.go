@@ -95,7 +95,7 @@ var (
 	llmFlags = func() *pflag.FlagSet {
 		llmFlags := pflag.NewFlagSet("LLM/VLM Model", pflag.ExitOnError)
 		llmFlags.SortFlags = false
-		llmFlags.StringVarP(&device, "device", "d", "npu", "device to run on: cpu, gpu, or npu")
+		llmFlags.StringVarP(&device, "device", "d", "", "device to run on: cpu, gpu, npu, or hybrid (default: hybrid for llama.cpp, npu for qairt)")
 		llmFlags.Int32VarP(&ngl, "ngl", "n", 999, "number of layers to offload to gpu/npu")
 		llmFlags.Int32VarP(&nctx, "nctx", "", 4096, "context window size")
 		llmFlags.Int32VarP(&maxTokens, "max-tokens", "", 2048, "max tokens")
@@ -329,45 +329,25 @@ func loadStopSequences() ([]string, error) {
 	return stopSequences, nil
 }
 
-// resolveDevice applies --device flag logic:
-// - QAIRT plugin: only npu is accepted; cpu/gpu exits with an error
-// - llama.cpp plugin: cpu → ngl=0, gpu → OpenCL backend, npu → HTP backend
+// resolveDevice maps the --device flag to (device_id, n_gpu_layers) via
+// the SDK's geniex_resolve_device (see sdk/src/device.cpp). An empty
+// --device picks the plugin's preferred default (hybrid for llama.cpp,
+// npu for qairt — with model-specific overrides, e.g. gpt-oss on
+// llama_cpp defaults to npu). When --device is unset and the manifest
+// pins a specific DeviceId (e.g. "HTP0,HTP1,HTP2,HTP3"), the manifest
+// wins — qairt is still coerced to its NPU device with a warning.
 func resolveDevice(manifest *types.ModelManifest) (deviceID string, nglOverride int32) {
-	deviceID = manifest.DeviceId
-	nglOverride = ngl
-
-	if device == "" {
-		return
+	if device == "" && manifest.DeviceId != "" && manifest.PluginId != geniex_sdk.PluginQairt {
+		return manifest.DeviceId, ngl
 	}
 
-	dev := strings.ToLower(device)
-	if dev != "cpu" && dev != "gpu" && dev != "npu" {
-		fmt.Println(render.GetTheme().Error.Sprintf("Error: invalid --device value %q, must be cpu, gpu, or npu", device))
+	deviceID, nglOverride, warning, err := geniex_sdk.ResolveDevice(manifest.PluginId, manifest.ModelName, device, ngl)
+	if err != nil {
+		fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 		os.Exit(1)
 	}
-
-	if manifest.PluginId == "qairt" {
-		// QAIRT models only run on NPU. Reject cpu/gpu rather than silently
-		// coercing — --device cpu/gpu is only meaningful for llama.cpp GGUF models.
-		if dev != "npu" {
-			fmt.Println(render.GetTheme().Error.Sprintf("Error: --device %s is not supported for QAIRT models (%s); QAIRT runs on NPU only. Use a llama.cpp GGUF model for cpu/gpu inference.", dev, manifest.Name))
-			os.Exit(1)
-		}
-		deviceID = "NPU"
-		return
-	}
-
-	// llama.cpp plugin
-	switch dev {
-	case "cpu":
-		nglOverride = 0
-		deviceID = ""
-	case "gpu":
-		deviceID = "GPUOpenCL"
-	case "npu":
-		if deviceID == "" {
-			deviceID = "HTP0"
-		}
+	if warning != "" {
+		fmt.Println(render.GetTheme().Warning.Sprintf("Warning: %s", warning))
 	}
 	return
 }

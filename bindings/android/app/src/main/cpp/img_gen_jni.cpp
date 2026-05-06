@@ -243,15 +243,14 @@ geniex_ImageGenCreateInput extract_image_gen_create_input(JNIEnv *env, jobject i
 
     out.scheduler_config_path = getStringField(env, cls, inputObj, "scheduler_config_path");
     out.plugin_id             = getStringField(env, cls, inputObj, "plugin_id");
-    // Translate user-friendly device_id to internal device string
-    const char *raw_device_id = getStringField(env, cls, inputObj, "device_id");
-    if (raw_device_id) {
-        std::string translated = jniutils::translate_device_id(raw_device_id);
-        out.device_id          = jniutils::hold_c_str(translated);
-        LOGd("device_id translated: %s -> %s", raw_device_id, translated.c_str());
-    } else {
-        out.device_id = nullptr;
-    }
+    // Resolve user-friendly device_id (cpu/gpu/npu/hybrid) via the shared helper.
+    const char              *raw_device_id = getStringField(env, cls, inputObj, "device_id");
+    jniutils::ResolvedDevice rdev =
+        jniutils::resolve_device(out.plugin_id, out.model_name, raw_device_id ? raw_device_id : "");
+    out.device_id = rdev.device_id.empty() ? nullptr : jniutils::hold_c_str(rdev.device_id);
+    LOGd("device_id resolved: raw=%s, device_id=%s",
+        raw_device_id ? raw_device_id : "(null)",
+        rdev.device_id.empty() ? "(null)" : rdev.device_id.c_str());
 
     env->DeleteLocalRef(inputObj);
     return out;

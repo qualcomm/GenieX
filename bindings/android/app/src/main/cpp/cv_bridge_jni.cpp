@@ -184,20 +184,21 @@ geniex_CVCreateInput extract_cv_create_input(JNIEnv* env, jobject inputObj) {
     }
 
     // === device_id ===
-    fid = env->GetFieldID(cls, "device_id", "Ljava/lang/String;");
-    if (check_jni_exception(env, "GetFieldID(device_id)") || !fid) {
-        LOGe("extract_cv_create_input field 'device_id' not found");
-    } else {
-        jstr = (jstring)env->GetObjectField(inputObj, fid);
-        if (check_jni_exception(env, "GetObjectField(device_id)") || !jstr) {
-            LOGd("extract_cv_create_input 'device_id' is null");
-        } else {
-            std::string s          = jstring2str(env, jstr);
-            std::string translated = translate_device_id(s);
-            out.device_id          = hold_c_str(translated);
-            LOGd("extract_cv_create_input device_id = %s (translated from %s)", translated.c_str(), s.c_str());
-            env->DeleteLocalRef(jstr);
+    {
+        std::string raw_dev;
+        fid = env->GetFieldID(cls, "device_id", "Ljava/lang/String;");
+        if (fid) {
+            jstr = (jstring)env->GetObjectField(inputObj, fid);
+            if (jstr) {
+                raw_dev = jstring2str(env, jstr);
+                env->DeleteLocalRef(jstr);
+            }
         }
+        ResolvedDevice rdev = resolve_device(out.plugin_id, out.model_name, raw_dev);
+        out.device_id       = rdev.device_id.empty() ? nullptr : hold_c_str(rdev.device_id);
+        LOGd("extract_cv_create_input device_id = %s (from raw='%s')",
+            rdev.device_id.empty() ? "(null)" : rdev.device_id.c_str(),
+            raw_dev.c_str());
     }
 
     // === license_id ===
