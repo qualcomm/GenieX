@@ -12,35 +12,38 @@ We curated a list of top, high quality models in QAIRT `bin` format.
 | qualcomm/Qwen3-4B | Qualcomm AI Hub |
 | qualcomm/Qwen3-4B-Instruct |  Qualcomm AI Hub |
 | qualcomm/Qwen2.5-VL-7B | Qualcomm AI Hub |
-| Llama-v3.1-8B-Instruct | Self converted and uploaded to personal Hugging Face |
-| Llama-SEA-LION-v3.5-8B-R | Self converted and uploaded to personal Hugging Face |
-| Llama-v3.2-1B-Instruct | Self converted and uploaded to personal Hugging Face |
-| Llama-v3.2-3B-Instruct | Self converted and uploaded to personal Hugging Face |
-| Llama-v3-8B-Instruct | Self converted and uploaded to personal Hugging Face |
-| Llama-v3-ELYZA-JP-8B | Self converted and uploaded to personal Hugging Face |
-| Llama3-TAIDE-LX-8B-Chat-Alpha1 | Self converted and uploaded to personal Hugging Face |
+| llama_v3_1_8b_instruct | Self converted and uploaded to personal Hugging Face |
+| llama_v3_1_sea_lion_3_5_8b_r | Self converted and uploaded to personal Hugging Face |
+| llama_v3_2_1b_instruct | Self converted and uploaded to personal Hugging Face |
+| llama_v3_2_3b_instruct | Self converted and uploaded to personal Hugging Face |
+| llama_v3_8b_instruct | Self converted and uploaded to personal Hugging Face |
+| llama_v3_elyza_jp_8b | Self converted and uploaded to personal Hugging Face |
+| llama_v3_taide_8b_chat | Self converted and uploaded to personal Hugging Face |
+| falcon_v3_7b_instruct | Self converted and uploaded to personal Hugging Face |
 
-To run a model on `Qualcomm` org, take `Qwen3-4B` for example, simply run:
+To run a model on `qualcomm` Huggingface, take `Qwen3-4B` for example, simply run:
 
-```bash
+```powershell
 geniex infer qualcomm/Qwen3-4B
 ```
 
-To run a model on `yichqian` personal huggingface, take `Llama-v3.2-3B-Instruct` for example, you need to firstly download the HF weights locally then run with the local path:
+For models we self converted and uploaded to personal Hugging Face , take `llama_v3_2_1b_instruct` for example, you need to firstly download the HF weights locally then run with the local path. 
 
-```bash
-hf auth login  # paste token when prompted
+Follow this [Huggingface CLI download tutorial](https://huggingface.co/docs/huggingface_hub/en/guides/cli) to setup HF CLI first, then in your windows laptop, run below: 
 
-# Download only the model folder you want
+```powershell
+# Set model name (must match the HF subfolder name exactly)
+$model = "llama_v3_2_1b_instruct"
+
+# Download the model from Huggingface
 hf download yichqian/geniex-qairt-models `
-  --local-dir .\geniex-qairt-models `
-  --include "Llama-v3.2-1B-Instruct/**"
+  --local-dir $model `
+  --include "$model/**"
 
-# Pull using the downloaded folder directly (absolute path)
-$localPath = (Resolve-Path ".\geniex-qairt-models\Llama-v3.2-1B-Instruct").Path
-geniex pull local/Llama-v3.2-1B-Instruct --model-hub localfs `
-  --local-path $localPath
+# Pull using the downloaded folder (absolute path)
+geniex pull local/$model --model-hub localfs `
+  --local-path (Resolve-Path "$model\$model").Path
 
-# Run inference on the same model name
-geniex infer local/Llama-v3.2-1B-Instruct
+# Run inference
+geniex infer local/$model
 ```

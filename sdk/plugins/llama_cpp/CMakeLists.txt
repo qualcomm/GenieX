@@ -54,6 +54,16 @@ add_subdirectory(
     ${CMAKE_BINARY_DIR}/third-party/llama.cpp
     EXCLUDE_FROM_ALL)
 
+# llama.cpp benefits from relaxed-FP (FMA contraction, reassociation)
+if(WIN32 AND CMAKE_C_COMPILER_ID MATCHES "Clang")
+    foreach(_t IN ITEMS llama ggml ggml-base ggml-cpu ggml-vulkan ggml-opencl ggml-hexagon mtmd)
+        if(TARGET ${_t})
+            target_compile_options(${_t} PRIVATE -ffp-model=fast -fno-finite-math-only)
+        endif()
+    endforeach()
+    unset(_t)
+endif()
+
 # setup plugin
 
 add_subdirectory(./src)

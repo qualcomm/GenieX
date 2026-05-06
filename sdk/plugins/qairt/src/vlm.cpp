@@ -3,6 +3,7 @@
 
 #include "vlm.h"
 
+#include <algorithm>
 #include <cstring>
 #include <filesystem>
 #include <string>
@@ -24,6 +25,12 @@
 namespace fs = std::filesystem;
 
 namespace geniex {
+
+namespace {
+// Default system prompt prepended on the first turn when the caller does not include
+// a `system` role message in the chat history.
+constexpr const char* kDefaultSystemPrompt = "You are a helpful AI assistant.";
+}  // namespace
 
 QairtVlm::~QairtVlm() = default;
 
@@ -49,12 +56,31 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
 
     QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(model_dir);
 
+    // Resolve vision encoder path first so we can exclude it from LLM shards.
+    std::string resolved_vision_bin;
+    if (input->mmproj_path && input->mmproj_path[0] != '\0') {
+        resolved_vision_bin = input->mmproj_path;
+    } else {
+        resolved_vision_bin = qairt::runtime::find_optional_file(model_dir, "vision_encoder.bin");
+    }
+
     // ── LLM config ────────────────────────────────────────────────────────────
     ModelConfig llm_cfg{};
 
     auto bin_shards = qairt::runtime::collect_bin_files(model_dir);
+    if (!resolved_vision_bin.empty()) {
+        const fs::path vision_path(resolved_vision_bin);
+        bin_shards.erase(std::remove_if(bin_shards.begin(),
+                             bin_shards.end(),
+                             [&](const std::string& p) {
+                                 std::error_code ec;
+                                 if (fs::equivalent(fs::path(p), vision_path, ec)) return true;
+                                 return fs::path(p).filename() == vision_path.filename();
+                             }),
+            bin_shards.end());
+    }
     if (bin_shards.empty()) {
-        GENIEX_LOG_ERROR("No .bin model shards found in: {}", model_dir.string());
+        GENIEX_LOG_ERROR("No .bin LLM shards found in: {}", model_dir.string());
         return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
     GENIEX_LOG_DEBUG("Found {} LLM shards in {}", bin_shards.size(), model_dir.string());
@@ -71,21 +97,18 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
 
-    // Optional files
-    llm_cfg.embedding_path  = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
+    // Embedding table (optional - AI Hub models do embedding on-device)
+    llm_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embedding_weights.raw");
+    if (llm_cfg.embedding_path.empty()) {
+        llm_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
+    }
     llm_cfg.htp_config_path = qairt::runtime::find_optional_file(model_dir, "htp_backend_ext_config.json");
 
     // ── Vision encoder config ─────────────────────────────────────────────────
     ModelConfig vision_cfg{};
 
-    if (input->mmproj_path && input->mmproj_path[0] != '\0') {
-        vision_cfg.model_paths = {std::string(input->mmproj_path)};
-    } else {
-        // Fallback: look for vision_encoder.bin alongside the LLM shards
-        std::string vision_bin = qairt::runtime::find_optional_file(model_dir, "vision_encoder.bin");
-        if (!vision_bin.empty()) {
-            vision_cfg.model_paths = {vision_bin};
-        }
+    if (!resolved_vision_bin.empty()) {
+        vision_cfg.model_paths = {resolved_vision_bin};
     }
     if (vision_cfg.model_paths.empty()) {
         GENIEX_LOG_WARN("No vision encoder found for VLM model '{}' — text-only mode", model_name_);
@@ -164,7 +187,7 @@ int32_t QairtVlm::apply_chat_template(
 
     // If the caller passed fewer messages than we've already committed, they implicitly
     // reset the conversation without calling reset() — treat it as a hard reset.
-    if (messages.size() < history_size_) {
+    if (messages.size() <= history_size_) {
         GENIEX_LOG_WARN(
             "VLM history shrank ({} → {}) without reset() — resetting KV cache", history_size_, messages.size());
         pipeline_->reset();
@@ -174,6 +197,18 @@ int32_t QairtVlm::apply_chat_template(
 
     // Slice out only the new messages since the last committed generate().
     std::vector<ChatMessage> new_messages(messages.begin() + static_cast<ptrdiff_t>(history_size_), messages.end());
+
+    // On the first turn, ensure there is a system prompt at the front. If the caller did
+    // not supply one, inject the default. Subsequent turns reuse the already-cached system.
+    if (history_size_ == 0) {
+        const bool has_system = !new_messages.empty() && new_messages.front().role == Role::System;
+        if (!has_system) {
+            ChatMessage sys{};
+            sys.role    = Role::System;
+            sys.content = kDefaultSystemPrompt;
+            new_messages.insert(new_messages.begin(), std::move(sys));
+        }
+    }
 
     // Record pending size — committed to history_size_ only after a successful generate().
     pending_history_size_ = messages.size();
@@ -222,7 +257,7 @@ int32_t QairtVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     }
 
     // Commit pending history size before running — this turn is now in the KV cache.
-    history_size_ = pending_history_size_;
+    history_size_ = pending_history_size_ + 1;
 
     // Run VLM pipeline (incremental — only new messages since last generate() are in the prompt)
     GenerateResult result = pipeline_->generate(input->prompt_utf8, image_paths, gen_cfg, on_token_fn);

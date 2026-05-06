@@ -21,6 +21,12 @@ namespace fs = std::filesystem;
 
 namespace geniex {
 
+namespace {
+// Default system prompt used on the first turn when the caller does not supply one
+// via a `system` role chat message.
+constexpr const char* kDefaultSystemPrompt = "You are a helpful AI assistant.";
+}  // namespace
+
 QairtLlm::~QairtLlm() = default;
 
 int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
@@ -72,7 +78,10 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     }
 
     // Embedding table (optional - AI Hub models do embedding on-device)
-    model_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
+    model_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embedding_weights.raw");
+    if (model_cfg.embedding_path.empty()) {
+        model_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
+    }
 
     // HTP backend config
     model_cfg.htp_config_path = qairt::runtime::find_optional_file(model_dir, "htp_backend_ext_config.json");
@@ -84,12 +93,8 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
         GENIEX_LOG_ERROR("Failed to create QAIRT LLM pipeline for model: {}", model_name_);
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
-    pipeline_ = std::make_unique<LLMPipeline>(std::move(*pipe));
-
-    // Set system prompt if provided
-    if (input->config.system_prompt && input->config.system_prompt[0] != '\0') {
-        pipeline_->setSystemPrompt(input->config.system_prompt);
-    }
+    pipeline_      = std::make_unique<LLMPipeline>(std::move(*pipe));
+    is_first_turn_ = true;
 
     GENIEX_LOG_DEBUG("QAIRT LLM created successfully: model={}", model_name_);
     return GENIEX_SUCCESS;
@@ -98,6 +103,7 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
 int32_t QairtLlm::reset() {
     if (!pipeline_) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     pipeline_->reset();
+    is_first_turn_ = true;
     return GENIEX_SUCCESS;
 }
 
@@ -121,18 +127,28 @@ int32_t QairtLlm::apply_chat_template(
     if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
     if (!input->messages || input->message_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
-    // Extract the last user message
-    const char* user_message = nullptr;
+    // Extract the last user message (and the system message, if this is the first turn).
+    const char* user_message  = nullptr;
+    const char* system_prompt = nullptr;
     for (int32_t i = input->message_count - 1; i >= 0; --i) {
-        if (input->messages[i].role && std::strcmp(input->messages[i].role, "user") == 0) {
-            user_message = input->messages[i].content;
-            break;
+        const auto& m = input->messages[i];
+        if (!m.role) continue;
+        if (!user_message && std::strcmp(m.role, "user") == 0) {
+            user_message = m.content;
+        } else if (is_first_turn_ && !system_prompt && std::strcmp(m.role, "system") == 0) {
+            system_prompt = m.content;
         }
+        if (user_message && (!is_first_turn_ || system_prompt)) break;
     }
 
     if (!user_message) {
         GENIEX_LOG_ERROR("No user message found in chat messages");
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    }
+
+    if (is_first_turn_) {
+        const char* sp = (system_prompt && system_prompt[0] != '\0') ? system_prompt : kDefaultSystemPrompt;
+        pipeline_->setSystemPrompt(sp);
     }
 
     bool        thinking  = input->enable_thinking || enable_thinking_;
@@ -177,6 +193,7 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
     // Generate
     GenerateResult result = pipeline_->generate(input->prompt_utf8, gen_cfg, on_token_fn);
+    is_first_turn_        = false;
 
     // Map result to output
     output->full_text = portable_strdup(result.full_text.c_str());
