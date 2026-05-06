@@ -13,6 +13,8 @@ class QairtLlm : public ILlm {
     std::string                  model_name_;
     bool                         enable_thinking_ = false;
 
+    bool is_first_turn_ = true;
+
    public:
     virtual ~QairtLlm() override;
 

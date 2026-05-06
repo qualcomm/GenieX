@@ -954,9 +954,10 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 		return err
 	}
 
-	modelTypeStr := types.ModelTypeLLM
-	if model.GetDomain() == qaihm.ModelDomain_MODEL_DOMAIN_MULTIMODAL {
-		modelTypeStr = types.ModelTypeVLM
+	modelTypeStr, err := chooseModelType()
+	if err != nil {
+		fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
+		return err
 	}
 	precisionLabel := strings.TrimPrefix(asset.GetPrecision().String(), "PRECISION_")
 	mf := types.ModelManifest{
