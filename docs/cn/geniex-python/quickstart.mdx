@@ -16,6 +16,9 @@ pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/
 ```
 这将从 [test PyPI](https://test.pypi.org/project/geniex/) 下载 Python 包。
 
+<Note>
+**高通内网用户：** 高通 VPN 访问 Hugging Face 存在连接问题。请先手动下载模型，然后将模型的**本地路径**传给 `from_pretrained`，而不是使用 HF 仓库 ID。
+</Note>
 
 ### **LLM 推理**
 
