@@ -22,3 +22,15 @@ We curated a list of top, high quality models in GGUF format.
 | unsloth/Phi-4-mini-instruct-GGUF |
 | Qwen/Qwen3-VL-2B-Instruct-GGUF |
 | Qwen/Qwen3-VL-4B-Instruct-GGUF |
+
+
+To run a model, take `unsloth/Qwen3.5-0.8B-GGUF` for example:
+```powershell windows
+geniex infer unsloth/Qwen3.5-0.8B-GGUF
+```
+
+When prompted, select:
+- **Model type**: `vlm` for vision-language models (Qwen3-VL), `llm` for all others
+- **Quantization**: `Q4_0` — best Hexagon NPU support for llama.cpp
+
+<Note>Multimodal support for `Qwen3.5` and `Gemma4` is coming soon.</Note>
