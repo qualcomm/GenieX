@@ -13,6 +13,11 @@ class QairtLlm : public ILlm {
     std::string                  model_name_;
     bool                         enable_thinking_ = false;
 
+    // Tracks whether the next apply_chat_template() call starts a new conversation. The
+    // pipeline's system prompt is consumed on each first turn, so we only inject it (from
+    // the input chat messages) when this flag is true. Reset by reset() and create_impl().
+    bool is_first_turn_ = true;
+
    public:
     virtual ~QairtLlm() override;
 

@@ -26,6 +26,12 @@ namespace fs = std::filesystem;
 
 namespace geniex {
 
+namespace {
+// Default system prompt prepended on the first turn when the caller does not include
+// a `system` role message in the chat history.
+constexpr const char* kDefaultSystemPrompt = "You are a helpful AI assistant.";
+}  // namespace
+
 QairtVlm::~QairtVlm() = default;
 
 int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
@@ -181,7 +187,7 @@ int32_t QairtVlm::apply_chat_template(
 
     // If the caller passed fewer messages than we've already committed, they implicitly
     // reset the conversation without calling reset() — treat it as a hard reset.
-    if (messages.size() < history_size_) {
+    if (messages.size() <= history_size_) {
         GENIEX_LOG_WARN(
             "VLM history shrank ({} → {}) without reset() — resetting KV cache", history_size_, messages.size());
         pipeline_->reset();
@@ -191,6 +197,18 @@ int32_t QairtVlm::apply_chat_template(
 
     // Slice out only the new messages since the last committed generate().
     std::vector<ChatMessage> new_messages(messages.begin() + static_cast<ptrdiff_t>(history_size_), messages.end());
+
+    // On the first turn, ensure there is a system prompt at the front. If the caller did
+    // not supply one, inject the default. Subsequent turns reuse the already-cached system.
+    if (history_size_ == 0) {
+        const bool has_system = !new_messages.empty() && new_messages.front().role == Role::System;
+        if (!has_system) {
+            ChatMessage sys{};
+            sys.role    = Role::System;
+            sys.content = kDefaultSystemPrompt;
+            new_messages.insert(new_messages.begin(), std::move(sys));
+        }
+    }
 
     // Record pending size — committed to history_size_ only after a successful generate().
     pending_history_size_ = messages.size();
@@ -239,7 +257,7 @@ int32_t QairtVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     }
 
     // Commit pending history size before running — this turn is now in the KV cache.
-    history_size_ = pending_history_size_;
+    history_size_ = pending_history_size_ + 1;
 
     // Run VLM pipeline (incremental — only new messages since last generate() are in the prompt)
     GenerateResult result = pipeline_->generate(input->prompt_utf8, image_paths, gen_cfg, on_token_fn);
