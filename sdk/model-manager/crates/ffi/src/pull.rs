@@ -86,10 +86,14 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
 
         let progress_cb: Option<model_manager_core::hub::ProgressCallback> =
             if let Some(cb) = inp.on_progress {
-                let cc = CCallback {
+                // Wrap in Arc so the closure captures the asserted
+                // Send+Sync wrapper as a single unit. Rust 2021's
+                // disjoint captures would otherwise split the fields
+                // and see the bare `*mut c_void`, which is !Sync.
+                let cc = std::sync::Arc::new(CCallback {
                     cb,
                     user_data: inp.user_data,
-                };
+                });
                 Some(Box::new(
                     move |files: &[model_manager_core::hub::FileProgress]| -> bool {
                         // CStrings must live for the duration of the callback.
