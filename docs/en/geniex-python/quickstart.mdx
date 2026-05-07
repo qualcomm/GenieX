@@ -9,11 +9,13 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ## **Quick Overview**
 
-### **Follow Jupyter Notebook Guide**
+### **Method 1 : Use Python script**
 
-For quick onboarding, we recommend following the Jupyter Notebook guide [here](https://github.com/qcom-ai-hub/geniex/blob/main/examples/python/windows.ipynb). It provides a step-by-step walkthrough of setting up the environment and running inference with the GenieX Python SDK.
+For QDC, we recommend using the Python script method below.
 
 ### **Installation**
+
+On QDC, download [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe) and then install the GenieX Python SDK using pip:
 
 ```bash
 pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
@@ -112,6 +114,11 @@ prompt = model.tokenizer.apply_chat_template(
 )
 print(model.generate(prompt, images=[image_path]).text)
 ```
+
+### **Method 2 : Follow Jupyter Notebook Guide**
+
+For laptop users, we recommend following the Jupyter Notebook guide [here](https://github.com/qcom-ai-hub/geniex/blob/main/examples/python/windows.ipynb). It provides a step-by-step walkthrough of setting up the environment and running inference with the GenieX Python SDK.
+
 
 <br />
 
