@@ -143,6 +143,15 @@ interrupts the current reply. `geniex-py <cmd> --help` for all flags.
 | `GENIEX_DATADIR`   | Model cache directory (default: `~/.cache/geniex`).  |
 | `GENIEX_HFTOKEN`   | HuggingFace token for gated repos.                   |
 | `GENIEX_LIB_PATH`  | Point at a pre-built `libgeniex.so` / `geniex.dll`.  |
+| `GENIEX_LOG`       | Log level: `trace`/`debug`/`info`/`warn`/`error`/`none`. Default `info`. |
+
+## Logging
+
+SDK and binding logs flow through Python's stdlib `logging` under the
+`geniex` logger. Set `GENIEX_LOG` before `geniex.init()` or call
+`geniex.set_log_level("debug")` at runtime. If the `geniex` logger has no
+handlers configured, a default `StreamHandler` is attached when `GENIEX_LOG`
+is set; otherwise your own logging config takes precedence.
 
 ## Building from source
 

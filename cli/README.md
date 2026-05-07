@@ -2,13 +2,27 @@
 
 GenieX-CLI is a command-line interface tool for running AI models locally on **Qualcomm** chipsets. It interfaces with the GenieX core runtime and supports two inference backends: **QAIRT** and **llama.cpp**.
 
-Enable debug log
+### Logging
+
+`GENIEX_LOG` is a single environment variable that controls log output across the CLI,
+the C/C++ SDK, and all language bindings (Go, Python, Android). Accepted values:
+
+| Value   | Emits                                    |
+|---------|------------------------------------------|
+| `none`  | nothing                                  |
+| `error` | errors only                              |
+| `warn`  | warnings + errors                        |
+| `info`  | info + warnings + errors (**default**)   |
+| `debug` | debug + info + warnings + errors         |
+| `trace` | everything (TRACE requires a debug build)|
 
 ```
 $env:GENIEX_LOG="debug" # powershell
 
 export GENIEX_LOG="debug" # bash
 ```
+
+`NO_COLOR=1` disables ANSI colors.
 
 Pull model without interactive
 

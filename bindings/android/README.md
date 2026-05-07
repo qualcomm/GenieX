@@ -173,3 +173,20 @@ TODO: update the Maven Central publishing procedure for GenieX-Bridge.
 ### Publishing to GitHub
 
 TODO: update the GitHub-based Android artifact publishing instructions for GenieX-Bridge.
+
+## Logging
+
+SDK logs are routed to `logcat` under the tag `GeniexSdk` at the corresponding
+Android priority (`VERBOSE`/`DEBUG`/`INFO`/`WARN`/`ERROR`). Set the runtime
+level from Kotlin:
+
+```kotlin
+GeniexSdk.setLogLevel("debug")  // trace|debug|info|warn|error|none
+```
+
+`GeniexSdk.setLogLevel` takes precedence over the `GENIEX_LOG` environment
+variable (which is rarely settable inside an Android process).
+
+```bash
+adb logcat -s GeniexSdk
+```

@@ -112,6 +112,23 @@ Public headers live under [sdk/include/](sdk/include/). Changing them requires u
 
 After updating one binding, ask whether the others need to move too.
 
+### Logging
+
+New code MUST route log output through the existing channels — no raw
+`std::cerr`, `printf`, Go `log` / `fmt.Println`, Python `print`, or direct
+`android.util.Log` calls inside library code paths.
+
+| Area             | Use                                                |
+|------------------|----------------------------------------------------|
+| SDK C/C++        | `GENIEX_LOG_TRACE/DEBUG/INFO/WARN/ERROR` macros    |
+| Go (CLI+binding) | `log/slog`                                         |
+| Python           | `logging.getLogger("geniex")` (or a child logger)  |
+| Android / JNI    | `android.util.Log` in Kotlin; JNI forwards through `geniex_set_log` |
+
+The user-facing control is `GENIEX_LOG` (`trace`/`debug`/`info`/`warn`/`error`/`none`),
+with bindings exposing an API override (`geniex.set_log_level` / `geniex_sdk.SetLogLevel` /
+`GeniexSdk.setLogLevel`).
+
 ## 5. Opening a PR
 
 - **Base**: `main`.
