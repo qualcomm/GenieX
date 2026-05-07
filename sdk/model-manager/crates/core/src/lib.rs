@@ -8,4 +8,5 @@ pub mod mapping;
 pub mod paths;
 pub mod pull;
 pub mod store;
+pub mod transport;
 pub mod validation;

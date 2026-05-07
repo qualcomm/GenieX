@@ -28,6 +28,12 @@ pub enum Error {
     #[error("hub error: {0}")]
     Hub(String),
 
+    #[error("http error: {0}")]
+    Http(String),
+
+    #[error("download cancelled")]
+    Cancelled,
+
     #[error("invalid model name: '{0}' (must be 'org/repo' with no path traversal)")]
     InvalidModelName(String),
 
