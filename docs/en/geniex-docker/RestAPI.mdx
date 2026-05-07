@@ -1,6 +1,6 @@
 ---
 title: "REST API"
-description: "Local OpenAI-compatible API for text generation, embeddings, and more"
+description: "Local OpenAI-compatible API for text generation"
 ---
 
 import Feedback from '/snippets/page-feedback.mdx';
@@ -43,8 +43,8 @@ The GenieXSDK REST API provides OpenAI-compatible endpoints for various AI tasks
 ### **Available Endpoints**
 
 - **`/v1/chat/completions`** - Creates model responses for conversations (LLM and VLM)
-- **`/v1/embeddings`** - Creates embeddings for text input
-- **`/v1/reranking`** - Reranks documents based on query relevance
+- **`/v1/models`** - Lists available models
+- **`/v1/models/{model}`** - Retrieves information about a specific model
 
 <Info>
 All API endpoints, request/response formats, and usage examples are documented in the [CLI REST API page](/en/geniex-cli/GenieXAPI). The API interface is identical whether running via CLI or Docker - only the server startup method differs.

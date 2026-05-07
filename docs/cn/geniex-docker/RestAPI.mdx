@@ -1,6 +1,6 @@
 ---
 title: "REST API"
-description: "本地 OpenAI 兼容 API，用于文本生成、嵌入等"
+description: "本地 OpenAI 兼容 API，用于文本生成"
 ---
 
 import Feedback from '/snippets/page-feedback.mdx';
@@ -43,8 +43,8 @@ GenieX SDK REST API 提供 OpenAI 兼容端点，用于各种 AI 任务。详细
 ### **可用端点**
 
 - **`/v1/chat/completions`** - 为对话创建模型响应（LLM 和 VLM）
-- **`/v1/embeddings`** - 为文本输入创建嵌入向量
-- **`/v1/reranking`** - 基于查询相关性对文档重排序
+- **`/v1/models`** - 列出可用模型
+- **`/v1/models/{model}`** - 获取指定模型的信息
 
 <Info>
 所有 API 端点、请求/响应格式和使用示例均记录在 [CLI REST API 页面](/cn/geniex-cli/GenieXAPI)。无论通过 CLI 还是 Docker 运行，API 接口完全相同——仅服务器启动方式不同。
