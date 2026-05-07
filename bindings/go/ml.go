@@ -41,7 +41,10 @@ import (
 	"unsafe"
 )
 
-var bridgeLogEnabled = false
+// bridgeLogEnabled controls whether SDK logs are forwarded to Go's slog.
+// Defaults to true so SDK logs surface through the normal Go logger unless
+// an embedder explicitly opts out.
+var bridgeLogEnabled = true
 
 type SDKError int32
 
@@ -202,7 +205,33 @@ func go_log_wrap(level C.geniex_LogLevel, msg *C.char) {
 	}
 }
 
-// EnableBridgeLog enables or disables the bridge log
+// EnableBridgeLog enables or disables forwarding SDK logs to Go's slog.
+// Must be called before Init() to take effect.
 func EnableBridgeLog(enable bool) {
 	bridgeLogEnabled = enable
+}
+
+// SetLogLevel sets the SDK runtime log level threshold. Accepted values:
+// "trace", "debug", "info", "warn", "error", "none". Takes precedence over
+// the GENIEX_LOG environment variable. Unknown values are ignored.
+func SetLogLevel(level string) {
+	var cLevel C.geniex_LogLevel
+	switch level {
+	case "trace":
+		cLevel = C.GENIEX_LOG_LEVEL_TRACE
+	case "debug":
+		cLevel = C.GENIEX_LOG_LEVEL_DEBUG
+	case "info":
+		cLevel = C.GENIEX_LOG_LEVEL_INFO
+	case "warn":
+		cLevel = C.GENIEX_LOG_LEVEL_WARN
+	case "error":
+		cLevel = C.GENIEX_LOG_LEVEL_ERROR
+	case "none":
+		// Sentinel: above ERROR silences everything.
+		cLevel = C.geniex_LogLevel(C.GENIEX_LOG_LEVEL_ERROR + 1)
+	default:
+		return
+	}
+	C.geniex_set_log_level(cLevel)
 }
