@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <nlohmann/json.hpp>
+#include <thread>
 
 #include "chat.h"
 #include "common.h"
