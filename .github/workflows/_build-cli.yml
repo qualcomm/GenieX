@@ -103,7 +103,7 @@ jobs:
         if: inputs.upload_artifact && inputs.build_installer && matrix.platform == 'windows-arm64'
         uses: actions/upload-artifact@v7
         with:
-          name: cli-installer-windows-arm64
+          name: cli-setup-windows-arm64
           path: bazel-bin/cli/release/windows/geniex-cli-setup.exe
           retention-days: 1
 

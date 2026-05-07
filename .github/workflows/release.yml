@@ -141,7 +141,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - run: 'echo "TODO: sign cli-installer-windows-arm64."'
+      - run: 'echo "TODO: sign cli-setup-windows-arm64."'
 
   # Assemble every release asset into one release-assets artifact so
   # publish-github-release and publish-s3 can run in parallel.
@@ -183,7 +183,7 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: cli-installer-windows-arm64
+          name: cli-setup-windows-arm64
           path: .
 
       - uses: actions/download-artifact@v8
@@ -206,7 +206,7 @@ jobs:
           set -euo pipefail
           HTP_DIR=sdk-windows-arm64/lib/llama_cpp
 
-          mv geniex-cli-setup.exe "geniex-cli-installer-windows-arm64-${RELEASE_TAG}.exe"
+          mv geniex-cli-setup.exe "geniex-cli-setup-windows-arm64-${RELEASE_TAG}.exe"
           mv geniex-android-aar.aar "geniex-android-aar-${RELEASE_TAG}.aar"
 
           staged="geniex-cli-linux-arm64-${RELEASE_TAG}"
@@ -303,6 +303,9 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      RELEASE_TAG: ${{ needs.resolve-tag.outputs.tag }}
+      IS_PRERELEASE: ${{ needs.resolve-tag.outputs.is_prerelease }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -337,6 +340,29 @@ jobs:
             --include 'geniex-sdk-windows-arm64-*.zip*' \
             --include 'geniex-sdk-linux-arm64-*.zip*' \
             --acl public-read
+
+      - name: Upload Windows CLI installer to S3
+        shell: bash
+        env:
+          AWS_PROFILE: bitsy
+          AWS_DEFAULT_REGION: us-west-2
+        run: |
+          set -euo pipefail
+          src="geniex-cli-setup-windows-arm64-${RELEASE_TAG}.exe"
+          # Versioned copy at the qai-hub-geniex/ root — every tag, matches SDK
+          # zip convention. Flat layout (no <tag>/ subdir) is deliberate.
+          aws s3 cp "${src}" \
+            "s3://qaihub-public-assets/qai-hub-geniex/${src}" \
+            --acl public-read
+          # Mutable "latest stable" pointer — only advance it on bare vX.Y.Z so
+          # rc/alpha builds never become the default download. Cache-Control
+          # no-cache forces revalidation since the bytes change each release.
+          if [[ "${IS_PRERELEASE}" != "true" ]]; then
+            aws s3 cp "${src}" \
+              "s3://qaihub-public-assets/qai-hub-geniex/geniex-cli.exe" \
+              --acl public-read \
+              --cache-control "no-cache, max-age=0"
+          fi
 
   publish-docker:
     name: publish-docker
