@@ -15,6 +15,26 @@ resolver = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-tokio = { version = "1", features = ["rt", "fs", "io-util"] }
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "sync",
+    "io-util",
+    "fs",
+    "time",
+] }
+tokio-util = { version = "0.7", features = ["io"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "rustls-tls",
+    "stream",
+    "gzip",
+    "json",
+    "http2",
+] }
+async-trait = "0.1"
+bytes = "1"
+futures = "0.3"
+url = "2"
 hf-hub = { version = "0.4", default-features = false, features = ["ureq"] }
 fs2 = "0.4"
+wiremock = "0.6"
