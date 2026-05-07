@@ -17,9 +17,8 @@ void* _crypto_dummy = (void*)OpenSSL_version;
 #endif
 
 #include <cstdlib>
-#ifdef GENIEX_DEBUG
+#include <cstring>
 #include <iostream>
-#endif
 
 #include "build_config.h"
 #include "logging.h"
@@ -32,38 +31,106 @@ void* _crypto_dummy = (void*)OpenSSL_version;
 
 using namespace geniex;
 
-// Default log handler - colorized for debug builds, no-op for release builds
-static void default_log_handler(geniex_LogLevel level, const char* msg) {
-#ifdef GENIEX_DEBUG
-    switch (level) {
-        case GENIEX_LOG_LEVEL_TRACE:
-            std::cerr << "\033[90m[TRACE] " << msg << "\033[0m" << std::endl;
-            break;
-        case GENIEX_LOG_LEVEL_DEBUG:
-            std::cerr << "\033[34m[DEBUG] " << msg << "\033[0m" << std::endl;
-            break;
-        case GENIEX_LOG_LEVEL_INFO:
-            std::cerr << "\033[32m[ INFO] " << msg << "\033[0m" << std::endl;
-            break;
-        case GENIEX_LOG_LEVEL_WARN:
-            std::cerr << "\033[33m[ WARN] " << msg << "\033[0m" << std::endl;
-            break;
-        case GENIEX_LOG_LEVEL_ERROR:
-            std::cerr << "\033[31m[ERROR] " << msg << "\033[0m" << std::endl;
-            break;
+namespace {
+
+// Sentinel value representing "no logging" (higher than any real level).
+// Not exposed in the public enum to keep ABI stable.
+constexpr geniex_LogLevel kLogLevelNone = static_cast<geniex_LogLevel>(GENIEX_LOG_LEVEL_ERROR + 1);
+
+bool parse_log_level(const char* s, geniex_LogLevel& out) {
+    if (s == nullptr) return false;
+    if (std::strcmp(s, "trace") == 0) {
+        out = GENIEX_LOG_LEVEL_TRACE;
+        return true;
     }
+    if (std::strcmp(s, "debug") == 0) {
+        out = GENIEX_LOG_LEVEL_DEBUG;
+        return true;
+    }
+    if (std::strcmp(s, "info") == 0) {
+        out = GENIEX_LOG_LEVEL_INFO;
+        return true;
+    }
+    if (std::strcmp(s, "warn") == 0) {
+        out = GENIEX_LOG_LEVEL_WARN;
+        return true;
+    }
+    if (std::strcmp(s, "error") == 0) {
+        out = GENIEX_LOG_LEVEL_ERROR;
+        return true;
+    }
+    if (std::strcmp(s, "none") == 0) {
+        out = kLogLevelNone;
+        return true;
+    }
+    return false;
+}
+
+bool use_color() {
+#ifdef _WIN32
+    return false;
 #else
-    // No-op for release builds
-    (void)level;
-    (void)msg;
+    const char* no_color = std::getenv("NO_COLOR");
+    return !(no_color != nullptr && no_color[0] != '\0');
 #endif
 }
+
+}  // namespace
+
+// Default log handler — always compiled; honors the runtime level threshold.
+// Emits to stderr with optional ANSI coloring (disabled when NO_COLOR is set).
+static void default_log_handler(geniex_LogLevel level, const char* msg) {
+    if (level < geniex_log_level) return;
+    const bool  color = use_color();
+    const char* prefix;
+    const char* colorCode;
+    switch (level) {
+        case GENIEX_LOG_LEVEL_TRACE:
+            prefix    = "[TRACE] ";
+            colorCode = "\033[90m";
+            break;
+        case GENIEX_LOG_LEVEL_DEBUG:
+            prefix    = "[DEBUG] ";
+            colorCode = "\033[34m";
+            break;
+        case GENIEX_LOG_LEVEL_INFO:
+            prefix    = "[ INFO] ";
+            colorCode = "\033[32m";
+            break;
+        case GENIEX_LOG_LEVEL_WARN:
+            prefix    = "[ WARN] ";
+            colorCode = "\033[33m";
+            break;
+        case GENIEX_LOG_LEVEL_ERROR:
+            prefix    = "[ERROR] ";
+            colorCode = "\033[31m";
+            break;
+        default:
+            return;
+    }
+    if (color) {
+        std::cerr << colorCode << prefix << msg << "\033[0m" << std::endl;
+    } else {
+        std::cerr << prefix << msg << std::endl;
+    }
+}
+
+// Tracks whether geniex_set_log_level() was called explicitly, so geniex_init() only
+// falls back to GENIEX_LOG env var when the embedder hasn't picked a level already.
+static bool s_log_level_user_set = false;
 
 int32_t geniex_init(void) {
 #ifdef _WIN32
     // set console output to UTF-8 code page for Windows
     SetConsoleOutputCP(CP_UTF8);
 #endif
+
+    if (!s_log_level_user_set) {
+        geniex_LogLevel parsed;
+        if (parse_log_level(std::getenv("GENIEX_LOG"), parsed)) {
+            geniex_log_level = parsed;
+        }
+    }
 
     GENIEX_LOG_INFO("initializing ml");
 
@@ -107,10 +174,26 @@ int32_t geniex_deinit(void) {
 
 geniex_log_callback geniex_log = default_log_handler;
 
+// Default threshold: DEBUG in GENIEX_DEBUG builds, INFO otherwise.
+// Runtime override via geniex_set_log_level() or GENIEX_LOG env var (read in geniex_init).
+#ifdef GENIEX_DEBUG
+geniex_LogLevel geniex_log_level = GENIEX_LOG_LEVEL_DEBUG;
+#else
+geniex_LogLevel geniex_log_level = GENIEX_LOG_LEVEL_INFO;
+#endif
+
 int32_t geniex_set_log(geniex_log_callback callback) {
     geniex_log = callback;
     return GENIEX_SUCCESS;
 }
+
+int32_t geniex_set_log_level(geniex_LogLevel level) {
+    geniex_log_level     = level;
+    s_log_level_user_set = true;
+    return GENIEX_SUCCESS;
+}
+
+geniex_LogLevel geniex_get_log_level(void) { return geniex_log_level; }
 
 void geniex_free(void* ptr) {
     if (ptr) free(ptr);

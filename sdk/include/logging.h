@@ -8,6 +8,7 @@
 #include "geniex.h"
 
 GENIEX_API extern geniex_log_callback geniex_log;
+GENIEX_API extern geniex_LogLevel     geniex_log_level;
 
 template <typename T>
 inline auto lp(T arg) {
@@ -44,7 +45,12 @@ void geniex_log_internal(geniex_LogLevel level, const char* file, int32_t line, 
     geniex_log(level,
         fmt::format("[{}:{}:{}] {}", filename, line, func, fmt::format(fmt, lp(std::forward<Args>(args))...)).c_str());
 }
-#define GENIEX_LEVEL_LOG(level, ...) geniex_log_internal(level, __FILE__, __LINE__, __func__, __VA_ARGS__)
+#define GENIEX_LEVEL_LOG(level, ...)                                                 \
+    do {                                                                             \
+        if ((level) >= geniex_log_level && geniex_log != nullptr) {                  \
+            geniex_log_internal((level), __FILE__, __LINE__, __func__, __VA_ARGS__); \
+        }                                                                            \
+    } while (0)
 
 #else  // GENIEX_DEBUG
 
@@ -53,18 +59,24 @@ inline void geniex_log_internal(geniex_LogLevel level, fmt::format_string<Args..
     if (geniex_log == nullptr) return;
     geniex_log(level, fmt::format(fmt, lp(std::forward<Args>(args))...).c_str());
 }
-#define GENIEX_LEVEL_LOG(level, ...) geniex_log_internal(level, __VA_ARGS__)
+#define GENIEX_LEVEL_LOG(level, ...)                                \
+    do {                                                            \
+        if ((level) >= geniex_log_level && geniex_log != nullptr) { \
+            geniex_log_internal((level), __VA_ARGS__);              \
+        }                                                           \
+    } while (0)
 
 #endif  // GENIEX_DEBUG
 
+// TRACE remains compile-time gated: only emitted in GENIEX_DEBUG builds.
+// DEBUG/INFO/WARN/ERROR are always compiled; filtering happens at runtime via geniex_log_level.
 #ifdef GENIEX_DEBUG
 #define GENIEX_LOG_TRACE(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_TRACE, __VA_ARGS__)
-#define GENIEX_LOG_DEBUG(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_DEBUG, __VA_ARGS__)
-#else  // GENIEX_DEBUG
+#else
 #define GENIEX_LOG_TRACE(...) ((void)0)
-#define GENIEX_LOG_DEBUG(...) ((void)0)
-#endif  // GENIEX_DEBUG
+#endif
 
+#define GENIEX_LOG_DEBUG(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_DEBUG, __VA_ARGS__)
 #define GENIEX_LOG_INFO(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_INFO, __VA_ARGS__)
 #define GENIEX_LOG_WARN(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_WARN, __VA_ARGS__)
 #define GENIEX_LOG_ERROR(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_ERROR, __VA_ARGS__)

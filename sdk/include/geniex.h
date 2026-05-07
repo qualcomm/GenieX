@@ -229,6 +229,27 @@ GENIEX_API int32_t geniex_deinit(void);
 GENIEX_API int32_t geniex_set_log(geniex_log_callback callback);
 
 /**
+ * @brief Set the runtime log level threshold. Logs below this level are dropped before reaching
+ *        the log callback. Takes precedence over the GENIEX_LOG environment variable.
+ *
+ * @param level[in]: The minimum log level to emit.
+ *
+ * @return geniex_ErrorCode: GENIEX_SUCCESS on success, negative on failure.
+ *
+ * @thread_safety: Thread-safe.
+ */
+GENIEX_API int32_t geniex_set_log_level(geniex_LogLevel level);
+
+/**
+ * @brief Get the current runtime log level threshold.
+ *
+ * @return geniex_LogLevel: The current minimum log level.
+ *
+ * @thread_safety: Thread-safe.
+ */
+GENIEX_API geniex_LogLevel geniex_get_log_level(void);
+
+/**
  * @brief Simple wrapper around free() to free memory allocated by ML library functions
  *
  * @param ptr[in]: The pointer to free.
