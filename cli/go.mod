@@ -1,9 +1,9 @@
 module github.com/qcom-it-nexa-ai/geniex/cli
 
-go 1.24.13
+go 1.25.0
 
 require (
-	github.com/bytedance/sonic v1.14.2
+	github.com/bytedance/sonic v1.15.1
 	github.com/charmbracelet/huh v0.8.0
 	github.com/charmbracelet/huh/spinner v0.0.0-20251110114415-25888d17260b
 	github.com/dustin/go-humanize v1.0.1
@@ -21,10 +21,10 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
 	github.com/valyala/fasthttp v1.68.0
-	golang.org/x/image v0.33.0
-	golang.org/x/sync v0.18.0
+	golang.org/x/image v0.38.0
+	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.38.0
-	golang.org/x/term v0.36.0
+	golang.org/x/term v0.37.0
 	google.golang.org/protobuf v1.36.10
 	resty.dev/v3 v3.0.0-beta.3
 )
@@ -36,7 +36,7 @@ require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic/loader v0.4.0 // indirect
+	github.com/bytedance/sonic/loader v0.5.1 // indirect
 	github.com/catppuccin/go v0.3.0 // indirect
 	github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7 // indirect
 	github.com/charmbracelet/bubbletea v1.3.10 // indirect
@@ -93,7 +93,7 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.20.0 // indirect
-	golang.org/x/crypto v0.43.0 // indirect
-	golang.org/x/net v0.46.0 // indirect
-	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/text v0.35.0 // indirect
 )
