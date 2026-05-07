@@ -53,21 +53,20 @@ geniex serve
 
 #### **使用示例**
 
-<CodeGroup>
-  ```bash Windows (cmd)
-  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"qualcomm/Qwen3-4B-Instruct-2507\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}], \"max_tokens\": 64}"
-  ```
+在浏览器中打开 `http://127.0.0.1:18181` 即可访问内置的 Swagger UI。
 
-  ```bash Linux
-  curl -X POST http://127.0.0.1:18181/v1/chat/completions \
-    -H "Content-Type: application/json" \
-    -d '{
-      "model": "qualcomm/Qwen3-4B-Instruct-2507",
-      "messages": [{"role":"user","content":"Hello!"}],
-      "max_tokens": 64
-    }'
-  ```
-</CodeGroup>
+**步骤 1.** 展开 `POST /v1/chat/completions` 端点，查看示例请求体和 schema。
+
+![Swagger UI 展示 chat completions 端点及示例请求体](/Images/server/curl-1.png)
+
+**步骤 2.** 点击 **Try it out**，根据需要编辑请求体，然后点击 **Execute**。
+
+![在 Try-it-out 模式下编辑请求体后执行](/Images/server/curl-2.png)
+
+**步骤 3.** 查看响应——`200` 状态码以及模型生成的回复。
+
+![响应体展示 200 成功响应及模型回复](/Images/server/curl-3.png)
+
 
 ### **使用 VLM**
 
@@ -102,11 +101,19 @@ curl -o demo.jpeg https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets
 
 #### **使用示例**
 
-<CodeGroup>
-  ```bash Windows (cmd)
-  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"qualcomm/Qwen2.5-VL-7B-Instruct\", \"messages\": [{\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"Describe this image succinctly.\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"C:/Users/Username/demo.jpeg\"}}]}], \"stream\": false}"
-  ```
-</CodeGroup>
+在浏览器中打开 `http://127.0.0.1:18181` 即可访问内置的 Swagger UI。
+
+**步骤 1.** 展开 `POST /v1/chat/completions` 端点，查看示例请求体和 schema。
+
+![Swagger UI 展示 chat completions 端点及示例请求体](/Images/server/curl-1.png)
+
+**步骤 2.** 点击 **Try it out**，将请求体替换为 VLM payload（`image_url.url` 可指向本地图片、远程 URL 或 base64 字符串），然后点击 **Execute**。
+
+![在 Try-it-out 模式下编辑 VLM 请求体后执行](/Images/server/curl-4.png)
+
+**步骤 3.** 查看响应——`200` 状态码以及模型对图像的描述。
+
+![响应体展示 200 成功响应及 VLM 对图像的描述](/Images/server/curl-5.png)
 
 
 <br />
