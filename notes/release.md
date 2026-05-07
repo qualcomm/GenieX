@@ -8,8 +8,9 @@ git tag v1.2.3 && git push origin v1.2.3
 
 - Tags containing `-` are drafts (and push the sdist to TestPyPI).
 - Bare `vX.Y.Z` tags publish immediately.
-- Assets: `geniex-{sdk,cli}-{linux,windows}-arm64-<tag>.zip`, `*.whl`, and per-file `.sha256` sidecars.
+- Assets: `geniex-sdk-{linux,windows}-arm64-<tag>.zip`, `geniex-cli-linux-arm64-<tag>.tar.gz`, `geniex-cli-setup-windows-arm64-<tag>.exe`, `*.whl`, `*.aar`, and per-file `.sha256` sidecars.
 - Re-running the same tag via **Actions → Release → Run workflow** is safe — assets are replaced.
+- S3 mirror at `s3://qaihub-public-assets/qai-hub-geniex/`: the Windows SDK zip and the `geniex-cli-setup-windows-arm64-<tag>.exe` installer go up on every tag; the mutable pointer `geniex-cli.exe` is only advanced on stable (non-prerelease) tags and is served with `Cache-Control: no-cache` so downloaders always pick up the newest release.
 
 > For the developer/user side of HTP signing (cert import, test-signing), see [run.md § Self-signed fallback](run.md#self-signed-fallback).
 

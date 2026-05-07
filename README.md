@@ -21,7 +21,7 @@ Release assets live on the [Releases page](https://github.com/qcom-ai-hub/geniex
 
 ### Windows (installer)
 
-Download `geniex-cli-installer-windows-arm64-<TAG>.exe` and the matching `geniex-sdk-windows-arm64-<TAG>.zip`, then run the installer.
+Download `geniex-cli-setup-windows-arm64-<TAG>.exe` and the matching `geniex-sdk-windows-arm64-<TAG>.zip`, then run the installer. For the latest stable installer without picking a tag, fetch [`https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-cli.exe`](https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-cli.exe) — this S3 object always mirrors the newest stable release.
 
 If the SDK name ends in `-selfsigned`, first follow [notes/run.md § Self-signed fallback](notes/run.md#self-signed-fallback) to import `ggml-htp-v1.cer` and enable test-signing. Full walkthrough: [notes/run.md § Running a prebuilt CI release](notes/run.md#running-a-prebuilt-ci-release-windows-on-snapdragon).
 
