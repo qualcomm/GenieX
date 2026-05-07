@@ -9,6 +9,10 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ## **快速概览**
 
+### **Jupyter Notebook 指南**
+
+如需快速上手，推荐参考 [Jupyter Notebook 指南](https://github.com/qcom-ai-hub/geniex/blob/main/examples/python/windows.ipynb)，其中提供了环境配置与 GenieX Python SDK 推理的逐步演示。
+
 ### **安装**
 
 ```bash
@@ -17,7 +21,24 @@ pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/
 这将从 [test PyPI](https://test.pypi.org/project/geniex/) 下载 Python 包。
 
 <Note>
-**高通内网用户：** 高通 VPN 访问 Hugging Face 存在连接问题。请先手动下载模型，然后将模型的**本地路径**传给 `from_pretrained`，而不是使用 HF 仓库 ID。
+**故障排查：SSL / 证书错误（企业代理 / QDC）**
+
+如果安装时出现 SSL 证书错误——常见于启用了 TLS 检测的企业网络，包括 **Qualcomm Developer Cloud（QDC）**——请在运行 `pip install` 之前，按照以下 **PowerShell** 命令手动下载 SDK：
+
+```powershell
+$env:GENIEX_VERSION = "0.1.4"  # 示例版本号，请替换为您实际安装的版本
+$base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/$env:GENIEX_VERSION"
+$zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
+
+Invoke-WebRequest "$base/$zip"        -OutFile $zip
+Invoke-WebRequest "$base/$zip.sha256" -OutFile "$zip.sha256"
+
+$env:GENIEX_SDK_DOWNLOAD_URL = "file:///$($(Get-Location).Path.Replace('\','/'))"
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+
+Remove-Item $zip, "$zip.sha256"
+Remove-Item Env:GENIEX_SDK_DOWNLOAD_URL
+```
 </Note>
 
 ### **LLM 推理**

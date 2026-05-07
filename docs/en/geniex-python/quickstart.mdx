@@ -9,6 +9,10 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ## **Quick Overview**
 
+### **Follow Jupyter Notebook Guide**
+
+For quick onboarding, we recommend following the Jupyter Notebook guide [here](https://github.com/qcom-ai-hub/geniex/blob/main/examples/python/windows.ipynb). It provides a step-by-step walkthrough of setting up the environment and running inference with the GenieX Python SDK.
+
 ### **Installation**
 
 ```bash
@@ -16,12 +20,25 @@ pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/
 ```
 This will download the python package from [test PyPI](https://test.pypi.org/project/geniex/)
 
-### **Follow Jupyter Notebook Guide**
-
-For quick onboarding, we recommend following the Jupyter Notebook guide [here](https://github.com/qcom-ai-hub/geniex/blob/main/examples/python/windows.ipynb). It provides a step-by-step walkthrough of setting up the environment and running inference with the GenieX Python SDK.
-
 <Note>
-**Qualcomm internal network users:** The Qualcomm VPN has connectivity issues with Hugging Face. Download the model manually first and pass its **local path** to `from_pretrained` instead of an HF repo id.
+**Troubleshooting: SSL / certificate errors (corporate proxy / QDC)**
+
+If the installation fails with an SSL certificate error — common on corporate networks with TLS inspection, including **Qualcomm Developer Cloud (QDC)** — pre-download the SDK manually and point the installer to it. Run the following **PowerShell** commands **before** `pip install`:
+
+```powershell
+$env:GENIEX_VERSION = "0.1.4"  # active version — replace with the version you are installing
+$base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/$env:GENIEX_VERSION"
+$zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
+
+Invoke-WebRequest "$base/$zip"        -OutFile $zip
+Invoke-WebRequest "$base/$zip.sha256" -OutFile "$zip.sha256"
+
+$env:GENIEX_SDK_DOWNLOAD_URL = "file:///$($(Get-Location).Path.Replace('\','/'))"
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+
+Remove-Item $zip, "$zip.sha256"
+Remove-Item Env:GENIEX_SDK_DOWNLOAD_URL
+```
 </Note>
 
 ### **LLM Inference**
