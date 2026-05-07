@@ -36,9 +36,10 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
-    auto mpar      = llama_model_default_params();
-    mpar.use_mmap  = true;
-    mpar.use_mlock = false;
+    ggml_backend_dev_t device_array[9] = {nullptr};
+    auto               mpar            = llama_model_default_params();
+    mpar.use_mmap                      = false;
+    mpar.use_mlock                     = false;
 
     mpar.n_gpu_layers = input->config.n_gpu_layers;
 
@@ -101,7 +102,6 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
         }
 
         if (!devices.empty()) {
-            ggml_backend_dev_t device_array[9] = {nullptr};
             for (size_t i = 0; i < devices.size() && i < 8; ++i) {
                 device_array[i] = devices[i];
             }
@@ -129,7 +129,10 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     cpar.n_seq_max       = config.n_seq_max > 0 ? config.n_seq_max : default_config.n_seq_max;
     cpar.n_threads       = config.n_threads > 0 ? config.n_threads : default_config.n_threads;
     cpar.n_threads_batch = config.n_threads_batch > 0 ? config.n_threads_batch : default_config.n_threads_batch;
-    cpar.kv_unified      = true;   // use unified KV cache
+
+    cpar.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
+    cpar.swa_full        = false;
+    cpar.kv_unified      = false;
     cpar.no_perf         = false;  // enable performance counters
 
     // NOTE: temporarily disabled — the device-id-substring-triggered KV quant +
@@ -548,9 +551,9 @@ namespace geniex {
 geniex_ModelConfig LlamaLlm::model_config_default(void) {
     auto cfg            = geniex_ModelConfig{};
     cfg.n_ctx           = 4096;
-    cfg.n_threads       = static_cast<int32_t>(std::thread::hardware_concurrency());
-    cfg.n_threads_batch = static_cast<int32_t>(std::thread::hardware_concurrency());
-    cfg.n_batch         = 2048;
+    cfg.n_threads       = static_cast<int32_t>(std::thread::hardware_concurrency()) / 2;
+    cfg.n_threads_batch = static_cast<int32_t>(std::thread::hardware_concurrency()) / 2;
+    cfg.n_batch         = 256;
     cfg.n_ubatch        = 512;
     cfg.n_seq_max       = 1;
     return cfg;
