@@ -53,11 +53,21 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
 
 #### **Usage Example**
 
-<CodeGroup>
-  ```bash Windows (cmd)
-  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"Qualcomm/Qwen3-4B-Instruct\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}], \"max_tokens\": 64}"
-  ```
-</CodeGroup>
+Open `http://127.0.0.1:18181` in your browser to access the built-in Swagger UI.
+
+**Step 1.** Expand the `POST /v1/chat/completions` endpoint to view the example request body and schema.
+
+![Swagger UI showing the chat completions endpoint with example request body](/Images/server/curl-1.png)
+
+**Step 2.** Click **Try it out**, edit the request body as needed, then click **Execute**.
+
+![Editing the request body in Try-it-out mode before executing](/Images/server/curl-2.png)
+
+**Step 3.** View the response — a `200` status with the model's generated reply.
+
+![Response body showing a successful 200 response with the model's reply](/Images/server/curl-3.png)
+
+
 
 ### **Use VLM**
 
@@ -69,11 +79,7 @@ Creates a model response for a given conversation. Supports LLM(text-only) and V
 - A base64-encoded string, e.g., `data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...`
 - A local file path on the server machine (requires server access to the file), e.g., `C:/Users/Username/Pictures/photo.jpg`. The `file://` prefix is optional.
 
-First, download a sample image to the current directory:
-
-```bash
-curl -o demo.jpeg https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg
-```
+First, download a sample image to the current directory, add below request to your 
 
 ```json Example Value
 {
@@ -89,14 +95,6 @@ curl -o demo.jpeg https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets
   ]
 }
 ```
-
-#### **Usage Example**
-
-<CodeGroup>
-  ```bash Windows (cmd)
-  curl -X POST http://127.0.0.1:18181/v1/chat/completions -H "Content-Type: application/json" -d "{\"model\": \"qualcomm/Qwen2.5-VL-7B-Instruct\", \"messages\": [{\"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"Describe this image succinctly.\"}, {\"type\": \"image_url\", \"image_url\": {\"url\": \"C:/Users/Username/demo.jpeg\"}}]}], \"stream\": false}"
-  ```
-</CodeGroup>
 
 
 <br />
