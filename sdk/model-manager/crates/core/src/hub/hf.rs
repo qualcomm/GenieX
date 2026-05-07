@@ -40,7 +40,11 @@ impl HfHub {
         token: Option<String>,
         transport: Arc<dyn HttpTransport>,
     ) -> Result<Self> {
-        let metadata = Arc::new(HfMetadata::with_endpoint(endpoint, token, transport.clone())?);
+        let metadata = Arc::new(HfMetadata::with_endpoint(
+            endpoint,
+            token,
+            transport.clone(),
+        )?);
         Ok(Self {
             ctx: HubContext::new(metadata, transport),
         })
@@ -55,10 +59,7 @@ impl HfHub {
 }
 
 impl ModelHub for HfHub {
-    fn list_files(
-        &self,
-        repo_id: &str,
-    ) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
+    fn list_files(&self, repo_id: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
         // Single short-lived current-thread runtime is enough for a
         // one-shot metadata call — no need to spin up the worker pool.
         let rt = Builder::new_current_thread()
@@ -93,4 +94,3 @@ impl ModelHub for HfHub {
         })
     }
 }
-

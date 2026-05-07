@@ -63,8 +63,8 @@ impl ReqwestTransport {
             .read_timeout(read)
             .redirect(reqwest::redirect::Policy::limited(10));
         if let Some(p) = cfg.proxy_override {
-            let proxy = reqwest::Proxy::all(&p)
-                .map_err(|e| Error::Http(format!("proxy {p}: {e}")))?;
+            let proxy =
+                reqwest::Proxy::all(&p).map_err(|e| Error::Http(format!("proxy {p}: {e}")))?;
             builder = builder.proxy(proxy);
         }
         let client = builder
@@ -154,10 +154,7 @@ impl HttpTransport for ReqwestTransport {
 
         let mut attempt = 0u32;
         loop {
-            let mut req = self
-                .client
-                .get(url.clone())
-                .header(RANGE, range.clone());
+            let mut req = self.client.get(url.clone()).header(RANGE, range.clone());
             if let Some(tok) = auth {
                 req = req.header(AUTHORIZATION, format!("Bearer {tok}"));
             }
@@ -184,12 +181,10 @@ impl HttpTransport for ReqwestTransport {
             }
             // 200 is accepted only if the server returned the full body and
             // we asked for offset==0; otherwise we need 206 Partial Content.
-            let ok = status == StatusCode::PARTIAL_CONTENT
-                || (status == StatusCode::OK && offset == 0);
+            let ok =
+                status == StatusCode::PARTIAL_CONTENT || (status == StatusCode::OK && offset == 0);
             if !ok {
-                return Err(Error::Http(format!(
-                    "GET {url} {range}: status {status}"
-                )));
+                return Err(Error::Http(format!("GET {url} {range}: status {status}")));
             }
 
             let mut stream = resp.bytes_stream();

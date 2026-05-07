@@ -59,9 +59,7 @@ pub fn pull(store: &Store, req: PullRequest) -> Result<()> {
         HubSource::LocalFs(path) => Box::new(LocalFsHub::new(path.clone())),
     };
 
-    store.with_model_lock(&req.model_name, || {
-        pull_locked(store, hub.as_ref(), &req)
-    })
+    store.with_model_lock(&req.model_name, || pull_locked(store, hub.as_ref(), &req))
 }
 
 fn pull_locked(store: &Store, hub: &dyn ModelHub, req: &PullRequest) -> Result<()> {
@@ -102,12 +100,7 @@ fn pull_locked(store: &Store, hub: &dyn ModelHub, req: &PullRequest) -> Result<(
 
     // 3. Fetch. The hub takes ownership of .progress bitmap management;
     //    on success every marker byte is already 0x01.
-    hub.download(
-        &req.model_name,
-        &files,
-        &dest_dir,
-        req.on_progress.as_ref(),
-    )?;
+    hub.download(&req.model_name, &files, &dest_dir, req.on_progress.as_ref())?;
 
     // 4. Persist the manifest (staged then atomic rename).
     let staged = inflight_dir.join(MANIFEST_FILE);

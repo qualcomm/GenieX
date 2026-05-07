@@ -77,7 +77,6 @@ async fn install_file_mock(server: &MockServer, path_str: &str, body: Vec<u8>) {
         .await;
 }
 
-
 #[tokio::test]
 async fn downloads_multi_file_multi_chunk_and_marks_progress() {
     // Force the chunk floor small so a ~64 KiB file becomes 4 chunks.
@@ -234,7 +233,10 @@ async fn resume_skips_completed_chunks() {
         get_hits.load(Ordering::SeqCst),
     );
     let marker = std::fs::read(dest.join("f.bin.progress")).unwrap();
-    assert!(marker.iter().all(|b| *b == 0x01), "bitmap should be fully set");
+    assert!(
+        marker.iter().all(|b| *b == 0x01),
+        "bitmap should be fully set"
+    );
 
     std::env::remove_var("GENIEX_DL_CHUNK_SIZE");
 }

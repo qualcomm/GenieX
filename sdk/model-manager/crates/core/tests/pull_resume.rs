@@ -168,7 +168,11 @@ fn pull_resumes_after_mid_download_failure() {
 
     // --- Final state: file correct, manifest published, marker gone ----
     let final_file = model_dir.join(file_name);
-    assert_eq!(std::fs::read(&final_file).unwrap(), body, "bytes must match");
+    assert_eq!(
+        std::fs::read(&final_file).unwrap(),
+        body,
+        "bytes must match"
+    );
     assert!(
         model_dir.join(MANIFEST_FILE).exists(),
         "geniex.json must be published"
@@ -188,11 +192,7 @@ fn pull_resumes_after_mid_download_failure() {
 /// Thin reimplementation of the inner body of `pull::pull_locked`, so
 /// the test can point at a custom HfHub endpoint while preserving the
 /// lock + manifest-publish semantics the orchestrator guarantees.
-fn run_pull(
-    store: &Store,
-    hub: &HfHub,
-    repo: &str,
-) -> model_manager_core::error::Result<()> {
+fn run_pull(store: &Store, hub: &HfHub, repo: &str) -> model_manager_core::error::Result<()> {
     store.with_model_lock(repo, || {
         let dest_dir = store.model_file_path(repo, "")?;
         std::fs::create_dir_all(&dest_dir)?;

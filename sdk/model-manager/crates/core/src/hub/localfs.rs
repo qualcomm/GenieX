@@ -21,10 +21,7 @@ impl LocalFsHub {
 }
 
 impl ModelHub for LocalFsHub {
-    fn list_files(
-        &self,
-        _repo_id: &str,
-    ) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
+    fn list_files(&self, _repo_id: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
         let mut files = Vec::new();
         for entry in std::fs::read_dir(&self.source_dir)?.flatten() {
             let ft = match entry.file_type() {
@@ -77,13 +74,18 @@ impl ModelHub for LocalFsHub {
             validate_relative_file(file_name)?;
             let src = self.source_dir.join(file_name);
             if !src.exists() {
-                return Err(Error::Hub(format!("local file not found: {}", src.display())));
+                return Err(Error::Hub(format!(
+                    "local file not found: {}",
+                    src.display()
+                )));
             }
             let dest = dest_dir.join(file_name);
             if let Some(parent) = dest.parent() {
                 std::fs::create_dir_all(parent)?;
             }
-            let size = std::fs::metadata(&src).map(|m| m.len() as i64).unwrap_or(-1);
+            let size = std::fs::metadata(&src)
+                .map(|m| m.len() as i64)
+                .unwrap_or(-1);
             std::fs::copy(&src, &dest)?;
 
             tracked[idx].downloaded_bytes = size.max(0);

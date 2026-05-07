@@ -60,7 +60,8 @@ async fn list_files_parses_siblings_and_skips_missing_manifest() {
 #[tokio::test]
 async fn resolve_builds_expected_url_shape() {
     let server = MockServer::start().await;
-    let md = HfMetadata::with_endpoint(&server.uri(), Some("tok".into()), fast_transport()).unwrap();
+    let md =
+        HfMetadata::with_endpoint(&server.uri(), Some("tok".into()), fast_transport()).unwrap();
     let got = md
         .resolve("meta-llama/Llama-3", &["weights.safetensors".to_string()])
         .await

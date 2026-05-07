@@ -94,10 +94,7 @@ struct ApiSibling {
 
 #[async_trait]
 impl HubMetadata for HfMetadata {
-    async fn list_files(
-        &self,
-        repo: &str,
-    ) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
+    async fn list_files(&self, repo: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
         // 1. Hit the JSON API for the full sibling listing. The API's
         //    Content-Length is reliable, so we reuse the small-file path.
         let api_url = self.api_model_url(repo)?;

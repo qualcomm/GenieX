@@ -33,10 +33,7 @@ pub struct FileSource {
 pub trait HubMetadata: Send + Sync {
     /// Return the full file listing for `repo`, plus a parsed
     /// `geniex.json` manifest if the hub ships one at the repo root.
-    async fn list_files(
-        &self,
-        repo: &str,
-    ) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)>;
+    async fn list_files(&self, repo: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)>;
 
     /// Build download coordinates for the given file names. Order of the
     /// returned vector matches the input.

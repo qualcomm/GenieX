@@ -259,7 +259,11 @@ fn extract_quant(name: &str) -> Option<String> {
     for part in name.split(|c: char| c == '-' || c == '.' || c == '_') {
         if part.starts_with('Q')
             && part.len() >= 2
-            && part[1..2].chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false)
+            && part[1..2]
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_digit())
+                .unwrap_or(false)
         {
             matches.push(part.to_string());
         }
@@ -325,7 +329,10 @@ mod tests {
 
     #[test]
     fn extract_quant_finds_common_formats() {
-        assert_eq!(extract_quant("model-Q4_K_M.gguf"), Some("Q4_K_M".to_string()));
+        assert_eq!(
+            extract_quant("model-Q4_K_M.gguf"),
+            Some("Q4_K_M".to_string())
+        );
         assert_eq!(extract_quant("model-Q8_0.gguf"), Some("Q8_0".to_string()));
         assert_eq!(extract_quant("model.gguf"), None);
     }
@@ -337,7 +344,10 @@ mod tests {
             ("model-Q4_K_M.gguf", 1_000_000),
             ("model-Q8_0.gguf", 1_800_000),
         ]);
-        let hint = ManifestHint { quant: Some("Q4_0".to_string()), ..Default::default() };
+        let hint = ManifestHint {
+            quant: Some("Q4_0".to_string()),
+            ..Default::default()
+        };
         let m = infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, hint).unwrap();
         assert_eq!(m.model_file.len(), 1);
         assert_eq!(m.model_file.get("Q4_0").unwrap().name, "model-Q4_0.gguf");
@@ -346,7 +356,10 @@ mod tests {
     #[test]
     fn quant_hint_rejects_unknown_quant() {
         let (names, sizes) = sizes_of(&[("model-Q4_K_M.gguf", 1_000_000)]);
-        let hint = ManifestHint { quant: Some("Q2_K".to_string()), ..Default::default() };
+        let hint = ManifestHint {
+            quant: Some("Q2_K".to_string()),
+            ..Default::default()
+        };
         assert!(infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, hint).is_err());
     }
 
@@ -356,7 +369,8 @@ mod tests {
             ("model-Q4_K_M.gguf", 1_000_000),
             ("mmproj-F16.gguf", 200_000),
         ]);
-        let m = infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, Default::default()).unwrap();
+        let m =
+            infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, Default::default()).unwrap();
         assert_eq!(m.model_type, ModelType::Vlm);
         assert!(m.model_file.contains_key("Q4_K_M"));
         assert_eq!(m.mmproj_file.name, "mmproj-F16.gguf");
@@ -365,11 +379,10 @@ mod tests {
 
     #[test]
     fn infers_llm_without_mmproj() {
-        let (names, sizes) = sizes_of(&[
-            ("model-Q4_K_M.gguf", 1_000_000),
-            ("tokenizer.json", 2_000),
-        ]);
-        let m = infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, Default::default()).unwrap();
+        let (names, sizes) =
+            sizes_of(&[("model-Q4_K_M.gguf", 1_000_000), ("tokenizer.json", 2_000)]);
+        let m =
+            infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, Default::default()).unwrap();
         assert_eq!(m.model_type, ModelType::Llm);
         assert_eq!(m.tokenizer_file.name, "tokenizer.json");
     }

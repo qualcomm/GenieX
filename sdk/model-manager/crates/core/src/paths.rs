@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
 use crate::error::{Error, Result};
 use crate::manifest::ModelManifest;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct ModelPaths {
@@ -29,15 +29,21 @@ pub fn resolve_model_paths(
 
     let (resolved_quant, model_path) = {
         let (q, file_info) = if let Some(q) = quant {
-            let fi = manifest.model_file.get(q)
+            let fi = manifest
+                .model_file
+                .get(q)
                 .ok_or_else(|| Error::QuantNotFound(q.to_string(), manifest.name.clone()))?;
             if !fi.downloaded {
-                return Err(Error::QuantNotDownloaded(q.to_string(), manifest.name.clone()));
+                return Err(Error::QuantNotDownloaded(
+                    q.to_string(),
+                    manifest.name.clone(),
+                ));
             }
             (q.to_string(), fi)
         } else {
             // Pick the lexicographically smallest downloaded quant.
-            let mut quants: Vec<&str> = manifest.model_file
+            let mut quants: Vec<&str> = manifest
+                .model_file
                 .iter()
                 .filter(|(_, v)| v.downloaded)
                 .map(|(k, _)| k.as_str())

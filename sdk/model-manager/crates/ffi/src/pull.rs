@@ -27,9 +27,8 @@ pub enum GeniexHubSource {
 /// Progress callback: invoked with an array of per-file `GeniexFileProgress`
 /// entries; return `false` to cancel. The pointer is only valid during the
 /// call — callbacks must not retain it.
-pub type GeniexDownloadProgressCb = Option<
-    unsafe extern "C" fn(*const GeniexFileProgress, i32, *mut c_void) -> bool,
->;
+pub type GeniexDownloadProgressCb =
+    Option<unsafe extern "C" fn(*const GeniexFileProgress, i32, *mut c_void) -> bool>;
 
 #[repr(C)]
 pub struct GeniexModelPullInput {
@@ -84,50 +83,45 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
         unsafe impl Send for CCallback {}
         unsafe impl Sync for CCallback {}
 
-        let progress_cb: Option<model_manager_core::hub::ProgressCallback> =
-            if let Some(cb) = inp.on_progress {
-                // Wrap in Arc so the closure captures the asserted
-                // Send+Sync wrapper as a single unit. Rust 2021's
-                // disjoint captures would otherwise split the fields
-                // and see the bare `*mut c_void`, which is !Sync.
-                let cc = std::sync::Arc::new(CCallback {
-                    cb,
-                    user_data: inp.user_data,
-                });
-                Some(Box::new(
-                    move |files: &[model_manager_core::hub::FileProgress]| -> bool {
-                        // CStrings must live for the duration of the callback.
-                        let cstrings: Vec<std::ffi::CString> = files
-                            .iter()
-                            .map(|f| {
-                                std::ffi::CString::new(f.file_name.as_bytes()).unwrap_or_default()
-                            })
-                            .collect();
-                        let ffi_entries: Vec<GeniexFileProgress> = files
-                            .iter()
-                            .zip(cstrings.iter())
-                            .map(|(f, cs)| GeniexFileProgress {
-                                file_name: cs.as_ptr(),
-                                downloaded_bytes: f.downloaded_bytes,
-                                total_bytes: f.total_bytes,
-                            })
-                            .collect();
+        let progress_cb: Option<model_manager_core::hub::ProgressCallback> = if let Some(cb) =
+            inp.on_progress
+        {
+            // Wrap in Arc so the closure captures the asserted
+            // Send+Sync wrapper as a single unit. Rust 2021's
+            // disjoint captures would otherwise split the fields
+            // and see the bare `*mut c_void`, which is !Sync.
+            let cc = std::sync::Arc::new(CCallback {
+                cb,
+                user_data: inp.user_data,
+            });
+            Some(Box::new(
+                move |files: &[model_manager_core::hub::FileProgress]| -> bool {
+                    // CStrings must live for the duration of the callback.
+                    let cstrings: Vec<std::ffi::CString> = files
+                        .iter()
+                        .map(|f| std::ffi::CString::new(f.file_name.as_bytes()).unwrap_or_default())
+                        .collect();
+                    let ffi_entries: Vec<GeniexFileProgress> = files
+                        .iter()
+                        .zip(cstrings.iter())
+                        .map(|(f, cs)| GeniexFileProgress {
+                            file_name: cs.as_ptr(),
+                            downloaded_bytes: f.downloaded_bytes,
+                            total_bytes: f.total_bytes,
+                        })
+                        .collect();
 
-                        let result = unsafe {
-                            (cc.cb)(
-                                ffi_entries.as_ptr(),
-                                ffi_entries.len() as i32,
-                                cc.user_data,
-                            )
-                        };
-                        // cstrings drop here — after the callback returns.
-                        let _ = cstrings;
-                        result
-                    },
-                ))
-            } else {
-                None
-            };
+                    let result = unsafe {
+                        (cc.cb)(ffi_entries.as_ptr(), ffi_entries.len() as i32, cc.user_data)
+                    };
+                    // cstrings drop here — after the callback returns.
+                    let _ = cstrings;
+                    result
+                },
+            ))
+        } else {
+            None
+        };
 
         let store = match get_store() {
             Ok(s) => s,

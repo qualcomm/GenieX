@@ -38,10 +38,7 @@ pub trait ModelHub {
     ///
     /// Hubs that have no concept of "remote listing" (e.g. `LocalFsHub`)
     /// should return files discovered under their source directory.
-    fn list_files(
-        &self,
-        repo_id: &str,
-    ) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)>;
+    fn list_files(&self, repo_id: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)>;
 
     /// Download the named files to `dest_dir`.
     ///

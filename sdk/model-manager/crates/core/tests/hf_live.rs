@@ -24,9 +24,7 @@ const TINY_REPO: &str = "ggml-org/tiny-llamas";
 #[ignore]
 fn list_files_returns_something() {
     let hub = HfHub::new(None).unwrap();
-    let (files, _manifest) = hub
-        .list_files(TINY_REPO)
-        .expect("hf list_files failed");
+    let (files, _manifest) = hub.list_files(TINY_REPO).expect("hf list_files failed");
     assert!(
         !files.is_empty(),
         "expected at least one file in {TINY_REPO}"

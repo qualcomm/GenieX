@@ -214,7 +214,11 @@ mod tests {
         let mut model_file = HashMap::new();
         model_file.insert(
             "Q4_K_M".to_string(),
-            ModelFileInfo { name: "model-Q4_K_M.gguf".to_string(), downloaded: true, size: 100 },
+            ModelFileInfo {
+                name: "model-Q4_K_M.gguf".to_string(),
+                downloaded: true,
+                size: 100,
+            },
         );
         ModelManifest {
             name: name.to_string(),

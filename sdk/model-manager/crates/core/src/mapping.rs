@@ -22,12 +22,18 @@ pub fn resolve_alias(alias: &str) -> Option<String> {
             ],
         ),
         ("gemma3", &[("", "", "ggml-org/gemma-3-4b-it-GGUF")]),
-        ("smolvlm", &[("", "", "ggml-org/SmolVLM-500M-Instruct-GGUF")]),
+        (
+            "smolvlm",
+            &[("", "", "ggml-org/SmolVLM-500M-Instruct-GGUF")],
+        ),
         ("gpt-oss", &[("", "", "NexaAI/gpt-oss-20b-GGUF")]),
-        ("omni-neural", &[("windows", "aarch64", "NexaAI/OmniNeural-4B")]),
+        (
+            "omni-neural",
+            &[("windows", "aarch64", "NexaAI/OmniNeural-4B")],
+        ),
     ];
 
-    let cur_os = std::env::consts::OS;     // "linux", "macos", "windows"
+    let cur_os = std::env::consts::OS; // "linux", "macos", "windows"
     let cur_arch = std::env::consts::ARCH; // "x86_64", "aarch64", etc.
 
     let mut result: Option<&str> = None;

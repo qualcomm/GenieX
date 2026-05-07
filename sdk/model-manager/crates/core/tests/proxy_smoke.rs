@@ -9,9 +9,7 @@
 
 use std::time::Duration;
 
-use model_manager_core::transport::{
-    HttpTransport, ReqwestTransport, TransportConfig,
-};
+use model_manager_core::transport::{HttpTransport, ReqwestTransport, TransportConfig};
 use tokio::io::AsyncWriteExt;
 use url::Url;
 use wiremock::matchers::{method, path};
@@ -90,7 +88,10 @@ async fn get_range_short_read_errors() {
         .await
         .unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("short read"), "expected short read, got: {msg}");
+    assert!(
+        msg.contains("short read"),
+        "expected short read, got: {msg}"
+    );
 }
 
 #[tokio::test]
