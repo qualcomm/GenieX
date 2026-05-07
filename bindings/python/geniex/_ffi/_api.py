@@ -14,8 +14,8 @@
 
 """Bound C functions from libgeniex with argtypes/restype annotations."""
 
+import logging
 import os
-import sys
 from ctypes import CFUNCTYPE, POINTER, byref, c_char_p, c_int32, c_void_p
 
 from ._lib import load_library
@@ -45,47 +45,103 @@ from ._types import (
 )
 
 # ---------------------------------------------------------------------------
-# Logging callback
+# Logging bridge (SDK callback -> Python stdlib logging)
 # ---------------------------------------------------------------------------
 
-# void (*geniex_log_callback)(geniex_LogLevel level, const char* msg)
-# geniex_LogLevel is an int32 enum: 0=TRACE 1=DEBUG 2=INFO 3=WARN 4=ERROR
+# Mirror of geniex_LogLevel in sdk/include/geniex.h. Values MUST match.
+_LEVEL_TRACE = 0
+_LEVEL_DEBUG = 1
+_LEVEL_INFO = 2
+_LEVEL_WARN = 3
+_LEVEL_ERROR = 4
+# Sentinel above ERROR silences all SDK output (matches SDK's "none" handling).
+_LEVEL_NONE = 5
+
+_LEVEL_STR_TO_INT = {
+    'trace': _LEVEL_TRACE,
+    'debug': _LEVEL_DEBUG,
+    'info': _LEVEL_INFO,
+    'warn': _LEVEL_WARN,
+    'error': _LEVEL_ERROR,
+    'none': _LEVEL_NONE,
+}
+
+_LEVEL_STR_TO_PY = {
+    'trace': logging.DEBUG,
+    'debug': logging.DEBUG,
+    'info': logging.INFO,
+    'warn': logging.WARNING,
+    'error': logging.ERROR,
+    'none': logging.CRITICAL + 1,
+}
+
 geniex_log_callback = CFUNCTYPE(None, c_int32, c_char_p)
 
-_LEVEL_NAMES = {0: 'TRACE', 1: 'DEBUG', 2: 'INFO', 3: 'WARN', 4: 'ERROR'}
-_ENV_LEVELS = {'TRACE': 0, 'DEBUG': 1, 'INFO': 2, 'WARN': 3, 'ERROR': 4}
+_logger = logging.getLogger('geniex')
 
-# Keep a module-level reference so ctypes doesn't garbage-collect the thunk.
-_log_cb: 'geniex_log_callback | None' = None
+# Keep a strong reference — ctypes callbacks must outlive the C side.
+_log_cb_ref: 'geniex_log_callback | None' = None
+
+
+def _sdk_log_bridge(level: int, msg_bytes):
+    try:
+        msg = msg_bytes.decode('utf-8', errors='replace') if msg_bytes else ''
+    except Exception:
+        msg = '<undecodable log message>'
+    if level == _LEVEL_ERROR:
+        _logger.error(msg)
+    elif level == _LEVEL_WARN:
+        _logger.warning(msg)
+    elif level == _LEVEL_INFO:
+        _logger.info(msg)
+    else:
+        _logger.debug(msg)
+
+
+def set_log_level(level: str) -> None:
+    """Set the geniex logger + SDK log level.
+
+    Accepted values: 'trace', 'debug', 'info', 'warn', 'error', 'none'.
+    Unknown values are ignored. Safe to call before or after init().
+    """
+    level_norm = level.lower().strip() if level else ''
+    if level_norm not in _LEVEL_STR_TO_INT:
+        return
+    _logger.setLevel(_LEVEL_STR_TO_PY[level_norm])
+    _ensure_bound()
+    lib = load_library()
+    lib.geniex_set_log_level(c_int32(_LEVEL_STR_TO_INT[level_norm]))
 
 
 def install_log_callback() -> None:
-    """Route SDK log messages to Python stderr.
+    """Configure the 'geniex' logger, register the SDK log callback, and sync levels.
 
-    Opt-in via ``GENIEX_LOG`` env var (case-insensitive):
-    ``trace|debug|info|warn|error|off``. No-op when unset or ``off``.
-    Release builds of libgeniex compile out TRACE/DEBUG, so those levels
-    only surface in debug builds.
+    Reads GENIEX_LOG (case-insensitive: trace|debug|info|warn|error|none/off).
+    Attaches a default StreamHandler to the 'geniex' logger only when the
+    logger has no handlers yet, so user-supplied logging config wins.
+    No-op after the first call.
     """
-    global _log_cb
-    if _log_cb is not None:
+    global _log_cb_ref
+    if _log_cb_ref is not None:
         return
 
-    requested = os.environ.get('GENIEX_LOG', '').strip().upper()
-    if not requested or requested in {'OFF', 'NONE', '0', 'FALSE'}:
-        return
-    min_level = _ENV_LEVELS.get(requested, _ENV_LEVELS['INFO'])
-
-    def callback(level: int, msg_bytes: bytes) -> None:
-        if level < min_level:
-            return
-        level_name = _LEVEL_NAMES.get(level, f'L{level}')
-        msg = msg_bytes.decode('utf-8', errors='replace') if msg_bytes else ''
-        print(f'[geniex][{level_name}] {msg}', file=sys.stderr, flush=True)
-
-    _log_cb = geniex_log_callback(callback)
     lib = load_library()
-    lib.geniex_set_log(_log_cb)
+
+    _log_cb_ref = geniex_log_callback(_sdk_log_bridge)
+    lib.geniex_set_log(_log_cb_ref)
+
+    requested = os.environ.get('GENIEX_LOG', '').strip().lower()
+    if requested in {'off', '0', 'false'}:
+        requested = 'none'
+    if requested in _LEVEL_STR_TO_INT:
+        _logger.setLevel(_LEVEL_STR_TO_PY[requested])
+        lib.geniex_set_log_level(c_int32(_LEVEL_STR_TO_INT[requested]))
+
+    if not _logger.handlers and _logger.level != logging.NOTSET:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
+        _logger.addHandler(handler)
+        _logger.propagate = False
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +176,12 @@ def _bind_all() -> None:
 
     lib.geniex_set_log.argtypes = [geniex_log_callback]
     lib.geniex_set_log.restype = c_int32
+
+    lib.geniex_set_log_level.argtypes = [c_int32]
+    lib.geniex_set_log_level.restype = c_int32
+
+    lib.geniex_get_log_level.argtypes = []
+    lib.geniex_get_log_level.restype = c_int32
 
     lib.geniex_init.argtypes = []
     lib.geniex_init.restype = c_int32
