@@ -36,13 +36,17 @@ jobs:
           set -euo pipefail
           semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
           [[ "${TAG}" =~ $semver ]] || { echo "::error::Invalid SemVer 2.0 tag: ${TAG}"; exit 1; }
-          # Stable tags are immutable; prereleases (hyphen-bearing) may be re-cut.
+          # Stable tags are immutable once they've shipped assets; prereleases
+          # (hyphen-bearing) may be re-cut. An existing stable release with no
+          # assets is a placeholder (e.g. created empty via the UI before the
+          # workflow ran) — let the workflow populate it instead of erroring.
           if [[ "${TAG}" == *-* ]]; then
             is_prerelease=true
           else
             is_prerelease=false
-            if gh release view "${TAG}" --json id >/dev/null 2>&1; then
-              echo "::error::Stable release ${TAG} already exists — refusing to overwrite."
+            asset_count=$(gh release view "${TAG}" --json assets --jq '.assets | length' 2>/dev/null || echo "none")
+            if [[ "${asset_count}" != "none" && "${asset_count}" -gt 0 ]]; then
+              echo "::error::Stable release ${TAG} already has ${asset_count} asset(s) — refusing to overwrite."
               exit 1
             fi
           fi
