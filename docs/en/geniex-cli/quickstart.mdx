@@ -25,7 +25,6 @@ import Feedback from "/snippets/page-feedback.mdx";
     ### **Running Your First Model through QAIRT plugin**
 
     **Language Model (LLM)**
-    Remember to select `Q4_0` as quant type which has the best support with llama.cpp Hexagon backend.
 
     ```bash Windows
    geniex infer qualcomm/Qwen3-4B
@@ -37,6 +36,8 @@ import Feedback from "/snippets/page-feedback.mdx";
     ```
 
     ### **Running Your First Model through llama.cpp plugin**
+    Remember to select `Q4_0` as quant type which has the best support with llama.cpp Hexagon backend.
+
     **Language Model (LLM)**
 
     ```bash Windows
@@ -49,7 +50,8 @@ import Feedback from "/snippets/page-feedback.mdx";
     ```
 
     When prompted, select:
-    - **Model type**: `vlm` for vision-language models (Qwen3-VL), `llm` for all others
+    - **Model type**: `vlm` for vision-language models, `llm` for language models. Currently for Gemma4 and Qwen3.5, please select `llm`, currently `vlm` path is not supported.
+
     - **Quantization**: `Q4_0` — best Hexagon NPU support for llama.cpp
 
     <Note>Multimodal support for `Qwen3.5` and `Gemma4` is coming soon.</Note>
