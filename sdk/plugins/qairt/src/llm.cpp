@@ -192,7 +192,13 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     }
 
     // Generate
-    GenerateResult result = pipeline_->generate(input->prompt_utf8, gen_cfg, on_token_fn);
+    GenerateResult result;
+    try {
+        result = pipeline_->generate(input->prompt_utf8, gen_cfg, on_token_fn);
+    } catch (const ContextLengthExceededError& e) {
+        GENIEX_LOG_ERROR("QAIRT generate: context length exceeded: {}", e.what());
+        return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+    }
     is_first_turn_        = false;
 
     // Map result to output

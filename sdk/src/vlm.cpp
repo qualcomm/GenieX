@@ -1,6 +1,5 @@
 #include <cstring>
 #include <memory>
-#include <string>
 
 #include "geniex.h"
 #include "logging.h"

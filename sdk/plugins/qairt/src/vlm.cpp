@@ -260,7 +260,13 @@ int32_t QairtVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     history_size_ = pending_history_size_ + 1;
 
     // Run VLM pipeline (incremental — only new messages since last generate() are in the prompt)
-    GenerateResult result = pipeline_->generate(input->prompt_utf8, image_paths, gen_cfg, on_token_fn);
+    GenerateResult result;
+    try {
+        result = pipeline_->generate(input->prompt_utf8, image_paths, gen_cfg, on_token_fn);
+    } catch (const ContextLengthExceededError& e) {
+        GENIEX_LOG_ERROR("QAIRT VLM generate: context length exceeded: {}", e.what());
+        return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+    }
 
     // Map result to output
     output->full_text = portable_strdup(result.full_text.c_str());
