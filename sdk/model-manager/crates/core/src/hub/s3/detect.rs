@@ -132,13 +132,11 @@ mod tests {
 
     #[test]
     fn ignores_non_oryon_cpus() {
-        assert!(cpu_name_to_chipset_alias(
-            "Intel(R) Core(TM) i7-12700H @ 2.30GHz".to_string()
-        )
-        .is_none());
         assert!(
-            cpu_name_to_chipset_alias("AMD Ryzen 7 7840U".to_string()).is_none()
+            cpu_name_to_chipset_alias("Intel(R) Core(TM) i7-12700H @ 2.30GHz".to_string())
+                .is_none()
         );
+        assert!(cpu_name_to_chipset_alias("AMD Ryzen 7 7840U".to_string()).is_none());
         assert!(cpu_name_to_chipset_alias(String::new()).is_none());
     }
 

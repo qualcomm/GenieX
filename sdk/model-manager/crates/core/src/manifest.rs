@@ -34,7 +34,11 @@ pub struct ModelManifest {
     pub device_id: String,
     #[serde(rename = "MinSDKVersion", default)]
     pub min_sdk_version: String,
-    #[serde(rename = "Precision", default, skip_serializing_if = "String::is_empty")]
+    #[serde(
+        rename = "Precision",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
     pub precision: String,
     #[serde(rename = "ModelFile", default)]
     pub model_file: HashMap<String, ModelFileInfo>,

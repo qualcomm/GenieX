@@ -112,9 +112,8 @@ async fn s3_pull_writes_manifest_and_extracts_flat() {
       ]
     }"#;
     let zip_bytes = build_zip();
-    let asset_url = format!(
-        "{base}/qai-hub-models/releases/{version}/models/testnet/assets/SM8650.zip"
-    );
+    let asset_url =
+        format!("{base}/qai-hub-models/releases/{version}/models/testnet/assets/SM8650.zip");
     let release_assets_json = format!(
         r#"{{
           "model_id": "testnet",
@@ -190,8 +189,7 @@ async fn s3_pull_writes_manifest_and_extracts_flat() {
         "extra tokenizer missing"
     );
     assert!(
-        !model_dir.join("NexaAI-TestNet.zip").exists()
-            && !model_dir.join("TestNet.zip").exists(),
+        !model_dir.join("NexaAI-TestNet.zip").exists() && !model_dir.join("TestNet.zip").exists(),
         "zip should have been removed after extract"
     );
 

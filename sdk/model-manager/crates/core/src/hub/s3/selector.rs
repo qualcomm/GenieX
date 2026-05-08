@@ -23,10 +23,7 @@ const RUNTIME_GENIE: &str = "RUNTIME_GENIE";
 
 /// Domains the SDK currently supports — same subset the Go CLI accepts
 /// in `RuntimeForDomain`.
-const SUPPORTED_DOMAINS: &[&str] = &[
-    "MODEL_DOMAIN_GENERATIVE_AI",
-    "MODEL_DOMAIN_MULTIMODAL",
-];
+const SUPPORTED_DOMAINS: &[&str] = &["MODEL_DOMAIN_GENERATIVE_AI", "MODEL_DOMAIN_MULTIMODAL"];
 
 pub fn is_domain_supported(domain: &str) -> bool {
     SUPPORTED_DOMAINS.contains(&domain)
@@ -81,10 +78,7 @@ pub fn match_asset<'a>(
     let mut candidates: Vec<&AssetDetails> = ra
         .assets
         .iter()
-        .filter(|a| {
-            a.runtime == RUNTIME_GENIE
-                && a.chipset.as_deref() == Some(canonical.as_str())
-        })
+        .filter(|a| a.runtime == RUNTIME_GENIE && a.chipset.as_deref() == Some(canonical.as_str()))
         .collect();
 
     if candidates.is_empty() {
@@ -160,8 +154,14 @@ mod tests {
     #[test]
     fn resolves_alias_case_insensitive() {
         let plat = platform(&[("Snapdragon 8 Gen 3", &["sm8650", "SD8G3"])]);
-        assert_eq!(resolve_chipset(&plat, "sm8650").unwrap(), "Snapdragon 8 Gen 3");
-        assert_eq!(resolve_chipset(&plat, "SD8G3").unwrap(), "Snapdragon 8 Gen 3");
+        assert_eq!(
+            resolve_chipset(&plat, "sm8650").unwrap(),
+            "Snapdragon 8 Gen 3"
+        );
+        assert_eq!(
+            resolve_chipset(&plat, "SD8G3").unwrap(),
+            "Snapdragon 8 Gen 3"
+        );
         assert!(resolve_chipset(&plat, "unknown").is_err());
     }
 

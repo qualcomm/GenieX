@@ -37,8 +37,7 @@ impl StoreConfig {
     /// AI Hub public assets base URL. Mirrors the Go CLI's
     /// `DefaultAIHubBaseURL`; override via `GENIEX_AIHUBBASEURL`.
     pub fn ai_hub_base_url() -> String {
-        std::env::var("GENIEX_AIHUBBASEURL")
-            .unwrap_or_else(|_| DEFAULT_AI_HUB_BASE_URL.to_string())
+        std::env::var("GENIEX_AIHUBBASEURL").unwrap_or_else(|_| DEFAULT_AI_HUB_BASE_URL.to_string())
     }
 
     /// Pinned aihm release version the SDK consumes. The public bucket has

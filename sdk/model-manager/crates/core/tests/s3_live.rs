@@ -34,7 +34,7 @@ const PHI_STORED_NAME: &str = "qualcomm/Phi-3.5-Mini-Instruct";
 #[test]
 #[ignore]
 fn live_manifest_resolves_phi_model() {
-    use model_manager_core::hub::s3::{S3Config, pull_ai_hub_with_transport};
+    use model_manager_core::hub::s3::{pull_ai_hub_with_transport, S3Config};
     use model_manager_core::transport::ReqwestTransport;
 
     // Reuse the pull entry point's HEAD-only code path indirectly by
@@ -121,7 +121,10 @@ fn live_phi_3_5_mini_e2e_pull() {
     assert_eq!(mf.device_id, PHI_CHIPSET);
     assert_eq!(mf.precision, "W4A16");
     let entry = mf.model_file.get("N/A").expect("N/A quant");
-    assert!(entry.name.ends_with(".bin"), "entrypoint not a .bin: {entry:?}");
+    assert!(
+        entry.name.ends_with(".bin"),
+        "entrypoint not a .bin: {entry:?}"
+    );
     assert!(entry.downloaded);
 
     let model_dir = tmp.path().join("models").join(PHI_STORED_NAME);

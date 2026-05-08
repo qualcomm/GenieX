@@ -336,10 +336,7 @@ struct SingleFileMetadata;
 
 #[async_trait::async_trait]
 impl HubMetadata for SingleFileMetadata {
-    async fn list_files(
-        &self,
-        _repo: &str,
-    ) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
+    async fn list_files(&self, _repo: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
         Err(Error::Hub(
             "SingleFileMetadata: list_files not supported".to_string(),
         ))
@@ -355,4 +352,3 @@ impl HubMetadata for SingleFileMetadata {
         1
     }
 }
-

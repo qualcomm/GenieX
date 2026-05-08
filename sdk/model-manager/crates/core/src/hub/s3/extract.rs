@@ -103,10 +103,7 @@ pub fn extract_flat(zip_path: &Path, dest_dir: &Path) -> Result<ExtractResult> {
 
 fn basename(path: &str) -> String {
     let path = path.replace('\\', "/");
-    path.rsplit('/')
-        .next()
-        .unwrap_or("")
-        .to_string()
+    path.rsplit('/').next().unwrap_or("").to_string()
 }
 
 /// AppleDouble metadata embedded by macOS Finder when zipping: `__MACOSX/`
@@ -164,13 +161,7 @@ mod tests {
     fn rejects_basename_collision() {
         let tmp = tempfile::tempdir().unwrap();
         let zip_path = tmp.path().join("a.zip");
-        write_zip(
-            &zip_path,
-            &[
-                ("a/model.bin", b"xx"),
-                ("b/model.bin", b"yy"),
-            ],
-        );
+        write_zip(&zip_path, &[("a/model.bin", b"xx"), ("b/model.bin", b"yy")]);
 
         let dest = tmp.path().join("out");
         assert!(extract_flat(&zip_path, &dest).is_err());
