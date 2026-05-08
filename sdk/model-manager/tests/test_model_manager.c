@@ -105,8 +105,6 @@ static int test_localfs(const char* data_dir) {
         "\"ModelName\":\"test-1b\","
         "\"ModelType\":\"llm\","
         "\"PluginId\":\"llama_cpp\","
-        "\"DeviceId\":\"\","
-        "\"MinSDKVersion\":\"\","
         "\"ModelFile\":{\"Q4_K_M\":{\"Name\":\"model-Q4_K_M.gguf\",\"Downloaded\":true,\"Size\":17}},"
         "\"MMProjFile\":{\"Name\":\"\",\"Downloaded\":false,\"Size\":0},"
         "\"TokenizerFile\":{\"Name\":\"\",\"Downloaded\":false,\"Size\":0},"

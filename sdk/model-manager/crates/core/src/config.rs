@@ -72,9 +72,6 @@ const DEFAULT_AI_HUB_BASE_URL: &str =
 /// Mirrors `cli/internal/config/config.go:DefaultAIHubVersion`.
 const DEFAULT_AI_HUB_VERSION: &str = "v0.52.0";
 
-/// Mirrors `cli/internal/config/config.go:MinSDKVersion`.
-pub const MIN_SDK_VERSION: &str = "0.0.0";
-
 fn default_data_dir() -> PathBuf {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))

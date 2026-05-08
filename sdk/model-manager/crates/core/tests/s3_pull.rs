@@ -195,7 +195,6 @@ async fn s3_pull_writes_manifest_and_extracts_flat() {
 
     let mf = store.get_manifest("NexaAI/TestNet").unwrap();
     assert_eq!(mf.plugin_id, "qairt");
-    assert_eq!(mf.device_id, "SM8650");
     assert_eq!(mf.precision, "W4A16");
     let entry = mf.model_file.get("N/A").expect("N/A quant entry");
     assert_eq!(entry.name, "model-00.bin");

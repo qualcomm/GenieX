@@ -30,7 +30,6 @@ use std::sync::Arc;
 
 use url::Url;
 
-use crate::config::MIN_SDK_VERSION;
 use crate::download::Engine;
 use crate::error::{Error, Result};
 use crate::hub::metadata::FileSource;
@@ -298,8 +297,6 @@ async fn pull_ai_hub_inner(
         },
         model_type,
         plugin_id: "qairt".to_string(),
-        device_id: asset.chipset.clone().unwrap_or_default(),
-        min_sdk_version: MIN_SDK_VERSION.to_string(),
         precision: precision_label,
         model_file,
         mmproj_file: ModelFileInfo::default(),

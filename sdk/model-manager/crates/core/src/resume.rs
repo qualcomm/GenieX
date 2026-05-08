@@ -94,8 +94,6 @@ mod tests {
             model_name: "org/repo".to_string(),
             model_type: ModelType::Llm,
             plugin_id: "llama_cpp".to_string(),
-            device_id: String::new(),
-            min_sdk_version: "0".to_string(),
             precision: String::new(),
             model_file,
             mmproj_file: ModelFileInfo::default(),
