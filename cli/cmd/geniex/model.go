@@ -299,6 +299,11 @@ func pullModel(name string, quant string) error {
 			manifest.ModelType = inferModelTypeFromManifest(&manifest)
 		}
 
+		det := store.ModelTypeDetection{Detected: manifest.ModelType}
+		if manifest.MMProjFile.Name == "" {
+			det.Err = fmt.Errorf("no mmproj file found in repository")
+		}
+
 		pgCh, errCh := s.Pull(context.TODO(), manifest)
 
 		bar := render.NewProgressBar(manifest.GetSize(), "downloading")
@@ -313,6 +318,8 @@ func pullModel(name string, quant string) error {
 			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			return err
 		}
+
+		printModelTypeDetection(name, det)
 	}
 
 	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success"))
@@ -347,6 +354,20 @@ func choosePluginId(name string) string {
 		return "llama_cpp"
 	}
 
+}
+
+// printModelTypeDetection prints a user-facing message about the auto-detected
+// model type.
+func printModelTypeDetection(modelName string, det store.ModelTypeDetection) {
+	if det.Err != nil {
+		fmt.Println(render.GetTheme().Error.Sprintf(
+			"⚠  Model type detection failed; defaulting to %s.\n"+
+				"   To set the correct type, run:\n"+
+				"     geniex model set-type %s <llm|vlm>",
+			det.Detected, modelName))
+	} else {
+		fmt.Println(render.GetTheme().Info.Sprintf("   Detected model type: %s", det.Detected))
+	}
 }
 
 func chooseModelType() (types.ModelType, error) {
@@ -1018,7 +1039,7 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 		"display_name", displayName, "id", model.GetId(), "chipset", asset.GetChipset(), "runtime", asset.GetRuntime(),
 		"precision", asset.GetPrecision(), "url", asset.GetDownloadUrl(), "size", zipSize)
 
-	infoCh, errCh := store.Get().PullZipAsset(ctx, mf, asset.GetDownloadUrl(), zipSize)
+	infoCh, detCh, errCh := store.Get().PullZipAsset(ctx, mf, asset.GetDownloadUrl(), zipSize)
 	bar := render.NewProgressBar(zipSize, "downloading")
 	for pg := range infoCh {
 		bar.Set(pg.TotalDownloaded)
@@ -1028,6 +1049,10 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 		bar.Clear()
 		fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", e))
 		return e
+	}
+
+	if det, ok := <-detCh; ok {
+		printModelTypeDetection(storedName, det)
 	}
 
 	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success"))

@@ -364,12 +364,14 @@ func (s *Store) PullZipAsset(
 	mf types.ModelManifest,
 	downloadURL string,
 	zipSize int64,
-) (<-chan types.DownloadInfo, <-chan error) {
+) (<-chan types.DownloadInfo, <-chan ModelTypeDetection, <-chan error) {
 	infoC := make(chan types.DownloadInfo, 10)
+	detC := make(chan ModelTypeDetection, 1)
 	errC := make(chan error, 1)
 
 	go func() {
 		defer close(errC)
+		defer close(detC)
 		defer close(infoC)
 
 		// Conservative: zip + extracted payload + slack ~= 3x zipSize.
@@ -426,23 +428,36 @@ func (s *Store) PullZipAsset(
 			slog.Warn("PullZipAsset: failed to remove zip after extract", "path", zipPath, "err", err)
 		}
 
-		if err := finalizeAIHubManifest(mf, res, partialDir, finalDir); err != nil {
+		det, err := finalizeAIHubManifest(mf, res, partialDir, finalDir)
+		if err != nil {
 			errC <- err
 			return
 		}
 
 		slog.Info("PullZipAsset complete",
 			"model", mf.Name, "entrypoint", res.EntrypointBasename,
-			"files", len(res.Files), "size", res.TotalSize)
+			"files", len(res.Files), "size", res.TotalSize,
+			"model_type", det.Detected, "type_fallback", det.Fallback)
+		detC <- det
 	}()
 
-	return infoC, errC
+	return infoC, detC, errC
+} 
+// ModelTypeDetection carries the result of automatic model-type detection so
+// callers can surface the right user-facing message.
+type ModelTypeDetection struct {
+	Detected types.ModelType
+	Err      error // non-nil when detection failed and LLM was used as the default
 }
 
 // finalizeAIHubManifest builds the geniex.json for an AI Hub (qairt) model
 // from the flat-extracted contents of a zip asset and atomically promotes the
 // staging directory into its final location.
-func finalizeAIHubManifest(mf types.ModelManifest, res *aihub.ExtractResult, partialDir, finalDir string) error {
+// It returns a ModelTypeDetection so the caller can print the appropriate
+// user-facing message without mixing UI concerns into the store layer.
+func finalizeAIHubManifest(mf types.ModelManifest, res *aihub.ExtractResult, partialDir, finalDir string) (ModelTypeDetection, error) {
+	var det ModelTypeDetection
+
 	// --- Step 1: auto-detect model type ---
 	if mf.ModelType == "" {
 		var hasMetadata bool
@@ -452,30 +467,35 @@ func finalizeAIHubManifest(mf types.ModelManifest, res *aihub.ExtractResult, par
 				break
 			}
 		}
-		if hasMetadata {
+		if !hasMetadata {
+			slog.Info("finalizeAIHubManifest: no metadata.json in zip, defaulting to LLM")
+			mf.ModelType = types.ModelTypeLLM
+			det = ModelTypeDetection{Detected: types.ModelTypeLLM, Err: fmt.Errorf("metadata.json not found in model archive")}
+		} else {
 			metaBytes, readErr := os.ReadFile(filepath.Join(partialDir, "metadata.json"))
 			if readErr != nil {
 				slog.Warn("finalizeAIHubManifest: failed to read metadata.json, defaulting to LLM", "err", readErr)
-				fmt.Println(render.GetTheme().Warning.Sprintf("Warning: could not read metadata.json (%s); defaulting model type to LLM", readErr))
 				mf.ModelType = types.ModelTypeLLM
+				det = ModelTypeDetection{Detected: types.ModelTypeLLM, Err: readErr}
 			} else {
 				var meta qaihm.ModelMetadata
 				if unmarshalErr := protojson.Unmarshal(metaBytes, &meta); unmarshalErr != nil {
 					slog.Warn("finalizeAIHubManifest: failed to parse metadata.json, defaulting to LLM", "err", unmarshalErr)
-					fmt.Println(render.GetTheme().Warning.Sprintf("Warning: could not parse metadata.json (%s); defaulting model type to LLM", unmarshalErr))
 					mf.ModelType = types.ModelTypeLLM
+					det = ModelTypeDetection{Detected: types.ModelTypeLLM, Err: unmarshalErr}
 				} else if meta.GetGenie().GetSupportsVision() {
 					slog.Info("finalizeAIHubManifest: detected VLM via metadata.json supports_vision")
 					mf.ModelType = types.ModelTypeVLM
+					det = ModelTypeDetection{Detected: types.ModelTypeVLM}
 				} else {
 					slog.Info("finalizeAIHubManifest: supports_vision=false in metadata.json, treating as LLM")
 					mf.ModelType = types.ModelTypeLLM
+					det = ModelTypeDetection{Detected: types.ModelTypeLLM}
 				}
 			}
-		} else {
-			slog.Info("finalizeAIHubManifest: no metadata.json in zip, defaulting to LLM")
-			mf.ModelType = types.ModelTypeLLM
 		}
+	} else {
+		det = ModelTypeDetection{Detected: mf.ModelType}
 	}
 
 	// --- Step 2: populate manifest fields from extract result ---
@@ -498,15 +518,15 @@ func finalizeAIHubManifest(mf types.ModelManifest, res *aihub.ExtractResult, par
 
 	// --- Step 3: write manifest ---
 	if err := writeManifestAt(partialDir, mf); err != nil {
-		return err
+		return det, err
 	}
 
 	// --- Step 4: atomic promotion ---
 	if err := os.Rename(partialDir, finalDir); err != nil {
-		return fmt.Errorf("promote partial dir: %w", err)
+		return det, fmt.Errorf("promote partial dir: %w", err)
 	}
 
-	return nil
+	return det, nil
 }
 
 func (s *Store) DataPath() string {
