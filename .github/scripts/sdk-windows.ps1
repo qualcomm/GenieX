@@ -23,13 +23,12 @@ Additional environment inputs read directly here:
   BUILD_DIR          (optional)  Default: sdk/build-windows-arm64.
   INSTALL_PREFIX     (optional)  Default: sdk/pkg-geniex.
 
-Why two-phase build:
-  libggml-htp-cat DEPENDS only on the htp-v*.so paths, so ninja schedules the
-  .cat signing step in parallel with the htp-v* ExternalProject build steps.
-  Inf2Cat then recursively scans the /driver: dir and trips over transient
-  files like .ninja_lock under htp-v*-prefix/. Phase 1 builds all HTP skels
-  with explicit --target, phase 2 runs everything else (including cat signing
-  + geniex) after we clean the prefix dirs.
+Hexagon HTP skel <-> inf2cat ordering:
+  install-htp-skels in sdk/plugins/llama_cpp/CMakeLists.txt stages the
+  htp-v*.so files into ggml-hexagon's binary dir and scrubs the
+  htp-v*-prefix/ ExternalProject workspaces; libggml-htp-cat
+  add_dependencies on that target so inf2cat's recursive /driver: scan
+  only sees finalised .so + .inf. A single `cmake --build` is enough.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -105,17 +104,6 @@ if ($LASTEXITCODE -ne 0) { throw "cmake configure failed: $LASTEXITCODE" }
 $Jobs = [Environment]::ProcessorCount
 Write-Host "Building with -j $Jobs"
 
-# Phase 1: build all Hexagon HTP skels first.
-& $env:CMAKE --build $BuildDir -j $Jobs --target htp-v68 htp-v69 htp-v73 htp-v75 htp-v79 htp-v81
-if ($LASTEXITCODE -ne 0) { throw "cmake --build (htp skels) failed: $LASTEXITCODE" }
-
-# Clean up ExternalProject workspaces so Inf2Cat's recursive scan of /driver:
-# only sees finalised .so + .inf.
-$hexDir = Join-Path $BuildDir "third-party\llama.cpp\ggml\src\ggml-hexagon"
-Get-ChildItem $hexDir -Directory -Filter "htp-v*-prefix" -ErrorAction SilentlyContinue |
-  ForEach-Object { Remove-Item -Recurse -Force $_.FullName }
-
-# Phase 2: build everything else (cat signing + geniex itself).
 & $env:CMAKE --build $BuildDir -j $Jobs
 if ($LASTEXITCODE -ne 0) { throw "cmake --build failed: $LASTEXITCODE" }
 

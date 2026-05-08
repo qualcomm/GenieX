@@ -12,23 +12,40 @@ set(LLAMA_BUILD_EXAMPLES OFF)
 set(LLAMA_BUILD_SERVER OFF)
 set(BUILD_SHARED_LIBS ON)
 
+add_subdirectory(
+    ../../../third-party/llama.cpp
+    ${CMAKE_BINARY_DIR}/third-party/llama.cpp
+    EXCLUDE_FROM_ALL)
+
 # patch for hexagon signing after disable install
+#
+# Runs after add_subdirectory so the upstream htp-vNN ExternalProject targets
+# and libggml-htp-cat exist and can be referenced here.
 if(GGML_HEXAGON)
     set(_HEXAGON_BDIR ${CMAKE_BINARY_DIR}/third-party/llama.cpp/ggml/src/ggml-hexagon)
     set(_INSTALL_COMMANDS)
+    set(_HTP_PREFIX_DIRS)
     foreach(_V IN ITEMS v68 v69 v73 v75 v79 v81)
         list(APPEND _INSTALL_COMMANDS
             COMMAND ${CMAKE_COMMAND} --install
                 ${_HEXAGON_BDIR}/htp-${_V}-prefix/src/htp-${_V}-build
         )
+        list(APPEND _HTP_PREFIX_DIRS ${_HEXAGON_BDIR}/htp-${_V}-prefix)
     endforeach()
+    # Scrub the ExternalProject workspaces once the skels are copied into
+    # ${_HEXAGON_BDIR} — inf2cat's recursive scan of /driver: must not see
+    # .ninja_lock or other transient files under htp-v*-prefix/.
+    list(APPEND _INSTALL_COMMANDS
+        COMMAND ${CMAKE_COMMAND} -E rm -rf ${_HTP_PREFIX_DIRS}
+    )
     add_custom_target(install-htp-skels
         ${_INSTALL_COMMANDS}
         DEPENDS htp-v68 htp-v69 htp-v73 htp-v75 htp-v79 htp-v81
         COMMENT "Installing HTP skel libraries"
     )
-    # libggml-htp-cat (inf2cat signing) depends on the .so files being
-    # present, so it must run after install-htp-skels.
+    # inf2cat signing depends on the .so files being in ${_HEXAGON_BDIR} and
+    # on the prefix dirs being gone. Both are now guaranteed by
+    # install-htp-skels.
     if(TARGET libggml-htp-cat)
         add_dependencies(libggml-htp-cat install-htp-skels)
     endif()
@@ -46,13 +63,9 @@ if(GGML_HEXAGON)
     unset(_HEXAGON_BDIR)
     unset(_V)
     unset(_INSTALL_COMMANDS)
+    unset(_HTP_PREFIX_DIRS)
     unset(_HTP_FILES)
 endif()
-
-add_subdirectory(
-    ../../../third-party/llama.cpp
-    ${CMAKE_BINARY_DIR}/third-party/llama.cpp
-    EXCLUDE_FROM_ALL)
 
 # llama.cpp benefits from relaxed-FP (FMA contraction, reassociation)
 if(WIN32 AND CMAKE_C_COMPILER_ID MATCHES "Clang")
