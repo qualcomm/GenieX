@@ -359,6 +359,8 @@ class geniex_ModelPullInput(Structure):
         ('hub', c_int32),
         ('local_path', c_char_p),
         ('hf_token', c_char_p),
+        ('chipset', c_char_p),
+        ('display_name', c_char_p),
         ('on_progress', geniex_download_progress_cb),
         ('user_data', c_void_p),
     ]
