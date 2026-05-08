@@ -137,3 +137,35 @@ fn live_phi_3_5_mini_e2e_pull() {
         mf.extra_files
     );
 }
+
+/// Same shape as `live_phi_3_5_mini_e2e_pull` but feeds an empty
+/// chipset through `S3Config`, exercising the
+/// `detect::detect_host_chipset` fallback inside `pull_ai_hub_inner`.
+/// On non-Snapdragon-Windows hosts this fails with "host auto-detect
+/// is not supported on this platform"; only real Snapdragon X Elite /
+/// Plus / X2 Elite laptops can pass it.
+#[test]
+#[ignore]
+fn live_e2e_with_auto_detect() {
+    let tmp = tempfile::tempdir().unwrap();
+    let store = Store::new(StoreConfig::new(tmp.path().to_path_buf())).unwrap();
+
+    let cfg = S3Config {
+        endpoint: AI_HUB_BASE_URL.to_string(),
+        version: AI_HUB_VERSION.to_string(),
+        chipset: String::new(), // <-- triggers host auto-detect
+        cache_dir: tmp.path().join("aihub"),
+        skip_cache: true,
+    };
+
+    pull_ai_hub(&store, PHI_STORED_NAME, PHI_DISPLAY_NAME, cfg, None)
+        .expect("live AI Hub pull with auto-detect failed");
+
+    let mf = store.get_manifest(PHI_STORED_NAME).expect("manifest");
+    assert_eq!(
+        mf.device_id, PHI_CHIPSET,
+        "auto-detect resolved to unexpected chipset: {:?}",
+        mf.device_id
+    );
+    assert_eq!(mf.plugin_id, "qairt");
+}
