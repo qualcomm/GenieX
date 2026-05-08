@@ -6,8 +6,6 @@ syntax = "proto3";
 
 package qaihm;
 
-option go_package = "github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm;qaihm";
-
 // Toolchains used to compile or profile models.
 message ToolVersions {
   optional string ai_hub_models = 1;

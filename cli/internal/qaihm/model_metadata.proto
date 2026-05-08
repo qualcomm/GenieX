@@ -12,8 +12,7 @@ syntax = "proto3";
 
 package qaihm;
 
-option go_package = "github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm;qaihm";
-
+import "platform.proto";
 import "shared/precision.proto";
 import "shared/runtime.proto";
 import "shared/tensor_spec.proto";
@@ -114,4 +113,7 @@ message ModelMetadata {
 
   // Optional Genie SDK metadata for on-device deployment.
   optional GenieMetadata genie = 9;
+
+  // Chipset attributes relevant to the compiled model asset (AoT only).
+  optional ChipsetInfo chipset_attributes = 10;
 }

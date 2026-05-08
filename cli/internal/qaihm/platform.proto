@@ -6,8 +6,6 @@ syntax = "proto3";
 
 package qaihm;
 
-option go_package = "github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm;qaihm";
-
 import "shared/precision.proto";
 import "shared/runtime.proto";
 
@@ -93,6 +91,8 @@ message DeviceInfo {
   WebsiteIcon icon = 7;
 
   bool enabled_in_scorecard = 8;
+
+  bool available_in_workbench = 9;
 }
 
 message ChipsetInfo {
@@ -111,6 +111,8 @@ message ChipsetInfo {
   uint32 soc_model = 7;
 
   string reference_device = 8;
+
+  bool supports_weight_sharing = 9;
 }
 
 message RuntimeInfo {
