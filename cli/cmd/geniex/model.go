@@ -129,7 +129,7 @@ func remove() *cobra.Command {
 				fmt.Println(render.GetTheme().Error.Sprintf("✘  Failed to remove model: %s", name))
 				os.Exit(1)
 			} else {
-				fmt.Println(render.GetTheme().Success.Sprintf("✔  Removed %s!", name))
+				fmt.Println(render.GetTheme().Success.Sprintf("✔  Removed %s", name))
 			}
 		}
 	}
@@ -150,7 +150,7 @@ func clean() *cobra.Command {
 	cleanCmd.Run = func(cmd *cobra.Command, args []string) {
 		s := store.Get()
 		c := s.Clean()
-		fmt.Println(render.GetTheme().Success.Sprintf("✔  Removed %d models!", c))
+		fmt.Println(render.GetTheme().Success.Sprintf("✔  Removed %d models", c))
 	}
 
 	return cleanCmd
@@ -357,7 +357,7 @@ func pullModel(name string, quant string) error {
 		}
 	}
 
-	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success!"))
+	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success"))
 
 	return nil
 }
@@ -1001,7 +1001,7 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 		return e
 	}
 
-	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success!"))
+	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success"))
 	return nil
 }
 
