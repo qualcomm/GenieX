@@ -1,47 +1,19 @@
 //! Live test against the HuggingFace Hub. Requires network access, so
-//! it is gated behind `--ignored` and will only run when explicitly
+//! it is gated behind `--ignored` and only runs when explicitly
 //! requested:
 //!
 //!   cargo test --test hf_live -- --ignored
-//!
-//! The CI job does not pass `--ignored`; this test exists to give humans
-//! a quick confidence check that the HF `/api/models` + our pull
-//! pipeline still work end-to-end against a real repo.
 //!
 //! Uses `ggml-org/tiny-llamas` (stories260K.gguf is ~1 MB) so the
 //! manifest inference path — which only recognises GGUF / ONNX /
 //! tokenizer — has something real to chew on.
 
-use std::sync::Arc;
-
 use model_manager_core::config::StoreConfig;
 use model_manager_core::manifest_builder::ManifestHint;
 use model_manager_core::pull::{pull, PullIntent, PullRequest};
-use model_manager_core::source::hf::HfSource;
-use model_manager_core::source::ModelSource;
 use model_manager_core::store::Store;
-use model_manager_core::transport::ReqwestTransport;
 
 const TINY_REPO: &str = "ggml-org/tiny-llamas";
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[ignore]
-async fn plan_returns_something() {
-    let transport = Arc::new(ReqwestTransport::new().unwrap());
-    let src = HfSource::with_endpoint_and_transport(
-        TINY_REPO.to_string(),
-        model_manager_core::source::hf::DEFAULT_HF_ENDPOINT,
-        None,
-        transport,
-        ManifestHint::default(),
-    )
-    .unwrap();
-    let plan = src.plan().await.expect("hf plan failed");
-    assert!(
-        !plan.files.is_empty(),
-        "expected at least one file in {TINY_REPO}"
-    );
-}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
@@ -61,7 +33,6 @@ async fn end_to_end_pull_via_hf() {
     };
     pull(&store, req).await.expect("pull failed");
 
-    // After pull, the model should be listed and resolve to a real file.
     let list = store.list().expect("list failed");
     assert!(
         list.iter().any(|m| m.name == TINY_REPO),

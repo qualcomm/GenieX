@@ -17,7 +17,7 @@ fn parses_go_generated_manifest() {
     let m: ModelManifest =
         serde_json::from_str(GO_MANIFEST).expect("Go-produced manifest must parse");
 
-    assert_eq!(m.name, "NexaAI/Qwen3-4B-GGUF");
+    assert_eq!(m.name, "Qwen/Qwen3-4B-GGUF");
     assert_eq!(m.model_name, "qwen3-4b");
     assert_eq!(m.model_type, ModelType::Llm);
     assert_eq!(m.plugin_id, "llama_cpp");

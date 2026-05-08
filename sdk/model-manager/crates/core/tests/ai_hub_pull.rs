@@ -1,4 +1,4 @@
-//! End-to-end S3 (AI Hub) pull against a wiremock'd server.
+//! End-to-end AI Hub pull against a wiremock'd server.
 //!
 //! Serves three protojson documents (manifest.json, release-assets.json,
 //! platform.json) plus a real zip containing a STORED `.bin` shard and
@@ -94,7 +94,7 @@ fn build_zip() -> Vec<u8> {
 }
 
 #[tokio::test]
-async fn s3_pull_writes_manifest_and_extracts_flat() {
+async fn ai_hub_pull_writes_manifest_and_extracts_flat() {
     let server = MockServer::start().await;
     let base = server.uri();
     let version = "v0.99.0";
@@ -178,16 +178,16 @@ async fn s3_pull_writes_manifest_and_extracts_flat() {
     let transport = fast_transport();
     let src = AiHubSource::with_transport(
         "TestNet".to_string(),
-        "NexaAI/TestNet".to_string(),
+        "tests/TestNet".to_string(),
         cfg,
         transport.clone(),
     );
-    pull_with_source(&store, "NexaAI/TestNet", Box::new(src), transport, None)
+    pull_with_source(&store, "tests/TestNet", Box::new(src), transport, None)
         .await
-        .expect("s3 pull");
+        .expect("ai hub pull");
 
     // Flat-extracted payload + synthesised manifest, no zip on disk.
-    let model_dir = tmp.path().join("models/NexaAI/TestNet");
+    let model_dir = tmp.path().join("models/tests/TestNet");
     assert!(
         model_dir.join("model-00.bin").exists(),
         "entrypoint .bin missing"
@@ -206,7 +206,7 @@ async fn s3_pull_writes_manifest_and_extracts_flat() {
         "no zip should exist on disk after range-read pipeline: {entries:?}",
     );
 
-    let mf = store.get_manifest("NexaAI/TestNet").unwrap();
+    let mf = store.get_manifest("tests/TestNet").unwrap();
     assert_eq!(mf.plugin_id, "qairt");
     assert_eq!(mf.precision, "W4A16");
     let entry = mf.model_file.get("N/A").expect("N/A quant entry");
@@ -220,7 +220,7 @@ async fn s3_pull_writes_manifest_and_extracts_flat() {
 }
 
 #[tokio::test]
-async fn s3_pull_errors_when_chipset_unknown() {
+async fn ai_hub_pull_errors_when_chipset_unknown() {
     let server = MockServer::start().await;
     let base = server.uri();
     let version = "v0.99.0";
@@ -289,11 +289,11 @@ async fn s3_pull_errors_when_chipset_unknown() {
     let transport = fast_transport();
     let src = AiHubSource::with_transport(
         "TestNet".to_string(),
-        "NexaAI/TestNet".to_string(),
+        "tests/TestNet".to_string(),
         cfg,
         transport.clone(),
     );
-    let err = pull_with_source(&store, "NexaAI/TestNet", Box::new(src), transport, None)
+    let err = pull_with_source(&store, "tests/TestNet", Box::new(src), transport, None)
         .await
         .expect_err("expected chipset mismatch error");
     assert!(

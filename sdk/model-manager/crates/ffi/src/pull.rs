@@ -16,7 +16,7 @@ pub enum GeniexHubSource {
     Auto = 0,
     HuggingFace = 1,
     ModelScope = 2,
-    S3 = 3,
+    AiHub = 3,
     Volces = 4,
     /// Local filesystem — intentionally 127, not 5, to keep "not a real
     /// hub" visually separated from the network hub IDs above.
@@ -45,11 +45,11 @@ pub struct GeniexModelPullInput {
     /// then anonymous). Only meaningful when `hub == GENIEX_HUB_HUGGINGFACE`.
     pub hf_token: *const c_char,
     /// Target chipset for AI Hub pulls. Required when
-    /// `hub == GENIEX_HUB_S3`; ignored otherwise. Matched against the
+    /// `hub == GENIEX_HUB_AIHUB`; ignored otherwise. Matched against the
     /// `name` / `aliases` fields of `platform.json`.
     pub chipset: *const c_char,
     /// AI Hub `display_name` of the model to download. Required when
-    /// `hub == GENIEX_HUB_S3`; ignored otherwise. `model_name` still
+    /// `hub == GENIEX_HUB_AIHUB`; ignored otherwise. `model_name` still
     /// names the on-disk directory ("org/repo" shape), mirroring the
     /// Go CLI's `storedName` / `displayName` split.
     pub display_name: *const c_char,
@@ -108,7 +108,7 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
                 };
                 PullIntent::LocalFs { source_dir: path }
             }
-            GeniexHubSource::S3 => {
+            GeniexHubSource::AiHub => {
                 // chipset NULL or empty → SDK auto-detects (currently
                 // Windows-on-Snapdragon only). Non-empty: caller override.
                 let chipset = unsafe { cstr_to_str(inp.chipset) }

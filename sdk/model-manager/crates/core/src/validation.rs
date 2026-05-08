@@ -56,7 +56,7 @@ mod tests {
 
     #[test]
     fn valid_names() {
-        validate_model_name("NexaAI/Qwen3-4B-GGUF").unwrap();
+        validate_model_name("Qwen/Qwen3-4B-Instruct").unwrap();
         validate_model_name("a/b").unwrap();
     }
 

@@ -223,7 +223,7 @@ mod tests {
           ]
         }"#;
         Mock::given(method("HEAD"))
-            .and(path("/api/models/NexaAI/Tiny-GGUF"))
+            .and(path("/api/models/tests/Tiny-GGUF"))
             .respond_with(
                 ResponseTemplate::new(200)
                     .append_header("Content-Length", body.len().to_string())
@@ -232,19 +232,19 @@ mod tests {
             .mount(&server)
             .await;
         Mock::given(method("GET"))
-            .and(path("/api/models/NexaAI/Tiny-GGUF"))
+            .and(path("/api/models/tests/Tiny-GGUF"))
             .respond_with(ResponseTemplate::new(206).set_body_bytes(body.as_bytes()))
             .mount(&server)
             .await;
         // HEAD for geniex.json → 404 means "repo does not ship one".
         Mock::given(method("HEAD"))
-            .and(path("/NexaAI/Tiny-GGUF/resolve/main/geniex.json"))
+            .and(path("/tests/Tiny-GGUF/resolve/main/geniex.json"))
             .respond_with(ResponseTemplate::new(404))
             .mount(&server)
             .await;
 
         let src = HfSource::with_endpoint_and_transport(
-            "NexaAI/Tiny-GGUF".to_string(),
+            "tests/Tiny-GGUF".to_string(),
             &server.uri(),
             None,
             fast_transport(),
@@ -252,7 +252,7 @@ mod tests {
         )
         .unwrap();
         let plan = src.plan().await.unwrap();
-        assert_eq!(plan.manifest.name, "NexaAI/Tiny-GGUF");
+        assert_eq!(plan.manifest.name, "tests/Tiny-GGUF");
         assert!(plan.manifest.model_file.contains_key("Q4_K_M"));
         assert_eq!(plan.files.len(), 1);
         assert_eq!(plan.files[0].name, "model-Q4_K_M.gguf");

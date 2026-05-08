@@ -13,16 +13,13 @@
 //!   * Everything else — returns `None`. Callers must then pass
 //!     `chipset` explicitly.
 
-#[cfg(target_os = "windows")]
-mod windows;
-
 /// Probe the host for a chipset identifier that can be fed to
 /// `resolve_chipset`. Returns `None` when detection is not supported
 /// on this platform or when the probe fails.
 pub fn detect_host_chipset() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        windows::detect().and_then(cpu_name_to_chipset_alias)
+        windows::detect_cpu_brand().and_then(cpu_name_to_chipset_alias)
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -34,8 +31,6 @@ pub fn detect_host_chipset() -> Option<String> {
 /// string) to the matching AI Hub chipset alias. Covers the SKUs
 /// published as of QAIRT 2.45; unknown SKUs return `None` so we
 /// fall back to the caller-supplied chipset.
-///
-/// Kept pub(crate) for unit testing.
 pub(crate) fn cpu_name_to_chipset_alias(brand: String) -> Option<String> {
     let sku = extract_oryon_sku(&brand)?;
     match &sku[..3] {
@@ -71,6 +66,66 @@ fn is_oryon_sku(tok: &str) -> bool {
         return false;
     }
     bytes[3..].iter().all(|b| b.is_ascii_digit())
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+    //! We read the CPU brand string from
+    //! `HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0\ProcessorNameString`
+    //! via `reg query`; it's been stable since Windows 2000 and
+    //! doesn't depend on `wmic.exe`, which was deprecated and is
+    //! missing on recent Windows 11 builds (24H2+).
+
+    use std::process::Command;
+
+    const KEY: &str = r"HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0";
+    const VALUE: &str = "ProcessorNameString";
+
+    pub(super) fn detect_cpu_brand() -> Option<String> {
+        let out = Command::new("reg")
+            .args(["query", KEY, "/v", VALUE])
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        parse_reg_query(&String::from_utf8_lossy(&out.stdout))
+    }
+
+    fn parse_reg_query(stdout: &str) -> Option<String> {
+        for line in stdout.lines() {
+            let trimmed = line.trim_start();
+            if !trimmed.starts_with(VALUE) {
+                continue;
+            }
+            if let Some((_, value)) = trimmed.split_once("REG_SZ") {
+                let v = value.trim();
+                if !v.is_empty() {
+                    return Some(v.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn parses_xelite1_reg_output() {
+            let stdout = "\
+HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\r\n    \
+ProcessorNameString    REG_SZ    Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz\r\n\r\n";
+            let brand = parse_reg_query(stdout).expect("parse");
+            assert_eq!(brand, "Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz");
+        }
+
+        #[test]
+        fn returns_none_on_empty_output() {
+            assert!(parse_reg_query("").is_none());
+        }
+    }
 }
 
 #[cfg(test)]

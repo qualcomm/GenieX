@@ -28,10 +28,10 @@ from typing import Callable
 from ._ffi._api import GeniexError, _check, _ensure_bound
 from ._ffi._lib import load_library
 from ._ffi._types import (
+    GENIEX_HUB_AIHUB,
     GENIEX_HUB_AUTO,
     GENIEX_HUB_HUGGINGFACE,
     GENIEX_HUB_LOCALFS,
-    GENIEX_HUB_S3,
     GENIEX_MODEL_TYPE_LLM,
     GENIEX_MODEL_TYPE_VLM,
     geniex_download_progress_cb,
@@ -85,7 +85,7 @@ _HUB_MAP = {
     'auto': GENIEX_HUB_AUTO,
     'hf': GENIEX_HUB_HUGGINGFACE,
     'huggingface': GENIEX_HUB_HUGGINGFACE,
-    's3': GENIEX_HUB_S3,
+    'aihub': GENIEX_HUB_AIHUB,
     'localfs': GENIEX_HUB_LOCALFS,
     'local': GENIEX_HUB_LOCALFS,
 }
@@ -149,14 +149,14 @@ def pull(
     Args:
         model_name: ``org/repo`` or a short alias (see :func:`resolve_alias`).
         quant: Optional quantization hint (e.g. ``"Q4_K_M"``).
-        hub: ``"auto"`` | ``"hf"`` | ``"s3"`` | ``"localfs"``, or a raw integer enum.
+        hub: ``"auto"`` | ``"hf"`` | ``"aihub"`` | ``"localfs"``, or a raw integer enum.
         local_path: Required when ``hub == "localfs"`` — source directory.
         hf_token: HuggingFace bearer token. Falls back to ``GENIEX_HFTOKEN`` env.
         chipset: AI Hub target chipset (e.g. ``"qualcomm-snapdragon-x-elite"``).
-            Only used when ``hub == "s3"``. ``None`` asks the SDK to auto-detect,
+            Only used when ``hub == "aihub"``. ``None`` asks the SDK to auto-detect,
             currently supported on Windows-on-Snapdragon hosts only.
         display_name: AI Hub ``display_name`` of the model. Required when
-            ``hub == "s3"``; ignored otherwise.
+            ``hub == "aihub"``; ignored otherwise.
         on_progress: Callback ``(files) -> bool``; return False to cancel.
     """
     _ensure_init()
