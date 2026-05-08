@@ -330,6 +330,164 @@ func (s *Store) PullExtraQuant(ctx context.Context, omf, nmf types.ModelManifest
 	return
 }
 
+// PartialSuffix is appended to a model directory while download + extract
+// are in flight.
+const PartialSuffix = ".partial"
+
+// PullZipAsset downloads a single zip asset and
+// extracts it flat into a staging directory.
+func (s *Store) PullZipAsset(
+	ctx context.Context,
+	mf types.ModelManifest,
+	downloadURL string,
+	zipSize int64,
+) (<-chan types.DownloadInfo, <-chan error) {
+	infoC := make(chan types.DownloadInfo, 10)
+	errC := make(chan error, 1)
+
+	go func() {
+		defer close(errC)
+		defer close(infoC)
+
+		// Conservative: zip + extracted payload + slack ~= 3x zipSize.
+		if err := s.ensureEnoughDiskSpace(zipSize * 3); err != nil {
+			errC <- err
+			return
+		}
+
+		// Remove any healthy same-named model before re-pulling.
+		finalDir := filepath.Join(s.home, "models", mf.Name)
+		if _, err := os.Stat(filepath.Join(finalDir, "geniex.json")); err == nil {
+			if rerr := s.Remove(mf.Name); rerr != nil {
+				errC <- fmt.Errorf("remove existing model: %w", rerr)
+				return
+			}
+		}
+
+		if err := s.LockModel(mf.Name); err != nil {
+			errC <- err
+			return
+		}
+		defer s.UnlockModel(mf.Name)
+
+		// LockModel created finalDir as a side-effect; remove it before staging.
+		_ = os.RemoveAll(finalDir)
+		partialDir := finalDir + PartialSuffix
+		if err := os.RemoveAll(partialDir); err != nil {
+			errC <- fmt.Errorf("clean stale partial: %w", err)
+			return
+		}
+		if err := os.MkdirAll(partialDir, 0o770); err != nil {
+			errC <- fmt.Errorf("mkdir partial: %w", err)
+			return
+		}
+
+		zipName := filepath.Base(mf.Name) + ".zip"
+		dlCh, dlErrCh := model_hub.StartDownloadURL(ctx, downloadURL, partialDir, zipName, zipSize)
+		for d := range dlCh {
+			infoC <- d
+		}
+		for e := range dlErrCh {
+			errC <- e
+			return
+		}
+
+		zipPath := filepath.Join(partialDir, zipName)
+		fmt.Println(render.GetTheme().Info.Sprintf("Extracting %s...", zipName))
+		res, err := aihub.ExtractFlat(zipPath, partialDir)
+		if err != nil {
+			errC <- fmt.Errorf("unzip %s: %w", zipName, err)
+			return
+		}
+		if err := os.Remove(zipPath); err != nil {
+			slog.Warn("PullZipAsset: failed to remove zip after extract", "path", zipPath, "err", err)
+		}
+
+		if err := finalizeAIHubManifest(mf, res, partialDir, finalDir); err != nil {
+			errC <- err
+			return
+		}
+
+		slog.Info("PullZipAsset complete",
+			"model", mf.Name, "entrypoint", res.EntrypointBasename,
+			"files", len(res.Files), "size", res.TotalSize)
+	}()
+
+	return infoC, errC
+}
+
+// finalizeAIHubManifest builds the geniex.json for an AI Hub (qairt) model
+// from the flat-extracted contents of a zip asset and atomically promotes the
+// staging directory into its final location.
+func finalizeAIHubManifest(mf types.ModelManifest, res *aihub.ExtractResult, partialDir, finalDir string) error {
+	// --- Step 1: auto-detect model type ---
+	if mf.ModelType == "" {
+		var hasMetadata bool
+		for _, f := range res.Files {
+			if f.Name == "metadata.json" {
+				hasMetadata = true
+				break
+			}
+		}
+		if hasMetadata {
+			metaBytes, readErr := os.ReadFile(filepath.Join(partialDir, "metadata.json"))
+			if readErr != nil {
+				slog.Warn("finalizeAIHubManifest: failed to read metadata.json, defaulting to LLM", "err", readErr)
+				fmt.Println(render.GetTheme().Warning.Sprintf("Warning: could not read metadata.json (%s); defaulting model type to LLM", readErr))
+				mf.ModelType = types.ModelTypeLLM
+			} else {
+				var meta qaihm.ModelMetadata
+				if unmarshalErr := protojson.Unmarshal(metaBytes, &meta); unmarshalErr != nil {
+					slog.Warn("finalizeAIHubManifest: failed to parse metadata.json, defaulting to LLM", "err", unmarshalErr)
+					fmt.Println(render.GetTheme().Warning.Sprintf("Warning: could not parse metadata.json (%s); defaulting model type to LLM", unmarshalErr))
+					mf.ModelType = types.ModelTypeLLM
+				} else if meta.GetGenie().GetSupportsVision() {
+					slog.Info("finalizeAIHubManifest: detected VLM via metadata.json supports_vision")
+					mf.ModelType = types.ModelTypeVLM
+				} else {
+					slog.Info("finalizeAIHubManifest: supports_vision=false in metadata.json, treating as LLM")
+					mf.ModelType = types.ModelTypeLLM
+				}
+			}
+		} else {
+			slog.Info("finalizeAIHubManifest: no metadata.json in zip, defaulting to LLM")
+			mf.ModelType = types.ModelTypeLLM
+		}
+	}
+
+	// --- Step 2: populate manifest fields from extract result ---
+	mf.ModelFile = map[string]types.ModelFileInfo{
+		"N/A": {
+			Name:       res.EntrypointBasename,
+			Downloaded: true,
+			Size:       res.TotalSize,
+		},
+	}
+	mf.MMProjFile = types.ModelFileInfo{}
+	mf.TokenizerFile = types.ModelFileInfo{}
+	mf.ExtraFiles = mf.ExtraFiles[:0]
+	for _, f := range res.Files {
+		if f.Name == res.EntrypointBasename {
+			continue
+		}
+		mf.ExtraFiles = append(mf.ExtraFiles, f)
+	}
+
+	// --- Step 3: write geniex.json ---
+	manifestPath := filepath.Join(partialDir, "geniex.json")
+	manifestData, _ := sonic.Marshal(mf)
+	if err := os.WriteFile(manifestPath, manifestData, 0o664); err != nil {
+		return fmt.Errorf("write manifest: %w", err)
+	}
+
+	// --- Step 4: atomic promotion ---
+	if err := os.Rename(partialDir, finalDir); err != nil {
+		return fmt.Errorf("promote partial dir: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Store) DataPath() string {
 	return s.home
 }
@@ -341,6 +499,32 @@ func (s *Store) ModelDirPath() string {
 // ModelfilePath returns the full path to a model's data file
 func (s *Store) ModelfilePath(name string, file string) string {
 	return filepath.Join(s.home, "models", name, file)
+}
+
+// SetModelType updates the ModelType field in an already-downloaded model's
+// geniex.json manifest. It is safe to call concurrently — the model lock is
+// held for the duration of the read-modify-write.
+func (s *Store) SetModelType(name string, modelType types.ModelType) error {
+	if err := s.LockModel(name); err != nil {
+		return err
+	}
+	defer s.UnlockModel(name)
+
+	manifestPath := filepath.Join(s.home, "models", name, "geniex.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return fmt.Errorf("read manifest: %w", err)
+	}
+	var mf types.ModelManifest
+	if err := sonic.Unmarshal(data, &mf); err != nil {
+		return fmt.Errorf("parse manifest: %w", err)
+	}
+	mf.ModelType = modelType
+	out, _ := sonic.Marshal(mf)
+	if err := os.WriteFile(manifestPath, out, 0o664); err != nil {
+		return fmt.Errorf("write manifest: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) scanModelDir() ([]string, error) {
