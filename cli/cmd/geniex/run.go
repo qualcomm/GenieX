@@ -212,20 +212,14 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 				MaxCompletionTokens: openai.Int(int64(maxTokens)),
 			},
 
-				option.WithJSONSet("enable_think", enableThink),
+				option.WithJSONSet("enable_think", !noThink),
 				option.WithJSONSet("top_k", topK),
 				option.WithJSONSet("min_p", minP),
 				option.WithJSONSet("repetition_penalty", repetitionPenalty),
 				option.WithJSONSet("grammar_path", grammarPath),
 				option.WithJSONSet("grammar_string", grammarString),
-				option.WithJSONSet("enable_json", enableJson),
-
 				option.WithJSONSet("ngl", ngl),
 				option.WithJSONSet("nctx", nctx),
-				option.WithJSONSet("enable_think", enableThink),
-
-				option.WithJSONSet("image_max_length", imageMaxLength),
-
 				option.WithHeaderAdd("GenieX-KeepCache", "true"))
 
 			var firstToken time.Time
