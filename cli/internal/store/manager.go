@@ -112,7 +112,7 @@ func (s *Store) cleanCorruptedDirectories() {
 }
 
 func (s *Store) isCorruptedModelDirectory(name string) bool {
-	manifestPath := s.ModelfilePath(name, "geniex.json")
+	manifestPath := s.ModelfilePath(name, manifestFileName)
 	if _, err := os.Stat(manifestPath); err == nil {
 		return false
 	}
