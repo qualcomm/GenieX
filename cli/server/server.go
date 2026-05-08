@@ -58,10 +58,10 @@ func Serve() {
 		}
 
 		fmt.Println(render.GetTheme().Info.Sprintf("HTTPS enabled: cert=%s key=%s", certFile, keyFile))
-		// fmt.Println(render.GetTheme().Info.Sprintf("Localhosting on https://%s/docs/ui", cfg.Host))
+		fmt.Println(render.GetTheme().Info.Sprintf("Local hosting on https://%s/docs/ui", cfg.Host))
 		err = engine.RunTLS(cfg.Host, certFile, keyFile)
 	} else {
-		fmt.Println(render.GetTheme().Info.Sprintf("Localhosting on http://%s/docs/ui", cfg.Host))
+		fmt.Println(render.GetTheme().Info.Sprintf("Local hosting on http://%s/docs/ui", cfg.Host))
 		err = engine.Run(cfg.Host)
 	}
 

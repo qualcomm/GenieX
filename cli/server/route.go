@@ -27,7 +27,7 @@ import (
 func RegisterRoot(r *gin.Engine) {
 	r.Use(middleware.CORS)
 	r.GET("/", func(c *gin.Context) {
-		c.String(200, "GenieX-CLI is running")
+		c.Redirect(http.StatusFound, "/docs/ui/")
 	})
 }
 
@@ -40,6 +40,10 @@ func RegisterSwagger(r *gin.Engine) {
 
 func RegisterAPIv1(r *gin.Engine) {
 	g := r.Group("/v1")
+	g.GET("/", func(c *gin.Context) {
+		c.String(200, "GenieX-CLI is running")
+	})
+
 	g.Use(middleware.CORS, middleware.GIL)
 
 	// ==== legacy ====
