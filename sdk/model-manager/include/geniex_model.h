@@ -194,8 +194,14 @@ typedef struct {
     const char* hf_token;
     /**
      * Target chipset for AI Hub (qairt) pulls, e.g. "SM8650". Matched
-     * against the name/aliases fields of platform.json. Required when
-     * `hub == GENIEX_HUB_S3`; ignored otherwise.
+     * against the name/aliases fields of platform.json. Only consulted
+     * when `hub == GENIEX_HUB_S3`.
+     *
+     * NULL or an empty string asks the SDK to auto-detect the host
+     * chipset. Detection currently works on Windows-on-Snapdragon
+     * (X Elite / X Plus / X2 Elite); on other hosts an auto-detect
+     * request fails with GENIEX_ERROR_COMMON_INVALID_INPUT and the
+     * caller must pass a chipset explicitly.
      */
     const char* chipset;
     /**

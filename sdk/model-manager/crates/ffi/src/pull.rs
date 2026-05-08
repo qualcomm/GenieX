@@ -76,10 +76,11 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
                 HubSource::LocalFs(path)
             }
             GeniexHubSource::S3 => {
-                let chipset = match unsafe { cstr_to_str(inp.chipset) } {
-                    Some(s) if !s.is_empty() => s.to_string(),
-                    _ => return GENIEX_ERROR_COMMON_INVALID_INPUT,
-                };
+                // chipset NULL or empty → SDK auto-detects (currently
+                // Windows-on-Snapdragon only). Non-empty: caller override.
+                let chipset = unsafe { cstr_to_str(inp.chipset) }
+                    .unwrap_or("")
+                    .to_string();
                 let display_name = match unsafe { cstr_to_str(inp.display_name) } {
                     Some(s) if !s.is_empty() => s.to_string(),
                     _ => return GENIEX_ERROR_COMMON_INVALID_INPUT,

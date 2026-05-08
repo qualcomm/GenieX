@@ -19,6 +19,7 @@
 //! either agent is interchangeable.
 
 pub mod cache;
+pub mod detect;
 pub mod extract;
 pub mod manifest;
 pub mod selector;
@@ -47,12 +48,14 @@ const PLATFORM_FILENAME: &str = "platform.json";
 const MAX_INDEX_BYTES: u64 = 8 * 1024 * 1024;
 
 /// Caller-supplied knobs. `endpoint` + `version` map to the Go CLI's
-/// `AIHubBaseURL` / `AIHubVersion`; `chipset` is the device name to
-/// match against `platform.json` aliases.
+/// `AIHubBaseURL` / `AIHubVersion`.
 #[derive(Debug, Clone)]
 pub struct S3Config {
     pub endpoint: String,
     pub version: String,
+    /// Device name matched against `platform.json` aliases. An empty
+    /// string triggers [`detect::detect_host_chipset`] as a fallback —
+    /// currently only supported on Windows-on-Snapdragon hosts.
     pub chipset: String,
     pub cache_dir: PathBuf,
     pub skip_cache: bool,
@@ -159,7 +162,19 @@ async fn pull_ai_hub_inner(
     let platform: PlatformInfo = serde_json::from_slice(&platform_bytes)
         .map_err(|e| Error::Hub(format!("parse platform.json: {e}")))?;
 
-    let asset = match match_asset(&release_assets, &platform, &cfg.chipset) {
+    // 4. Resolve chipset. Empty string means "auto-detect from host".
+    let chipset: String = if cfg.chipset.is_empty() {
+        detect::detect_host_chipset().ok_or_else(|| {
+            Error::Hub(
+                "chipset not provided and host auto-detect is not supported on this platform"
+                    .to_string(),
+            )
+        })?
+    } else {
+        cfg.chipset.clone()
+    };
+
+    let asset = match match_asset(&release_assets, &platform, &chipset) {
         Ok(a) => a,
         Err(UnavailableChipset {
             requested,
