@@ -91,6 +91,11 @@ func Version() string {
 	return C.GoString(C.geniex_version())
 }
 
+// QairtVersion returns the bundled QAIRT runtime version string.
+func QairtVersion() string {
+	return C.GoString(C.geniex_qairt_version())
+}
+
 type PluginListOutput struct {
 	PluginIDs []string
 }
