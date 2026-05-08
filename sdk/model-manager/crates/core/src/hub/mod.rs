@@ -10,6 +10,8 @@ pub use s3::S3Config;
 
 use std::path::Path;
 
+use async_trait::async_trait;
+
 use crate::error::Result;
 use crate::manifest::ModelManifest;
 
@@ -48,19 +50,30 @@ pub enum HubSource {
     },
 }
 
-pub trait ModelHub {
+/// A hub that knows how to list a repo's files and fetch them into a
+/// destination directory. The trait is `async` so composing hubs inside
+/// already-async callers (services, web handlers, async Python bindings)
+/// never has to block a worker thread with `block_on()`.
+///
+/// Sync callers should go through the FFI crate (`crates/ffi`), which
+/// owns a single process-global tokio runtime.
+#[async_trait]
+pub trait ModelHub: Send + Sync {
     /// Fetch the remote file list for a repo, along with a manifest if the
     /// repo ships a `geniex.json` at its root.
     ///
     /// Hubs that have no concept of "remote listing" (e.g. `LocalFsHub`)
     /// should return files discovered under their source directory.
-    fn list_files(&self, repo_id: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)>;
+    async fn list_files(
+        &self,
+        repo_id: &str,
+    ) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)>;
 
     /// Download the named files to `dest_dir`.
     ///
     /// `on_progress` is invoked after each file completes (and periodically
     /// during download for hubs that can report byte-level progress).
-    fn download(
+    async fn download(
         &self,
         repo_id: &str,
         files: &[String],

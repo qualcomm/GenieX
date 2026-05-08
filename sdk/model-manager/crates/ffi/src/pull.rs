@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use model_manager_core::config::StoreConfig;
 use model_manager_core::hub::HubSource;
 use model_manager_core::manifest_builder::ManifestHint;
-use model_manager_core::pull::{pull, PullRequest};
+use model_manager_core::pull::{pull_blocking, PullRequest};
 
-use crate::init::get_store;
+use crate::init::{get_store, runtime_handle};
 use crate::types::*;
 
 /// C-compatible hub source enum. Values MUST match `geniex_HubSource` in
@@ -173,7 +173,7 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
             hint,
         };
 
-        match pull(store, req) {
+        match pull_blocking(&runtime_handle(), store, req) {
             Ok(()) => GENIEX_SUCCESS,
             Err(e) => report(&e),
         }

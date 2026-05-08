@@ -28,7 +28,6 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use tokio::runtime::Builder;
 use url::Url;
 
 use crate::config::MIN_SDK_VERSION;
@@ -91,7 +90,10 @@ impl S3Config {
 /// used as the on-disk model directory). `display_name` selects which
 /// entry in the AI Hub manifest to download — usually equal to
 /// `model_name` or a short alias resolved by the caller.
-pub fn pull_ai_hub(
+///
+/// Sync callers should go through [`crate::pull::pull_blocking`] which
+/// drives this on the FFI crate's shared runtime.
+pub async fn pull_ai_hub(
     store: &Store,
     model_name: &str,
     display_name: &str,
@@ -99,23 +101,7 @@ pub fn pull_ai_hub(
     on_progress: Option<&ProgressCallback>,
 ) -> Result<()> {
     let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
-    let worker_threads = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4)
-        .min(8);
-    let rt = Builder::new_multi_thread()
-        .worker_threads(worker_threads)
-        .enable_all()
-        .build()
-        .map_err(|e| Error::Http(format!("build multi-thread runtime: {e}")))?;
-    rt.block_on(pull_ai_hub_inner(
-        store,
-        model_name,
-        display_name,
-        cfg,
-        transport,
-        on_progress,
-    ))
+    pull_ai_hub_inner(store, model_name, display_name, cfg, transport, on_progress).await
 }
 
 /// Same as [`pull_ai_hub`] but takes an explicit transport. Exposed for

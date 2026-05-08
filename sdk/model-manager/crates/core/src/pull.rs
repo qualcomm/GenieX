@@ -53,17 +53,24 @@ pub struct PullRequest {
 }
 
 /// Download a model, writing its manifest only after all files are present.
-pub fn pull(store: &Store, req: PullRequest) -> Result<()> {
+///
+/// Async-native; sync callers should use [`pull_blocking`] (which runs
+/// this on the FFI runtime) rather than building their own.
+pub async fn pull(store: &Store, req: PullRequest) -> Result<()> {
     validate_model_name(&req.model_name)?;
 
     match &req.hub {
         HubSource::HuggingFace => {
             let hub = HfHub::new(req.hf_token.clone())?;
-            store.with_model_lock(&req.model_name, || pull_locked(store, &hub, &req))
+            store
+                .with_model_lock_async(&req.model_name, || pull_locked(store, &hub, &req))
+                .await
         }
         HubSource::LocalFs(path) => {
             let hub = LocalFsHub::new(path.clone());
-            store.with_model_lock(&req.model_name, || pull_locked(store, &hub, &req))
+            store
+                .with_model_lock_async(&req.model_name, || pull_locked(store, &hub, &req))
+                .await
         }
         HubSource::S3 {
             display_name,
@@ -76,20 +83,32 @@ pub fn pull(store: &Store, req: PullRequest) -> Result<()> {
                 store.config().ai_hub_cache_dir(),
                 false,
             );
-            store.with_model_lock(&req.model_name, || {
-                pull_ai_hub(
-                    store,
-                    &req.model_name,
-                    display_name,
-                    cfg,
-                    req.on_progress.as_ref(),
-                )
-            })
+            store
+                .with_model_lock_async(&req.model_name, || {
+                    pull_ai_hub(
+                        store,
+                        &req.model_name,
+                        display_name,
+                        cfg,
+                        req.on_progress.as_ref(),
+                    )
+                })
+                .await
         }
     }
 }
 
-fn pull_locked(store: &Store, hub: &dyn ModelHub, req: &PullRequest) -> Result<()> {
+/// Sync entry point for callers that don't have a runtime. Drives
+/// [`pull`] to completion on a caller-supplied tokio handle — the FFI
+/// crate owns one process-global runtime and calls this from sync
+/// `geniex_model_pull`. **Do not call from inside a tokio context** —
+/// it panics (`Handle::block_on from within a runtime`). Async callers
+/// must use [`pull`].
+pub fn pull_blocking(handle: &tokio::runtime::Handle, store: &Store, req: PullRequest) -> Result<()> {
+    handle.block_on(pull(store, req))
+}
+
+async fn pull_locked(store: &Store, hub: &dyn ModelHub, req: &PullRequest) -> Result<()> {
     let dest_dir = store.model_file_path(&req.model_name, "")?;
     fs::create_dir_all(&dest_dir)?;
 
@@ -98,7 +117,7 @@ fn pull_locked(store: &Store, hub: &dyn ModelHub, req: &PullRequest) -> Result<(
 
     // 1. Resolve manifest: prefer an explicit geniex.json from the hub,
     //    otherwise infer one from the remote file listing.
-    let (remote_files, hub_manifest) = hub.list_files(&req.model_name)?;
+    let (remote_files, hub_manifest) = hub.list_files(&req.model_name).await?;
     let mut manifest: ModelManifest = match hub_manifest {
         Some(m) => m,
         None => {
@@ -127,7 +146,8 @@ fn pull_locked(store: &Store, hub: &dyn ModelHub, req: &PullRequest) -> Result<(
 
     // 3. Fetch. The hub takes ownership of .progress bitmap management;
     //    on success every marker byte is already 0x01.
-    hub.download(&req.model_name, &files, &dest_dir, req.on_progress.as_ref())?;
+    hub.download(&req.model_name, &files, &dest_dir, req.on_progress.as_ref())
+        .await?;
 
     // 4. Persist the manifest (staged then atomic rename).
     let staged = inflight_dir.join(MANIFEST_FILE);

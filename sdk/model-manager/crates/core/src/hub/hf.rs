@@ -1,17 +1,17 @@
-//! HuggingFace [`ModelHub`] — thin sync adapter that composes
-//! [`HfMetadata`] + [`ReqwestTransport`] and drives them through the
-//! [`Engine`]. The `ModelHub` trait is sync for backward compatibility
-//! with [`crate::pull::pull_locked`] and the FFI layer; we run the async
-//! engine on a scoped multi-thread tokio runtime that is built and
-//! dropped inside `download()` so no global reactor leaks out.
+//! HuggingFace [`ModelHub`] — composes [`HfMetadata`] +
+//! [`ReqwestTransport`] and drives them through the [`Engine`].
+//!
+//! This module is pure async. Sync callers should go through the FFI
+//! crate (`crates/ffi`), which owns a single process-global runtime
+//! rather than spinning one up per pull.
 
 use std::path::Path;
 use std::sync::Arc;
 
-use tokio::runtime::Builder;
+use async_trait::async_trait;
 
 use crate::download::{Engine, EngineConfig};
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::hub::hf_metadata::HfMetadata;
 use crate::hub::metadata::HubContext;
 use crate::hub::{ModelHub, ProgressCallback, RemoteFile};
@@ -49,27 +49,18 @@ impl HfHub {
             ctx: HubContext::new(metadata, transport),
         })
     }
-
-    fn worker_threads() -> usize {
-        std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(4)
-            .min(8)
-    }
 }
 
+#[async_trait]
 impl ModelHub for HfHub {
-    fn list_files(&self, repo_id: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
-        // Single short-lived current-thread runtime is enough for a
-        // one-shot metadata call — no need to spin up the worker pool.
-        let rt = Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| Error::Http(format!("build current-thread runtime: {e}")))?;
-        rt.block_on(self.ctx.metadata.list_files(repo_id))
+    async fn list_files(
+        &self,
+        repo_id: &str,
+    ) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
+        self.ctx.metadata.list_files(repo_id).await
     }
 
-    fn download(
+    async fn download(
         &self,
         repo_id: &str,
         files: &[String],
@@ -79,18 +70,8 @@ impl ModelHub for HfHub {
         for f in files {
             validate_relative_file(f)?;
         }
-        let names: Vec<String> = files.to_vec();
-
-        let rt = Builder::new_multi_thread()
-            .worker_threads(Self::worker_threads())
-            .enable_all()
-            .build()
-            .map_err(|e| Error::Http(format!("build multi-thread runtime: {e}")))?;
-
-        rt.block_on(async {
-            let sources = self.ctx.metadata.resolve(repo_id, &names).await?;
-            let engine = Engine::with_config(&self.ctx, EngineConfig::resolve(&self.ctx));
-            engine.run(sources, dest_dir, on_progress).await
-        })
+        let sources = self.ctx.metadata.resolve(repo_id, files).await?;
+        let engine = Engine::with_config(&self.ctx, EngineConfig::resolve(&self.ctx));
+        engine.run(sources, dest_dir, on_progress).await
     }
 }

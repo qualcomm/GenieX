@@ -31,10 +31,10 @@ const PHI_STORED_NAME: &str = "qualcomm/Phi-3.5-Mini-Instruct";
 /// Cheap reachability + parsing check: fetch manifest.json, confirm
 /// the model we rely on is still present. Runs in a couple hundred
 /// milliseconds; no zip download.
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore]
-fn live_manifest_resolves_phi_model() {
-    use model_manager_core::hub::s3::{pull_ai_hub_with_transport, S3Config};
+async fn live_manifest_resolves_phi_model() {
+    use model_manager_core::hub::s3::pull_ai_hub_with_transport;
     use model_manager_core::transport::ReqwestTransport;
 
     // Reuse the pull entry point's HEAD-only code path indirectly by
@@ -43,29 +43,24 @@ fn live_manifest_resolves_phi_model() {
     // *before* that string means manifest parsing is broken.
     let tmp = tempfile::tempdir().unwrap();
     let store = Store::new(StoreConfig::new(tmp.path().to_path_buf())).unwrap();
-    let cfg = S3Config {
-        endpoint: AI_HUB_BASE_URL.to_string(),
-        version: AI_HUB_VERSION.to_string(),
-        chipset: "definitely-not-a-real-chipset".to_string(),
-        cache_dir: tmp.path().join("aihub"),
-        skip_cache: true,
-    };
+    let cfg = S3Config::new(
+        AI_HUB_BASE_URL,
+        AI_HUB_VERSION,
+        "definitely-not-a-real-chipset",
+        tmp.path().join("aihub"),
+        true,
+    );
 
-    let rt = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        .enable_all()
-        .build()
-        .unwrap();
-    let err = rt
-        .block_on(pull_ai_hub_with_transport(
-            &store,
-            PHI_STORED_NAME,
-            PHI_DISPLAY_NAME,
-            cfg,
-            Arc::new(ReqwestTransport::new().unwrap()),
-            None,
-        ))
-        .expect_err("expected chipset mismatch error");
+    let err = pull_ai_hub_with_transport(
+        &store,
+        PHI_STORED_NAME,
+        PHI_DISPLAY_NAME,
+        cfg,
+        Arc::new(ReqwestTransport::new().unwrap()),
+        None,
+    )
+    .await
+    .expect_err("expected chipset mismatch error");
     let msg = format!("{err}");
     assert!(
         msg.contains("not available") || msg.contains("not found in platform.json"),
@@ -76,19 +71,19 @@ fn live_manifest_resolves_phi_model() {
 /// End-to-end: download the real Phi-3.5-Mini-Instruct qairt zip from
 /// the public bucket, extract, synthesise the manifest, and verify the
 /// store reports the model. ~2 GB download; don't run in CI.
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn live_phi_3_5_mini_e2e_pull() {
+async fn live_phi_3_5_mini_e2e_pull() {
     let tmp = tempfile::tempdir().unwrap();
     let store = Store::new(StoreConfig::new(tmp.path().to_path_buf())).unwrap();
 
-    let cfg = S3Config {
-        endpoint: AI_HUB_BASE_URL.to_string(),
-        version: AI_HUB_VERSION.to_string(),
-        chipset: PHI_CHIPSET.to_string(),
-        cache_dir: tmp.path().join("aihub"),
-        skip_cache: true,
-    };
+    let cfg = S3Config::new(
+        AI_HUB_BASE_URL,
+        AI_HUB_VERSION,
+        PHI_CHIPSET,
+        tmp.path().join("aihub"),
+        true,
+    );
 
     // Terse progress pinger so a slow run doesn't look hung when
     // invoked with `--nocapture`.
@@ -109,6 +104,7 @@ fn live_phi_3_5_mini_e2e_pull() {
     });
 
     pull_ai_hub(&store, PHI_STORED_NAME, PHI_DISPLAY_NAME, cfg, Some(&cb))
+        .await
         .expect("live AI Hub pull failed");
 
     assert!(
@@ -147,21 +143,22 @@ fn live_phi_3_5_mini_e2e_pull() {
 /// On non-Snapdragon-Windows hosts this fails with "host auto-detect
 /// is not supported on this platform"; only real Snapdragon X Elite /
 /// Plus / X2 Elite laptops can pass it.
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn live_e2e_with_auto_detect() {
+async fn live_e2e_with_auto_detect() {
     let tmp = tempfile::tempdir().unwrap();
     let store = Store::new(StoreConfig::new(tmp.path().to_path_buf())).unwrap();
 
-    let cfg = S3Config {
-        endpoint: AI_HUB_BASE_URL.to_string(),
-        version: AI_HUB_VERSION.to_string(),
-        chipset: String::new(), // <-- triggers host auto-detect
-        cache_dir: tmp.path().join("aihub"),
-        skip_cache: true,
-    };
+    let cfg = S3Config::new(
+        AI_HUB_BASE_URL,
+        AI_HUB_VERSION,
+        "", // <-- triggers host auto-detect
+        tmp.path().join("aihub"),
+        true,
+    );
 
     pull_ai_hub(&store, PHI_STORED_NAME, PHI_DISPLAY_NAME, cfg, None)
+        .await
         .expect("live AI Hub pull with auto-detect failed");
 
     let mf = store.get_manifest(PHI_STORED_NAME).expect("manifest");

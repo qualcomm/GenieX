@@ -43,6 +43,29 @@ impl Store {
     /// LockFileEx on Windows via `fs2`). This matches the Go CLI which
     /// uses `github.com/gofrs/flock` for the same purpose.
     pub fn with_model_lock<T>(&self, name: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
+        let lock_file = self.acquire_model_lock(name)?;
+        let result = f();
+        drop(lock_file); // explicit for clarity; Drop releases the OS lock
+        result
+    }
+
+    /// Async variant of [`Self::with_model_lock`]. Acquires the OS lock
+    /// synchronously (it's a single syscall + file create, fast enough
+    /// on a tokio worker thread), then runs the async body while
+    /// holding it. Lock is released when the returned future completes
+    /// and the `lock_file` RAII handle drops.
+    pub async fn with_model_lock_async<F, Fut, T>(&self, name: &str, f: F) -> Result<T>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<T>>,
+    {
+        let lock_file = self.acquire_model_lock(name)?;
+        let result = f().await;
+        drop(lock_file);
+        result
+    }
+
+    fn acquire_model_lock(&self, name: &str) -> Result<fs::File> {
         validate_model_name(name)?;
         let dir = self.cfg.model_dir(name);
         fs::create_dir_all(&dir)?;
@@ -53,10 +76,7 @@ impl Store {
             .write(true)
             .open(&lock_path)?;
         lock_file.lock_exclusive()?;
-        let result = f();
-        // Lock released on drop.
-        drop(lock_file);
-        result
+        Ok(lock_file)
     }
 
     pub fn list(&self) -> Result<Vec<ModelManifest>> {

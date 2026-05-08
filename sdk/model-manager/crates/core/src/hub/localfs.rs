@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use async_trait::async_trait;
+
 use crate::error::{Error, Result};
 use crate::manifest::ModelManifest;
 use crate::validation::validate_relative_file;
@@ -20,8 +22,12 @@ impl LocalFsHub {
     }
 }
 
+#[async_trait]
 impl ModelHub for LocalFsHub {
-    fn list_files(&self, _repo_id: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
+    async fn list_files(
+        &self,
+        _repo_id: &str,
+    ) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
         let mut files = Vec::new();
         for entry in std::fs::read_dir(&self.source_dir)?.flatten() {
             let ft = match entry.file_type() {
@@ -52,7 +58,7 @@ impl ModelHub for LocalFsHub {
         Ok((files, manifest))
     }
 
-    fn download(
+    async fn download(
         &self,
         _repo_id: &str,
         files: &[String],
@@ -93,7 +99,7 @@ impl ModelHub for LocalFsHub {
 
             if let Some(cb) = on_progress {
                 if !cb(&tracked) {
-                    return Err(Error::Hub("download cancelled by caller".to_string()));
+                    return Err(Error::Cancelled);
                 }
             }
         }
