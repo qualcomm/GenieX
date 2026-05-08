@@ -32,6 +32,12 @@ pub type GeniexDownloadProgressCb =
 
 #[repr(C)]
 pub struct GeniexModelPullInput {
+    /// Must equal `size_of::<GeniexModelPullInput>()`. See the C header
+    /// doc on `geniex_ModelPullInput.struct_size` — this is the ABI
+    /// version gate: callers compiled against an older header won't
+    /// match any recognized size and are rejected before any field is
+    /// dereferenced.
+    pub struct_size: u32,
     pub model_name: *const c_char,
     pub quant: *const c_char,
     pub hub: GeniexHubSource,
@@ -52,10 +58,30 @@ pub struct GeniexModelPullInput {
     pub user_data: *mut c_void,
 }
 
+/// Struct sizes the Rust FFI knows how to read. The only entry today
+/// is the current layout; if we add fields in a forward-compatible
+/// way, append the *previous* size here so older callers still work.
+/// A caller that passes a size not in this list is rejected up front.
+const ACCEPTED_PULL_INPUT_SIZES: &[u32] = &[std::mem::size_of::<GeniexModelPullInput>() as u32];
+
 #[no_mangle]
 pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
     ffi_guard(|| {
         if input.is_null() {
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
+
+        // ABI gate: `struct_size` has to be set to `sizeof(struct)` at
+        // the caller's compile time. It's read before we touch any other
+        // field, so an ABI mismatch can't corrupt downstream reads.
+        // See ACCEPTED_PULL_INPUT_SIZES doc.
+        let struct_size = unsafe { std::ptr::read(&(*input).struct_size) };
+        if !ACCEPTED_PULL_INPUT_SIZES.contains(&struct_size) {
+            crate::logging::error(&format!(
+                "geniex_model_pull: unsupported struct_size {}; expected one of {:?} \
+                 (recompile your binding against the current geniex_model.h)",
+                struct_size, ACCEPTED_PULL_INPUT_SIZES,
+            ));
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
 

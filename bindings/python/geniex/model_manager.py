@@ -21,7 +21,7 @@ models without re-implementing hub logic per binding.
 
 from __future__ import annotations
 
-from ctypes import byref, c_char_p, c_int32
+from ctypes import byref, c_char_p, c_int32, sizeof
 from dataclasses import dataclass
 from typing import Callable
 
@@ -180,7 +180,11 @@ def pull(
 
     cb = geniex_download_progress_cb(_trampoline) if on_progress else geniex_download_progress_cb(0)
 
+    # struct_size is the ABI version gate. Wrapping sizeof() here means
+    # ctypes mirror drift between Python and the installed geniex.dll is
+    # a rejected FFI call rather than a silent garbage read.
     inp = geniex_ModelPullInput(
+        struct_size=sizeof(geniex_ModelPullInput),
         model_name=model_name.encode(),
         quant=quant.encode() if quant else None,
         hub=hub_val,

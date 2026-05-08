@@ -181,10 +181,30 @@ typedef struct {
 typedef bool (*geniex_download_progress_cb)(const geniex_FileProgress* files, int32_t file_count, void* user_data);
 
 typedef struct {
-    const char*      model_name; /**< "org/repo" or short alias                    */
-    const char*      quant;      /**< Quantization hint. NULL for auto-select      */
-    geniex_HubSource hub;        /**< Use GENIEX_HUB_AUTO for automatic selection  */
-    geniex_Path      local_path; /**< Required only when hub == GENIEX_HUB_LOCALFS */
+    /**
+     * MUST be `sizeof(geniex_ModelPullInput)` when the struct is
+     * constructed. Lets the library reject callers that were compiled
+     * against an older header after a field was added.
+     *
+     * Rationale: C doesn't expose a stable way to version a struct,
+     * and language bindings (Python ctypes, Go cgo, Android JNI) all
+     * mirror this layout by hand. A non-zero size lets the SDK detect
+     * a layout mismatch before dereferencing uninitialized fields.
+     *
+     * Conventional initialisation:
+     *   geniex_ModelPullInput in = {0};
+     *   in.struct_size = sizeof(in);
+     *   in.model_name = "...";
+     *   ...
+     *
+     * Returns GENIEX_ERROR_COMMON_INVALID_INPUT if struct_size is zero
+     * or not a recognised version.
+     */
+    uint32_t         struct_size;
+    const char*      model_name;  /**< "org/repo" or short alias                    */
+    const char*      quant;       /**< Quantization hint. NULL for auto-select      */
+    geniex_HubSource hub;         /**< Use GENIEX_HUB_AUTO for automatic selection  */
+    geniex_Path      local_path;  /**< Required only when hub == GENIEX_HUB_LOCALFS */
     /**
      * HuggingFace bearer token for this pull. NULL falls back to the
      * `GENIEX_HFTOKEN` environment variable; if that is also unset the
