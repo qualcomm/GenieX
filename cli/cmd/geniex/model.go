@@ -54,6 +54,16 @@ var (
 // the AI Hub (S3/QAIRT) pull path instead of the standard HF path.
 var aiHubOrgs = []string{"qualcomm", "qai-hub-models"}
 
+// isAIHubModel reports whether name belongs to an AI Hub org (e.g. "qualcomm/Qwen3-4B").
+// It returns the repo portion (after the slash) as a convenience.
+func isAIHubModel(name string) (repo string, ok bool) {
+	org, repo, ok := splitOrgRepo(name)
+	if !ok || !slices.Contains(aiHubOrgs, strings.ToLower(org)) {
+		return "", false
+	}
+	return repo, true
+}
+
 // pull creates a command to download and cache a model by name.
 // Usage: geniex pull <model-name>
 func pull() *cobra.Command {
@@ -74,17 +84,7 @@ func pull() *cobra.Command {
 	pullCmd.Flags().BoolVar(&noConfigCache, "no-config-cache", false, "bypass local metadata cache and fetch the latest model index from remote")
 
 	pullCmd.Run = func(cmd *cobra.Command, args []string) {
-		// Route to AI Hub when the user supplies "<allowlisted-org>/<repo>".
-		// The repo name is treated as the model's display_name in the manifest.
-		if org, repo, ok := splitOrgRepo(args[0]); ok && slices.Contains(aiHubOrgs, strings.ToLower(org)) {
-			if err := tryPullAIHubModel(context.TODO(), args[0], repo, noConfigCache); err != nil {
-				os.Exit(1)
-			}
-			return
-		}
-
-		name, quant := normalizeModelName(args[0])
-		if err := pullModel(name, quant); err != nil {
+		if err := pullModelByName(args[0], noConfigCache); err != nil {
 			os.Exit(1)
 		}
 	}
@@ -231,6 +231,15 @@ func list() *cobra.Command {
 }
 
 // pull
+
+// pullModelByName is the single entry point for downloading a model by name.
+func pullModelByName(rawName string, noConfigCache bool) error {
+	if repo, ok := isAIHubModel(rawName); ok {
+		return tryPullAIHubModel(context.TODO(), rawName, repo, noConfigCache)
+	}
+	name, quant := normalizeModelName(rawName)
+	return pullModel(name, quant)
+}
 
 func pullModel(name string, quant string) error {
 	slog.Debug("pullModel", "name", name, "quant", quant)
