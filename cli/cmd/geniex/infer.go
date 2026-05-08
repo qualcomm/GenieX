@@ -52,7 +52,7 @@ var (
 	stop           []string
 	stopFile       string
 	imageMaxLength int32
-	enableThink    bool
+	noThink        bool
 	hideThink      bool
 	prompt         []string
 	tokenFile      string
@@ -101,7 +101,7 @@ var (
 		llmFlags.Int32VarP(&maxTokens, "max-tokens", "", 2048, "max tokens")
 		llmFlags.StringArrayVarP(&stop, "stop", "", nil, "stop sequences")
 		llmFlags.StringVarP(&stopFile, "stop-file", "", "", "file containing stop sequences")
-		llmFlags.BoolVarP(&enableThink, "enable-think", "", true, "enable thinking mode")
+		llmFlags.BoolVarP(&noThink, "no-think", "", false, "disable thinking mode")
 		llmFlags.BoolVarP(&hideThink, "hide-think", "", false, "hide thinking output")
 		llmFlags.StringVarP(&systemPrompt, "system-prompt", "s", "", "system prompt to set model behavior")
 		llmFlags.StringVarP(&input, "input", "i", "", "prompt txt file")
@@ -447,7 +447,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 
 				templateOutput, err := p.ApplyChatTemplate(geniex_sdk.LlmApplyChatTemplateInput{
 					Messages:            history,
-					EnableThink:         enableThink,
+					EnableThink:         !noThink,
 					AddGenerationPrompt: true,
 				})
 				if err != nil {
@@ -595,7 +595,7 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 
 			tmplOut, err := p.ApplyChatTemplate(geniex_sdk.VlmApplyChatTemplateInput{
 				Messages:    history,
-				EnableThink: enableThink,
+				EnableThink: !noThink,
 			})
 			if err != nil {
 				return "", geniex_sdk.ProfileData{}, err
