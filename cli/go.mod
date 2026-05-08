@@ -1,6 +1,6 @@
 module github.com/qcom-it-nexa-ai/geniex/cli
 
-go 1.25.0
+go 1.25.9
 
 require (
 	github.com/bytedance/sonic v1.15.1
