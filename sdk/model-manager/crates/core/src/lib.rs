@@ -7,6 +7,7 @@ pub mod manifest_builder;
 pub mod mapping;
 pub mod paths;
 pub mod pull;
+pub mod resume;
 pub mod store;
 pub mod transport;
 pub mod validation;

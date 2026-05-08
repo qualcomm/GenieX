@@ -34,6 +34,24 @@ impl StoreConfig {
         std::env::var("GENIEX_HFTOKEN").ok()
     }
 
+    /// AI Hub public assets base URL. Mirrors the Go CLI's
+    /// `DefaultAIHubBaseURL`; override via `GENIEX_AIHUBBASEURL`.
+    pub fn ai_hub_base_url() -> String {
+        std::env::var("GENIEX_AIHUBBASEURL").unwrap_or_else(|_| DEFAULT_AI_HUB_BASE_URL.to_string())
+    }
+
+    /// Pinned aihm release version the SDK consumes. The public bucket has
+    /// no `latest` alias; override via `GENIEX_AIHUBVERSION`.
+    pub fn ai_hub_version() -> String {
+        std::env::var("GENIEX_AIHUBVERSION").unwrap_or_else(|_| DEFAULT_AI_HUB_VERSION.to_string())
+    }
+
+    /// Cache directory for AI Hub index JSONs. Matches the Go CLI layout
+    /// (`<data-dir>/aihub`) so both agents can share the same cache.
+    pub fn ai_hub_cache_dir(&self) -> PathBuf {
+        self.data_dir.join("aihub")
+    }
+
     pub fn models_dir(&self) -> PathBuf {
         self.data_dir.join("models")
     }
@@ -46,6 +64,13 @@ impl StoreConfig {
         self.model_dir(name).join(file)
     }
 }
+
+/// Mirrors `cli/internal/config/config.go:DefaultAIHubBaseURL`.
+const DEFAULT_AI_HUB_BASE_URL: &str =
+    "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models";
+
+/// Mirrors `cli/internal/config/config.go:DefaultAIHubVersion`.
+const DEFAULT_AI_HUB_VERSION: &str = "v0.52.0";
 
 fn default_data_dir() -> PathBuf {
     let home = std::env::var("HOME")

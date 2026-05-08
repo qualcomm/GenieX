@@ -105,8 +105,6 @@ static int test_localfs(const char* data_dir) {
         "\"ModelName\":\"test-1b\","
         "\"ModelType\":\"llm\","
         "\"PluginId\":\"llama_cpp\","
-        "\"DeviceId\":\"\","
-        "\"MinSDKVersion\":\"\","
         "\"ModelFile\":{\"Q4_K_M\":{\"Name\":\"model-Q4_K_M.gguf\",\"Downloaded\":true,\"Size\":17}},"
         "\"MMProjFile\":{\"Name\":\"\",\"Downloaded\":false,\"Size\":0},"
         "\"TokenizerFile\":{\"Name\":\"\",\"Downloaded\":false,\"Size\":0},"
@@ -117,6 +115,7 @@ static int test_localfs(const char* data_dir) {
     int                   progress_calls = 0;
     geniex_ModelPullInput pull_input;
     memset(&pull_input, 0, sizeof(pull_input));
+    pull_input.struct_size = sizeof(pull_input);
     pull_input.model_name  = "NexaAI/TestModel-GGUF";
     pull_input.quant       = NULL;
     pull_input.hub         = GENIEX_HUB_LOCALFS;

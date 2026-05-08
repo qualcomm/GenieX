@@ -11,6 +11,12 @@ pub struct ModelPaths {
     pub model_dir: PathBuf,
     pub model_name: String,
     pub plugin_id: String,
+    /// Reserved for the plugin / inference layer to populate out-of-band
+    /// (e.g. from runtime detection). The manifest itself no longer
+    /// carries a device id — the model-manager has no opinion on where
+    /// the model should run. Currently always `None`; the field stays to
+    /// keep the FFI `geniex_ModelPaths` ABI stable for callers who read
+    /// it directly.
     pub device_id: Option<String>,
 }
 
@@ -71,12 +77,6 @@ pub fn resolve_model_paths(
         None
     };
 
-    let device_id = if manifest.device_id.is_empty() {
-        None
-    } else {
-        Some(manifest.device_id.clone())
-    };
-
     Ok((
         resolved_quant,
         ModelPaths {
@@ -86,7 +86,8 @@ pub fn resolve_model_paths(
             model_dir,
             model_name: manifest.model_name.clone(),
             plugin_id: manifest.plugin_id.clone(),
-            device_id,
+            // Manifest no longer carries device_id — see ModelPaths doc.
+            device_id: None,
         },
     ))
 }
