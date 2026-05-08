@@ -99,7 +99,7 @@ impl HttpTransport for ReqwestTransport {
                     tracing_log(format!("head retry {attempt}: {e}"));
                     continue;
                 }
-                Err(e) => return Err(Error::Http(format!("HEAD {url}: {e}"))),
+                Err(e) => return Err(Error::HttpTimeout(format!("HEAD {url}: {e}"))),
             };
 
             let status = resp.status();
@@ -110,7 +110,10 @@ impl HttpTransport for ReqwestTransport {
                 continue;
             }
             if !status.is_success() {
-                return Err(Error::Http(format!("HEAD {url}: status {status}")));
+                return Err(Error::HttpStatus {
+                    url: url.to_string(),
+                    status: status.as_u16(),
+                });
             }
 
             let headers = resp.headers();
@@ -168,7 +171,7 @@ impl HttpTransport for ReqwestTransport {
                     continue;
                 }
                 Err(e) => {
-                    return Err(Error::Http(format!("GET {url} {range}: {e}")));
+                    return Err(Error::HttpTimeout(format!("GET {url} {range}: {e}")));
                 }
             };
 
@@ -184,7 +187,10 @@ impl HttpTransport for ReqwestTransport {
             let ok =
                 status == StatusCode::PARTIAL_CONTENT || (status == StatusCode::OK && offset == 0);
             if !ok {
-                return Err(Error::Http(format!("GET {url} {range}: status {status}")));
+                return Err(Error::HttpStatus {
+                    url: url.to_string(),
+                    status: status.as_u16(),
+                });
             }
 
             let mut stream = resp.bytes_stream();
@@ -206,9 +212,11 @@ impl HttpTransport for ReqwestTransport {
                         // engine passes us a freshly-seeked handle per
                         // attempt, so we simply return an error and let
                         // it retry.
-                        return Err(Error::Http(format!("stream {url} {range}: {e}")));
+                        return Err(Error::HttpTimeout(format!("stream {url} {range}: {e}")));
                     }
-                    Err(e) => return Err(Error::Http(format!("stream {url} {range}: {e}"))),
+                    Err(e) => {
+                        return Err(Error::HttpTimeout(format!("stream {url} {range}: {e}")));
+                    }
                 };
                 sink.write_all(&bytes)
                     .await

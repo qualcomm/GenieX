@@ -151,8 +151,11 @@ async fn pull_ai_hub_inner(
     let manifest_cache = cfg.cache_dir.join(MANIFEST_FILENAME);
     let manifest_bytes =
         fetch_with_cache(&manifest_url, &manifest_cache, cfg.skip_cache, &transport).await?;
-    let release_manifest: ReleaseManifest = serde_json::from_slice(&manifest_bytes)
-        .map_err(|e| Error::Hub(format!("parse manifest.json: {e}")))?;
+    let release_manifest: ReleaseManifest =
+        serde_json::from_slice(&manifest_bytes).map_err(|source| Error::ManifestParse {
+            what: "manifest.json",
+            source,
+        })?;
 
     let entry = release_manifest
         .models
@@ -181,15 +184,21 @@ async fn pull_ai_hub_inner(
     // 2. release-assets.json (direct fetch — per-model, URL changes each release).
     let release_assets_bytes = fetch_direct(release_assets_url, &transport).await?;
     let release_assets: ModelReleaseAssets = serde_json::from_slice(&release_assets_bytes)
-        .map_err(|e| Error::Hub(format!("parse release-assets.json: {e}")))?;
+        .map_err(|source| Error::ManifestParse {
+            what: "release-assets.json",
+            source,
+        })?;
 
     // 3. platform.json (shared across all models, very cacheable).
     let platform_url = format!("{endpoint}/releases/{version}/{PLATFORM_FILENAME}");
     let platform_cache = cfg.cache_dir.join(PLATFORM_FILENAME);
     let platform_bytes =
         fetch_with_cache(&platform_url, &platform_cache, cfg.skip_cache, &transport).await?;
-    let platform: PlatformInfo = serde_json::from_slice(&platform_bytes)
-        .map_err(|e| Error::Hub(format!("parse platform.json: {e}")))?;
+    let platform: PlatformInfo =
+        serde_json::from_slice(&platform_bytes).map_err(|source| Error::ManifestParse {
+            what: "platform.json",
+            source,
+        })?;
 
     // 4. Resolve chipset. Empty string means "auto-detect from host".
     let chipset: String = if cfg.chipset.is_empty() {
@@ -209,10 +218,10 @@ async fn pull_ai_hub_inner(
             requested,
             available,
         }) => {
-            return Err(Error::Hub(format!(
-                "chipset {requested:?} not available; model supports: {}",
-                available.join(", ")
-            )));
+            return Err(Error::ChipsetUnavailable {
+                requested,
+                available,
+            });
         }
     };
 

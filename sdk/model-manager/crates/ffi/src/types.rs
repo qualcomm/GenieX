@@ -10,8 +10,13 @@ use crate::logging;
 pub const GENIEX_SUCCESS: i32 = 0;
 pub const GENIEX_ERROR_COMMON_UNKNOWN: i32 = -100000;
 pub const GENIEX_ERROR_COMMON_INVALID_INPUT: i32 = -100001;
-pub const GENIEX_ERROR_COMMON_NOT_INITIALIZED: i32 = -100007;
 pub const GENIEX_ERROR_COMMON_FILE_NOT_FOUND: i32 = -100004;
+pub const GENIEX_ERROR_COMMON_NETWORK: i32 = -100005;
+pub const GENIEX_ERROR_COMMON_CANCELLED: i32 = -100006;
+pub const GENIEX_ERROR_COMMON_NOT_INITIALIZED: i32 = -100007;
+pub const GENIEX_ERROR_COMMON_ALREADY_INITIALIZED: i32 = -100008;
+pub const GENIEX_ERROR_COMMON_MANIFEST_PARSE: i32 = -100014;
+pub const GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE: i32 = -100015;
 
 /// C-compatible per-file progress entry. Must mirror `geniex_FileProgress`
 /// in geniex_model.h.
@@ -25,13 +30,22 @@ pub struct GeniexFileProgress {
 pub fn err_to_code(e: &Error) -> i32 {
     match e {
         Error::NotInitialized => GENIEX_ERROR_COMMON_NOT_INITIALIZED,
+        Error::AlreadyInitialized => GENIEX_ERROR_COMMON_ALREADY_INITIALIZED,
         Error::ModelNotFound(_) => GENIEX_ERROR_COMMON_FILE_NOT_FOUND,
         Error::QuantNotFound(_, _)
         | Error::QuantNotDownloaded(_, _)
         | Error::NoDownloadedQuant(_)
         | Error::InvalidModelName(_)
         | Error::InvalidFileName(_) => GENIEX_ERROR_COMMON_INVALID_INPUT,
-        _ => GENIEX_ERROR_COMMON_UNKNOWN,
+        Error::HttpStatus { .. } | Error::HttpTimeout(_) | Error::Http(_) => {
+            GENIEX_ERROR_COMMON_NETWORK
+        }
+        Error::ManifestParse { .. } => GENIEX_ERROR_COMMON_MANIFEST_PARSE,
+        Error::ChipsetUnavailable { .. } => GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE,
+        Error::Cancelled => GENIEX_ERROR_COMMON_CANCELLED,
+        Error::Io(_) | Error::Json(_) | Error::Hub(_) | Error::ManifestInferenceFailed(_) => {
+            GENIEX_ERROR_COMMON_UNKNOWN
+        }
     }
 }
 
