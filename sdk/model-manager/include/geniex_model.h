@@ -181,6 +181,26 @@ typedef struct {
 typedef bool (*geniex_download_progress_cb)(const geniex_FileProgress* files, int32_t file_count, void* user_data);
 
 typedef struct {
+    /**
+     * MUST be `sizeof(geniex_ModelPullInput)` when the struct is
+     * constructed. Lets the library reject callers that were compiled
+     * against an older header after a field was added.
+     *
+     * Rationale: C doesn't expose a stable way to version a struct,
+     * and language bindings (Python ctypes, Go cgo, Android JNI) all
+     * mirror this layout by hand. A non-zero size lets the SDK detect
+     * a layout mismatch before dereferencing uninitialized fields.
+     *
+     * Conventional initialisation:
+     *   geniex_ModelPullInput in = {0};
+     *   in.struct_size = sizeof(in);
+     *   in.model_name = "...";
+     *   ...
+     *
+     * Returns GENIEX_ERROR_COMMON_INVALID_INPUT if struct_size is zero
+     * or not a recognised version.
+     */
+    uint32_t         struct_size;
     const char*      model_name; /**< "org/repo" or short alias                    */
     const char*      quant;      /**< Quantization hint. NULL for auto-select      */
     geniex_HubSource hub;        /**< Use GENIEX_HUB_AUTO for automatic selection  */
@@ -191,7 +211,26 @@ typedef struct {
      * download proceeds anonymously (subject to HF rate limits). Only
      * consulted when `hub == GENIEX_HUB_HUGGINGFACE`.
      */
-    const char*                 hf_token;
+    const char* hf_token;
+    /**
+     * Target chipset for AI Hub (qairt) pulls, e.g. "SM8650". Matched
+     * against the name/aliases fields of platform.json. Only consulted
+     * when `hub == GENIEX_HUB_S3`.
+     *
+     * NULL or an empty string asks the SDK to auto-detect the host
+     * chipset. Detection currently works on Windows-on-Snapdragon
+     * (X Elite / X Plus / X2 Elite); on other hosts an auto-detect
+     * request fails with GENIEX_ERROR_COMMON_INVALID_INPUT and the
+     * caller must pass a chipset explicitly.
+     */
+    const char* chipset;
+    /**
+     * AI Hub model `display_name`. Required when `hub == GENIEX_HUB_S3`;
+     * ignored otherwise. `model_name` still names the on-disk directory
+     * ("org/repo" shape), matching the Go CLI's storedName/displayName
+     * split.
+     */
+    const char*                 display_name;
     geniex_download_progress_cb on_progress; /**< NULL to suppress progress reporting           */
     void*                       user_data;   /**< Forwarded to on_progress                      */
 } geniex_ModelPullInput;

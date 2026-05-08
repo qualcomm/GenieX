@@ -21,7 +21,7 @@ models without re-implementing hub logic per binding.
 
 from __future__ import annotations
 
-from ctypes import byref, c_char_p, c_int32
+from ctypes import byref, c_char_p, c_int32, sizeof
 from dataclasses import dataclass
 from typing import Callable
 
@@ -31,6 +31,7 @@ from ._ffi._types import (
     GENIEX_HUB_AUTO,
     GENIEX_HUB_HUGGINGFACE,
     GENIEX_HUB_LOCALFS,
+    GENIEX_HUB_S3,
     GENIEX_MODEL_TYPE_LLM,
     GENIEX_MODEL_TYPE_VLM,
     geniex_download_progress_cb,
@@ -84,6 +85,7 @@ _HUB_MAP = {
     'auto': GENIEX_HUB_AUTO,
     'hf': GENIEX_HUB_HUGGINGFACE,
     'huggingface': GENIEX_HUB_HUGGINGFACE,
+    's3': GENIEX_HUB_S3,
     'localfs': GENIEX_HUB_LOCALFS,
     'local': GENIEX_HUB_LOCALFS,
 }
@@ -138,6 +140,8 @@ def pull(
     hub: str | int = 'auto',
     local_path: str | None = None,
     hf_token: str | None = None,
+    chipset: str | None = None,
+    display_name: str | None = None,
     on_progress: ProgressCallback | None = None,
 ) -> None:
     """Download a model (blocking). Resumes partial downloads.
@@ -145,9 +149,14 @@ def pull(
     Args:
         model_name: ``org/repo`` or a short alias (see :func:`resolve_alias`).
         quant: Optional quantization hint (e.g. ``"Q4_K_M"``).
-        hub: ``"auto"`` | ``"hf"`` | ``"localfs"``, or a raw integer enum.
+        hub: ``"auto"`` | ``"hf"`` | ``"s3"`` | ``"localfs"``, or a raw integer enum.
         local_path: Required when ``hub == "localfs"`` — source directory.
         hf_token: HuggingFace bearer token. Falls back to ``GENIEX_HFTOKEN`` env.
+        chipset: AI Hub target chipset (e.g. ``"qualcomm-snapdragon-x-elite"``).
+            Only used when ``hub == "s3"``. ``None`` asks the SDK to auto-detect,
+            currently supported on Windows-on-Snapdragon hosts only.
+        display_name: AI Hub ``display_name`` of the model. Required when
+            ``hub == "s3"``; ignored otherwise.
         on_progress: Callback ``(files) -> bool``; return False to cancel.
     """
     _ensure_init()
@@ -171,12 +180,18 @@ def pull(
 
     cb = geniex_download_progress_cb(_trampoline) if on_progress else geniex_download_progress_cb(0)
 
+    # struct_size is the ABI version gate. Wrapping sizeof() here means
+    # ctypes mirror drift between Python and the installed geniex.dll is
+    # a rejected FFI call rather than a silent garbage read.
     inp = geniex_ModelPullInput(
+        struct_size=sizeof(geniex_ModelPullInput),
         model_name=model_name.encode(),
         quant=quant.encode() if quant else None,
         hub=hub_val,
         local_path=local_path.encode() if local_path else None,
         hf_token=hf_token.encode() if hf_token else None,
+        chipset=chipset.encode() if chipset else None,
+        display_name=display_name.encode() if display_name else None,
         on_progress=cb,
         user_data=None,
     )

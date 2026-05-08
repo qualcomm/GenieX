@@ -44,13 +44,18 @@ typedef enum {
 
     /* ===== COMMON ERRORS (100xxx) ===== */
 
-    GENIEX_ERROR_COMMON_UNKNOWN           = -100000, /**< Unknown error */
-    GENIEX_ERROR_COMMON_INVALID_INPUT     = -100001, /**< Invalid input parameters or handle */
-    GENIEX_ERROR_COMMON_INVALID_DEVICE    = -100002, /**< Unknown device alias (cpu/gpu/npu/hybrid) */
-    GENIEX_ERROR_COMMON_MEMORY_ALLOCATION = -100003, /**< Memory allocation failed */
-    GENIEX_ERROR_COMMON_FILE_NOT_FOUND    = -100004, /**< File not found or inaccessible */
-    GENIEX_ERROR_COMMON_NOT_INITIALIZED   = -100007, /**< Library not initialized */
-    GENIEX_ERROR_COMMON_NOT_SUPPORTED     = -100013, /**< Operation not supported */
+    GENIEX_ERROR_COMMON_UNKNOWN             = -100000, /**< Unknown error */
+    GENIEX_ERROR_COMMON_INVALID_INPUT       = -100001, /**< Invalid input parameters or handle */
+    GENIEX_ERROR_COMMON_INVALID_DEVICE      = -100002, /**< Unknown device alias (cpu/gpu/npu/hybrid) */
+    GENIEX_ERROR_COMMON_MEMORY_ALLOCATION   = -100003, /**< Memory allocation failed */
+    GENIEX_ERROR_COMMON_FILE_NOT_FOUND      = -100004, /**< File not found or inaccessible */
+    GENIEX_ERROR_COMMON_NETWORK             = -100005, /**< Network failure (timeout, bad status, DNS, proxy, ...) */
+    GENIEX_ERROR_COMMON_CANCELLED           = -100006, /**< Operation cancelled by caller */
+    GENIEX_ERROR_COMMON_NOT_INITIALIZED     = -100007, /**< Library not initialized */
+    GENIEX_ERROR_COMMON_ALREADY_INITIALIZED = -100008, /**< Library already initialized; deinit first */
+    GENIEX_ERROR_COMMON_NOT_SUPPORTED       = -100013, /**< Operation not supported */
+    GENIEX_ERROR_COMMON_MANIFEST_PARSE      = -100014, /**< Failed to parse a manifest / index document */
+    GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE = -100015, /**< Requested chipset not available for this model */
 
     GENIEX_ERROR_COMMON_MODEL_LOAD    = -100201, /**< Model loading failed */
     GENIEX_ERROR_COMMON_MODEL_INVALID = -100203, /**< Invalid model format */

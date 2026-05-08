@@ -20,11 +20,14 @@ use model_manager_core::store::Store;
 
 const TINY_REPO: &str = "ggml-org/tiny-llamas";
 
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore]
-fn list_files_returns_something() {
+async fn list_files_returns_something() {
     let hub = HfHub::new(None).unwrap();
-    let (files, _manifest) = hub.list_files(TINY_REPO).expect("hf list_files failed");
+    let (files, _manifest) = hub
+        .list_files(TINY_REPO)
+        .await
+        .expect("hf list_files failed");
     assert!(
         !files.is_empty(),
         "expected at least one file in {TINY_REPO}"
@@ -35,9 +38,9 @@ fn list_files_returns_something() {
     );
 }
 
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn end_to_end_pull_via_hf() {
+async fn end_to_end_pull_via_hf() {
     let tmp = tempfile::tempdir().expect("tmpdir");
     let cfg = StoreConfig::new(tmp.path().to_path_buf());
     let store = Store::new(cfg).expect("store init");
@@ -49,7 +52,7 @@ fn end_to_end_pull_via_hf() {
         on_progress: None,
         hint: ManifestHint::default(),
     };
-    pull(&store, req).expect("pull failed");
+    pull(&store, req).await.expect("pull failed");
 
     // After pull, the model should be listed and resolve to a real file.
     let list = store.list().expect("list failed");

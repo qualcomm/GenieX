@@ -20,6 +20,12 @@ pub struct ModelFileInfo {
     pub size: i64,
 }
 
+/// On-disk manifest written next to a cached model as `geniex.json`.
+///
+/// Historical `DeviceId` and `MinSDKVersion` keys are accepted (serde
+/// silently drops unknown JSON fields on deserialize) but no longer
+/// serialised — qairt / llama_cpp plugins don't read them and AI Hub
+/// hub already tracks the chipset out-of-band.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelManifest {
     #[serde(rename = "Name")]
@@ -30,10 +36,12 @@ pub struct ModelManifest {
     pub model_type: ModelType,
     #[serde(rename = "PluginId")]
     pub plugin_id: String,
-    #[serde(rename = "DeviceId")]
-    pub device_id: String,
-    #[serde(rename = "MinSDKVersion", default)]
-    pub min_sdk_version: String,
+    #[serde(
+        rename = "Precision",
+        default,
+        skip_serializing_if = "String::is_empty"
+    )]
+    pub precision: String,
     #[serde(rename = "ModelFile", default)]
     pub model_file: HashMap<String, ModelFileInfo>,
     #[serde(rename = "MMProjFile", default)]

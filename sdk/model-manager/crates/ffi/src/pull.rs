@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use model_manager_core::config::StoreConfig;
 use model_manager_core::hub::HubSource;
 use model_manager_core::manifest_builder::ManifestHint;
-use model_manager_core::pull::{pull, PullRequest};
+use model_manager_core::pull::{pull_blocking, PullRequest};
 
-use crate::init::get_store;
+use crate::init::{get_store, runtime_handle};
 use crate::types::*;
 
 /// C-compatible hub source enum. Values MUST match `geniex_HubSource` in
@@ -32,6 +32,12 @@ pub type GeniexDownloadProgressCb =
 
 #[repr(C)]
 pub struct GeniexModelPullInput {
+    /// Must equal `size_of::<GeniexModelPullInput>()`. See the C header
+    /// doc on `geniex_ModelPullInput.struct_size` — this is the ABI
+    /// version gate: callers compiled against an older header won't
+    /// match any recognized size and are rejected before any field is
+    /// dereferenced.
+    pub struct_size: u32,
     pub model_name: *const c_char,
     pub quant: *const c_char,
     pub hub: GeniexHubSource,
@@ -39,14 +45,43 @@ pub struct GeniexModelPullInput {
     /// HuggingFace bearer token (NULL = fall back to GENIEX_HFTOKEN env,
     /// then anonymous). Only meaningful when `hub == GENIEX_HUB_HUGGINGFACE`.
     pub hf_token: *const c_char,
+    /// Target chipset for AI Hub pulls. Required when
+    /// `hub == GENIEX_HUB_S3`; ignored otherwise. Matched against the
+    /// `name` / `aliases` fields of `platform.json`.
+    pub chipset: *const c_char,
+    /// AI Hub `display_name` of the model to download. Required when
+    /// `hub == GENIEX_HUB_S3`; ignored otherwise. `model_name` still
+    /// names the on-disk directory ("org/repo" shape), mirroring the
+    /// Go CLI's `storedName` / `displayName` split.
+    pub display_name: *const c_char,
     pub on_progress: GeniexDownloadProgressCb,
     pub user_data: *mut c_void,
 }
+
+/// Struct sizes the Rust FFI knows how to read. The only entry today
+/// is the current layout; if we add fields in a forward-compatible
+/// way, append the *previous* size here so older callers still work.
+/// A caller that passes a size not in this list is rejected up front.
+const ACCEPTED_PULL_INPUT_SIZES: &[u32] = &[std::mem::size_of::<GeniexModelPullInput>() as u32];
 
 #[no_mangle]
 pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
     ffi_guard(|| {
         if input.is_null() {
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
+
+        // ABI gate: `struct_size` has to be set to `sizeof(struct)` at
+        // the caller's compile time. It's read before we touch any other
+        // field, so an ABI mismatch can't corrupt downstream reads.
+        // See ACCEPTED_PULL_INPUT_SIZES doc.
+        let struct_size = unsafe { std::ptr::read(&(*input).struct_size) };
+        if !ACCEPTED_PULL_INPUT_SIZES.contains(&struct_size) {
+            crate::logging::error(&format!(
+                "geniex_model_pull: unsupported struct_size {}; expected one of {:?} \
+                 (recompile your binding against the current geniex_model.h)",
+                struct_size, ACCEPTED_PULL_INPUT_SIZES,
+            ));
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
 
@@ -66,7 +101,22 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
                 };
                 HubSource::LocalFs(path)
             }
-            // Other hubs are placeholders — fall back to HuggingFace for now.
+            GeniexHubSource::S3 => {
+                // chipset NULL or empty → SDK auto-detects (currently
+                // Windows-on-Snapdragon only). Non-empty: caller override.
+                let chipset = unsafe { cstr_to_str(inp.chipset) }
+                    .unwrap_or("")
+                    .to_string();
+                let display_name = match unsafe { cstr_to_str(inp.display_name) } {
+                    Some(s) if !s.is_empty() => s.to_string(),
+                    _ => return GENIEX_ERROR_COMMON_INVALID_INPUT,
+                };
+                HubSource::S3 {
+                    display_name,
+                    chipset,
+                }
+            }
+            // ModelScope / Volces remain placeholders — fall back to HuggingFace.
             _ => HubSource::HuggingFace,
         };
 
@@ -149,7 +199,7 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
             hint,
         };
 
-        match pull(store, req) {
+        match pull_blocking(&runtime_handle(), store, req) {
             Ok(()) => GENIEX_SUCCESS,
             Err(e) => report(&e),
         }

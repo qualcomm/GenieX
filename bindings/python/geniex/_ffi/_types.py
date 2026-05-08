@@ -24,6 +24,7 @@ from ctypes import (
     c_float,
     c_int32,
     c_int64,
+    c_uint32,
     c_void_p,
 )
 
@@ -354,11 +355,19 @@ geniex_download_progress_cb = CFUNCTYPE(c_bool, POINTER(geniex_FileProgress), c_
 
 class geniex_ModelPullInput(Structure):
     _fields_ = [
+        # ABI version gate. Must equal ctypes.sizeof(geniex_ModelPullInput)
+        # at the call site — the Rust side rejects any other value with
+        # GENIEX_ERROR_COMMON_INVALID_INPUT. Our pull() wrapper sets it
+        # automatically; external callers using this struct directly must
+        # set it themselves.
+        ('struct_size', c_uint32),
         ('model_name', c_char_p),
         ('quant', c_char_p),
         ('hub', c_int32),
         ('local_path', c_char_p),
         ('hf_token', c_char_p),
+        ('chipset', c_char_p),
+        ('display_name', c_char_p),
         ('on_progress', geniex_download_progress_cb),
         ('user_data', c_void_p),
     ]

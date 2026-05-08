@@ -15,6 +15,7 @@ async-trait = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 url = { workspace = true }
+zip = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
