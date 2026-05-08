@@ -9,8 +9,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use model_manager_core::download::{chunk as chunklib, Engine, EngineConfig};
-use model_manager_core::hub::metadata::{FileSource, HubContext};
-use model_manager_core::hub::{FileProgress, HfMetadata, ProgressCallback};
+use model_manager_core::hub::metadata::FileSource;
+use model_manager_core::hub::{FileProgress, ProgressCallback};
 use model_manager_core::transport::{HttpTransport, ReqwestTransport, TransportConfig};
 use tempfile::tempdir;
 use url::Url;
@@ -89,10 +89,6 @@ async fn downloads_multi_file_multi_chunk_and_marks_progress() {
     install_file_mock(&server, "/org/repo/resolve/main/b.bin", body_b.clone()).await;
 
     let tmp = tempdir().unwrap();
-    let ctx = HubContext::new(
-        Arc::new(HfMetadata::with_endpoint(&server.uri(), None, fast_transport()).unwrap()),
-        fast_transport(),
-    );
     let cfg = EngineConfig {
         file_concurrency: 2,
         chunk_concurrency: 4,
@@ -121,7 +117,7 @@ async fn downloads_multi_file_multi_chunk_and_marks_progress() {
         true
     });
 
-    Engine::with_config(&ctx, cfg)
+    Engine::with_config(fast_transport(), cfg)
         .run(sources, tmp.path(), Some(&cb))
         .await
         .expect("download");
@@ -200,10 +196,6 @@ async fn resume_skips_completed_chunks() {
     bitmap[2] = 0x01;
     std::fs::write(dest.join("f.bin.progress"), &bitmap).unwrap();
 
-    let ctx = HubContext::new(
-        Arc::new(HfMetadata::with_endpoint(&server.uri(), None, fast_transport()).unwrap()),
-        fast_transport(),
-    );
     let cfg = EngineConfig {
         file_concurrency: 1,
         chunk_concurrency: 4,
@@ -220,7 +212,7 @@ async fn resume_skips_completed_chunks() {
     // mount the same pattern again, so we only installed GET above.
     get_hits.store(0, Ordering::SeqCst);
 
-    Engine::with_config(&ctx, cfg)
+    Engine::with_config(fast_transport(), cfg)
         .run(sources, dest, None)
         .await
         .expect("resume");
@@ -271,10 +263,6 @@ async fn cancel_via_callback_returns_cancelled() {
         .await;
 
     let tmp = tempdir().unwrap();
-    let ctx = HubContext::new(
-        Arc::new(HfMetadata::with_endpoint(&server.uri(), None, fast_transport()).unwrap()),
-        fast_transport(),
-    );
     let cfg = EngineConfig {
         file_concurrency: 1,
         chunk_concurrency: 1,
@@ -294,7 +282,7 @@ async fn cancel_via_callback_returns_cancelled() {
         auth: None,
     }];
 
-    let err = Engine::with_config(&ctx, cfg)
+    let err = Engine::with_config(fast_transport(), cfg)
         .run(sources, tmp.path(), Some(&cb))
         .await
         .expect_err("cancellation must surface");

@@ -31,10 +31,10 @@ use std::sync::Arc;
 use url::Url;
 
 use crate::config::MIN_SDK_VERSION;
-use crate::download::{Engine, EngineConfig};
+use crate::download::Engine;
 use crate::error::{Error, Result};
-use crate::hub::metadata::{FileSource, HubContext, HubMetadata};
-use crate::hub::{ProgressCallback, RemoteFile};
+use crate::hub::metadata::FileSource;
+use crate::hub::ProgressCallback;
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
 use crate::store::{Store, INFLIGHT_DIR, MANIFEST_FILE};
 use crate::transport::{HttpTransport, ReqwestTransport};
@@ -218,9 +218,9 @@ async fn pull_ai_hub_inner(
         ))
     })?;
 
-    // 4. Download the zip through the shared engine. `HubContext` needs a
-    //    `HubMetadata` — for a single-file download we plug in a minimal
-    //    shim so `EngineConfig::resolve` + `Engine::run` work unchanged.
+    // 4. Download the zip through the shared engine. A single-zip
+    //    fetch doesn't need metadata resolution, so we build the
+    //    engine directly with a transport + concurrency hint.
     let zip_basename = format!(
         "{}.zip",
         model_name.rsplit('/').next().unwrap_or(model_name)
@@ -237,8 +237,12 @@ async fn pull_ai_hub_inner(
     let inflight_dir = dest_dir.join(INFLIGHT_DIR);
     std::fs::create_dir_all(&inflight_dir)?;
 
-    let ctx = HubContext::new(Arc::new(SingleFileMetadata), transport.clone());
-    let engine = Engine::with_config(&ctx, EngineConfig::resolve(&ctx));
+    // AI Hub pulls are always a single-zip fetch, so the download
+    // engine doesn't need a HubMetadata adapter — just a transport and
+    // a concurrency hint. Skipping the trait also removes the awkward
+    // SingleFileMetadata phantom impl (`list_files` / `resolve` would
+    // have thrown, which is an LSP violation).
+    let engine = Engine::new(transport.clone(), /* default_file_concurrency */ 1);
     engine
         .run(vec![file_source], &dest_dir, on_progress)
         .await?;
@@ -353,26 +357,3 @@ async fn fetch_direct(url: &str, transport: &Arc<dyn HttpTransport>) -> Result<V
     Ok(buf)
 }
 
-/// Placeholder `HubMetadata` for the single-zip download case. The
-/// engine only calls `default_file_concurrency`; `list_files` and
-/// `resolve` are unreachable from this path but must be present.
-struct SingleFileMetadata;
-
-#[async_trait::async_trait]
-impl HubMetadata for SingleFileMetadata {
-    async fn list_files(&self, _repo: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
-        Err(Error::Hub(
-            "SingleFileMetadata: list_files not supported".to_string(),
-        ))
-    }
-
-    async fn resolve(&self, _repo: &str, _files: &[String]) -> Result<Vec<FileSource>> {
-        Err(Error::Hub(
-            "SingleFileMetadata: resolve not supported".to_string(),
-        ))
-    }
-
-    fn default_file_concurrency(&self) -> usize {
-        1
-    }
-}

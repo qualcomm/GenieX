@@ -32,8 +32,9 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::error::{Error, Result};
-use crate::hub::metadata::{FileSource, HubContext};
+use crate::hub::metadata::FileSource;
 use crate::hub::{FileProgress, ProgressCallback};
+use crate::transport::HttpTransport;
 
 use super::chunk;
 
@@ -45,9 +46,12 @@ pub struct EngineConfig {
 }
 
 impl EngineConfig {
-    pub fn resolve(ctx: &HubContext) -> Self {
-        let file_conc = env_usize("GENIEX_DL_FILE_CONCURRENCY")
-            .unwrap_or_else(|| ctx.metadata.default_file_concurrency());
+    /// Build a config from `GENIEX_DL_*` env overrides, falling back to
+    /// the supplied default file concurrency (hubs signal their own
+    /// comfort level — HF bumps it up with a token, local/S3 want 1).
+    pub fn resolve(default_file_concurrency: usize) -> Self {
+        let file_conc =
+            env_usize("GENIEX_DL_FILE_CONCURRENCY").unwrap_or(default_file_concurrency);
         let chunk_conc = env_usize("GENIEX_DL_CHUNK_CONCURRENCY").unwrap_or(8);
         Self {
             file_concurrency: file_conc.max(1),
@@ -81,21 +85,21 @@ impl FileState {
     }
 }
 
-pub struct Engine<'a> {
-    ctx: &'a HubContext,
+pub struct Engine {
+    transport: Arc<dyn HttpTransport>,
     cfg: EngineConfig,
 }
 
-impl<'a> Engine<'a> {
-    pub fn new(ctx: &'a HubContext) -> Self {
+impl Engine {
+    pub fn new(transport: Arc<dyn HttpTransport>, default_file_concurrency: usize) -> Self {
         Self {
-            ctx,
-            cfg: EngineConfig::resolve(ctx),
+            cfg: EngineConfig::resolve(default_file_concurrency),
+            transport,
         }
     }
 
-    pub fn with_config(ctx: &'a HubContext, cfg: EngineConfig) -> Self {
-        Self { ctx, cfg }
+    pub fn with_config(transport: Arc<dyn HttpTransport>, cfg: EngineConfig) -> Self {
+        Self { transport, cfg }
     }
 
     pub async fn run(
@@ -122,7 +126,7 @@ impl<'a> Engine<'a> {
         let chunk_sem = Arc::new(Semaphore::new(self.cfg.chunk_concurrency));
 
         let mut file_tasks: JoinSet<Result<()>> = JoinSet::new();
-        let transport = self.ctx.transport.clone();
+        let transport = self.transport.clone();
         let dest_owned = dest_dir.to_path_buf();
 
         for (source, state) in sources.into_iter().zip(states.iter().cloned()) {

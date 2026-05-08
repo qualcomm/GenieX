@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::download::{Engine, EngineConfig};
+use crate::download::Engine;
 use crate::error::Result;
 use crate::hub::hf_metadata::HfMetadata;
 use crate::hub::metadata::HubContext;
@@ -71,7 +71,10 @@ impl ModelHub for HfHub {
             validate_relative_file(f)?;
         }
         let sources = self.ctx.metadata.resolve(repo_id, files).await?;
-        let engine = Engine::with_config(&self.ctx, EngineConfig::resolve(&self.ctx));
+        let engine = Engine::new(
+            self.ctx.transport.clone(),
+            self.ctx.metadata.default_file_concurrency(),
+        );
         engine.run(sources, dest_dir, on_progress).await
     }
 }
