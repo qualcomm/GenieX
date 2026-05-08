@@ -35,10 +35,13 @@ use crate::hub::s3::{pull_ai_hub, S3Config};
 use crate::hub::{hf::HfHub, localfs::LocalFsHub, HubSource, ModelHub, ProgressCallback};
 use crate::manifest::ModelManifest;
 use crate::manifest_builder::{infer_manifest_from_names, ManifestHint};
+use crate::resume;
 use crate::store::{Store, INFLIGHT_DIR, MANIFEST_FILE};
 use crate::validation::validate_model_name;
 
-pub const PROGRESS_SUFFIX: &str = ".progress";
+/// Re-exported for backwards-compat; canonical home is
+/// [`crate::resume::PROGRESS_SUFFIX`].
+pub const PROGRESS_SUFFIX: &str = resume::PROGRESS_SUFFIX;
 
 pub struct PullRequest {
     /// "org/repo" (already resolved from any short alias by the caller).
@@ -142,7 +145,7 @@ async fn pull_locked(store: &Store, hub: &dyn ModelHub, req: &PullRequest) -> Re
     //    resume the engine itself decides what bytes to request, but we
     //    still filter out files that are already fully marked done —
     //    saves a HEAD per file on restart.
-    let files = files_to_download(&manifest, &dest_dir);
+    let files = resume::files_to_download(&manifest, &dest_dir);
 
     // 3. Fetch. The hub takes ownership of .progress bitmap management;
     //    on success every marker byte is already 0x01.
@@ -180,55 +183,4 @@ fn drop_marker(dest_dir: &Path, file_name: &str) {
     }
     let marker = dest_dir.join(format!("{file_name}{PROGRESS_SUFFIX}"));
     let _ = fs::remove_file(&marker);
-}
-
-/// Decide which files listed in the manifest still need fetching. A file
-/// is considered "fully done" only when its `.progress` marker exists
-/// and every byte is `0x01` — partial bitmaps mean we need to resume.
-/// The engine does the actual chunk-level decision; this filter just
-/// lets us skip the per-file HEAD round-trip on restart.
-fn files_to_download(manifest: &ModelManifest, dest_dir: &Path) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-
-    let mut push_if_needed = |name: &str| {
-        if name.is_empty() {
-            return;
-        }
-        // Already-published file: manifest exists in dest_dir but
-        // we got a second pull attempt. The engine's bitmap check
-        // will be authoritative; we still push so the engine
-        // reopens, confirms, and moves on (a no-op).
-        let marker = dest_dir.join(format!("{}{}", name, PROGRESS_SUFFIX));
-        let output = dest_dir.join(name);
-        if !marker.exists() && output.exists() {
-            // Legacy published state: file present, no marker.
-            // Previous pulls left this shape. Treat as done.
-            return;
-        }
-        if let Ok(data) = fs::read(&marker) {
-            if !data.is_empty() && data.iter().all(|b| *b == 0x01) {
-                return;
-            }
-        }
-        out.push(name.to_string());
-    };
-
-    for f in manifest.model_file.values() {
-        if f.downloaded {
-            push_if_needed(&f.name);
-        }
-    }
-    if manifest.mmproj_file.downloaded {
-        push_if_needed(&manifest.mmproj_file.name);
-    }
-    if manifest.tokenizer_file.downloaded {
-        push_if_needed(&manifest.tokenizer_file.name);
-    }
-    for f in &manifest.extra_files {
-        if f.downloaded {
-            push_if_needed(&f.name);
-        }
-    }
-
-    out
 }
