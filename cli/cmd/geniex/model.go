@@ -32,12 +32,12 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/v6/table"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/spf13/cobra"
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
@@ -52,7 +52,7 @@ var (
 
 // aiHubOrgs is the allowlist of HuggingFace org names that are routed to
 // the AI Hub (S3/QAIRT) pull path instead of the standard HF path.
-var aiHubOrgs = []string{"qualcomm"}
+var aiHubOrgs = []string{"qualcomm", "qai-hub-models"}
 
 // pull creates a command to download and cache a model by name.
 // Usage: geniex pull <model-name>
@@ -76,7 +76,7 @@ func pull() *cobra.Command {
 	pullCmd.Run = func(cmd *cobra.Command, args []string) {
 		// Route to AI Hub when the user supplies "<allowlisted-org>/<repo>".
 		// The repo name is treated as the model's display_name in the manifest.
-		if org, repo, ok := splitOrgRepo(args[0]); ok && slices.Contains(aiHubOrgs, org) {
+		if org, repo, ok := splitOrgRepo(args[0]); ok && slices.Contains(aiHubOrgs, strings.ToLower(org)) {
 			if err := tryPullAIHubModel(context.TODO(), args[0], repo, noConfigCache); err != nil {
 				os.Exit(1)
 			}
@@ -1025,4 +1025,3 @@ func headContentLength(ctx context.Context, url string) (int64, error) {
 	}
 	return resp.ContentLength, nil
 }
-
