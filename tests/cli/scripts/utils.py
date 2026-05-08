@@ -24,21 +24,20 @@ geniex_path = None
 
 def _search_geniex() -> str:
     search_dirs = [
-        '../build',
-        './build',
-        './runner/build',
+        "../../../bazel-bin/cli/cmd/geniex/geniex_",
+        "./bazel-bin/cli/cmd/geniex/geniex_",
     ]
     for d in search_dirs:
-        exe = 'geniex' if platform.system() != 'Windows' else 'geniex.exe'
+        exe = "geniex" if platform.system() != "Windows" else "geniex.exe"
         path = Path(d) / exe
         if path.exists() and os.access(path, os.X_OK):
             return str(path.resolve())
 
-    global_geniex = shutil.which('geniex')
+    global_geniex = shutil.which("geniex")
     if global_geniex is not None:
         return global_geniex
 
-    raise FileNotFoundError('geniex command not found')
+    raise FileNotFoundError("geniex command not found")
 
 
 def start_geniex(
@@ -54,13 +53,13 @@ def start_geniex(
         geniex_path = _search_geniex()
 
     env = os.environ.copy()
-    env['GENIEX_LOG'] = 'trace' if debug_log else ''
-    env['NO_COLOR'] = '1'
+    env["GENIEX_LOG"] = "trace" if debug_log else ""
+    env["NO_COLOR"] = "1"
 
     return subprocess.Popen(
-        [geniex_path, '--test-mode', '--skip-update'] + args,
+        [geniex_path, "--test-mode", "--skip-update"] + args,
         text=True,
-        encoding='utf-8',
+        encoding="utf-8",
         cwd=Path(__file__).parent.parent,
         env=env,
         stdout=stdout,

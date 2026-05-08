@@ -18,75 +18,38 @@ from typing import TypeAlias
 from cases import *
 
 PLUGIN_MAP = {
-    'Linux': {
-        'x86_64': ['llama_cpp', 'geniexml'],
-        'arm64': ['llama_cpp'],
+    "Linux": {
+        "x86_64": ["llama_cpp"],
+        "arm64": ["llama_cpp", "qairt"],
     },
-    'Windows': {
-        'x86_64': ['llama_cpp'],
-        'arm64': ['llama_cpp', 'qairt', 'geniexml'],
-    },
-    'Darwin': {
-        'x86_64': ['llama_cpp'],
-        'arm64': ['llama_cpp', 'metal'],
+    "Windows": {
+        "x86_64": ["llama_cpp"],
+        "arm64": ["llama_cpp", "qairt"],
     },
 }
 
 # (plugin, model_id, cases)
 TESTCASE_MAP: dict[str, dict[str, dict[str, list[type[BaseCase]]]]] = {
-    'llama_cpp': {
-        'llm': {
-            'Qwen/Qwen3-1.7B-GGUF:Q8_0': [MultiRound],
+    "llama_cpp": {
+        "llm": {
+            "Qwen/Qwen3-1.7B-GGUF:Q8_0": [MultiRound],
+        },
+        "vlm": {
+            "ggml-org/Qwen2.5-Omni-3B-GGUF:Q4_K_M": [MultiRound, AudioMultiRound],
             # 'ggml-org/gemma-3-4b-it-GGUF:F16': [MultiRound, ImageMultiRound],
-            'ggml-org/Qwen2.5-Omni-3B-GGUF:Q4_K_M': [MultiRound, AudioMultiRound],
-        },
-        'vlm': {},
-        'embedder': {
-            'djuna/jina-embeddings-v2-small-en-Q5_K_M-GGUF:Q5_K_M': [SingleRound],
-        },
-        'reranker': {},
-        'tts': {},
-        'asr': {},
-        'diarize': {},
-        'cv': {},
-        'image_gen': {},
-    },
-    'qairt': {
-        'llm': {
-            'NexaAI/Granite-4-Micro-NPU': [MultiRound],
-            'NexaAI/phi4-mini-npu-turbo': [MultiRound],
-            'NexaAI/Qwen3-4B-Instruct-2507-npu': [MultiRound],
-            'NexaAI/Qwen3-4B-Thinking-2507-npu': [MultiRound],
-            'NexaAI/Llama3.2-3B-NPU-Turbo': [MultiRound],
-            'NexaAI/jan-v1-4B-npu': [MultiRound],
-            'NexaAI/qwen3-4B-npu': [MultiRound],
-            'NexaAI/phi3.5-mini-npu': [MultiRound],
-        },
-        'vlm': {
-            'NexaAI/Qwen3-VL-4B-Instruct-NPU': [MultiRound, ImageMultiRound],
-            'NexaAI/OmniNeural-4B': [MultiRound, ImageMultiRound, AudioMultiRound],
-            'NexaAI/LFM2-1.2B-npu': [MultiRound],
-        },
-        'embedder': {
-            'NexaAI/embeddinggemma-300m-npu': [SingleRound],
-        },
-        'asr': {
-            'NexaAI/parakeet-tdt-0.6b-v3-npu': [ASR],
-        },
-        'cv': {
-            'NexaAI/convnext-tiny-npu': [ImageRecognition],
-            'NexaAI/paddleocr-npu': [OCR],
-            'NexaAI/yolov12-npu': [ImageRecognition],
-        },
-        'reranker': {
-            'NexaAI/jina-v2-rerank-npu': [QueryDocument],
         },
     },
-    'geniexml': {
-        'vlm': {
-            'NexaAI/Qwen3-VL-4B-Instruct-GGUF:Q4_0': [MultiRound, ImageMultiRound],
-            'NexaAI/Qwen3-VL-4B-Thinking-GGUF:Q4_0': [MultiRound, ImageMultiRound],
-        }
+    "qairt": {
+        "llm": {
+            "qualcomm/Qwen3-4B": [MultiRound],
+        },
+        "vlm": {
+            "qualcomm/Qwen2.5-VL-7B-Instruct": [
+                MultiRound,
+                ImageMultiRound,
+                AudioMultiRound,
+            ],
+        },
     },
 }
 
