@@ -15,6 +15,8 @@
 package geniex_sdk
 
 /*
+#cgo CFLAGS: -I${SRCDIR}/../../sdk/pkg-geniex/include
+
 #include <stdlib.h>
 #include "geniex.h"
 
