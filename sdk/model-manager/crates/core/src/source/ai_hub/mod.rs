@@ -6,7 +6,6 @@
 //! [`Plan`] — manifest + one per-entry [`BytesSource`] — without
 //! downloading the multi-GB payload.
 
-pub mod cache;
 pub mod detect;
 pub mod manifest;
 pub mod remote_zip;
@@ -15,6 +14,7 @@ pub mod selector;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 use url::Url;
@@ -33,6 +33,9 @@ const MANIFEST_FILENAME: &str = "manifest.json";
 const PLATFORM_FILENAME: &str = "platform.json";
 const MAX_INDEX_BYTES: u64 = 8 * 1024 * 1024;
 
+/// TTL for the on-disk index cache (matches Go CLI's 24h).
+const CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+
 #[derive(Debug, Clone)]
 pub struct AiHubConfig {
     pub endpoint: String,
@@ -45,18 +48,16 @@ pub struct AiHubConfig {
 
 impl AiHubConfig {
     pub fn new(
-        endpoint: impl Into<String>,
-        version: impl Into<String>,
-        chipset: impl Into<String>,
+        endpoint: String,
+        version: String,
+        chipset: String,
         cache_dir: PathBuf,
         skip_cache: bool,
     ) -> Self {
-        let endpoint: String = endpoint.into().trim_end_matches('/').to_string();
-        let version: String = version.into().trim_matches('/').to_string();
         Self {
-            endpoint,
-            version,
-            chipset: chipset.into(),
+            endpoint: endpoint.trim_end_matches('/').to_string(),
+            version: version.trim_matches('/').to_string(),
+            chipset,
             cache_dir,
             skip_cache,
         }
@@ -336,15 +337,44 @@ async fn fetch_with_cache(
     transport: &Arc<dyn HttpTransport>,
 ) -> Result<Vec<u8>> {
     if !skip_cache {
-        if let Some(bytes) = cache::read_if_fresh(cache_path, cache::DEFAULT_TTL) {
+        if let Some(bytes) = read_cache(cache_path, CACHE_TTL) {
             return Ok(bytes);
         }
     }
     let bytes = fetch_direct(url, transport).await?;
     if !skip_cache {
-        cache::write(cache_path, &bytes);
+        write_cache(cache_path, &bytes);
     }
     Ok(bytes)
+}
+
+/// Return cached bytes if the file was modified within `ttl`. Any I/O
+/// error is treated as a cache miss.
+fn read_cache(path: &Path, ttl: Duration) -> Option<Vec<u8>> {
+    let meta = std::fs::metadata(path).ok()?;
+    let mtime = meta.modified().ok()?;
+    let age = SystemTime::now().duration_since(mtime).ok()?;
+    if age > ttl {
+        return None;
+    }
+    std::fs::read(path).ok()
+}
+
+/// Best-effort cache write. Failures are logged and swallowed — the
+/// caller always gets the freshly fetched bytes regardless.
+fn write_cache(path: &Path, data: &[u8]) {
+    if let Some(parent) = path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            eprintln!(
+                "[model-manager] aihub cache mkdir {}: {e}",
+                parent.display()
+            );
+            return;
+        }
+    }
+    if let Err(e) = std::fs::write(path, data) {
+        eprintln!("[model-manager] aihub cache write {}: {e}", path.display());
+    }
 }
 
 async fn fetch_direct(url: &str, transport: &Arc<dyn HttpTransport>) -> Result<Vec<u8>> {
@@ -413,5 +443,20 @@ mod tests {
         let out = prepare_flat_entries(&raw).unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].0, "model.bin");
+    }
+
+    #[test]
+    fn cache_miss_on_missing_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(read_cache(&tmp.path().join("nope.json"), CACHE_TTL).is_none());
+    }
+
+    #[test]
+    fn cache_roundtrip() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = tmp.path().join("x.json");
+        write_cache(&p, b"hello");
+        assert_eq!(read_cache(&p, CACHE_TTL).unwrap(), b"hello");
+        assert!(read_cache(&p, Duration::ZERO).is_none());
     }
 }

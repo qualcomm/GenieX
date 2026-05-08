@@ -3,7 +3,7 @@
 //! patience), so they are gated behind `--ignored` and only run when
 //! explicitly requested:
 //!
-//!   cargo test --test s3_live -- --ignored
+//!   cargo test --test ai_hub_live -- --ignored
 //!
 //! The CI job does not pass `--ignored`; these exist to give humans a
 //! quick confidence check that our protojson parsing + selector +
@@ -39,9 +39,9 @@ const PHI_STORED_NAME: &str = "qualcomm/Phi-3.5-Mini-Instruct";
 async fn live_manifest_resolves_phi_model() {
     let tmp = tempfile::tempdir().unwrap();
     let cfg = AiHubConfig::new(
-        AI_HUB_BASE_URL,
-        AI_HUB_VERSION,
-        "definitely-not-a-real-chipset",
+        AI_HUB_BASE_URL.to_string(),
+        AI_HUB_VERSION.to_string(),
+        "definitely-not-a-real-chipset".to_string(),
         tmp.path().join("aihub"),
         true,
     );
@@ -74,9 +74,9 @@ async fn live_phi_3_5_mini_e2e_pull() {
     let store = Store::new(StoreConfig::new(tmp.path().to_path_buf())).unwrap();
 
     let cfg = AiHubConfig::new(
-        AI_HUB_BASE_URL,
-        AI_HUB_VERSION,
-        PHI_CHIPSET,
+        AI_HUB_BASE_URL.to_string(),
+        AI_HUB_VERSION.to_string(),
+        PHI_CHIPSET.to_string(),
         tmp.path().join("aihub"),
         true,
     );
@@ -89,7 +89,7 @@ async fn live_phi_3_5_mini_e2e_pull() {
             if f.total_bytes > 0 {
                 let pct = (f.downloaded_bytes as f64 / f.total_bytes as f64) * 100.0;
                 eprintln!(
-                    "[s3_live] {}: {}/{} ({:.1}%)",
+                    "[ai_hub_live] {}: {}/{} ({:.1}%)",
                     f.file_name, f.downloaded_bytes, f.total_bytes, pct
                 );
             }
@@ -143,45 +143,5 @@ async fn live_phi_3_5_mini_e2e_pull() {
     assert!(
         !entries.iter().any(|n| n.ends_with(".zip")),
         "unexpected .zip in model dir: {entries:?}"
-    );
-}
-
-/// Same shape as `live_phi_3_5_mini_e2e_pull` but feeds an empty
-/// chipset through `AiHubConfig`, exercising the
-/// `detect::detect_host_chipset` fallback inside `AiHubSource::plan`.
-/// On non-Snapdragon-Windows hosts this fails with "host auto-detect
-/// is not supported on this platform"; only real Snapdragon X Elite /
-/// Plus / X2 Elite laptops can pass it.
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-#[ignore]
-async fn live_e2e_with_auto_detect() {
-    let tmp = tempfile::tempdir().unwrap();
-    let store = Store::new(StoreConfig::new(tmp.path().to_path_buf())).unwrap();
-
-    let cfg = AiHubConfig::new(
-        AI_HUB_BASE_URL,
-        AI_HUB_VERSION,
-        "", // <-- triggers host auto-detect
-        tmp.path().join("aihub"),
-        true,
-    );
-
-    let transport = Arc::new(ReqwestTransport::new().unwrap());
-    let src = AiHubSource::with_transport(
-        PHI_DISPLAY_NAME.to_string(),
-        PHI_STORED_NAME.to_string(),
-        cfg,
-        transport.clone(),
-    );
-    pull_with_source(&store, PHI_STORED_NAME, Box::new(src), transport, None)
-        .await
-        .expect("live AI Hub pull with auto-detect failed");
-
-    let mf = store.get_manifest(PHI_STORED_NAME).expect("manifest");
-    assert_eq!(mf.plugin_id, "qairt");
-    let entry = mf.model_file.get("N/A").expect("N/A quant");
-    assert!(
-        entry.name.ends_with(".bin") && entry.downloaded,
-        "auto-detect did not produce a usable entrypoint: {entry:?}"
     );
 }

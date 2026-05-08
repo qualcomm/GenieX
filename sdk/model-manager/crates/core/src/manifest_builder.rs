@@ -226,7 +226,7 @@ pub fn infer_manifest_from_names(
     });
 
     // Derive model_name: last path component of `name`, with -GGUF suffix
-    // stripped. e.g. "NexaAI/Qwen3-4B-GGUF" -> "Qwen3-4B".
+    // stripped. e.g. "Qwen/Qwen3-4B-GGUF" -> "Qwen3-4B".
     let model_name = hint.model_name.unwrap_or_else(|| {
         let repo = name.rsplit('/').next().unwrap_or(name);
         repo.trim_end_matches("-GGUF")

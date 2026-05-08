@@ -9,11 +9,8 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 fs2 = { workspace = true }
 tokio = { workspace = true }
-tokio-util = { workspace = true }
 reqwest = { workspace = true }
 async-trait = { workspace = true }
-bytes = { workspace = true }
-futures = { workspace = true }
 url = { workspace = true }
 flate2 = { workspace = true }
 

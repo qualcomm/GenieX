@@ -1,16 +1,19 @@
-//! `reqwest`-backed `HttpTransport` — rustls, proxy-aware, retrying.
+//! HTTP transport layer — the minimum a hub needs from the network.
 //!
-//! reqwest's default client honors `HTTP_PROXY` / `HTTPS_PROXY` /
-//! `NO_PROXY` / `ALL_PROXY` env vars out of the box, which solves the
-//! proxy-blind behavior we had under hf-hub+ureq. rustls keeps us off any
-//! system OpenSSL dependency so the static `libgeniex_model.a` stays
-//! portable.
+//! `HttpTransport` has two methods: HEAD to discover size +
+//! `Accept-Ranges`, and a byte-range GET that streams into an
+//! `AsyncWrite`. Keeping it this thin means a new transport (proxied
+//! reqwest, a local MITM, a mocked test harness) is ~150 lines to add.
+//!
+//! The default [`ReqwestTransport`] honors `HTTP_PROXY` / `HTTPS_PROXY`
+//! / `NO_PROXY` env vars out of the box (reqwest default), which is
+//! the whole point of moving off hf-hub's ureq backend. rustls keeps
+//! us off any system OpenSSL dependency so the static
+//! `libgeniex_model.a` stays portable.
 
 use std::time::Duration;
 
 use async_trait::async_trait;
-use bytes::Bytes;
-use futures::StreamExt;
 use reqwest::header::{ACCEPT_RANGES, AUTHORIZATION, CONTENT_LENGTH, ETAG, RANGE};
 use reqwest::{Client, StatusCode};
 use tokio::io::{AsyncWrite, AsyncWriteExt};
@@ -18,7 +21,29 @@ use url::Url;
 
 use crate::error::{Error, Result};
 
-use super::{HeadInfo, HttpTransport};
+#[derive(Debug, Clone)]
+pub struct HeadInfo {
+    pub size: u64,
+    pub accepts_ranges: bool,
+    pub etag: Option<String>,
+}
+
+#[async_trait]
+pub trait HttpTransport: Send + Sync {
+    async fn head(&self, url: &Url, auth: Option<&str>) -> Result<HeadInfo>;
+
+    /// Stream bytes `[offset, offset+len)` from `url` into `sink`. Must
+    /// write exactly `len` bytes; short reads or EOF mid-stream are
+    /// surfaced as [`crate::error::Error::Http`] so the engine can retry.
+    async fn get_range(
+        &self,
+        url: &Url,
+        auth: Option<&str>,
+        offset: u64,
+        len: u64,
+        sink: &mut (dyn AsyncWrite + Unpin + Send),
+    ) -> Result<()>;
+}
 
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(60);
@@ -96,7 +121,7 @@ impl HttpTransport for ReqwestTransport {
                 Err(e) if attempt < self.retries => {
                     attempt += 1;
                     tokio::time::sleep(self.retry_backoff).await;
-                    tracing_log(format!("head retry {attempt}: {e}"));
+                    log_retry(format!("head retry {attempt}: {e}"));
                     continue;
                 }
                 Err(e) => return Err(Error::HttpTimeout(format!("HEAD {url}: {e}"))),
@@ -106,7 +131,7 @@ impl HttpTransport for ReqwestTransport {
             if Self::is_transient(status) && attempt < self.retries {
                 attempt += 1;
                 tokio::time::sleep(self.retry_backoff).await;
-                tracing_log(format!("head retry {attempt}: status {status}"));
+                log_retry(format!("head retry {attempt}: status {status}"));
                 continue;
             }
             if !status.is_success() {
@@ -162,12 +187,12 @@ impl HttpTransport for ReqwestTransport {
                 req = req.header(AUTHORIZATION, format!("Bearer {tok}"));
             }
 
-            let resp = match req.send().await {
+            let mut resp = match req.send().await {
                 Ok(r) => r,
                 Err(e) if attempt < self.retries => {
                     attempt += 1;
                     tokio::time::sleep(self.retry_backoff).await;
-                    tracing_log(format!("get_range retry {attempt}: {e}"));
+                    log_retry(format!("get_range retry {attempt}: {e}"));
                     continue;
                 }
                 Err(e) => {
@@ -179,11 +204,11 @@ impl HttpTransport for ReqwestTransport {
             if Self::is_transient(status) && attempt < self.retries {
                 attempt += 1;
                 tokio::time::sleep(self.retry_backoff).await;
-                tracing_log(format!("get_range retry {attempt}: status {status}"));
+                log_retry(format!("get_range retry {attempt}: status {status}"));
                 continue;
             }
-            // 200 is accepted only if the server returned the full body and
-            // we asked for offset==0; otherwise we need 206 Partial Content.
+            // 200 is accepted only if the server returned the full body
+            // and we asked for offset==0; otherwise we need 206.
             let ok =
                 status == StatusCode::PARTIAL_CONTENT || (status == StatusCode::OK && offset == 0);
             if !ok {
@@ -193,31 +218,17 @@ impl HttpTransport for ReqwestTransport {
                 });
             }
 
-            let mut stream = resp.bytes_stream();
             let mut written: u64 = 0;
-            while let Some(chunk) = stream.next().await {
-                let bytes: Bytes = match chunk {
-                    Ok(b) => b,
-                    Err(e) if attempt < self.retries => {
-                        attempt += 1;
-                        tokio::time::sleep(self.retry_backoff).await;
-                        tracing_log(format!("stream retry {attempt}: {e}"));
-                        // Restart the whole range — we can't rewind the
-                        // sink, but the engine's unit of retry is a chunk,
-                        // so a full restart here is fine as long as the
-                        // caller hasn't advertised progress yet. Caller
-                        // writes to a pre-allocated region via seek, so
-                        // overwriting from 0 on retry is safe; we just
-                        // need the sink at the same start position. The
-                        // engine passes us a freshly-seeked handle per
-                        // attempt, so we simply return an error and let
-                        // it retry.
-                        return Err(Error::HttpTimeout(format!("stream {url} {range}: {e}")));
-                    }
-                    Err(e) => {
-                        return Err(Error::HttpTimeout(format!("stream {url} {range}: {e}")));
-                    }
-                };
+            loop {
+                // The executor passes freshly-seeked sinks, so a
+                // mid-stream error always means "retry this range" —
+                // surface as HttpTimeout so the executor's chunk-level
+                // retry machinery picks it up.
+                let chunk = resp
+                    .chunk()
+                    .await
+                    .map_err(|e| Error::HttpTimeout(format!("stream {url} {range}: {e}")))?;
+                let Some(bytes) = chunk else { break };
                 sink.write_all(&bytes)
                     .await
                     .map_err(|e| Error::Http(format!("write sink: {e}")))?;
@@ -231,7 +242,7 @@ impl HttpTransport for ReqwestTransport {
                 if attempt < self.retries {
                     attempt += 1;
                     tokio::time::sleep(self.retry_backoff).await;
-                    tracing_log(format!(
+                    log_retry(format!(
                         "short read retry {attempt}: got {written} / expected {len}"
                     ));
                     continue;
@@ -245,9 +256,9 @@ impl HttpTransport for ReqwestTransport {
     }
 }
 
-fn tracing_log(msg: String) {
-    // Keep dependency footprint minimal — route to stderr. Upstream FFI
-    // log bridge can grab stderr if needed; using eprintln! matches what
-    // the Go CLI does via slog before slog was wired.
+fn log_retry(msg: String) {
+    // Upstream FFI log bridge can grab stderr if needed; direct
+    // eprintln avoids pulling in a logging facade just for a handful
+    // of retry lines.
     eprintln!("[model-manager] {msg}");
 }

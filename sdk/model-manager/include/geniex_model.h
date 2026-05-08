@@ -147,7 +147,7 @@ typedef enum {
     GENIEX_HUB_AUTO        = 0, /**< Automatic hub selection              */
     GENIEX_HUB_HUGGINGFACE = 1, /**< HuggingFace Hub                      */
     GENIEX_HUB_MODELSCOPE  = 2, /**< ModelScope (mainland China preferred) */
-    GENIEX_HUB_S3          = 3, /**< AWS S3 (nexa-model-hub-bucket)        */
+    GENIEX_HUB_AIHUB       = 3, /**< Qualcomm AI Hub qairt assets         */
     GENIEX_HUB_VOLCES      = 4, /**< Volces TOS (mainland China preferred) */
     /**
      * Local filesystem — not a real hub. The value 127 (0x7F) keeps it
@@ -215,7 +215,7 @@ typedef struct {
     /**
      * Target chipset for AI Hub (qairt) pulls, e.g. "SM8650". Matched
      * against the name/aliases fields of platform.json. Only consulted
-     * when `hub == GENIEX_HUB_S3`.
+     * when `hub == GENIEX_HUB_AIHUB`.
      *
      * NULL or an empty string asks the SDK to auto-detect the host
      * chipset. Detection currently works on Windows-on-Snapdragon
@@ -225,10 +225,10 @@ typedef struct {
      */
     const char* chipset;
     /**
-     * AI Hub model `display_name`. Required when `hub == GENIEX_HUB_S3`;
-     * ignored otherwise. `model_name` still names the on-disk directory
-     * ("org/repo" shape), matching the Go CLI's storedName/displayName
-     * split.
+     * AI Hub model `display_name`. Required when
+     * `hub == GENIEX_HUB_AIHUB`; ignored otherwise. `model_name` still
+     * names the on-disk directory ("org/repo" shape), matching the Go
+     * CLI's storedName/displayName split.
      */
     const char*                 display_name;
     geniex_download_progress_cb on_progress; /**< NULL to suppress progress reporting           */
