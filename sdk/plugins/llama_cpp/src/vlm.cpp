@@ -134,9 +134,8 @@ int32_t LlamaVlm::apply_chat_template(
     common_chat_templates_inputs tmpl_inputs;
     tmpl_inputs.messages              = chat_messages;
     tmpl_inputs.add_generation_prompt = true;
-    tmpl_inputs.use_jinja             = false;
+    tmpl_inputs.use_jinja             = true;
     if (input->tools && strlen(input->tools) > 0) {
-        tmpl_inputs.use_jinja = true;  // jinja can be buggy, stay consistent with generation code
         tmpl_inputs.tools = common_chat_tools_parse_oaicompat(nlohmann::ordered_json::parse(std::string(input->tools)));
     }
 
