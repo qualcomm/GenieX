@@ -114,31 +114,27 @@ pub async fn pull_with_source(
             let inflight_dir = dest_dir.join(INFLIGHT_DIR);
             fs::create_dir_all(&inflight_dir)?;
 
-            // 1. Plan: resolve manifest + byte-level recipes.
             let mut plan = source.plan().await?;
             plan.manifest.name = model_name_owned.clone();
 
-            // 2. Fetch (resume-aware).
             let pending = resume::filter_pending(&plan.files, &dest_dir);
             if !pending.is_empty() {
                 let executor = Executor::new(transport.clone(), 4);
                 executor.run(&pending, &dest_dir, on_progress).await?;
             }
 
-            // 3. Publish atomically: write to inflight/, rename into place.
             let staged = inflight_dir.join(MANIFEST_FILE);
             fs::write(&staged, serde_json::to_string(&plan.manifest)?)?;
             let final_path = dest_dir.join(MANIFEST_FILE);
             fs::rename(&staged, &final_path)?;
 
-            // 4. Drop per-file progress markers — the manifest is now
-            //    the source of truth. Matches Go CLI's
-            //    `cli/internal/model_hub/model_hub.go` behavior.
+            // Once the manifest is published, per-file markers are
+            // redundant; the Go CLI does the same cleanup after a
+            // successful pull, so cache layouts stay interchangeable.
             for f in &plan.files {
                 drop_marker(&dest_dir, &f.name);
             }
 
-            // 5. Clear the in-flight sentinel.
             let _ = fs::remove_dir_all(&inflight_dir);
 
             Ok(())

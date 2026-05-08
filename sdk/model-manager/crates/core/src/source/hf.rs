@@ -1,10 +1,8 @@
 //! HuggingFace [`ModelSource`].
 //!
-//! Collapses the old `HfHub` + `HfMetadata` split into one struct: one
-//! call to `/api/models/{repo}` gives siblings + sizes, and any
-//! `geniex.json` that ships with the repo is pulled and used verbatim.
-//! If the repo doesn't ship one, we synthesise via
-//! [`crate::manifest_builder::infer_manifest_from_names`].
+//! One call to `/api/models/{repo}` gives siblings + sizes. If the
+//! repo ships a `geniex.json` we use it verbatim; otherwise we
+//! synthesise via [`crate::manifest_builder::infer_manifest_from_names`].
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -57,17 +55,6 @@ impl HfSource {
         })
     }
 
-    /// File-level concurrency hint. Token unlocks parallel; anonymous
-    /// stays at 1 to avoid rate-limits. Exposed so the executor can
-    /// read it when it wants a per-source knob (today it doesn't).
-    pub fn default_file_concurrency(&self) -> usize {
-        if self.token.is_some() {
-            8
-        } else {
-            1
-        }
-    }
-
     fn api_url(&self) -> Result<Url> {
         self.endpoint
             .join(&format!("api/models/{}", self.repo))
@@ -112,7 +99,6 @@ struct ApiSibling {
 #[async_trait]
 impl ModelSource for HfSource {
     async fn plan(&self) -> Result<Plan> {
-        // 1. Siblings + sizes.
         let api_url = self.api_url()?;
         let body = self.fetch_small(&api_url, MAX_MANIFEST_BYTES).await?;
         let parsed: ApiModelResponse = serde_json::from_slice(&body)?;
@@ -127,10 +113,10 @@ impl ModelSource for HfSource {
             file_names.push(s.rfilename);
         }
 
-        // 2. Explicit geniex.json wins; otherwise infer.
+        // HEAD rather than GET so we don't pull a nonexistent manifest's
+        // HTML 404 page into memory before failing JSON parse.
         let ships_manifest = {
             let url = self.file_url(MANIFEST_FILE)?;
-            // Cheap existence probe: HEAD, 2xx => ships it.
             self.transport
                 .head(&url, self.token.as_deref())
                 .await
@@ -152,9 +138,8 @@ impl ModelSource for HfSource {
         };
         manifest.name = self.repo.clone();
 
-        // 3. Emit a FileSpec per file the manifest actually uses.
-        //    Anything not mentioned (ignored shards, readmes) is left
-        //    behind by design — `pull` only materialises manifest entries.
+        // Only materialise files the manifest actually uses; readmes and
+        // unused quantization shards in `siblings` are left behind.
         let mut files: Vec<FileSpec> = Vec::new();
         let mut push = |name: &str, size: Option<u64>| -> Result<()> {
             if name.is_empty() {

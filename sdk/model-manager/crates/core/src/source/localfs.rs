@@ -19,8 +19,6 @@ const MANIFEST_FILE: &str = "geniex.json";
 
 pub struct LocalFsSource {
     source_dir: PathBuf,
-    /// "org/repo" the caller asked for; stamped into the manifest's
-    /// `Name` so the on-disk store keys match.
     model_name: String,
     hint: ManifestHint,
 }
@@ -38,8 +36,6 @@ impl LocalFsSource {
 #[async_trait]
 impl ModelSource for LocalFsSource {
     async fn plan(&self) -> Result<Plan> {
-        // Scan once so both branches (explicit manifest / inferred) see
-        // the same file set.
         let mut file_names: Vec<String> = Vec::new();
         let mut sizes: HashMap<String, i64> = HashMap::new();
         for entry in std::fs::read_dir(&self.source_dir)?.flatten() {
@@ -62,7 +58,6 @@ impl ModelSource for LocalFsSource {
             }
         }
 
-        // Prefer the shipped manifest; fall back to inference.
         let manifest_path = self.source_dir.join(MANIFEST_FILE);
         let mut manifest: ModelManifest = if manifest_path.exists() {
             let data = std::fs::read_to_string(&manifest_path)?;
@@ -72,7 +67,6 @@ impl ModelSource for LocalFsSource {
         };
         manifest.name = self.model_name.clone();
 
-        // Emit Local BytesSources per referenced file.
         let mut files: Vec<FileSpec> = Vec::new();
         let mut push = |name: &str| {
             if name.is_empty() {

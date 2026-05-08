@@ -4,11 +4,7 @@
 //! public S3 protojson chain, then reads the remote archive's ZIP64
 //! central directory over HTTP Range reads to produce a complete
 //! [`Plan`] — manifest + one per-entry [`BytesSource`] — without
-//! downloading the 4 GB+ payload.
-//!
-//! See `source::ai_hub::remote_zip` for the CD parser. See
-//! `source::ai_hub::selector` for the chipset matcher lifted verbatim
-//! from the old `hub::s3` code.
+//! downloading the multi-GB payload.
 
 pub mod cache;
 pub mod detect;
@@ -37,8 +33,6 @@ const MANIFEST_FILENAME: &str = "manifest.json";
 const PLATFORM_FILENAME: &str = "platform.json";
 const MAX_INDEX_BYTES: u64 = 8 * 1024 * 1024;
 
-/// Config knobs for the AI Hub source. Mirrors today's `S3Config` but
-/// is owned by the source itself rather than a detached pull function.
 #[derive(Debug, Clone)]
 pub struct AiHubConfig {
     pub endpoint: String,
@@ -108,7 +102,6 @@ impl ModelSource for AiHubSource {
         let endpoint = self.cfg.endpoint.as_str();
         let version = self.cfg.version.as_str();
 
-        // 1. manifest.json → pick the entry we care about.
         let manifest_url = format!("{endpoint}/releases/{version}/{MANIFEST_FILENAME}");
         let manifest_cache = self.cfg.cache_dir.join(MANIFEST_FILENAME);
         let manifest_bytes = fetch_with_cache(
@@ -150,7 +143,8 @@ impl ModelSource for AiHubSource {
             )));
         }
 
-        // 2. release-assets.json (per-model, URL rotates each release).
+        // release-assets.json is per-model with a URL that rotates each
+        // release, so it's fetched uncached.
         let release_assets_bytes = fetch_direct(release_assets_url, &self.transport).await?;
         let release_assets: ModelReleaseAssets = serde_json::from_slice(&release_assets_bytes)
             .map_err(|source| Error::ManifestParse {
@@ -158,7 +152,6 @@ impl ModelSource for AiHubSource {
                 source,
             })?;
 
-        // 3. platform.json → alias resolution.
         let platform_url = format!("{endpoint}/releases/{version}/{PLATFORM_FILENAME}");
         let platform_cache = self.cfg.cache_dir.join(PLATFORM_FILENAME);
         let platform_bytes = fetch_with_cache(
@@ -174,7 +167,6 @@ impl ModelSource for AiHubSource {
                 source,
             })?;
 
-        // 4. Resolve chipset (possibly via host auto-detect).
         let chipset: String = if self.cfg.chipset.is_empty() {
             detect::detect_host_chipset().ok_or_else(|| {
                 Error::Hub(
@@ -206,23 +198,20 @@ impl ModelSource for AiHubSource {
             ))
         })?;
 
-        // 5. Pull the remote central directory. No payload fetched yet.
+        // Only the ZIP64 footer + central directory are fetched here;
+        // per-entry payloads stay remote until the executor requests
+        // them.
         let raw_entries = fetch_central_directory(&self.transport, &download_url).await?;
-
-        // 6. Filter + flat-extract-name planning. Mirrors the old
-        //    `extract::extract_flat` pre-scan: skip dirs, __MACOSX and
-        //    ._* metadata, and reject basename collisions up front.
         let flat_entries = prepare_flat_entries(&raw_entries)?;
 
-        // 7. Pick the entrypoint — lex-first `.bin` shard, same as the
-        //    Go CLI's ExtractFlat.
+        // Lex-first `.bin` matches the Go CLI's `ExtractFlat`, so a
+        // cache populated by either agent is interchangeable.
         let entrypoint_name = flat_entries
             .iter()
             .find(|(name, _)| name.to_ascii_lowercase().ends_with(".bin"))
             .map(|(name, _)| name.clone())
             .ok_or_else(|| Error::Hub("no .bin shard in archive".to_string()))?;
 
-        // 8. Synthesise the qairt manifest.
         let precision_label = asset
             .precision
             .strip_prefix("PRECISION_")
@@ -271,8 +260,6 @@ impl ModelSource for AiHubSource {
             extra_files,
         };
 
-        // 9. Emit one FileSpec per flat entry, picking BytesSource by
-        //    compression method.
         let files: Vec<FileSpec> = flat_entries
             .into_iter()
             .map(|(name, e)| {
@@ -305,9 +292,6 @@ impl ModelSource for AiHubSource {
 /// Reduce the raw central-directory entries to a flat list of
 /// `(basename, entry)` pairs, skipping directories + macOS AppleDouble
 /// metadata and rejecting basename collisions.
-///
-/// Returns entries in stable central-directory order so progress is
-/// predictable; the caller can sort after if needed.
 fn prepare_flat_entries(raw: &[ZipEntry]) -> Result<Vec<(String, ZipEntry)>> {
     let mut seen: HashSet<String> = HashSet::new();
     let mut out: Vec<(String, ZipEntry)> = Vec::new();

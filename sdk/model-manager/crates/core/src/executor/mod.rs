@@ -4,20 +4,14 @@
 //! materialises each one into `dest_dir/<name>`. Four branches cover
 //! every hub we support today:
 //!
-//! - [`BytesSource::Http`] — reuses the old engine's chunked parallel
-//!   download + `.progress` bitmap resume. Preferred for HF files
-//!   (and any hub whose URLs are one-URL-one-file).
+//! - [`BytesSource::Http`] — chunked parallel download with `.progress`
+//!   bitmap resume. One URL per file (HF).
 //! - [`BytesSource::HttpRange`] — same chunking/resume machinery but
 //!   every range request is offset into a larger remote object (a
 //!   STORED zip entry inside an AI Hub asset).
-//! - [`BytesSource::HttpDeflate`] — single-range fetch into an in-memory
-//!   buffer, sync flate2 decode on a blocking worker, streaming write
-//!   to disk. Resume is entry-granular because DEFLATE is not seekable.
+//! - [`BytesSource::HttpDeflate`] — single-range fetch + inline flate2
+//!   decode. Resume is entry-granular because DEFLATE is not seekable.
 //! - [`BytesSource::Local`] — plain copy for `LocalFsSource`.
-//!
-//! Progress aggregation: per-file `AtomicU64` counters, ticker-driven
-//! callback, cooperative cancel flag. All lifted unchanged from the
-//! old `download::engine`.
 
 pub mod chunk;
 
@@ -58,7 +52,7 @@ pub struct ExecutorConfig {
 }
 
 impl ExecutorConfig {
-    /// Resolve from `GENIEX_DL_*` env overrides, same knobs as before.
+    /// Resolve from `GENIEX_DL_*` env overrides.
     pub fn resolve(default_file_concurrency: usize) -> Self {
         let file_conc = env_usize("GENIEX_DL_FILE_CONCURRENCY").unwrap_or(default_file_concurrency);
         let chunk_conc = env_usize("GENIEX_DL_CHUNK_CONCURRENCY").unwrap_or(8);
@@ -272,7 +266,6 @@ async fn run_one(
                 .unwrap_or(0);
             state.total_bytes.store(size, Ordering::Relaxed);
             state.downloaded_bytes.store(size, Ordering::Relaxed);
-            // Write a single-byte 0x01 marker so resume treats this as done.
             let marker = PathBuf::from(format!("{}{}", dest.display(), PROGRESS_SUFFIX));
             tokio::fs::write(&marker, [chunk::PROGRESS_DONE_BYTE]).await?;
             Ok(())
@@ -416,8 +409,10 @@ async fn download_http_deflate(
     let output_path = dest_dir.join(name);
     let marker_path = PathBuf::from(format!("{}{}", output_path.display(), PROGRESS_SUFFIX));
 
-    // Bitmap is a single byte for deflate entries: 0x01 means the file
-    // is fully decoded, anything else means refetch.
+    // DEFLATE entries are entry-granular: a 0x01 marker means the file
+    // is fully decoded, anything else (partial, missing, stale) means
+    // refetch the whole entry — flate2 streams aren't seekable, so
+    // mid-entry resume isn't possible.
     if let Ok(data) = std::fs::read(&marker_path) {
         if data.first().copied() == Some(chunk::PROGRESS_DONE_BYTE)
             && output_path.exists()
@@ -437,9 +432,10 @@ async fn download_http_deflate(
         return Err(Error::Cancelled);
     }
 
-    // 1. Fetch the compressed slice into memory. This caps RAM at
-    //    `compressed_len` per in-flight deflate entry — the executor's
-    //    `file_concurrency` sets how many decode in parallel.
+    // Buffering the compressed slice caps RAM at `compressed_len` per
+    // in-flight deflate entry; `file_concurrency` bounds how many run
+    // in parallel. Streaming decode on `spawn_blocking` because flate2
+    // is sync.
     let mut compressed: Vec<u8> = Vec::with_capacity(compressed_len as usize);
     transport
         .get_range(
@@ -455,7 +451,6 @@ async fn download_http_deflate(
         return Err(Error::Cancelled);
     }
 
-    // 2. Sync decode on a blocking worker — flate2 is not async.
     if let Some(parent) = output_path.parent() {
         tokio::fs::create_dir_all(parent).await?;
     }
@@ -491,7 +486,6 @@ async fn download_http_deflate(
         )));
     }
 
-    // Mark done: single-byte 0x01.
     std::fs::write(&marker_path, [chunk::PROGRESS_DONE_BYTE])?;
 
     Ok(())
