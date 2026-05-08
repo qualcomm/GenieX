@@ -165,7 +165,8 @@ mod tests {
     fn manifest_entries_not_downloaded_are_ignored() {
         let mut m = base_manifest();
         m.model_file.clear();
-        m.model_file.insert("Q4".to_string(), mf("notneeded.gguf", false));
+        m.model_file
+            .insert("Q4".to_string(), mf("notneeded.gguf", false));
         let tmp = tempfile::tempdir().unwrap();
         let plan = files_to_download(&m, tmp.path());
         assert!(plan.is_empty());

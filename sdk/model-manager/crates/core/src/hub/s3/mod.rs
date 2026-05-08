@@ -356,4 +356,3 @@ async fn fetch_direct(url: &str, transport: &Arc<dyn HttpTransport>) -> Result<V
         .await?;
     Ok(buf)
 }
-

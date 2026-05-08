@@ -105,10 +105,7 @@ pub fn extract_flat(zip_path: &Path, dest_dir: &Path) -> Result<ExtractResult> {
 fn basename(path: &str) -> String {
     // Zip entry names are always '/'-separated per APPNOTE, but some
     // macOS / Windows zip tools emit '\'-tainted names — handle both.
-    path.rsplit(['/', '\\'])
-        .next()
-        .unwrap_or("")
-        .to_string()
+    path.rsplit(['/', '\\']).next().unwrap_or("").to_string()
 }
 
 /// AppleDouble metadata embedded by macOS Finder when zipping: `__MACOSX/`

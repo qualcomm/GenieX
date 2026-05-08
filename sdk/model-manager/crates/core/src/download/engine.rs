@@ -50,8 +50,7 @@ impl EngineConfig {
     /// the supplied default file concurrency (hubs signal their own
     /// comfort level — HF bumps it up with a token, local/S3 want 1).
     pub fn resolve(default_file_concurrency: usize) -> Self {
-        let file_conc =
-            env_usize("GENIEX_DL_FILE_CONCURRENCY").unwrap_or(default_file_concurrency);
+        let file_conc = env_usize("GENIEX_DL_FILE_CONCURRENCY").unwrap_or(default_file_concurrency);
         let chunk_conc = env_usize("GENIEX_DL_CHUNK_CONCURRENCY").unwrap_or(8);
         Self {
             file_concurrency: file_conc.max(1),

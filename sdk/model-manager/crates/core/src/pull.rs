@@ -107,7 +107,11 @@ pub async fn pull(store: &Store, req: PullRequest) -> Result<()> {
 /// `geniex_model_pull`. **Do not call from inside a tokio context** —
 /// it panics (`Handle::block_on from within a runtime`). Async callers
 /// must use [`pull`].
-pub fn pull_blocking(handle: &tokio::runtime::Handle, store: &Store, req: PullRequest) -> Result<()> {
+pub fn pull_blocking(
+    handle: &tokio::runtime::Handle,
+    store: &Store,
+    req: PullRequest,
+) -> Result<()> {
     handle.block_on(pull(store, req))
 }
 

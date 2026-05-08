@@ -53,10 +53,7 @@ impl HfHub {
 
 #[async_trait]
 impl ModelHub for HfHub {
-    async fn list_files(
-        &self,
-        repo_id: &str,
-    ) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
+    async fn list_files(&self, repo_id: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
         self.ctx.metadata.list_files(repo_id).await
     }
 

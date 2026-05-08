@@ -64,10 +64,7 @@ pub trait ModelHub: Send + Sync {
     ///
     /// Hubs that have no concept of "remote listing" (e.g. `LocalFsHub`)
     /// should return files discovered under their source directory.
-    async fn list_files(
-        &self,
-        repo_id: &str,
-    ) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)>;
+    async fn list_files(&self, repo_id: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)>;
 
     /// Download the named files to `dest_dir`.
     ///

@@ -24,10 +24,7 @@ impl LocalFsHub {
 
 #[async_trait]
 impl ModelHub for LocalFsHub {
-    async fn list_files(
-        &self,
-        _repo_id: &str,
-    ) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
+    async fn list_files(&self, _repo_id: &str) -> Result<(Vec<RemoteFile>, Option<ModelManifest>)> {
         let mut files = Vec::new();
         for entry in std::fs::read_dir(&self.source_dir)?.flatten() {
             let ft = match entry.file_type() {

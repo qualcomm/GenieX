@@ -180,11 +180,7 @@ async fn pull_resumes_after_mid_download_failure() {
 /// Thin reimplementation of the inner body of `pull::pull_locked`, so
 /// the test can point at a custom HfHub endpoint while preserving the
 /// lock + manifest-publish semantics the orchestrator guarantees.
-async fn run_pull(
-    store: &Store,
-    hub: &HfHub,
-    repo: &str,
-) -> model_manager_core::error::Result<()> {
+async fn run_pull(store: &Store, hub: &HfHub, repo: &str) -> model_manager_core::error::Result<()> {
     store
         .with_model_lock_async(repo, || async {
             let dest_dir = store.model_file_path(repo, "")?;
