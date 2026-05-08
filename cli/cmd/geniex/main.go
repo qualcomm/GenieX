@@ -69,6 +69,7 @@ func RootCmd() *cobra.Command {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&skipUpdate, "skip-update", "", false, "Skip checking for updates")
 	rootCmd.PersistentFlags().BoolVarP(&testMode, "test-mode", "", false, "Enable test mode")
+	rootCmd.PersistentFlags().MarkHidden("test-mode")
 
 	rootCmd.AddGroup(
 		&cobra.Group{ID: "model", Title: "Model Commands"},
