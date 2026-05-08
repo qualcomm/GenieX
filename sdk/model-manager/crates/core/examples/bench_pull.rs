@@ -24,7 +24,8 @@ use std::time::Instant;
 use model_manager_core::hub::hf::HfHub;
 use model_manager_core::hub::{FileProgress, ModelHub, ProgressCallback};
 
-fn main() {
+#[tokio::main(flavor = "multi_thread")]
+async fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 3 {
         eprintln!("usage: bench_pull <repo> <file>");
@@ -76,6 +77,7 @@ fn main() {
     let files = vec![file.clone()];
     let t0 = Instant::now();
     hub.download(repo, &files, &dest_dir, Some(&cb))
+        .await
         .expect("download failed");
     let elapsed = t0.elapsed();
 
