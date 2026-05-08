@@ -25,16 +25,22 @@ pub fn read_if_fresh(path: &Path, ttl: Duration) -> Option<Vec<u8>> {
     fs::read(path).ok()
 }
 
-/// Best-effort write: creates parent dirs, swallows errors.
+/// Best-effort write: creates parent dirs, logs and swallows errors.
+/// Uses the `[model-manager]` prefix so downstream log scrapers can
+/// pick it up, and to keep a single tag to replace when we migrate
+/// to `tracing`.
 pub fn write(path: &Path, data: &[u8]) {
     if let Some(parent) = path.parent() {
         if let Err(e) = fs::create_dir_all(parent) {
-            eprintln!("[aihub cache] mkdir {}: {e}", parent.display());
+            eprintln!(
+                "[model-manager] aihub cache mkdir {}: {e}",
+                parent.display()
+            );
             return;
         }
     }
     if let Err(e) = fs::write(path, data) {
-        eprintln!("[aihub cache] write {}: {e}", path.display());
+        eprintln!("[model-manager] aihub cache write {}: {e}", path.display());
     }
 }
 

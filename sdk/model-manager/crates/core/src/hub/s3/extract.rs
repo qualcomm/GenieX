@@ -5,6 +5,7 @@
 //! paths are discarded, and basename collisions are rejected up front.
 //! The lex-first `*.bin` becomes the model entrypoint.
 
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -39,7 +40,7 @@ pub fn extract_flat(zip_path: &Path, dest_dir: &Path) -> Result<ExtractResult> {
     // AI Hub zips produced on macOS include those, and their basenames
     // (e.g. `._model.bin`) would otherwise collide with the real shards.
     let mut planned: Vec<(usize, String)> = Vec::new();
-    let mut seen: Vec<(String, String)> = Vec::new();
+    let mut seen: HashMap<String, String> = HashMap::with_capacity(archive.len());
     for i in 0..archive.len() {
         let entry = archive
             .by_index(i)
@@ -55,12 +56,12 @@ pub fn extract_flat(zip_path: &Path, dest_dir: &Path) -> Result<ExtractResult> {
         if base.is_empty() || base == "." || base == ".." {
             continue;
         }
-        if let Some((prev, _)) = seen.iter().find(|(name, _)| name == &base) {
+        if let Some(prev) = seen.get(&base) {
             return Err(Error::Hub(format!(
                 "duplicate basename {base:?} in archive (from {prev:?} and {raw:?})"
             )));
         }
-        seen.push((base.clone(), raw));
+        seen.insert(base.clone(), raw);
         planned.push((i, base));
     }
 
@@ -102,20 +103,23 @@ pub fn extract_flat(zip_path: &Path, dest_dir: &Path) -> Result<ExtractResult> {
 }
 
 fn basename(path: &str) -> String {
-    let path = path.replace('\\', "/");
-    path.rsplit('/').next().unwrap_or("").to_string()
+    // Zip entry names are always '/'-separated per APPNOTE, but some
+    // macOS / Windows zip tools emit '\'-tainted names — handle both.
+    path.rsplit(['/', '\\'])
+        .next()
+        .unwrap_or("")
+        .to_string()
 }
 
 /// AppleDouble metadata embedded by macOS Finder when zipping: `__MACOSX/`
 /// siblings and `._*` resource-fork siblings. Never interesting to us,
 /// and their basenames collide with real shards.
 fn is_macos_metadata(path: &str) -> bool {
-    let p = path.replace('\\', "/");
-    if p.starts_with("__MACOSX/") || p.contains("/__MACOSX/") {
+    let normalized = path.replace('\\', "/");
+    if normalized.starts_with("__MACOSX/") || normalized.contains("/__MACOSX/") {
         return true;
     }
-    let base = p.rsplit('/').next().unwrap_or("");
-    base.starts_with("._")
+    basename(&normalized).starts_with("._")
 }
 
 #[cfg(test)]

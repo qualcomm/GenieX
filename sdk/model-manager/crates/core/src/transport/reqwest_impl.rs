@@ -241,5 +241,5 @@ fn tracing_log(msg: String) {
     // Keep dependency footprint minimal — route to stderr. Upstream FFI
     // log bridge can grab stderr if needed; using eprintln! matches what
     // the Go CLI does via slog before slog was wired.
-    eprintln!("[geniex-model-manager] {msg}");
+    eprintln!("[model-manager] {msg}");
 }

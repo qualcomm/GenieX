@@ -49,6 +49,10 @@ const MAX_INDEX_BYTES: u64 = 8 * 1024 * 1024;
 
 /// Caller-supplied knobs. `endpoint` + `version` map to the Go CLI's
 /// `AIHubBaseURL` / `AIHubVersion`.
+///
+/// Construct via [`S3Config::new`] to normalize `endpoint` (no trailing
+/// `/`) and `version` (no surrounding `/`) once at construction time —
+/// the pull hot path then formats URLs directly without per-call trim.
 #[derive(Debug, Clone)]
 pub struct S3Config {
     pub endpoint: String,
@@ -59,6 +63,28 @@ pub struct S3Config {
     pub chipset: String,
     pub cache_dir: PathBuf,
     pub skip_cache: bool,
+}
+
+impl S3Config {
+    /// Normalize `endpoint` / `version` once so the download path can
+    /// skip repeated `trim_end_matches('/')` calls.
+    pub fn new(
+        endpoint: impl Into<String>,
+        version: impl Into<String>,
+        chipset: impl Into<String>,
+        cache_dir: PathBuf,
+        skip_cache: bool,
+    ) -> Self {
+        let endpoint: String = endpoint.into().trim_end_matches('/').to_string();
+        let version: String = version.into().trim_matches('/').to_string();
+        Self {
+            endpoint,
+            version,
+            chipset: chipset.into(),
+            cache_dir,
+            skip_cache,
+        }
+    }
 }
 
 /// Run the AI Hub pull for `model_name` (the "org/repo" the user typed,
@@ -114,8 +140,11 @@ async fn pull_ai_hub_inner(
     transport: Arc<dyn HttpTransport>,
     on_progress: Option<&ProgressCallback>,
 ) -> Result<()> {
-    let endpoint = cfg.endpoint.trim_end_matches('/');
-    let version = cfg.version.trim_matches('/');
+    // `S3Config::new` normalizes these; callers who build the struct by
+    // field literal still get correct URLs because the extra calls below
+    // used to trim defensively. See S3Config::new doc.
+    let endpoint = cfg.endpoint.as_str();
+    let version = cfg.version.as_str();
 
     // 1. manifest.json + lookup
     let manifest_url = format!("{endpoint}/releases/{version}/{MANIFEST_FILENAME}");
@@ -224,7 +253,7 @@ async fn pull_ai_hub_inner(
     let result = extract::extract_flat(&zip_path, &dest_dir)?;
     if let Err(e) = std::fs::remove_file(&zip_path) {
         eprintln!(
-            "[aihub] failed to remove zip after extract {}: {e}",
+            "[model-manager] aihub failed to remove zip after extract {}: {e}",
             zip_path.display()
         );
     }

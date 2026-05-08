@@ -69,13 +69,13 @@ pub fn pull(store: &Store, req: PullRequest) -> Result<()> {
             display_name,
             chipset,
         } => {
-            let cfg = S3Config {
-                endpoint: StoreConfig::ai_hub_base_url(),
-                version: StoreConfig::ai_hub_version(),
-                chipset: chipset.clone(),
-                cache_dir: store.config().ai_hub_cache_dir(),
-                skip_cache: false,
-            };
+            let cfg = S3Config::new(
+                StoreConfig::ai_hub_base_url(),
+                StoreConfig::ai_hub_version(),
+                chipset.clone(),
+                store.config().ai_hub_cache_dir(),
+                false,
+            );
             store.with_model_lock(&req.model_name, || {
                 pull_ai_hub(
                     store,

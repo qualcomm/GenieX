@@ -94,17 +94,13 @@ pub fn match_asset<'a>(
 }
 
 fn collect_chipsets(ra: &ModelReleaseAssets) -> Vec<String> {
-    let mut seen: Vec<String> = Vec::new();
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for a in &ra.assets {
-        let Some(cs) = a.chipset.as_deref() else {
-            continue;
-        };
-        if !seen.iter().any(|s| s == cs) {
-            seen.push(cs.to_string());
+        if let Some(cs) = a.chipset.as_deref() {
+            seen.insert(cs.to_string());
         }
     }
-    seen.sort();
-    seen
+    seen.into_iter().collect()
 }
 
 #[derive(Debug)]

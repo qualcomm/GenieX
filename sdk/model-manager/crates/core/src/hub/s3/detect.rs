@@ -49,8 +49,9 @@ pub(crate) fn cpu_name_to_chipset_alias(brand: String) -> Option<String> {
     //   "Snapdragon X Plus - X1P64100 - Qualcomm Oryon CPU"
     //   "Snapdragon X2 Elite - X2E80100 - Qualcomm Oryon CPU"
     let sku = extract_oryon_sku(&brand)?;
-    let head: String = sku.chars().take(3).collect();
-    match head.as_str() {
+    // `is_oryon_sku` already guaranteed len >= 6 and an ASCII prefix,
+    // so a direct 3-byte slice is safe without re-checking.
+    match &sku[..3] {
         "X1E" => Some("qualcomm-snapdragon-x-elite".to_string()),
         "X1P" => Some("qualcomm-snapdragon-x-plus-8-core".to_string()),
         "X2E" => Some("qualcomm-snapdragon-x2-elite".to_string()),
