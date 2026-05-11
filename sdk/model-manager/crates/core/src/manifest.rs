@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -18,6 +18,23 @@ pub struct ModelFileInfo {
     pub downloaded: bool,
     #[serde(rename = "Size")]
     pub size: i64,
+}
+
+/// Accept JSON `null` as the field's `Default` value.
+///
+/// The Go CLI writes manifests with `sonic.Marshal`, which emits nil
+/// slices/maps as `null` and, in older versions, emitted unset optional
+/// structs (e.g. `MMProjFile`) as `null` too. Plain `#[serde(default)]`
+/// only kicks in when the key is absent, so without this helper those
+/// manifests fail with `invalid type: null, expected ...` and the whole
+/// model gets skipped as corrupted. `list_models()` in Python surfaced
+/// the resulting gap vs the Go `geniex list`.
+fn null_as_default<'de, T, D>(deserializer: D) -> Result<T, D::Error>
+where
+    T: Default + Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 /// On-disk manifest written next to a cached model as `geniex.json`.
@@ -42,13 +59,17 @@ pub struct ModelManifest {
         skip_serializing_if = "String::is_empty"
     )]
     pub precision: String,
-    #[serde(rename = "ModelFile", default)]
+    #[serde(rename = "ModelFile", default, deserialize_with = "null_as_default")]
     pub model_file: HashMap<String, ModelFileInfo>,
-    #[serde(rename = "MMProjFile", default)]
+    #[serde(rename = "MMProjFile", default, deserialize_with = "null_as_default")]
     pub mmproj_file: ModelFileInfo,
-    #[serde(rename = "TokenizerFile", default)]
+    #[serde(
+        rename = "TokenizerFile",
+        default,
+        deserialize_with = "null_as_default"
+    )]
     pub tokenizer_file: ModelFileInfo,
-    #[serde(rename = "ExtraFiles", default)]
+    #[serde(rename = "ExtraFiles", default, deserialize_with = "null_as_default")]
     pub extra_files: Vec<ModelFileInfo>,
 }
 

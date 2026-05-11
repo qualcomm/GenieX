@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/downloader"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 const HF_ENDPOINT = "https://huggingface.co"
@@ -41,20 +43,29 @@ func NewHuggingFace() *HuggingFace {
 	return &HuggingFace{downloader: downloader.NewDownloader(config.Get().HFToken)}
 }
 
-func (d *HuggingFace) ChinaMainlandOnly() bool {
-	return false
-}
+var hfTokenWarnOnce sync.Once
 
 func (d *HuggingFace) MaxConcurrency() int {
 	if config.Get().HFToken != "" {
 		return 8
-	} else {
-		fmt.Println(render.GetTheme().Warning.Sprintf("GENIEX_HFTOKEN not set. Set it for speeding up downloads from https://huggingface.co/settings/tokens"))
-		return 1
 	}
+	hfTokenWarnOnce.Do(func() {
+		setCmd := `export HF_TOKEN=hf_...`
+		if runtime.GOOS == "windows" {
+			setCmd = `$env:HF_TOKEN="hf_..."`
+		}
+		msg := "Set HF_TOKEN to speed up HuggingFace downloads. " +
+			"Get a token at https://huggingface.co/settings/tokens, then:\n  " + setCmd
+		fmt.Println(render.GetTheme().Warning.Sprint(msg))
+	})
+	return 1
 }
 
 func (d *HuggingFace) CheckAvailable(ctx context.Context, name string) error {
+	return nil
+}
+
+func (d *HuggingFace) PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error {
 	return nil
 }
 
@@ -90,7 +101,6 @@ func (d *HuggingFace) ModelInfo(ctx context.Context, name string) ([]ModelFileIn
 	g.SetLimit(d.MaxConcurrency())
 
 	for i := range info.Siblings {
-		i := i
 		g.Go(func() error {
 			req := client.R()
 			if config.Get().HFToken != "" {

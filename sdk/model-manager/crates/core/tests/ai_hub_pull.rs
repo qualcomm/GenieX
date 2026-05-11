@@ -1,9 +1,10 @@
-//! End-to-end S3 (AI Hub) pull against a wiremock'd server.
+//! End-to-end AI Hub pull against a wiremock'd server.
 //!
 //! Serves three protojson documents (manifest.json, release-assets.json,
-//! platform.json) plus a small zip containing a `.bin` shard and a
-//! tokenizer. Confirms the resulting model directory matches what the
-//! Go CLI's `Store.PullZipAsset` would produce: entrypoint basename in
+//! platform.json) plus a real zip containing a STORED `.bin` shard and
+//! a DEFLATE tokenizer. Confirms the resulting model directory matches
+//! what the Go CLI's `Store.PullZipAsset` would produce, *without the
+//! zip ever landing on disk*: entrypoint basename in
 //! `ModelFile["N/A"]`, extras populated, plugin_id = `"qairt"`.
 
 use std::io::Write;
@@ -11,7 +12,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use model_manager_core::config::StoreConfig;
-use model_manager_core::hub::s3::{pull_ai_hub_with_transport, S3Config};
+use model_manager_core::pull::pull_with_source;
+use model_manager_core::source::ai_hub::{AiHubConfig, AiHubSource};
 use model_manager_core::store::Store;
 use model_manager_core::transport::{HttpTransport, ReqwestTransport, TransportConfig};
 use tempfile::tempdir;
@@ -69,24 +71,30 @@ async fn install_static(server: &MockServer, p: &str, body: Vec<u8>) {
         .await;
 }
 
+/// Build a zip whose `.bin` entrypoint is STORED and tokenizer is
+/// DEFLATE. This exercises both `BytesSource::HttpRange` and
+/// `BytesSource::HttpDeflate` in the same pull.
 fn build_zip() -> Vec<u8> {
     let mut buf: Vec<u8> = Vec::new();
     {
         let cursor = std::io::Cursor::new(&mut buf);
         let mut zw = zip::ZipWriter::new(cursor);
-        let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+        let stored: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Stored);
-        zw.start_file("weights/model-00.bin", opts).unwrap();
+        zw.start_file("weights/model-00.bin", stored).unwrap();
         zw.write_all(b"BIN_SHARD_CONTENTS").unwrap();
-        zw.start_file("tokenizer.json", opts).unwrap();
-        zw.write_all(b"{\"vocab\":[]}").unwrap();
+        let deflated: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        zw.start_file("tokenizer.json", deflated).unwrap();
+        // Enough repetition to actually compress.
+        zw.write_all(&vec![b'{'; 4096]).unwrap();
         zw.finish().unwrap();
     }
     buf
 }
 
 #[tokio::test]
-async fn s3_pull_writes_manifest_and_extracts_flat() {
+async fn ai_hub_pull_writes_manifest_and_extracts_flat() {
     let server = MockServer::start().await;
     let base = server.uri();
     let version = "v0.99.0";
@@ -151,7 +159,7 @@ async fn s3_pull_writes_manifest_and_extracts_flat() {
     install_static(
         &server,
         &format!("/qai-hub-models/releases/{version}/models/testnet/assets/SM8650.zip"),
-        zip_bytes,
+        zip_bytes.clone(),
     )
     .await;
 
@@ -159,7 +167,7 @@ async fn s3_pull_writes_manifest_and_extracts_flat() {
     let store_cfg = StoreConfig::new(tmp.path().to_path_buf());
     let store = Store::new(store_cfg).unwrap();
 
-    let s3_cfg = S3Config {
+    let cfg = AiHubConfig {
         endpoint: format!("{base}/qai-hub-models"),
         version: version.to_string(),
         chipset: "sd8g3".to_string(),
@@ -167,19 +175,19 @@ async fn s3_pull_writes_manifest_and_extracts_flat() {
         skip_cache: true,
     };
 
-    pull_ai_hub_with_transport(
-        &store,
-        "NexaAI/TestNet",
-        "TestNet",
-        s3_cfg,
-        fast_transport(),
-        None,
-    )
-    .await
-    .expect("s3 pull");
+    let transport = fast_transport();
+    let src = AiHubSource::with_transport(
+        "TestNet".to_string(),
+        "tests/TestNet".to_string(),
+        cfg,
+        transport.clone(),
+    );
+    pull_with_source(&store, "tests/TestNet", Box::new(src), transport, None)
+        .await
+        .expect("ai hub pull");
 
-    // Flat-extracted payload + synthesised manifest.
-    let model_dir = tmp.path().join("models/NexaAI/TestNet");
+    // Flat-extracted payload + synthesised manifest, no zip on disk.
+    let model_dir = tmp.path().join("models/tests/TestNet");
     assert!(
         model_dir.join("model-00.bin").exists(),
         "entrypoint .bin missing"
@@ -188,18 +196,22 @@ async fn s3_pull_writes_manifest_and_extracts_flat() {
         model_dir.join("tokenizer.json").exists(),
         "extra tokenizer missing"
     );
+    let entries: Vec<_> = std::fs::read_dir(&model_dir)
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
     assert!(
-        !model_dir.join("NexaAI-TestNet.zip").exists() && !model_dir.join("TestNet.zip").exists(),
-        "zip should have been removed after extract"
+        !entries.iter().any(|n| n.ends_with(".zip")),
+        "no zip should exist on disk after range-read pipeline: {entries:?}",
     );
 
-    let mf = store.get_manifest("NexaAI/TestNet").unwrap();
+    let mf = store.get_manifest("tests/TestNet").unwrap();
     assert_eq!(mf.plugin_id, "qairt");
     assert_eq!(mf.precision, "W4A16");
     let entry = mf.model_file.get("N/A").expect("N/A quant entry");
     assert_eq!(entry.name, "model-00.bin");
     assert!(entry.downloaded);
-    // The extras slot should carry the tokenizer (non-entrypoint files).
     assert!(
         mf.extra_files.iter().any(|f| f.name == "tokenizer.json"),
         "tokenizer.json missing from extras: {:?}",
@@ -208,7 +220,7 @@ async fn s3_pull_writes_manifest_and_extracts_flat() {
 }
 
 #[tokio::test]
-async fn s3_pull_errors_when_chipset_unknown() {
+async fn ai_hub_pull_errors_when_chipset_unknown() {
     let server = MockServer::start().await;
     let base = server.uri();
     let version = "v0.99.0";
@@ -266,7 +278,7 @@ async fn s3_pull_errors_when_chipset_unknown() {
     let store_cfg = StoreConfig::new(tmp.path().to_path_buf());
     let store = Store::new(store_cfg).unwrap();
 
-    let s3_cfg = S3Config {
+    let cfg = AiHubConfig {
         endpoint: format!("{base}/qai-hub-models"),
         version: version.to_string(),
         chipset: "UnknownChip".to_string(),
@@ -274,16 +286,16 @@ async fn s3_pull_errors_when_chipset_unknown() {
         skip_cache: true,
     };
 
-    let err = pull_ai_hub_with_transport(
-        &store,
-        "NexaAI/TestNet",
-        "TestNet",
-        s3_cfg,
-        fast_transport(),
-        None,
-    )
-    .await
-    .expect_err("expected chipset mismatch error");
+    let transport = fast_transport();
+    let src = AiHubSource::with_transport(
+        "TestNet".to_string(),
+        "tests/TestNet".to_string(),
+        cfg,
+        transport.clone(),
+    );
+    let err = pull_with_source(&store, "tests/TestNet", Box::new(src), transport, None)
+        .await
+        .expect_err("expected chipset mismatch error");
     assert!(
         format!("{err}").contains("not available"),
         "unexpected error: {err}"

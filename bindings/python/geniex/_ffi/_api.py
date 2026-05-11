@@ -195,6 +195,9 @@ def _bind_all() -> None:
     lib.geniex_version.argtypes = []
     lib.geniex_version.restype = c_char_p
 
+    lib.geniex_qairt_version.argtypes = []
+    lib.geniex_qairt_version.restype = c_char_p
+
     lib.geniex_get_plugin_list.argtypes = [POINTER(geniex_GetPluginListOutput)]
     lib.geniex_get_plugin_list.restype = c_int32
 
@@ -424,3 +427,9 @@ def version() -> str:
     _ensure_bound()
     lib = load_library()
     return lib.geniex_version().decode()
+
+
+def qairt_version() -> str:
+    _ensure_bound()
+    lib = load_library()
+    return lib.geniex_qairt_version().decode()

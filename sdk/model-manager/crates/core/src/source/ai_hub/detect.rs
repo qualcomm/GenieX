@@ -8,18 +8,10 @@
 //!
 //! Current coverage:
 //!   * Windows on Snapdragon (X Elite / X Plus / X2 Elite) — parsed
-//!     from the CPU brand string via WMIC. This is the 95% case for
-//!     Genie runtime users today.
+//!     from the CPU brand string via a `reg query` probe. This is the
+//!     95% case for Genie runtime users today.
 //!   * Everything else — returns `None`. Callers must then pass
 //!     `chipset` explicitly.
-//!
-//! The returned string is a raw SoC identifier (e.g. `"X1E80100"`,
-//! `"sm8650"`); it's the caller's job to feed it through
-//! [`super::selector::resolve_chipset`] against the live
-//! `platform.json` to get a canonical AI Hub chipset name.
-
-#[cfg(target_os = "windows")]
-mod windows;
 
 /// Probe the host for a chipset identifier that can be fed to
 /// `resolve_chipset`. Returns `None` when detection is not supported
@@ -27,7 +19,7 @@ mod windows;
 pub fn detect_host_chipset() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        windows::detect().and_then(cpu_name_to_chipset_alias)
+        windows::detect_cpu_brand().and_then(cpu_name_to_chipset_alias)
     }
     #[cfg(not(target_os = "windows"))]
     {
@@ -39,18 +31,8 @@ pub fn detect_host_chipset() -> Option<String> {
 /// string) to the matching AI Hub chipset alias. Covers the SKUs
 /// published as of QAIRT 2.45; unknown SKUs return `None` so we
 /// fall back to the caller-supplied chipset.
-///
-/// Kept pub(crate) for unit testing.
 pub(crate) fn cpu_name_to_chipset_alias(brand: String) -> Option<String> {
-    // Strategy: scan the brand string for an `X<digit>{E,P}` token,
-    // then key off the first four characters (`X1E`, `X1P`, `X2E`).
-    // Examples:
-    //   "Snapdragon(R) X Elite - X1E80100 - Qualcomm(R) Oryon(TM) CPU"
-    //   "Snapdragon X Plus - X1P64100 - Qualcomm Oryon CPU"
-    //   "Snapdragon X2 Elite - X2E80100 - Qualcomm Oryon CPU"
     let sku = extract_oryon_sku(&brand)?;
-    // `is_oryon_sku` already guaranteed len >= 6 and an ASCII prefix,
-    // so a direct 3-byte slice is safe without re-checking.
     match &sku[..3] {
         "X1E" => Some("qualcomm-snapdragon-x-elite".to_string()),
         "X1P" => Some("qualcomm-snapdragon-x-plus-8-core".to_string()),
@@ -60,7 +42,6 @@ pub(crate) fn cpu_name_to_chipset_alias(brand: String) -> Option<String> {
 }
 
 fn extract_oryon_sku(brand: &str) -> Option<String> {
-    // Walk tokens and pick the first that looks like X<digit><letter><digits>.
     for tok in brand.split(|c: char| !(c.is_ascii_alphanumeric())) {
         if is_oryon_sku(tok) {
             return Some(tok.to_ascii_uppercase());
@@ -70,7 +51,6 @@ fn extract_oryon_sku(brand: &str) -> Option<String> {
 }
 
 fn is_oryon_sku(tok: &str) -> bool {
-    // Shape: X<digit><E|P><digits> (e.g. X1E80100, X2E96100).
     let bytes = tok.as_bytes();
     if bytes.len() < 6 {
         return false;
@@ -86,6 +66,66 @@ fn is_oryon_sku(tok: &str) -> bool {
         return false;
     }
     bytes[3..].iter().all(|b| b.is_ascii_digit())
+}
+
+#[cfg(target_os = "windows")]
+mod windows {
+    //! We read the CPU brand string from
+    //! `HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0\ProcessorNameString`
+    //! via `reg query`; it's been stable since Windows 2000 and
+    //! doesn't depend on `wmic.exe`, which was deprecated and is
+    //! missing on recent Windows 11 builds (24H2+).
+
+    use std::process::Command;
+
+    const KEY: &str = r"HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0";
+    const VALUE: &str = "ProcessorNameString";
+
+    pub(super) fn detect_cpu_brand() -> Option<String> {
+        let out = Command::new("reg")
+            .args(["query", KEY, "/v", VALUE])
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        parse_reg_query(&String::from_utf8_lossy(&out.stdout))
+    }
+
+    fn parse_reg_query(stdout: &str) -> Option<String> {
+        for line in stdout.lines() {
+            let trimmed = line.trim_start();
+            if !trimmed.starts_with(VALUE) {
+                continue;
+            }
+            if let Some((_, value)) = trimmed.split_once("REG_SZ") {
+                let v = value.trim();
+                if !v.is_empty() {
+                    return Some(v.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn parses_xelite1_reg_output() {
+            let stdout = "\
+HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\r\n    \
+ProcessorNameString    REG_SZ    Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz\r\n\r\n";
+            let brand = parse_reg_query(stdout).expect("parse");
+            assert_eq!(brand, "Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz");
+        }
+
+        #[test]
+        fn returns_none_on_empty_output() {
+            assert!(parse_reg_query("").is_none());
+        }
+    }
 }
 
 #[cfg(test)]
@@ -143,13 +183,9 @@ mod tests {
 
     #[test]
     fn rejects_almost_sku_shaped_tokens() {
-        // Trailing letter → not a pure digit tail.
         assert!(!is_oryon_sku("X1E80100A"));
-        // Missing digit after X.
         assert!(!is_oryon_sku("XEE80100"));
-        // Too short (min length 6: X + digit + letter + 3 digits).
         assert!(!is_oryon_sku("X1E10"));
-        // Empty.
         assert!(!is_oryon_sku(""));
     }
 }

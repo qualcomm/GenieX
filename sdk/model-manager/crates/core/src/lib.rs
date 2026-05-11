@@ -1,13 +1,13 @@
 pub mod config;
-pub mod download;
 pub mod error;
-pub mod hub;
+pub mod executor;
 pub mod manifest;
 pub mod manifest_builder;
 pub mod mapping;
 pub mod paths;
 pub mod pull;
 pub mod resume;
+pub mod source;
 pub mod store;
 pub mod transport;
 pub mod validation;

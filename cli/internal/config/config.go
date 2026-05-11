@@ -15,7 +15,7 @@
 package config
 
 import (
-	"sync"
+	"os"
 
 	"github.com/spf13/viper"
 )
@@ -28,10 +28,6 @@ const DefaultAIHubBaseURL = "https://qaihub-public-assets.s3.us-west-2.amazonaws
 // bucket has no `latest` alias; manifests are only at
 // <base>/releases/<version>/manifest.json. Override via GENIEX_AIHUBVERSION.
 const DefaultAIHubVersion = "v0.52.0"
-
-// MinSDKVersion is baked into every geniex.json the CLI synthesises for AI
-// Hub (qairt) model pulls so that older SDKs refuse to load them.
-const MinSDKVersion = "0.0.0"
 
 type Config struct {
 	// Global settings
@@ -54,24 +50,7 @@ type Config struct {
 	AIHubNoCache bool   // If true, always refetch AI Hub index JSONs (no disk cache)
 }
 
-var config *Config
-var once sync.Once
-
-// Get returns the singleton configuration instance.
-// Uses sync.Once to ensure configuration is loaded only once.
-func Get() *Config {
-	once.Do(get)
-	return config
-}
-
-// NOTE: Avoid calling Get before subcommand initialization to prevent premature config initialization
-func GetLog() string {
-	get()
-	return config.Log
-}
-
-// init sets up default configuration values using Viper.
-// These defaults are used if no environment variables are provided.
+// init sets up viper defaults and env binding. Runs once at package load.
 func init() {
 	// ENV only param need to set default here
 	viper.SetDefault("hftoken", "")                       // Default empty token
@@ -79,18 +58,22 @@ func init() {
 	viper.SetDefault("aihubbaseurl", DefaultAIHubBaseURL) // AI Hub public assets base URL
 	viper.SetDefault("aihubversion", DefaultAIHubVersion) // Pinned aihm release version
 	viper.SetDefault("aihubnocache", false)               // Disable AI Hub JSON caching
+
+	viper.SetEnvPrefix("geniex")
+	viper.AutomaticEnv()
 }
 
-// get initializes the configuration by reading from environment variables.
-// Environment variables should be prefixed with "GENIEX_" (e.g., GENIEX_HOST).
-// This function is called only once via sync.Once for thread safety.
-func get() {
-	config = &Config{}
+// Get returns a fresh snapshot of the current viper state. Unmarshalling on
+// every call is intentional: cobra populates subcommand flags in stages, so
+// callers at different points in startup observe different values. Sharing a
+// cached *Config via sync.Once would freeze whichever snapshot was observed
+// first — usually before the subcommand's own flags are visible.
+func Get() *Config {
+	c := &Config{}
+	viper.Unmarshal(c)
 
-	// Set environment variable prefix to "GENIEX_"
-	viper.SetEnvPrefix("geniex")
-	// Automatically read environment variables
-	viper.AutomaticEnv()
-	// Unmarshal configuration into the Config struct
-	viper.Unmarshal(config)
+	if t := os.Getenv("HF_TOKEN"); t != "" {
+		c.HFToken = t
+	}
+	return c
 }

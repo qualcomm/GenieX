@@ -1,6 +1,6 @@
 //! End-to-end test for `pull()` resume at chunk granularity.
 //!
-//! Walks a real pull through the HfHub → engine → ReqwestTransport
+//! Walks a real pull through the HfSource → Executor → ReqwestTransport
 //! stack against a wiremock upstream. The mock fails chunk #1 once on
 //! the first GET; the first pull therefore errors out with a partial
 //! `.progress` bitmap. A second pull must skip the completed chunks
@@ -11,9 +11,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use model_manager_core::config::StoreConfig;
-use model_manager_core::hub::hf::HfHub;
-use model_manager_core::hub::ModelHub;
 use model_manager_core::manifest_builder::ManifestHint;
+use model_manager_core::pull::pull_with_source;
+use model_manager_core::source::hf::HfSource;
 use model_manager_core::store::{Store, INFLIGHT_DIR, MANIFEST_FILE};
 use model_manager_core::transport::{HttpTransport, ReqwestTransport, TransportConfig};
 use tempfile::tempdir;
@@ -58,14 +58,13 @@ async fn pull_resumes_after_mid_download_failure() {
     let file_name = "weights.gguf";
 
     let api_body = serde_json::json!({
-        "siblings": [{ "rfilename": file_name }]
+        "siblings": [{ "rfilename": file_name, "size": body.len() }]
     })
     .to_string();
 
     let failed_once = Arc::new(AtomicUsize::new(0));
     let get_hits = Arc::new(AtomicUsize::new(0));
 
-    // API HEAD+GET.
     Mock::given(method("HEAD"))
         .and(path(format!("/api/models/{repo}")))
         .respond_with(
@@ -81,6 +80,13 @@ async fn pull_resumes_after_mid_download_failure() {
         .respond_with(move |_req: &Request| {
             ResponseTemplate::new(206).set_body_string(api_body_cl.clone())
         })
+        .mount(&server)
+        .await;
+
+    // HEAD for geniex.json probe → 404 (repo doesn't ship one).
+    Mock::given(method("HEAD"))
+        .and(path(format!("/{repo}/resolve/main/geniex.json")))
+        .respond_with(ResponseTemplate::new(404))
         .mount(&server)
         .await;
 
@@ -115,16 +121,26 @@ async fn pull_resumes_after_mid_download_failure() {
         .mount(&server)
         .await;
 
-    // --- Real store + hub -----------------------------------------------
     let tmp = tempdir().unwrap();
     let cfg = StoreConfig::new(tmp.path().to_path_buf());
     let store = Store::new(cfg).expect("store init");
-    let hub = HfHub::with_endpoint(&server.uri(), None, fast_transport()).unwrap();
+
+    let endpoint = server.uri();
+    let do_pull = || async {
+        let transport = fast_transport();
+        let src = HfSource::with_endpoint_and_transport(
+            repo.to_string(),
+            &endpoint,
+            None,
+            transport.clone(),
+            ManifestHint::default(),
+        )
+        .unwrap();
+        pull_with_source(&store, repo, Box::new(src), transport, None).await
+    };
 
     // --- First pull: must fail due to 500 on one chunk -------------------
-    let err = run_pull(&store, &hub, repo)
-        .await
-        .expect_err("first pull must fail");
+    let err = do_pull().await.expect_err("first pull must fail");
     let msg = format!("{err}");
     assert!(
         msg.to_lowercase().contains("http") || msg.contains("500"),
@@ -145,9 +161,7 @@ async fn pull_resumes_after_mid_download_failure() {
     let remaining = bitmap.len() - done;
 
     // --- Second pull: should resume and only fetch the remaining chunks -
-    run_pull(&store, &hub, repo)
-        .await
-        .expect("second pull must succeed");
+    do_pull().await.expect("second pull must succeed");
     let second_hits = get_hits.load(Ordering::SeqCst) - after_first;
     assert_eq!(
         second_hits, remaining,
@@ -175,68 +189,4 @@ async fn pull_resumes_after_mid_download_failure() {
     );
 
     std::env::remove_var("GENIEX_DL_CHUNK_SIZE");
-}
-
-/// Thin reimplementation of the inner body of `pull::pull_locked`, so
-/// the test can point at a custom HfHub endpoint while preserving the
-/// lock + manifest-publish semantics the orchestrator guarantees.
-async fn run_pull(store: &Store, hub: &HfHub, repo: &str) -> model_manager_core::error::Result<()> {
-    store
-        .with_model_lock_async(repo, || async {
-            let dest_dir = store.model_file_path(repo, "")?;
-            std::fs::create_dir_all(&dest_dir)?;
-            let inflight = dest_dir.join(INFLIGHT_DIR);
-            std::fs::create_dir_all(&inflight)?;
-
-            let (remote_files, hub_manifest) = hub.list_files(repo).await?;
-            let mut manifest = match hub_manifest {
-                Some(m) => m,
-                None => {
-                    let names: Vec<String> = remote_files
-                        .iter()
-                        .filter(|f| f.name != "geniex.json")
-                        .map(|f| f.name.clone())
-                        .collect();
-                    let mut sizes = std::collections::HashMap::new();
-                    for f in &remote_files {
-                        sizes.insert(f.name.clone(), f.size);
-                    }
-                    model_manager_core::manifest_builder::infer_manifest_from_names(
-                        repo,
-                        &names,
-                        &sizes,
-                        ManifestHint::default(),
-                    )?
-                }
-            };
-            manifest.name = repo.to_string();
-
-            let files: Vec<String> = manifest
-                .model_file
-                .values()
-                .filter(|f| f.downloaded && !f.name.is_empty())
-                .map(|f| f.name.clone())
-                .collect();
-
-            hub.download(repo, &files, &dest_dir, None).await?;
-
-            // Mirror pull_locked's publish step.
-            let staged = inflight.join(MANIFEST_FILE);
-            std::fs::write(&staged, serde_json::to_string(&manifest)?)?;
-            let final_path = dest_dir.join(MANIFEST_FILE);
-            std::fs::rename(&staged, &final_path)?;
-            for f in manifest.model_file.values() {
-                if !f.name.is_empty() {
-                    let marker = dest_dir.join(format!(
-                        "{}{}",
-                        f.name,
-                        model_manager_core::pull::PROGRESS_SUFFIX
-                    ));
-                    let _ = std::fs::remove_file(marker);
-                }
-            }
-            let _ = std::fs::remove_dir_all(&inflight);
-            Ok(())
-        })
-        .await
 }

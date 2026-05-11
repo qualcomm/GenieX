@@ -1,16 +1,20 @@
-//! Ad-hoc timing harness: pull one file via `HfHub` and print wall-clock
-//! + throughput. Useful when tuning `GENIEX_DL_*` knobs, sanity-checking
+//! Ad-hoc timing harness: pull one HF repo and print wall-clock +
+//! throughput. Useful when tuning `GENIEX_DL_*` knobs, sanity-checking
 //! proxy setup, or eyeballing throughput after a transport change.
 //!
 //! Usage (from the workspace root):
 //!
-//!   cargo run --release --example bench_pull -- <repo> <file>
+//!   cargo run --release --example bench_pull -- <repo> [<quant>]
+//!
+//! `<repo>` is an HF "org/repo" string; `<quant>` narrows the manifest
+//! inference to a single quantization (e.g. `Q4_K_M`) so small runs
+//! don't fetch every GGUF in the repo.
 //!
 //! Env vars honoured:
 //!   GENIEX_DATADIR                    Output directory (defaults to a
 //!                                     temp dir that is wiped on start).
 //!   GENIEX_HFTOKEN                    HF bearer token (optional).
-//!   GENIEX_DL_FILE_CONCURRENCY        Engine tuning knobs.
+//!   GENIEX_DL_FILE_CONCURRENCY        Executor tuning knobs.
 //!   GENIEX_DL_CHUNK_CONCURRENCY
 //!   GENIEX_DL_CHUNK_SIZE
 //!   HTTPS_PROXY / HTTP_PROXY / NO_PROXY   Read by reqwest automatically.
@@ -21,18 +25,21 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use model_manager_core::hub::hf::HfHub;
-use model_manager_core::hub::{FileProgress, ModelHub, ProgressCallback};
+use model_manager_core::config::StoreConfig;
+use model_manager_core::executor::{FileProgress, ProgressCallback};
+use model_manager_core::manifest_builder::ManifestHint;
+use model_manager_core::pull::{pull, PullIntent, PullRequest};
+use model_manager_core::store::Store;
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.len() < 3 {
-        eprintln!("usage: bench_pull <repo> <file>");
+    if args.len() < 2 {
+        eprintln!("usage: bench_pull <repo> [<quant>]");
         std::process::exit(2);
     }
-    let repo = &args[1];
-    let file = &args[2];
+    let repo = args[1].clone();
+    let quant = args.get(2).cloned();
 
     let dest_dir: PathBuf = std::env::var("GENIEX_DATADIR")
         .map(PathBuf::from)
@@ -45,9 +52,8 @@ async fn main() {
     std::fs::create_dir_all(&dest_dir).unwrap();
 
     let token = std::env::var("GENIEX_HFTOKEN").ok();
-    let hub = HfHub::new(token).expect("build HfHub");
+    let store = Store::new(StoreConfig::new(dest_dir.clone())).expect("build store");
 
-    // Progress callback: print every ~500 ms so we can eyeball throughput.
     let start = Instant::now();
     let last_print = std::sync::Mutex::new(Instant::now());
     let cb: ProgressCallback = Box::new(move |files: &[FileProgress]| -> bool {
@@ -71,25 +77,27 @@ async fn main() {
         true
     });
 
-    eprintln!("# bench_pull: repo={repo} file={file}");
+    eprintln!("# bench_pull: repo={repo} quant={quant:?}");
     eprintln!("# dest_dir={}", dest_dir.display());
 
-    let files = vec![file.clone()];
+    let req = PullRequest {
+        model_name: repo.clone(),
+        intent: PullIntent::HuggingFace {
+            repo: repo.clone(),
+            token,
+        },
+        on_progress: Some(cb),
+        hint: ManifestHint {
+            quant,
+            ..ManifestHint::default()
+        },
+    };
     let t0 = Instant::now();
-    hub.download(repo, &files, &dest_dir, Some(&cb))
-        .await
-        .expect("download failed");
+    pull(&store, req).await.expect("pull failed");
     let elapsed = t0.elapsed();
 
-    let out = dest_dir.join(file);
-    let bytes = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0);
-    let mib = bytes as f64 / 1_048_576.0;
     let secs = elapsed.as_secs_f64();
-    let mbps = if secs > 0.0 { mib / secs } else { 0.0 };
-
     println!();
     println!("=== RESULT ===");
-    println!("bytes      : {bytes}");
     println!("elapsed_s  : {secs:.2}");
-    println!("throughput : {mbps:.2} MiB/s");
 }

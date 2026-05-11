@@ -41,7 +41,7 @@ func ApplyLogLevel() {
 		options.NoColor = true
 	}
 
-	level := config.GetLog()
+	level := config.Get().Log
 
 	if level == LogLevelNone {
 		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))

@@ -1,5 +1,17 @@
-//! Orchestrates a model download: resolve manifest, fetch files with
-//! per-file atomicity + resume markers, then atomically publish the manifest.
+//! Orchestrate a model download using the [`crate::source::ModelSource`]
+//! + [`crate::executor::Executor`] pair.
+//!
+//! Three-step contract:
+//!
+//! ```text
+//! ┌───────────────────┐   ┌───────────────────────────┐   ┌──────────────────┐
+//! │  1. Plan          │   │  2. Fetch bytes           │   │  3. Publish      │
+//! │                   │   │                           │   │                  │
+//! │  source.plan() →  │──▶│  executor.run(plan,       │──▶│  write manifest  │
+//! │   (manifest,      │   │    dest, on_progress)     │   │  atomically;     │
+//! │    Vec<FileSpec>) │   │                           │   │  drop markers    │
+//! └───────────────────┘   └───────────────────────────┘   └──────────────────┘
+//! ```
 //!
 //! Layout during/after a pull of `org/repo`:
 //!
@@ -10,103 +22,134 @@
 //!     ├── .inflight/            # present only during a pull (sentinel)
 //!     │   └── geniex.json       # staged manifest; renamed into place on success
 //!     ├── model.gguf            # downloaded file
-//!     ├── model.gguf.progress   # resume marker; content = [0x01] (whole-file done)
+//!     ├── model.gguf.progress   # resume marker
 //!     └── geniex.json           # published only when every file is complete
 //! ```
-//!
-//! The `.inflight/` sentinel makes [`crate::store::Store::list`] skip
-//! incomplete pulls, so a crashed or killed process never exposes a
-//! "half-downloaded" model.
-//!
-//! `.progress` marker format matches the Go CLI
-//! (`cli/internal/model_hub/model_hub.go`): a byte array of length
-//! `ceil(size / chunk_size)` where each `0x01` byte signals a completed
-//! chunk. As of the concurrent-download refactor, the engine writes and
-//! flips these bytes chunk-by-chunk — so a killed pull resumes at
-//! chunk granularity, and a pull started by the Go CLI can be finished
-//! by the Rust engine (and vice versa).
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::config::StoreConfig;
 use crate::error::Result;
-use crate::hub::s3::{pull_ai_hub, S3Config};
-use crate::hub::{hf::HfHub, localfs::LocalFsHub, HubSource, ModelHub, ProgressCallback};
-use crate::manifest::ModelManifest;
-use crate::manifest_builder::{infer_manifest_from_names, ManifestHint};
+use crate::executor::{Executor, ProgressCallback};
+use crate::manifest_builder::ManifestHint;
 use crate::resume;
+use crate::source::ai_hub::{AiHubConfig, AiHubSource};
+use crate::source::hf::HfSource;
+use crate::source::localfs::LocalFsSource;
+use crate::source::ModelSource;
 use crate::store::{Store, INFLIGHT_DIR, MANIFEST_FILE};
+use crate::transport::{HttpTransport, ReqwestTransport};
 use crate::validation::validate_model_name;
 
-/// Re-exported for backwards-compat; canonical home is
-/// [`crate::resume::PROGRESS_SUFFIX`].
-pub const PROGRESS_SUFFIX: &str = resume::PROGRESS_SUFFIX;
+pub use crate::resume::PROGRESS_SUFFIX;
 
 pub struct PullRequest {
     /// "org/repo" (already resolved from any short alias by the caller).
     pub model_name: String,
-    pub hub: HubSource,
-    /// HuggingFace bearer token for this pull. `None` means anonymous;
-    /// rate limits will apply. This is intentionally per-pull rather than
-    /// stored in the Store so callers can rotate credentials.
-    pub hf_token: Option<String>,
+    pub intent: PullIntent,
     pub on_progress: Option<ProgressCallback>,
     pub hint: ManifestHint,
 }
 
-/// Download a model, writing its manifest only after all files are present.
+/// User intent, decoupled from the concrete [`ModelSource`] that will
+/// execute it. Each variant carries exactly the parameters that hub
+/// needs — no placeholders, no "unused for this hub" fields.
+pub enum PullIntent {
+    HuggingFace {
+        /// "org/repo" on HF — usually identical to `PullRequest.model_name`
+        /// but the caller may have canonicalised.
+        repo: String,
+        /// Bearer token; `None` means anonymous (with inevitable rate
+        /// limits). Intentionally per-pull rather than stored in the
+        /// Store, so callers can rotate credentials.
+        token: Option<String>,
+    },
+    LocalFs {
+        source_dir: PathBuf,
+    },
+    AiHub {
+        display_name: String,
+        chipset: String,
+    },
+}
+
+/// Download a model, writing its manifest only after every file is
+/// present.
 ///
-/// Async-native; sync callers should use [`pull_blocking`] (which runs
-/// this on the FFI runtime) rather than building their own.
+/// Async-native; sync callers should use [`pull_blocking`] (which
+/// drives this on the FFI runtime).
 pub async fn pull(store: &Store, req: PullRequest) -> Result<()> {
     validate_model_name(&req.model_name)?;
 
-    match &req.hub {
-        HubSource::HuggingFace => {
-            let hub = HfHub::new(req.hf_token.clone())?;
-            store
-                .with_model_lock_async(&req.model_name, || pull_locked(store, &hub, &req))
-                .await
-        }
-        HubSource::LocalFs(path) => {
-            let hub = LocalFsHub::new(path.clone());
-            store
-                .with_model_lock_async(&req.model_name, || pull_locked(store, &hub, &req))
-                .await
-        }
-        HubSource::S3 {
-            display_name,
-            chipset,
-        } => {
-            let cfg = S3Config::new(
-                StoreConfig::ai_hub_base_url(),
-                StoreConfig::ai_hub_version(),
-                chipset.clone(),
-                store.config().ai_hub_cache_dir(),
-                false,
-            );
-            store
-                .with_model_lock_async(&req.model_name, || {
-                    pull_ai_hub(
-                        store,
-                        &req.model_name,
-                        display_name,
-                        cfg,
-                        req.on_progress.as_ref(),
-                    )
-                })
-                .await
-        }
-    }
+    let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
+    let source: Box<dyn ModelSource> = build_source(&req, store, transport.clone())?;
+    pull_with_source(
+        store,
+        &req.model_name,
+        source,
+        transport,
+        req.on_progress.as_ref(),
+    )
+    .await
 }
 
-/// Sync entry point for callers that don't have a runtime. Drives
-/// [`pull`] to completion on a caller-supplied tokio handle — the FFI
-/// crate owns one process-global runtime and calls this from sync
-/// `geniex_model_pull`. **Do not call from inside a tokio context** —
-/// it panics (`Handle::block_on from within a runtime`). Async callers
-/// must use [`pull`].
+/// Drive a pre-built [`ModelSource`] through the plan → fetch →
+/// publish pipeline. Exposed so tests can point at a custom source
+/// (e.g. a mock endpoint) without going through [`PullIntent`].
+pub async fn pull_with_source(
+    store: &Store,
+    model_name: &str,
+    source: Box<dyn ModelSource>,
+    transport: Arc<dyn HttpTransport>,
+    on_progress: Option<&ProgressCallback>,
+) -> Result<()> {
+    validate_model_name(model_name)?;
+    let model_name_owned = model_name.to_string();
+    store
+        .with_model_lock_async(model_name, || async move {
+            let dest_dir = store.model_file_path(&model_name_owned, "")?;
+            fs::create_dir_all(&dest_dir)?;
+            let inflight_dir = dest_dir.join(INFLIGHT_DIR);
+            fs::create_dir_all(&inflight_dir)?;
+
+            let mut plan = source.plan().await?;
+            plan.manifest.name = model_name_owned.clone();
+
+            let pending = resume::filter_pending(&plan.files, &dest_dir);
+            if !pending.is_empty() {
+                let executor = Executor::new(transport.clone(), 4);
+                executor.run(&pending, &dest_dir, on_progress).await?;
+            }
+
+            let staged = inflight_dir.join(MANIFEST_FILE);
+            fs::write(&staged, serde_json::to_string(&plan.manifest)?)?;
+            let final_path = dest_dir.join(MANIFEST_FILE);
+            fs::rename(&staged, &final_path)?;
+
+            // Once the manifest is published, per-file markers are
+            // redundant; the Go CLI does the same cleanup after a
+            // successful pull, so cache layouts stay interchangeable.
+            for f in &plan.files {
+                drop_marker(&dest_dir, &f.name);
+            }
+
+            remove_inflight_dir(&inflight_dir);
+
+            Ok(())
+        })
+        .await
+}
+
+/// Sync entry point for callers without a runtime. Drives [`pull`] to
+/// completion on a caller-supplied tokio handle — the FFI crate owns
+/// one process-global runtime and calls this from sync
+/// `geniex_model_pull`.
+///
+/// **Do not call from inside a tokio context** — it panics
+/// (`Handle::block_on from within a runtime`). Async callers must
+/// use [`pull`].
 pub fn pull_blocking(
     handle: &tokio::runtime::Handle,
     store: &Store,
@@ -115,70 +158,72 @@ pub fn pull_blocking(
     handle.block_on(pull(store, req))
 }
 
-async fn pull_locked(store: &Store, hub: &dyn ModelHub, req: &PullRequest) -> Result<()> {
-    let dest_dir = store.model_file_path(&req.model_name, "")?;
-    fs::create_dir_all(&dest_dir)?;
-
-    let inflight_dir = dest_dir.join(INFLIGHT_DIR);
-    fs::create_dir_all(&inflight_dir)?;
-
-    // 1. Resolve manifest: prefer an explicit geniex.json from the hub,
-    //    otherwise infer one from the remote file listing.
-    let (remote_files, hub_manifest) = hub.list_files(&req.model_name).await?;
-    let mut manifest: ModelManifest = match hub_manifest {
-        Some(m) => m,
-        None => {
-            let names: Vec<String> = remote_files
-                .iter()
-                .filter(|f| f.name != "geniex.json")
-                .map(|f| f.name.clone())
-                .collect();
-            let mut sizes = std::collections::HashMap::new();
-            for f in &remote_files {
-                sizes.insert(f.name.clone(), f.size);
-            }
-            infer_manifest_from_names(&req.model_name, &names, &sizes, req.hint.clone())?
+fn build_source(
+    req: &PullRequest,
+    store: &Store,
+    transport: Arc<dyn HttpTransport>,
+) -> Result<Box<dyn ModelSource>> {
+    match &req.intent {
+        PullIntent::HuggingFace { repo, token } => {
+            let src = HfSource::with_endpoint_and_transport(
+                repo.clone(),
+                crate::source::hf::DEFAULT_HF_ENDPOINT,
+                token.clone(),
+                transport,
+                req.hint.clone(),
+            )?;
+            Ok(Box::new(src))
         }
-    };
-
-    // Make sure the manifest's `Name` matches what the user asked for; a
-    // mismatch would cause `Store::list` / `get_manifest` to misfile it.
-    manifest.name = req.model_name.clone();
-
-    // 2. Build the list of files to hand to the hub. With chunk-granular
-    //    resume the engine itself decides what bytes to request, but we
-    //    still filter out files that are already fully marked done —
-    //    saves a HEAD per file on restart.
-    let files = resume::files_to_download(&manifest, &dest_dir);
-
-    // 3. Fetch. The hub takes ownership of .progress bitmap management;
-    //    on success every marker byte is already 0x01.
-    hub.download(&req.model_name, &files, &dest_dir, req.on_progress.as_ref())
-        .await?;
-
-    // 4. Persist the manifest (staged then atomic rename).
-    let staged = inflight_dir.join(MANIFEST_FILE);
-    fs::write(&staged, serde_json::to_string(&manifest)?)?;
-    let final_path = dest_dir.join(MANIFEST_FILE);
-    fs::rename(&staged, &final_path)?;
-
-    // 5. On a clean success, drop the per-file .progress markers — the
-    //    published manifest is now the source of truth that the store
-    //    considers this model complete. Matches the Go CLI's behavior
-    //    at model_hub.go's `for _, p := range markerPaths { os.Remove(p) }`.
-    for f in manifest.model_file.values() {
-        drop_marker(&dest_dir, &f.name);
+        PullIntent::LocalFs { source_dir } => Ok(Box::new(LocalFsSource::new(
+            source_dir.clone(),
+            req.model_name.clone(),
+            req.hint.clone(),
+        ))),
+        PullIntent::AiHub {
+            display_name,
+            chipset,
+        } => {
+            let cfg = AiHubConfig::new(
+                StoreConfig::ai_hub_base_url(),
+                StoreConfig::ai_hub_version(),
+                chipset.clone(),
+                store.config().ai_hub_cache_dir(),
+                false,
+            );
+            let src = AiHubSource::with_transport(
+                display_name.clone(),
+                req.model_name.clone(),
+                cfg,
+                transport,
+            );
+            Ok(Box::new(src))
+        }
     }
-    drop_marker(&dest_dir, &manifest.mmproj_file.name);
-    drop_marker(&dest_dir, &manifest.tokenizer_file.name);
-    for f in &manifest.extra_files {
-        drop_marker(&dest_dir, &f.name);
+}
+
+// Transient Windows filesystem errors (AV scan, search indexer, pending
+// handle close) can make `remove_dir_all` fail right after a successful
+// pull, leaving an empty `.inflight/` behind — which `Store::list` then
+// treats as "still in progress" and silently drops the model from the
+// listing. Retry with short backoffs, and warn if the sentinel still
+// exists after the final attempt so the stale state is detectable.
+fn remove_inflight_dir(inflight_dir: &Path) {
+    const DELAYS_MS: [u64; 3] = [50, 100, 200];
+    for delay in DELAYS_MS {
+        match fs::remove_dir_all(inflight_dir) {
+            Ok(()) => return,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+            Err(_) => std::thread::sleep(std::time::Duration::from_millis(delay)),
+        }
     }
-
-    // 6. Clear the in-flight sentinel.
-    let _ = fs::remove_dir_all(&inflight_dir);
-
-    Ok(())
+    if let Err(e) = fs::remove_dir_all(inflight_dir) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            eprintln!(
+                "[model-manager] failed to clean up {} after successful pull: {e}",
+                inflight_dir.display()
+            );
+        }
+    }
 }
 
 fn drop_marker(dest_dir: &Path, file_name: &str) {
@@ -187,4 +232,38 @@ fn drop_marker(dest_dir: &Path, file_name: &str) {
     }
     let marker = dest_dir.join(format!("{file_name}{PROGRESS_SUFFIX}"));
     let _ = fs::remove_file(&marker);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn remove_inflight_dir_removes_empty_sentinel() {
+        let tmp = tempdir().unwrap();
+        let inflight = tmp.path().join(INFLIGHT_DIR);
+        fs::create_dir_all(&inflight).unwrap();
+        remove_inflight_dir(&inflight);
+        assert!(!inflight.exists());
+    }
+
+    #[test]
+    fn remove_inflight_dir_removes_nonempty_sentinel() {
+        let tmp = tempdir().unwrap();
+        let inflight = tmp.path().join(INFLIGHT_DIR);
+        fs::create_dir_all(&inflight).unwrap();
+        fs::write(inflight.join("leftover.bin"), b"stale").unwrap();
+        remove_inflight_dir(&inflight);
+        assert!(!inflight.exists());
+    }
+
+    #[test]
+    fn remove_inflight_dir_noop_when_missing() {
+        let tmp = tempdir().unwrap();
+        let inflight = tmp.path().join(INFLIGHT_DIR);
+        // Do not create it — function must return without warning or panic.
+        remove_inflight_dir(&inflight);
+        assert!(!inflight.exists());
+    }
 }

@@ -123,7 +123,7 @@ impl std::fmt::Display for UnavailableChipset {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hub::s3::manifest::ChipsetInfo;
+    use crate::source::ai_hub::manifest::ChipsetInfo;
 
     fn platform(entries: &[(&str, &[&str])]) -> PlatformInfo {
         PlatformInfo {

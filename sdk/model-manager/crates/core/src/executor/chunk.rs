@@ -160,16 +160,6 @@ pub fn preallocate(output_path: &Path, file_size: u64) -> Result<()> {
 }
 
 #[cfg(test)]
-pub(crate) fn read_range(path: &Path, offset: u64, len: u64) -> Result<Vec<u8>> {
-    use std::io::Read;
-    let mut f = fs::File::open(path)?;
-    f.seek(SeekFrom::Start(offset))?;
-    let mut buf = vec![0u8; len as usize];
-    f.read_exact(&mut buf)?;
-    Ok(buf)
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::tempdir;

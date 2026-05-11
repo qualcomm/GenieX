@@ -345,12 +345,12 @@ func notifyUpdate() {
 	ck.LastNotify = time.Now()
 	setUpdateCheck(ck)
 
-	fmt.Fprintf(os.Stderr, "\n\n%s %s → %s\n",
+	fmt.Printf("\n\n%s %s → %s\n",
 		render.GetTheme().Warning.Sprintf("A new version of geniex-cli is available:"),
 		render.GetTheme().Success.Sprint(Version),
 		render.GetTheme().Success.Sprint(ck.LatestVersion))
 
-	fmt.Fprintf(os.Stderr, "%s\n\n",
+	fmt.Printf("%s\n\n",
 		render.GetTheme().Warning.Sprint("To update, run: `geniex update`"),
 	)
 }

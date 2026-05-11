@@ -62,7 +62,15 @@ def _make_progress_printer():
     return _cb
 
 
-def _ensure_downloaded(model: str, quant: str | None) -> _mm.ModelPaths | None:
+def _ensure_downloaded(
+    model: str,
+    quant: str | None,
+    *,
+    hub: str = 'auto',
+    display_name: str | None = None,
+    chipset: str | None = None,
+    local_path: str | None = None,
+) -> _mm.ModelPaths | None:
     """Download the model through the model manager if it's not a local path.
 
     Returns the resolved :class:`ModelPaths` so callers can hand a local
@@ -78,17 +86,40 @@ def _ensure_downloaded(model: str, quant: str | None) -> _mm.ModelPaths | None:
     if os.path.exists(model):
         return None
 
+    # ensure_cached wraps only the HF/auto path. AiHub + LocalFs need the
+    # extra metadata (display_name, chipset, local_path) that only pull()
+    # carries, so route those explicitly and then resolve paths after.
+    if hub in ('aihub', 'localfs', 'local'):
+        if hub == 'aihub' and not display_name:
+            raise SystemExit('error: --display-name is required when --hub aihub')
+        if hub in ('localfs', 'local') and not local_path:
+            raise SystemExit('error: --local-path is required when --hub localfs')
+
     result: dict = {}
 
     def _worker():
         try:
-            result['paths'] = _mm.ensure_cached(
-                model,
-                quant=quant,
-                hub='auto',
-                hf_token=os.environ.get('GENIEX_HFTOKEN'),
-                on_progress=_make_progress_printer(),
-            )
+            if hub in ('aihub', 'localfs', 'local'):
+                _mm.pull(
+                    model,
+                    quant=quant,
+                    hub=hub,
+                    local_path=local_path,
+                    hf_token=os.environ.get('GENIEX_HFTOKEN'),
+                    chipset=chipset,
+                    display_name=display_name,
+                    on_progress=_make_progress_printer(),
+                )
+                key = f'{model}:{quant}' if quant else model
+                result['paths'] = _mm.get_paths(key)
+            else:
+                result['paths'] = _mm.ensure_cached(
+                    model,
+                    quant=quant,
+                    hub=hub,
+                    hf_token=os.environ.get('GENIEX_HFTOKEN'),
+                    on_progress=_make_progress_printer(),
+                )
         except BaseException as e:  # noqa: BLE001 — forward to main thread
             result['error'] = e
 
@@ -212,19 +243,26 @@ def _cmd_devices(_args: argparse.Namespace) -> int:
 
 
 def _cmd_chat(args: argparse.Namespace) -> int:
-    paths = _ensure_downloaded(args.model, args.quant)
+    _ensure_downloaded(
+        args.model,
+        args.quant,
+        hub=args.hub,
+        display_name=args.display_name,
+        chipset=args.chipset,
+        local_path=args.local_path,
+    )
 
     name = f'{args.model}:{args.quant}' if args.quant else args.model
     sys.stdout.write(f'{_DIM}loading {name} ...{_RESET} ')
     sys.stdout.flush()
     t0 = time.monotonic()
-    # After a successful pull, hand the resolved file path directly to
-    # from_pretrained so it hits the local-path fast-path instead of
-    # re-invoking ensure_cached (which would repeat the hub list_files).
-    load_target = paths.model_path if paths else args.model
+    # Pass the original org/repo through; from_pretrained's internal
+    # get_paths fast-path resolves it against the cache the pull above
+    # just populated, and carries the QAIRT registry key (`qwen3_4b`)
+    # forward via ModelPaths.model_name.
     model = AutoModelForCausalLM.from_pretrained(
-        load_target,
-        quant=None if paths else args.quant,
+        args.model,
+        quant=args.quant,
         device_map=args.device,
         n_ctx=args.n_ctx,
     )
@@ -249,7 +287,14 @@ def _cmd_chat(args: argparse.Namespace) -> int:
 
 def _cmd_pull(args: argparse.Namespace) -> int:
     """Download a model into the local cache."""
-    _ensure_downloaded(args.model, args.quant)
+    _ensure_downloaded(
+        args.model,
+        args.quant,
+        hub=args.hub,
+        display_name=args.display_name,
+        chipset=args.chipset,
+        local_path=args.local_path,
+    )
     return 0
 
 
@@ -373,6 +418,31 @@ def _cmd_rm(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_hub_args(p: argparse.ArgumentParser) -> None:
+    """Attach shared --hub / --display-name / --chipset / --local-path flags."""
+    p.add_argument(
+        '--hub',
+        choices=['auto', 'hf', 'huggingface', 'aihub', 'localfs', 'local'],
+        default='auto',
+        help='Source hub (default: auto = HuggingFace)',
+    )
+    p.add_argument(
+        '--display-name',
+        default=None,
+        help='AI Hub model display_name (required when --hub aihub)',
+    )
+    p.add_argument(
+        '--chipset',
+        default=None,
+        help=('AI Hub target chipset (e.g. qualcomm-snapdragon-x-elite); omit to auto-detect on Windows-on-Snapdragon'),
+    )
+    p.add_argument(
+        '--local-path',
+        default=None,
+        help='Source directory (required when --hub localfs)',
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog='geniex-py', description='GenieX Python CLI')
     sub = parser.add_subparsers(dest='cmd', required=True)
@@ -399,11 +469,13 @@ def _build_parser() -> argparse.ArgumentParser:
             "qairt; run 'geniex-py devices' to list concrete ids)"
         ),
     )
+    _add_hub_args(chat)
     chat.set_defaults(func=_cmd_chat)
 
     pull = sub.add_parser('pull', help='Download a model into the local cache')
     pull.add_argument('model', help='Alias or HF repo id (supports org/repo:quant)')
     pull.add_argument('--quant', default=None, help='Quantization variant (e.g. Q4_K_M)')
+    _add_hub_args(pull)
     pull.set_defaults(func=_cmd_pull)
 
     ls = sub.add_parser('ls', help='List cached models, or show one model as JSON')

@@ -9,15 +9,14 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 fs2 = { workspace = true }
 tokio = { workspace = true }
-tokio-util = { workspace = true }
 reqwest = { workspace = true }
 async-trait = { workspace = true }
-bytes = { workspace = true }
-futures = { workspace = true }
 url = { workspace = true }
-zip = { workspace = true }
+flate2 = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"
 wiremock = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
+zip = { workspace = true }
+flate2 = { workspace = true }

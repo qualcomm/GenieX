@@ -24,6 +24,7 @@ go_library(
         "//cli/internal/qaihm",
         "//cli/internal/record",
         "//cli/internal/render",
+        "//cli/internal/sochost",
         "//cli/internal/store",
         "//cli/internal/types",
         "//cli/server",

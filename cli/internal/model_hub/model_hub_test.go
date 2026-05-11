@@ -23,7 +23,7 @@ import (
 	"github.com/lmittmann/tint"
 )
 
-const MODEL_NAME = "NexaAI/OmniNeural-4B"
+const MODEL_NAME = "qualcomm/Qwen3-4B-Instruct-2507"
 
 func TestMain(m *testing.M) {
 	slog.SetDefault(slog.New(tint.NewHandler(os.Stderr, &tint.Options{
@@ -31,56 +31,71 @@ func TestMain(m *testing.M) {
 		Level:     slog.LevelDebug,
 	})))
 
-	// only test huggingface
-	hubs = hubs[3:]
+	// only test aihub; chipset getter returns a fixed Snapdragon X Elite
+	// since there is no store singleton in the test binary.
+	hubs = []ModelHub{NewAIHub(
+		func() string { return "qualcomm-snapdragon-x-elite" },
+		os.TempDir(),
+	)}
 
 	os.Exit(m.Run())
 }
 
 func TestModelInfo(t *testing.T) {
-	data, _, err := ModelInfo(context.Background(), MODEL_NAME)
+	files, mf, err := ModelInfo(context.Background(), MODEL_NAME)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
-	t.Log(data)
+	t.Logf("files: %+v", files)
+	t.Logf("pseudo manifest: %+v", mf)
+
+	if mf == nil {
+		t.Fatal("expected pseudo geniex.json to be parsed into *types.ModelManifest")
+	}
+	if mf.PluginId != "qairt" {
+		t.Errorf("PluginId: got %q, want qairt", mf.PluginId)
+	}
+	if mf.DeviceId == "" {
+		t.Errorf("DeviceId should be set to the matched chipset")
+	}
 }
 
 func TestGetFileContent(t *testing.T) {
-	data, err := GetFileContent(context.Background(), MODEL_NAME, ".gitattributes")
-	if err != nil {
-		t.Error(err)
-		return
+	// The pseudo geniex.json is always present; round-trip it via
+	// GetFileContent so we don't depend on a real zip download.
+	if _, _, err := ModelInfo(context.Background(), MODEL_NAME); err != nil {
+		t.Fatal(err)
 	}
-
-	t.Logf("GetFileContent:\n%s", data)
+	data, err := GetFileContent(context.Background(), MODEL_NAME, "geniex.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("GetFileContent(geniex.json):\n%s", data)
 }
 
 func TestDownload(t *testing.T) {
 	files, _, err := ModelInfo(context.Background(), MODEL_NAME)
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatal(err)
 	}
 
-	resCh, errCh := StartDownload(context.Background(), MODEL_NAME, "/tmp/OmniNeural-4B", files)
+	outDir := t.TempDir()
+	resCh, errCh := StartDownload(context.Background(), MODEL_NAME, outDir, files)
 	for p := range resCh {
 		t.Logf("Downloaded: %d / %d", p.TotalDownloaded, p.TotalSize)
 	}
 	for e := range errCh {
 		t.Error(e)
 	}
-
-	os.RemoveAll("/tmp/OmniNeural-4B/")
 }
 
 func BenchmarkDownload(b *testing.B) {
-	files, _, err := ModelInfo(context.Background(), "ggml-org/embeddinggemma-300M-qat-q4_0-GGUF")
+	files, _, err := ModelInfo(context.Background(), MODEL_NAME)
 	if err != nil {
-		b.Error(err)
-		return
+		b.Fatal(err)
 	}
 
-	resCh, errCh := StartDownload(context.Background(), "ggml-org/embeddinggemma-300M-qat-q4_0-GGUF", "/tmp/embeddinggemma-300M-qat-q4_0-GGUF", files)
+	resCh, errCh := StartDownload(context.Background(), MODEL_NAME, b.TempDir(), files)
 	for p := range resCh {
 		b.Logf("Downloaded: %d / %d", p.TotalDownloaded, p.TotalSize)
 	}

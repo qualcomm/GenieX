@@ -37,10 +37,12 @@ Side effects on success
 
 import ctypes
 import ctypes.util
+import logging
 import os
 import sys
 
 _lib: ctypes.CDLL | None = None
+_logger = logging.getLogger('geniex')
 
 
 def _lib_name() -> str:
@@ -216,16 +218,38 @@ def load_library() -> ctypes.CDLL:
             _lib = ctypes.CDLL(env_path)
             return _lib
 
-    # --- Priority 2: release (wheel) layout ---
-    result = _find_release(name)
-    if result:
-        lib_path, plugin_path = result
-        _setup_env(lib_path, plugin_path)
-        _lib = ctypes.CDLL(lib_path)
-        return _lib
+    # --- Priority 2/3: release (wheel) vs dev (in-repo) layout ---
+    # If both layouts are present (e.g. a leftover `bindings/python/geniex/lib/`
+    # from a previous `pip install .` coexists with a freshly built dev SDK),
+    # prefer the one with the newer mtime so a stale DLL does not shadow a
+    # fresh build. Warn so the conflict is not silent.
+    release = _find_release(name)
+    dev = _find_dev(name)
 
-    # --- Priority 3: dev (in-repo) layout — sdk/pkg-geniex/lib/ ---
-    result = _find_dev(name)
+    if release and dev:
+        release_mtime = os.path.getmtime(release[0])
+        dev_mtime = os.path.getmtime(dev[0])
+        if dev_mtime > release_mtime:
+            _logger.warning(
+                'Both release (%s) and dev (%s) native libraries exist; '
+                'using dev copy because it is newer. '
+                'Delete the stale release copy to silence this warning.',
+                release[0],
+                dev[0],
+            )
+            result = dev
+        else:
+            _logger.warning(
+                'Both release (%s) and dev (%s) native libraries exist; '
+                'using release copy because it is newer. '
+                'Delete the stale dev copy to silence this warning.',
+                release[0],
+                dev[0],
+            )
+            result = release
+    else:
+        result = release or dev
+
     if result:
         lib_path, plugin_path = result
         _setup_env(lib_path, plugin_path)
