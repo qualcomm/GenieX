@@ -135,7 +135,7 @@ pub async fn pull_with_source(
                 drop_marker(&dest_dir, &f.name);
             }
 
-            let _ = fs::remove_dir_all(&inflight_dir);
+            remove_inflight_dir(&inflight_dir);
 
             Ok(())
         })
@@ -201,10 +201,69 @@ fn build_source(
     }
 }
 
+// Transient Windows filesystem errors (AV scan, search indexer, pending
+// handle close) can make `remove_dir_all` fail right after a successful
+// pull, leaving an empty `.inflight/` behind — which `Store::list` then
+// treats as "still in progress" and silently drops the model from the
+// listing. Retry with short backoffs, and warn if the sentinel still
+// exists after the final attempt so the stale state is detectable.
+fn remove_inflight_dir(inflight_dir: &Path) {
+    const DELAYS_MS: [u64; 3] = [50, 100, 200];
+    for delay in DELAYS_MS {
+        match fs::remove_dir_all(inflight_dir) {
+            Ok(()) => return,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+            Err(_) => std::thread::sleep(std::time::Duration::from_millis(delay)),
+        }
+    }
+    if let Err(e) = fs::remove_dir_all(inflight_dir) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            eprintln!(
+                "[model-manager] failed to clean up {} after successful pull: {e}",
+                inflight_dir.display()
+            );
+        }
+    }
+}
+
 fn drop_marker(dest_dir: &Path, file_name: &str) {
     if file_name.is_empty() {
         return;
     }
     let marker = dest_dir.join(format!("{file_name}{PROGRESS_SUFFIX}"));
     let _ = fs::remove_file(&marker);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn remove_inflight_dir_removes_empty_sentinel() {
+        let tmp = tempdir().unwrap();
+        let inflight = tmp.path().join(INFLIGHT_DIR);
+        fs::create_dir_all(&inflight).unwrap();
+        remove_inflight_dir(&inflight);
+        assert!(!inflight.exists());
+    }
+
+    #[test]
+    fn remove_inflight_dir_removes_nonempty_sentinel() {
+        let tmp = tempdir().unwrap();
+        let inflight = tmp.path().join(INFLIGHT_DIR);
+        fs::create_dir_all(&inflight).unwrap();
+        fs::write(inflight.join("leftover.bin"), b"stale").unwrap();
+        remove_inflight_dir(&inflight);
+        assert!(!inflight.exists());
+    }
+
+    #[test]
+    fn remove_inflight_dir_noop_when_missing() {
+        let tmp = tempdir().unwrap();
+        let inflight = tmp.path().join(INFLIGHT_DIR);
+        // Do not create it — function must return without warning or panic.
+        remove_inflight_dir(&inflight);
+        assert!(!inflight.exists());
+    }
 }
