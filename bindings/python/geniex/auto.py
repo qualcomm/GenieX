@@ -131,15 +131,28 @@ def _resolve_model_sources(
     model_name_or_path: str,
     quant: str | None,
     hf_token: str | None,
-) -> tuple[str, str | None, str | None]:
-    """Return ``(model_path, mmproj_path, tokenizer_path)``.
+) -> tuple[str, str | None, str | None, _mm.ModelPaths | None]:
+    """Return ``(model_path, mmproj_path, tokenizer_path, paths)``.
 
     Local paths are anchored directly; everything else goes through the
     model manager (``geniex_model_*`` FFI) which handles alias resolution,
     download, and path resolution.
+
+    AiHub/LocalFs models cached by a previous ``pull`` hit the fast path:
+    ``get_paths`` succeeds without talking to any hub, so notebook-style
+    ``from_pretrained("qualcomm/Qwen3-4B")`` works without forcing users
+    to re-specify ``hub='aihub'``. Only when the cache is empty do we
+    fall through to ``ensure_cached`` (HF/auto).
     """
     if os.path.exists(model_name_or_path):
-        return _resolve_local_anchor(model_name_or_path), None, None
+        return _resolve_local_anchor(model_name_or_path), None, None, None
+
+    key = f'{model_name_or_path}:{quant}' if quant else model_name_or_path
+    try:
+        cached = _mm.get_paths(key)
+        return cached.model_path, cached.mmproj_path, cached.tokenizer_path, cached
+    except Exception:  # noqa: BLE001 — any failure = cache miss, fall through
+        pass
 
     paths = _mm.ensure_cached(
         model_name_or_path,
@@ -147,7 +160,7 @@ def _resolve_model_sources(
         hub='auto',
         hf_token=hf_token,
     )
-    return paths.model_path, paths.mmproj_path, paths.tokenizer_path
+    return paths.model_path, paths.mmproj_path, paths.tokenizer_path, paths
 
 
 def _build_model_config(n_ctx: int, n_gpu_layers: int, **kwargs) -> geniex_ModelConfig:
@@ -215,11 +228,16 @@ class AutoModelForCausalLM:
             license_key: NPU licence key.
         """
         ensure_init()
-        resolved_name = model_name or model_name_or_path
+        model_path, _mmproj, _tok, paths = _resolve_model_sources(model_name_or_path, quant, hf_token)
+        # QAIRT uses `model_name` as a registry key (e.g. `qwen3_4b`),
+        # not the org/repo string. Fall back to the manifest's ModelName
+        # whenever the caller didn't override and the cached model is QAIRT.
+        resolved_name = model_name or (
+            paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
+        )
         plugin_id, device_id, ngl_override = _resolve_device(device_map, resolved_name)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
-        model_path, _mmproj, _tok = _resolve_model_sources(model_name_or_path, quant, hf_token)
         config = _build_model_config(n_ctx, n_gpu_layers, **kwargs)
 
         inp = geniex_LlmCreateInput(
@@ -285,14 +303,15 @@ class AutoModelForVision2Seq:
             license_key: NPU licence key.
         """
         ensure_init()
-        plugin_id, device_id, ngl_override = _resolve_device(device_map, model_name_or_path)
+        model_path, _mmproj, _tok, paths = _resolve_model_sources(model_name_or_path, quant, hf_token)
+        resolved_name = paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
+        plugin_id, device_id, ngl_override = _resolve_device(device_map, resolved_name)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
-        model_path, _mmproj, _tok = _resolve_model_sources(model_name_or_path, quant, hf_token)
         config = _build_model_config(n_ctx, n_gpu_layers, **kwargs)
 
         inp = geniex_VlmCreateInput(
-            model_name=model_name_or_path.encode(),
+            model_name=resolved_name.encode(),
             model_path=model_path.encode(),
             config=config,
         )
