@@ -232,7 +232,7 @@ func pullModel(name string, quant string) error {
 	}
 
 	if _, ok := aihub.IsAIHubName(name); ok {
-		if err := ensureChipset(context.TODO(), false); err != nil {
+		if err := ensureChipset(context.TODO()); err != nil {
 			return err
 		}
 	}
