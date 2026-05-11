@@ -31,10 +31,6 @@ func NewLocalFS(base string) *LocalFS {
 	return &LocalFS{base}
 }
 
-func (d *LocalFS) ChinaMainlandOnly() bool {
-	return false
-}
-
 func (d *LocalFS) MaxConcurrency() int {
 	return 4
 }

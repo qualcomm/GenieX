@@ -35,15 +35,8 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
-// ErrChipsetNotConfigured is returned by AIHub.ModelInfo when the device
-// chipset has not been set. The CLI is expected to prompt the user to run
-// `geniex config set device <chipset>` or (in future) invoke pickDevice.
 var ErrChipsetNotConfigured = errors.New("aihub: device chipset not configured (run: geniex config set device <chipset>)")
 
-// AIHub wraps the aihub package so that AI Hub models can be pulled through
-// the same ModelHub/store.Pull pipeline as HuggingFace. It synthesises a
-// geniex.json + a single-zip file listing in ModelInfo, streams the zip
-// via GetFileContent, and unpacks it in PostDownload.
 type AIHub struct {
 	client        *aihub.Client
 	chipsetGetter func() string
@@ -61,9 +54,6 @@ type resolvedAsset struct {
 	manifestJSON []byte // serialised pseudo geniex.json
 }
 
-// NewAIHub builds an AIHub wrapper. chipsetGetter returns the currently
-// configured chipset ID (empty if unset). cacheDir is used by aihub.Client
-// to persist the small manifest/platform index JSONs.
 func NewAIHub(chipsetGetter func() string, cacheDir string) *AIHub {
 	return &AIHub{
 		client:        aihub.NewClient(cacheDir),
@@ -73,11 +63,8 @@ func NewAIHub(chipsetGetter func() string, cacheDir string) *AIHub {
 	}
 }
 
-func (*AIHub) ChinaMainlandOnly() bool { return false }
-
 func (*AIHub) MaxConcurrency() int { return 8 }
 
-// CheckAvailable gates the hub to names matching the AI Hub org allowlist.
 func (*AIHub) CheckAvailable(ctx context.Context, name string) error {
 	if _, ok := aihub.IsAIHubName(name); !ok {
 		return fmt.Errorf("aihub: %q is not an AI Hub model", name)
@@ -270,4 +257,3 @@ func (h *AIHub) formatMatchError(err error, name, chipset string) error {
 	return fmt.Errorf("no AI Hub asset for model=%q chipset=%q; available: %s",
 		name, chipset, strings.Join(chipsets, ", "))
 }
-

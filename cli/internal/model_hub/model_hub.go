@@ -25,9 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/bytedance/sonic"
 	"golang.org/x/sync/errgroup"
@@ -45,16 +43,10 @@ type ModelFileInfo struct {
 }
 
 type ModelHub interface {
-	ChinaMainlandOnly() bool
 	MaxConcurrency() int
 	CheckAvailable(ctx context.Context, modelName string) error
 	ModelInfo(ctx context.Context, modelName string) ([]ModelFileInfo, error)
 	GetFileContent(ctx context.Context, modelName, fileName string, offset, limit int64, writer io.Writer) error
-	// PostDownload runs after store.Pull has finished writing every chunk of
-	// every file to outputDir and before geniex.json is written. Hubs that
-	// need post-processing (e.g. unzipping a single-archive asset into its
-	// constituent files) can mutate mf in place; the store will serialise
-	// the updated manifest.
 	PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error
 }
 
@@ -368,48 +360,6 @@ func StartDownloadURL(ctx context.Context, urlStr, outputDir, dstName string, si
 	return resCh, errCh
 }
 
-var (
-	chinaMainlandCheck sync.Once
-	isChinaMainland    bool
-)
-
-func checkChinaMainland() bool {
-	chinaMainlandCheck.Do(func() {
-		client := resty.New()
-		client.SetTimeout(2 * time.Second)
-		defer client.Close()
-
-		for _, ep := range [][]string{
-			{"http://ip-api.com/json", "countryCode"},
-			{"https://ipapi.co/json", "country_code"},
-			{"https://ipinfo.io/json", "country"},
-		} {
-			res, err := client.R().
-				// EnableDebug().
-				Get(ep[0])
-			if err != nil {
-				continue
-			}
-
-			n, err := sonic.GetFromString(res.String(), ep[1])
-			if err != nil {
-				continue
-			}
-
-			code, err := n.String()
-			if err != nil {
-				continue
-			}
-
-			slog.Info("Detected country code", "endpoint", ep[0], "code", code)
-			isChinaMainland = code == "CN"
-			return
-		}
-		slog.Error("Detect country code failed")
-	})
-	return isChinaMainland
-}
-
 func getHub(ctx context.Context, modelName string) (ModelHub, error) {
 	// if only one hub specified, check availability first
 	if len(hubs) == 1 {
@@ -420,10 +370,6 @@ func getHub(ctx context.Context, modelName string) (ModelHub, error) {
 
 	// try each hub
 	for _, h := range hubs {
-		if h.ChinaMainlandOnly() && !checkChinaMainland() {
-			slog.Info("skip china mainland only hub", "hub", reflect.TypeOf(h))
-			continue
-		}
 		if err := h.CheckAvailable(ctx, modelName); err != nil {
 			slog.Warn("hub not available, try next", "hub", reflect.TypeOf(h), "err", err)
 		} else {

@@ -42,10 +42,6 @@ func NewHuggingFace() *HuggingFace {
 	return &HuggingFace{downloader: downloader.NewDownloader(config.Get().HFToken)}
 }
 
-func (d *HuggingFace) ChinaMainlandOnly() bool {
-	return false
-}
-
 func (d *HuggingFace) MaxConcurrency() int {
 	if config.Get().HFToken != "" {
 		return 8
@@ -95,7 +91,6 @@ func (d *HuggingFace) ModelInfo(ctx context.Context, name string) ([]ModelFileIn
 	g.SetLimit(d.MaxConcurrency())
 
 	for i := range info.Siblings {
-		i := i
 		g.Go(func() error {
 			req := client.R()
 			if config.Get().HFToken != "" {

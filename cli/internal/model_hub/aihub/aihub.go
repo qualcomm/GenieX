@@ -21,7 +21,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,8 +28,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"resty.dev/v3"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 )
 
 // DefaultCacheTTL is how long cached index JSONs are considered fresh.
@@ -312,15 +311,4 @@ func HeadContentLength(ctx context.Context, url string) (int64, error) {
 		return 0, fmt.Errorf("HEAD %s: missing Content-Length", url)
 	}
 	return resp.ContentLength, nil
-}
-
-// sanitizeForFilename strips characters unsafe on Windows paths.
-func sanitizeForFilename(s string) string {
-	return strings.Map(func(r rune) rune {
-		switch r {
-		case '/', '\\', ':', '*', '?', '"', '<', '>', '|':
-			return '_'
-		}
-		return r
-	}, path.Base(s))
 }
