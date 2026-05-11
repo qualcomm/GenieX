@@ -187,6 +187,7 @@ func infer() *cobra.Command {
 		case types.ModelTypeLLM:
 			err = inferLLM(manifest, quant)
 		case types.ModelTypeVLM:
+			checkDependency()
 			err = inferVLM(manifest, quant)
 		default:
 			panic("not support model type")
