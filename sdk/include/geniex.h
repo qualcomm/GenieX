@@ -55,8 +55,8 @@ typedef enum {
     GENIEX_ERROR_COMMON_ALREADY_INITIALIZED = -100008, /**< Library already initialized; deinit first */
     GENIEX_ERROR_COMMON_NOT_SUPPORTED       = -100013, /**< Operation not supported */
     GENIEX_ERROR_COMMON_MANIFEST_PARSE      = -100014, /**< Failed to parse a manifest / index document */
-    GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE  = -100015, /**< Requested chipset not available for this model */
-    GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED   = -100016, /**< Parameter not supported by this plugin */
+    GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE = -100015, /**< Requested chipset not available for this model */
+    GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED = -100016, /**< Parameter not supported by this plugin */
 
     GENIEX_ERROR_COMMON_MODEL_LOAD    = -100201, /**< Model loading failed */
     GENIEX_ERROR_COMMON_MODEL_INVALID = -100203, /**< Invalid model format */
