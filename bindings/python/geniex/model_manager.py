@@ -133,6 +133,41 @@ def _ensure_init() -> None:
         init()
 
 
+def _maybe_resolve_alias(model_name: str, quant: str | None) -> tuple[str, str | None]:
+    """Expand a short alias to ``org/repo[:quant]`` if the input has no ``/``.
+
+    Mirrors ``ensure_cached``'s rules: splits a trailing ``:quant`` off the
+    input, routes the bare name through :func:`resolve_alias` when it looks
+    like an alias (no ``/``), and lets any quant suffix on the resolved name
+    or on the original input fill in when the caller didn't pass ``quant``.
+    Canonical ``org/repo`` inputs pass through unchanged.
+    """
+    name_part = model_name
+    if ':' in model_name:
+        name_part, parsed_quant = model_name.rsplit(':', 1)
+        if quant is None and parsed_quant:
+            quant = parsed_quant
+
+    if '/' in name_part:
+        return name_part, quant
+
+    try:
+        resolved = resolve_alias(name_part)
+    except GeniexError as exc:
+        raise GeniexError(
+            exc.code,
+            f'Unknown model alias: {name_part!r}. Use canonical org/repo form '
+            f'or see geniex.model_manager.resolve_alias for registered aliases.',
+        ) from exc
+
+    if ':' in resolved:
+        resolved_name, resolved_quant = resolved.rsplit(':', 1)
+        if quant is None and resolved_quant:
+            quant = resolved_quant
+        return resolved_name, quant
+    return resolved, quant
+
+
 def pull(
     model_name: str,
     *,
@@ -147,7 +182,9 @@ def pull(
     """Download a model (blocking). Resumes partial downloads.
 
     Args:
-        model_name: ``org/repo`` or a short alias (see :func:`resolve_alias`).
+        model_name: ``org/repo``, ``org/repo:quant``, or a short alias
+            (see :func:`resolve_alias`). Aliases are expanded locally
+            before the call into the SDK.
         quant: Optional quantization hint (e.g. ``"Q4_K_M"``).
         hub: ``"auto"`` | ``"hf"`` | ``"aihub"`` | ``"localfs"``, or a raw integer enum.
         local_path: Required when ``hub == "localfs"`` — source directory.
@@ -162,6 +199,7 @@ def pull(
     _ensure_init()
     lib = load_library()
 
+    model_name, quant = _maybe_resolve_alias(model_name, quant)
     hub_val = _resolve_hub(hub)
 
     def _trampoline(files_ptr, count, _user_data):
@@ -227,11 +265,18 @@ def clean() -> int:
 
 
 def get_paths(model_name: str) -> ModelPaths:
-    """Resolve ``org/repo`` (optionally ``:quant``) to absolute paths."""
+    """Resolve ``org/repo`` (optionally ``:quant``) or a short alias to absolute paths.
+
+    Aliases (e.g. ``"qwen3"``) are expanded locally via :func:`resolve_alias`
+    before the lookup; any ``:quant`` suffix on the input or on the resolved
+    alias is preserved so cached quant-specific entries hit.
+    """
     _ensure_init()
     lib = load_library()
+    base, quant = _maybe_resolve_alias(model_name, None)
+    key = f'{base}:{quant}' if quant else base
     out = geniex_ModelPaths()
-    _check(lib.geniex_model_get_paths(model_name.encode(), byref(out)))
+    _check(lib.geniex_model_get_paths(key.encode(), byref(out)))
     try:
         return ModelPaths(
             model_path=out.model_path.decode() if out.model_path else '',

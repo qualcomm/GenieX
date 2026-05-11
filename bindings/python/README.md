@@ -57,7 +57,7 @@ local path to a `.gguf` file or a pre-downloaded directory.
 ```python
 from geniex import AutoModelForVision2Seq
 
-model = AutoModelForVision2Seq.from_pretrained("qwen3vl", device_map="auto")
+model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen3-VL-2B-Instruct-GGUF", device_map="auto")
 messages = [{
     "role": "user",
     "content": [
