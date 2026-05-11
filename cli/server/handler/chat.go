@@ -68,8 +68,8 @@ func defaultChatCompletionRequest() ChatCompletionRequest {
 		Stream: false,
 
 		EnableThink:       true,
-		NCtx:              4096,
-		Ngl:               999,
+		NCtx:              0,   // llama_cpp only; 0 = not set, resolved to 4096 for llama_cpp
+		Ngl:               0,   // llama_cpp only; 0 = not set, resolved to 999 for llama_cpp
 		ImageMaxLength:    512,
 		TopK:              0,
 		MinP:              0.0,
@@ -99,12 +99,6 @@ func ChatCompletions(c *gin.Context) {
 		return
 	}
 
-	// Automatically adjust NCtx if MaxCompletionTokens is larger
-	if param.NCtx < int32(param.MaxCompletionTokens.Value) {
-		slog.Debug("Adjust NCtx to MaxCompletionTokens", "from", param.NCtx, "to", param.MaxCompletionTokens.Value)
-		param.NCtx = int32(param.MaxCompletionTokens.Value)
-	}
-
 	slog.Info("ChatCompletions", "param", param)
 	s := store.Get()
 	name, _ := utils.NormalizeModelName(param.Model)
@@ -115,11 +109,18 @@ func ChatCompletions(c *gin.Context) {
 		return
 	}
 
+	// Automatically adjust NCtx if MaxCompletionTokens is larger (llama_cpp only — QAIRT
+	// does not use NCtx and the 0-default must not be overwritten for non-llama_cpp plugins).
+	if manifest.PluginId == geniex_sdk.PluginLlamaCpp && param.NCtx < int32(param.MaxCompletionTokens.Value) {
+		slog.Debug("Adjust NCtx to MaxCompletionTokens", "from", param.NCtx, "to", param.MaxCompletionTokens.Value)
+		param.NCtx = int32(param.MaxCompletionTokens.Value)
+	}
+
 	switch manifest.ModelType {
 	case types.ModelTypeLLM:
-		chatCompletionsLLM(c, param)
+		chatCompletionsLLM(c, param, manifest.PluginId)
 	case types.ModelTypeVLM:
-		chatCompletionsVLM(c, param)
+		chatCompletionsVLM(c, param, manifest.PluginId)
 	default:
 		slog.Error("Model type not support", "model_type", manifest.ModelType)
 		c.JSON(http.StatusBadRequest, map[string]any{"error": "model type not support"})
@@ -127,7 +128,7 @@ func ChatCompletions(c *gin.Context) {
 	}
 }
 
-func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
+func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId string) {
 	messages := make([]geniex_sdk.LlmChatMessage, 0, len(param.Messages))
 	for _, msg := range param.Messages {
 		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
@@ -216,6 +217,12 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 	)
 	if errors.Is(err, os.ErrNotExist) {
 		c.JSON(http.StatusNotFound, map[string]any{"error": "model not found"})
+		return
+	} else if errors.Is(err, geniex_sdk.ErrCommonParamNotSupported) {
+		c.JSON(http.StatusBadRequest, map[string]any{
+			"error": fmt.Sprintf("a parameter in the request is not supported by the %s plugin", pluginId),
+			"code":  geniex_sdk.SDKErrorCode(err),
+		})
 		return
 	} else if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
@@ -408,7 +415,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 	}
 }
 
-func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
+func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId string) {
 	messages := make([]geniex_sdk.VlmChatMessage, 0, len(param.Messages))
 	for _, msg := range param.Messages {
 		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
@@ -549,6 +556,12 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 	)
 	if errors.Is(err, os.ErrNotExist) {
 		c.JSON(http.StatusNotFound, map[string]any{"error": "model not found"})
+		return
+	} else if errors.Is(err, geniex_sdk.ErrCommonParamNotSupported) {
+		c.JSON(http.StatusBadRequest, map[string]any{
+			"error": fmt.Sprintf("a parameter in the request is not supported by the %s plugin", pluginId),
+			"code":  geniex_sdk.SDKErrorCode(err),
+		})
 		return
 	} else if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})

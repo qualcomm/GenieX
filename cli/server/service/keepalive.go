@@ -161,6 +161,21 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 		delete(keepAlive.models, name)
 	}
 
+	// Resolve llama_cpp-only defaults: NCtx and NGpuLayers are meaningful only for
+	// llama_cpp. For other plugins (e.g. qairt) they must stay 0 so the plugin's
+	// param-guard is not tripped by the request defaults.
+	// TODO: Remove this resolution once the C API exposes geniex_get_last_error_detail()
+	// and the plugin can report the exact unsupported param name directly.
+	nctx, ngl := param.NCtx, param.NGpuLayers
+	if manifest.PluginId == geniex_sdk.PluginLlamaCpp {
+		if nctx == 0 {
+			nctx = 4096
+		}
+		if ngl == 0 {
+			ngl = 999
+		}
+	}
+
 	var t keepable
 	var e error
 	switch reflect.TypeFor[T]() {
@@ -169,8 +184,8 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 			ModelName: manifest.ModelName,
 			ModelPath: modelfile,
 			Config: geniex_sdk.ModelConfig{
-				NCtx:       param.NCtx,
-				NGpuLayers: param.NGpuLayers,
+				NCtx:       nctx,
+				NGpuLayers: ngl,
 			},
 			PluginID: manifest.PluginId,
 			DeviceID: manifest.DeviceId,
@@ -190,8 +205,8 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 			MmprojPath:    mmproj,
 			TokenizerPath: tokenizer,
 			Config: geniex_sdk.ModelConfig{
-				NCtx:       param.NCtx,
-				NGpuLayers: param.NGpuLayers,
+				NCtx:       nctx,
+				NGpuLayers: ngl,
 			},
 			PluginID: manifest.PluginId,
 			DeviceID: manifest.DeviceId,
