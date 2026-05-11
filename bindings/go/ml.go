@@ -63,6 +63,7 @@ func SDKErrorCode(err error) int32 {
 
 var (
 	ErrCommonNotSupport             = SDKError(C.GENIEX_ERROR_COMMON_NOT_SUPPORTED)
+	ErrCommonParamNotSupported      = SDKError(C.GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED)
 	ErrCommonModelLoad              = SDKError(C.GENIEX_ERROR_COMMON_MODEL_LOAD)
 	ErrCommonPluginLoad             = SDKError(C.GENIEX_ERROR_COMMON_PLUGIN_LOAD)
 	ErrCommonPluginInvalid          = SDKError(C.GENIEX_ERROR_COMMON_PLUGIN_INVALID)
