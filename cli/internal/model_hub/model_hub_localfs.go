@@ -19,6 +19,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 type LocalFS struct {
@@ -46,6 +48,10 @@ func (d *LocalFS) CheckAvailable(ctx context.Context, name string) error {
 	if !info.IsDir() {
 		return os.ErrNotExist
 	}
+	return nil
+}
+
+func (d *LocalFS) PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error {
 	return nil
 }
 

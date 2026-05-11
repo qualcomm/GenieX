@@ -50,6 +50,12 @@ type ModelHub interface {
 	CheckAvailable(ctx context.Context, modelName string) error
 	ModelInfo(ctx context.Context, modelName string) ([]ModelFileInfo, error)
 	GetFileContent(ctx context.Context, modelName, fileName string, offset, limit int64, writer io.Writer) error
+	// PostDownload runs after store.Pull has finished writing every chunk of
+	// every file to outputDir and before geniex.json is written. Hubs that
+	// need post-processing (e.g. unzipping a single-archive asset into its
+	// constituent files) can mutate mf in place; the store will serialise
+	// the updated manifest.
+	PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error
 }
 
 var hubs = []ModelHub{
@@ -61,6 +67,14 @@ var errUnavailable = fmt.Errorf("no model hub contains the model")
 // Specify hub to use
 func SetHub(h ModelHub) {
 	hubs = []ModelHub{h}
+}
+
+// RegisterHub prepends h to the hub list. Used by downstream packages
+// (e.g. store) to plug in hubs that need runtime dependencies the
+// model_hub package can't take directly, like the AI Hub hub which
+// needs access to the chipset configuration and on-disk cache dir.
+func RegisterHub(h ModelHub) {
+	hubs = append([]ModelHub{h}, hubs...)
 }
 
 // list model files
@@ -107,6 +121,16 @@ func ModelInfo(ctx context.Context, modelName string) ([]ModelFileInfo, *types.M
 
 	return files, &manifest, nil
 
+}
+
+// PostDownload resolves the active hub for modelName and delegates to it.
+// See ModelHub.PostDownload.
+func PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error {
+	hub, err := getHub(ctx, modelName)
+	if err != nil {
+		return err
+	}
+	return hub.PostDownload(ctx, modelName, outputDir, mf)
 }
 
 // Get single file content

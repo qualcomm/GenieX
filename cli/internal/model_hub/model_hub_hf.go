@@ -29,6 +29,7 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/downloader"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 const HF_ENDPOINT = "https://huggingface.co"
@@ -55,6 +56,10 @@ func (d *HuggingFace) MaxConcurrency() int {
 }
 
 func (d *HuggingFace) CheckAvailable(ctx context.Context, name string) error {
+	return nil
+}
+
+func (d *HuggingFace) PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error {
 	return nil
 }
 

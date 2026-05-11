@@ -273,6 +273,47 @@ func (c *Client) fetchJSON(ctx context.Context, url, cachePath string, opts ...F
 	return body, nil
 }
 
+// aiHubOrgs is the allowlist of HuggingFace-style org names that route through
+// the AI Hub S3/QAIRT pull path instead of HuggingFace.
+var aiHubOrgs = []string{"qualcomm", "qai-hub-models"}
+
+// IsAIHubName reports whether name belongs to an AI Hub org
+// (e.g. "qualcomm/Qwen3-4B"). It returns the repo portion (after the slash)
+// as a convenience.
+func IsAIHubName(name string) (repo string, ok bool) {
+	parts := strings.SplitN(name, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", false
+	}
+	for _, o := range aiHubOrgs {
+		if strings.EqualFold(parts[0], o) {
+			return parts[1], true
+		}
+	}
+	return "", false
+}
+
+// HeadContentLength issues a HEAD against url and returns its Content-Length.
+func HeadContentLength(ctx context.Context, url string) (int64, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("HEAD %s: %s", url, resp.Status)
+	}
+	if resp.ContentLength <= 0 {
+		return 0, fmt.Errorf("HEAD %s: missing Content-Length", url)
+	}
+	return resp.ContentLength, nil
+}
+
 // sanitizeForFilename strips characters unsafe on Windows paths.
 func sanitizeForFilename(s string) string {
 	return strings.Map(func(r rune) rune {

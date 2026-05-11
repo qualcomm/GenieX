@@ -4,6 +4,7 @@ go_library(
     name = "model_hub",
     srcs = [
         "model_hub.go",
+        "model_hub_aihub.go",
         "model_hub_hf.go",
         "model_hub_localfs.go",
     ],
@@ -12,6 +13,7 @@ go_library(
     deps = [
         "//cli/internal/config",
         "//cli/internal/downloader",
+        "//cli/internal/model_hub/aihub",
         "//cli/internal/render",
         "//cli/internal/types",
         "@com_github_bytedance_sonic//:sonic",

@@ -27,8 +27,6 @@ import (
 	"github.com/shirou/gopsutil/disk"
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
@@ -203,19 +201,24 @@ func (s *Store) Pull(ctx context.Context, mf types.ModelManifest) (infoCh <-chan
 		}
 
 		// Create model directory structure
-		err := os.MkdirAll(filepath.Join(s.home, "models", mf.Name), 0o770)
+		err := os.MkdirAll(modelDir, 0o770)
 		if err != nil {
 			errC <- err
 			return
 		}
 
 		// Create modelfile for storing downloaded content
-		resCh, errCh := model_hub.StartDownload(ctx, mf.Name, filepath.Join(s.home, "models", mf.Name), needs)
+		resCh, errCh := model_hub.StartDownload(ctx, mf.Name, modelDir, needs)
 		for d := range resCh {
 			infoC <- d
 		}
 		for e := range errCh {
 			errC <- e
+			return
+		}
+
+		if err := model_hub.PostDownload(ctx, mf.Name, modelDir, &mf); err != nil {
+			errC <- err
 			return
 		}
 
@@ -225,13 +228,12 @@ func (s *Store) Pull(ctx context.Context, mf types.ModelManifest) (infoCh <-chan
 			ModelType:     mf.ModelType,
 			PluginId:      mf.PluginId,
 			DeviceId:      mf.DeviceId,
-			MinSDKVersion: mf.MinSDKVersion,
 			ModelFile:     mf.ModelFile,
 			MMProjFile:    mf.MMProjFile,
 			TokenizerFile: mf.TokenizerFile,
 			ExtraFiles:    mf.ExtraFiles,
 		}
-		manifestPath := filepath.Join(s.home, "models", mf.Name, "geniex.json")
+		manifestPath := filepath.Join(modelDir, "geniex.json")
 		manifestData, _ := sonic.Marshal(model) // JSON marshal won't fail, ignore error
 		err = os.WriteFile(manifestPath, manifestData, 0o664)
 		if err != nil {
@@ -328,126 +330,6 @@ func (s *Store) PullExtraQuant(ctx context.Context, omf, nmf types.ModelManifest
 	return
 }
 
-// PartialSuffix is appended to a model directory while download + extract
-// are in flight. A crash/kill leaves <name>.partial/ behind; the next
-// Store.init() sweep removes it.
-const PartialSuffix = ".partial"
-
-// PullZipAsset downloads a single zip asset (AI Hub / qairt flow), extracts
-// it flat, synthesises geniex.json, and atomically renames the staging
-// directory into place.
-//
-// mf is pre-populated by the caller with PluginId, DeviceId, ModelName,
-// ModelType, MinSDKVersion. ModelFile / ExtraFiles are (re)written here
-// based on the actual zip contents.
-//
-// zipSize must be the HTTP Content-Length of downloadURL (HEAD ahead).
-// The returned channels follow Pull's convention: infoCh streams download
-// progress, errCh carries one terminal error on failure.
-func (s *Store) PullZipAsset(
-	ctx context.Context,
-	mf types.ModelManifest,
-	downloadURL string,
-	zipSize int64,
-) (<-chan types.DownloadInfo, <-chan error) {
-	infoC := make(chan types.DownloadInfo, 10)
-	errC := make(chan error, 1)
-
-	go func() {
-		defer close(errC)
-		defer close(infoC)
-
-		// Conservative: zip + extracted payload + slack ~= 3x zipSize.
-		if err := s.ensureEnoughDiskSpace(zipSize * 3); err != nil {
-			errC <- err
-			return
-		}
-
-		// Remove any healthy same-named model before re-pulling.
-		finalDir := filepath.Join(s.home, "models", mf.Name)
-		if _, err := os.Stat(filepath.Join(finalDir, "geniex.json")); err == nil {
-			if rerr := s.Remove(mf.Name); rerr != nil {
-				errC <- fmt.Errorf("remove existing model: %w", rerr)
-				return
-			}
-		}
-
-		if err := s.LockModel(mf.Name); err != nil {
-			errC <- err
-			return
-		}
-		defer s.UnlockModel(mf.Name)
-
-		// LockModel created finalDir as a side-effect; remove it before staging.
-		_ = os.RemoveAll(finalDir)
-		partialDir := finalDir + PartialSuffix
-		if err := os.RemoveAll(partialDir); err != nil {
-			errC <- fmt.Errorf("clean stale partial: %w", err)
-			return
-		}
-		if err := os.MkdirAll(partialDir, 0o770); err != nil {
-			errC <- fmt.Errorf("mkdir partial: %w", err)
-			return
-		}
-
-		zipName := filepath.Base(mf.Name) + ".zip"
-		dlCh, dlErrCh := model_hub.StartDownloadURL(ctx, downloadURL, partialDir, zipName, zipSize)
-		for d := range dlCh {
-			infoC <- d
-		}
-		for e := range dlErrCh {
-			errC <- e
-			return
-		}
-
-		zipPath := filepath.Join(partialDir, zipName)
-		fmt.Println(render.GetTheme().Info.Sprintf("Extracting %s...", zipName))
-		res, err := aihub.ExtractFlat(zipPath, partialDir)
-		if err != nil {
-			errC <- fmt.Errorf("unzip %s: %w", zipName, err)
-			return
-		}
-		if err := os.Remove(zipPath); err != nil {
-			slog.Warn("PullZipAsset: failed to remove zip after extract", "path", zipPath, "err", err)
-		}
-
-		mf.ModelFile = map[string]types.ModelFileInfo{
-			"N/A": {
-				Name:       res.EntrypointBasename,
-				Downloaded: true,
-				Size:       res.TotalSize,
-			},
-		}
-		mf.MMProjFile = types.ModelFileInfo{}
-		mf.TokenizerFile = types.ModelFileInfo{}
-		mf.ExtraFiles = mf.ExtraFiles[:0]
-		for _, f := range res.Files {
-			if f.Name == res.EntrypointBasename {
-				continue
-			}
-			mf.ExtraFiles = append(mf.ExtraFiles, f)
-		}
-
-		manifestPath := filepath.Join(partialDir, "geniex.json")
-		manifestData, _ := sonic.Marshal(mf)
-		if err := os.WriteFile(manifestPath, manifestData, 0o664); err != nil {
-			errC <- fmt.Errorf("write manifest: %w", err)
-			return
-		}
-
-		if err := os.Rename(partialDir, finalDir); err != nil {
-			errC <- fmt.Errorf("promote partial dir: %w", err)
-			return
-		}
-
-		slog.Info("PullZipAsset complete",
-			"model", mf.Name, "entrypoint", res.EntrypointBasename,
-			"files", len(res.Files), "size", res.TotalSize)
-	}()
-
-	return infoC, errC
-}
-
 func (s *Store) DataPath() string {
 	return s.home
 }
@@ -488,10 +370,6 @@ func (s *Store) scanModelDir() ([]string, error) {
 
 		for _, repo := range repos {
 			if !repo.IsDir() {
-				continue
-			}
-			// Staging dirs from an in-flight AI Hub pull are not real models.
-			if strings.HasSuffix(repo.Name(), PartialSuffix) {
 				continue
 			}
 

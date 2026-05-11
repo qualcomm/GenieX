@@ -238,7 +238,7 @@ func ensureModelAvailable(s *store.Store, name string, quant string) (*types.Mod
 	manifest, err := s.GetManifest(name)
 	if errors.Is(err, os.ErrNotExist) {
 		fmt.Println(render.GetTheme().Info.Sprintf("Model is not currently cached, downloading..."))
-		if err := pullModelByName(name, false); err != nil {
+		if err := pullModel(name, quant); err != nil {
 			return nil, fmt.Errorf("download model failed")
 		}
 		manifest, err = s.GetManifest(name)
