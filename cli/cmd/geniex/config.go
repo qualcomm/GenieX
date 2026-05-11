@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
@@ -62,10 +63,7 @@ func configCmd() *cobra.Command {
 
 // validConfigKeyArg validates that args[0] is a known configuration key.
 func validConfigKeyArg(cmd *cobra.Command, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("requires a key argument (one of: %s)", strings.Join(store.ConfigKeys, ", "))
-	}
-	if !store.IsValidConfigKey(args[0]) {
+	if !slices.Contains(store.ConfigKeys, args[0]) {
 		return fmt.Errorf("unknown config key %q (valid keys: %s)", args[0], strings.Join(store.ConfigKeys, ", "))
 	}
 	return nil
@@ -103,19 +101,7 @@ func configSetCmd() *cobra.Command {
 		Long: "Set a specific configuration key to a new value. Pass an empty string to clear the value.\n\n" +
 			"For the \"device\" key, omit the value to launch an interactive device picker.\n\n" +
 			"Available keys: " + strings.Join(store.ConfigKeys, ", "),
-		Args: cobra.MatchAll(
-			cobra.RangeArgs(1, 2),
-			func(cmd *cobra.Command, args []string) error {
-				if err := validConfigKeyArg(cmd, args[:1]); err != nil {
-					return err
-				}
-				// Non-device keys always require an explicit value.
-				if args[0] != store.ConfigKeyDevice && len(args) < 2 {
-					return fmt.Errorf("key %q requires a value argument", args[0])
-				}
-				return nil
-			},
-		),
+		Args:      cobra.MatchAll(cobra.RangeArgs(1, 2), validConfigKeyArg),
 		ValidArgs: store.ConfigKeys,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			key := args[0]
