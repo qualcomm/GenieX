@@ -42,6 +42,16 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
     model_name_      = input->model_name;
     enable_thinking_ = input->config.enable_thinking;
 
+    // Reject llama.cpp-only parameters that have no meaning in the QAIRT plugin
+    if (input->config.n_gpu_layers != 0) {
+        GENIEX_LOG_ERROR("--ngl (n_gpu_layers) is not supported by the qairt plugin");
+        return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
+    }
+    if (input->config.n_ctx != 0) {
+        GENIEX_LOG_ERROR("--nctx (n_ctx) is not supported by the qairt plugin");
+        return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
+    }
+
     // Look up model in VLM registry
     auto& registry = vlm_model_registry();
     auto  it       = registry.find(model_name_);
