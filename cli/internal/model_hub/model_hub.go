@@ -83,10 +83,9 @@ func ModelInfo(ctx context.Context, modelName string) ([]ModelFileInfo, *types.M
 	}
 
 	// check manifest available
-	const manifestFile = "geniex.json"
 	var hasManifest bool
 	for i := 0; i < len(files); i++ {
-		if files[i].Name == manifestFile {
+		if files[i].Name == types.ManifestFileName {
 			files = append(files[:i], files[i+1:]...)
 			hasManifest = true
 			break

@@ -14,6 +14,10 @@
 
 package types
 
+// ManifestFileName is the name of the per-model manifest file written into
+// every model directory.
+const ManifestFileName = "geniex.json"
+
 type ModelType string
 
 const (
