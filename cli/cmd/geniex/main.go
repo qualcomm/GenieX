@@ -15,9 +15,12 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -26,6 +29,7 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 )
 
@@ -102,6 +106,23 @@ func RootCmd() *cobra.Command {
 	)
 
 	return rootCmd
+}
+
+func checkDependency() {
+	if _, err := exec.LookPath("sox"); err == nil {
+		fmt.Println(render.GetTheme().Warning.Sprintf("SoX is not installed, some features may not work. Try:"))
+		switch runtime.GOOS {
+		case "linux":
+			fmt.Println(render.GetTheme().Warning.Sprintf("  sudo apt install sox       # Debian/Ubuntu"))
+			fmt.Println(render.GetTheme().Warning.Sprintf("  sudo yum install sox       # RHEL/CentOS/Fedora"))
+			fmt.Println(render.GetTheme().Warning.Sprintf("  sudo pacman -S sox         # Arch Linux"))
+		case "windows":
+			fmt.Println(render.GetTheme().Warning.Sprintf("  winget install --id=ChrisBagwell.SoX -e"))
+			fmt.Println(render.GetTheme().Warning.Sprintf("Then restart your terminal to make sure sox is in PATH"))
+		default:
+			fmt.Println(render.GetTheme().Warning.Sprintf("Please install it manually for your OS: %s\n", runtime.GOOS))
+		}
+	}
 }
 
 func normalizeModelName(name string) (string, string) {
