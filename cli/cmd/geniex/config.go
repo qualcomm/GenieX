@@ -26,9 +26,11 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/sochost"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 )
 
@@ -152,6 +154,52 @@ func hostOSType() (qaihm.OperatingSystemType, error) {
 		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_UNSPECIFIED,
 			fmt.Errorf("unsupported operating system %q for AI Hub device selection", runtime.GOOS)
 	}
+}
+
+// ensureChipset makes sure ConfigKeyDevice is populated before an AI Hub
+// pull. If it's already set, it's a no-op. Otherwise it first tries a
+// silent host probe (currently Windows-only, reading the CPU brand from
+// the registry); on failure it falls back to the interactive pickDevice.
+func ensureChipset(ctx context.Context, noConfigCache bool) error {
+	if v, _, _ := store.Get().ConfigGet(store.ConfigKeyDevice); v != "" {
+		return nil
+	}
+	if canonical, ok := autoDetectChipset(ctx, noConfigCache); ok {
+		if err := store.Get().ConfigSet(store.ConfigKeyDevice, canonical); err == nil {
+			fmt.Println(render.GetTheme().Info.Sprintf("device = %s (auto-detected)", canonical))
+			return nil
+		}
+	}
+	fmt.Println(render.GetTheme().Info.Sprint("No device configured. Please select your device first."))
+	return pickDevice(ctx, noConfigCache)
+}
+
+// autoDetectChipset probes the host for a Snapdragon CPU and, on success,
+// resolves the alias against platform.json into the canonical chipset
+// name AI Hub uses as an asset key. Returns false on any failure so the
+// caller falls back to interactive selection.
+func autoDetectChipset(ctx context.Context, noConfigCache bool) (string, bool) {
+	alias, ok := sochost.DetectChipsetAlias()
+	if !ok {
+		return "", false
+	}
+	cacheDir := filepath.Join(store.Get().DataPath(), "aihub")
+	client := aihub.NewClient(cacheDir)
+	defer client.Close()
+
+	var fetchOpts []aihub.FetchOption
+	if noConfigCache || config.Get().AIHubNoCache {
+		fetchOpts = append(fetchOpts, aihub.WithSkipCache())
+	}
+	plat, err := client.LoadPlatformDirect(ctx, fetchOpts...)
+	if err != nil {
+		return "", false
+	}
+	canonical, err := aihub.ResolveChipset(plat, alias)
+	if err != nil {
+		return "", false
+	}
+	return canonical, true
 }
 
 // pickDevice fetches platform.json, filters devices by the host OS, and

@@ -32,6 +32,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
@@ -226,6 +227,12 @@ func pullModel(name string, quant string) error {
 			model_hub.SetHub(model_hub.NewLocalFS(localPath))
 		default:
 			return fmt.Errorf("unknown model hub: %s", modelHub)
+		}
+	}
+
+	if _, ok := aihub.IsAIHubName(name); ok {
+		if err := ensureChipset(context.TODO(), false); err != nil {
+			return err
 		}
 	}
 

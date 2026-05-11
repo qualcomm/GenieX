@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sochost",
+    srcs = [
+        "sochost.go",
+        "sochost_other.go",
+        "sochost_windows.go",
+    ],
+    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/sochost",
+    visibility = ["//cli:__subpackages__"],
+    deps = select({
+        "@io_bazel_rules_go//go/platform:windows": [
+            "@org_golang_x_sys//windows/registry",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+go_test(
+    name = "sochost_test",
+    srcs = ["sochost_test.go"],
+    embed = [":sochost"],
+)

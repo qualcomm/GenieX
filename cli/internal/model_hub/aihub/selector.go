@@ -78,10 +78,10 @@ func RuntimeForDomain(domain qaihm.ModelDomain) (qaihm.Runtime, error) {
 	}
 }
 
-// resolveChipset looks up the user-supplied chipset string against
+// ResolveChipset looks up the user-supplied chipset string against
 // platform.json, matching either ChipsetInfo.Name or any of its aliases. It
 // returns the canonical name.
-func resolveChipset(plat *qaihm.PlatformInfo, chipset string) (string, error) {
+func ResolveChipset(plat *qaihm.PlatformInfo, chipset string) (string, error) {
 	if plat == nil {
 		return "", errors.New("aihub: nil platform")
 	}
@@ -134,7 +134,7 @@ func MatchAll(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qai
 		return nil, err
 	}
 
-	canonical, err := resolveChipset(plat, chipset)
+	canonical, err := ResolveChipset(plat, chipset)
 	if err != nil {
 		return nil, err
 	}
