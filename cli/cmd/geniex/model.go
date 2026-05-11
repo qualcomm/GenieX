@@ -219,6 +219,8 @@ func pullModel(name string, quant string) error {
 	}
 	if modelHub != "" {
 		switch strings.ToLower(modelHub) {
+		case "aihub":
+			// model_hub.SetHub(model_hub.NewAIHub())
 		case "hf", "huggingface":
 			model_hub.SetHub(model_hub.NewHuggingFace())
 		case "local", "localfs":
@@ -789,7 +791,3 @@ func detectMacOSBundles(files []model_hub.ModelFileInfo) []string {
 
 	return bundles
 }
-
-// AI Hub pull flow moved to cli/internal/model_hub/model_hub_aihub.go;
-// pullModel handles qualcomm/* and qai-hub-models/* uniformly via the
-// ModelHub interface and the PostDownload hook (unzip into flat layout).

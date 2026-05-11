@@ -32,6 +32,7 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/downloader"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
@@ -195,7 +196,10 @@ func (h *AIHub) PostDownload(ctx context.Context, name, outputDir string, mf *ty
 	}
 
 	zipPath := filepath.Join(outputDir, r.zipBasename)
+	spin := render.NewSpinner("Extracting " + r.zipBasename)
+	spin.Start()
 	res, err := aihub.ExtractFlat(zipPath, outputDir)
+	spin.Stop()
 	if err != nil {
 		return fmt.Errorf("aihub: unzip %s: %w", r.zipBasename, err)
 	}

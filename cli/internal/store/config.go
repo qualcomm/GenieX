@@ -19,7 +19,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 
 	"github.com/bytedance/sonic"
 )
@@ -33,11 +32,6 @@ const (
 // ConfigKeys is the list of all known configuration keys.
 var ConfigKeys = []string{
 	ConfigKeyDevice,
-}
-
-// IsValidConfigKey returns true if key is a known configuration key.
-func IsValidConfigKey(key string) bool {
-	return slices.Contains(ConfigKeys, key)
 }
 
 const configFileName = "config.json"

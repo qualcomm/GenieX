@@ -70,16 +70,6 @@ func (s *Store) init() {
 		}
 	}
 
-	// Register the AI Hub wrapper so pullModel can route
-	// "qualcomm/..." / "qai-hub-models/..." through the same pipeline as HF.
-	model_hub.RegisterHub(model_hub.NewAIHub(
-		func() string {
-			v, _, _ := s.ConfigGet(ConfigKeyDevice)
-			return v
-		},
-		filepath.Join(s.home, "aihub"),
-	))
-
 	s.cleanCorruptedDirectories()
 }
 
@@ -139,4 +129,3 @@ func (s *Store) isCorruptedModelDirectory(name string) bool {
 	slog.Info("Cleaning corrupted model directory", "name", name)
 	return true
 }
-

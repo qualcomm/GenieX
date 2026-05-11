@@ -50,9 +50,7 @@ type ModelHub interface {
 	PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error
 }
 
-var hubs = []ModelHub{
-	NewHuggingFace(),
-}
+var hubs = []ModelHub{}
 
 var errUnavailable = fmt.Errorf("no model hub contains the model")
 
