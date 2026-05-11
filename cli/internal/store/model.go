@@ -24,8 +24,6 @@ import (
 	"slices"
 	"strings"
 
-	"encoding/json"
-
 	"github.com/bytedance/sonic"
 	"github.com/shirou/gopsutil/disk"
 
