@@ -15,6 +15,8 @@
 package config
 
 import (
+	"os"
+
 	"github.com/spf13/viper"
 )
 
@@ -69,5 +71,9 @@ func init() {
 func Get() *Config {
 	c := &Config{}
 	viper.Unmarshal(c)
+
+	if t := os.Getenv("HF_TOKEN"); t != "" {
+		c.HFToken = t
+	}
 	return c
 }
