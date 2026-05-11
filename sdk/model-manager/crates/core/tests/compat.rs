@@ -38,6 +38,30 @@ fn parses_go_generated_manifest() {
 }
 
 #[test]
+fn tolerates_null_optional_fields() {
+    // Legacy / hand-edited manifests may carry `null` for optional fields
+    // (Go's sonic.Marshal emits nil slices as `null`; older Go code used
+    // `*ModelFileInfo` which serialised a nil pointer as `null`). The CLI
+    // decoder accepts these; the Rust decoder must too, or `list_models`
+    // silently drops the entry as "corrupted".
+    let json = r#"{
+      "Name":"Org/Repo",
+      "ModelName":"tiny",
+      "ModelType":"llm",
+      "PluginId":"llama_cpp",
+      "ModelFile":{"Q4_K_M":{"Name":"m.gguf","Downloaded":true,"Size":1}},
+      "MMProjFile":null,
+      "TokenizerFile":null,
+      "ExtraFiles":null
+    }"#;
+    let m: ModelManifest = serde_json::from_str(json).expect("null optionals must parse");
+    assert_eq!(m.name, "Org/Repo");
+    assert_eq!(m.mmproj_file.name, "");
+    assert_eq!(m.tokenizer_file.name, "");
+    assert!(m.extra_files.is_empty());
+}
+
+#[test]
 fn round_trip_back_to_go_shape() {
     // Parse, serialize, reparse — ensuring we emit the same PascalCase
     // shape Go expects.
