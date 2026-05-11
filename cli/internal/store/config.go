@@ -19,7 +19,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sync"
+	"slices"
 
 	"github.com/bytedance/sonic"
 )
@@ -37,17 +37,10 @@ var ConfigKeys = []string{
 
 // IsValidConfigKey returns true if key is a known configuration key.
 func IsValidConfigKey(key string) bool {
-	for _, k := range ConfigKeys {
-		if k == key {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ConfigKeys, key)
 }
 
 const configFileName = "config.json"
-
-var configMu sync.Mutex
 
 // configPath returns the on-disk path of the config file.
 func (s *Store) configPath() string {
@@ -87,16 +80,9 @@ func (s *Store) saveConfig(cfg map[string]string) error {
 		return err
 	}
 	tmpName := tmp.Name()
-	defer func() {
-		// If rename succeeded the temp file is already gone; ignore error.
-		_ = os.Remove(tmpName)
-	}()
+	defer os.Remove(tmpName) // no-op after a successful rename
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Chmod(0o600); err != nil {
 		tmp.Close()
 		return err
 	}
@@ -111,9 +97,6 @@ func (s *Store) saveConfig(cfg map[string]string) error {
 func (s *Store) ConfigGet(key string) (string, bool, error) {
 	slog.Debug("ConfigGet", "key", key)
 
-	configMu.Lock()
-	defer configMu.Unlock()
-
 	cfg, err := s.loadConfig()
 	if err != nil {
 		return "", false, err
@@ -126,9 +109,6 @@ func (s *Store) ConfigGet(key string) (string, bool, error) {
 // clears the key.
 func (s *Store) ConfigSet(key, value string) error {
 	slog.Debug("ConfigSet", "key", key, "value", value)
-
-	configMu.Lock()
-	defer configMu.Unlock()
 
 	cfg, err := s.loadConfig()
 	if err != nil {
@@ -144,8 +124,5 @@ func (s *Store) ConfigSet(key, value string) error {
 
 // ConfigList returns a snapshot of all persisted configuration entries.
 func (s *Store) ConfigList() (map[string]string, error) {
-	configMu.Lock()
-	defer configMu.Unlock()
-
 	return s.loadConfig()
 }

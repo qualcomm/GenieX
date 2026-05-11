@@ -29,6 +29,7 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/downloader"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 const HF_ENDPOINT = "https://huggingface.co"
@@ -41,10 +42,6 @@ func NewHuggingFace() *HuggingFace {
 	return &HuggingFace{downloader: downloader.NewDownloader(config.Get().HFToken)}
 }
 
-func (d *HuggingFace) ChinaMainlandOnly() bool {
-	return false
-}
-
 func (d *HuggingFace) MaxConcurrency() int {
 	if config.Get().HFToken != "" {
 		return 8
@@ -55,6 +52,10 @@ func (d *HuggingFace) MaxConcurrency() int {
 }
 
 func (d *HuggingFace) CheckAvailable(ctx context.Context, name string) error {
+	return nil
+}
+
+func (d *HuggingFace) PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error {
 	return nil
 }
 
@@ -90,7 +91,6 @@ func (d *HuggingFace) ModelInfo(ctx context.Context, name string) ([]ModelFileIn
 	g.SetLimit(d.MaxConcurrency())
 
 	for i := range info.Siblings {
-		i := i
 		g.Go(func() error {
 			req := client.R()
 			if config.Get().HFToken != "" {

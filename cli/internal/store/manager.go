@@ -70,6 +70,16 @@ func (s *Store) init() {
 		}
 	}
 
+	// Register the AI Hub wrapper so pullModel can route
+	// "qualcomm/..." / "qai-hub-models/..." through the same pipeline as HF.
+	model_hub.RegisterHub(model_hub.NewAIHub(
+		func() string {
+			v, _, _ := s.ConfigGet(ConfigKeyDevice)
+			return v
+		},
+		filepath.Join(s.home, "aihub"),
+	))
+
 	s.cleanCorruptedDirectories()
 }
 
@@ -87,11 +97,6 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) cleanCorruptedDirectories() {
-	// Sweep stale *.partial directories left by a killed AI Hub pull.
-	// On success the pull atomically renames the .partial suffix away;
-	// any remaining dir is by definition incomplete.
-	s.cleanPartialDirs()
-
 	models, err := s.scanModelDir()
 	if err != nil {
 		slog.Error("Failed to scan model directory", "err", err)
@@ -135,35 +140,3 @@ func (s *Store) isCorruptedModelDirectory(name string) bool {
 	return true
 }
 
-// cleanPartialDirs removes stale <name>.partial directories at any depth
-// under the models root. Used on Store init to recover from a crash during
-// an AI Hub zip download/extract.
-func (s *Store) cleanPartialDirs() {
-	root := s.ModelDirPath()
-	orgs, err := os.ReadDir(root)
-	if err != nil {
-		return
-	}
-	for _, org := range orgs {
-		if !org.IsDir() {
-			continue
-		}
-		orgPath := filepath.Join(root, org.Name())
-		children, err := os.ReadDir(orgPath)
-		if err != nil {
-			continue
-		}
-		for _, c := range children {
-			if !c.IsDir() {
-				continue
-			}
-			if strings.HasSuffix(c.Name(), PartialSuffix) {
-				victim := filepath.Join(orgPath, c.Name())
-				slog.Info("Removing stale partial model directory", "path", victim)
-				if err := os.RemoveAll(victim); err != nil {
-					slog.Warn("Failed to remove stale partial directory", "path", victim, "err", err)
-				}
-			}
-		}
-	}
-}

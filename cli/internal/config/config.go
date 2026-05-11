@@ -29,10 +29,6 @@ const DefaultAIHubBaseURL = "https://qaihub-public-assets.s3.us-west-2.amazonaws
 // <base>/releases/<version>/manifest.json. Override via GENIEX_AIHUBVERSION.
 const DefaultAIHubVersion = "v0.52.0"
 
-// MinSDKVersion is baked into every geniex.json the CLI synthesises for AI
-// Hub (qairt) model pulls so that older SDKs refuse to load them.
-const MinSDKVersion = "0.0.0"
-
 type Config struct {
 	// Global settings
 	DataDir string

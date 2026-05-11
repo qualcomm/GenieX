@@ -33,14 +33,11 @@ type ModelFileInfo struct {
 }
 
 type ModelManifest struct {
-	Name          string // OrgName/RepoName
-	ModelName     string // model arch name like "qwen3-4b", "yolov12", etc.
-	ModelType     ModelType
-	PluginId      string
-	DeviceId      string
-	MinSDKVersion string
-	// Precision is the quantization precision selected at pull time
-	Precision     string
+	Name      string // OrgName/RepoName
+	ModelName string // model arch name like "qwen3-4b", "yolov12", etc.
+	ModelType ModelType
+	PluginId  string
+	DeviceId  string
 
 	ModelFile     map[string]ModelFileInfo // quant -> modelfile
 	MMProjFile    ModelFileInfo

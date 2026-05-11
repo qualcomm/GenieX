@@ -163,22 +163,22 @@ func TestResolveChipset(t *testing.T) {
 	p, _ := loadFixtures(t)
 
 	// Canonical name.
-	got, err := resolveChipset(p, "qualcomm-snapdragon-x-elite")
+	got, err := ResolveChipset(p, "qualcomm-snapdragon-x-elite")
 	if err != nil || got != "qualcomm-snapdragon-x-elite" {
 		t.Errorf("canonical: got (%q, %v)", got, err)
 	}
 	// Alias resolves to canonical.
-	got, err = resolveChipset(p, "sc8380xp")
+	got, err = ResolveChipset(p, "sc8380xp")
 	if err != nil || got != "qualcomm-snapdragon-x-elite" {
 		t.Errorf("alias: got (%q, %v)", got, err)
 	}
 	// Case-insensitive.
-	got, err = resolveChipset(p, "QUALCOMM-SNAPDRAGON-X-ELITE")
+	got, err = ResolveChipset(p, "QUALCOMM-SNAPDRAGON-X-ELITE")
 	if err != nil || got != "qualcomm-snapdragon-x-elite" {
 		t.Errorf("case-insensitive: got (%q, %v)", got, err)
 	}
 	// Unknown.
-	if _, err = resolveChipset(p, "nvidia-a100"); !errors.Is(err, ErrUnknownChipset) {
+	if _, err = ResolveChipset(p, "nvidia-a100"); !errors.Is(err, ErrUnknownChipset) {
 		t.Errorf("unknown chipset: expected ErrUnknownChipset, got %v", err)
 	}
 }

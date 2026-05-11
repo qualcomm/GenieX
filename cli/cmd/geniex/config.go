@@ -26,9 +26,11 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/sochost"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 )
 
@@ -81,7 +83,7 @@ func configGetCmd() *cobra.Command {
 			key := args[0]
 			value, ok, err := store.Get().ConfigGet(key)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Failed to get configuration: %s", err))
+				fmt.Println(render.GetTheme().Error.Sprintf("Failed to get configuration: %s", err))
 				os.Exit(1)
 			}
 			if !ok {
@@ -95,9 +97,7 @@ func configGetCmd() *cobra.Command {
 }
 
 func configSetCmd() *cobra.Command {
-	var noConfigCache bool
-
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "set <key> [value]",
 		Short: "Set a configuration value",
 		Long: "Set a specific configuration key to a new value. Pass an empty string to clear the value.\n\n" +
@@ -121,49 +121,84 @@ func configSetCmd() *cobra.Command {
 			key := args[0]
 
 			// Device key with no explicit value: launch interactive picker.
-			if key == store.ConfigKeyDevice && len(args) == 1 {
-				return pickDevice(cmd.Context(), noConfigCache)
+			switch key {
+			case store.ConfigKeyDevice:
+				if len(args) == 1 {
+					return pickDevice(cmd.Context())
+				}
+			default:
+				if len(args) < 2 {
+					return fmt.Errorf("key %q requires a value argument", key)
+				}
 			}
 
 			value := args[1]
 			if err := store.Get().ConfigSet(key, value); err != nil {
-				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Failed to set configuration: %s", err))
+				fmt.Println(render.GetTheme().Error.Sprintf("Failed to set configuration: %s", err))
 				os.Exit(1)
 			}
 			fmt.Println(render.GetTheme().Info.Sprintf("%s = %s", key, value))
 			return nil
 		},
 	}
-
-	cmd.Flags().BoolVar(&noConfigCache, "no-config-cache", false, "bypass local metadata cache and fetch the latest device list from remote")
-	return cmd
 }
 
-// hostOSType maps runtime.GOOS to the protobuf OperatingSystemType used in
-// DeviceInfo so we can filter the device list to only relevant entries.
-// Returns an error for operating systems the CLI does not support.
-func hostOSType() (qaihm.OperatingSystemType, error) {
-	switch runtime.GOOS {
-	case "windows":
-		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_WINDOWS, nil
-	case "linux":
-		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_QC_LINUX, nil
-	default:
-		return qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_UNSPECIFIED,
-			fmt.Errorf("unsupported operating system %q for AI Hub device selection", runtime.GOOS)
+// ensureChipset makes sure ConfigKeyDevice is populated before an AI Hub
+// pull. If it's already set, it's a no-op. Otherwise it first tries a
+// silent host probe (currently Windows-only, reading the CPU brand from
+// the registry); on failure it falls back to the interactive pickDevice.
+func ensureChipset(ctx context.Context) error {
+	if v, _, _ := store.Get().ConfigGet(store.ConfigKeyDevice); v != "" {
+		return nil
 	}
+	if canonical, ok := autoDetectChipset(ctx); ok {
+		if err := store.Get().ConfigSet(store.ConfigKeyDevice, canonical); err == nil {
+			fmt.Println(render.GetTheme().Info.Sprintf("device = %s (auto-detected)", canonical))
+			return nil
+		}
+	}
+	fmt.Println(render.GetTheme().Info.Sprint("No device configured. Please select your device first."))
+	return pickDevice(ctx)
 }
 
-// pickDevice fetches platform.json, filters devices by the host OS, and
-// presents an interactive selector. The selected device's chipset string is
-// stored under the "device" config key.
-func pickDevice(ctx context.Context, noConfigCache bool) error {
+// autoDetectChipset probes the host for a Snapdragon CPU and, on success,
+// resolves the alias against platform.json into the canonical chipset
+// name AI Hub uses as an asset key. Returns false on any failure so the
+// caller falls back to interactive selection.
+func autoDetectChipset(ctx context.Context) (string, bool) {
+	alias, ok := sochost.DetectChipsetAlias()
+	if !ok {
+		return "", false
+	}
 	cacheDir := filepath.Join(store.Get().DataPath(), "aihub")
 	client := aihub.NewClient(cacheDir)
 	defer client.Close()
 
 	var fetchOpts []aihub.FetchOption
-	if noConfigCache {
+	if config.Get().AIHubNoCache {
+		fetchOpts = append(fetchOpts, aihub.WithSkipCache())
+	}
+	plat, err := client.LoadPlatformDirect(ctx, fetchOpts...)
+	if err != nil {
+		return "", false
+	}
+	canonical, err := aihub.ResolveChipset(plat, alias)
+	if err != nil {
+		return "", false
+	}
+	return canonical, true
+}
+
+// pickDevice fetches platform.json, filters devices by the host OS, and
+// presents an interactive selector. The selected device's chipset string is
+// stored under the "device" config key.
+func pickDevice(ctx context.Context) error {
+	cacheDir := filepath.Join(store.Get().DataPath(), "aihub")
+	client := aihub.NewClient(cacheDir)
+	defer client.Close()
+
+	var fetchOpts []aihub.FetchOption
+	if config.Get().AIHubNoCache {
 		fetchOpts = append(fetchOpts, aihub.WithSkipCache())
 	}
 
@@ -172,13 +207,19 @@ func pickDevice(ctx context.Context, noConfigCache bool) error {
 	plat, err := client.LoadPlatformDirect(ctx, fetchOpts...)
 	spin.Stop()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Failed to fetch device list: %s", err))
+		fmt.Println(render.GetTheme().Error.Sprintf("Failed to fetch device list: %s", err))
 		return err
 	}
 
-	osType, err := hostOSType()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprint(err.Error()))
+	var osType qaihm.OperatingSystemType
+	switch runtime.GOOS {
+	case "windows":
+		osType = qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_WINDOWS
+	case "linux":
+		osType = qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_QC_LINUX
+	default:
+		err := fmt.Errorf("unsupported operating system %q for AI Hub device selection", runtime.GOOS)
+		fmt.Println(render.GetTheme().Error.Sprint(err.Error()))
 		return err
 	}
 
@@ -194,7 +235,7 @@ func pickDevice(ctx context.Context, noConfigCache bool) error {
 	}
 
 	if len(options) == 0 {
-		fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprint("No devices found for this operating system."))
+		fmt.Println(render.GetTheme().Error.Sprint("No devices found for this operating system."))
 		return fmt.Errorf("no devices available")
 	}
 
@@ -208,7 +249,7 @@ func pickDevice(ctx context.Context, noConfigCache bool) error {
 	}
 
 	if err := store.Get().ConfigSet(store.ConfigKeyDevice, selected); err != nil {
-		fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Failed to save device: %s", err))
+		fmt.Println(render.GetTheme().Error.Sprintf("Failed to save device: %s", err))
 		return err
 	}
 
@@ -233,7 +274,7 @@ func configListCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			cfg, err := store.Get().ConfigList()
 			if err != nil {
-				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Failed to read configuration: %s", err))
+				fmt.Println(render.GetTheme().Error.Sprintf("Failed to read configuration: %s", err))
 				os.Exit(1)
 			}
 

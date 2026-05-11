@@ -25,9 +25,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/bytedance/sonic"
 	"golang.org/x/sync/errgroup"
@@ -45,11 +43,11 @@ type ModelFileInfo struct {
 }
 
 type ModelHub interface {
-	ChinaMainlandOnly() bool
 	MaxConcurrency() int
 	CheckAvailable(ctx context.Context, modelName string) error
 	ModelInfo(ctx context.Context, modelName string) ([]ModelFileInfo, error)
 	GetFileContent(ctx context.Context, modelName, fileName string, offset, limit int64, writer io.Writer) error
+	PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error
 }
 
 var hubs = []ModelHub{
@@ -61,6 +59,14 @@ var errUnavailable = fmt.Errorf("no model hub contains the model")
 // Specify hub to use
 func SetHub(h ModelHub) {
 	hubs = []ModelHub{h}
+}
+
+// RegisterHub prepends h to the hub list. Used by downstream packages
+// (e.g. store) to plug in hubs that need runtime dependencies the
+// model_hub package can't take directly, like the AI Hub hub which
+// needs access to the chipset configuration and on-disk cache dir.
+func RegisterHub(h ModelHub) {
+	hubs = append([]ModelHub{h}, hubs...)
 }
 
 // list model files
@@ -107,6 +113,16 @@ func ModelInfo(ctx context.Context, modelName string) ([]ModelFileInfo, *types.M
 
 	return files, &manifest, nil
 
+}
+
+// PostDownload resolves the active hub for modelName and delegates to it.
+// See ModelHub.PostDownload.
+func PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error {
+	hub, err := getHub(ctx, modelName)
+	if err != nil {
+		return err
+	}
+	return hub.PostDownload(ctx, modelName, outputDir, mf)
 }
 
 // Get single file content
@@ -344,48 +360,6 @@ func StartDownloadURL(ctx context.Context, urlStr, outputDir, dstName string, si
 	return resCh, errCh
 }
 
-var (
-	chinaMainlandCheck sync.Once
-	isChinaMainland    bool
-)
-
-func checkChinaMainland() bool {
-	chinaMainlandCheck.Do(func() {
-		client := resty.New()
-		client.SetTimeout(2 * time.Second)
-		defer client.Close()
-
-		for _, ep := range [][]string{
-			{"http://ip-api.com/json", "countryCode"},
-			{"https://ipapi.co/json", "country_code"},
-			{"https://ipinfo.io/json", "country"},
-		} {
-			res, err := client.R().
-				// EnableDebug().
-				Get(ep[0])
-			if err != nil {
-				continue
-			}
-
-			n, err := sonic.GetFromString(res.String(), ep[1])
-			if err != nil {
-				continue
-			}
-
-			code, err := n.String()
-			if err != nil {
-				continue
-			}
-
-			slog.Info("Detected country code", "endpoint", ep[0], "code", code)
-			isChinaMainland = code == "CN"
-			return
-		}
-		slog.Error("Detect country code failed")
-	})
-	return isChinaMainland
-}
-
 func getHub(ctx context.Context, modelName string) (ModelHub, error) {
 	// if only one hub specified, check availability first
 	if len(hubs) == 1 {
@@ -396,10 +370,6 @@ func getHub(ctx context.Context, modelName string) (ModelHub, error) {
 
 	// try each hub
 	for _, h := range hubs {
-		if h.ChinaMainlandOnly() && !checkChinaMainland() {
-			slog.Info("skip china mainland only hub", "hub", reflect.TypeOf(h))
-			continue
-		}
 		if err := h.CheckAvailable(ctx, modelName); err != nil {
 			slog.Warn("hub not available, try next", "hub", reflect.TypeOf(h), "err", err)
 		} else {

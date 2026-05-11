@@ -16,7 +16,6 @@ package main
 
 import (
 	"fmt"
-	"log/slog"
 	"strconv"
 	"strings"
 
@@ -89,18 +88,4 @@ func compareVersion(v1, v2 string) (int, error) {
 		}
 	}
 	return 0, nil
-}
-
-func isValidVersion(minVersion string) bool {
-	// community repo or dev version
-	if minVersion == "" || Version == "" {
-		return true
-	}
-
-	slog.Debug("check version", "minVersion", minVersion, "curVersion", Version)
-	result, err := compareVersion(Version, minVersion)
-	if err != nil {
-		panic(err)
-	}
-	return result >= 0
 }
