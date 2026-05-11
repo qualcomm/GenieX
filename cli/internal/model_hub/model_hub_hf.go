@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -42,13 +43,24 @@ func NewHuggingFace() *HuggingFace {
 	return &HuggingFace{downloader: downloader.NewDownloader(config.Get().HFToken)}
 }
 
+var hfTokenWarnOnce sync.Once
+
 func (d *HuggingFace) MaxConcurrency() int {
 	if config.Get().HFToken != "" {
 		return 8
-	} else {
-		fmt.Println(render.GetTheme().Warning.Sprintf("GENIEX_HFTOKEN not set. Set it for speeding up downloads from https://huggingface.co/settings/tokens"))
-		return 1
 	}
+	hfTokenWarnOnce.Do(func() {
+		msg := "No HuggingFace token detected. Set one to:\n" +
+			"  - speed up downloads (parallel chunks instead of 1)\n" +
+			"  - access gated models (Llama, Gemma, etc.)\n" +
+			"Get a token: https://huggingface.co/settings/tokens\n" +
+			"Set it:\n" +
+			"  Windows (PowerShell): $env:HF_TOKEN=\"hf_...\"\n" +
+			"  Linux/macOS:          export HF_TOKEN=hf_...\n" +
+			"(GENIEX_HFTOKEN is also accepted for backward compatibility.)"
+		fmt.Fprintln(os.Stderr, render.GetTheme().Warning.Sprint(msg))
+	})
+	return 1
 }
 
 func (d *HuggingFace) CheckAvailable(ctx context.Context, name string) error {
