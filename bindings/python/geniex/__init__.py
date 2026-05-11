@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from . import model_manager
-from ._ffi._api import deinit, get_device_list, get_plugin_list, init, set_log_level, version
+from ._ffi._api import deinit, get_device_list, get_plugin_list, init, qairt_version, set_log_level, version
 from ._version import __version__
 from .auto import AutoModelForCausalLM, AutoModelForVision2Seq
 from .generation import GenerateOutput, ProfileData, TextIteratorStreamer
@@ -32,6 +32,7 @@ __all__ = [
     'deinit',
     'set_log_level',
     'version',
+    'qairt_version',
     'get_plugin_list',
     'get_device_list',
     'model_manager',

@@ -266,13 +266,20 @@ GENIEX_API void geniex_free(void* ptr);
 /**
  * @brief Get Library Version
  *
- * @param out_version[out]: Pointer to the library version.
- *
- * @return geniex_ErrorCode: GENIEX_SUCCESS on success, negative on failure.
+ * @return Null-terminated UTF-8 string.
  *
  * @thread_safety: Thread-safe.
  */
 GENIEX_API const char* geniex_version(void);
+
+/**
+ * @brief Get the bundled QAIRT runtime version.
+ *
+ * @return Null-terminated UTF-8 string.
+ *
+ * @thread_safety: Thread-safe.
+ */
+GENIEX_API const char* geniex_qairt_version(void);
 
 /** Output structure containing the list of available plugins */
 typedef struct {

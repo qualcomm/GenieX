@@ -35,8 +35,8 @@ func version() *cobra.Command {
 	}
 
 	versionCmd.Run = func(cmd *cobra.Command, args []string) {
-		fmt.Println("GenieX Bridge Version: " + geniex_sdk.Version())
-		fmt.Println("GenieX CLI Version:    " + Version)
+		fmt.Println("QAIRT Version:      " + geniex_sdk.QairtVersion())
+		fmt.Println("GenieX CLI Version: " + Version)
 	}
 
 	return versionCmd

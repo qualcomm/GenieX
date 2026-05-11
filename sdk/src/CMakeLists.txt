@@ -7,6 +7,8 @@ set_source_files_properties(version.cpp PROPERTIES
 target_compile_definitions(geniex PRIVATE GENIEX_SHARED GENIEX_BUILD)
 
 target_include_directories(geniex PUBLIC ${COMMON_INCLUDE})
+target_include_directories(geniex PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../third-party/geniex-qairt/core/include)
 
 if(GENIEX_MODEL_MANAGER)
     add_dependencies(geniex model_manager_build)
