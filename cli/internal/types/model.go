@@ -42,6 +42,7 @@ type ModelManifest struct {
 	ModelType ModelType
 	PluginId  string
 	DeviceId  string
+	Precision string // e.g. "INT8", "FP16" — set for AI Hub (qairt) models
 
 	ModelFile     map[string]ModelFileInfo // quant -> modelfile
 	MMProjFile    ModelFileInfo

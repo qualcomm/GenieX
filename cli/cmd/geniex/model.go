@@ -16,9 +16,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -31,8 +34,10 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
@@ -930,7 +935,11 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 	}
 	if chipset == "" {
 		fmt.Println(render.GetTheme().Info.Sprint("No device configured. Please select your device first."))
-		if err := pickDevice(ctx, noConfigCache); err != nil {
+		// pickDevice reads config.Get().AIHubNoCache internally. We don't pass
+		// noConfigCache here because platform.json is only fetched when no
+		// device is configured yet — meaning no local cache exists anyway, so
+		// the flag has no practical effect on this code path.
+		if err := pickDevice(ctx); err != nil {
 			return err
 		}
 		// Re-read the chipset that was just saved by pickDevice.
@@ -1011,13 +1020,12 @@ func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noCo
 
 	precisionLabel := strings.TrimPrefix(asset.GetPrecision().String(), "PRECISION_")
 	mf := types.ModelManifest{
-		Name:          storedName,
-		ModelName:     model.GetId(),
-		ModelType:     "", // auto-detected from metadata.json inside the zip by PullZipAsset
-		PluginId:      "qairt",
-		DeviceId:      asset.GetChipset(),
-		MinSDKVersion: config.MinSDKVersion,
-		Precision:     precisionLabel,
+		Name:      storedName,
+		ModelName: model.GetId(),
+		ModelType: "", // auto-detected from metadata.json inside the zip by PullZipAsset
+		PluginId:  "qairt",
+		DeviceId:  asset.GetChipset(),
+		Precision: precisionLabel,
 	}
 
 	// Already-downloaded short-circuit: same check the HF path does.

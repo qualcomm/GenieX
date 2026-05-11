@@ -96,7 +96,7 @@ func ModelInfo(ctx context.Context, modelName string) ([]ModelFileInfo, *types.M
 	}
 
 	// parse manifest
-	data, err := GetFileContent(ctx, modelName, manifestFile)
+	data, err := GetFileContent(ctx, modelName, types.ManifestFileName)
 	if err != nil {
 		slog.Warn("failed to get manifest file, ignore", "error", err)
 		return nil, nil, err
