@@ -3,6 +3,7 @@ use std::path::PathBuf;
 
 use model_manager_core::config::StoreConfig;
 use model_manager_core::manifest_builder::ManifestHint;
+use model_manager_core::mapping::aihub_display_name_from_repo;
 use model_manager_core::pull::{pull_blocking, PullIntent, PullRequest};
 
 use crate::init::{get_store, runtime_handle};
@@ -96,8 +97,35 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
             .map(str::to_string)
             .or_else(StoreConfig::hf_token_from_env);
 
+        // `chipset` / `display_name` are only meaningful for AI Hub but
+        // we read them once up front so both the explicit-AiHub branch
+        // and the Auto-→-AiHub auto-detect path can share the values.
+        let chipset = unsafe { cstr_to_str(inp.chipset) }
+            .unwrap_or("")
+            .to_string();
+        let explicit_display_name = unsafe { cstr_to_str(inp.display_name) }
+            .map(str::to_string)
+            .filter(|s| !s.is_empty());
+
         let intent = match inp.hub {
-            GeniexHubSource::HuggingFace | GeniexHubSource::Auto => PullIntent::HuggingFace {
+            GeniexHubSource::Auto => {
+                // "qualcomm/*" / "qai-hub-models/*" route to AI Hub without
+                // requiring the caller to set hub=AIHUB explicitly. The
+                // derived display_name is the repo after the slash;
+                // callers may still override via inp.display_name.
+                if let Some(repo) = aihub_display_name_from_repo(&model_name) {
+                    PullIntent::AiHub {
+                        display_name: explicit_display_name.unwrap_or_else(|| repo.to_string()),
+                        chipset,
+                    }
+                } else {
+                    PullIntent::HuggingFace {
+                        repo: model_name.clone(),
+                        token: hf_token,
+                    }
+                }
+            }
+            GeniexHubSource::HuggingFace => PullIntent::HuggingFace {
                 repo: model_name.clone(),
                 token: hf_token,
             },
@@ -111,12 +139,9 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
             GeniexHubSource::AiHub => {
                 // chipset NULL or empty → SDK auto-detects (currently
                 // Windows-on-Snapdragon only). Non-empty: caller override.
-                let chipset = unsafe { cstr_to_str(inp.chipset) }
-                    .unwrap_or("")
-                    .to_string();
-                let display_name = match unsafe { cstr_to_str(inp.display_name) } {
-                    Some(s) if !s.is_empty() => s.to_string(),
-                    _ => return GENIEX_ERROR_COMMON_INVALID_INPUT,
+                let display_name = match explicit_display_name {
+                    Some(s) => s,
+                    None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
                 };
                 PullIntent::AiHub {
                     display_name,
