@@ -91,17 +91,17 @@ var (
 		llmFlags := pflag.NewFlagSet("LLM/VLM Model", pflag.ExitOnError)
 		llmFlags.SortFlags = false
 		llmFlags.StringVarP(&device, "device", "d", "", "device to run on: cpu, gpu, npu, or hybrid (default: hybrid for llama.cpp, npu for qairt)")
-		llmFlags.Int32VarP(&ngl, "ngl", "n", 999, "number of layers to offload to gpu/npu")
-		llmFlags.Int32VarP(&nctx, "nctx", "", 4096, "context window size")
+		llmFlags.Int32VarP(&ngl, "ngl", "n", 999, "number of layers to offload to gpu/npu (llama_cpp only)")
+		llmFlags.Int32VarP(&nctx, "nctx", "", 4096, "context window size (llama_cpp only)")
 		llmFlags.Int32VarP(&maxTokens, "max-tokens", "", 2048, "max tokens")
-		llmFlags.StringArrayVarP(&stop, "stop", "", nil, "stop sequences")
-		llmFlags.StringVarP(&stopFile, "stop-file", "", "", "file containing stop sequences")
+		llmFlags.StringArrayVarP(&stop, "stop", "", nil, "stop sequences (llama_cpp only)")
+		llmFlags.StringVarP(&stopFile, "stop-file", "", "", "file containing stop sequences (llama_cpp only)")
 		llmFlags.BoolVarP(&noThink, "no-think", "", false, "disable thinking mode")
 		llmFlags.BoolVarP(&hideThink, "hide-think", "", false, "hide thinking output")
 		llmFlags.StringVarP(&systemPrompt, "system-prompt", "s", "", "system prompt to set model behavior")
 		llmFlags.StringVarP(&input, "input", "i", "", "prompt txt file")
 		llmFlags.StringArrayVarP(&prompt, "prompt", "p", nil, "pass prompt")
-		llmFlags.StringVarP(&tokenFile, "token-file", "t", "", "path to token file (space-separated token IDs)")
+		llmFlags.StringVarP(&tokenFile, "token-file", "t", "", "path to token file (space-separated token IDs) (llama_cpp only)")
 		return llmFlags
 	}()
 	vlmFlags = func() *pflag.FlagSet {
@@ -196,6 +196,11 @@ func infer() *cobra.Command {
 		switch err {
 		case nil:
 			os.Exit(0)
+		case geniex_sdk.ErrCommonParamNotSupported:
+			fmt.Println(render.GetTheme().Error.Sprintf(`
+⚠️ A flag you passed is not supported by the %s plugin.
+
+👉 Run 'geniex infer -h' to see which flags are plugin-specific.`, manifest.PluginId))
 		case geniex_sdk.ErrCommonNotSupport:
 			fmt.Println(render.GetTheme().Error.Sprint(`
 ⚠️ Oops. This model type is not supported yet.
