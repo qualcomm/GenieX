@@ -6,14 +6,14 @@
 
 #pragma once
 
-#include "geniex.h"
-#include "geniex-proc/types.h"  // for GENIEX_DEFAULT_SEED
-#include "logging.h"
-#include "types.h"  // geniex::GenerationConfig
-
 #include <cstdint>
 #include <fstream>
 #include <sstream>
+
+#include "geniex-proc/types.h"  // for GENIEX_DEFAULT_SEED
+#include "geniex.h"
+#include "logging.h"
+#include "types.h"  // geniex::GenerationConfig
 
 namespace geniex::qairt {
 
@@ -58,7 +58,7 @@ inline void apply_sampler_config(const geniex_SamplerConfig* cfg, GenerationConf
 
     // Temperature is special: 0 means "use default", a NEGATIVE value is the
     // greedy/argmax sentinel, positive is the literal temp.
-    out.temperature        = (cfg->temperature == 0.0f) ? kDefaults.temperature : cfg->temperature;
+    out.temperature = (cfg->temperature == 0.0f) ? kDefaults.temperature : cfg->temperature;
 
     // Grammar — string takes priority over path (matches llama_cpp plugin).
     if (cfg->grammar_string && cfg->grammar_string[0] != '\0') {
