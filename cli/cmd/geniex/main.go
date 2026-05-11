@@ -17,6 +17,7 @@ package main
 import (
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -25,7 +26,20 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 )
+
+func registerAIHub() {
+	s := store.Get()
+	model_hub.RegisterHub(model_hub.NewHuggingFace())
+	model_hub.RegisterHub(model_hub.NewAIHub(
+		func() string {
+			v, _, _ := s.ConfigGet(store.ConfigKeyDevice)
+			return v
+		},
+		filepath.Join(s.DataPath(), "aihub"),
+	))
+}
 
 var (
 	dataDir    string
@@ -45,6 +59,8 @@ func RootCmd() *cobra.Command {
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// log
 			common.ApplyLogLevel()
+
+			registerAIHub()
 
 			// subCmd := cmd.CalledAs()
 			//
@@ -118,7 +134,7 @@ func normalizeModelName(name string) (string, string) {
 // main is the entry point that executes the root command.
 func main() {
 	if err := RootCmd().Execute(); err != nil {
-		slog.Error("geniex-cli failed", "err", err)
+		slog.Error("geniex failed", "err", err)
 		os.Exit(1)
 	}
 }
