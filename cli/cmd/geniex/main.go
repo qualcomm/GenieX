@@ -118,9 +118,9 @@ func normalizeModelName(name string) (string, string) {
 		return actualName, quant
 	}
 
-	// support qwen3 -> NexaAI/qwen3
+	// support qwen3 -> qualcomm/qwen3
 	if !strings.Contains(name, "/") {
-		return "NexaAI/" + name, quant
+		return "qualcomm/" + name, quant
 	}
 
 	// support https://huggingface.co/Qwen/Qwen3-0.6B-GGUF -> Qwen/Qwen3-0.6B-GGUF
