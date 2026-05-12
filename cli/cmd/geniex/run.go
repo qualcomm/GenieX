@@ -116,9 +116,7 @@ func run() *cobra.Command {
 		case nil:
 			os.Exit(0)
 		default:
-			if !printDriverHintForPhase(err) {
-				fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
-			}
+			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			os.Exit(1)
 		}
 	}
@@ -149,7 +147,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 	spin.Stop()
 
 	if err != nil {
-		return modelLoadError{err}
+		return err
 	}
 
 	// repl
@@ -251,7 +249,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 			profileData.DecodingSpeed = float64(profileData.GeneratedTokens) / float64(end.Sub(firstToken).Seconds())
 
 			if stream.Err() != nil {
-				return "", profileData, generationError{stream.Err()}
+				return "", profileData, stream.Err()
 			}
 
 			if len(acc.Choices) > 0 {

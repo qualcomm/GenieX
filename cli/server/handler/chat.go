@@ -50,10 +50,35 @@ const (
 	phaseGeneration
 )
 
-// driverHintError formats an error with a hint that the failure may be driver
-// related. Used when the SDK returned an error we haven't otherwise classified,
-// so the client can surface an actionable suggestion instead of a bare message.
-func driverHintError(phase errorPhase, err error) string {
+// specificSDKErrors is the set of SDK error codes that already have a tailored
+// message on the client side. Errors matching one of these are forwarded as-is
+// so the generic driver hint does not override a more specific explanation.
+var specificSDKErrors = []error{
+	geniex_sdk.ErrCommonNotSupport,
+	geniex_sdk.ErrCommonParamNotSupported,
+	geniex_sdk.ErrCommonModelLoad,
+	geniex_sdk.ErrCommonPluginLoad,
+	geniex_sdk.ErrCommonPluginInvalid,
+	geniex_sdk.ErrLlmTokenizationContextLength,
+}
+
+func isSpecificSDKError(err error) bool {
+	for _, e := range specificSDKErrors {
+		if errors.Is(err, e) {
+			return true
+		}
+	}
+	return false
+}
+
+// errorMessage returns the message to send back to the client. For errors
+// that already map to a specific client-side branch it is the raw error
+// string; for unclassified errors it appends a driver-version hint so the
+// user has an actionable suggestion instead of a bare message.
+func errorMessage(phase errorPhase, err error) string {
+	if isSpecificSDKError(err) {
+		return err.Error()
+	}
 	switch phase {
 	case phaseModelLoad:
 		return fmt.Sprintf("Model failed to load: %s. This may be caused by an outdated NPU or GPU driver — please check your driver version and update it if necessary.", err.Error())
@@ -249,7 +274,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": driverHintError(phaseModelLoad, err), "code": geniex_sdk.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": errorMessage(phaseModelLoad, err), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 	if isWarmupRequest(param) {
@@ -264,7 +289,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		AddGenerationPrompt: true,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": driverHintError(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": errorMessage(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 
@@ -318,7 +343,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 				resWg.Wait()
 
 				if err != nil {
-					c.SSEvent("", map[string]any{"error": driverHintError(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
+					c.SSEvent("", map[string]any{"error": errorMessage(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
 					return false
 				}
 
@@ -345,7 +370,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 
 				if err != nil {
 					slog.Error("Generation error", "error", err)
-					c.SSEvent("", map[string]any{"error": driverHintError(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
+					c.SSEvent("", map[string]any{"error": errorMessage(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
 					return false
 				}
 
@@ -406,7 +431,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		},
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, map[string]any{"error": driverHintError(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
+			c.JSON(http.StatusInternalServerError, map[string]any{"error": errorMessage(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
 
@@ -588,7 +613,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		})
 		return
 	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": driverHintError(phaseModelLoad, err), "code": geniex_sdk.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": errorMessage(phaseModelLoad, err), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 	if isWarmupRequest(param) {
@@ -603,7 +628,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		EnableThink: param.EnableThink,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": driverHintError(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": errorMessage(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
 	images := make([]string, 0)
@@ -671,7 +696,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 				resWg.Wait()
 
 				if err != nil {
-					c.SSEvent("", map[string]any{"error": driverHintError(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
+					c.SSEvent("", map[string]any{"error": errorMessage(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
 					return false
 				}
 
@@ -698,7 +723,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 
 				if err != nil {
 					slog.Error("Generation error", "error", err)
-					c.SSEvent("", map[string]any{"error": driverHintError(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
+					c.SSEvent("", map[string]any{"error": errorMessage(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
 					return false
 				}
 
@@ -762,7 +787,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		},
 		)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, map[string]any{"error": driverHintError(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
+			c.JSON(http.StatusInternalServerError, map[string]any{"error": errorMessage(phaseGeneration, err), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
 
