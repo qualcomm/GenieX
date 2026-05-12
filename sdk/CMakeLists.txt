@@ -60,7 +60,31 @@ if(GENIEX_MODEL_MANAGER)
         set(RUST_PROFILE "release")
         set(RUST_BUILD_FLAG "--release")
     endif()
-    set(RUST_TARGET_DIR "${RUST_MM_DIR}/target/${RUST_PROFILE}")
+
+    # Android is the only cross-compile case we cover here — x86_64 Linux
+    # container (ghcr.io/snapdragon-toolchain/arm64-android) targeting
+    # aarch64. Linux/Windows arm64 CI runs host == target, so plain
+    # `cargo build` is correct there. The API level and host tag are
+    # hard-coded to match sdk/CMakePresets.json (ANDROID_PLATFORM=android-31)
+    # and the runner image (linux-x86_64).
+    if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+        set(_ndk_bin
+            "$ENV{ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin")
+        # cc-rs (pulled in by transitive C deps like onig_sys) looks for an
+        # un-suffixed `aarch64-linux-android-clang`; the NDK only ships the
+        # API-versioned wrapper. Point CC/AR at the real names so Rust
+        # build scripts can invoke clang without relying on the short form.
+        set(RUST_CARGO_ENV
+            CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${_ndk_bin}/aarch64-linux-android31-clang
+            CC_aarch64_linux_android=${_ndk_bin}/aarch64-linux-android31-clang
+            AR_aarch64_linux_android=${_ndk_bin}/llvm-ar)
+        set(RUST_CARGO_TARGET_FLAGS --target aarch64-linux-android)
+        set(RUST_TARGET_DIR "${RUST_MM_DIR}/target/aarch64-linux-android/${RUST_PROFILE}")
+    else()
+        set(RUST_CARGO_ENV "")
+        set(RUST_CARGO_TARGET_FLAGS "")
+        set(RUST_TARGET_DIR "${RUST_MM_DIR}/target/${RUST_PROFILE}")
+    endif()
 
     # cargo's static-library output file name is platform-dependent:
     # Windows produces `<crate>.lib`, everything else produces
@@ -75,7 +99,8 @@ if(GENIEX_MODEL_MANAGER)
 
     add_custom_command(
         OUTPUT "${RUST_MODEL_LIB}"
-        COMMAND cargo build ${RUST_BUILD_FLAG}
+        COMMAND ${CMAKE_COMMAND} -E env ${RUST_CARGO_ENV}
+                cargo build ${RUST_BUILD_FLAG} ${RUST_CARGO_TARGET_FLAGS}
                 --manifest-path "${RUST_MM_DIR}/Cargo.toml"
         WORKING_DIRECTORY "${RUST_MM_DIR}"
         COMMENT "Building model manager (${RUST_PROFILE})"

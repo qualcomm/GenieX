@@ -27,10 +27,12 @@ case "$PLATFORM" in
     PRESET="arm64-linux-snapdragon-release"
     ;;
   android-arm64)
+    # Runs inside ghcr.io/snapdragon-toolchain/arm64-android which provides
+    # $ANDROID_NDK_ROOT; the CI job pre-installs the aarch64-linux-android
+    # Rust target. sdk/CMakeLists.txt handles the cargo --target +
+    # CARGO_TARGET_*_LINKER wiring.
     PRESET="arm64-android-snapdragon-release"
-    # GENIEX_MODEL_MANAGER has no cross-build wiring for android-arm64 yet
-    # (tracked as #222); keep it disabled until that lands.
-    EXTRA_CMAKE_FLAGS="$EXTRA_CMAKE_FLAGS -DGENIEX_MODEL_MANAGER=OFF"
+    EXTRA_CMAKE_FLAGS="$EXTRA_CMAKE_FLAGS -DGENIEX_MODEL_MANAGER=ON"
     ;;
   *)
     echo "Unsupported PLATFORM: $PLATFORM" >&2

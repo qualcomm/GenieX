@@ -58,7 +58,7 @@ if(GENIEX_MODEL_MANAGER)
         # Restrict the dynamic-symbol table to the geniex_* API so the
         # Rust runtime / hf-hub / ring / ureq symbols that --whole-archive
         # pulls in do not leak into libgeniex.so's public ABI.
-        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android")
             set(GENIEX_MODEL_VERSION_SCRIPT
                 "${CMAKE_SOURCE_DIR}/model-manager/include/geniex_model.ld")
             target_link_options(geniex PRIVATE
