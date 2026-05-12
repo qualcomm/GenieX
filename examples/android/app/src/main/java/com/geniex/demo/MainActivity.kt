@@ -1070,8 +1070,8 @@ space ::= | " " | "\n" | "\r" | "\t"
                             Log.d(TAG, "Config has ${configWithMedia.imageCount} images")
 
                             vlmWrapper.generateStreamFlow(
-                                if (isNpu || true) inputString else result.formattedText,
-                                configWithMedia  // Use the updated config with media paths
+                                result.formattedText,
+                                configWithMedia
                             ).collect { handleResult(sb, it) }
                         }.onFailure {
                             runOnUiThread {

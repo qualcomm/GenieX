@@ -43,5 +43,14 @@
     "chipset": "SM8750",
     "type": "chat",
     "pluginIds": 4
+  },
+  {
+    "id": "Qwen2.5-VL-7B-Instruct",
+    "displayName": "Qwen2.5-VL-7B-Instruct (NPU)",
+    "modelName": "qualcomm/Qwen2.5-VL-7B-Instruct",
+    "hub": "AUTO",
+    "chipset": "SM8750",
+    "type": "vlm",
+    "pluginIds": 4
   }
 ]
