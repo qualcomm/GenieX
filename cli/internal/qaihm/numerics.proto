@@ -6,8 +6,6 @@ syntax = "proto3";
 
 package qaihm;
 
-option go_package = "github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm;qaihm";
-
 import "shared/range.proto";
 import "shared/precision.proto";
 import "shared/runtime.proto";

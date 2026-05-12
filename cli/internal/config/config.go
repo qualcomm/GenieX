@@ -29,7 +29,7 @@ const DefaultAIHubBaseURL = "https://qaihub-public-assets.s3.us-west-2.amazonaws
 // DefaultAIHubVersion is the pinned aihm release the CLI consumes. The public
 // bucket has no `latest` alias; manifests are only at
 // <base>/releases/<version>/manifest.json. Override via GENIEX_AIHUBVERSION.
-const DefaultAIHubVersion = "v0.52.0"
+const DefaultAIHubVersion = "v0.53.1"
 
 type Config struct {
 	// Global settings

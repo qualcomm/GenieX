@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -288,19 +289,40 @@ func pullModel(name string, quant string) error {
 		if manifest.PluginId == "" {
 			manifest.PluginId = choosePluginId(name)
 		}
-		if manifest.ModelType == "" {
-			if ctype, err := chooseModelType(); err != nil {
-				fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
-				return err
-			} else {
-				manifest.ModelType = ctype
-			}
-		}
 
 		err := chooseFiles(name, quant, files, &manifest)
 		if err != nil {
 			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			return err
+		}
+
+		// --model-type flag overrides all auto-detection. Validate early so
+		// we fail before downloading anything.
+		if modelType != "" {
+			mt := types.ModelType(strings.ToLower(modelType))
+			if !slices.Contains(types.AllModelTypes, mt) {
+				return fmt.Errorf("unknown model type %q (valid: %s)", modelType,
+					strings.Join(func() []string {
+						s := make([]string, len(types.AllModelTypes))
+						for i, t := range types.AllModelTypes {
+							s[i] = string(t)
+						}
+						return s
+					}(), ", "))
+			}
+			manifest.ModelType = mt
+		}
+
+		if manifest.ModelType == "" {
+			switch manifest.PluginId {
+			case "llama_cpp":
+				// For GGUF models, presence of an mmproj file indicates VLM.
+				manifest.ModelType = inferModelTypeFromManifest(&manifest)
+			case "qairt":
+				// For AI Hub models, type is detected from metadata.json inside
+				// the zip by PostDownload. Leave ModelType blank here; re-read
+				// the manifest after Pull to surface the detected type to the user.
+			}
 		}
 
 		pgCh, errCh := s.Pull(context.TODO(), manifest)
@@ -314,9 +336,30 @@ func pullModel(name string, quant string) error {
 
 		for err := range errCh {
 			bar.Clear()
+			var detErr *model_hub.ErrModelTypeDetection
+			if errors.As(err, &detErr) {
+				// Detection failure is non-fatal: the model downloaded successfully
+				// but we couldn't determine its type from metadata.json.
+				fmt.Println(render.GetTheme().Warning.Sprintf(
+					"⚠  Model type detection failed; defaulting to llm.\n"+
+						"   To set the correct type, run:\n"+
+						"     geniex model set-type %s <llm|vlm>", name))
+				continue
+			}
 			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			return err
 		}
+
+		// For qairt models the type was written to disk by PostDownload;
+		// re-read the manifest so we can report the correct detected type.
+		detectedType := manifest.ModelType
+		if manifest.PluginId == "qairt" {
+			if updated, err := s.GetManifest(name); err == nil {
+				detectedType = updated.ModelType
+			}
+		}
+
+		printModelTypeDetection(name, detectedType)
 	}
 
 	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success"))
@@ -353,15 +396,13 @@ func choosePluginId(name string) string {
 
 }
 
-func chooseModelType() (types.ModelType, error) {
-	if modelType != "" {
-		mt := types.ModelType(modelType)
-		if !slices.Contains(types.AllModelTypes, mt) {
-			return "", fmt.Errorf("unknown model type: %s", modelType)
-		}
-		return mt, nil
-	}
+// printModelTypeDetection prints a user-facing message about the auto-detected
+// model type.
+func printModelTypeDetection(modelName string, modelType types.ModelType) {
+	fmt.Println(render.GetTheme().Info.Sprintf("   Detected model type: %s", modelType))
+}
 
+func chooseModelType() (types.ModelType, error) {
 	var modelType types.ModelType
 	if err := huh.NewSelect[types.ModelType]().
 		Title("Choose Model Type").
@@ -373,7 +414,91 @@ func chooseModelType() (types.ModelType, error) {
 	return modelType, nil
 }
 
+// modelCmd builds the `geniex model` command tree:
+//
+// It is the home for all per-model management operations
+func modelCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		GroupID: "model",
+		Use:     "model",
+		Short:   "Manage cached models",
+		Long:    "Commands to manage cached models, including reconfiguring model-specific settings.",
+	}
+	cmd.AddCommand(setTypeCmd())
+	return cmd
+}
+
+// setTypeCmd builds the `geniex model set-type` subcommand.
+// It overwrites the ModelType field in an already-downloaded model's manifest.
+func setTypeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:       "set-type <model-name> [llm|vlm]",
+		Short:     "Override the model type for a cached model",
+		Long:      "Update the model type stored in a cached model's manifest.\n\nOmit the type argument to choose interactively.",
+		Args:      cobra.RangeArgs(1, 2),
+		ValidArgs: func() []string {
+			s := make([]string, len(types.AllModelTypes))
+			for i, t := range types.AllModelTypes {
+				s[i] = string(t)
+			}
+			return s
+		}(),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name, _ := normalizeModelName(args[0])
+
+			// Verify the model is present before prompting for a type.
+			if _, err := store.Get().GetManifest(name); err != nil {
+				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Model %q not found: %s", name, err))
+				return err
+			}
+
+			var mt types.ModelType
+			if len(args) == 2 {
+				mt = types.ModelType(strings.ToLower(args[1]))
+				valid := false
+				for _, t := range types.AllModelTypes {
+					if mt == t {
+						valid = true
+						break
+					}
+				}
+				if !valid {
+					validStrs := make([]string, len(types.AllModelTypes))
+					for i, t := range types.AllModelTypes {
+						validStrs[i] = string(t)
+					}
+					fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf(
+						"Unknown model type %q (valid: %s)", args[1], strings.Join(validStrs, ", ")))
+					return fmt.Errorf("unknown model type %q", args[1])
+				}
+			} else {
+				var err error
+				mt, err = chooseModelType()
+				if err != nil {
+					return err
+				}
+			}
+
+			if err := store.Get().SetModelType(name, mt); err != nil {
+				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Failed to update model type: %s", err))
+				return err
+			}
+			fmt.Println(render.GetTheme().Success.Sprintf("✔  %s → %s", name, mt))
+			return nil
+		},
+	}
+}
+
 var partRegex = regexp.MustCompile(`-\d+-of-\d+\.gguf$`)
+
+// inferModelTypeFromManifest returns the model type inferred from the manifest
+// for a GGUF model.
+func inferModelTypeFromManifest(manifest *types.ModelManifest) types.ModelType {
+	if manifest.MMProjFile.Name != "" {
+		return types.ModelTypeVLM
+	}
+	return types.ModelTypeLLM
+}
 
 func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, res *types.ModelManifest) (err error) {
 	if len(files) == 0 {
@@ -791,3 +916,4 @@ func detectMacOSBundles(files []model_hub.ModelFileInfo) []string {
 
 	return bundles
 }
+

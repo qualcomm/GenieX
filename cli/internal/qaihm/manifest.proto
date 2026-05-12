@@ -6,8 +6,6 @@ syntax = "proto3";
 
 package qaihm;
 
-option go_package = "github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm;qaihm";
-
 import "info.proto";
 
 message ModelManifestUrls {

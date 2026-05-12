@@ -23,6 +23,8 @@ import (
 
 	"github.com/gofrs/flock"
 
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
+
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 )
@@ -112,7 +114,7 @@ func (s *Store) cleanCorruptedDirectories() {
 }
 
 func (s *Store) isCorruptedModelDirectory(name string) bool {
-	manifestPath := s.ModelfilePath(name, "geniex.json")
+	manifestPath := s.ModelfilePath(name, types.ManifestFileName)
 	if _, err := os.Stat(manifestPath); err == nil {
 		return false
 	}

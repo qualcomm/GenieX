@@ -17,6 +17,7 @@ package model_hub
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -37,6 +38,16 @@ import (
 )
 
 var ErrChipsetNotConfigured = errors.New("aihub: device chipset not configured (run: geniex config set device <chipset>)")
+
+// ErrModelTypeDetection is returned by PostDownload when metadata.json exists
+// but could not be parsed. The model type has been defaulted to LLM; the caller
+// should warn the user to correct it with `geniex model set-type`.
+type ErrModelTypeDetection struct{ Cause error }
+
+func (e *ErrModelTypeDetection) Error() string {
+	return "model type detection failed: " + e.Cause.Error()
+}
+func (e *ErrModelTypeDetection) Unwrap() error { return e.Cause }
 
 type AIHub struct {
 	client        *aihub.Client
@@ -235,10 +246,52 @@ func (h *AIHub) PostDownload(ctx context.Context, name, outputDir string, mf *ty
 		mf.ExtraFiles = append(mf.ExtraFiles, f)
 	}
 
+	// Detect model type from metadata.json if present.
+	// supports_vision absent or false → LLM; true → VLM.
+	if mf.ModelType == "" {
+		mt, detErr := detectModelTypeFromDir(outputDir)
+		mf.ModelType = mt
+		if detErr != nil {
+			// Return as ErrModelTypeDetection so the caller can distinguish it
+			// from a fatal error and show a user-facing warning instead of aborting.
+			return &ErrModelTypeDetection{Cause: detErr}
+		}
+	}
+
 	h.mu.Lock()
 	delete(h.resolved, name)
 	h.mu.Unlock()
 	return nil
+}
+
+// aiHubMetaJSON is the minimal subset of metadata.json needed for type detection.
+type aiHubMetaJSON struct {
+	Genie *struct {
+		SupportsVision bool `json:"supports_vision"`
+	} `json:"genie"`
+}
+
+// detectModelTypeFromDir reads metadata.json from dir and returns VLM when
+// supports_vision is true, LLM otherwise. Returns a non-nil error only when
+// metadata.json exists but could not be parsed; an absent file is not an error.
+func detectModelTypeFromDir(dir string) (types.ModelType, error) {
+	data, err := os.ReadFile(filepath.Join(dir, "metadata.json"))
+	if err != nil {
+		// File absent is not an error — default to LLM.
+		slog.Debug("aihub: no metadata.json, treating as LLM", "dir", dir)
+		return types.ModelTypeLLM, nil
+	}
+	var meta aiHubMetaJSON
+	if err := json.Unmarshal(data, &meta); err != nil {
+		slog.Warn("aihub: failed to parse metadata.json, defaulting to LLM", "err", err)
+		return types.ModelTypeLLM, fmt.Errorf("parse metadata.json: %w", err)
+	}
+	if meta.Genie != nil && meta.Genie.SupportsVision {
+		slog.Info("aihub: detected VLM via metadata.json supports_vision")
+		return types.ModelTypeVLM, nil
+	}
+	slog.Debug("aihub: supports_vision=false, treating as LLM")
+	return types.ModelTypeLLM, nil
 }
 
 // formatMatchError turns aihub.ChipsetNotAvailableError into a friendlier
