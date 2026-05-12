@@ -118,10 +118,13 @@ impl ModelSource for AiHubSource {
                 source,
             })?;
 
+        // Match by display_name first, then fall back to the snake_case
+        // `id`, so callers can use either "Llama-v3.2-3B-Instruct" or
+        // "llama_v3_2_3b_instruct".
         let entry = release_manifest
             .models
             .iter()
-            .find(|m| m.display_name == self.display_name)
+            .find(|m| m.display_name == self.display_name || m.id == self.display_name)
             .ok_or_else(|| {
                 Error::Hub(format!(
                     "model {:?} not found in AI Hub manifest",
