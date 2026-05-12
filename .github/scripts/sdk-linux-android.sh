@@ -19,10 +19,11 @@ EXTRA_CMAKE_FLAGS="${EXTRA_CMAKE_FLAGS:-}"
 
 case "$PLATFORM" in
   linux-arm64)
-    # Runs inside ghcr.io/snapdragon-toolchain/arm64-linux which provides
-    # HEXAGON_SDK_ROOT + HEXAGON_TOOLS_ROOT + OPENCL_SDK_ROOT, so GGML_HEXAGON
-    # and GENIEX_MODEL_MANAGER (Rust cross w/ aarch64-unknown-linux-gnu) can
-    # stay on the preset defaults.
+    # Runs inside ghcr.io/qcom-ai-hub/geniex-toolchain-linux (derived
+    # from snapdragon-toolchain/arm64-linux). Base provides
+    # HEXAGON_SDK_ROOT + HEXAGON_TOOLS_ROOT + OPENCL_SDK_ROOT; the
+    # derived layer adds rustup + aarch64-unknown-linux-gnu target, so
+    # GGML_HEXAGON and GENIEX_MODEL_MANAGER stay on the preset defaults.
     PRESET="arm64-linux-snapdragon-release"
     ;;
   android-arm64)
