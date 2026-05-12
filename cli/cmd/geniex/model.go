@@ -644,64 +644,17 @@ func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, r
 		}
 
 	} else {
-		// other
+		// qairt only have one zip file
 		if specifiedQuant != "" {
 			return fmt.Errorf("specified quant %s only support in gguf model", specifiedQuant)
 		}
 
-		// quant
-		quant := getQuant(name)
-		if quant == "N/A" {
-			if q, err := model_hub.GetFileContent(context.TODO(), name, "config.json"); err != nil {
-			} else if b, err := sonic.Get(q, "quantization_config", "bits"); err != nil {
-			} else if q, err := b.Float64(); err != nil {
-			} else {
-				quant = fmt.Sprintf("%dBIT", uint32(q))
-			}
-		}
+		mainFile := files[0]
 
-		// detect main model file: prefer a non-nested supported file, else any
-		// supported file, else the first file in the repo.
-		isSupportedModelFile := func(filename string) bool {
-			lower := strings.ToLower(filename)
-			return strings.HasSuffix(lower, "safetensors") ||
-				strings.HasSuffix(lower, "npz") ||
-				strings.HasSuffix(lower, "geniex") ||
-				strings.HasSuffix(lower, "bin")
-		}
-
-		var mainFile model_hub.ModelFileInfo
-		for _, file := range files {
-			if isSupportedModelFile(file.Name) && !strings.Contains(file.Name, "/") {
-				mainFile = file
-				break
-			}
-		}
-		if mainFile.Name == "" {
-			for _, file := range files {
-				if isSupportedModelFile(file.Name) {
-					mainFile = file
-					break
-				}
-			}
-		}
-		if mainFile.Name == "" {
-			mainFile = files[0]
-		}
-
-		res.ModelFile[quant] = types.ModelFileInfo{
+		res.ModelFile["N/A"] = types.ModelFileInfo{
 			Name:       mainFile.Name,
 			Downloaded: true,
 			Size:       mainFile.Size,
-		}
-		for _, file := range files {
-			if file.Name != mainFile.Name {
-				res.ExtraFiles = append(res.ExtraFiles, types.ModelFileInfo{
-					Name:       file.Name,
-					Downloaded: true,
-					Size:       file.Size,
-				})
-			}
 		}
 	}
 
