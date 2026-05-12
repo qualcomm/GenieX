@@ -1,9 +1,18 @@
 [
   {
     "id": "Qwen3-0.6B-GGUF",
-    "displayName": "Qwen3-0.6B-GGUF",
-    "modelName": "Qwen/Qwen3-0.6B-GGUF",
-    "quant": "Q8_0",
+    "displayName": "Qwen3-0.6B (GGUF)",
+    "modelName": "unsloth/Qwen3-0.6B-GGUF",
+    "quant": "Q4_0",
+    "hub": "HUGGINGFACE",
+    "type": "chat",
+    "pluginIds": 7
+  },
+  {
+    "id": "Qwen3-1.7B-GGUF",
+    "displayName": "Qwen3-1.7B (GGUF)",
+    "modelName": "unsloth/Qwen3-1.7B-GGUF",
+    "quant": "Q4_0",
     "hub": "HUGGINGFACE",
     "type": "chat",
     "pluginIds": 7
@@ -18,27 +27,73 @@
     "pluginIds": 7
   },
   {
+    "id": "Ministral-3-3B-Instruct-2512-GGUF",
+    "displayName": "Ministral-3-3B-Instruct-2512 (GGUF)",
+    "modelName": "unsloth/Ministral-3-3B-Instruct-2512-GGUF",
+    "quant": "Q4_0",
+    "hub": "HUGGINGFACE",
+    "type": "chat",
+    "pluginIds": 7
+  },
+  {
+    "id": "granite-4.0-micro-GGUF",
+    "displayName": "granite-4.0-micro (GGUF)",
+    "modelName": "unsloth/granite-4.0-micro-GGUF",
+    "quant": "Q4_0",
+    "hub": "HUGGINGFACE",
+    "type": "chat",
+    "pluginIds": 7
+  },
+  {
+    "id": "Phi-4-mini-instruct-GGUF",
+    "displayName": "Phi-4-mini-instruct (GGUF)",
+    "modelName": "unsloth/Phi-4-mini-instruct-GGUF",
+    "quant": "Q4_0",
+    "hub": "HUGGINGFACE",
+    "type": "chat",
+    "pluginIds": 7
+  },
+  {
+    "_note": "Gemma 4 E2B is actually a VLM, but VLM support is not wired up for llama.cpp in the Android demo yet — exposed as type=chat so the text path still works.",
+    "id": "gemma-4-E2B-it-GGUF",
+    "displayName": "gemma-4-E2B-it (GGUF)",
+    "modelName": "unsloth/gemma-4-E2B-it-GGUF",
+    "quant": "Q4_0",
+    "hub": "HUGGINGFACE",
+    "type": "chat",
+    "pluginIds": 7
+  },
+  {
     "id": "Qwen3.5-0.8B-GGUF",
     "displayName": "Qwen3.5-0.8B (GGUF)",
     "modelName": "unsloth/Qwen3.5-0.8B-GGUF",
-    "quant": "Q4_K_M",
+    "quant": "Q4_0",
     "hub": "HUGGINGFACE",
-    "type": "chat",
+    "type": "vlm",
+    "pluginIds": 7
+  },
+  {
+    "id": "Qwen3.5-2B-GGUF",
+    "displayName": "Qwen3.5-2B (GGUF)",
+    "modelName": "unsloth/Qwen3.5-2B-GGUF",
+    "quant": "Q4_0",
+    "hub": "HUGGINGFACE",
+    "type": "vlm",
+    "pluginIds": 7
+  },
+  {
+    "id": "Qwen3-VL-2B-Instruct-GGUF",
+    "displayName": "Qwen3-VL-2B-Instruct (GGUF)",
+    "modelName": "unsloth/Qwen3-VL-2B-Instruct-GGUF",
+    "quant": "Q4_0",
+    "hub": "HUGGINGFACE",
+    "type": "vlm",
     "pluginIds": 7
   },
   {
     "id": "Qwen3-4B-Instruct-2507",
     "displayName": "Qwen3-4B-Instruct-2507 (NPU)",
     "modelName": "qualcomm/Qwen3-4B-Instruct-2507",
-    "hub": "AUTO",
-    "chipset": "SM8750",
-    "type": "chat",
-    "pluginIds": 4
-  },
-  {
-    "id": "Phi-3.5-mini-instruct",
-    "displayName": "Phi-3.5-mini-instruct (NPU)",
-    "modelName": "qualcomm/Phi-3.5-mini-instruct",
     "hub": "AUTO",
     "chipset": "SM8750",
     "type": "chat",

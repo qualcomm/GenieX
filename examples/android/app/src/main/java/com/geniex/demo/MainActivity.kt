@@ -255,7 +255,8 @@ class MainActivity : FragmentActivity() {
     private fun parseModelList() {
         try {
             val baseJson = assets.open("model_list.json").bufferedReader().use { it.readText() }
-            modelList = Json.decodeFromString<List<ModelData>>(baseJson)
+            val json = Json { ignoreUnknownKeys = true }
+            modelList = json.decodeFromString<List<ModelData>>(baseJson)
         } catch (e: Exception) {
             Log.e("nfl", "parseModelList: $e")
         }
