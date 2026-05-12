@@ -21,6 +21,14 @@ on:
 
 permissions:
   contents: read
+  packages: read
+
+# Pinned derived toolchain images built by _build-toolchain-docker.yml.
+# Bumping these is the single upgrade point for Rust toolchain / apt
+# layers; regenerate via `workflow_dispatch` on _build-toolchain-docker.
+env:
+  TOOLCHAIN_LINUX_IMAGE: ghcr.io/qcom-ai-hub/geniex-toolchain-linux:v0.0.1
+  TOOLCHAIN_ANDROID_IMAGE: ghcr.io/qcom-ai-hub/geniex-toolchain-android:v0.0.1
 
 jobs:
   build:
@@ -104,6 +112,17 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "HEXAGON_HTP_CERT=$dst"
           Write-Host "HEXAGON_HTP_CERT=$dst"
 
+      # Derived toolchain images live in a private GHCR package. GH_PAT
+      # is used because enterprise policy blocks GITHUB_TOKEN from org
+      # package pulls (same pattern as _build-docker.yml).
+      - name: Log in to GHCR
+        if: matrix.platform == 'linux-arm64' || matrix.platform == 'android-arm64'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_PAT }}
+
       - name: Build SDK (Linux, Snapdragon toolchain container)
         if: matrix.platform == 'linux-arm64'
         shell: bash
@@ -112,8 +131,9 @@ jobs:
           EXTRA_CMAKE_FLAGS: ${{ inputs.extra_cmake_flags }}
         run: |
           set -euo pipefail
-          # Runs as root to apt-install toolchain bits; chown back to
-          # the runner UID so upload-artifact / cache can read the tree.
+          # Runs as root because the image's rust/apt layers were built
+          # as root; chown back to the runner UID so upload-artifact /
+          # cache can read the tree.
           uid="$(id -u)"
           gid="$(id -g)"
           docker run --rm \
@@ -126,27 +146,9 @@ jobs:
             -e HOST_UID="$uid" \
             -e HOST_GID="$gid" \
             --platform linux/amd64 \
-            ghcr.io/snapdragon-toolchain/arm64-linux:v0.1 \
+            "$TOOLCHAIN_LINUX_IMAGE" \
             bash -eux -c '
               git config --global --add safe.directory "*"
-              apt-get update -y
-              # build-essential needed for Rust proc-macro host linking.
-              apt-get install -y --no-install-recommends build-essential ccache make curl ca-certificates
-              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
-              export PATH="$HOME/.cargo/bin:$PATH"
-              rustup target add aarch64-unknown-linux-gnu
-              # Rust target triple is aarch64-unknown-linux-gnu, but Debian
-              # names its cross compiler aarch64-linux-gnu-* (no "unknown").
-              # Recent cc-rs versions stopped stripping "unknown" when deriving
-              # the tool name, so onig_sys (pulled in via tokenizers-cpp) fails
-              # with ToolNotFound. Underscore env-var overrides (CC_aarch64_..
-              # unknown_linux_gnu) are ignored by cc-rs when it has already
-              # synthesized the hyphenated default, so symlink the expected
-              # names onto the real Debian binaries.
-              for tool in gcc g++ ar; do
-                ln -sf "/usr/bin/aarch64-linux-gnu-${tool}" \
-                       "/usr/local/bin/aarch64-unknown-linux-gnu-${tool}"
-              done
               bash .github/scripts/sdk-linux-android.sh
               chown -R "$HOST_UID:$HOST_GID" sdk .ccache || true
             '
@@ -159,7 +161,6 @@ jobs:
           EXTRA_CMAKE_FLAGS: ${{ inputs.extra_cmake_flags }}
         run: |
           set -euo pipefail
-          # See Linux job above for the root + chown rationale.
           uid="$(id -u)"
           gid="$(id -g)"
           docker run --rm \
@@ -172,15 +173,9 @@ jobs:
             -e HOST_UID="$uid" \
             -e HOST_GID="$gid" \
             --platform linux/amd64 \
-            ghcr.io/snapdragon-toolchain/arm64-android:v0.3 \
+            "$TOOLCHAIN_ANDROID_IMAGE" \
             bash -eux -c '
               git config --global --add safe.directory "*"
-              apt-get update -y
-              # build-essential needed for Rust proc-macro host linking.
-              apt-get install -y --no-install-recommends build-essential ccache curl ca-certificates
-              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
-              export PATH="$HOME/.cargo/bin:$PATH"
-              rustup target add aarch64-linux-android
               bash .github/scripts/sdk-linux-android.sh
               chown -R "$HOST_UID:$HOST_GID" sdk .ccache || true
             '
