@@ -19,9 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -34,19 +32,17 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 var (
-	modelHub      string
-	localPath     string
-	noConfigCache bool
+	modelHub  string
+	localPath string
+	modelType string
 )
 
 // pull creates a command to download and cache a model by name.
@@ -65,7 +61,7 @@ func pull() *cobra.Command {
 	pullCmd.Flags().SortFlags = false
 	pullCmd.Flags().StringVarP(&modelHub, "model-hub", "", "", "specify model hub to use: aihub|hf|localfs")
 	pullCmd.Flags().StringVarP(&localPath, "local-path", "", "", "[localfs] path to local directory")
-	pullCmd.Flags().BoolVar(&noConfigCache, "no-config-cache", false, "bypass local metadata cache and fetch the latest model index from remote")
+	pullCmd.Flags().StringVarP(&modelType, "model-type", "", "", "specify model type to use: [llm|vlm]")
 
 	pullCmd.Run = func(cmd *cobra.Command, args []string) {
 		name, quant := normalizeModelName(args[0])
@@ -300,16 +296,33 @@ func pullModel(name string, quant string) error {
 			return err
 		}
 
-		switch manifest.PluginId {
-		case "llama_cpp":
-			// For GGUF models, presence of an mmproj file indicates VLM.
-			if manifest.ModelType == "" {
-				manifest.ModelType = inferModelTypeFromManifest(&manifest)
+		// --model-type flag overrides all auto-detection. Validate early so
+		// we fail before downloading anything.
+		if modelType != "" {
+			mt := types.ModelType(strings.ToLower(modelType))
+			if !slices.Contains(types.AllModelTypes, mt) {
+				return fmt.Errorf("unknown model type %q (valid: %s)", modelType,
+					strings.Join(func() []string {
+						s := make([]string, len(types.AllModelTypes))
+						for i, t := range types.AllModelTypes {
+							s[i] = string(t)
+						}
+						return s
+					}(), ", "))
 			}
-		case "qairt":
-			// For AI Hub models, type is detected from metadata.json inside the
-			// zip by PostDownload. Leave ModelType blank here; re-read the
-			// manifest after Pull to surface the detected type to the user.
+			manifest.ModelType = mt
+		}
+
+		if manifest.ModelType == "" {
+			switch manifest.PluginId {
+			case "llama_cpp":
+				// For GGUF models, presence of an mmproj file indicates VLM.
+				manifest.ModelType = inferModelTypeFromManifest(&manifest)
+			case "qairt":
+				// For AI Hub models, type is detected from metadata.json inside
+				// the zip by PostDownload. Leave ModelType blank here; re-read
+				// the manifest after Pull to surface the detected type to the user.
+			}
 		}
 
 		pgCh, errCh := s.Pull(context.TODO(), manifest)
@@ -323,20 +336,30 @@ func pullModel(name string, quant string) error {
 
 		for err := range errCh {
 			bar.Clear()
+			var detErr *model_hub.ErrModelTypeDetection
+			if errors.As(err, &detErr) {
+				// Detection failure is non-fatal: the model downloaded successfully
+				// but we couldn't determine its type from metadata.json.
+				fmt.Println(render.GetTheme().Warning.Sprintf(
+					"⚠  Model type detection failed; defaulting to llm.\n"+
+						"   To set the correct type, run:\n"+
+						"     geniex model set-type %s <llm|vlm>", name))
+				continue
+			}
 			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			return err
 		}
 
 		// For qairt models the type was written to disk by PostDownload;
 		// re-read the manifest so we can report the correct detected type.
-		det := store.ModelTypeDetection{Detected: manifest.ModelType}
+		detectedType := manifest.ModelType
 		if manifest.PluginId == "qairt" {
 			if updated, err := s.GetManifest(name); err == nil {
-				det.Detected = updated.ModelType
+				detectedType = updated.ModelType
 			}
 		}
 
-		printModelTypeDetection(name, det)
+		printModelTypeDetection(name, detectedType)
 	}
 
 	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success"))
@@ -375,16 +398,8 @@ func choosePluginId(name string) string {
 
 // printModelTypeDetection prints a user-facing message about the auto-detected
 // model type.
-func printModelTypeDetection(modelName string, det store.ModelTypeDetection) {
-	if det.Err != nil {
-		fmt.Println(render.GetTheme().Error.Sprintf(
-			"⚠  Model type detection failed; defaulting to %s.\n"+
-				"   To set the correct type, run:\n"+
-				"     geniex model set-type %s <llm|vlm>",
-			det.Detected, modelName))
-	} else {
-		fmt.Println(render.GetTheme().Info.Sprintf("   Detected model type: %s", det.Detected))
-	}
+func printModelTypeDetection(modelName string, modelType types.ModelType) {
+	fmt.Println(render.GetTheme().Info.Sprintf("   Detected model type: %s", modelType))
 }
 
 func chooseModelType() (types.ModelType, error) {
@@ -902,200 +917,3 @@ func detectMacOSBundles(files []model_hub.ModelFileInfo) []string {
 	return bundles
 }
 
-// =============== AI Hub (qairt) pull flow ===============
-
-// tryPullAIHubModel resolves the display_name against the AI Hub manifest and,
-// on a match, downloads the chipset-specific zip asset, unzips it flat, and
-// writes a synthesised geniex.json keyed by storedName (the original org/repo
-// the user typed). All errors are terminal.
-func tryPullAIHubModel(ctx context.Context, storedName, displayName string, noConfigCache bool) error {
-	cacheDir := filepath.Join(store.Get().DataPath(), "aihub")
-	client := aihub.NewClient(cacheDir)
-	defer client.Close()
-
-	// Read the configured chipset from persistent config.
-	chipset, _, _ := store.Get().ConfigGet(store.ConfigKeyDevice)
-
-	var fetchOpts []aihub.FetchOption
-	if config.Get().AIHubNoCache || noConfigCache {
-		fetchOpts = append(fetchOpts, aihub.WithSkipCache())
-	}
-
-	spin := render.NewSpinner("fetching AI Hub model index...")
-	spin.Start()
-	manifest, err := client.LoadManifest(ctx, fetchOpts...)
-	if err != nil {
-		spin.Stop()
-		fmt.Println(render.GetTheme().Error.Sprintf("Failed to fetch AI Hub model index: %s", err))
-		return err
-	}
-	model, err := client.LookupModelByDisplayName(displayName)
-	spin.Stop()
-	if err != nil {
-		fmt.Println(render.GetTheme().Error.Sprintf(
-			"Model %q not found from AI Hub.\n"+
-				"  Browse available models: https://aihub.qualcomm.com/models",
-			displayName))
-		return err
-	}
-
-	if _, rerr := aihub.RuntimeForDomain(model.GetDomain()); rerr != nil {
-		fmt.Println(render.GetTheme().Error.Sprintf(
-			"AI Hub model %s has domain %s, which the CLI doesn't support yet (LLM/VLM only).",
-			displayName, model.GetDomain()))
-		return rerr
-	}
-	if chipset == "" {
-		fmt.Println(render.GetTheme().Info.Sprint("No device configured. Please select your device first."))
-		// pickDevice reads config.Get().AIHubNoCache internally. We don't pass
-		// noConfigCache here because platform.json is only fetched when no
-		// device is configured yet — meaning no local cache exists anyway, so
-		// the flag has no practical effect on this code path.
-		if err := pickDevice(ctx); err != nil {
-			return err
-		}
-		// Re-read the chipset that was just saved by pickDevice.
-		chipset, _, _ = store.Get().ConfigGet(store.ConfigKeyDevice)
-		if chipset == "" {
-			return fmt.Errorf("device not configured")
-		}
-	}
-
-	spin = render.NewSpinner("resolving model asset...")
-	spin.Start()
-	plat, err := client.LoadPlatform(ctx, manifest, fetchOpts...)
-	if err != nil {
-		spin.Stop()
-		fmt.Println(render.GetTheme().Error.Sprintf("Failed to load platform.json: %s", err))
-		return err
-	}
-	ra, err := client.LoadReleaseAssets(ctx, manifest, model.GetId(), fetchOpts...)
-	if err != nil {
-		spin.Stop()
-		if errors.Is(err, aihub.ErrNoReleaseAssets) {
-			fmt.Println(render.GetTheme().Error.Sprintf(
-				"AI Hub model %q has no downloadable release assets published.", displayName))
-		} else {
-			fmt.Println(render.GetTheme().Error.Sprintf("Failed to load release assets: %s", err))
-		}
-		return err
-	}
-	candidates, err := aihub.MatchAll(ra, plat, model.GetDomain(), chipset)
-	spin.Stop()
-	if err != nil {
-		var cnae *aihub.ChipsetNotAvailableError
-		if errors.As(err, &cnae) {
-			availableChipsets := make([]string, 0, len(cnae.Available))
-			seen := make(map[string]struct{})
-			for _, a := range cnae.Available {
-				if _, ok := seen[a.Chipset]; !ok {
-					seen[a.Chipset] = struct{}{}
-					availableChipsets = append(availableChipsets, a.Chipset)
-				}
-			}
-			sort.Strings(availableChipsets)
-			fmt.Println(render.GetTheme().Error.Sprintf(
-				"No geniex asset found for model=%q, chipset=%q.\n"+
-					"  Model is available for: %s\n"+
-					"  Browse available models: https://aihub.qualcomm.com/models",
-				displayName, chipset, strings.Join(availableChipsets, ", ")))
-		} else {
-			fmt.Println(render.GetTheme().Error.Sprintf("%s", err))
-		}
-		return err
-	}
-
-	// If multiple precision variants are available, let the user choose.
-	var asset *qaihm.ModelReleaseAssets_AssetDetails
-	if len(candidates) == 1 {
-		asset = candidates[0]
-	} else {
-		options := make([]huh.Option[*qaihm.ModelReleaseAssets_AssetDetails], 0, len(candidates))
-		for _, c := range candidates {
-			label := strings.TrimPrefix(c.GetPrecision().String(), "PRECISION_")
-			options = append(options, huh.NewOption(label, c))
-		}
-		if err := huh.NewSelect[*qaihm.ModelReleaseAssets_AssetDetails]().
-			Title("Choose a precision variant to download").
-			Options(options...).
-			Value(&asset).
-			Run(); err != nil {
-			return err
-		}
-	}
-
-	zipSize, err := headContentLength(ctx, asset.GetDownloadUrl())
-	if err != nil {
-		fmt.Println(render.GetTheme().Error.Sprintf("Failed to HEAD %s: %s", asset.GetDownloadUrl(), err))
-		return err
-	}
-
-	precisionLabel := strings.TrimPrefix(asset.GetPrecision().String(), "PRECISION_")
-	mf := types.ModelManifest{
-		Name:      storedName,
-		ModelName: model.GetId(),
-		ModelType: "", // auto-detected from metadata.json inside the zip by PullZipAsset
-		PluginId:  "qairt",
-		DeviceId:  asset.GetChipset(),
-		Precision: precisionLabel,
-	}
-
-	// Already-downloaded short-circuit: same check the HF path does.
-	if existing, gerr := store.Get().GetManifest(mf.Name); gerr == nil {
-		allDownloaded := true
-		for _, f := range existing.ModelFile {
-			if !f.Downloaded {
-				allDownloaded = false
-				break
-			}
-		}
-		if allDownloaded && existing.DeviceId == asset.GetChipset() {
-			fmt.Println(render.GetTheme().Info.Sprint("Already downloaded"))
-			return nil
-		}
-	}
-
-	slog.Info("AI Hub pull",
-		"display_name", displayName, "id", model.GetId(), "chipset", asset.GetChipset(), "runtime", asset.GetRuntime(),
-		"precision", asset.GetPrecision(), "url", asset.GetDownloadUrl(), "size", zipSize)
-
-	infoCh, detCh, errCh := store.Get().PullZipAsset(ctx, mf, asset.GetDownloadUrl(), zipSize)
-	bar := render.NewProgressBar(zipSize, "downloading")
-	for pg := range infoCh {
-		bar.Set(pg.TotalDownloaded)
-	}
-	bar.Exit()
-	for e := range errCh {
-		bar.Clear()
-		fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", e))
-		return e
-	}
-
-	if det, ok := <-detCh; ok {
-		printModelTypeDetection(storedName, det)
-	}
-
-	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success"))
-	return nil
-}
-
-// headContentLength issues a HEAD against url and returns its Content-Length.
-func headContentLength(ctx context.Context, url string) (int64, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("HEAD %s: %s", url, resp.Status)
-	}
-	if resp.ContentLength <= 0 {
-		return 0, fmt.Errorf("HEAD %s: missing Content-Length", url)
-	}
-	return resp.ContentLength, nil
-}

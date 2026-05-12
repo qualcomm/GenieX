@@ -16,7 +16,6 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -28,8 +27,6 @@ import (
 	"github.com/shirou/gopsutil/disk"
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
@@ -349,178 +346,6 @@ func (s *Store) PullExtraQuant(ctx context.Context, omf, nmf types.ModelManifest
 	return
 }
 
-// PartialSuffix is appended to a model directory while download + extract
-// are in flight.
-const PartialSuffix = ".partial"
-
-// PullZipAsset downloads a single zip asset and
-// extracts it flat into a staging directory.
-func (s *Store) PullZipAsset(
-	ctx context.Context,
-	mf types.ModelManifest,
-	downloadURL string,
-	zipSize int64,
-) (<-chan types.DownloadInfo, <-chan ModelTypeDetection, <-chan error) {
-	infoC := make(chan types.DownloadInfo, 10)
-	detC := make(chan ModelTypeDetection, 1)
-	errC := make(chan error, 1)
-
-	go func() {
-		defer close(errC)
-		defer close(detC)
-		defer close(infoC)
-
-		// Conservative: zip + extracted payload + slack ~= 3x zipSize.
-		if err := s.ensureEnoughDiskSpace(zipSize * 3); err != nil {
-			errC <- err
-			return
-		}
-
-		// Remove any healthy same-named model before re-pulling.
-		finalDir := s.ModelfilePath(mf.Name, "")
-		if _, err := os.Stat(filepath.Join(finalDir, types.ManifestFileName)); err == nil {
-			if rerr := s.Remove(mf.Name); rerr != nil {
-				errC <- fmt.Errorf("remove existing model: %w", rerr)
-				return
-			}
-		}
-
-		if err := s.LockModel(mf.Name); err != nil {
-			errC <- err
-			return
-		}
-		defer s.UnlockModel(mf.Name)
-
-		// LockModel created finalDir as a side-effect; remove it before staging.
-		_ = os.RemoveAll(finalDir)
-		partialDir := finalDir + PartialSuffix
-		if err := os.RemoveAll(partialDir); err != nil {
-			errC <- fmt.Errorf("clean stale partial: %w", err)
-			return
-		}
-		if err := os.MkdirAll(partialDir, 0o770); err != nil {
-			errC <- fmt.Errorf("mkdir partial: %w", err)
-			return
-		}
-
-		zipName := filepath.Base(mf.Name) + ".zip"
-		dlCh, dlErrCh := model_hub.StartDownloadURL(ctx, downloadURL, partialDir, zipName, zipSize)
-		for d := range dlCh {
-			infoC <- d
-		}
-		for e := range dlErrCh {
-			errC <- e
-			return
-		}
-
-		zipPath := filepath.Join(partialDir, zipName)
-		fmt.Println(render.GetTheme().Info.Sprintf("Extracting %s...", zipName))
-		res, err := aihub.ExtractFlat(zipPath, partialDir)
-		if err != nil {
-			errC <- fmt.Errorf("unzip %s: %w", zipName, err)
-			return
-		}
-		if err := os.Remove(zipPath); err != nil {
-			slog.Warn("PullZipAsset: failed to remove zip after extract", "path", zipPath, "err", err)
-		}
-
-		det, err := finalizeAIHubManifest(mf, res, partialDir, finalDir)
-		if err != nil {
-			errC <- err
-			return
-		}
-
-		slog.Info("PullZipAsset complete",
-			"model", mf.Name, "entrypoint", res.EntrypointBasename,
-			"files", len(res.Files), "size", res.TotalSize,
-			"model_type", det.Detected, "type_detection_err", det.Err)
-		detC <- det
-	}()
-
-	return infoC, detC, errC
-} 
-// ModelTypeDetection carries the result of automatic model-type detection so
-// callers can surface the right user-facing message.
-type ModelTypeDetection struct {
-	Detected types.ModelType
-	Err      error // non-nil when detection failed and LLM was used as the default
-}
-
-// finalizeAIHubManifest builds the geniex.json for an AI Hub (qairt) model
-func finalizeAIHubManifest(mf types.ModelManifest, res *aihub.ExtractResult, partialDir, finalDir string) (ModelTypeDetection, error) {
-	var det ModelTypeDetection
-
-	// --- Step 1: auto-detect model type ---
-	if mf.ModelType == "" {
-		var hasMetadata bool
-		for _, f := range res.Files {
-			if f.Name == "metadata.json" {
-				hasMetadata = true
-				break
-			}
-		}
-		if !hasMetadata {
-			slog.Info("finalizeAIHubManifest: no metadata.json in zip, treating as LLM")
-			mf.ModelType = types.ModelTypeLLM
-			det = ModelTypeDetection{Detected: types.ModelTypeLLM}
-		} else {
-			metaBytes, readErr := os.ReadFile(filepath.Join(partialDir, "metadata.json"))
-			if readErr != nil {
-				slog.Warn("finalizeAIHubManifest: failed to read metadata.json, defaulting to LLM", "err", readErr)
-				mf.ModelType = types.ModelTypeLLM
-				det = ModelTypeDetection{Detected: types.ModelTypeLLM, Err: readErr}
-			} else {
-				var meta aiHubMetadataJSON
-				if unmarshalErr := json.Unmarshal(metaBytes, &meta); unmarshalErr != nil {
-					slog.Warn("finalizeAIHubManifest: failed to parse metadata.json, defaulting to LLM", "err", unmarshalErr)
-					mf.ModelType = types.ModelTypeLLM
-					det = ModelTypeDetection{Detected: types.ModelTypeLLM, Err: unmarshalErr}
-				} else if meta.Genie != nil && meta.Genie.SupportsVision {
-					slog.Info("finalizeAIHubManifest: detected VLM via metadata.json supports_vision")
-					mf.ModelType = types.ModelTypeVLM
-					det = ModelTypeDetection{Detected: types.ModelTypeVLM}
-				} else {
-					slog.Info("finalizeAIHubManifest: supports_vision=false in metadata.json, treating as LLM")
-					mf.ModelType = types.ModelTypeLLM
-					det = ModelTypeDetection{Detected: types.ModelTypeLLM}
-				}
-			}
-		}
-	} else {
-		det = ModelTypeDetection{Detected: mf.ModelType}
-	}
-
-	// --- Step 2: populate manifest fields from extract result ---
-	mf.ModelFile = map[string]types.ModelFileInfo{
-		"N/A": {
-			Name:       res.EntrypointBasename,
-			Downloaded: true,
-			Size:       res.TotalSize,
-		},
-	}
-	mf.MMProjFile = types.ModelFileInfo{}
-	mf.TokenizerFile = types.ModelFileInfo{}
-	mf.ExtraFiles = mf.ExtraFiles[:0]
-	for _, f := range res.Files {
-		if f.Name == res.EntrypointBasename {
-			continue
-		}
-		mf.ExtraFiles = append(mf.ExtraFiles, f)
-	}
-
-	// --- Step 3: write manifest ---
-	if err := writeManifestAt(partialDir, mf); err != nil {
-		return det, err
-	}
-
-	// --- Step 4: atomic promotion ---
-	if err := os.Rename(partialDir, finalDir); err != nil {
-		return det, fmt.Errorf("promote partial dir: %w", err)
-	}
-
-	return det, nil
-}
-
 func (s *Store) DataPath() string {
 	return s.home
 }
@@ -579,10 +404,6 @@ func (s *Store) scanModelDir() ([]string, error) {
 
 		for _, repo := range repos {
 			if !repo.IsDir() {
-				continue
-			}
-			// Staging dirs from an in-flight AI Hub pull are not real models.
-			if strings.HasSuffix(repo.Name(), PartialSuffix) {
 				continue
 			}
 
