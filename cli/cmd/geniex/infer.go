@@ -39,57 +39,6 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
-// modelLoadError and generationError tag an error with the phase it came from
-// (creating the model vs. running generation / chat-template formatting). They
-// let the top-level fallback print a driver-hint message tailored to the phase
-// when the underlying error isn't one we classify specifically.
-type modelLoadError struct{ err error }
-
-func (e modelLoadError) Error() string { return e.err.Error() }
-func (e modelLoadError) Unwrap() error { return e.err }
-
-type generationError struct{ err error }
-
-func (e generationError) Error() string { return e.err.Error() }
-func (e generationError) Unwrap() error { return e.err }
-
-// printDriverHintForPhase prints the generic driver-version hint tailored to
-// the phase wrapper on err, and returns true. If err has no phase wrapper,
-// it prints nothing and returns false so the caller can fall back to its
-// default message.
-func printDriverHintForPhase(err error) bool {
-	var loadErr modelLoadError
-	if errors.As(err, &loadErr) {
-		fmt.Println(render.GetTheme().Error.Sprintf(`
-⚠️ Oops. Model failed to load.
-
-This may be caused by an outdated NPU or GPU driver.
-
-👉 Try these:
-- Check your NPU / GPU driver version and update it if it's out of date.
-- Redownload the model.
-- See help in our discord or slack.
-
-Details: %s`, err))
-		return true
-	}
-	var genErr generationError
-	if errors.As(err, &genErr) {
-		fmt.Println(render.GetTheme().Error.Sprintf(`
-⚠️ Oops. Generation failed.
-
-This may be caused by an outdated NPU or GPU driver.
-
-👉 Try these:
-- Check your NPU / GPU driver version and update it if it's out of date.
-- See help in our discord or slack.
-
-Details: %s`, err))
-		return true
-	}
-	return false
-}
-
 var (
 	// disableStream *bool // reuse in run.go
 	ngl            int32
@@ -244,10 +193,10 @@ func infer() *cobra.Command {
 			panic("not support model type")
 		}
 
-		switch {
-		case err == nil:
+		switch err {
+		case nil:
 			os.Exit(0)
-		case errors.Is(err, geniex_sdk.ErrCommonParamNotSupported):
+		case geniex_sdk.ErrCommonParamNotSupported:
 			// TODO: Once the C API exposes geniex_get_last_error_detail() (a thread-local
 			// detail string set by the plugin before returning an error code), the specific
 			// unsupported flag name will be available here and this generic message can be
@@ -258,41 +207,40 @@ func infer() *cobra.Command {
 ⚠️ A flag you passed is not supported by the %s plugin.
 
 👉 Run 'geniex infer -h' to see which flags are plugin-specific.`, manifest.PluginId))
-		case errors.Is(err, geniex_sdk.ErrCommonNotSupport):
+		case geniex_sdk.ErrCommonNotSupport:
 			fmt.Println(render.GetTheme().Error.Sprint(`
 ⚠️ Oops. This model type is not supported yet.
 
 👉 Try these:
 - Check back later for updates.
 - See help in our discord or slack.`))
-		case errors.Is(err, geniex_sdk.ErrCommonModelLoad):
+		case geniex_sdk.ErrCommonModelLoad:
 			fmt.Println(render.GetTheme().Error.Sprint(`
 ⚠️ Oops. Model failed to load.
 
 👉 Try these:
 - Redownload the model.
 - Verify your system meets the model's requirements.
+- Check your NPU / GPU driver version and update it if it's out of date.
 - See help in our discord or slack.`))
-		case errors.Is(err, geniex_sdk.ErrCommonPluginLoad):
+		case geniex_sdk.ErrCommonPluginLoad:
 			fmt.Println(render.GetTheme().Error.Sprint(`
 ⚠️ Oops. Plugin failed to load.
 
 👉 Try these:
 - Ensure all plugin dependencies are correct.
 - See help in our discord or slack.`))
-		case errors.Is(err, geniex_sdk.ErrCommonPluginInvalid):
+		case geniex_sdk.ErrCommonPluginInvalid:
 			fmt.Println(render.GetTheme().Error.Sprint(`
 ⚠️ Oops. Plugin is invalid.
 
 👉 Try these:
 - This model may not be compatible with your system. Try another model.
 - See help in our discord or slack.`))
-		case errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength):
+		case geniex_sdk.ErrLlmTokenizationContextLength:
 			fmt.Println(render.GetTheme().Info.Sprintf("Context length exceeded, please start a new conversation"))
 		default:
-			if !printDriverHintForPhase(err) {
-				fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
-			}
+			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 		}
 		os.Exit(1)
 	}
@@ -462,7 +410,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 	spin.Stop()
 
 	if err != nil {
-		return modelLoadError{err}
+		return err
 	}
 	defer p.Destroy()
 
@@ -507,7 +455,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 					},
 				})
 				if err != nil {
-					return "", geniex_sdk.ProfileData{}, generationError{err}
+					return "", geniex_sdk.ProfileData{}, err
 				}
 				// Clear tokenIDs after use so subsequent calls use normal mode
 				tokenIDs = nil
@@ -521,7 +469,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 					AddGenerationPrompt: true,
 				})
 				if err != nil {
-					return "", geniex_sdk.ProfileData{}, generationError{err}
+					return "", geniex_sdk.ProfileData{}, err
 				}
 
 				res, err = p.Generate(geniex_sdk.LlmGenerateInput{
@@ -535,7 +483,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 				})
 
 				if err != nil {
-					return "", geniex_sdk.ProfileData{}, generationError{err}
+					return "", geniex_sdk.ProfileData{}, err
 				}
 
 				history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleAssistant, Content: res.FullText})
@@ -632,7 +580,7 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 
 	if err != nil {
 		slog.Error("failed to create VLM", "error", err)
-		return modelLoadError{err}
+		return err
 	}
 	defer p.Destroy()
 
@@ -663,7 +611,7 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 				EnableThink: !noThink,
 			})
 			if err != nil {
-				return "", geniex_sdk.ProfileData{}, generationError{err}
+				return "", geniex_sdk.ProfileData{}, err
 			}
 
 			res, err := p.Generate(geniex_sdk.VlmGenerateInput{
@@ -679,7 +627,7 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 				},
 			})
 			if err != nil {
-				return "", geniex_sdk.ProfileData{}, generationError{err}
+				return "", geniex_sdk.ProfileData{}, err
 			}
 
 			history = append(history, geniex_sdk.VlmChatMessage{
