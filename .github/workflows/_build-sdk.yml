@@ -23,12 +23,9 @@ permissions:
   contents: read
   packages: read
 
-# Pinned derived toolchain images built by _build-toolchain-docker.yml.
-# Bumping these is the single upgrade point for Rust toolchain / apt
-# layers; regenerate via `workflow_dispatch` on _build-toolchain-docker.
-env:
-  TOOLCHAIN_LINUX_IMAGE: ghcr.io/qcom-ai-hub/geniex-toolchain-linux:v0.0.1
-  TOOLCHAIN_ANDROID_IMAGE: ghcr.io/qcom-ai-hub/geniex-toolchain-android:v0.0.1
+# Derived toolchain images (matrix.container_image) are built by
+# _build-toolchain-docker.yml; bumping the pinned tag there is the
+# single upgrade point for Rust toolchain / apt layers.
 
 jobs:
   build:
@@ -39,10 +36,15 @@ jobs:
         include:
           - platform: windows-arm64
             runner: windows-arm64
+            preset: arm64-windows-snapdragon-release
           - platform: linux-arm64
             runner: ubuntu-latest
+            preset: arm64-linux-snapdragon-release
+            container_image: ghcr.io/qcom-ai-hub/geniex-toolchain-linux:v0.0.1
           - platform: android-arm64
             runner: ubuntu-latest
+            preset: arm64-android-snapdragon-release
+            container_image: ghcr.io/qcom-ai-hub/geniex-toolchain-android:v0.0.1
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
 
@@ -123,12 +125,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GH_PAT }}
 
-      - name: Build SDK (Linux, Snapdragon toolchain container)
-        if: matrix.platform == 'linux-arm64'
+      - name: Build SDK (cross-compile in toolchain container)
+        if: matrix.platform != 'windows-arm64'
         shell: bash
         env:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
           EXTRA_CMAKE_FLAGS: ${{ inputs.extra_cmake_flags }}
+          PRESET: ${{ matrix.preset }}
+          CONTAINER_IMAGE: ${{ matrix.container_image }}
         run: |
           set -euo pipefail
           # Runs as root because the image's rust/apt layers were built
@@ -141,42 +145,21 @@ jobs:
             -w /workspace \
             -e GENIEX_VERSION \
             -e EXTRA_CMAKE_FLAGS \
-            -e PLATFORM=linux-arm64 \
+            -e PRESET \
             -e CCACHE_DIR=/workspace/.ccache \
             -e HOST_UID="$uid" \
             -e HOST_GID="$gid" \
             --platform linux/amd64 \
-            "$TOOLCHAIN_LINUX_IMAGE" \
+            "$CONTAINER_IMAGE" \
             bash -eux -c '
               git config --global --add safe.directory "*"
-              bash .github/scripts/sdk-linux-android.sh
-              chown -R "$HOST_UID:$HOST_GID" sdk .ccache || true
-            '
-
-      - name: Build SDK (Android, Snapdragon toolchain container)
-        if: matrix.platform == 'android-arm64'
-        shell: bash
-        env:
-          GENIEX_VERSION: ${{ steps.version.outputs.version }}
-          EXTRA_CMAKE_FLAGS: ${{ inputs.extra_cmake_flags }}
-        run: |
-          set -euo pipefail
-          uid="$(id -u)"
-          gid="$(id -g)"
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
-            -e GENIEX_VERSION \
-            -e EXTRA_CMAKE_FLAGS \
-            -e PLATFORM=android-arm64 \
-            -e CCACHE_DIR=/workspace/.ccache \
-            -e HOST_UID="$uid" \
-            -e HOST_GID="$gid" \
-            --platform linux/amd64 \
-            "$TOOLCHAIN_ANDROID_IMAGE" \
-            bash -eux -c '
-              git config --global --add safe.directory "*"
-              bash .github/scripts/sdk-linux-android.sh
+              cmake -S sdk --preset "$PRESET" \
+                -DGENIEX_VERSION="$GENIEX_VERSION" \
+                -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                $EXTRA_CMAKE_FLAGS
+              cmake --build "sdk/build-$PRESET" -j "$(nproc)"
+              cmake --install "sdk/build-$PRESET" --prefix sdk/pkg-geniex
               chown -R "$HOST_UID:$HOST_GID" sdk .ccache || true
             '
 
@@ -189,7 +172,34 @@ jobs:
         shell: powershell
         env:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File .github/scripts/sdk-windows.ps1
+          PRESET: ${{ matrix.preset }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $BuildDir = "sdk/build-$env:PRESET"
+          Remove-Item -Recurse -Force $BuildDir -ErrorAction SilentlyContinue
+
+          # Source vcvars into this process so cmake's child processes
+          # (clang, ninja, inf2cat.exe) inherit PATH/INCLUDE/LIB for the
+          # Windows SDK — same semantics as `call vcvars && cmake`.
+          $envDump = cmd /c "`"$env:VCVARS_BAT`" $env:VCVARS_ARGS && set"
+          foreach ($line in $envDump) {
+            if ($line -match "^(.+?)=(.*)$") {
+              [Environment]::SetEnvironmentVariable($matches[1], $matches[2], "Process")
+            }
+          }
+          $env:PATH = "$env:LLVM_BIN;$env:PATH"
+
+          cmake -S sdk --preset $env:PRESET -B $BuildDir --log-level=VERBOSE `
+            "-DGENIEX_VERSION=$env:GENIEX_VERSION" `
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          if ($LASTEXITCODE -ne 0) { throw "cmake configure failed: $LASTEXITCODE" }
+
+          cmake --build $BuildDir -j $([Environment]::ProcessorCount)
+          if ($LASTEXITCODE -ne 0) { throw "cmake --build failed: $LASTEXITCODE" }
+
+          cmake --install $BuildDir --prefix sdk/pkg-geniex
+          if ($LASTEXITCODE -ne 0) { throw "cmake install failed: $LASTEXITCODE" }
 
       # On Linux/Android ccache runs inside the container; only the on-disk
       # size is visible from the host. Never fail the job on a stats read.
