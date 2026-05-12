@@ -221,6 +221,7 @@ func infer() *cobra.Command {
 👉 Try these:
 - Redownload the model.
 - Verify your system meets the model's requirements.
+- Check your NPU / GPU driver version and update it if it's out of date.
 - See help in our discord or slack.`))
 		case geniex_sdk.ErrCommonPluginLoad:
 			fmt.Println(render.GetTheme().Error.Sprint(`
