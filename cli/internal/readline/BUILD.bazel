@@ -8,7 +8,6 @@ go_library(
         "history.go",
         "readline.go",
         "terminal.go",
-        "terminal_darwin.go",
         "terminal_linux.go",
         "terminal_windows.go",
     ],

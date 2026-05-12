@@ -51,7 +51,7 @@ func NewStreamRecorder() (*StreamRecorder, error) {
 			"rate", "16000",
 			"channels", "1",
 		}
-	case "darwin", "linux":
+	case "linux":
 		args = []string{
 			// input (device)
 			"-d",

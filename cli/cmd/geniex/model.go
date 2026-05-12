@@ -725,94 +725,56 @@ func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, r
 			}
 		}
 
-		// Detect macOS model bundles (.mlmodelc and .mlpackage)
-		// These appear as folders on HuggingFace but are actually model bundles
-		bundlePaths := detectMacOSBundles(files)
+		// detect main model file
+		isSupportedModelFile := func(filename string) bool {
+			lower := strings.ToLower(filename)
+			return strings.HasSuffix(lower, "safetensors") ||
+				strings.HasSuffix(lower, "npz") ||
+				strings.HasSuffix(lower, "geniex") ||
+				strings.HasSuffix(lower, "bin")
+		}
 
-		if len(bundlePaths) > 0 {
-			// Use the first bundle as the model path
-			bundlePath := bundlePaths[0]
+		// First pass: prefer non-nested supported files (not in subdirectories)
+		for _, file := range files {
+			if isSupportedModelFile(file.Name) && !strings.Contains(file.Name, "/") {
+				res.ModelFile[quant] = types.ModelFileInfo{Name: file.Name, Size: file.Size}
+				break
+			}
+		}
 
-			// Calculate total size of the primary bundle
-			var primaryBundleSize int64
+		// Second pass: if no non-nested file found, fall back to any supported file
+		if res.ModelFile[quant].Name == "" {
 			for _, file := range files {
-				if strings.HasPrefix(file.Name, bundlePath+"/") {
-					primaryBundleSize += file.Size
-				}
-			}
-
-			// Set the first bundle path as the model file (this is a directory reference, not a downloadable file)
-			res.ModelFile[quant] = types.ModelFileInfo{
-				Name:       bundlePath,
-				Downloaded: true, // Mark as available for inference
-				Size:       primaryBundleSize,
-			}
-
-			// Add ALL files to ExtraFiles - this includes:
-			// 1. All files from the primary bundle
-			// 2. All files from other bundles
-			// 3. All other files in the repo
-			// The bundle paths themselves are not downloadable, only the files within them are
-			for _, file := range files {
-				res.ExtraFiles = append(res.ExtraFiles, types.ModelFileInfo{
-					Name:       file.Name,
-					Downloaded: true,
-					Size:       file.Size,
-				})
-			}
-		} else {
-			// Original logic for non-bundle files
-			// detect main model file
-			isSupportedModelFile := func(filename string) bool {
-				lower := strings.ToLower(filename)
-				return strings.HasSuffix(lower, "safetensors") ||
-					strings.HasSuffix(lower, "npz") ||
-					strings.HasSuffix(lower, "geniex") ||
-					strings.HasSuffix(lower, "bin")
-			}
-
-			// First pass: prefer non-nested supported files (not in subdirectories)
-			for _, file := range files {
-				if isSupportedModelFile(file.Name) && !strings.Contains(file.Name, "/") {
+				if isSupportedModelFile(file.Name) {
 					res.ModelFile[quant] = types.ModelFileInfo{Name: file.Name, Size: file.Size}
 					break
 				}
 			}
+		}
 
-			// Second pass: if no non-nested file found, fall back to any supported file
-			if res.ModelFile[quant].Name == "" {
-				for _, file := range files {
-					if isSupportedModelFile(file.Name) {
-						res.ModelFile[quant] = types.ModelFileInfo{Name: file.Name, Size: file.Size}
-						break
-					}
-				}
+		// add other files to ExtraFiles
+		for _, file := range files {
+			if file.Name != res.ModelFile[quant].Name {
+				res.ExtraFiles = append(res.ExtraFiles, types.ModelFileInfo{Name: file.Name, Size: file.Size})
 			}
+		}
 
-			// add other files to ExtraFiles
-			for _, file := range files {
-				if file.Name != res.ModelFile[quant].Name {
-					res.ExtraFiles = append(res.ExtraFiles, types.ModelFileInfo{Name: file.Name, Size: file.Size})
-				}
-			}
+		// fallback to first file
+		if res.ModelFile[quant].Name == "" {
+			res.ModelFile[quant] = types.ModelFileInfo{Name: files[0].Name, Size: files[0].Size}
+			res.ExtraFiles = res.ExtraFiles[1:]
+		}
 
-			// fallback to first file
-			if res.ModelFile[quant].Name == "" {
-				res.ModelFile[quant] = types.ModelFileInfo{Name: files[0].Name, Size: files[0].Size}
-				res.ExtraFiles = res.ExtraFiles[1:]
-			}
-
-			res.ModelFile[quant] = types.ModelFileInfo{
-				Name:       res.ModelFile[quant].Name,
+		res.ModelFile[quant] = types.ModelFileInfo{
+			Name:       res.ModelFile[quant].Name,
+			Downloaded: true,
+			Size:       res.ModelFile[quant].Size,
+		}
+		for i, v := range res.ExtraFiles {
+			res.ExtraFiles[i] = types.ModelFileInfo{
+				Name:       v.Name,
 				Downloaded: true,
-				Size:       res.ModelFile[quant].Size,
-			}
-			for i, v := range res.ExtraFiles {
-				res.ExtraFiles[i] = types.ModelFileInfo{
-					Name:       v.Name,
-					Downloaded: true,
-					Size:       v.Size,
-				}
+				Size:       v.Size,
 			}
 		}
 	}
@@ -890,30 +852,4 @@ func sumSize(files []model_hub.ModelFileInfo) int64 {
 	return size
 }
 
-// detectMacOSBundles detects .mlmodelc and .mlpackage bundles from file list
-// Returns a list of bundle paths (e.g., "EmbedNeuralVision.mlmodelc")
-func detectMacOSBundles(files []model_hub.ModelFileInfo) []string {
-	bundleMap := make(map[string]bool)
-
-	for _, file := range files {
-		// Case-insensitive check for .mlmodelc/ or .mlpackage/
-		lowerName := strings.ToLower(file.Name)
-		if idx := strings.Index(lowerName, ".mlmodelc/"); idx != -1 {
-			bundlePath := file.Name[:idx+len(".mlmodelc")]
-			bundleMap[bundlePath] = true
-		} else if idx := strings.Index(lowerName, ".mlpackage/"); idx != -1 {
-			bundlePath := file.Name[:idx+len(".mlpackage")]
-			bundleMap[bundlePath] = true
-		}
-	}
-
-	// Convert map to sorted slice for consistent ordering
-	bundles := make([]string, 0, len(bundleMap))
-	for bundle := range bundleMap {
-		bundles = append(bundles, bundle)
-	}
-	sort.Strings(bundles)
-
-	return bundles
-}
 

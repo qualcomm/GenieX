@@ -36,7 +36,7 @@ func NewRecorder(outputFile string) (*Recorder, error) {
 	}
 
 	switch runtime.GOOS {
-	case "darwin", "linux":
+	case "linux":
 		args = []string{"-d", "-t", "wav", outputFile}
 		cmd = exec.Command("sox", args...)
 

@@ -65,10 +65,6 @@ func update() *cobra.Command {
 			}
 			// check platform
 			assetMap := map[string]map[string]string{
-				"darwin": {
-					"amd64": "geniex-cli_macos_x86_64.pkg",
-					"arm64": "geniex-cli_macos_arm64.pkg",
-				},
 				"windows": {
 					"amd64": "geniex-cli_windows_x86_64.exe",
 					"arm64": "geniex-cli_windows_arm64.exe",
@@ -253,8 +249,6 @@ func downloadPkg(url, dst string, size int64, progress chan int64) error {
 func installPkg(pkgPath string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", pkgPath)
 	case "windows":
 		cmd = exec.Command(pkgPath)
 	case "linux":
