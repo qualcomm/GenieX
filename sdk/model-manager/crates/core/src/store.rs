@@ -7,6 +7,7 @@ use fs2::FileExt;
 use crate::config::StoreConfig;
 use crate::error::{Error, Result};
 use crate::manifest::{ModelManifest, ModelType};
+use crate::mapping::canonicalize_model_name;
 use crate::paths::{resolve_model_paths, ModelPaths};
 use crate::validation::{validate_model_name, validate_relative_file};
 
@@ -174,11 +175,15 @@ impl Store {
     }
 
     /// Resolve a model name (with optional ":quant" suffix) to ModelPaths.
+    ///
+    /// Accepts a bare name (no '/') and canonicalises it to `aihub/<name>`
+    /// so callers can refer to AI Hub models without the prefix.
     pub fn get_paths(&self, name_with_quant: &str) -> Result<(String, ModelPaths)> {
         let (name, quant) = split_quant(name_with_quant);
-        validate_model_name(name)?;
-        let manifest = self.get_manifest(name)?;
-        let base_dir = self.cfg.model_dir(name);
+        let name = canonicalize_model_name(name);
+        validate_model_name(&name)?;
+        let manifest = self.get_manifest(&name)?;
+        let base_dir = self.cfg.model_dir(&name);
         resolve_model_paths(&manifest, &base_dir, quant.as_deref())
     }
 

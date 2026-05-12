@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use model_manager_core::config::StoreConfig;
 use model_manager_core::manifest_builder::ManifestHint;
-use model_manager_core::mapping::aihub_display_name_from_repo;
+use model_manager_core::mapping::{aihub_display_name_from_repo, canonicalize_model_name};
 use model_manager_core::pull::{pull_blocking, PullIntent, PullRequest};
 
 use crate::init::{get_store, runtime_handle};
@@ -87,10 +87,13 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
 
         let inp = unsafe { &*input };
 
-        let model_name = match unsafe { cstr_to_str(inp.model_name) } {
+        let raw_model_name = match unsafe { cstr_to_str(inp.model_name) } {
             Some(s) => s.to_string(),
             None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
         };
+        // Bare names (no '/') are treated as AI Hub model ids and stored
+        // under `aihub/<name>`; anything with '/' is passed through.
+        let model_name = canonicalize_model_name(&raw_model_name);
 
         // Explicit token wins; env var is the fallback; anonymous otherwise.
         let hf_token = unsafe { cstr_to_str(inp.hf_token) }
@@ -109,9 +112,10 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
 
         let intent = match inp.hub {
             GeniexHubSource::Auto => {
-                // "qualcomm/*" / "qai-hub-models/*" route to AI Hub without
-                // requiring the caller to set hub=AIHUB explicitly. The
-                // derived display_name is the repo after the slash;
+                // "qualcomm/*", "qai-hub-models/*", "aihub/*" and bare names
+                // (which canonicalize_model_name above rewrote to "aihub/<name>")
+                // all route to AI Hub without the caller setting hub=AIHUB.
+                // The derived display_name is the repo after the slash;
                 // callers may still override via inp.display_name.
                 if let Some(repo) = aihub_display_name_from_repo(&model_name) {
                     PullIntent::AiHub {
