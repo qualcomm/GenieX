@@ -193,6 +193,81 @@ func list() *cobra.Command {
 	return listCmd
 }
 
+// modelCmd builds the `geniex model` command tree:
+//
+// It is the home for all per-model management operations
+func modelCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		GroupID: "model",
+		Use:     "model",
+		Short:   "Manage cached models",
+		Long:    "Commands to manage cached models, including reconfiguring model-specific settings.",
+	}
+	cmd.AddCommand(setTypeCmd())
+	return cmd
+}
+
+// setTypeCmd builds the `geniex model set-type` subcommand.
+// It overwrites the ModelType field in an already-downloaded model's manifest.
+func setTypeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "set-type <model-name> [llm|vlm]",
+		Short: "Override the model type for a cached model",
+		Long:  "Update the model type stored in a cached model's manifest.\n\nOmit the type argument to choose interactively.",
+		Args:  cobra.RangeArgs(1, 2),
+		ValidArgs: func() []string {
+			s := make([]string, len(types.AllModelTypes))
+			for i, t := range types.AllModelTypes {
+				s[i] = string(t)
+			}
+			return s
+		}(),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name, _ := normalizeModelName(args[0])
+
+			// Verify the model is present before prompting for a type.
+			if _, err := store.Get().GetManifest(name); err != nil {
+				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Model %q not found: %s", name, err))
+				return err
+			}
+
+			var mt types.ModelType
+			if len(args) == 2 {
+				mt = types.ModelType(strings.ToLower(args[1]))
+				valid := false
+				for _, t := range types.AllModelTypes {
+					if mt == t {
+						valid = true
+						break
+					}
+				}
+				if !valid {
+					validStrs := make([]string, len(types.AllModelTypes))
+					for i, t := range types.AllModelTypes {
+						validStrs[i] = string(t)
+					}
+					fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf(
+						"Unknown model type %q (valid: %s)", args[1], strings.Join(validStrs, ", ")))
+					return fmt.Errorf("unknown model type %q", args[1])
+				}
+			} else {
+				var err error
+				mt, err = chooseModelType()
+				if err != nil {
+					return err
+				}
+			}
+
+			if err := store.Get().SetModelType(name, mt); err != nil {
+				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Failed to update model type: %s", err))
+				return err
+			}
+			fmt.Println(render.GetTheme().Success.Sprintf("✔  %s → %s", name, mt))
+			return nil
+		},
+	}
+}
+
 func pullModel(name string, quant string) error {
 	slog.Debug("pullModel", "name", name, "quant", quant)
 
@@ -358,7 +433,7 @@ func pullModel(name string, quant string) error {
 			}
 		}
 
-		printModelTypeDetection(name, detectedType)
+		fmt.Println(render.GetTheme().Info.Sprintf("   Detected model type: %s", detectedType))
 	}
 
 	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success"))
@@ -395,12 +470,6 @@ func choosePluginId(name string) string {
 
 }
 
-// printModelTypeDetection prints a user-facing message about the auto-detected
-// model type.
-func printModelTypeDetection(modelName string, modelType types.ModelType) {
-	fmt.Println(render.GetTheme().Info.Sprintf("   Detected model type: %s", modelType))
-}
-
 func chooseModelType() (types.ModelType, error) {
 	var modelType types.ModelType
 	if err := huh.NewSelect[types.ModelType]().
@@ -411,81 +480,6 @@ func chooseModelType() (types.ModelType, error) {
 		return "", err
 	}
 	return modelType, nil
-}
-
-// modelCmd builds the `geniex model` command tree:
-//
-// It is the home for all per-model management operations
-func modelCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		GroupID: "model",
-		Use:     "model",
-		Short:   "Manage cached models",
-		Long:    "Commands to manage cached models, including reconfiguring model-specific settings.",
-	}
-	cmd.AddCommand(setTypeCmd())
-	return cmd
-}
-
-// setTypeCmd builds the `geniex model set-type` subcommand.
-// It overwrites the ModelType field in an already-downloaded model's manifest.
-func setTypeCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:       "set-type <model-name> [llm|vlm]",
-		Short:     "Override the model type for a cached model",
-		Long:      "Update the model type stored in a cached model's manifest.\n\nOmit the type argument to choose interactively.",
-		Args:      cobra.RangeArgs(1, 2),
-		ValidArgs: func() []string {
-			s := make([]string, len(types.AllModelTypes))
-			for i, t := range types.AllModelTypes {
-				s[i] = string(t)
-			}
-			return s
-		}(),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			name, _ := normalizeModelName(args[0])
-
-			// Verify the model is present before prompting for a type.
-			if _, err := store.Get().GetManifest(name); err != nil {
-				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Model %q not found: %s", name, err))
-				return err
-			}
-
-			var mt types.ModelType
-			if len(args) == 2 {
-				mt = types.ModelType(strings.ToLower(args[1]))
-				valid := false
-				for _, t := range types.AllModelTypes {
-					if mt == t {
-						valid = true
-						break
-					}
-				}
-				if !valid {
-					validStrs := make([]string, len(types.AllModelTypes))
-					for i, t := range types.AllModelTypes {
-						validStrs[i] = string(t)
-					}
-					fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf(
-						"Unknown model type %q (valid: %s)", args[1], strings.Join(validStrs, ", ")))
-					return fmt.Errorf("unknown model type %q", args[1])
-				}
-			} else {
-				var err error
-				mt, err = chooseModelType()
-				if err != nil {
-					return err
-				}
-			}
-
-			if err := store.Get().SetModelType(name, mt); err != nil {
-				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Failed to update model type: %s", err))
-				return err
-			}
-			fmt.Println(render.GetTheme().Success.Sprintf("✔  %s → %s", name, mt))
-			return nil
-		},
-	}
 }
 
 var partRegex = regexp.MustCompile(`-\d+-of-\d+\.gguf$`)
