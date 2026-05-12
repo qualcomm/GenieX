@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"runtime"
 	"sync"
 	"time"
 
@@ -37,25 +36,25 @@ const HF_ENDPOINT = "https://huggingface.co"
 
 type HuggingFace struct {
 	downloader *downloader.HTTPDownloader
+	hfToken    string
 }
 
 func NewHuggingFace() *HuggingFace {
-	return &HuggingFace{downloader: downloader.NewDownloader(config.Get().HFToken)}
+	token := config.Get().HFToken
+	return &HuggingFace{
+		downloader: downloader.NewDownloader(token),
+		hfToken:    token,
+	}
 }
 
 var hfTokenWarnOnce sync.Once
 
 func (d *HuggingFace) MaxConcurrency() int {
-	if config.Get().HFToken != "" {
+	if d.hfToken != "" {
 		return 8
 	}
 	hfTokenWarnOnce.Do(func() {
-		setCmd := `export HF_TOKEN=hf_...`
-		if runtime.GOOS == "windows" {
-			setCmd = `$env:HF_TOKEN="hf_..."`
-		}
-		msg := "Set HF_TOKEN to speed up HuggingFace downloads. " +
-			"Get a token at https://huggingface.co/settings/tokens, then:\n  " + setCmd
+		msg := "Cannot find a HuggingFace token; download speed may be degraded when downloading from HuggingFace."
 		fmt.Println(render.GetTheme().Warning.Sprint(msg))
 	})
 	return 1
@@ -82,8 +81,8 @@ func (d *HuggingFace) ModelInfo(ctx context.Context, name string) ([]ModelFileIn
 	client.AddResponseMiddleware(code2error)
 
 	req := client.R()
-	if config.Get().HFToken != "" {
-		req.SetHeader("Authorization", "Bearer "+config.Get().HFToken)
+	if d.hfToken != "" {
+		req.SetHeader("Authorization", "Bearer "+d.hfToken)
 	}
 	resp, err := req.Get(fmt.Sprintf("%s/api/models/%s", HF_ENDPOINT, name))
 	if err != nil {
@@ -103,8 +102,8 @@ func (d *HuggingFace) ModelInfo(ctx context.Context, name string) ([]ModelFileIn
 	for i := range info.Siblings {
 		g.Go(func() error {
 			req := client.R()
-			if config.Get().HFToken != "" {
-				req.SetHeader("Authorization", "Bearer "+config.Get().HFToken)
+			if d.hfToken != "" {
+				req.SetHeader("Authorization", "Bearer "+d.hfToken)
 			}
 			req.SetHeader("Accept-Encoding", "identity")
 

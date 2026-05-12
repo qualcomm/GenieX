@@ -16,6 +16,8 @@ package config
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -71,9 +73,29 @@ func init() {
 func Get() *Config {
 	c := &Config{}
 	viper.Unmarshal(c)
-
-	if t := os.Getenv("HF_TOKEN"); t != "" {
-		c.HFToken = t
-	}
+	c.HFToken = resolveHFToken(c.HFToken)
 	return c
+}
+
+func resolveHFToken(geniexToken string) string {
+	if geniexToken != "" {
+		return geniexToken
+	}
+
+	if token := os.Getenv("HF_TOKEN"); token != "" {
+		return token
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil || homeDir == "" {
+		return ""
+	}
+
+	tokenPath := filepath.Join(homeDir, ".cache", "huggingface", "token")
+	data, err := os.ReadFile(tokenPath)
+	if err != nil {
+		return ""
+	}
+
+	return strings.TrimSpace(string(data))
 }
