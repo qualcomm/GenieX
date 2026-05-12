@@ -103,18 +103,20 @@ func configSetCmd() *cobra.Command {
 			"Available keys: " + strings.Join(store.ConfigKeys, ", "),
 		Args:      cobra.MatchAll(cobra.RangeArgs(1, 2), validConfigKeyArg),
 		ValidArgs: store.ConfigKeys,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			key := args[0]
 
 			// Device key with no explicit value: launch interactive picker.
 			switch key {
 			case store.ConfigKeyDevice:
 				if len(args) == 1 {
-					return pickDevice(cmd.Context())
+					pickDevice(cmd.Context())
+					return
 				}
 			default:
 				if len(args) < 2 {
-					return fmt.Errorf("key %q requires a value argument", key)
+					fmt.Println(render.GetTheme().Error.Sprintf("Key %q requires a value argument", key))
+					return
 				}
 			}
 
@@ -124,7 +126,6 @@ func configSetCmd() *cobra.Command {
 				os.Exit(1)
 			}
 			fmt.Println(render.GetTheme().Info.Sprintf("%s = %s", key, value))
-			return nil
 		},
 	}
 }

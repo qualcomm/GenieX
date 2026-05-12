@@ -41,8 +41,10 @@ type HuggingFace struct {
 
 func NewHuggingFace() *HuggingFace {
 	token := config.Get().HFToken
+	dl := downloader.NewDownloader()
+	dl.AuthToken = token
 	return &HuggingFace{
-		downloader: downloader.NewDownloader(token),
+		downloader: dl,
 		hfToken:    token,
 	}
 }

@@ -332,7 +332,7 @@ func StartDownloadURL(ctx context.Context, urlStr, outputDir, dstName string, si
 		outPath := filepath.Join(outputDir, dstName)
 		markerPath := outPath + ProgressSuffix
 
-		hd := downloader.NewDownloader("")
+		hd := downloader.NewDownloader()
 		fetch := func(ctx context.Context, offset, limit int64, w io.Writer) error {
 			return hd.DownloadChunk(ctx, urlStr, offset, limit, w)
 		}

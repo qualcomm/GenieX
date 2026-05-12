@@ -37,6 +37,7 @@ go_library(
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_pflag//:pflag",
         "@com_github_spf13_viper//:viper",
+        "@org_golang_x_mod//semver",
         "@org_golang_x_sync//errgroup",
     ],
 )

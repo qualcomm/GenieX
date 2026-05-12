@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -60,28 +61,25 @@ func RootCmd() *cobra.Command {
 
 	rootCmd := &cobra.Command{
 		Use: "geniex",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			// log
 			common.ApplyLogLevel()
 
 			registerAIHub()
 
-			// subCmd := cmd.CalledAs()
-			//
-			// // skip update check
-			// if !skipUpdate {
-			// 	notifyUpdate()
-			// 	// skip some quick commands
-			// 	if !slices.Contains([]string{
-			// 		"remove", "rm", "clean", "list", "ls",
-			// 		"config",
-			// 		"version", "update",
-			// 	}, subCmd) {
-			// 		go checkUpdate()
-			// 	}
-			// }
-
-			return nil
+			subCmd := cmd.CalledAs()
+			if !skipUpdate {
+				notifyUpdate()
+				// skip network probe for quick commands
+				if !slices.Contains([]string{
+					"remove", "rm", "clean", "list", "ls", "model",
+					"config",
+					"version", "update",
+					"help", "completion",
+				}, subCmd) {
+					go checkUpdate()
+				}
+			}
 		},
 	}
 	rootCmd.PersistentFlags().StringVarP(&dataDir, "data-dir", "", "", "Custom data directory (env: GENIEX_DATADIR)")

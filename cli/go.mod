@@ -22,6 +22,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/valyala/fasthttp v1.68.0
 	golang.org/x/image v0.38.0
+	golang.org/x/mod v0.33.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.38.0
 	golang.org/x/term v0.37.0

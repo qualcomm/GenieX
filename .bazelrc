@@ -22,7 +22,7 @@ startup --windows_enable_symlinks
 build --enable_runfiles
 
 # build info inject — override with --define=VERSION=0.1.0 for releases
-common --define=VERSION=0.0.0.dev0
+common --define=VERSION=v0.0.0-dev.0
 
 # Disk cache — CI restores/saves it via actions/cache.
 # bazel-cache-epoch: 1 (bump to bust a corrupted cache)

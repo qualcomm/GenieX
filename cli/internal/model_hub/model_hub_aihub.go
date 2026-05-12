@@ -70,7 +70,7 @@ func NewAIHub(chipsetGetter func() string, cacheDir string) *AIHub {
 	return &AIHub{
 		client:        aihub.NewClient(cacheDir),
 		chipsetGetter: chipsetGetter,
-		http:          downloader.NewDownloader(""),
+		http:          downloader.NewDownloader(),
 		resolved:      make(map[string]resolvedAsset),
 	}
 }

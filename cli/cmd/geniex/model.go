@@ -222,13 +222,13 @@ func setTypeCmd() *cobra.Command {
 			}
 			return s
 		}(),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		Run: func(cmd *cobra.Command, args []string) {
 			name, _ := normalizeModelName(args[0])
 
 			// Verify the model is present before prompting for a type.
 			if _, err := store.Get().GetManifest(name); err != nil {
 				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Model %q not found: %s", name, err))
-				return err
+				return
 			}
 
 			var mt types.ModelType
@@ -248,22 +248,21 @@ func setTypeCmd() *cobra.Command {
 					}
 					fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf(
 						"Unknown model type %q (valid: %s)", args[1], strings.Join(validStrs, ", ")))
-					return fmt.Errorf("unknown model type %q", args[1])
+					return
 				}
 			} else {
 				var err error
 				mt, err = chooseModelType()
 				if err != nil {
-					return err
+					return
 				}
 			}
 
 			if err := store.Get().SetModelType(name, mt); err != nil {
 				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Failed to update model type: %s", err))
-				return err
+				return
 			}
 			fmt.Println(render.GetTheme().Success.Sprintf("✔  %s → %s", name, mt))
-			return nil
 		},
 	}
 }
