@@ -19,20 +19,12 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
 
-      # jidicula/clang-format-action isn't on the org allowlist, so apt.
-      - name: Install clang-format
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y clang-format-20
-          clang-format-20 --version
-
       - name: Resolve C/C++ file list
         id: files
         uses: ./.github/actions/changed-files
         with:
           include: '\.(cpp|hpp|c|h|cc|cxx|hxx)$'
-          exclude: '^sdk/build/|^sdk/include/external/|^third-party/|^sdk/plugins/qnn/libs/'
+          exclude: '^sdk/build/|^sdk/include/external/|^third-party/|^sdk/plugins/qnn/libs/|^sdk/tests/include/(doctest\.h|utf8(\.h|/))'
 
       - name: Check C/C++ formatting
         if: steps.files.outputs.any == 'true'
@@ -40,11 +32,12 @@ jobs:
           FILES: ${{ steps.files.outputs.files }}
         run: |
           set -euo pipefail
+          clang-format-18 --version
           failed=0
           while IFS= read -r file; do
             [ -z "$file" ] && continue
-            if ! diff -u "$file" <(clang-format-20 "$file"); then
-              echo "::error file=$file::clang-format-20 diff — run 'clang-format-20 -i $file'"
+            if ! diff -u "$file" <(clang-format-18 "$file"); then
+              echo "::error file=$file::clang-format-18 diff — run 'clang-format-18 -i $file'"
               failed=1
             fi
           done <<< "$FILES"
