@@ -17,14 +17,6 @@ set_target_properties(geniex_llama_cpp PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/plugins/llama_cpp"
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/plugins/llama_cpp")
 
-foreach(cfg Debug Release RelWithDebInfo MinSizeRel)
-    string(TOUPPER "${cfg}" cfg_upper)
-    set_target_properties(geniex_llama_cpp PROPERTIES
-        LIBRARY_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_BINARY_DIR}/plugins/llama_cpp"
-        RUNTIME_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_BINARY_DIR}/plugins/llama_cpp"
-        ARCHIVE_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_BINARY_DIR}/plugins/llama_cpp")
-endforeach()
-
 if(UNIX)
     set_target_properties(geniex_llama_cpp PROPERTIES
         INSTALL_RPATH "$ORIGIN:$ORIGIN/.."

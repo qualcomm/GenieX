@@ -9,14 +9,6 @@ set_target_properties(geniex_qairt PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/plugins/qairt"
     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/plugins/qairt")
 
-foreach(cfg Debug Release RelWithDebInfo MinSizeRel)
-    string(TOUPPER "${cfg}" cfg_upper)
-    set_target_properties(geniex_qairt PROPERTIES
-        LIBRARY_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_BINARY_DIR}/plugins/qairt"
-        RUNTIME_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_BINARY_DIR}/plugins/qairt"
-        ARCHIVE_OUTPUT_DIRECTORY_${cfg_upper} "${CMAKE_BINARY_DIR}/plugins/qairt")
-endforeach()
-
 target_include_directories(geniex_qairt BEFORE
     PRIVATE ${CMAKE_SOURCE_DIR}/third-party/geniex-proc/include)
 target_include_directories(geniex_qairt

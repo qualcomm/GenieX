@@ -66,8 +66,6 @@ The `arm64-windows-snapdragon-release` preset requires:
 - **Windows Driver Kit** — provides `inf2cat.exe`
 - **Self-signed HTP cert** (`.pfx`) and Windows test-signing enabled — see [run.md § Self-signed fallback](run.md#self-signed-fallback) for cert generation and test-signing setup
 
-For a minimal NPU build that skips Hexagon/OpenCL and drives the NPU only through QAIRT, use the `arm64-windows-snapdragon-cpu-release` preset instead.
-
 ## Build the SDK
 
 ### Linux (cross-compile from x86_64)
@@ -102,12 +100,10 @@ cmake --install build-linux --prefix pkg-geniex
 
 ```powershell
 cd sdk
-cmake --preset arm64-windows-snapdragon-release -DGENIEX_TEST=OFF
-cmake --build --preset arm64-windows-snapdragon-release -j 8
-cmake --install build-arm64-windows-snapdragon-release --prefix pkg-geniex
+cmake --preset arm64-windows-snapdragon-release -B build
+cmake --build build -j
+cmake --install build --prefix pkg-geniex
 ```
-
-Swap the preset to `arm64-windows-snapdragon-cpu-release` for the QAIRT-only minimal build described above.
 
 ### Android (cross-compile from Linux)
 

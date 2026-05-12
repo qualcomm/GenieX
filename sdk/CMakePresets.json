@@ -1,10 +1,5 @@
 {
   "version": 5,
-  "vendor": {
-    "geniex": {
-      "autoFormat": false
-    }
-  },
   "configurePresets": [
     {
       "name": "base",
@@ -17,15 +12,15 @@
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "GENIEX_DEBUG": "ON"
+        "GENIEX_DEBUG": "ON",
+        "GENIEX_TEST": "ON"
       }
     },
     {
       "name": "release",
       "hidden": true,
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "GENIEX_DEBUG": "OFF"
+        "CMAKE_BUILD_TYPE": "Release"
       }
     },
     {
@@ -44,7 +39,7 @@
       }
     },
     {
-      "name": "arm64-windows-llvm",
+      "name": "arm64-windows-snapdragon",
       "hidden": true,
       "generator": "Ninja",
       "architecture": {
@@ -56,14 +51,7 @@
         "strategy": "external"
       },
       "cacheVariables": {
-        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm64-windows-llvm.cmake"
-      }
-    },
-    {
-      "name": "arm64-windows-snapdragon",
-      "hidden": true,
-      "inherits": ["arm64-windows-llvm"],
-      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm64-windows-llvm.cmake",
         "PREBUILT_LIB_DIR": "windows_aarch64"
       }
     },
@@ -106,51 +94,64 @@
       "name": "default",
       "displayName": "Default (SDK Release)",
       "description": "Build SDK in Release mode with standard options",
-      "inherits": ["release", "base"]
+      "inherits": [
+        "release",
+        "base"
+      ]
     },
     {
       "name": "arm64-windows-snapdragon-debug",
-      "inherits": ["arm64-windows-snapdragon", "snapdragon", "debug", "base"]
+      "inherits": [
+        "arm64-windows-snapdragon",
+        "snapdragon",
+        "debug",
+        "base"
+      ]
     },
     {
       "name": "arm64-windows-snapdragon-release",
-      "inherits": ["arm64-windows-snapdragon", "snapdragon", "release", "base"]
-    },
-    {
-      "name": "arm64-windows-snapdragon-cpu-debug",
-      "displayName": "Windows ARM64 Snapdragon (llama.cpp CPU + QAIRT NPU, no Hexagon/OpenCL) - Debug",
-      "description": "Snapdragon build without Hexagon SDK or OpenCL SDK. llama.cpp runs CPU-only; QAIRT plugin still drives the NPU via its bundled QNN libs.",
-      "inherits": ["base", "snapdragon", "arm64-windows-snapdragon", "debug"],
-      "cacheVariables": {
-        "GGML_HEXAGON": "OFF",
-        "GGML_OPENCL": "OFF"
-      }
-    },
-    {
-      "name": "arm64-windows-snapdragon-cpu-release",
-      "displayName": "Windows ARM64 Snapdragon (llama.cpp CPU + QAIRT NPU, no Hexagon/OpenCL) - Release",
-      "description": "Snapdragon build without Hexagon SDK or OpenCL SDK. llama.cpp runs CPU-only; QAIRT plugin still drives the NPU via its bundled QNN libs.",
-      "inherits": ["base", "snapdragon", "arm64-windows-snapdragon", "release"],
-      "cacheVariables": {
-        "GGML_HEXAGON": "OFF",
-        "GGML_OPENCL": "OFF"
-      }
+      "inherits": [
+        "arm64-windows-snapdragon",
+        "snapdragon",
+        "release",
+        "base"
+      ]
     },
     {
       "name": "arm64-android-snapdragon-debug",
-      "inherits": ["arm64-android-snapdragon", "snapdragon", "debug", "base"]
+      "inherits": [
+        "arm64-android-snapdragon",
+        "snapdragon",
+        "debug",
+        "base"
+      ]
     },
     {
       "name": "arm64-android-snapdragon-release",
-      "inherits": ["arm64-android-snapdragon", "snapdragon", "release", "base"]
+      "inherits": [
+        "arm64-android-snapdragon",
+        "snapdragon",
+        "release",
+        "base"
+      ]
     },
     {
       "name": "arm64-linux-snapdragon-debug",
-      "inherits": ["arm64-linux-snapdragon", "snapdragon", "debug", "base"]
+      "inherits": [
+        "arm64-linux-snapdragon",
+        "snapdragon",
+        "debug",
+        "base"
+      ]
     },
     {
       "name": "arm64-linux-snapdragon-release",
-      "inherits": ["arm64-linux-snapdragon", "snapdragon", "release", "base"]
+      "inherits": [
+        "arm64-linux-snapdragon",
+        "snapdragon",
+        "release",
+        "base"
+      ]
     }
   ],
   "buildPresets": [
@@ -167,16 +168,6 @@
     {
       "name": "arm64-windows-snapdragon-release",
       "configurePreset": "arm64-windows-snapdragon-release",
-      "jobs": 0
-    },
-    {
-      "name": "arm64-windows-snapdragon-cpu-debug",
-      "configurePreset": "arm64-windows-snapdragon-cpu-debug",
-      "jobs": 0
-    },
-    {
-      "name": "arm64-windows-snapdragon-cpu-release",
-      "configurePreset": "arm64-windows-snapdragon-cpu-release",
       "jobs": 0
     },
     {
