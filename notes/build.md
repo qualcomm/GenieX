@@ -72,24 +72,13 @@ For a minimal NPU build that skips Hexagon/OpenCL and drives the NPU only throug
 
 ### Linux (cross-compile from x86_64)
 
-Start the Snapdragon Linux toolchain container — follow [llama.cpp's instructions](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/linux.md#snapdragon-based-linux-devices) to launch:
+Start the derived Snapdragon Linux toolchain container — it extends [ghcr.io/snapdragon-toolchain/arm64-linux](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/linux.md#snapdragon-based-linux-devices) with `build-essential`, `ccache`, `rustup`, the `aarch64-unknown-linux-gnu` Rust target, and the cc-rs cross-compiler symlinks baked in (see [`.github/docker/toolchain-linux.Dockerfile`](../.github/docker/toolchain-linux.Dockerfile)):
 
 ```bash
 docker run --rm -u $(id -u):$(id -g) \
     --volume $(pwd):/workspace \
     --platform linux/amd64 \
-    ghcr.io/snapdragon-toolchain/arm64-linux:v0.1
-```
-
-Install build tools and Rust inside the container:
-
-```bash
-# Root shell (docker exec -u 0 -it <container_id> bash):
-apt update -y && apt install -y make gcc
-# Exit back to the normal user shell, then:
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-rustup target add aarch64-unknown-linux-gnu
+    ghcr.io/qcom-ai-hub/geniex-toolchain-linux:v0.0.1
 ```
 
 Build the SDK with the `arm64-linux-snapdragon-debug` preset:
@@ -122,24 +111,13 @@ Swap the preset to `arm64-windows-snapdragon-cpu-release` for the QAIRT-only min
 
 ### Android (cross-compile from Linux)
 
-Start the Snapdragon Android toolchain container — follow [llama.cpp's instructions](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/README.md#android) to launch:
+Start the derived Snapdragon Android toolchain container — it extends [ghcr.io/snapdragon-toolchain/arm64-android](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/README.md#android) with `build-essential`, `ccache`, `rustup`, and the `aarch64-linux-android` Rust target baked in (see [`.github/docker/toolchain-android.Dockerfile`](../.github/docker/toolchain-android.Dockerfile)):
 
 ```bash
 docker run --rm -u $(id -u):$(id -g) \
     --volume $(pwd):/workspace \
     --platform linux/amd64 \
-    ghcr.io/snapdragon-toolchain/arm64-android:v0.3
-```
-
-Install build tools and Rust inside the container:
-
-```bash
-# Root shell (docker exec -u 0 -it <container_id> bash):
-apt update -y && apt install -y make gcc
-# Exit back to the normal user shell, then:
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-rustup target add aarch64-linux-android
+    ghcr.io/qcom-ai-hub/geniex-toolchain-android:v0.0.1
 ```
 
 Build the SDK with the `arm64-android-snapdragon-debug` preset:
