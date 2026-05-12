@@ -114,14 +114,17 @@ func runUpdate(_ *cobra.Command, _ []string) error {
 	dst := filepath.Join(os.TempDir(), ast.Name)
 	progress := make(chan int64)
 	bar := render.NewProgressBar(int64(ast.Size), "downloading")
+
+	var dlErr error
 	go func() {
-		defer bar.Exit()
-		for pg := range progress {
-			bar.Add(pg)
-		}
+		dlErr = downloadPkg(ast.URL, dst, int64(ast.Size), progress)
 	}()
-	if err := downloadPkg(ast.BrowserDownloadURL, dst, int64(ast.Size), progress); err != nil {
-		return err
+	for pg := range progress {
+		bar.Add(pg)
+	}
+	bar.Exit()
+	if dlErr != nil {
+		return dlErr
 	}
 
 	if err := exec.Command(dst).Start(); err != nil {
@@ -142,10 +145,13 @@ type release struct {
 }
 
 type asset struct {
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"`
-	Size               int    `json:"size"`
-	Digest             string `json:"digest"`
+	// URL is the GitHub API endpoint. Use it (with Accept:
+	// application/octet-stream) for private repos — browser_download_url
+	// 404s when the release was published without a real git tag.
+	URL    string `json:"url"`
+	Name   string `json:"name"`
+	Size   int    `json:"size"`
+	Digest string `json:"digest"`
 }
 
 // resolveGitHubToken returns a PAT for authenticating the release-lookup call.
@@ -219,7 +225,9 @@ func downloadPkg(url, dst string, size int64, progress chan int64) error {
 
 	g, ctx := errgroup.WithContext(context.Background())
 	g.SetLimit(numWorkers)
-	dl := downloader.NewDownloader("")
+	dl := downloader.NewDownloader()
+	dl.AuthToken = resolveGitHubToken()
+	dl.Headers = map[string]string{"Accept": "application/octet-stream"}
 
 	for offset := int64(0); offset < size; offset += chunkSize {
 		offset := offset
