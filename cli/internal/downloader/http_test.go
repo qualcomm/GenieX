@@ -79,7 +79,8 @@ func TestDownloadChunk_CrossHostRedirectStripsAuth(t *testing.T) {
 	defer origin.Close()
 	defer target.Close()
 
-	d := NewDownloader("secret-token")
+	d := NewDownloader()
+	d.AuthToken = "secret-token"
 	var buf bytes.Buffer
 	if err := d.DownloadChunk(context.Background(), origin.URL, 0, 5, &buf); err != nil {
 		t.Fatalf("DownloadChunk: %v", err)
@@ -98,7 +99,8 @@ func TestDownloadChunk_SameHostRedirectPreservesAuth(t *testing.T) {
 	defer origin.Close()
 	defer target.Close()
 
-	d := NewDownloader("secret-token")
+	d := NewDownloader()
+	d.AuthToken = "secret-token"
 	var buf bytes.Buffer
 	if err := d.DownloadChunk(context.Background(), origin.URL, 0, 5, &buf); err != nil {
 		t.Fatalf("DownloadChunk: %v", err)
@@ -157,7 +159,7 @@ func TestDownloadChunk_HonorsHTTPProxyEnv(t *testing.T) {
 	t.Setenv("HTTP_PROXY", proxy.URL)
 	t.Setenv("NO_PROXY", "")
 
-	d := NewDownloader("")
+	d := NewDownloader()
 	// Target must not be a loopback host — httpproxy bypasses the proxy for
 	// localhost / 127.0.0.0/8. example.com is public, but we never actually
 	// resolve it because the CONNECT tunnel above routes every request to

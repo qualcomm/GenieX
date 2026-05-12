@@ -28,18 +28,22 @@ import (
 )
 
 type HTTPDownloader struct {
-	authToken    string
-	maxRedirects int
+	// AuthToken is sent as a Bearer token and stripped when a redirect crosses
+	// to a different host (presigned S3/Azure URLs 400/404 on unexpected auth).
+	AuthToken string
+	// Headers are applied to every request and follow all redirects — use for
+	// static, non-sensitive headers like Accept.
+	Headers map[string]string
 
+	maxRedirects int
 	maxRetries   int
 	retryDelayMs int
 
 	fasthttp.Client
 }
 
-func NewDownloader(authToken string) *HTTPDownloader {
+func NewDownloader() *HTTPDownloader {
 	return &HTTPDownloader{
-		authToken:    authToken,
 		maxRedirects: 3,
 		maxRetries:   3,
 		retryDelayMs: 1000,
@@ -82,10 +86,13 @@ func (d *HTTPDownloader) DownloadChunk(ctx context.Context, reqURL string, offse
 		req.SetRequestURI(reqURL)
 		req.Header.SetMethod(fasthttp.MethodGet)
 		req.Header.Set("User-Agent", "GenieX-CLI/0.0")
+		for k, v := range d.Headers {
+			req.Header.Set(k, v)
+		}
 		// Strip Authorization when following a cross-host redirect: presigned
 		// S3/Azure URLs 400/404 on unexpected auth headers.
-		if d.authToken != "" && sameHost(reqURL, originalURL) {
-			req.Header.Set("Authorization", "Bearer "+d.authToken)
+		if d.AuthToken != "" && sameHost(reqURL, originalURL) {
+			req.Header.Set("Authorization", "Bearer "+d.AuthToken)
 		}
 		if limit > 0 {
 			req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", offset, offset+limit-1))
