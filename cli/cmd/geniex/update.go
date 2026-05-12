@@ -17,7 +17,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -25,12 +24,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/bytedance/sonic"
 	"github.com/spf13/cobra"
+	"golang.org/x/mod/semver"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/downloader"
@@ -39,7 +38,7 @@ import (
 )
 
 const (
-	githubAPIURL = "https://api.github.com/repos/qcom-ai-hub/ai-hub-models-internal/releases/latest"
+	githubAPIURL = "https://api.github.com/repos/qcom-ai-hub/geniex/releases/latest"
 	userAgent    = "GenieX-Updater/1.0"
 
 	updateCheckInterval  = 24 * time.Hour
@@ -48,154 +47,98 @@ const (
 	defaultChunkSize  = 4 * 1024 * 1024
 	defaultNumWorkers = 16
 
-	linuxGlobalInstallDir = "/opt/geniex"
+	linuxInstallScriptURL = "https://raw.githubusercontent.com/qcom-ai-hub/geniex/main/cli/release/linux/install.sh"
 )
 
 func update() *cobra.Command {
-	updateCmd := &cobra.Command{
+	return &cobra.Command{
 		GroupID: "management",
 		Use:     "update",
 		Short:   "update geniex",
 		Long:    "Update geniex to the latest version",
+		Run: func(cmd *cobra.Command, args []string) {
+			if err := runUpdate(cmd, args); err != nil {
+				fmt.Println(render.GetTheme().Error.Sprintf("Update failed: %s", err))
+			}
+		},
+	}
+}
+
+func runUpdate(_ *cobra.Command, _ []string) error {
+	rls, err := getLastRelease()
+	if err != nil {
+		return err
 	}
 
-	updateCmd.Run = func(cmd *cobra.Command, args []string) {
-		err := func() error {
-			if runtime.GOOS == "linux" && !isLinuxGlobalInstall() {
-				return fmt.Errorf("update is only supported for global installation (%s). Reinstall with 'install.sh' for update support", linuxGlobalInstallDir)
-			}
-			// check platform
-			assetMap := map[string]map[string]string{
-				"windows": {
-					"amd64": "geniex-cli_windows_x86_64.exe",
-					"arm64": "geniex-cli_windows_arm64.exe",
-				},
-				"linux": {
-					"amd64": "geniex-cli_linux_x86_64.sh",
-					"arm64": "geniex-cli_linux_arm64.sh",
-				},
-			}
-			assetName, ok := assetMap[runtime.GOOS][runtime.GOARCH]
-			if !ok {
-				return fmt.Errorf("current platform is not supported, please manually download")
-			}
+	latest := rls.Name
+	cmp, err := compareVersion(Version, latest)
+	if err != nil {
+		return err
+	}
+	if cmp >= 0 {
+		fmt.Println("Already up-to-date.")
+		return nil
+	}
 
-			rls, err := getLastRelease()
-			if err != nil {
-				return err
-			}
+	// Linux auto-update is not yet wired to the new tar.gz layout;
+	// point users at the canonical install script for now.
+	if runtime.GOOS == "linux" {
+		fmt.Println(render.GetTheme().Warning.Sprintf(
+			"New version %s available. Re-run the install script to upgrade:", latest))
+		fmt.Println(render.GetTheme().Success.Sprintf(
+			"  curl -fsSL %s | bash", linuxInstallScriptURL))
+		return nil
+	}
+	if runtime.GOOS != "windows" {
+		return fmt.Errorf("auto-update is not supported on %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
 
-			updateAvailable, err := hasUpdate(Version, rls.TagName)
-			if err != nil {
-				return err
-			}
-
-			if !updateAvailable {
-				fmt.Println("Already up-to-date.")
-				return nil
-			}
-
-			// find asset
-			var ast asset
-			for _, asset := range rls.Assets {
-				if asset.Name == assetName {
-					ast = asset
-					break
-				}
-			}
-			if ast.Name == "" {
-				return fmt.Errorf("asset %s not found in release", assetName)
-			}
-
-			fmt.Println(
-				render.GetTheme().Warning.Sprint("New version found, file: "),
-				render.GetTheme().Success.Sprint(ast.Name),
-				render.GetTheme().Warning.Sprint(", version: "),
-				render.GetTheme().Success.Sprint(rls.TagName))
-
-			// download
-			dst := filepath.Join(os.TempDir(), ast.Name)
-			progress := make(chan int64)
-			bar := render.NewProgressBar(int64(ast.Size), "downloading")
-			go func() {
-				defer bar.Exit()
-				for pg := range progress {
-					bar.Add(pg)
-				}
-			}()
-			if err = downloadPkg(ast.BrowserDownloadURL, dst, int64(ast.Size), progress); err != nil {
-				return err
-			}
-
-			if err = installPkg(dst); err != nil {
-				return err
-			}
-			fmt.Println("update package is ready to install")
-
-			return nil
-		}()
-		if err != nil {
-			fmt.Println(render.GetTheme().Error.Sprintf("Update failed: %s", err.Error()))
-			os.Exit(1)
+	assetName := fmt.Sprintf("geniex-cli-setup-windows-%s-%s.exe", runtime.GOARCH, latest)
+	var ast asset
+	for _, a := range rls.Assets {
+		if a.Name == assetName {
+			ast = a
+			break
 		}
 	}
+	if ast.Name == "" {
+		return fmt.Errorf("asset %s not found in release", assetName)
+	}
 
-	return updateCmd
+	fmt.Println(
+		render.GetTheme().Warning.Sprint("New version found, file: "),
+		render.GetTheme().Success.Sprint(ast.Name),
+		render.GetTheme().Warning.Sprint(", version: "),
+		render.GetTheme().Success.Sprint(latest))
+
+	dst := filepath.Join(os.TempDir(), ast.Name)
+	progress := make(chan int64)
+	bar := render.NewProgressBar(int64(ast.Size), "downloading")
+	go func() {
+		defer bar.Exit()
+		for pg := range progress {
+			bar.Add(pg)
+		}
+	}()
+	if err := downloadPkg(ast.BrowserDownloadURL, dst, int64(ast.Size), progress); err != nil {
+		return err
+	}
+
+	if err := exec.Command(dst).Start(); err != nil {
+		return err
+	}
+	fmt.Println("update package is ready to install")
+	return nil
 }
 
-func isLinuxGlobalInstall() bool {
-	exe, err := os.Executable()
-	if err != nil {
-		return false
-	}
-	resolved, err := filepath.EvalSymlinks(exe)
-	if err != nil {
-		return false
-	}
-	rel, err := filepath.Rel(linuxGlobalInstallDir, filepath.Clean(resolved))
-	if err != nil {
-		return false
-	}
-	return !strings.HasPrefix(rel, "..")
-}
+// GitHub release API
 
-// util functions
-
-func getLastRelease() (release, error) {
-	var rls release
-
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	req, err := http.NewRequest("GET", githubAPIURL, nil)
-	if err != nil {
-		return rls, err
-	}
-	req.Header.Set("User-Agent", userAgent)
-	resp, err := client.Do(req)
-	if err != nil {
-		return rls, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return rls, fmt.Errorf("get latest release failed: %d", resp.StatusCode)
-	}
-
-	err = sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&rls)
-	return rls, err
-}
-
-func hasUpdate(cur, latest string) (bool, error) {
-	result, err := compareVersion(cur, latest)
-	if err != nil {
-		return false, fmt.Errorf("invalid version %s or %s: %w", cur, latest, err)
-	}
-	return result < 0, nil
-}
-
+// Release `name` is the display version (e.g. "v0.1.4"). We prefer it over
+// `tag_name` because releases published without a git tag surface a synthetic
+// `tag_name` like "untagged-<sha>".
 type release struct {
-	TagName string  `json:"tag_name"`
-	Assets  []asset `json:"assets"`
+	Name   string  `json:"name"`
+	Assets []asset `json:"assets"`
 }
 
 type asset struct {
@@ -205,7 +148,62 @@ type asset struct {
 	Digest             string `json:"digest"`
 }
 
-// downloadPkg a file from url to dst with progress
+// resolveGitHubToken returns a PAT for authenticating the release-lookup call.
+// geniex's own var wins over the generic one used by gh / CI.
+func resolveGitHubToken() string {
+	if t := os.Getenv("GENIEX_GITHUB_TOKEN"); t != "" {
+		return t
+	}
+	return os.Getenv("GITHUB_TOKEN")
+}
+
+func getLastRelease() (release, error) {
+	var rls release
+
+	req, err := http.NewRequest("GET", githubAPIURL, nil)
+	if err != nil {
+		return rls, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "application/vnd.github+json")
+	if tok := resolveGitHubToken(); tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return rls, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return rls, fmt.Errorf("get latest release failed: %d", resp.StatusCode)
+	}
+	return rls, sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&rls)
+}
+
+// compareVersion compares two SemVer strings.
+// Returns: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2.
+// Accepts bare versions ("1.2.3") by normalizing to the "v" prefix semver expects.
+func compareVersion(v1, v2 string) (int, error) {
+	n1, n2 := normalizeSemver(v1), normalizeSemver(v2)
+	for _, p := range [...]struct{ orig, norm string }{{v1, n1}, {v2, n2}} {
+		if !semver.IsValid(p.norm) {
+			return 0, fmt.Errorf("invalid format: %s", p.orig)
+		}
+	}
+	return semver.Compare(n1, n2), nil
+}
+
+func normalizeSemver(v string) string {
+	if !strings.HasPrefix(v, "v") {
+		return "v" + v
+	}
+	return v
+}
+
+// Parallel chunked downloader
+
 func downloadPkg(url, dst string, size int64, progress chan int64) error {
 	defer close(progress)
 
@@ -219,55 +217,27 @@ func downloadPkg(url, dst string, size int64, progress chan int64) error {
 	numWorkers := min(int((size+chunkSize-1)/chunkSize), defaultNumWorkers)
 	slog.Debug("downloading package", "url", url, "size", size, "chunkSize", chunkSize, "numWorkers", numWorkers)
 
-	ctx := context.Background()
-	g, ctx := errgroup.WithContext(ctx)
+	g, ctx := errgroup.WithContext(context.Background())
 	g.SetLimit(numWorkers)
-
-	downloader := downloader.NewDownloader("")
+	dl := downloader.NewDownloader("")
 
 	for offset := int64(0); offset < size; offset += chunkSize {
 		offset := offset
 		g.Go(func() error {
 			limit := min(chunkSize, size-offset)
-
 			buf := bytes.NewBuffer(make([]byte, 0, int(limit)))
-			if err := downloader.DownloadChunk(ctx, url, offset, limit, buf); err != nil {
+			if err := dl.DownloadChunk(ctx, url, offset, limit, buf); err != nil {
 				return fmt.Errorf("failed to download chunk at offset %d: %w", offset, err)
 			}
-
 			if _, err := file.WriteAt(buf.Bytes(), offset); err != nil {
 				return fmt.Errorf("failed to write chunk at offset %d: %w", offset, err)
 			}
-
 			progress <- int64(buf.Len())
 			return nil
 		})
 	}
 
 	return g.Wait()
-}
-
-func installPkg(pkgPath string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command(pkgPath)
-	case "linux":
-		if err := os.Chmod(pkgPath, 0755); err != nil {
-			return fmt.Errorf("failed to make installer executable: %w", err)
-		}
-		cmd = exec.Command("bash", pkgPath)
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
-	default:
-		return errors.New("update is not supported on this platform")
-	}
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Start()
 }
 
 // Update check store
@@ -278,62 +248,53 @@ type updateCheck struct {
 	LatestVersion string    `json:"latest_version"`
 }
 
-func getUpdateCheck() (updateCheck, error) {
-	ck := updateCheck{}
+func updateCheckPath() string {
+	return filepath.Join(store.Get().DataPath(), "update_check")
+}
 
-	data, err := os.ReadFile(filepath.Join(store.Get().DataPath(), "update_check"))
+func getUpdateCheck() updateCheck {
+	var ck updateCheck
+	data, err := os.ReadFile(updateCheckPath())
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			err = setUpdateCheck(ck)
-		}
-		return ck, err
+		return ck
 	}
-
-	err = sonic.Unmarshal(data, &ck)
-	return ck, err
+	sonic.Unmarshal(data, &ck)
+	return ck
 }
 
-func setUpdateCheck(ck updateCheck) error {
-	slog.Info("setting last update check", "update_check", ck)
-
+func setUpdateCheck(ck updateCheck) {
 	data, _ := sonic.Marshal(ck)
-	return os.WriteFile(filepath.Join(store.Get().DataPath(), "update_check"), data, 0644)
+	if err := os.WriteFile(updateCheckPath(), data, 0644); err != nil {
+		slog.Debug("update check save failed", "error", err)
+	}
 }
 
-// check and notify
+// Background check & pre-launch notice
 
 func checkUpdate() {
-	slog.Info("checking for updates")
-
-	ck, err := getUpdateCheck()
-	slog.Info("last update check", "update_check", ck, "error", err)
-	if err != nil {
-		return
-	}
-
+	ck := getUpdateCheck()
 	if time.Since(ck.LastCheck) < updateCheckInterval {
-		slog.Info("skip update check, interval not reached", "last_check_time", ck.LastCheck)
 		return
 	}
 
 	rls, err := getLastRelease()
-	slog.Debug("latest release", "release", rls, "error", err)
 	if err != nil {
+		slog.Debug("update check failed", "error", err)
 		return
 	}
 
 	ck.LastCheck = time.Now()
-	ck.LatestVersion = rls.TagName
+	ck.LatestVersion = rls.Name
 	setUpdateCheck(ck)
 }
 
 func notifyUpdate() {
-	ck, _ := getUpdateCheck()
-	slog.Info("notifying update", "update_check", ck)
-
-	upAvail, _ := hasUpdate(Version, ck.LatestVersion)
-	if !upAvail || time.Since(ck.LastNotify) < notificationInterval {
-		slog.Info("skip update notification", "update_available", upAvail, "time_since_last_notify", time.Since(ck.LastNotify))
+	ck := getUpdateCheck()
+	if ck.LatestVersion == "" || time.Since(ck.LastNotify) < notificationInterval {
+		return
+	}
+	cmp, err := compareVersion(Version, ck.LatestVersion)
+	if err != nil || cmp >= 0 {
 		return
 	}
 
@@ -344,57 +305,6 @@ func notifyUpdate() {
 		render.GetTheme().Warning.Sprintf("A new version of geniex-cli is available:"),
 		render.GetTheme().Success.Sprint(Version),
 		render.GetTheme().Success.Sprint(ck.LatestVersion))
-
 	fmt.Printf("%s\n\n",
-		render.GetTheme().Warning.Sprint("To update, run: `geniex update`"),
-	)
-}
-
-// compareVersion compares two version strings in format v0.0.0
-// Returns: -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2
-func compareVersion(v1, v2 string) (int, error) {
-	parseVersion := func(v string) ([3]int, error) {
-		origV := v
-		v = strings.TrimPrefix(v, "v")
-		// Strip pre-release suffixes like -rc2, -beta, -alpha, etc.
-		if idx := strings.IndexAny(v, "-+"); idx != -1 {
-			v = v[:idx]
-		}
-		parts := strings.Split(v, ".")
-		if len(parts) != 3 {
-			return [3]int{}, fmt.Errorf("invalid format: %s", origV)
-		}
-		var nums [3]int
-		for i, p := range parts {
-			n, err := strconv.Atoi(p)
-			if err != nil {
-				return [3]int{}, fmt.Errorf("invalid format: %s", origV)
-			}
-			if n < 0 {
-				return [3]int{}, fmt.Errorf("invalid format: %s", origV)
-			}
-			nums[i] = n
-		}
-		return nums, nil
-	}
-
-	n1, err := parseVersion(v1)
-	if err != nil {
-		return 0, err
-	}
-
-	n2, err := parseVersion(v2)
-	if err != nil {
-		return 0, err
-	}
-
-	for i := range 3 {
-		if n1[i] < n2[i] {
-			return -1, nil
-		}
-		if n1[i] > n2[i] {
-			return 1, nil
-		}
-	}
-	return 0, nil
+		render.GetTheme().Warning.Sprint("To update, run: `geniex update`"))
 }

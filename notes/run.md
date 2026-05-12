@@ -199,3 +199,16 @@ Then, for both builders and pre-built users:
    ```
 
 Upstream background: `third-party/llama.cpp/docs/backend/snapdragon/windows.md`.
+
+## Update checks
+
+Before `serve` / `run` / `infer` start, geniex consults a cached "latest release" entry and prints a one-line notice if a newer version exists, at most once per 8 h. The cache is refreshed in the background every 24 h.
+
+Because the release repo (`qcom-ai-hub/geniex`) is private, the background refresh needs a GitHub PAT with `repo:read`. Supply it via either env var — `GENIEX_GITHUB_TOKEN` wins if both are set:
+
+```bash
+export GENIEX_GITHUB_TOKEN=ghp_…   # geniex-specific
+export GITHUB_TOKEN=ghp_…          # same convention as `gh` / CI
+```
+
+Without a token the probe silently no-ops (no stdout spam). Pass `--skip-update` on any command to skip the probe entirely for that invocation.

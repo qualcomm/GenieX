@@ -160,12 +160,12 @@ func TestCompareVersion(t *testing.T) {
 			wantErr:  false,
 		},
 
-		// Pre-release versions (should compare base version only)
+		// Pre-release versions (SemVer: pre-release < stable of same base)
 		{
-			name:     "rc version equals stable",
+			name:     "rc version less than stable",
 			v1:       "v0.2.68-rc2",
 			v2:       "v0.2.68",
-			expected: 0,
+			expected: -1,
 			wantErr:  false,
 		},
 		{
@@ -183,48 +183,48 @@ func TestCompareVersion(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name:     "beta version comparison",
+			name:     "beta version less than stable",
 			v1:       "v1.0.0-beta",
 			v2:       "v1.0.0",
-			expected: 0,
+			expected: -1,
 			wantErr:  false,
 		},
 		{
-			name:     "alpha version comparison",
+			name:     "alpha version greater than older stable",
 			v1:       "v2.5.0-alpha.1",
 			v2:       "v2.4.9",
 			expected: 1,
 			wantErr:  false,
 		},
 		{
-			name:     "build metadata with plus",
+			name:     "build metadata ignored",
 			v1:       "v1.0.0+build123",
 			v2:       "v1.0.0",
 			expected: 0,
 			wantErr:  false,
 		},
 		{
-			name:     "complex prerelease version",
+			name:     "prerelease with build metadata less than stable",
 			v1:       "v3.2.1-rc1+build456",
 			v2:       "v3.2.1",
-			expected: 0,
+			expected: -1,
 			wantErr:  false,
 		},
 		{
-			name:     "two rc versions",
+			name:     "rc1 less than rc2",
 			v1:       "v0.2.68-rc1",
 			v2:       "v0.2.68-rc2",
-			expected: 0,
+			expected: -1,
 			wantErr:  false,
 		},
 
 		// Invalid format cases
 		{
-			name:     "invalid format - missing parts",
+			name:     "short form canonicalizes to zero patch",
 			v1:       "v1.0",
 			v2:       "v1.0.0",
 			expected: 0,
-			wantErr:  true,
+			wantErr:  false,
 		},
 		{
 			name:     "invalid format - too many parts",

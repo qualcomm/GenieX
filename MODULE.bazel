@@ -95,6 +95,7 @@ use_repo(
     "dev_resty_v3",
     "org_golang_google_protobuf",
     "org_golang_x_image",
+    "org_golang_x_mod",
     "org_golang_x_sync",
     "org_golang_x_sys",
     "org_golang_x_term",
