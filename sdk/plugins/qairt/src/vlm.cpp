@@ -19,6 +19,7 @@
 #include "logging.h"
 #include "pipeline/vlm_pipeline.h"
 #include "qnn_runtime_utils.h"
+#include "sampler_config_utils.h"
 #include "types.h"
 #include "vlm_model_registry.h"  // vlm_model_registry()
 
@@ -241,10 +242,7 @@ int32_t QairtVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     GenerationConfig gen_cfg{};
     if (input->config) {
         gen_cfg.max_tokens = input->config->max_tokens > 0 ? input->config->max_tokens : 512;
-        if (input->config->sampler_config) {
-            gen_cfg.temperature = input->config->sampler_config->temperature;
-            gen_cfg.top_p       = input->config->sampler_config->top_p;
-        }
+        qairt::apply_sampler_config(input->config->sampler_config, gen_cfg);
     }
     gen_cfg.thinking_mode = enable_thinking_;
 
