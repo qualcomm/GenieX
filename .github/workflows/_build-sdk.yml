@@ -119,7 +119,7 @@ jobs:
       # package pulls (same pattern as _build-docker.yml).
       - name: Log in to GHCR
         if: matrix.platform == 'linux-arm64' || matrix.platform == 'android-arm64'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}

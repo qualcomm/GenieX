@@ -109,7 +109,7 @@ jobs:
         if: >-
           steps.meta.outputs.platforms == 'both' ||
           steps.meta.outputs.platforms == matrix.platform
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
