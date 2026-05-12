@@ -45,7 +45,7 @@ go_test(
     name = "geniex_test",
     srcs = [
         "model_test.go",
-        "version_test.go",
+        "update_test.go",
     ],
     embed = [":geniex_lib"],
     gotags = [
