@@ -32,7 +32,7 @@ pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/
 如果安装时出现 SSL 证书错误——常见于启用了 TLS 检测的企业网络，包括 **Qualcomm Developer Cloud（QDC）**——请在运行 `pip install` 之前，按照以下 **PowerShell** 命令手动下载 SDK：
 
 ```powershell
-$env:GENIEX_VERSION = "v0.1.4"  # 示例版本号，请替换为您实际安装的版本
+$env:GENIEX_VERSION = "v0.1.5"
 $base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/$env:GENIEX_VERSION"
 $zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
 
