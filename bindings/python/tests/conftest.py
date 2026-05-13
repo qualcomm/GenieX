@@ -33,9 +33,10 @@ from geniex import model_manager as _mm
 LLAMA_CPP_MODEL = 'bartowski/Qwen_Qwen3-0.6B-GGUF'
 LLAMA_CPP_QUANT = 'Q4_0'
 
-# Pre-cached QAIRT model used by the NPU tests. Override with
-# GENIEX_QAIRT_MODEL=<org/repo> to exercise a different model.
+# Pre-cached QAIRT models used by the NPU tests. Override with
+# GENIEX_QAIRT_MODEL / GENIEX_QAIRT_VLM_MODEL to exercise other models.
 QAIRT_MODEL = os.environ.get('GENIEX_QAIRT_MODEL', 'aihub/qwen3_4b')
+QAIRT_VLM_MODEL = os.environ.get('GENIEX_QAIRT_VLM_MODEL', 'qualcomm/Qwen2.5-VL-7B-Instruct')
 
 
 def _is_snapdragon_host() -> bool:
@@ -77,3 +78,13 @@ def qairt_paths(geniex_session):
         return _mm.get_paths(QAIRT_MODEL)
     except geniex.GeniexError as e:
         pytest.skip(f'QAIRT model {QAIRT_MODEL} not cached ({e}); run `geniex-py pull` first')
+
+
+@pytest.fixture(scope='session')
+def qairt_vlm_paths(geniex_session):
+    if not _device_tests_enabled() or not _is_snapdragon_host():
+        pytest.skip('QAIRT tests require GENIEX_DEVICE_TEST=1 on a Snapdragon host')
+    try:
+        return _mm.get_paths(QAIRT_VLM_MODEL)
+    except geniex.GeniexError as e:
+        pytest.skip(f'QAIRT VLM {QAIRT_VLM_MODEL} not cached ({e}); run `geniex-py pull` first')
