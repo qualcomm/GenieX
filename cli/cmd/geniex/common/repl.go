@@ -71,6 +71,7 @@ func (r *Repl) GetPrompt() (string, error) {
 		config := &readline.Config{
 			Prompt:      render.GetTheme().Prompt.Sprint("> "),
 			AltPrompt:   render.GetTheme().Prompt.Sprint(". "),
+			Placeholder: "Send a message (/? for help)",
 			HistoryFile: filepath.Join(store.Get().DataPath(), "history"),
 		}
 		rl, err := readline.New(config)

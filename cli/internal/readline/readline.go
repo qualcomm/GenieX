@@ -21,6 +21,7 @@ import (
 type Config struct {
 	Prompt      string
 	AltPrompt   string
+	Placeholder string
 	HistoryFile string
 }
 
@@ -48,6 +49,7 @@ func New(config *Config) (*Readline, error) {
 	buf := NewBuffer(
 		config.Prompt,
 		config.AltPrompt,
+		config.Placeholder,
 	)
 
 	hist := NewHistory(config.HistoryFile)

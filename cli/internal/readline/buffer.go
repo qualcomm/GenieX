@@ -25,11 +25,11 @@ import (
 	"golang.org/x/term"
 )
 
-// TODO: placeholder
 type Buffer struct {
 	// configuration
-	prompt    string
-	altPrompt string
+	prompt      string
+	altPrompt   string
+	placeholder string
 
 	// state
 	data         []rune
@@ -37,11 +37,12 @@ type Buffer struct {
 	cursorHeight int
 }
 
-func NewBuffer(prompt, altPrompt string) *Buffer {
+func NewBuffer(prompt, altPrompt, placeholder string) *Buffer {
 	return &Buffer{
-		prompt:    prompt,
-		altPrompt: altPrompt,
-		data:      make([]rune, 0),
+		prompt:      prompt,
+		altPrompt:   altPrompt,
+		placeholder: placeholder,
+		data:        make([]rune, 0),
 	}
 }
 
@@ -91,6 +92,16 @@ func (b *Buffer) refresh() {
 	buffer.WriteString(b.prompt)
 	curWidth += calcANSIWidth(b.prompt)
 	cursorWidth = curWidth
+
+	// render placeholder when buffer is empty; cursor stays at the prompt
+	// because cursorWidth/cursorHeight are not advanced past this point.
+	// truncate to the remaining space on the current line so it never wraps.
+	avail := width - curWidth - 1
+	if len(b.data) == 0 && b.placeholder != "" && avail > 0 {
+		buffer.WriteString("\x1b[2;37m") // dim + light grey
+		buffer.WriteString(runewidth.Truncate(b.placeholder, avail, "…"))
+		buffer.WriteString("\x1b[0m")
+	}
 
 	for i, r := range b.data {
 		// line wrap
