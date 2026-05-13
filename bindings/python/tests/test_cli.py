@@ -27,6 +27,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from geniex.cli import _parse_media
+
 _CLI_PATH = Path(__file__).resolve().parent.parent / 'geniex' / 'cli.py'
 
 
@@ -79,3 +81,35 @@ def test_cli_help_runs():
     )
     assert r.returncode == 0
     assert 'GenieX Python CLI' in r.stdout
+
+
+def test_parse_media_extracts_image(tmp_path):
+    img = tmp_path / 'cat.png'
+    img.write_bytes(b'\x89PNG\r\n\x1a\n')
+    prompt, images, audios = _parse_media(f'Describe {img}')
+    assert prompt == 'Describe'
+    assert images == [str(img)]
+    assert audios == []
+
+
+def test_parse_media_extracts_audio(tmp_path):
+    wav = tmp_path / 'sample.wav'
+    wav.write_bytes(b'RIFF')
+    prompt, images, audios = _parse_media(f'Transcribe {wav}')
+    assert audios == [str(wav)]
+    assert images == []
+    assert 'Transcribe' in prompt and str(wav) not in prompt
+
+
+def test_parse_media_ignores_missing_file():
+    prompt, images, audios = _parse_media('Look at ./does-not-exist.png please')
+    assert images == []
+    assert audios == []
+    assert './does-not-exist.png' in prompt
+
+
+def test_parse_media_leaves_plain_text_alone():
+    prompt, images, audios = _parse_media('Hello world, no media here.')
+    assert prompt == 'Hello world, no media here.'
+    assert images == []
+    assert audios == []

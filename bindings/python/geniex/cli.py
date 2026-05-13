@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -31,6 +32,7 @@ import time
 import geniex
 from geniex import (
     AutoModelForCausalLM,
+    AutoModelForVision2Seq,
     GeniexError,
     get_device_list,
     get_plugin_list,
@@ -39,6 +41,36 @@ from geniex import (
 )
 
 _mm = geniex.model_manager
+
+# Matches bare media paths in the user prompt (absolute, relative, or
+# Windows drive-qualified). Mirrors the regex used by the Go CLI so
+# behaviour is consistent across bindings.
+_MEDIA_PATH_RE = re.compile(r'(?:[a-zA-Z]:)?(?:\./|/|\\)[\S\\ ]+?\.(?i:jpg|jpeg|png|webp|mp3|wav)\b')
+_IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.webp')
+_AUDIO_EXTS = ('.mp3', '.wav')
+
+
+def _parse_media(prompt: str) -> tuple[str, list[str], list[str]]:
+    """Strip media paths from ``prompt`` and return ``(prompt, images, audios)``.
+
+    Only paths pointing at existing files are consumed; anything else stays
+    in the prompt so the user sees an explicit error from the model rather
+    than silent truncation.
+    """
+    images: list[str] = []
+    audios: list[str] = []
+    cleaned = prompt
+    for match in _MEDIA_PATH_RE.findall(prompt):
+        if not os.path.isfile(match):
+            print(f'warning: file not found: {match}', file=sys.stderr)
+            continue
+        ext = os.path.splitext(match)[1].lower()
+        if ext in _AUDIO_EXTS:
+            audios.append(match)
+        elif ext in _IMAGE_EXTS:
+            images.append(match)
+        cleaned = cleaned.replace(f"'{match}'", '').replace(match, '')
+    return cleaned.strip(), images, audios
 
 
 def _fmt_bytes(n: int) -> str:
@@ -137,8 +169,31 @@ _GREEN = '\x1b[32m' if _ANSI else ''
 _RESET = '\x1b[0m' if _ANSI else ''
 
 
-def _run_turn(model, history: list[dict], user: str, max_tokens: int, temperature: float) -> None:
-    history.append({'role': 'user', 'content': user})
+def _run_turn(
+    model,
+    history: list[dict],
+    user: str,
+    max_tokens: int,
+    temperature: float,
+    *,
+    is_vlm: bool,
+) -> None:
+    images: list[str] = []
+    audios: list[str] = []
+    if is_vlm:
+        user, images, audios = _parse_media(user)
+        # VLM chat templates need typed content parts (one per image / audio
+        # / text) so the tokenizer can emit the right marker tokens.
+        parts: list[dict] = []
+        for img in images:
+            parts.append({'type': 'image', 'image': img})
+        for aud in audios:
+            parts.append({'type': 'audio', 'audio': aud})
+        if user:
+            parts.append({'type': 'text', 'text': user})
+        history.append({'role': 'user', 'content': parts or user})
+    else:
+        history.append({'role': 'user', 'content': user})
     prompt = model.tokenizer.apply_chat_template(
         history,
         tokenize=False,
@@ -147,12 +202,15 @@ def _run_turn(model, history: list[dict], user: str, max_tokens: int, temperatur
     )
 
     reply_parts: list[str] = []
-    streamer = model.generate(
-        prompt,
-        max_new_tokens=max_tokens,
-        temperature=temperature,
-        stream=True,
-    )
+    gen_kwargs: dict = {
+        'max_new_tokens': max_tokens,
+        'temperature': temperature,
+        'stream': True,
+    }
+    if is_vlm:
+        gen_kwargs['images'] = images
+        gen_kwargs['audios'] = audios
+    streamer = model.generate(prompt, **gen_kwargs)
     try:
         for chunk in streamer:
             print(chunk, end='', flush=True)
@@ -181,7 +239,14 @@ def _run_turn(model, history: list[dict], user: str, max_tokens: int, temperatur
     history.append({'role': 'assistant', 'content': ''.join(reply_parts)})
 
 
-def _chat_loop(model, system: str | None, max_tokens: int, temperature: float) -> None:
+def _chat_loop(
+    model,
+    system: str | None,
+    max_tokens: int,
+    temperature: float,
+    *,
+    is_vlm: bool,
+) -> None:
     history: list[dict] = []
     if system:
         history.append({'role': 'system', 'content': system})
@@ -209,7 +274,7 @@ def _chat_loop(model, system: str | None, max_tokens: int, temperature: float) -
             print(f'{_DIM}(history cleared){_RESET}')
             continue
 
-        _run_turn(model, history, user, max_tokens, temperature)
+        _run_turn(model, history, user, max_tokens, temperature, is_vlm=is_vlm)
 
 
 def _cmd_devices(_args: argparse.Namespace) -> int:
@@ -239,11 +304,20 @@ def _cmd_chat(args: argparse.Namespace) -> int:
         local_path=args.local_path,
     )
 
+    # Dispatch LLM vs VLM from the cached manifest. Fall back to LLM when
+    # the model type can't be resolved (local paths, fresh installs, etc.).
+    try:
+        model_type = _mm.get_type(args.model)
+    except GeniexError:
+        model_type = 'llm'
+    is_vlm = model_type == 'vlm'
+    factory = AutoModelForVision2Seq if is_vlm else AutoModelForCausalLM
+
     name = f'{args.model}:{args.quant}' if args.quant else args.model
-    sys.stdout.write(f'{_DIM}loading {name} ...{_RESET} ')
+    sys.stdout.write(f'{_DIM}loading {name} ({model_type}) ...{_RESET} ')
     sys.stdout.flush()
     t0 = time.monotonic()
-    model = AutoModelForCausalLM.from_pretrained(
+    model = factory.from_pretrained(
         args.model,
         quant=args.quant,
         device_map=args.device,
@@ -259,10 +333,15 @@ def _cmd_chat(args: argparse.Namespace) -> int:
             history: list[dict] = []
             if args.system:
                 history.append({'role': 'system', 'content': args.system})
-            _run_turn(model, history, args.prompt, args.max_tokens, args.temperature)
+            _run_turn(model, history, args.prompt, args.max_tokens, args.temperature, is_vlm=is_vlm)
         else:
+            if is_vlm:
+                print(
+                    f'{_DIM}VLM mode — drop image/audio paths into the prompt '
+                    f'(png/jpg/webp/mp3/wav) to attach media.{_RESET}'
+                )
             print(f'{_DIM}Use Ctrl+D or /exit to exit.{_RESET}\n')
-            _chat_loop(model, args.system, args.max_tokens, args.temperature)
+            _chat_loop(model, args.system, args.max_tokens, args.temperature, is_vlm=is_vlm)
     finally:
         model.close()
     return 0
