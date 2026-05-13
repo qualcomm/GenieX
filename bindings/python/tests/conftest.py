@@ -40,7 +40,16 @@ QAIRT_VLM_MODEL = os.environ.get('GENIEX_QAIRT_VLM_MODEL', 'qualcomm/Qwen2.5-VL-
 
 
 def _is_snapdragon_host() -> bool:
-    return platform.system() == 'Windows' and platform.machine().lower() in ('arm64', 'aarch64')
+    if platform.machine().lower() not in ('arm64', 'aarch64'):
+        return False
+    if platform.system() == 'Windows':
+        return True
+    # Linux / Android: probe the DeviceTree compatible string for a Qualcomm SoC.
+    try:
+        with open('/sys/firmware/devicetree/base/compatible', 'rb') as f:
+            return b'qcom' in f.read()
+    except OSError:
+        return False
 
 
 def _device_tests_enabled() -> bool:
