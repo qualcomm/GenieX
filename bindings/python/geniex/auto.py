@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from ctypes import byref, c_void_p
@@ -24,6 +25,8 @@ from . import model_manager as _mm
 from ._ffi._api import _check, ensure_init, get_plugin_list, load_library, resolve_device
 from ._ffi._types import geniex_LlmCreateInput, geniex_ModelConfig, geniex_VlmCreateInput
 from .modeling import GeniexLLM, GeniexVLM
+
+_logger = logging.getLogger('geniex')
 
 PLUGIN_LLAMA_CPP = 'llama_cpp'
 PLUGIN_QAIRT = 'qairt'
@@ -163,7 +166,14 @@ def _resolve_model_sources(
     return paths.model_path, paths.mmproj_path, paths.tokenizer_path, paths
 
 
-def _build_model_config(n_ctx: int, n_gpu_layers: int, **kwargs) -> geniex_ModelConfig:
+def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **kwargs) -> geniex_ModelConfig:
+    if plugin_id == PLUGIN_QAIRT:
+        if n_gpu_layers != 0:
+            _logger.debug('qairt plugin does not consume n_gpu_layers; forcing 0')
+            n_gpu_layers = 0
+        if n_ctx != 0:
+            _logger.debug('qairt plugin does not consume n_ctx; forcing 0')
+            n_ctx = 0
     cfg = geniex_ModelConfig(
         n_ctx=n_ctx,
         n_gpu_layers=n_gpu_layers,
@@ -219,10 +229,14 @@ class AutoModelForCausalLM:
                 ``geniex-py devices`` (or
                 :func:`geniex._ffi.get_device_list`) to list concrete
                 device ids available on this machine.
-            n_ctx: Context length (0 = model default).
+            n_ctx: Context length (0 = model default). Forced to 0 when the
+                resolved plugin is ``qairt`` (the QAIRT runtime does not
+                consume ``n_ctx``).
             n_gpu_layers: Layers to offload to GPU/NPU (999 = offload all).
-                Forced to 0 when ``device_map`` resolves to CPU, and to
-                999 when it resolves to ``hybrid``.
+                Forced to 0 when ``device_map`` resolves to CPU, to 999
+                when it resolves to ``hybrid``, and to 0 when the resolved
+                plugin is ``qairt`` (the QAIRT runtime does not consume
+                ``n_gpu_layers``).
             tokenizer_path: Optional override for tokenizer file path.
             license_id: NPU licence ID.
             license_key: NPU licence key.
@@ -238,7 +252,7 @@ class AutoModelForCausalLM:
         plugin_id, device_id, ngl_override = _resolve_device(device_map, resolved_name)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
-        config = _build_model_config(n_ctx, n_gpu_layers, **kwargs)
+        config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
 
         inp = geniex_LlmCreateInput(
             model_name=resolved_name.encode(),
@@ -293,10 +307,14 @@ class AutoModelForVision2Seq:
                 to ``hybrid`` for ``llama_cpp`` and ``npu`` for ``qairt``.
                 See :class:`AutoModelForCausalLM.from_pretrained` for
                 full semantics.
-            n_ctx: Context length (0 = model default).
+            n_ctx: Context length (0 = model default). Forced to 0 when the
+                resolved plugin is ``qairt`` (the QAIRT runtime does not
+                consume ``n_ctx``).
             n_gpu_layers: Layers to offload to GPU/NPU (999 = offload all).
-                Forced to 0 when ``device_map`` resolves to CPU, and to
-                999 when it resolves to ``hybrid``.
+                Forced to 0 when ``device_map`` resolves to CPU, to 999
+                when it resolves to ``hybrid``, and to 0 when the resolved
+                plugin is ``qairt`` (the QAIRT runtime does not consume
+                ``n_gpu_layers``).
             mmproj_path: Path to the multimodal projector file.
             tokenizer_path: Optional override for tokenizer file path.
             license_id: NPU licence ID.
@@ -308,7 +326,7 @@ class AutoModelForVision2Seq:
         plugin_id, device_id, ngl_override = _resolve_device(device_map, resolved_name)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
-        config = _build_model_config(n_ctx, n_gpu_layers, **kwargs)
+        config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
 
         inp = geniex_VlmCreateInput(
             model_name=resolved_name.encode(),
