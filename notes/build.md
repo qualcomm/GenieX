@@ -20,13 +20,12 @@ bazelisk run //cli -- infer Qwen/Qwen3-0.6B-GGUF
 
 ## CLI build options
 
-Flags for `bazelisk run`:
+Flags for `bazelisk build` and `bazelisk run`:
 
-| Flag                     | Meaning                                                        |
-| ------------------------ | -------------------------------------------------------------- |
-| `--//sdk:sdk_type=local` | Default. Link against a locally built SDK in `sdk/pkg-geniex`. |
-| `--//sdk:sdk_type=s3`    | WIP.                                                           |
-| `--//sdk:sdk_type=bazel` | WIP.                                                           |
+| Flag                                    | Meaning                                                                                                     |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `--//sdk:sdk_type={local,s3,bazel}`     | SDK source. `local` (default) links against `sdk/pkg-geniex`; `s3` and `bazel` are WIP.                     |
+| `--config={linux_arm64,windows_arm64}`  | Cross-compile to the target platform (Go toolchain + CGO + `oci_image` base). `sdk/pkg-geniex/` must match. |
 
 Development targets:
 
