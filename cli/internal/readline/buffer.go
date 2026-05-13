@@ -20,6 +20,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
@@ -93,14 +94,9 @@ func (b *Buffer) refresh() {
 	curWidth += calcANSIWidth(b.prompt)
 	cursorWidth = curWidth
 
-	// render placeholder when buffer is empty; cursor stays at the prompt
-	// because cursorWidth/cursorHeight are not advanced past this point.
-	// truncate to the remaining space on the current line so it never wraps.
 	avail := width - curWidth - 1
 	if len(b.data) == 0 && b.placeholder != "" && avail > 0 {
-		buffer.WriteString("\x1b[2;37m") // dim + light grey
-		buffer.WriteString(runewidth.Truncate(b.placeholder, avail, "…"))
-		buffer.WriteString("\x1b[0m")
+		buffer.WriteString(truncateANSI(b.placeholder, avail))
 	}
 
 	for i, r := range b.data {
@@ -154,4 +150,41 @@ var ansiRegexp = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 
 func calcANSIWidth(s string) int {
 	return runewidth.StringWidth(ansiRegexp.ReplaceAllString(s, ""))
+}
+
+func truncateANSI(s string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	if calcANSIWidth(s) <= limit {
+		return s
+	}
+	locs := ansiRegexp.FindAllStringIndex(s, -1)
+
+	var out strings.Builder
+	width := 0
+	hasSGR := false
+	i := 0
+	for i < len(s) {
+		if len(locs) > 0 && locs[0][0] == i {
+			out.WriteString(s[locs[0][0]:locs[0][1]])
+			hasSGR = true
+			i = locs[0][1]
+			locs = locs[1:]
+			continue
+		}
+		r, sz := utf8.DecodeRuneInString(s[i:])
+		rw := runewidth.RuneWidth(r)
+		if width+rw > limit-1 {
+			break
+		}
+		out.WriteRune(r)
+		width += rw
+		i += sz
+	}
+	out.WriteRune('…')
+	if hasSGR {
+		out.WriteString("\x1b[0m")
+	}
+	return out.String()
 }
