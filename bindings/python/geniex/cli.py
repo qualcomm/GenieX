@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Minimal ``geniex`` command-line entry point.
+"""geniex-py console-script entry point.
 
-Installed as a console script via ``[project.scripts]`` in pyproject.toml;
-the library-level API (``geniex.AutoModelForCausalLM`` etc.) is unchanged.
+This module also serves as a reference for how downstream users consume
+the ``geniex`` package: it imports only from the public ``geniex``
+surface and never reaches into private ``_ffi`` internals.
 """
 
 from __future__ import annotations
@@ -27,9 +28,17 @@ import sys
 import threading
 import time
 
-from . import model_manager as _mm
-from ._ffi._api import GeniexError, ensure_init, get_device_list, get_plugin_list
-from .auto import AutoModelForCausalLM, _resolve_device
+import geniex
+from geniex import (
+    AutoModelForCausalLM,
+    GeniexError,
+    get_device_list,
+    get_plugin_list,
+    init,
+    resolve_device_map,
+)
+
+_mm = geniex.model_manager
 
 
 def _fmt_bytes(n: int) -> str:
@@ -44,8 +53,6 @@ def _fmt_bytes(n: int) -> str:
 
 
 def _make_progress_printer():
-    """Return an on_progress callback that renders a single-line status to stderr."""
-
     def _cb(files):
         parts = []
         for f in files:
@@ -54,7 +61,6 @@ def _make_progress_printer():
             pct = f' {got * 100 // total}%' if total > 0 else ''
             parts.append(f'{f.file_name} {_fmt_bytes(got)}/{_fmt_bytes(total)}{pct}')
         line = ' | '.join(parts)
-        # Pad so shorter lines overwrite longer previous lines cleanly.
         sys.stderr.write('\r' + line.ljust(80)[:120])
         sys.stderr.flush()
         return True
@@ -71,29 +77,13 @@ def _ensure_downloaded(
     chipset: str | None = None,
     local_path: str | None = None,
 ) -> _mm.ModelPaths | None:
-    """Download the model through the model manager if it's not a local path.
-
-    Returns the resolved :class:`ModelPaths` so callers can hand a local
-    file to ``from_pretrained`` and skip a second model-manager round-trip
-    (which would otherwise hit ``repo.info()`` again over the network).
-    Returns ``None`` when ``model`` is already a local path.
-
-    The Rust pull is a blocking FFI call, so we run it in a daemon thread
-    and keep the main thread in Python so Ctrl-C is delivered promptly.
-    The ``.inflight/`` sentinel stays on disk if the user aborts, and a
-    subsequent run will resume from where it left off.
-    """
     if os.path.exists(model):
         return None
 
-    # ensure_cached wraps only the HF/auto path. AiHub + LocalFs need the
-    # extra metadata (display_name, chipset, local_path) that only pull()
-    # carries, so route those explicitly and then resolve paths after.
-    if hub in ('aihub', 'localfs', 'local'):
-        if hub == 'aihub' and not display_name:
-            raise SystemExit('error: --display-name is required when --hub aihub')
-        if hub in ('localfs', 'local') and not local_path:
-            raise SystemExit('error: --local-path is required when --hub localfs')
+    if hub == 'aihub' and not display_name:
+        raise SystemExit('error: --display-name is required when --hub aihub')
+    if hub in ('localfs', 'local') and not local_path:
+        raise SystemExit('error: --local-path is required when --hub localfs')
 
     result: dict = {}
 
@@ -123,6 +113,7 @@ def _ensure_downloaded(
         except BaseException as e:  # noqa: BLE001 — forward to main thread
             result['error'] = e
 
+    # Run the blocking pull off the main thread so Ctrl-C is delivered promptly.
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
     try:
@@ -147,7 +138,6 @@ _RESET = '\x1b[0m' if _ANSI else ''
 
 
 def _run_turn(model, history: list[dict], user: str, max_tokens: int, temperature: float) -> None:
-    """Stream one assistant reply and append it to ``history`` in place."""
     history.append({'role': 'user', 'content': user})
     prompt = model.tokenizer.apply_chat_template(
         history,
@@ -169,11 +159,9 @@ def _run_turn(model, history: list[dict], user: str, max_tokens: int, temperatur
             reply_parts.append(chunk)
         print()
     except KeyboardInterrupt:
-        # Ctrl-C during generation: ask the C side to stop at the next
-        # token boundary (the plugin's decode loop breaks when our token
-        # callback returns False), then drain whatever's already queued
-        # so the streamer thread finishes and publishes its final
-        # profile (including stop_reason='cancelled').
+        # Ctrl-C mid-generation: ask the C side to stop at the next token
+        # boundary, then drain the queue so the streamer thread publishes
+        # its final profile (stop_reason='cancelled').
         streamer.cancel()
         try:
             for chunk in streamer:
@@ -199,8 +187,8 @@ def _chat_loop(model, system: str | None, max_tokens: int, temperature: float) -
         history.append({'role': 'system', 'content': system})
 
     while True:
-        # Ctrl-C at the prompt clears the half-typed line and re-prompts,
-        # matching llama-cli / ollama run. Only Ctrl-D (EOF) ends the session.
+        # Ctrl-C at the prompt clears the line and re-prompts (matching
+        # llama-cli / ollama run); only Ctrl-D ends the session.
         try:
             user = input(f'{_GREEN}> {_RESET}')
         except KeyboardInterrupt:
@@ -225,8 +213,7 @@ def _chat_loop(model, system: str | None, max_tokens: int, temperature: float) -
 
 
 def _cmd_devices(_args: argparse.Namespace) -> int:
-    """List plugins and the devices each plugin exposes on this host."""
-    ensure_init()
+    init()
     plugins = get_plugin_list()
     if not plugins:
         print('No plugins available.')
@@ -256,10 +243,6 @@ def _cmd_chat(args: argparse.Namespace) -> int:
     sys.stdout.write(f'{_DIM}loading {name} ...{_RESET} ')
     sys.stdout.flush()
     t0 = time.monotonic()
-    # Pass the original org/repo through; from_pretrained's internal
-    # get_paths fast-path resolves it against the cache the pull above
-    # just populated, and carries the QAIRT registry key (`qwen3_4b`)
-    # forward via ModelPaths.model_name.
     model = AutoModelForCausalLM.from_pretrained(
         args.model,
         quant=args.quant,
@@ -267,7 +250,7 @@ def _cmd_chat(args: argparse.Namespace) -> int:
         n_ctx=args.n_ctx,
     )
     elapsed = time.monotonic() - t0
-    plugin_id, device_id, _ngl = _resolve_device(args.device, args.model)
+    plugin_id, device_id, _ngl = resolve_device_map(args.device, args.model)
     where = f'{plugin_id}:{device_id}' if plugin_id and device_id else (plugin_id or args.device)
     print(f'{_DIM}done ({elapsed:.1f}s, {where}){_RESET}')
 
@@ -286,7 +269,6 @@ def _cmd_chat(args: argparse.Namespace) -> int:
 
 
 def _cmd_pull(args: argparse.Namespace) -> int:
-    """Download a model into the local cache."""
     _ensure_downloaded(
         args.model,
         args.quant,
@@ -308,7 +290,6 @@ def _human_size(n: int) -> str:
 
 
 def _read_manifest(name: str) -> dict | None:
-    """Load the on-disk geniex.json for a cached model (or None on failure)."""
     try:
         paths = _mm.get_paths(name)
     except GeniexError:
@@ -339,7 +320,6 @@ def _render_table(rows: list[list[str]], headers: list[str]) -> None:
 
 
 def _cmd_ls(args: argparse.Namespace) -> int:
-    """List cached models (or show one model's details when a name is given)."""
     if args.model:
         manifest = _read_manifest(args.model)
         if manifest is None:
@@ -354,8 +334,7 @@ def _cmd_ls(args: argparse.Namespace) -> int:
         return 0
 
     def _file_size(f: dict) -> int:
-        """Return the file's size, falling back to disk stat when the manifest
-        recorded -1 (e.g. LocalFs pulls where the hub couldn't stat ahead)."""
+        # Size may be -1 for LocalFs pulls where the hub couldn't stat ahead.
         s = int(f.get('Size') or 0)
         return max(s, 0)
 
@@ -405,7 +384,6 @@ def _cmd_ls(args: argparse.Namespace) -> int:
 
 
 def _cmd_rm(args: argparse.Namespace) -> int:
-    """Remove one cached model, or all with --all."""
     if args.all:
         n = _mm.clean()
         print(f'removed {n} model{"s" if n != 1 else ""}')
@@ -419,7 +397,6 @@ def _cmd_rm(args: argparse.Namespace) -> int:
 
 
 def _add_hub_args(p: argparse.ArgumentParser) -> None:
-    """Attach shared --hub / --display-name / --chipset / --local-path flags."""
     p.add_argument(
         '--hub',
         choices=['auto', 'hf', 'huggingface', 'aihub', 'localfs', 'local'],
