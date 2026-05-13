@@ -12,12 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""High-level Python API for the geniex model manager.
-
-Wraps the `geniex_model_*` C FFI (implemented in Rust under
-``sdk/model-manager``) so Python callers can download, list, and resolve
-models without re-implementing hub logic per binding.
-"""
+"""High-level Python API for the geniex model manager."""
 
 from __future__ import annotations
 
@@ -53,6 +48,7 @@ __all__ = [
     'get_paths',
     'get_type',
     'resolve_alias',
+    'ensure_cached',
 ]
 
 
@@ -104,10 +100,9 @@ _initialized = False
 
 
 def init(data_dir: str | None = None) -> None:
-    """Initialize the model manager.
+    """Initialise the model manager. Idempotent.
 
     ``data_dir`` precedence: argument → ``GENIEX_DATADIR`` env → ``~/.cache/geniex``.
-    Idempotent — calling twice is a no-op.
     """
     global _initialized
     if _initialized:
@@ -120,6 +115,7 @@ def init(data_dir: str | None = None) -> None:
 
 
 def deinit() -> None:
+    """Release model-manager resources."""
     global _initialized
     if not _initialized:
         return
@@ -134,14 +130,8 @@ def _ensure_init() -> None:
 
 
 def _maybe_resolve_alias(model_name: str, quant: str | None) -> tuple[str, str | None]:
-    """Expand a short alias to ``org/repo[:quant]`` if the input has no ``/``.
-
-    Splits a trailing ``:quant`` off the input, then tries :func:`resolve_alias`
-    for bare names (no ``/``). If the alias is unknown, the bare name is passed
-    through unchanged — the SDK canonicalises bare names to ``aihub/<name>`` so
-    they route to AI Hub without a registered alias. Canonical ``org/repo``
-    inputs pass through unchanged.
-    """
+    # Split a trailing :quant, try resolve_alias() for bare names, leave org/repo alone.
+    # Unknown bare names pass through — the SDK canonicalises them to aihub/<name>.
     name_part = model_name
     if ':' in model_name:
         name_part, parsed_quant = model_name.rsplit(':', 1)
@@ -154,7 +144,6 @@ def _maybe_resolve_alias(model_name: str, quant: str | None) -> tuple[str, str |
     try:
         resolved = resolve_alias(name_part)
     except GeniexError:
-        # Unknown alias: let the SDK treat it as a bare AI Hub model id.
         return name_part, quant
 
     if ':' in resolved:
@@ -176,22 +165,17 @@ def pull(
     display_name: str | None = None,
     on_progress: ProgressCallback | None = None,
 ) -> None:
-    """Download a model (blocking). Resumes partial downloads.
+    """Download a model into the local cache (blocking, resumable).
 
     Args:
-        model_name: ``org/repo``, ``org/repo:quant``, or a short alias
-            (see :func:`resolve_alias`). Aliases are expanded locally
-            before the call into the SDK.
-        quant: Optional quantization hint (e.g. ``"Q4_K_M"``).
-        hub: ``"auto"`` | ``"hf"`` | ``"aihub"`` | ``"localfs"``, or a raw integer enum.
-        local_path: Required when ``hub == "localfs"`` — source directory.
-        hf_token: HuggingFace bearer token. Falls back to ``GENIEX_HFTOKEN`` env.
-        chipset: AI Hub target chipset (e.g. ``"qualcomm-snapdragon-x-elite"``).
-            Only used when ``hub == "aihub"``. ``None`` asks the SDK to auto-detect,
-            currently supported on Windows-on-Snapdragon hosts only.
-        display_name: AI Hub ``display_name`` of the model. Required when
-            ``hub == "aihub"``; ignored otherwise.
-        on_progress: Callback ``(files) -> bool``; return False to cancel.
+        model_name: ``org/repo``, ``org/repo:quant``, or a short alias.
+        quant: Optional quantisation hint (e.g. ``"Q4_K_M"``).
+        hub: ``"auto" | "hf" | "aihub" | "localfs"`` or a raw enum int.
+        local_path: Required when ``hub == "localfs"``.
+        hf_token: HuggingFace bearer token; falls back to ``GENIEX_HFTOKEN``.
+        chipset: AI Hub target chipset; auto-detected on Windows-on-Snapdragon.
+        display_name: AI Hub ``display_name`` (required when ``hub == "aihub"``).
+        on_progress: Callback ``(files) -> bool``; return ``False`` to cancel.
     """
     _ensure_init()
     lib = load_library()
@@ -215,9 +199,7 @@ def pull(
 
     cb = geniex_download_progress_cb(_trampoline) if on_progress else geniex_download_progress_cb(0)
 
-    # struct_size is the ABI version gate. Wrapping sizeof() here means
-    # ctypes mirror drift between Python and the installed geniex.dll is
-    # a rejected FFI call rather than a silent garbage read.
+    # struct_size is the ABI version gate; the SDK rejects stale layouts.
     inp = geniex_ModelPullInput(
         struct_size=sizeof(geniex_ModelPullInput),
         model_name=model_name.encode(),
@@ -234,7 +216,7 @@ def pull(
 
 
 def list_models() -> list[str]:
-    """List cached model names (``org/repo``)."""
+    """Return cached model names (``org/repo``)."""
     _ensure_init()
     lib = load_library()
     out = geniex_ModelListOutput()
@@ -246,14 +228,14 @@ def list_models() -> list[str]:
 
 
 def remove(model_name: str) -> None:
-    """Delete a cached model from disk."""
+    """Delete ``model_name`` from the local cache."""
     _ensure_init()
     lib = load_library()
     _check(lib.geniex_model_remove(model_name.encode()))
 
 
 def clean() -> int:
-    """Remove all cached models; returns the count removed."""
+    """Remove all cached models. Returns the number removed."""
     _ensure_init()
     lib = load_library()
     n = c_int32(0)
@@ -262,12 +244,7 @@ def clean() -> int:
 
 
 def get_paths(model_name: str) -> ModelPaths:
-    """Resolve ``org/repo`` (optionally ``:quant``) or a short alias to absolute paths.
-
-    Aliases (e.g. ``"qwen3"``) are expanded locally via :func:`resolve_alias`
-    before the lookup; any ``:quant`` suffix on the input or on the resolved
-    alias is preserved so cached quant-specific entries hit.
-    """
+    """Resolve ``org/repo[:quant]`` (or alias) to absolute on-disk paths."""
     _ensure_init()
     lib = load_library()
     base, quant = _maybe_resolve_alias(model_name, None)
@@ -289,7 +266,7 @@ def get_paths(model_name: str) -> ModelPaths:
 
 
 def get_type(model_name: str) -> str:
-    """Return ``"llm"`` or ``"vlm"``."""
+    """Return ``"llm"`` or ``"vlm"`` for a cached model."""
     _ensure_init()
     lib = load_library()
     t = c_int32(0)
@@ -302,7 +279,7 @@ def get_type(model_name: str) -> str:
 
 
 def resolve_alias(alias: str) -> str:
-    """Resolve a short alias (e.g. ``"qwen3"``) to a canonical ``org/repo``."""
+    """Expand a short alias (e.g. ``"qwen3"``) to ``"org/repo"``."""
     _ensure_init()
     lib = load_library()
     out = c_char_p()
@@ -322,11 +299,7 @@ def ensure_cached(
     hf_token: str | None = None,
     on_progress: ProgressCallback | None = None,
 ) -> ModelPaths:
-    """Resolve alias, pull if missing, and return resolved paths.
-
-    Accepts ``org/repo`` or ``org/repo:quant`` (colon syntax); an explicit
-    ``quant`` keyword overrides anything parsed from the name.
-    """
+    """Resolve alias, :func:`pull` if missing, and return :class:`ModelPaths`."""
     _ensure_init()
 
     name_part = model_name_or_alias
@@ -335,7 +308,6 @@ def ensure_cached(
         if quant is None and parsed_quant:
             quant = parsed_quant
 
-    # Try alias resolution; if it fails, assume the input is already org/repo.
     try:
         full_name = resolve_alias(name_part)
     except GeniexError:

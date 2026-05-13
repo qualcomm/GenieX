@@ -47,11 +47,7 @@ class TextIteratorStreamer:
         return self._output
 
     def cancel(self) -> None:
-        """Stop generation at the next token boundary.
-
-        The next invocation of the C token callback returns False, which
-        the plugin treats as a signal to break out of the decode loop.
-        """
+        """Stop generation at the next token boundary."""
         self._cancelled.set()
 
     def _make_callback(self) -> geniex_token_callback:
@@ -62,11 +58,10 @@ class TextIteratorStreamer:
         def _cb(token_bytes: bytes, _userdata: c_void_p) -> bool:
             if token_bytes is not None:
                 q.put(token_bytes.decode('utf-8', errors='replace'))
-            # Returning False tells geniex_llm/vlm_generate to stop —
-            # see sdk/plugins/llama_cpp/src/llm.cpp line ~510.
+            # Returning False signals the plugin to break out of its decode loop.
             return not cancelled.is_set()
 
-        # Keep a reference so the GC doesn't collect it while C holds the pointer
+        # Retain a reference so GC doesn't free the callback while C holds the pointer.
         self._cb_ref = _cb
         return _cb
 

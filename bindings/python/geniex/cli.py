@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Minimal ``geniex`` command-line entry point.
+"""geniex-py console-script entry point.
 
-Installed as a console script via ``[project.scripts]`` in pyproject.toml;
-the library-level API (``geniex.AutoModelForCausalLM`` etc.) is unchanged.
+This module also serves as a reference for how downstream users consume
+the ``geniex`` package: it imports only from the public ``geniex``
+surface and never reaches into private ``_ffi`` internals.
 """
 
 from __future__ import annotations
@@ -23,13 +24,64 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import threading
 import time
 
-from . import model_manager as _mm
-from ._ffi._api import GeniexError, ensure_init, get_device_list, get_plugin_list
-from .auto import AutoModelForCausalLM, _resolve_device
+import geniex
+from geniex import (
+    AutoModelForCausalLM,
+    AutoModelForVision2Seq,
+    GeniexError,
+    get_device_list,
+    get_plugin_list,
+    init,
+    resolve_device_map,
+)
+
+_mm = geniex.model_manager
+
+# When stdout/stderr is a pipe on Windows the default codec is cp1252 and
+# model tokens outside Latin-1 (UTF-8 continuation bytes, emoji, replacement
+# chars) crash the print. Force UTF-8 whenever the stream supports it so
+# callers piping through `tee`, pytest capture, etc. get clean output.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, 'reconfigure'):
+        try:
+            _stream.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:  # noqa: BLE001 — best-effort
+            pass
+
+# Matches bare media paths in the user prompt (absolute, relative, or
+# Windows drive-qualified). Mirrors the regex used by the Go CLI so
+# behaviour is consistent across bindings.
+_MEDIA_PATH_RE = re.compile(r'(?:[a-zA-Z]:)?(?:\./|/|\\)[\S\\ ]+?\.(?i:jpg|jpeg|png|webp|mp3|wav)\b')
+_IMAGE_EXTS = ('.jpg', '.jpeg', '.png', '.webp')
+_AUDIO_EXTS = ('.mp3', '.wav')
+
+
+def _parse_media(prompt: str) -> tuple[str, list[str], list[str]]:
+    """Strip media paths from ``prompt`` and return ``(prompt, images, audios)``.
+
+    Only paths pointing at existing files are consumed; anything else stays
+    in the prompt so the user sees an explicit error from the model rather
+    than silent truncation.
+    """
+    images: list[str] = []
+    audios: list[str] = []
+    cleaned = prompt
+    for match in _MEDIA_PATH_RE.findall(prompt):
+        if not os.path.isfile(match):
+            print(f'warning: file not found: {match}', file=sys.stderr)
+            continue
+        ext = os.path.splitext(match)[1].lower()
+        if ext in _AUDIO_EXTS:
+            audios.append(match)
+        elif ext in _IMAGE_EXTS:
+            images.append(match)
+        cleaned = cleaned.replace(f"'{match}'", '').replace(match, '')
+    return cleaned.strip(), images, audios
 
 
 def _fmt_bytes(n: int) -> str:
@@ -44,8 +96,6 @@ def _fmt_bytes(n: int) -> str:
 
 
 def _make_progress_printer():
-    """Return an on_progress callback that renders a single-line status to stderr."""
-
     def _cb(files):
         parts = []
         for f in files:
@@ -54,7 +104,6 @@ def _make_progress_printer():
             pct = f' {got * 100 // total}%' if total > 0 else ''
             parts.append(f'{f.file_name} {_fmt_bytes(got)}/{_fmt_bytes(total)}{pct}')
         line = ' | '.join(parts)
-        # Pad so shorter lines overwrite longer previous lines cleanly.
         sys.stderr.write('\r' + line.ljust(80)[:120])
         sys.stderr.flush()
         return True
@@ -71,29 +120,13 @@ def _ensure_downloaded(
     chipset: str | None = None,
     local_path: str | None = None,
 ) -> _mm.ModelPaths | None:
-    """Download the model through the model manager if it's not a local path.
-
-    Returns the resolved :class:`ModelPaths` so callers can hand a local
-    file to ``from_pretrained`` and skip a second model-manager round-trip
-    (which would otherwise hit ``repo.info()`` again over the network).
-    Returns ``None`` when ``model`` is already a local path.
-
-    The Rust pull is a blocking FFI call, so we run it in a daemon thread
-    and keep the main thread in Python so Ctrl-C is delivered promptly.
-    The ``.inflight/`` sentinel stays on disk if the user aborts, and a
-    subsequent run will resume from where it left off.
-    """
     if os.path.exists(model):
         return None
 
-    # ensure_cached wraps only the HF/auto path. AiHub + LocalFs need the
-    # extra metadata (display_name, chipset, local_path) that only pull()
-    # carries, so route those explicitly and then resolve paths after.
-    if hub in ('aihub', 'localfs', 'local'):
-        if hub == 'aihub' and not display_name:
-            raise SystemExit('error: --display-name is required when --hub aihub')
-        if hub in ('localfs', 'local') and not local_path:
-            raise SystemExit('error: --local-path is required when --hub localfs')
+    if hub == 'aihub' and not display_name:
+        raise SystemExit('error: --display-name is required when --hub aihub')
+    if hub in ('localfs', 'local') and not local_path:
+        raise SystemExit('error: --local-path is required when --hub localfs')
 
     result: dict = {}
 
@@ -123,6 +156,7 @@ def _ensure_downloaded(
         except BaseException as e:  # noqa: BLE001 — forward to main thread
             result['error'] = e
 
+    # Run the blocking pull off the main thread so Ctrl-C is delivered promptly.
     t = threading.Thread(target=_worker, daemon=True)
     t.start()
     try:
@@ -146,9 +180,31 @@ _GREEN = '\x1b[32m' if _ANSI else ''
 _RESET = '\x1b[0m' if _ANSI else ''
 
 
-def _run_turn(model, history: list[dict], user: str, max_tokens: int, temperature: float) -> None:
-    """Stream one assistant reply and append it to ``history`` in place."""
-    history.append({'role': 'user', 'content': user})
+def _run_turn(
+    model,
+    history: list[dict],
+    user: str,
+    max_tokens: int,
+    temperature: float,
+    *,
+    is_vlm: bool,
+) -> None:
+    images: list[str] = []
+    audios: list[str] = []
+    if is_vlm:
+        user, images, audios = _parse_media(user)
+        # VLM chat templates need typed content parts (one per image / audio
+        # / text) so the tokenizer can emit the right marker tokens.
+        parts: list[dict] = []
+        for img in images:
+            parts.append({'type': 'image', 'image': img})
+        for aud in audios:
+            parts.append({'type': 'audio', 'audio': aud})
+        if user:
+            parts.append({'type': 'text', 'text': user})
+        history.append({'role': 'user', 'content': parts or user})
+    else:
+        history.append({'role': 'user', 'content': user})
     prompt = model.tokenizer.apply_chat_template(
         history,
         tokenize=False,
@@ -157,23 +213,24 @@ def _run_turn(model, history: list[dict], user: str, max_tokens: int, temperatur
     )
 
     reply_parts: list[str] = []
-    streamer = model.generate(
-        prompt,
-        max_new_tokens=max_tokens,
-        temperature=temperature,
-        stream=True,
-    )
+    gen_kwargs: dict = {
+        'max_new_tokens': max_tokens,
+        'temperature': temperature,
+        'stream': True,
+    }
+    if is_vlm:
+        gen_kwargs['images'] = images
+        gen_kwargs['audios'] = audios
+    streamer = model.generate(prompt, **gen_kwargs)
     try:
         for chunk in streamer:
             print(chunk, end='', flush=True)
             reply_parts.append(chunk)
         print()
     except KeyboardInterrupt:
-        # Ctrl-C during generation: ask the C side to stop at the next
-        # token boundary (the plugin's decode loop breaks when our token
-        # callback returns False), then drain whatever's already queued
-        # so the streamer thread finishes and publishes its final
-        # profile (including stop_reason='cancelled').
+        # Ctrl-C mid-generation: ask the C side to stop at the next token
+        # boundary, then drain the queue so the streamer thread publishes
+        # its final profile (stop_reason='cancelled').
         streamer.cancel()
         try:
             for chunk in streamer:
@@ -188,19 +245,26 @@ def _run_turn(model, history: list[dict], user: str, max_tokens: int, temperatur
         stop = p.stop_reason or 'unknown'
         print(
             f'\n{_CYAN}— {p.decode_speed:.1f} tok/s · {p.generated_tokens} tok'
-            f' · {p.ttft / 1000:.1f} s first token · stop: {stop} —{_RESET}\n'
+            f' · {p.ttft / 1e6:.1f} s first token · stop: {stop} —{_RESET}\n'
         )
     history.append({'role': 'assistant', 'content': ''.join(reply_parts)})
 
 
-def _chat_loop(model, system: str | None, max_tokens: int, temperature: float) -> None:
+def _chat_loop(
+    model,
+    system: str | None,
+    max_tokens: int,
+    temperature: float,
+    *,
+    is_vlm: bool,
+) -> None:
     history: list[dict] = []
     if system:
         history.append({'role': 'system', 'content': system})
 
     while True:
-        # Ctrl-C at the prompt clears the half-typed line and re-prompts,
-        # matching llama-cli / ollama run. Only Ctrl-D (EOF) ends the session.
+        # Ctrl-C at the prompt clears the line and re-prompts (matching
+        # llama-cli / ollama run); only Ctrl-D ends the session.
         try:
             user = input(f'{_GREEN}> {_RESET}')
         except KeyboardInterrupt:
@@ -221,12 +285,11 @@ def _chat_loop(model, system: str | None, max_tokens: int, temperature: float) -
             print(f'{_DIM}(history cleared){_RESET}')
             continue
 
-        _run_turn(model, history, user, max_tokens, temperature)
+        _run_turn(model, history, user, max_tokens, temperature, is_vlm=is_vlm)
 
 
 def _cmd_devices(_args: argparse.Namespace) -> int:
-    """List plugins and the devices each plugin exposes on this host."""
-    ensure_init()
+    init()
     plugins = get_plugin_list()
     if not plugins:
         print('No plugins available.')
@@ -252,22 +315,27 @@ def _cmd_chat(args: argparse.Namespace) -> int:
         local_path=args.local_path,
     )
 
+    # Dispatch LLM vs VLM from the cached manifest. Fall back to LLM when
+    # the model type can't be resolved (local paths, fresh installs, etc.).
+    try:
+        model_type = _mm.get_type(args.model)
+    except GeniexError:
+        model_type = 'llm'
+    is_vlm = model_type == 'vlm'
+    factory = AutoModelForVision2Seq if is_vlm else AutoModelForCausalLM
+
     name = f'{args.model}:{args.quant}' if args.quant else args.model
-    sys.stdout.write(f'{_DIM}loading {name} ...{_RESET} ')
+    sys.stdout.write(f'{_DIM}loading {name} ({model_type}) ...{_RESET} ')
     sys.stdout.flush()
     t0 = time.monotonic()
-    # Pass the original org/repo through; from_pretrained's internal
-    # get_paths fast-path resolves it against the cache the pull above
-    # just populated, and carries the QAIRT registry key (`qwen3_4b`)
-    # forward via ModelPaths.model_name.
-    model = AutoModelForCausalLM.from_pretrained(
+    model = factory.from_pretrained(
         args.model,
         quant=args.quant,
         device_map=args.device,
         n_ctx=args.n_ctx,
     )
     elapsed = time.monotonic() - t0
-    plugin_id, device_id, _ngl = _resolve_device(args.device, args.model)
+    plugin_id, device_id, _ngl = resolve_device_map(args.device, args.model)
     where = f'{plugin_id}:{device_id}' if plugin_id and device_id else (plugin_id or args.device)
     print(f'{_DIM}done ({elapsed:.1f}s, {where}){_RESET}')
 
@@ -276,17 +344,21 @@ def _cmd_chat(args: argparse.Namespace) -> int:
             history: list[dict] = []
             if args.system:
                 history.append({'role': 'system', 'content': args.system})
-            _run_turn(model, history, args.prompt, args.max_tokens, args.temperature)
+            _run_turn(model, history, args.prompt, args.max_tokens, args.temperature, is_vlm=is_vlm)
         else:
+            if is_vlm:
+                print(
+                    f'{_DIM}VLM mode — drop image/audio paths into the prompt '
+                    f'(png/jpg/webp/mp3/wav) to attach media.{_RESET}'
+                )
             print(f'{_DIM}Use Ctrl+D or /exit to exit.{_RESET}\n')
-            _chat_loop(model, args.system, args.max_tokens, args.temperature)
+            _chat_loop(model, args.system, args.max_tokens, args.temperature, is_vlm=is_vlm)
     finally:
         model.close()
     return 0
 
 
 def _cmd_pull(args: argparse.Namespace) -> int:
-    """Download a model into the local cache."""
     _ensure_downloaded(
         args.model,
         args.quant,
@@ -308,7 +380,6 @@ def _human_size(n: int) -> str:
 
 
 def _read_manifest(name: str) -> dict | None:
-    """Load the on-disk geniex.json for a cached model (or None on failure)."""
     try:
         paths = _mm.get_paths(name)
     except GeniexError:
@@ -339,7 +410,6 @@ def _render_table(rows: list[list[str]], headers: list[str]) -> None:
 
 
 def _cmd_ls(args: argparse.Namespace) -> int:
-    """List cached models (or show one model's details when a name is given)."""
     if args.model:
         manifest = _read_manifest(args.model)
         if manifest is None:
@@ -354,8 +424,7 @@ def _cmd_ls(args: argparse.Namespace) -> int:
         return 0
 
     def _file_size(f: dict) -> int:
-        """Return the file's size, falling back to disk stat when the manifest
-        recorded -1 (e.g. LocalFs pulls where the hub couldn't stat ahead)."""
+        # Size may be -1 for LocalFs pulls where the hub couldn't stat ahead.
         s = int(f.get('Size') or 0)
         return max(s, 0)
 
@@ -405,7 +474,6 @@ def _cmd_ls(args: argparse.Namespace) -> int:
 
 
 def _cmd_rm(args: argparse.Namespace) -> int:
-    """Remove one cached model, or all with --all."""
     if args.all:
         n = _mm.clean()
         print(f'removed {n} model{"s" if n != 1 else ""}')
@@ -419,7 +487,6 @@ def _cmd_rm(args: argparse.Namespace) -> int:
 
 
 def _add_hub_args(p: argparse.ArgumentParser) -> None:
-    """Attach shared --hub / --display-name / --chipset / --local-path flags."""
     p.add_argument(
         '--hub',
         choices=['auto', 'hf', 'huggingface', 'aihub', 'localfs', 'local'],
