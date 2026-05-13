@@ -34,6 +34,7 @@ type Theme struct {
 
 	Quant       Style
 	Prompt      Style
+	Placeholder Style
 	AddFiles    Style
 	ThinkOutput Style
 	ModelOutput Style
@@ -77,6 +78,7 @@ func noColorTheme() *Theme {
 		Error:       NoColor{},
 		Quant:       NoColor{},
 		Prompt:      NoColor{},
+		Placeholder: NoColor{},
 		AddFiles:    NoColor{},
 		ThinkOutput: NoColor{},
 		ModelOutput: NoColor{},
@@ -96,6 +98,7 @@ func defaultColorTheme() *Theme {
 
 		theme.Quant = color.Style{color.FgLightBlue}
 		theme.Prompt = color.Style{color.FgGreen, color.Bold}
+		theme.Placeholder = color.Style{color.FgDarkGray}
 		theme.AddFiles = color.Style{color.FgWhite}
 		theme.ThinkOutput = color.Style{color.FgDarkGray}
 		theme.ModelOutput = NoColor{}
