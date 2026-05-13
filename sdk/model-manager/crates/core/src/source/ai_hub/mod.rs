@@ -23,7 +23,9 @@ use crate::error::{Error, Result};
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
 use crate::transport::{HttpTransport, ReqwestTransport};
 
-use self::manifest::{ModelReleaseAssets, PlatformInfo, ReleaseManifest};
+use self::manifest::{
+    InfoJson, ManifestModelEntry, ModelReleaseAssets, PlatformInfo, ReleaseManifest,
+};
 use self::remote_zip::{fetch_central_directory, Method, ZipEntry};
 use self::selector::{match_asset, UnavailableChipset};
 
@@ -243,11 +245,47 @@ impl ModelSource for AiHubSource {
             })
             .collect();
 
-        let model_type = if entry.domain == "MODEL_DOMAIN_MULTIMODAL" {
-            ModelType::Vlm
+        // `domain` alone cannot distinguish Qwen2.5-VL from text-only
+        // LLMs (both report MODEL_DOMAIN_GENERATIVE_AI), so we also
+        // read the per-model info.json. Fetch failure is non-fatal:
+        // `classify_ai_hub` falls back to the domain-only signal and
+        // defaults to LLM if even that is absent.
+        let info: Option<InfoJson> = if entry.manifest_urls.info.is_empty() {
+            None
         } else {
-            ModelType::Llm
+            let cache_path = self
+                .cfg
+                .cache_dir
+                .join("info")
+                .join(format!("{version}-{}.json", entry.id));
+            match fetch_with_cache(
+                &entry.manifest_urls.info,
+                &cache_path,
+                self.cfg.skip_cache,
+                &self.transport,
+            )
+            .await
+            {
+                Ok(bytes) => match serde_json::from_slice::<InfoJson>(&bytes) {
+                    Ok(info) => Some(info),
+                    Err(e) => {
+                        eprintln!(
+                            "[model-manager] aihub info.json parse for {}: {e}",
+                            entry.id
+                        );
+                        None
+                    }
+                },
+                Err(e) => {
+                    eprintln!(
+                        "[model-manager] aihub info.json fetch for {}: {e}",
+                        entry.id
+                    );
+                    None
+                }
+            }
         };
+        let model_type = classify_ai_hub(info.as_ref(), entry);
         let manifest = ModelManifest {
             name: self.model_name.clone(),
             model_name: if entry.id.is_empty() {
@@ -396,9 +434,108 @@ async fn fetch_direct(url: &str, transport: &Arc<dyn HttpTransport>) -> Result<V
     Ok(buf)
 }
 
+/// Lowercase substrings in `info.description` / `info.headline` that
+/// mark an AI Hub model as vision-language. Kept together so the set
+/// is easy to audit when AI Hub updates its copy.
+const AI_HUB_VLM_KEYWORDS: &[&str] = &[
+    "vision-language",
+    "vision language",
+    "multimodal",
+    "image-text",
+    "image and text",
+    "images and text",
+    "process both images",
+    "visual question answering",
+    "understand images",
+    "understanding images",
+    "vlm",
+];
+
+/// Modality classifier for the AI Hub source. `domain == MULTIMODAL`
+/// is retained as a positive signal; for `GENERATIVE_AI` models (which
+/// include Qwen2.5-VL), we keyword-match the info.json description +
+/// headline. Defaults to LLM when no positive signal is present.
+fn classify_ai_hub(info: Option<&InfoJson>, entry: &ManifestModelEntry) -> ModelType {
+    if entry.domain == "MODEL_DOMAIN_MULTIMODAL" {
+        return ModelType::Vlm;
+    }
+    if let Some(info) = info {
+        let haystack = format!("{} {}", info.description, info.headline).to_lowercase();
+        if AI_HUB_VLM_KEYWORDS.iter().any(|kw| haystack.contains(kw)) {
+            return ModelType::Vlm;
+        }
+    }
+    ModelType::Llm
+}
+
 #[cfg(test)]
 mod tests {
+    use self::manifest::ManifestUrls;
     use super::*;
+
+    fn entry(id: &str, domain: &str) -> ManifestModelEntry {
+        ManifestModelEntry {
+            id: id.to_string(),
+            display_name: id.to_string(),
+            domain: domain.to_string(),
+            manifest_urls: ManifestUrls::default(),
+        }
+    }
+
+    fn info(description: &str, headline: &str) -> InfoJson {
+        InfoJson {
+            domain: "MODEL_DOMAIN_GENERATIVE_AI".to_string(),
+            headline: headline.to_string(),
+            description: description.to_string(),
+            tags: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn classify_domain_multimodal_is_vlm() {
+        // #12
+        let e = entry("qwen2_5_vl_7b_instruct", "MODEL_DOMAIN_MULTIMODAL");
+        assert_eq!(classify_ai_hub(None, &e), ModelType::Vlm);
+    }
+
+    #[test]
+    fn classify_qwen25_vl_generative_ai_info_description() {
+        // #13 regression-blocker: live manifest reports GENERATIVE_AI
+        // for Qwen2.5-VL. Description must rescue it.
+        let e = entry("qwen2_5_vl_7b_instruct", "MODEL_DOMAIN_GENERATIVE_AI");
+        let i = info(
+            "Qwen2.5-VL-7B-Instruct is a multimodal vision-language model that processes both images and text",
+            "",
+        );
+        assert_eq!(classify_ai_hub(Some(&i), &e), ModelType::Vlm);
+    }
+
+    #[test]
+    fn classify_llama_generative_ai_stays_llm() {
+        // #14
+        let e = entry("llama_v3_8b_instruct", "MODEL_DOMAIN_GENERATIVE_AI");
+        let i = info(
+            "Llama 3 is a state-of-the-art large language model",
+            "State-of-the-art large language model",
+        );
+        assert_eq!(classify_ai_hub(Some(&i), &e), ModelType::Llm);
+    }
+
+    #[test]
+    fn classify_headline_only_hit() {
+        // #15 — headline alone carries the VLM signal.
+        let e = entry("some_vlm", "MODEL_DOMAIN_GENERATIVE_AI");
+        let i = info("", "Visual question answering on mobile");
+        assert_eq!(classify_ai_hub(Some(&i), &e), ModelType::Vlm);
+    }
+
+    #[test]
+    fn classify_info_missing_defaults_llm() {
+        // #16 — fetch failed; fall back to domain-only (GENERATIVE_AI
+        // isn't a VLM signal) → LLM.
+        let e = entry("mystery_model", "MODEL_DOMAIN_GENERATIVE_AI");
+        assert_eq!(classify_ai_hub(None, &e), ModelType::Llm);
+    }
 
     #[test]
     fn rejects_basename_collision() {

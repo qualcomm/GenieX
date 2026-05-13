@@ -174,7 +174,10 @@ def pull(
         local_path: Required when ``hub == "localfs"``.
         hf_token: HuggingFace bearer token; falls back to ``GENIEX_HFTOKEN``.
         chipset: AI Hub target chipset; auto-detected on Windows-on-Snapdragon.
-        display_name: AI Hub ``display_name`` (required when ``hub == "aihub"``).
+        display_name: AI Hub ``display_name``. Optional when the model name
+            starts with ``qualcomm/``, ``qai-hub-models/``, or ``aihub/`` — the
+            SDK derives it from the repo. Required only when the stored name
+            cannot be mapped (rare).
         on_progress: Callback ``(files) -> bool``; return ``False`` to cancel.
     """
     _ensure_init()
