@@ -54,12 +54,14 @@ def test_resolve_device_map_auto(geniex_session):
 
 
 def test_resolve_device_map_hybrid_forces_999(geniex_session):
-    _, _, ngl = geniex.resolve_device_map('hybrid')
+    plugin_id, _, ngl = geniex.resolve_device_map('hybrid')
+    assert plugin_id == 'llama_cpp'
     assert ngl == 999
 
 
 def test_resolve_device_map_cpu_forces_0(geniex_session):
-    _, _, ngl = geniex.resolve_device_map('cpu')
+    plugin_id, _, ngl = geniex.resolve_device_map('cpu')
+    assert plugin_id == 'llama_cpp'
     assert ngl == 0
 
 

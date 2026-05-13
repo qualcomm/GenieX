@@ -33,6 +33,15 @@ PLUGIN_QAIRT = 'qairt'
 
 _KNOWN_ALIASES = {'cpu', 'gpu', 'npu', 'hybrid'}
 
+# Stable owner for each alias, independent of plugin enumeration order.
+# cpu/gpu/hybrid are llama_cpp-only concepts; npu is qairt's NPU-only default.
+_ALIAS_OWNERS = {
+    'cpu': PLUGIN_LLAMA_CPP,
+    'gpu': PLUGIN_LLAMA_CPP,
+    'hybrid': PLUGIN_LLAMA_CPP,
+    'npu': PLUGIN_QAIRT,
+}
+
 
 def resolve_device_map(
     device_map: str,
@@ -41,8 +50,9 @@ def resolve_device_map(
     """Resolve a ``device_map`` string to ``(plugin_id, device_id, ngl_override)``.
 
     Accepted forms: ``"auto"`` / ``""`` (first plugin + SDK default),
-    ``"cpu" | "gpu" | "npu" | "hybrid"`` (alias against the first plugin),
-    ``"<plugin_id>"``, or ``"<plugin_id>:<device_id>"``.
+    ``"cpu" | "gpu" | "npu" | "hybrid"`` (alias against the plugin that owns
+    it — cpu/gpu/hybrid → llama_cpp, npu → qairt), ``"<plugin_id>"``, or
+    ``"<plugin_id>:<device_id>"``.
 
     ``ngl_override`` is ``None`` unless the alias forces a specific
     ``n_gpu_layers`` (``cpu`` → 0, ``hybrid`` → 999).
@@ -57,7 +67,8 @@ def resolve_device_map(
 
     if key in _KNOWN_ALIASES:
         plugins = get_plugin_list()
-        plugin_id = plugins[0] if plugins else PLUGIN_LLAMA_CPP
+        owner = _ALIAS_OWNERS[key]
+        plugin_id = owner if owner in plugins else (plugins[0] if plugins else PLUGIN_LLAMA_CPP)
         return _call_sdk(plugin_id, model_name, key)
 
     if ':' in device_map:
