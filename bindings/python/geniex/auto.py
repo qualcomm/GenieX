@@ -34,42 +34,27 @@ PLUGIN_QAIRT = 'qairt'
 _KNOWN_ALIASES = {'cpu', 'gpu', 'npu', 'hybrid'}
 
 
-def _resolve_device(
+def resolve_device_map(
     device_map: str,
     model_name: str | None = None,
 ) -> tuple[str | None, str | None, int | None]:
-    """Return ``(plugin_id, device_id, ngl_override)`` from ``device_map``.
+    """Resolve a ``device_map`` string to ``(plugin_id, device_id, ngl_override)``.
 
-    This is the pybind-side entry point. Plugin selection and the
-    ``<plugin>:<device>`` parsing stay in Python; the actual alias →
-    concrete (device_id, ngl) mapping is delegated to the SDK's
-    :func:`geniex._ffi._api.resolve_device`.
+    Accepted forms: ``"auto"`` / ``""`` (first plugin + SDK default),
+    ``"cpu" | "gpu" | "npu" | "hybrid"`` (alias against the first plugin),
+    ``"<plugin_id>"``, or ``"<plugin_id>:<device_id>"``.
 
-    Accepted forms:
-      - ``"auto"`` / empty — pick the first plugin, then ask the SDK
-        for that plugin's default alias.
-      - ``"<plugin_id>"`` — use this plugin with its default alias.
-      - ``"<plugin_id>:<device_id>"`` — fully specified. If
-        ``<device_id>`` is a friendly alias, the SDK translates it;
-        otherwise it passes through unchanged.
-      - ``"cpu"`` / ``"gpu"`` / ``"npu"`` / ``"hybrid"`` — friendly alias
-        against the first plugin.
-
-    ``ngl_override`` is non-None when the alias forced a specific
-    ``n_gpu_layers`` (``cpu`` → 0, ``hybrid`` → 999). Callers should
-    only overwrite their own default when this is non-None.
+    ``ngl_override`` is ``None`` unless the alias forces a specific
+    ``n_gpu_layers`` (``cpu`` → 0, ``hybrid`` → 999).
     """
-    # Empty / "auto" → first plugin + SDK default alias.
     if not device_map or device_map == 'auto':
         plugins = get_plugin_list()
         if not plugins:
             return None, None, None
-        plugin_id = plugins[0]
-        return _call_sdk(plugin_id, model_name, None)
+        return _call_sdk(plugins[0], model_name, None)
 
     key = device_map.lower()
 
-    # Bare friendly alias — pick the first plugin and let the SDK translate.
     if key in _KNOWN_ALIASES:
         plugins = get_plugin_list()
         plugin_id = plugins[0] if plugins else PLUGIN_LLAMA_CPP
@@ -79,7 +64,6 @@ def _resolve_device(
         plugin_id, device_id = device_map.split(':', 1)
         if device_id.lower() in _KNOWN_ALIASES:
             return _call_sdk(plugin_id, model_name, device_id.lower())
-        # Concrete device id. qairt only exposes its NPU — coerce.
         if plugin_id == PLUGIN_QAIRT and device_id.upper() != 'NPU':
             print(
                 f'warning: qairt plugin only supports NPU inference; '
@@ -89,7 +73,6 @@ def _resolve_device(
             return plugin_id, 'NPU', None
         return plugin_id, device_id, None
 
-    # Bare plugin id (e.g. "llama_cpp", "qairt") — SDK picks the default.
     return _call_sdk(device_map, model_name, None)
 
 
@@ -98,31 +81,22 @@ def _call_sdk(
     model_name: str | None,
     alias: str | None,
 ) -> tuple[str, str | None, int | None]:
-    """Call ``geniex_resolve_device`` and map its result into the
-    ``(plugin_id, device_id, ngl_override)`` triple this module returns.
-
-    ``ngl_default=-1`` is a sentinel so we can detect "SDK didn't force
-    a value" and surface it as ``None`` to the caller.
-    """
+    # ngl_default=-1 is a sentinel so we can distinguish "SDK forced a value"
+    # from "alias passed through" and surface the latter as None.
     device_id, ngl, warning = resolve_device(plugin_id, model_name, alias, -1)
     if warning:
         print(f'warning: {warning}', file=sys.stderr)
-    # SDK returned the sentinel unchanged → no override. Any other value
-    # (0 for cpu, 999 for hybrid, or caller-provided) means "do override".
     ngl_override: int | None = None if ngl == -1 else ngl
     return plugin_id, device_id, ngl_override
 
 
 def _resolve_local_anchor(path: str) -> str:
-    """Return an anchor file for a local directory/file path.
-
-    The C++ side derives the directory via ``parent_path()``, so we need to
-    point at a file inside the directory rather than the directory itself.
-    """
+    # The C++ side derives the model dir via parent_path(), so we return a
+    # file inside the directory rather than the directory itself.
     if os.path.isdir(path):
         anchor = os.path.join(path, 'tokenizer.json')
         if not os.path.isfile(anchor):
-            entries = [e for e in os.listdir(path) if os.path.isfile(os.path.join(path, e))]
+            entries = sorted(e for e in os.listdir(path) if os.path.isfile(os.path.join(path, e)))
             if not entries:
                 raise FileNotFoundError(f'No files found in model directory: {path}')
             anchor = os.path.join(path, entries[0])
@@ -135,21 +109,11 @@ def _resolve_model_sources(
     quant: str | None,
     hf_token: str | None,
 ) -> tuple[str, str | None, str | None, _mm.ModelPaths | None]:
-    """Return ``(model_path, mmproj_path, tokenizer_path, paths)``.
-
-    Local paths are anchored directly; everything else goes through the
-    model manager (``geniex_model_*`` FFI) which handles alias resolution,
-    download, and path resolution.
-
-    AiHub/LocalFs models cached by a previous ``pull`` hit the fast path:
-    ``get_paths`` succeeds without talking to any hub, so notebook-style
-    ``from_pretrained("qualcomm/Qwen3-4B")`` works without forcing users
-    to re-specify ``hub='aihub'``. Only when the cache is empty do we
-    fall through to ``ensure_cached`` (HF/auto).
-    """
     if os.path.exists(model_name_or_path):
         return _resolve_local_anchor(model_name_or_path), None, None, None
 
+    # Try the local cache first so AiHub/LocalFs models pulled previously
+    # don't force the caller to respecify hub='aihub'.
     key = f'{model_name_or_path}:{quant}' if quant else model_name_or_path
     try:
         cached = _mm.get_paths(key)
@@ -174,11 +138,7 @@ def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **
         if n_ctx != 0:
             _logger.debug('qairt plugin does not consume n_ctx; forcing 0')
             n_ctx = 0
-    cfg = geniex_ModelConfig(
-        n_ctx=n_ctx,
-        n_gpu_layers=n_gpu_layers,
-    )
-    # Pass through any recognised extra kwargs
+    cfg = geniex_ModelConfig(n_ctx=n_ctx, n_gpu_layers=n_gpu_layers)
     _int_fields = {'n_threads', 'n_threads_batch', 'n_batch', 'n_ubatch', 'n_seq_max', 'max_tokens'}
     _bool_fields = {'enable_thinking', 'verbose'}
     _str_fields = {'chat_template_path', 'chat_template_content', 'system_prompt'}
@@ -211,45 +171,27 @@ class AutoModelForCausalLM:
         hf_token: str | None = None,
         **kwargs,
     ) -> GeniexLLM:
-        """Load a causal LM and return a GeniexLLM instance.
+        """Load a causal LM by HF repo id, alias, or local path.
 
         Args:
-            model_name_or_path: HuggingFace repo id or local path.
-            model_name: Override the registry model name (e.g. 'granite4' for QAIRT).
-                        Defaults to model_name_or_path when not set.
-            quant: Quantization variant (e.g. 'Q4_K_M').  Used to filter files
-                when downloading from HuggingFace Hub.
-            device_map: ``'auto'`` | ``'cpu'`` | ``'gpu'`` | ``'npu'`` |
-                ``'hybrid'`` | ``'<plugin_id>'`` |
-                ``'<plugin_id>:<device_id>'``. The default (``'auto'``)
-                maps to ``hybrid`` for ``llama_cpp`` (fast per-tensor
-                HTP+CPU scheduling) and to ``npu`` for ``qairt``.
-                ``hybrid`` leaves ``device_id`` empty with
-                ``n_gpu_layers=999``; ``npu`` pins to ``HTP0``. Run
-                ``geniex-py devices`` (or
-                :func:`geniex._ffi.get_device_list`) to list concrete
-                device ids available on this machine.
-            n_ctx: Context length (0 = model default). Forced to 0 when the
-                resolved plugin is ``qairt`` (the QAIRT runtime does not
-                consume ``n_ctx``).
-            n_gpu_layers: Layers to offload to GPU/NPU (999 = offload all).
-                Forced to 0 when ``device_map`` resolves to CPU, to 999
-                when it resolves to ``hybrid``, and to 0 when the resolved
-                plugin is ``qairt`` (the QAIRT runtime does not consume
-                ``n_gpu_layers``).
-            tokenizer_path: Optional override for tokenizer file path.
-            license_id: NPU licence ID.
-            license_key: NPU licence key.
+            model_name_or_path: HuggingFace repo id, short alias, or local path.
+            model_name: Override the registry model name (e.g. ``'granite4'`` for QAIRT).
+            quant: Quantization variant (e.g. ``'Q4_K_M'``).
+            device_map: See :func:`resolve_device_map`.
+            n_ctx: Context length (``0`` = model default; forced to ``0`` on qairt).
+            n_gpu_layers: Layers offloaded to GPU/NPU; coerced for ``cpu``/``hybrid``/qairt.
+            tokenizer_path: Optional tokenizer path override.
+            license_id / license_key: NPU licence credentials.
+            hf_token: HuggingFace bearer token; falls back to ``GENIEX_HFTOKEN`` env.
         """
         ensure_init()
         model_path, _mmproj, _tok, paths = _resolve_model_sources(model_name_or_path, quant, hf_token)
-        # QAIRT uses `model_name` as a registry key (e.g. `qwen3_4b`),
-        # not the org/repo string. Fall back to the manifest's ModelName
-        # whenever the caller didn't override and the cached model is QAIRT.
+        # QAIRT uses `model_name` as a registry key (e.g. `qwen3_4b`), not org/repo —
+        # carry the cached manifest's ModelName forward when the caller didn't override.
         resolved_name = model_name or (
             paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
         )
-        plugin_id, device_id, ngl_override = _resolve_device(device_map, resolved_name)
+        plugin_id, device_id, ngl_override = resolve_device_map(device_map, resolved_name)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
@@ -296,34 +238,15 @@ class AutoModelForVision2Seq:
         hf_token: str | None = None,
         **kwargs,
     ) -> GeniexVLM:
-        """Load a VLM and return a GeniexVLM instance.
+        """Load a VLM by HF repo id, alias, or local path.
 
-        Args:
-            model_name_or_path: HuggingFace repo id or local path.
-            quant: Quantization variant.
-            device_map: ``'auto'`` | ``'cpu'`` | ``'gpu'`` | ``'npu'`` |
-                ``'hybrid'`` | ``'<plugin_id>'`` |
-                ``'<plugin_id>:<device_id>'``. Default (``'auto'``) maps
-                to ``hybrid`` for ``llama_cpp`` and ``npu`` for ``qairt``.
-                See :class:`AutoModelForCausalLM.from_pretrained` for
-                full semantics.
-            n_ctx: Context length (0 = model default). Forced to 0 when the
-                resolved plugin is ``qairt`` (the QAIRT runtime does not
-                consume ``n_ctx``).
-            n_gpu_layers: Layers to offload to GPU/NPU (999 = offload all).
-                Forced to 0 when ``device_map`` resolves to CPU, to 999
-                when it resolves to ``hybrid``, and to 0 when the resolved
-                plugin is ``qairt`` (the QAIRT runtime does not consume
-                ``n_gpu_layers``).
-            mmproj_path: Path to the multimodal projector file.
-            tokenizer_path: Optional override for tokenizer file path.
-            license_id: NPU licence ID.
-            license_key: NPU licence key.
+        See :class:`AutoModelForCausalLM.from_pretrained` for shared parameters.
+        ``mmproj_path`` is an optional override for the multimodal projector file.
         """
         ensure_init()
         model_path, _mmproj, _tok, paths = _resolve_model_sources(model_name_or_path, quant, hf_token)
         resolved_name = paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
-        plugin_id, device_id, ngl_override = _resolve_device(device_map, resolved_name)
+        plugin_id, device_id, ngl_override = resolve_device_map(device_map, resolved_name)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
