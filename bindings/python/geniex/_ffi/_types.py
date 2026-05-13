@@ -205,7 +205,6 @@ class geniex_LlmApplyChatTemplateOutput(Structure):
 
 
 class geniex_VlmContent(Structure):
-    # field name in C is `type` but that's a Python keyword — use _type_ alias
     _fields_ = [
         ('type', c_char_p),
         ('text', c_char_p),

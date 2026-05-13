@@ -14,13 +14,9 @@
 
 from __future__ import annotations
 
-from ctypes import byref, c_void_p, pointer, string_at
+from ctypes import POINTER, byref, c_char_p, c_void_p, cast, pointer, string_at
 
-from ._ffi._api import (
-    _check,
-    _str_list_to_c,
-    load_library,
-)
+from ._ffi._api import _check, _str_list_to_c, load_library
 from ._ffi._types import (
     geniex_GenerationConfig,
     geniex_KvCacheLoadInput,
@@ -82,8 +78,9 @@ def _build_gen_config(
     sampler: geniex_SamplerConfig,
     images: list[str],
     audios: list[str],
-) -> tuple[geniex_GenerationConfig, object, object, object, object, object]:
-    """Returns (config, *arrays) — callers must keep arrays alive for the call."""
+) -> tuple[geniex_GenerationConfig, object, object, object]:
+    # Callers must keep the returned arrays alive until after the C call
+    # returns — ctypes does not retain a reference through cast().
     stop_arr, stop_count = _str_list_to_c(stop)
     img_arr, img_count = _str_list_to_c(images)
     aud_arr, aud_count = _str_list_to_c(audios)
@@ -96,36 +93,21 @@ def _build_gen_config(
         audio_count=aud_count,
     )
     if stop_arr is not None:
-        from ctypes import POINTER, c_char_p, cast
-
         cfg.stop = cast(stop_arr, POINTER(c_char_p))
     if img_arr is not None:
-        from ctypes import POINTER, c_char_p, cast
-
         cfg.image_paths = cast(img_arr, POINTER(c_char_p))
     if aud_arr is not None:
-        from ctypes import POINTER, c_char_p, cast
-
         cfg.audio_paths = cast(aud_arr, POINTER(c_char_p))
 
     return cfg, stop_arr, img_arr, aud_arr
 
 
-# ---------------------------------------------------------------------------
-# GeniexLLM
-# ---------------------------------------------------------------------------
-
-
 class GeniexLLM:
-    """Internal LLM wrapper around a C geniex_LLM* handle."""
+    """LLM handle returned by :meth:`AutoModelForCausalLM.from_pretrained`."""
 
     def __init__(self, handle: c_void_p) -> None:
         self._handle = handle
         self.tokenizer = ModelTokenizer(self)
-
-    # ------------------------------------------------------------------
-    # Chat template
-    # ------------------------------------------------------------------
 
     def _apply_chat_template(
         self,
@@ -160,10 +142,6 @@ class GeniexLLM:
             lib.geniex_free(out.formatted_text)
         return result
 
-    # ------------------------------------------------------------------
-    # Generation
-    # ------------------------------------------------------------------
-
     def generate(
         self,
         prompt: str,
@@ -183,6 +161,12 @@ class GeniexLLM:
         stream: bool = False,
         **_kwargs,
     ) -> GenerateOutput | TextIteratorStreamer:
+        """Generate text from ``prompt``.
+
+        Returns a :class:`GenerateOutput` when ``stream=False`` (default),
+        or a :class:`TextIteratorStreamer` that yields token chunks and
+        exposes ``.output`` once the generation thread finishes.
+        """
         stop = stop or []
         sampler = _build_sampler(
             temperature,
@@ -205,7 +189,6 @@ class GeniexLLM:
     def _generate_blocking(self, prompt: str, cfg, sampler, *_keep) -> GenerateOutput:
         lib = load_library()
 
-        # no-op streaming callback that just collects tokens silently
         @geniex_token_callback
         def _noop(token, _ud):
             return True
@@ -247,31 +230,27 @@ class GeniexLLM:
         streamer.start(_run)
         return streamer
 
-    # ------------------------------------------------------------------
-    # State management
-    # ------------------------------------------------------------------
-
     def reset(self) -> None:
+        """Clear KV cache and reset sampler state."""
         lib = load_library()
         _check(lib.geniex_llm_reset(self._handle))
 
     def save_kv_cache(self, path: str) -> None:
+        """Save the current KV cache to ``path``."""
         lib = load_library()
         inp = geniex_KvCacheSaveInput(path=path.encode())
         out = geniex_KvCacheSaveOutput()
         _check(lib.geniex_llm_save_kv_cache(self._handle, byref(inp), byref(out)))
 
     def load_kv_cache(self, path: str) -> None:
+        """Restore a previously saved KV cache from ``path``."""
         lib = load_library()
         inp = geniex_KvCacheLoadInput(path=path.encode())
         out = geniex_KvCacheLoadOutput()
         _check(lib.geniex_llm_load_kv_cache(self._handle, byref(inp), byref(out)))
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
     def close(self) -> None:
+        """Release the C handle. Idempotent."""
         if self._handle:
             lib = load_library()
             lib.geniex_llm_destroy(self._handle)
@@ -290,18 +269,11 @@ class GeniexLLM:
             pass
 
 
-# ---------------------------------------------------------------------------
-# GeniexVLM
-# ---------------------------------------------------------------------------
-
-
 def _build_vlm_messages(messages: list[dict]):
-    """Convert list[dict] to (geniex_VlmChatMessage array, count)."""
     count = len(messages)
     MsgArray = geniex_VlmChatMessage * count
     c_msgs_list = []
-    # keep content arrays alive
-    _content_refs: list = []
+    _content_refs: list = []  # keep content arrays alive
 
     for msg in messages:
         role = msg['role'].encode()
@@ -318,7 +290,6 @@ def _build_vlm_messages(messages: list[dict]):
             items = []
             for item in content:
                 ctype = item.get('type', 'text').encode()
-                # image field may be a path; text field is text
                 text_val = (item.get('text') or item.get('image') or item.get('audio') or '').encode()
                 items.append(geniex_VlmContent(type=ctype, text=text_val))
             contents = ContentArray(*items)
@@ -332,15 +303,11 @@ def _build_vlm_messages(messages: list[dict]):
 
 
 class GeniexVLM:
-    """Internal VLM wrapper around a C geniex_VLM* handle."""
+    """VLM handle returned by :meth:`AutoModelForVision2Seq.from_pretrained`."""
 
     def __init__(self, handle: c_void_p) -> None:
         self._handle = handle
         self.tokenizer = ModelTokenizer(self)
-
-    # ------------------------------------------------------------------
-    # Chat template
-    # ------------------------------------------------------------------
 
     def _apply_chat_template(
         self,
@@ -356,7 +323,6 @@ class GeniexVLM:
             message_count=count,
             tools=_enc(tools),
             enable_thinking=enable_thinking,
-            # add_generation_prompt is not in the VLM C API (geniex_VlmApplyChatTemplateInput)
         )
         out = geniex_VlmApplyChatTemplateOutput()
         _check(lib.geniex_vlm_apply_chat_template(self._handle, byref(inp), byref(out)))
@@ -364,10 +330,6 @@ class GeniexVLM:
         if out.formatted_text:
             lib.geniex_free(out.formatted_text)
         return result
-
-    # ------------------------------------------------------------------
-    # Generation
-    # ------------------------------------------------------------------
 
     def generate(
         self,
@@ -390,6 +352,11 @@ class GeniexVLM:
         stream: bool = False,
         **_kwargs,
     ) -> GenerateOutput | TextIteratorStreamer:
+        """Generate text from ``prompt`` with optional ``images`` / ``audios`` file paths.
+
+        Returns a :class:`GenerateOutput` when ``stream=False`` (default),
+        or a :class:`TextIteratorStreamer` when ``stream=True``.
+        """
         stop = stop or []
         images = images or []
         audios = audios or []
@@ -455,19 +422,13 @@ class GeniexVLM:
         streamer.start(_run)
         return streamer
 
-    # ------------------------------------------------------------------
-    # State management
-    # ------------------------------------------------------------------
-
     def reset(self) -> None:
+        """Clear KV cache and reset sampler state."""
         lib = load_library()
         _check(lib.geniex_vlm_reset(self._handle))
 
-    # ------------------------------------------------------------------
-    # Lifecycle
-    # ------------------------------------------------------------------
-
     def close(self) -> None:
+        """Release the C handle. Idempotent."""
         if self._handle:
             lib = load_library()
             lib.geniex_vlm_destroy(self._handle)
