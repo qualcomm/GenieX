@@ -33,7 +33,7 @@ This will download the python package from [test PyPI](https://test.pypi.org/pro
 If the installation fails with an SSL certificate error — common on corporate networks with TLS inspection, including **Qualcomm Developer Cloud (QDC)** — pre-download the SDK manually and point the installer to it. Run the following **PowerShell** commands **before** `pip install`:
 
 ```powershell
-$env:GENIEX_VERSION = "v0.1.4"  # active version — replace with the version you are installing
+$env:GENIEX_VERSION = "v0.1.5"
 $base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/$env:GENIEX_VERSION"
 $zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
 
