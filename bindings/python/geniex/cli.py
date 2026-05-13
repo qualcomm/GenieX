@@ -245,7 +245,7 @@ def _run_turn(
         stop = p.stop_reason or 'unknown'
         print(
             f'\n{_CYAN}— {p.decode_speed:.1f} tok/s · {p.generated_tokens} tok'
-            f' · {p.ttft / 1000:.1f} s first token · stop: {stop} —{_RESET}\n'
+            f' · {p.ttft / 1e6:.1f} s first token · stop: {stop} —{_RESET}\n'
         )
     history.append({'role': 'assistant', 'content': ''.join(reply_parts)})
 
