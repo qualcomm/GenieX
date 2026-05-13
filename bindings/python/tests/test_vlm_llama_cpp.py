@@ -29,6 +29,8 @@ import pytest
 import geniex
 from geniex import model_manager as _mm
 
+from .conftest import _device_tests_enabled, _is_snapdragon_host
+
 VLM_MODEL = 'ggml-org/SmolVLM-500M-Instruct-GGUF'
 
 # Any small PNG in the repo works; we pick one that is checked in so the
@@ -115,3 +117,24 @@ def test_vlm_stream_with_image(vlm, test_image):
     # that the stream terminates cleanly and publishes a GenerateOutput.
     list(streamer)
     assert streamer.output is not None
+
+
+@pytest.mark.parametrize('device_map', ['cpu', 'gpu', 'npu', 'hybrid'])
+def test_vlm_generate_on_device(vlm_paths, test_image, device_map):
+    if not _device_tests_enabled() or not _is_snapdragon_host():
+        pytest.skip('per-device tests require GENIEX_DEVICE_TEST=1 on a Snapdragon host')
+    with geniex.AutoModelForVision2Seq.from_pretrained(
+        VLM_MODEL,
+        device_map=device_map,
+    ) as vlm:
+        prompt = _vlm_prompt(vlm, test_image, 'Describe this image.')
+        out = vlm.generate(
+            prompt,
+            max_new_tokens=8,
+            temperature=0.0,
+            seed=42,
+            images=[test_image],
+        )
+        assert isinstance(out, geniex.GenerateOutput)
+        # Tiny VLMs can hit EOS on the first token, so only check profile present.
+        assert out.profile is not None
