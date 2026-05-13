@@ -489,11 +489,19 @@ Note: You must use the campaign_investigation function whenever a customer asks 
             val resolvedDeviceId = deviceId ?: paths.device_id
             when (selectModelData.type) {
                 "chat", "llm" -> {
-                    val conf = ModelConfig(
-                        nCtx = 1024,
-                        nGpuLayers = nGpuLayers,
-                        enable_thinking = enableThinking,
-                    )
+                    // QAIRT rejects non-zero n_ctx / n_gpu_layers (both fixed at compile
+                    // time in the AI Hub bundle) — and the Kotlin ModelConfig defaults
+                    // are non-zero, so zero them explicitly for the qairt path.
+                    val isQairt = pluginId == "qairt"
+                    val conf = if (isQairt) {
+                        ModelConfig(nCtx = 0, nGpuLayers = 0, enable_thinking = enableThinking)
+                    } else {
+                        ModelConfig(
+                            nCtx = 1024,
+                            nGpuLayers = nGpuLayers,
+                            enable_thinking = enableThinking,
+                        )
+                    }
                     LlmWrapper.builder().llmCreateInput(
                         LlmCreateInput(
                             model_name = paths.model_name,
@@ -599,7 +607,8 @@ Note: You must use the campaign_investigation function whenever a customer asks 
                 "multimodal", "vlm" -> {
                     val isNpuVlm = pluginId == "qairt"
                     val config = if (isNpuVlm) {
-                        ModelConfig(nCtx = 2048, nThreads = 8, enable_thinking = enableThinking)
+                        // QAIRT rejects non-zero n_ctx / n_gpu_layers for VLM too.
+                        ModelConfig(nCtx = 0, nGpuLayers = 0, nThreads = 8, enable_thinking = enableThinking)
                     } else {
                         ModelConfig(
                             nCtx = 1024,
