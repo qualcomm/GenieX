@@ -191,7 +191,13 @@ class AutoModelForCausalLM:
         resolved_name = model_name or (
             paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
         )
-        plugin_id, device_id, ngl_override = resolve_device_map(device_map, resolved_name)
+        # When the caller leaves device_map as 'auto' and the cache knows which
+        # plugin produced the model, route to that plugin instead of the first
+        # registered one — otherwise QAIRT bins fall through to llama_cpp.
+        effective_device_map = device_map
+        if (not device_map or device_map == 'auto') and paths and paths.plugin_id:
+            effective_device_map = paths.plugin_id
+        plugin_id, device_id, ngl_override = resolve_device_map(effective_device_map, resolved_name)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
@@ -246,7 +252,10 @@ class AutoModelForVision2Seq:
         ensure_init()
         model_path, _mmproj, _tok, paths = _resolve_model_sources(model_name_or_path, quant, hf_token)
         resolved_name = paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
-        plugin_id, device_id, ngl_override = resolve_device_map(device_map, resolved_name)
+        effective_device_map = device_map
+        if (not device_map or device_map == 'auto') and paths and paths.plugin_id:
+            effective_device_map = paths.plugin_id
+        plugin_id, device_id, ngl_override = resolve_device_map(effective_device_map, resolved_name)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
