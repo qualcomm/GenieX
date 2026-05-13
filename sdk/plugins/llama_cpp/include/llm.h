@@ -24,6 +24,7 @@ class LlamaLlm : public ILlm {
     // Instance-level storage for model loading parameters (thread-safe)
     llama_model_tensor_buft_override tensor_overrides[2];           // MoE override + null terminator
     bool                             allow_special_tokens = false;  // Control special token output
+    bool                             uses_htp             = false;  // True when loaded on the Hexagon backend
 
    public:
     virtual ~LlamaLlm() override;

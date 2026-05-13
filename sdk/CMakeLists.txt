@@ -114,6 +114,49 @@ endif()
 
 enable_testing()
 
+# ===============================================================================
+# Third-party patches
+# ===============================================================================
+# Apply local patches to vendored submodules at configure time so the submodules
+# themselves stay pointed at upstream commits. Each patch is gated by a marker
+# file in the build tree, so `cmake --build` is idempotent. Rebasing a submodule
+# onto a new upstream tip requires refreshing the corresponding .patch.
+#
+# * llama-hexagon-release-sessions.patch exposes a
+#   "ggml_backend_hexagon_release_sessions" entry via get_proc_address, used by
+#   the llama.cpp plugin to tear down HTP FastRPC channels on model unload so
+#   QAIRT's HTP re-init is not poisoned by stale sessions. See
+#   sdk/plugins/llama_cpp/src/llm.cpp for the caller.
+if(GENIEX_PLUGIN_LLAMA_CPP)
+    set(_LLAMA_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/../third-party/llama.cpp")
+    set(_LLAMA_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-release-sessions.patch")
+    set(_LLAMA_MARKER "${CMAKE_CURRENT_BINARY_DIR}/.llama-hexagon-release-sessions.applied")
+    if(EXISTS "${_LLAMA_PATCH}" AND NOT EXISTS "${_LLAMA_MARKER}")
+        find_package(Git QUIET REQUIRED)
+        # --check first so a re-configure against an already-patched tree is a no-op
+        # rather than a failure.
+        execute_process(
+            COMMAND ${GIT_EXECUTABLE} -C "${_LLAMA_DIR}" apply --reverse --check "${_LLAMA_PATCH}"
+            RESULT_VARIABLE _reverse_check_rc
+            OUTPUT_QUIET ERROR_QUIET)
+        if(_reverse_check_rc EQUAL 0)
+            message(STATUS "llama.cpp patch already present, skipping apply")
+            file(TOUCH "${_LLAMA_MARKER}")
+        else()
+            message(STATUS "Applying llama.cpp patch: ${_LLAMA_PATCH}")
+            execute_process(
+                COMMAND ${GIT_EXECUTABLE} -C "${_LLAMA_DIR}" apply "${_LLAMA_PATCH}"
+                RESULT_VARIABLE _apply_rc)
+            if(NOT _apply_rc EQUAL 0)
+                message(FATAL_ERROR
+                    "Failed to apply ${_LLAMA_PATCH} to ${_LLAMA_DIR}. "
+                    "If the submodule was bumped, refresh the patch against the new tip.")
+            endif()
+            file(TOUCH "${_LLAMA_MARKER}")
+        endif()
+    endif()
+endif()
+
 # headers
 
 set(COMMON_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/include)
