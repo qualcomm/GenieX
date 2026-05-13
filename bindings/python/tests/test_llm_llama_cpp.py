@@ -28,7 +28,6 @@ def llm(llama_cpp_paths):
     model = geniex.AutoModelForCausalLM.from_pretrained(
         LLAMA_CPP_MODEL,
         quant=LLAMA_CPP_QUANT,
-        device_map='cpu',
     )
     yield model
     model.close()
@@ -74,7 +73,6 @@ def test_context_manager_closes_handle(llama_cpp_paths):
     with geniex.AutoModelForCausalLM.from_pretrained(
         LLAMA_CPP_MODEL,
         quant=LLAMA_CPP_QUANT,
-        device_map='cpu',
     ) as m:
         assert isinstance(m, geniex.GeniexLLM)
 

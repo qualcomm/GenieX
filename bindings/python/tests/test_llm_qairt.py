@@ -17,6 +17,10 @@ when ``GENIEX_DEVICE_TEST=1`` is not set."""
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+
 import pytest
 
 import geniex
@@ -26,10 +30,7 @@ from .conftest import QAIRT_MODEL
 
 @pytest.fixture(scope='module')
 def qairt_llm(qairt_paths):
-    model = geniex.AutoModelForCausalLM.from_pretrained(
-        QAIRT_MODEL,
-        device_map='qairt',
-    )
+    model = geniex.AutoModelForCausalLM.from_pretrained(QAIRT_MODEL)
     yield model
     model.close()
 
@@ -51,3 +52,31 @@ def test_qairt_apply_chat_template(qairt_llm):
         add_generation_prompt=True,
     )
     assert isinstance(text, str) and text
+
+
+def test_cli_chat_qairt_single_prompt(qairt_paths):
+    # Exercise the full `geniex-py chat -p ...` path on a QAIRT model.
+    # Runs in a subprocess to match how a downstream user invokes it and
+    # to confirm packaging (console-script + dispatch) is intact.
+    env = {**os.environ, 'NO_COLOR': '1'}
+    r = subprocess.run(
+        [
+            sys.executable,
+            '-m',
+            'geniex.cli',
+            'chat',
+            QAIRT_MODEL,
+            '--max-tokens',
+            '8',
+            '-p',
+            'Say hi.',
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=300,
+    )
+    assert r.returncode == 0, r.stderr
+    # Should print the `(llm)` dispatch tag and a non-empty generation.
+    assert '(llm)' in r.stdout
+    assert r.stdout.strip() != ''
