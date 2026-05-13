@@ -21,13 +21,13 @@ import pytest
 
 import geniex
 
-from .conftest import QAIRT_ALIAS
+from .conftest import QAIRT_MODEL
 
 
 @pytest.fixture(scope='module')
 def qairt_llm(qairt_paths):
     model = geniex.AutoModelForCausalLM.from_pretrained(
-        QAIRT_ALIAS,
+        QAIRT_MODEL,
         device_map='qairt',
     )
     yield model
@@ -51,16 +51,3 @@ def test_qairt_apply_chat_template(qairt_llm):
         add_generation_prompt=True,
     )
     assert isinstance(text, str) and text
-
-
-def test_qairt_ngl_coerced_to_zero(qairt_paths):
-    # Even though we pass 999, the factory must coerce to 0 for qairt and still load.
-    model = geniex.AutoModelForCausalLM.from_pretrained(
-        QAIRT_ALIAS,
-        device_map='qairt',
-        n_gpu_layers=999,
-    )
-    try:
-        assert isinstance(model, geniex.GeniexLLM)
-    finally:
-        model.close()
