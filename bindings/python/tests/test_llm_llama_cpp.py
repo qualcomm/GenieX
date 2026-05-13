@@ -20,7 +20,7 @@ import pytest
 
 import geniex
 
-from .conftest import LLAMA_CPP_MODEL, LLAMA_CPP_QUANT
+from .conftest import LLAMA_CPP_MODEL, LLAMA_CPP_QUANT, _device_tests_enabled, _is_snapdragon_host
 
 
 @pytest.fixture(scope='module')
@@ -94,3 +94,17 @@ def test_streamer_cancel_stops_generation(llm):
     # Generation must end even though max_new_tokens was not reached.
     assert streamer.output is not None
     assert len(chunks) < 512
+
+
+@pytest.mark.parametrize('device_map', ['cpu', 'gpu', 'npu', 'hybrid'])
+def test_generate_on_device(llama_cpp_paths, device_map):
+    if not _device_tests_enabled() or not _is_snapdragon_host():
+        pytest.skip('per-device tests require GENIEX_DEVICE_TEST=1 on a Snapdragon host')
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        LLAMA_CPP_MODEL,
+        quant=LLAMA_CPP_QUANT,
+        device_map=device_map,
+    ) as llm:
+        out = llm.generate('Say hi.', max_new_tokens=8, temperature=0.0, seed=42)
+        assert out.text
+        assert out.profile.generated_tokens > 0
