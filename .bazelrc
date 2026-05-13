@@ -4,8 +4,13 @@ common --enable_bzlmod
 build --incompatible_disallow_empty_glob
 build --keep_going
 build --verbose_failures
+build --disk_cache=~/.cache/bazel-disk
 test --test_output=errors
 run --color=yes
+
+# quick alias
+build:linux_arm64 --platforms=@io_bazel_rules_go//go/toolchain:linux_arm64_cgo
+build:windows_arm64 --platforms=@io_bazel_rules_go//go/toolchain:windows_arm64_cgo
 
 # hermetic toolchain
 common --@rules_python//python/config_settings:bootstrap_impl=script
@@ -21,9 +26,5 @@ build  --@com_google_protobuf//bazel/toolchains:prefer_prebuilt_protoc
 startup --windows_enable_symlinks
 build --enable_runfiles
 
-# build info inject — override with --define=VERSION=0.1.0 for releases
+# build info inject
 common --define=VERSION=v0.0.0-dev.0
-
-# Disk cache — CI restores/saves it via actions/cache.
-# bazel-cache-epoch: 1 (bump to bust a corrupted cache)
-build --disk_cache=~/.cache/bazel-disk

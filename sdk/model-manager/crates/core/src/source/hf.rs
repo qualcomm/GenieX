@@ -20,6 +20,7 @@ use super::{BytesSource, FileSpec, ModelSource, Plan};
 
 pub const DEFAULT_HF_ENDPOINT: &str = "https://huggingface.co";
 const MANIFEST_FILE: &str = "geniex.json";
+const CONFIG_FILE: &str = "config.json";
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 
 pub struct HfSource {
@@ -122,19 +123,31 @@ impl ModelSource for HfSource {
                 .await
                 .is_ok()
         };
+        // Fetch `config.json` when siblings advertise one. Used by the
+        // modality classifier; fetch failure is non-fatal (we degrade to
+        // the mmproj filename heuristic).
+        let config_bytes: Option<Vec<u8>> =
+            if !ships_manifest && file_names.iter().any(|n| n == CONFIG_FILE) {
+                match self.file_url(CONFIG_FILE) {
+                    Ok(url) => self.fetch_small(&url, MAX_MANIFEST_BYTES).await.ok(),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
+        let mut infer_hint = self.hint.clone();
+        infer_hint.config_json_bytes = config_bytes;
+
         let mut manifest: ModelManifest = if ships_manifest {
             let url = self.file_url(MANIFEST_FILE)?;
             match self.fetch_small(&url, MAX_MANIFEST_BYTES).await {
                 Ok(bytes) => serde_json::from_slice(&bytes).map_err(Error::Json)?,
-                Err(_) => infer_manifest_from_names(
-                    &self.repo,
-                    &file_names,
-                    &file_sizes,
-                    self.hint.clone(),
-                )?,
+                Err(_) => {
+                    infer_manifest_from_names(&self.repo, &file_names, &file_sizes, infer_hint)?
+                }
             }
         } else {
-            infer_manifest_from_names(&self.repo, &file_names, &file_sizes, self.hint.clone())?
+            infer_manifest_from_names(&self.repo, &file_names, &file_sizes, infer_hint)?
         };
         manifest.name = self.repo.clone();
 
@@ -212,6 +225,95 @@ mod tests {
             })
             .unwrap(),
         )
+    }
+
+    /// Register `HEAD` + `GET` handlers for a sibling URL so
+    /// `fetch_small` can pull its bytes.
+    async fn mount_file(server: &MockServer, rel_path: &str, body: &str) {
+        Mock::given(method("HEAD"))
+            .and(path(rel_path))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .append_header("Content-Length", body.len().to_string())
+                    .append_header("Accept-Ranges", "bytes"),
+            )
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(rel_path))
+            .respond_with(ResponseTemplate::new(206).set_body_bytes(body.as_bytes()))
+            .mount(server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn plan_classifies_vlm_via_config_json() {
+        // #17 — HF repo with safetensors + config.json carrying
+        // `vision_config` is classified as VLM without any mmproj file.
+        let server = MockServer::start().await;
+        // infer_manifest_from_names requires at least one recognised
+        // weight file; include a GGUF alongside safetensors so inference
+        // succeeds and we can observe the modality verdict.
+        let api_body = r#"{
+          "siblings": [
+            {"rfilename": "config.json", "size": 128},
+            {"rfilename": "model-Q4_K_M.gguf", "size": 1024}
+          ]
+        }"#;
+        let config_body =
+            r#"{"architectures":["Qwen2_5_VLForConditionalGeneration"],"vision_config":{}}"#;
+        mount_file(&server, "/api/models/tests/VLM", api_body).await;
+        mount_file(&server, "/tests/VLM/resolve/main/config.json", config_body).await;
+        Mock::given(method("HEAD"))
+            .and(path("/tests/VLM/resolve/main/geniex.json"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        let src = HfSource::with_endpoint_and_transport(
+            "tests/VLM".to_string(),
+            &server.uri(),
+            None,
+            fast_transport(),
+            ManifestHint::default(),
+        )
+        .unwrap();
+        let plan = src.plan().await.unwrap();
+        assert_eq!(plan.manifest.model_type, crate::manifest::ModelType::Vlm);
+    }
+
+    #[tokio::test]
+    async fn plan_classifies_llm_when_config_overrides_stray_mmproj() {
+        // #18 — config says LlamaForCausalLM; a stray `mmproj-x.gguf`
+        // sibling must NOT promote this to VLM.
+        let server = MockServer::start().await;
+        let api_body = r#"{
+          "siblings": [
+            {"rfilename": "config.json", "size": 64},
+            {"rfilename": "model-Q4_K_M.gguf", "size": 1024},
+            {"rfilename": "model-Q8_0.gguf", "size": 2048},
+            {"rfilename": "mmproj-x.gguf", "size": 128}
+          ]
+        }"#;
+        let config_body = r#"{"architectures":["LlamaForCausalLM"]}"#;
+        mount_file(&server, "/api/models/tests/LLM", api_body).await;
+        mount_file(&server, "/tests/LLM/resolve/main/config.json", config_body).await;
+        Mock::given(method("HEAD"))
+            .and(path("/tests/LLM/resolve/main/geniex.json"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        let src = HfSource::with_endpoint_and_transport(
+            "tests/LLM".to_string(),
+            &server.uri(),
+            None,
+            fast_transport(),
+            ManifestHint::default(),
+        )
+        .unwrap();
+        let plan = src.plan().await.unwrap();
+        assert_eq!(plan.manifest.model_type, crate::manifest::ModelType::Llm);
     }
 
     #[tokio::test]

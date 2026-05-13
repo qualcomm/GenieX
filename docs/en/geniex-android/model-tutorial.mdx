@@ -1,36 +1,77 @@
 ---
 title: "Model tutorial"
-description: Step-by-step guide to download, load, and chat with models in the demo app.
+description: Walkthrough for downloading, loading, and chatting with models in the GenieX demo app.
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-## **LFM2-24B-A2B-Preview-GGUF**
+The demo app groups models into two buckets:
 
-This walkthrough follows the [Tutorial: LFM2-24B-A2B-Preview-GGUF](https://github.com/geniex-ai/geniex-sdk/blob/main/bindings/android/README.md#tutorial-lfm2-24b-a2b-preview-gguf) section in the geniex-sdk Android README. It uses the [LFM2-24B-A2B-Preview-GGUF](https://huggingface.co/NexaAI/LFM2-24B-A2B-Preview-GGUF) model in the demo app.
+- **GGUF via `llama_cpp`** — runs on CPU / Adreno GPU / Hexagon NPU. You pick the device at load time.
+- **AI Hub via `qairt`** — NPU-only pre-compiled bundles from Qualcomm AI Hub. Runs on Snapdragon 8 Elite Gen 5 (chipset `SM8750`).
 
-### **Steps**
+The two tutorials below show one of each.
+
+## **1. GGUF LLM: `unsloth/Qwen3-0.6B-GGUF`**
+
+A small Qwen3 0.6 B chat model, Q4_0. Fast first download, runs on any device.
 
 <Steps>
   <Step title="Install the app">
-    Install the demo app (APK or build from source). For APK download and build-from-source steps, see [Quick Start with APK](https://github.com/geniex-ai/geniex-sdk/blob/main/bindings/android/README.md#quick-start-with-apk) and [Build from Source](https://github.com/geniex-ai/geniex-sdk/blob/main/bindings/android/README.md#build-from-source) on the [GitHub Android README](https://github.com/geniex-ai/geniex-sdk/blob/main/bindings/android/README.md).
+    See [Quickstart](/en/geniex-android/quickstart) — install the prebuilt APK or build from source in Android Studio.
   </Step>
   <Step title="Select the model">
-    Open the model selector (dropdown next to the model name) and choose **LFM2-24B-A2B-Preview-GGUF**.
-    <img src="https://raw.githubusercontent.com/geniex-ai/geniex-sdk/main/assets/lfm0.png" alt="Select model" style={{ borderRadius: '0.5rem', marginTop: '0.75rem', maxWidth: '240px', width: '100%', height: 'auto' }} />
+    Open the model dropdown at the top and pick **Qwen3-0.6B (GGUF)**.
   </Step>
   <Step title="Download">
-    Tap **Download** to fetch the model to your device. Wait until the download finishes.
+    Tap **Download**. Progress streams live from the Rust model manager; killing the app mid-download and relaunching resumes from the last byte.
   </Step>
   <Step title="Load">
-    Tap **Load**. A **load model config** dialog appears: choose **CPU**, **GPU**, or **NPU** (for Qualcomm NPU), then tap **SURE**. Once the model is loaded, the chat area becomes available.
-    <img src="https://raw.githubusercontent.com/geniex-ai/geniex-sdk/main/assets/lfm1.png" alt="Load model config" style={{ borderRadius: '0.5rem', marginTop: '0.75rem', maxWidth: '240px', width: '100%', height: 'auto' }} />
+    Tap **Load**. A dialog appears — choose **CPU**, **GPU**, **NPU**, or **Hybrid**:
+    - **Hybrid** (recommended on Snapdragon) — llama.cpp's per-tensor HTP+CPU scheduler. Fastest LLM path.
+    - **NPU** — pinned single-HTP session. More deterministic, slower than hybrid for most LLMs.
+    - **GPU** — Adreno via OpenCL.
+    - **CPU** — works on any ARM64 device.
   </Step>
   <Step title="Chat">
-    Type your message in the input field at the bottom, then tap **Send** to get a response. Use **Clear** to clear the input or conversation as needed.
-    <img src="https://raw.githubusercontent.com/geniex-ai/geniex-sdk/main/assets/lfm2.png" alt="Chat" style={{ borderRadius: '0.5rem', marginTop: '0.75rem', maxWidth: '240px', width: '100%', height: 'auto' }} />
+    Type a message in the input bar and tap **Send**. Tap **Clear** or unload the model to reset the conversation.
   </Step>
 </Steps>
 
+## **2. AI Hub VLM: `qualcomm/Qwen2.5-VL-7B-Instruct`**
+
+A vision-language model pre-compiled for Snapdragon 8 Elite Gen 5.
+
+<Warning>
+Requires a device with chipset `SM8750`. On other chipsets the AI Hub entries will download but fail to load.
+</Warning>
+
+<Steps>
+  <Step title="Select the model">
+    Open the dropdown and pick **Qwen2.5-VL-7B-Instruct (NPU)**.
+  </Step>
+  <Step title="Download">
+    Tap **Download**. The AI Hub bundle is larger than the GGUF models (~4.6 GB) — stay on Wi-Fi. Downloads resume across app restarts.
+  </Step>
+  <Step title="Load">
+    Tap **Load**. The plugin picker only shows **NPU** for QAIRT models (`qairt` is NPU-only by design). Confirm.
+  </Step>
+  <Step title="Chat with an image">
+    Tap the **image** button, pick a photo from the gallery, type a question like "What's in this image?", and send. The VLM chat template is applied automatically by the SDK.
+  </Step>
+</Steps>
+
+## **Troubleshooting**
+
+**"Model loads but generation self-repeats or outputs nothing"**
+Make sure the demo is passing the chat-templated prompt (`applyChatTemplate().formattedText`) into `generateStreamFlow`, not the raw user text. QAIRT pipelines treat their input as already-templated — sending raw text drops the model into completion mode.
+
+**"AI Hub pull fails with `INVALID_INPUT`"**
+Android needs an explicit `chipset` for AI Hub pulls — auto-detect only runs on Windows-on-Snapdragon. The demo's `model_list.json` pins `SM8750`; if you've customised it, ensure the field is present.
+
+**"QAIRT load fails with unknown model name"**
+The model id returned by AI Hub must match an entry in the QAIRT plugin's registry (`qwen3_4b_instruct_2507`, `qwen2_5_vl_7b_instruct`, etc.). If you're adding a new AI Hub model, register it on the C++ side first — see `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`.
+
 <br />
+
 <Feedback />

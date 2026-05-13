@@ -34,6 +34,7 @@ use crate::config::StoreConfig;
 use crate::error::Result;
 use crate::executor::{Executor, ProgressCallback};
 use crate::manifest_builder::ManifestHint;
+use crate::mapping::canonicalize_model_name;
 use crate::resume;
 use crate::source::ai_hub::{AiHubConfig, AiHubSource};
 use crate::source::hf::HfSource;
@@ -80,7 +81,10 @@ pub enum PullIntent {
 ///
 /// Async-native; sync callers should use [`pull_blocking`] (which
 /// drives this on the FFI runtime).
-pub async fn pull(store: &Store, req: PullRequest) -> Result<()> {
+pub async fn pull(store: &Store, mut req: PullRequest) -> Result<()> {
+    // Bare AI Hub ids (no '/') are stored under `aihub/<name>` so they
+    // satisfy validate_model_name's org/repo invariant.
+    req.model_name = canonicalize_model_name(&req.model_name);
     validate_model_name(&req.model_name)?;
 
     let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);

@@ -255,7 +255,8 @@ class MainActivity : FragmentActivity() {
     private fun parseModelList() {
         try {
             val baseJson = assets.open("model_list.json").bufferedReader().use { it.readText() }
-            modelList = Json.decodeFromString<List<ModelData>>(baseJson)
+            val json = Json { ignoreUnknownKeys = true }
+            modelList = json.decodeFromString<List<ModelData>>(baseJson)
         } catch (e: Exception) {
             Log.e("nfl", "parseModelList: $e")
         }
@@ -1070,8 +1071,8 @@ space ::= | " " | "\n" | "\r" | "\t"
                             Log.d(TAG, "Config has ${configWithMedia.imageCount} images")
 
                             vlmWrapper.generateStreamFlow(
-                                if (isNpu || true) inputString else result.formattedText,
-                                configWithMedia  // Use the updated config with media paths
+                                result.formattedText,
+                                configWithMedia
                             ).collect { handleResult(sb, it) }
                         }.onFailure {
                             runOnUiThread {

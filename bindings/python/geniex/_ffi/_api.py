@@ -44,18 +44,13 @@ from ._types import (
     geniex_VlmGenerateOutput,
 )
 
-# ---------------------------------------------------------------------------
-# Logging bridge (SDK callback -> Python stdlib logging)
-# ---------------------------------------------------------------------------
-
-# Mirror of geniex_LogLevel in sdk/include/geniex.h. Values MUST match.
+# Mirrors geniex_LogLevel in sdk/include/geniex.h — values MUST match.
 _LEVEL_TRACE = 0
 _LEVEL_DEBUG = 1
 _LEVEL_INFO = 2
 _LEVEL_WARN = 3
 _LEVEL_ERROR = 4
-# Sentinel above ERROR silences all SDK output (matches SDK's "none" handling).
-_LEVEL_NONE = 5
+_LEVEL_NONE = 5  # sentinel above ERROR silences SDK output entirely
 
 _LEVEL_STR_TO_INT = {
     'trace': _LEVEL_TRACE,
@@ -79,7 +74,7 @@ geniex_log_callback = CFUNCTYPE(None, c_int32, c_char_p)
 
 _logger = logging.getLogger('geniex')
 
-# Keep a strong reference — ctypes callbacks must outlive the C side.
+# Strong reference — ctypes callbacks must outlive the C side.
 _log_cb_ref: 'geniex_log_callback | None' = None
 
 
@@ -99,10 +94,10 @@ def _sdk_log_bridge(level: int, msg_bytes):
 
 
 def set_log_level(level: str) -> None:
-    """Set the geniex logger + SDK log level.
+    """Set both the ``geniex`` logger level and the SDK threshold.
 
-    Accepted values: 'trace', 'debug', 'info', 'warn', 'error', 'none'.
-    Unknown values are ignored. Safe to call before or after init().
+    Accepts ``'trace' | 'debug' | 'info' | 'warn' | 'error' | 'none'``.
+    Unknown values are ignored. Safe to call before or after :func:`init`.
     """
     level_norm = level.lower().strip() if level else ''
     if level_norm not in _LEVEL_STR_TO_INT:
@@ -114,13 +109,7 @@ def set_log_level(level: str) -> None:
 
 
 def install_log_callback() -> None:
-    """Configure the 'geniex' logger, register the SDK log callback, and sync levels.
-
-    Reads GENIEX_LOG (case-insensitive: trace|debug|info|warn|error|none/off).
-    Attaches a default StreamHandler to the 'geniex' logger only when the
-    logger has no handlers yet, so user-supplied logging config wins.
-    No-op after the first call.
-    """
+    """Register the SDK → logging bridge and sync with the ``GENIEX_LOG`` env var."""
     global _log_cb_ref
     if _log_cb_ref is not None:
         return
@@ -144,12 +133,9 @@ def install_log_callback() -> None:
         _logger.propagate = False
 
 
-# ---------------------------------------------------------------------------
-# Error handling
-# ---------------------------------------------------------------------------
-
-
 class GeniexError(Exception):
+    """Raised when a geniex C call returns a negative error code."""
+
     def __init__(self, code: int, message: str):
         super().__init__(f'GeniexError({code}): {message}')
         self.code = code
@@ -161,11 +147,6 @@ def _check(code: int) -> None:
         msg_bytes = lib.geniex_get_error_message(c_int32(code))
         msg = msg_bytes.decode() if msg_bytes else 'unknown error'
         raise GeniexError(code, msg)
-
-
-# ---------------------------------------------------------------------------
-# Function bindings
-# ---------------------------------------------------------------------------
 
 
 def _bind_all() -> None:
@@ -306,14 +287,11 @@ def _ensure_bound() -> None:
         _bound = True
 
 
-# ---------------------------------------------------------------------------
-# Init lifecycle
-# ---------------------------------------------------------------------------
-
 _initialized = False
 
 
 def init() -> None:
+    """Initialise the geniex runtime. Idempotent."""
     global _initialized
     if _initialized:
         return
@@ -325,6 +303,7 @@ def init() -> None:
 
 
 def deinit() -> None:
+    """Tear down the geniex runtime."""
     global _initialized
     if not _initialized:
         return
@@ -338,18 +317,11 @@ def ensure_init() -> None:
         init()
 
 
-# ---------------------------------------------------------------------------
-# Helpers: convert Python string lists ↔ C char** arrays
-# ---------------------------------------------------------------------------
-
-
 def _encode(s: str | None) -> bytes | None:
     return s.encode() if s else None
 
 
 def _str_list_to_c(strings: list[str]):
-    """Return (array, count) of c_char_p array allocated from Python bytes."""
-
     count = len(strings)
     if count == 0:
         return None, 0
@@ -358,12 +330,8 @@ def _str_list_to_c(strings: list[str]):
     return arr, count
 
 
-# ---------------------------------------------------------------------------
-# Plugin / device helpers
-# ---------------------------------------------------------------------------
-
-
 def get_plugin_list() -> list[str]:
+    """Return the plugin ids registered with libgeniex."""
     _ensure_bound()
     lib = load_library()
     out = geniex_GetPluginListOutput()
@@ -375,6 +343,7 @@ def get_plugin_list() -> list[str]:
 
 
 def get_device_list(plugin_id: str) -> list[tuple[str, str]]:
+    """Return ``[(device_id, device_name), ...]`` for ``plugin_id``."""
     _ensure_bound()
     lib = load_library()
     inp = geniex_GetDeviceListInput(plugin_id=plugin_id.encode())
@@ -394,12 +363,10 @@ def resolve_device(
     mode: str | None,
     ngl_default: int,
 ) -> tuple[str | None, int, str | None]:
-    """Call the SDK's device alias resolver.
+    """Raw SDK device-alias resolver. Prefer :func:`geniex.resolve_device_map`.
 
-    Returns ``(device_id, ngl, warning)``. ``device_id`` is ``None`` when
-    the alias maps to "leave device_id unset" (cpu / hybrid on llama_cpp).
-    ``warning`` is non-None when the alias was coerced (e.g. qairt →
-    NPU). Raises :class:`GeniexError` when ``mode`` is an unknown alias.
+    Returns ``(device_id, ngl, warning)``; ``device_id`` / ``warning`` may
+    be ``None``. Raises :class:`GeniexError` for unknown aliases.
     """
     _ensure_bound()
     lib = load_library()
@@ -424,12 +391,14 @@ def resolve_device(
 
 
 def version() -> str:
+    """Return the geniex SDK version string."""
     _ensure_bound()
     lib = load_library()
     return lib.geniex_version().decode()
 
 
 def qairt_version() -> str:
+    """Return the bundled QAIRT runtime version string."""
     _ensure_bound()
     lib = load_library()
     return lib.geniex_qairt_version().decode()

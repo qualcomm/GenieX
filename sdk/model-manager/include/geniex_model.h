@@ -225,10 +225,12 @@ typedef struct {
      */
     const char* chipset;
     /**
-     * AI Hub model `display_name`. Required when
-     * `hub == GENIEX_HUB_AIHUB`; ignored otherwise. `model_name` still
-     * names the on-disk directory ("org/repo" shape), matching the Go
-     * CLI's storedName/displayName split.
+     * AI Hub model `display_name`. Used when `hub == GENIEX_HUB_AIHUB` or
+     * `hub == GENIEX_HUB_AUTO` resolves to AI Hub. If NULL and `model_name`
+     * is `qualcomm/<repo>`, `qai-hub-models/<repo>`, or `aihub/<repo>`,
+     * `<repo>` is used as the display_name; otherwise the caller must set
+     * this. `model_name` still names the on-disk directory ("org/repo"
+     * shape), matching the Go CLI's storedName/displayName split.
      */
     const char*                 display_name;
     geniex_download_progress_cb on_progress; /**< NULL to suppress progress reporting           */
