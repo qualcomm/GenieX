@@ -24,7 +24,9 @@ def test_version_nonempty(geniex_session):
     assert isinstance(v, str) and v
 
 
-def test_qairt_version_nonempty(geniex_session):
+def test_bundled_npu_runtime_version_nonempty(geniex_session):
+    # Actually returns the bundled QAIRT runtime version; named so the
+    # 'not qairt' pytest -k filter for device tests doesn't drop it.
     v = geniex.qairt_version()
     assert isinstance(v, str) and v
 

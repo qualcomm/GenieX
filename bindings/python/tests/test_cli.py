@@ -56,15 +56,10 @@ def test_cli_devices_returns_zero(geniex_session):
     assert 'llama_cpp' in r.stdout or 'qairt' in r.stdout
 
 
-def test_cli_ls_empty_cache(tmp_datadir):
-    # Run ls in a freshly-cleaned cache and expect the "no models cached" line.
-    env = {**os.environ, 'GENIEX_DATADIR': tmp_datadir}
-    subprocess.run(
-        [sys.executable, '-m', 'geniex.cli', 'rm', '--all'],
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+def test_cli_ls_runs(tmp_path):
+    # Use an empty, disposable data dir so the test never mutates the user
+    # cache. The output may be the "no models cached" hint or a table header.
+    env = {**os.environ, 'GENIEX_DATADIR': str(tmp_path)}
     r = subprocess.run(
         [sys.executable, '-m', 'geniex.cli', 'ls'],
         capture_output=True,
@@ -72,7 +67,7 @@ def test_cli_ls_empty_cache(tmp_datadir):
         env=env,
     )
     assert r.returncode == 0, r.stderr
-    assert 'no models cached' in r.stdout or r.stdout.strip() != ''
+    assert r.stdout.strip() != ''
 
 
 def test_cli_help_runs():

@@ -33,8 +33,9 @@ from geniex import model_manager as _mm
 LLAMA_CPP_MODEL = 'bartowski/Qwen_Qwen3-0.6B-GGUF'
 LLAMA_CPP_QUANT = 'Q4_0'
 
-# AI Hub alias — resolved by the SDK's registry on Snapdragon hosts.
-QAIRT_ALIAS = 'granite4_micro'
+# Pre-cached QAIRT model used by the NPU tests. Override with
+# GENIEX_QAIRT_MODEL=<org/repo> to exercise a different model.
+QAIRT_MODEL = os.environ.get('GENIEX_QAIRT_MODEL', 'aihub/qwen3_4b')
 
 
 def _is_snapdragon_host() -> bool:
@@ -46,17 +47,16 @@ def _device_tests_enabled() -> bool:
 
 
 @pytest.fixture(scope='session')
-def tmp_datadir(tmp_path_factory) -> str:
-    # Isolate from the user's real ~/.cache/geniex so tests can clean() freely.
-    path = tmp_path_factory.mktemp('geniex-datadir')
-    os.environ['GENIEX_DATADIR'] = str(path)
-    return str(path)
+def geniex_session():
+    """Init the geniex runtime + model manager against the user's real cache.
 
-
-@pytest.fixture(scope='session')
-def geniex_session(tmp_datadir):
+    Device tests (QAIRT especially) need pre-cached models, and the SDK
+    model manager only supports one data dir per process. We therefore
+    run tests against the default ``~/.cache/geniex`` and avoid any
+    destructive ``clean()`` calls.
+    """
     geniex.init()
-    _mm.init(tmp_datadir)
+    _mm.init()  # default: GENIEX_DATADIR env → ~/.cache/geniex
     yield
     geniex.deinit()
 
@@ -74,7 +74,6 @@ def qairt_paths(geniex_session):
     if not _device_tests_enabled() or not _is_snapdragon_host():
         pytest.skip('QAIRT tests require GENIEX_DEVICE_TEST=1 on a Snapdragon host')
     try:
-        _mm.pull(QAIRT_ALIAS, hub='aihub')
+        return _mm.get_paths(QAIRT_MODEL)
     except geniex.GeniexError as e:
-        pytest.skip(f'could not pull QAIRT model {QAIRT_ALIAS}: {e}')
-    return _mm.get_paths(QAIRT_ALIAS)
+        pytest.skip(f'QAIRT model {QAIRT_MODEL} not cached ({e}); run `geniex-py pull` first')
