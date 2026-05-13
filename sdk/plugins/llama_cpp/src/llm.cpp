@@ -32,8 +32,8 @@ void try_release_htp_sessions_if_last() {
     auto* reg = ggml_backend_reg_by_name("HTP");
     if (!reg) return;
     using release_fn = void (*)(ggml_backend_reg_t);
-    auto fn = reinterpret_cast<release_fn>(
-        ggml_backend_reg_get_proc_address(reg, "ggml_backend_hexagon_release_sessions"));
+    auto fn =
+        reinterpret_cast<release_fn>(ggml_backend_reg_get_proc_address(reg, "ggml_backend_hexagon_release_sessions"));
     if (fn) {
         GENIEX_LOG_DEBUG("Releasing HTP sessions on last llama.cpp HTP handle destroy");
         fn(reg);
@@ -130,7 +130,7 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
         if (!devices.empty()) {
             for (size_t i = 0; i < devices.size() && i < 8; ++i) {
                 device_array[i] = devices[i];
-                auto* reg       = ggml_backend_dev_backend_reg(devices[i]);
+                auto*       reg = ggml_backend_dev_backend_reg(devices[i]);
                 const char* rn  = reg ? ggml_backend_reg_name(reg) : nullptr;
                 if (rn && strcmp(rn, "HTP") == 0) this->uses_htp = true;
             }
@@ -146,8 +146,8 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     if (!this->uses_htp && mpar.n_gpu_layers != 0) {
         auto n_devs = ggml_backend_dev_count();
         for (size_t i = 0; i < n_devs; ++i) {
-            auto* reg      = ggml_backend_dev_backend_reg(ggml_backend_dev_get(i));
-            const char* rn = reg ? ggml_backend_reg_name(reg) : nullptr;
+            auto*       reg = ggml_backend_dev_backend_reg(ggml_backend_dev_get(i));
+            const char* rn  = reg ? ggml_backend_reg_name(reg) : nullptr;
             if (rn && strcmp(rn, "HTP") == 0) {
                 this->uses_htp = true;
                 break;
