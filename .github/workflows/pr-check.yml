@@ -8,6 +8,8 @@ on:
       - "sdk/**"
       - "cli/**"
       - "bindings/**"
+      - "third-party/**"
+      - ".gitmodules"
       - ".github/**"
       - "*bazel*"
   # Seeds ccache on main so the first PR run off a new base hits warm.
@@ -15,6 +17,8 @@ on:
     branches: [main]
     paths:
       - "sdk/**"
+      - "third-party/**"
+      - ".gitmodules"
       - ".github/**"
       - "*bazel*"
   workflow_dispatch:
