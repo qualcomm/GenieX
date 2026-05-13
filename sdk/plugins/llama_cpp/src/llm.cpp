@@ -22,22 +22,30 @@ namespace {
 // Refcount of live LlamaLlm instances that bound to the HTP backend. When the
 // last one goes away we ask the HTP backend to close its FastRPC channels so a
 // subsequent QAIRT load can re-create its own HTP context without tripping
-// CONTEXT_ERROR_CREATE_FROM_BINARY_FAILED (err 1007). Sessions are lazily
-// recreated inside the HTP registry on the next llama.cpp load. See
+// CONTEXT_ERROR_CREATE_FROM_BINARY_FAILED (err 1007). Before the next
+// llama.cpp load we ask the HTP backend to recreate those sessions. See
 // sdk/patches/llama-hexagon-release-sessions.patch.
 std::atomic<int> g_htp_refcount{0};
 
-void try_release_htp_sessions_if_last() {
-    if (g_htp_refcount.fetch_sub(1, std::memory_order_acq_rel) != 1) return;
+using htp_reg_fn = void (*)(ggml_backend_reg_t);
+
+void call_htp_proc(const char* name, const char* log_msg) {
     auto* reg = ggml_backend_reg_by_name("HTP");
     if (!reg) return;
-    using release_fn = void (*)(ggml_backend_reg_t);
-    auto fn =
-        reinterpret_cast<release_fn>(ggml_backend_reg_get_proc_address(reg, "ggml_backend_hexagon_release_sessions"));
-    if (fn) {
-        GENIEX_LOG_DEBUG("Releasing HTP sessions on last llama.cpp HTP handle destroy");
-        fn(reg);
-    }
+    auto fn = reinterpret_cast<htp_reg_fn>(ggml_backend_reg_get_proc_address(reg, name));
+    if (!fn) return;
+    GENIEX_LOG_DEBUG("{}", log_msg);
+    fn(reg);
+}
+
+void reacquire_htp_sessions() {
+    call_htp_proc("ggml_backend_hexagon_reacquire_sessions", "Reacquiring HTP sessions before llama.cpp load");
+}
+
+void try_release_htp_sessions_if_last() {
+    if (g_htp_refcount.fetch_sub(1, std::memory_order_acq_rel) != 1) return;
+    call_htp_proc(
+        "ggml_backend_hexagon_release_sessions", "Releasing HTP sessions on last llama.cpp HTP handle destroy");
 }
 }  // namespace
 
@@ -61,6 +69,13 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     if (!input->model_path) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
+
+    // If a prior LlamaLlm tore down HTP sessions to hand off to QAIRT, the
+    // ggml registry still holds cached HTP device pointers whose session
+    // context was nulled out. Recreate those sessions now so the upcoming
+    // device lookup / model load does not dereference a null session.
+    // No-op when HTP is unused or sessions are already live.
+    reacquire_htp_sessions();
 
     ggml_backend_dev_t device_array[9] = {nullptr};
     auto               mpar            = llama_model_default_params();
