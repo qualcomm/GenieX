@@ -42,6 +42,17 @@ from geniex import (
 
 _mm = geniex.model_manager
 
+# When stdout/stderr is a pipe on Windows the default codec is cp1252 and
+# model tokens outside Latin-1 (UTF-8 continuation bytes, emoji, replacement
+# chars) crash the print. Force UTF-8 whenever the stream supports it so
+# callers piping through `tee`, pytest capture, etc. get clean output.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, 'reconfigure'):
+        try:
+            _stream.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:  # noqa: BLE001 — best-effort
+            pass
+
 # Matches bare media paths in the user prompt (absolute, relative, or
 # Windows drive-qualified). Mirrors the regex used by the Go CLI so
 # behaviour is consistent across bindings.
