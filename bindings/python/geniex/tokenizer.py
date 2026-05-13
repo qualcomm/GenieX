@@ -22,11 +22,7 @@ if TYPE_CHECKING:
 
 
 class ModelTokenizer:
-    """Facade that provides a transformers-compatible apply_chat_template() interface.
-
-    Does not perform standalone tokenization — the underlying C runtime requires
-    a loaded model handle to apply the chat template.
-    """
+    """Transformers-compatible facade for ``apply_chat_template`` on a loaded model."""
 
     def __init__(self, model: 'GeniexLLM | GeniexVLM') -> None:
         self._model = model
@@ -40,17 +36,12 @@ class ModelTokenizer:
         enable_thinking: bool = False,
         tools: list[dict] | str | None = None,
     ) -> str:
-        """Format a list of chat messages using the model's built-in chat template.
+        """Format chat ``messages`` using the loaded model's chat template.
 
-        Args:
-            messages: List of message dicts with 'role' and 'content' keys.
-            tokenize: Must be False — standalone tokenization is not supported.
-            add_generation_prompt: Whether to append the generation prompt suffix.
-            enable_thinking: Enable thinking mode (Qwen reasoning models).
-            tools: Tool definitions as a list of dicts or a pre-serialised JSON string.
-
-        Returns:
-            Formatted prompt string ready to pass to model.generate().
+        ``tokenize=True`` is rejected — the C runtime handles tokenisation
+        internally, so callers should pass the returned string straight to
+        :meth:`GeniexLLM.generate`. ``tools`` accepts a list of dicts or a
+        pre-serialised JSON string.
         """
         if tokenize:
             raise ValueError(

@@ -12,28 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Shared library loader with automatic dev / release path discovery.
-
-The sibling ``GENIEX_SDK_DOWNLOAD_URL`` env var is **build-time only** —
-consumed by ``setup.py`` when pip assembles a wheel from the sdist — and
-has no effect here at runtime.
-
-Search order
-------------
-1. ``GENIEX_LIB_PATH`` env var — path to the lib directory or the library file itself.
-2. **Release layout** — ``lib/libgeniex.so`` beside the ``geniex`` package root
-   (i.e. ``site-packages/geniex/lib/libgeniex.so`` after ``pip install``).
-3. **Dev layout** — walk up from this file to the repo root, then glob
-   ``sdk/build-*/src/libgeniex.so`` and pick the most recently modified build.
-4. OS linker (``ctypes.util.find_library``).
-
-Side effects on success
------------------------
-* ``GENIEX_PLUGIN_PATH`` is set to the directory containing plugin subdirs so the
-  C library's ``scan_plugins()`` can find them without manual configuration.
-* The ``.so`` directory (and its immediate subdirectories) are prepended to
-  ``LD_LIBRARY_PATH`` / ``PATH`` so transitive shared-lib deps resolve.
-"""
+"""Native library loader. Search order: ``GENIEX_LIB_PATH`` → wheel layout → in-tree dev build → OS linker."""
 
 import ctypes
 import ctypes.util
@@ -54,18 +33,10 @@ def _lib_name() -> str:
 
 
 def _preload_shared_libs(directories: list[str]) -> None:
-    """Pre-load shared libraries in *directories* into the process with RTLD_GLOBAL.
-
-    ``os.environ['LD_LIBRARY_PATH']`` changes have no effect after the process
-    has started.  Pre-loading deps with ``RTLD_GLOBAL`` exposes their symbols to
-    subsequently loaded libraries, which is the portable in-process equivalent.
-
-    Handles both cmake-install layout (versioned ``libfoo.so.0.9.11`` only) and
-    in-tree build layout (unversioned ``libfoo.so`` symlinks present).
-    Loads the *shortest* name for each base library so dlopen resolves sonames
-    correctly (e.g. loads ``libfoo.so`` before ``libfoo.so.0.9.11``).
-    """
-    flags = getattr(ctypes, 'RTLD_GLOBAL', 0x100)  # RTLD_GLOBAL = 0x100 on Linux
+    # Pre-load sibling shared libs with RTLD_GLOBAL so their symbols are
+    # visible to libgeniex when it dlopens. LD_LIBRARY_PATH mutations after
+    # process start have no effect; pre-loading is the portable equivalent.
+    flags = getattr(ctypes, 'RTLD_GLOBAL', 0x100)
 
     def _so_files(d: str) -> list[str]:
         try:
@@ -76,9 +47,8 @@ def _preload_shared_libs(directories: list[str]) -> None:
             return [f for f in entries if f.endswith('.dll')]
         elif sys.platform == 'darwin':
             return [f for f in entries if '.dylib' in f]
-        else:
-            # Include both libfoo.so and libfoo.so.0.9.11 — sort so unversioned loads first.
-            return sorted(f for f in entries if '.so' in f and not f.endswith('.a'))
+        # Sorted so the unversioned libfoo.so loads before libfoo.so.0.9.11.
+        return sorted(f for f in entries if '.so' in f and not f.endswith('.a'))
 
     loaded: set[str] = set()
     for d in directories:
@@ -86,7 +56,6 @@ def _preload_shared_libs(directories: list[str]) -> None:
             continue
         for fname in _so_files(d):
             full = os.path.join(d, fname)
-            # Resolve symlinks to avoid loading the same inode twice.
             real = os.path.realpath(full)
             if real in loaded:
                 continue
@@ -94,14 +63,12 @@ def _preload_shared_libs(directories: list[str]) -> None:
                 ctypes.CDLL(full, flags)
                 loaded.add(real)
             except OSError:
-                pass  # ignore libs that fail (wrong arch, missing dep, etc.)
+                pass  # wrong arch / missing dep / etc — skip
 
 
 def _setup_env(lib_path: str, plugin_path: str, extra_dirs: list[str] | None = None) -> None:
-    """Pre-load transitive deps and configure GENIEX_PLUGIN_PATH."""
     lib_dir = os.path.dirname(lib_path)
 
-    # Dirs to pre-load: the lib's own dir, its immediate subdirs, plus any extra.
     preload_dirs = [lib_dir]
     try:
         for entry in os.scandir(lib_dir):
@@ -112,9 +79,8 @@ def _setup_env(lib_path: str, plugin_path: str, extra_dirs: list[str] | None = N
     if extra_dirs:
         preload_dirs.extend(extra_dirs)
 
-    # On Windows, os.add_dll_directory() must happen BEFORE loading any DLL so
-    # that LoadLibrary can find transitive dependencies (PATH changes have no
-    # effect on DLL search paths for already-running processes on Windows 8+).
+    # On Windows add_dll_directory() must happen BEFORE LoadLibrary — PATH
+    # changes don't affect DLL search on Windows 8+.
     if sys.platform == 'win32':
         for d in preload_dirs:
             if os.path.isdir(d):
@@ -122,35 +88,17 @@ def _setup_env(lib_path: str, plugin_path: str, extra_dirs: list[str] | None = N
 
     _preload_shared_libs(preload_dirs)
 
-    # Also update LD_LIBRARY_PATH / PATH for child processes the user might spawn.
     key = 'PATH' if sys.platform == 'win32' else 'LD_LIBRARY_PATH'
     existing = os.environ.get(key, '')
     extra = os.pathsep.join(preload_dirs)
     os.environ[key] = f'{extra}{os.pathsep}{existing}' if existing else extra
 
-    # Set GENIEX_PLUGIN_PATH only if not already overridden by the user.
     if not os.environ.get('GENIEX_PLUGIN_PATH'):
         os.environ['GENIEX_PLUGIN_PATH'] = plugin_path
 
 
-# ---------------------------------------------------------------------------
-# Candidate finders
-# ---------------------------------------------------------------------------
-
-
 def _find_release(name: str) -> tuple[str, str] | None:
-    """Return (lib_path, plugin_path) for the release (wheel-installed) layout.
-
-    Expected structure after ``pip install``::
-
-        site-packages/geniex/
-            lib/
-                libgeniex.so          ← lib_path
-                llama_cpp/            ← plugin subdir scanned by C library
-                    libgeniex_plugin.so
-    """
-    # This file is at: site-packages/geniex/_ffi/_lib.py
-    # geniex package root is two levels up.
+    # site-packages/geniex/lib/{name, <plugin-subdirs>/}
     pkg_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     lib_path = os.path.join(pkg_root, 'lib', name)
     if os.path.isfile(lib_path):
@@ -160,18 +108,7 @@ def _find_release(name: str) -> tuple[str, str] | None:
 
 
 def _find_dev(name: str) -> tuple[str, str] | None:
-    """Return (lib_path, plugin_path) for the dev (in-repo) layout.
-
-    Looks for the cmake-installed SDK under ``sdk/pkg-geniex/``::
-
-        <repo>/
-            sdk/
-                pkg-geniex/
-                    lib/
-                        libgeniex.so      ← lib_path
-                        llama_cpp/        ← plugin_path (GENIEX_PLUGIN_PATH)
-                            libgeniex_plugin.so
-    """
+    # <repo>/sdk/pkg-geniex/lib/{name, <plugin-subdirs>/}
     current = os.path.dirname(os.path.abspath(__file__))
     repo_root: str | None = None
     for _ in range(10):
@@ -194,21 +131,14 @@ def _find_dev(name: str) -> tuple[str, str] | None:
     return lib_path, plugin_path
 
 
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
-
-
 def load_library() -> ctypes.CDLL:
+    """Load libgeniex and configure plugin / preload environment."""
     global _lib
     if _lib is not None:
         return _lib
 
     name = _lib_name()
 
-    # --- Priority 1: explicit env override ---
-    # Accepts either a directory (GENIEX_LIB_PATH=/path/to/lib/) or a full
-    # file path (GENIEX_LIB_PATH=/path/to/lib/geniex.dll).
     env_path = os.environ.get('GENIEX_LIB_PATH')
     if env_path:
         if os.path.isdir(env_path):
@@ -218,11 +148,8 @@ def load_library() -> ctypes.CDLL:
             _lib = ctypes.CDLL(env_path)
             return _lib
 
-    # --- Priority 2/3: release (wheel) vs dev (in-repo) layout ---
-    # If both layouts are present (e.g. a leftover `bindings/python/geniex/lib/`
-    # from a previous `pip install .` coexists with a freshly built dev SDK),
-    # prefer the one with the newer mtime so a stale DLL does not shadow a
-    # fresh build. Warn so the conflict is not silent.
+    # If both layouts are present, pick the newer mtime so a stale wheel
+    # copy doesn't shadow a fresh dev build (and vice versa). Warn once.
     release = _find_release(name)
     dev = _find_dev(name)
 
@@ -231,18 +158,14 @@ def load_library() -> ctypes.CDLL:
         dev_mtime = os.path.getmtime(dev[0])
         if dev_mtime > release_mtime:
             _logger.warning(
-                'Both release (%s) and dev (%s) native libraries exist; '
-                'using dev copy because it is newer. '
-                'Delete the stale release copy to silence this warning.',
+                'Both release (%s) and dev (%s) native libraries exist; using dev (newer).',
                 release[0],
                 dev[0],
             )
             result = dev
         else:
             _logger.warning(
-                'Both release (%s) and dev (%s) native libraries exist; '
-                'using release copy because it is newer. '
-                'Delete the stale dev copy to silence this warning.',
+                'Both release (%s) and dev (%s) native libraries exist; using release (newer).',
                 release[0],
                 dev[0],
             )
@@ -256,7 +179,6 @@ def load_library() -> ctypes.CDLL:
         _lib = ctypes.CDLL(lib_path)
         return _lib
 
-    # --- Priority 4: OS linker ---
     found = ctypes.util.find_library('geniex')
     if found:
         try:
