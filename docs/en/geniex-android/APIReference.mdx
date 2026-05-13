@@ -5,335 +5,359 @@ description: API structures and configuration options for GenieX Android SDK.
 
 import Feedback from "/snippets/page-feedback.mdx";
 
+This page covers the configuration knobs that apply to every wrapper: which backend to load, which device to run on, and the data types used to create wrappers and stream results. For end-to-end examples, see [CPU / GPU / Hybrid](/en/geniex-android/APIReference_CPUGPU) and [NPU](/en/geniex-android/APIReference_NPU).
 
-## **Plugin Selection**
+## **Plugin selection**
 
-Choose the appropriate backend plugin for your model type and format.
+Choose the inference backend via `plugin_id`:
 
 ```kotlin
-val plugin_id: String?  // Backend plugin to use
+val plugin_id: String?   // "llama_cpp" | "qairt" | null
 ```
 
-**Available Plugins:**
-- `"cpu_gpu"` - GGUF backend for CPU/GPU/Hexagon NPU (LLM, VLM). Device is selected via `device_id` + `nGpuLayers`.
-- `"npu"` - NPU backend for NEXA format models (LLM, VLM, Embeddings, ASR, CV, Rerank)
-- `"whisper_cpp"` - Whisper.cpp backend for ASR
-- `"tts_cpp"` - TTS backend for text-to-speech
+| `plugin_id`    | Backend                                                                                       | Model format             | Devices                          |
+|----------------|-----------------------------------------------------------------------------------------------|--------------------------|----------------------------------|
+| `"llama_cpp"`  | llama.cpp + GGML Hexagon backend                                                              | GGUF                     | CPU / Adreno GPU / Hexagon NPU   |
+| `"qairt"`      | Qualcomm AI Runtime with QAIRT pipelines                                                      | AI Hub pre-compiled bins | Hexagon NPU only                 |
+| `null`         | Let the SDK pick based on the resolved model paths                                            | —                        | —                                |
+
+The string constants are also exposed as [`PluginIdValue`](https://github.com/qcom-ai-hub/geniex/blob/main/bindings/android/app/src/main/java/com/geniex/sdk/bean/InputPluginBase.kt) (`LLAMA_CPP`, `QAIRT`).
+
+<Note>
+The old `"cpu_gpu"` / `"npu"` / `"whisper_cpp"` / `"tts_cpp"` plugin ids from earlier documentation are no longer in use. llama.cpp now covers CPU / GPU / Hexagon NPU through `device_id`; QAIRT replaces the old NEXA NPU plugin.
+</Note>
 
 ---
 
-## **Device Selection**
+## **Device selection**
 
-Control which hardware device processes your model via a friendly alias.
+Friendly hardware aliases. The JNI layer forwards these to `geniex_resolve_device` in the native SDK — the single source of truth for `device_id` + `nGpuLayers` mapping.
 
 ```kotlin
-val device_id: String?  // "cpu" | "gpu" | "npu" | "hybrid" | null
+val device_id: String?   // "cpu" | "gpu" | "npu" | "hybrid" | null
 ```
-
-**Available Values** (also exposed as [`DeviceIdValue`](../../../bindings/android/app/src/main/java/com/geniex/sdk/bean/InputPluginBase.kt)):
 
 | Alias      | What it does                                                                                     |
 |------------|--------------------------------------------------------------------------------------------------|
 | `null`     | Plugin default — `hybrid` for `llama_cpp`, `npu` for `qairt`.                                    |
 | `"cpu"`    | Pure CPU. JNI forces `nGpuLayers = 0`.                                                            |
 | `"gpu"`    | Adreno GPU via OpenCL (`llama_cpp` only).                                                         |
-| `"npu"`    | Pinned Hexagon session (`HTP0`). Deterministic layout; slower than `hybrid` on LLMs.              |
+| `"npu"`    | Pinned Hexagon session (`HTP0`). Deterministic; slower than `hybrid` on most LLMs.                |
 | `"hybrid"` | `llama_cpp` per-tensor HTP+CPU scheduler. JNI forces `nGpuLayers = 999`. Fastest LLM path.        |
 
+Also exposed as [`DeviceIdValue`](https://github.com/qcom-ai-hub/geniex/blob/main/bindings/android/app/src/main/java/com/geniex/sdk/bean/InputPluginBase.kt).
+
 <Note>
-QAIRT (`plugin_id = "qairt"`) only exposes its NPU device. If you pass
-`"cpu"`, `"gpu"`, or `"hybrid"` with a QAIRT model the JNI logs a
-warning and falls back to NPU — it will not fail the call.
+QAIRT has only an NPU device. Passing `"cpu"`, `"gpu"`, or `"hybrid"` with a QAIRT model logs a warning and falls back to NPU — it will not fail the call.
+</Note>
+
+<Note>
+Some model families can't run on `hybrid`. For example, `gpt-oss-*` is pinned to `npu` automatically via `is_llama_cpp_hybrid_incompatible` in the native SDK (`sdk/src/device.cpp`). Callers do not need to special-case this.
 </Note>
 
 ---
 
-## **LLM Data Structures**
+## **Model manager**
 
-### LlmCreateInput
+Models are pulled on-device through the bundled Rust model manager. Do **not** manually `adb push` weights into `filesDir/models/` — that path is legacy and will be wiped on next launch.
+
+### `ModelManagerWrapper`
+
+Singleton `object` exposed at `com.geniex.sdk.ModelManagerWrapper`.
+
+```kotlin
+// One-time init. Safe to call on every Activity.onCreate — idempotent.
+GeniexSdk.getInstance().init(context)   // calls ModelManagerWrapper.init() for you
+
+// Pull, streaming progress.
+ModelManagerWrapper.pullFlow(
+    ModelPullInput(
+        model_name = "unsloth/Qwen3-0.6B-GGUF",
+        quant      = "Q4_0",
+        hub        = HubSource.HUGGINGFACE,
+    )
+).collect { event ->
+    when (event) {
+        is ModelManagerWrapper.PullEvent.Progress  -> /* update UI */
+        ModelManagerWrapper.PullEvent.Completed    -> /* done */
+        is ModelManagerWrapper.PullEvent.Error     -> /* show error */
+    }
+}
+
+// Resolve on-disk paths for a previously-pulled model.
+val paths: ModelPaths? = ModelManagerWrapper.getPaths("unsloth/Qwen3-0.6B-GGUF")
+
+// Inventory / cleanup.
+ModelManagerWrapper.list()                  // List<String> of resolved model names
+ModelManagerWrapper.remove("org/repo")      // Int (0 = success)
+ModelManagerWrapper.clean()                 // wipe all cached models
+```
+
+### `ModelPullInput`
+
+```kotlin
+data class ModelPullInput(
+    val model_name:   String,                     // "org/repo" or alias
+    val quant:        String? = null,             // e.g. "Q4_0", "Q4_K_M"
+    val hub:          HubSource = HubSource.AUTO, // AUTO routes by model_name
+    val local_path:   String? = null,             // only when hub == LOCALFS
+    val hf_token:     String? = null,             // falls back to GENIEX_HFTOKEN env
+    val chipset:      String? = null,             // required for AI Hub on Android (e.g. "SM8750")
+    val display_name: String? = null,             // required when hub == AIHUB explicitly
+)
+```
+
+### `HubSource`
+
+```kotlin
+enum class HubSource(val value: Int) {
+    AUTO(0),          // routes by model_name prefix (e.g. qualcomm/* → AIHUB)
+    HUGGINGFACE(1),
+    MODELSCOPE(2),
+    AIHUB(3),
+    VOLCES(4),
+    LOCALFS(127),
+}
+```
+
+### `ModelPaths`
+
+Returned by `getPaths()`. Feed the fields straight into `*CreateInput`:
+
+```kotlin
+data class ModelPaths(
+    val model_path:     String,
+    val model_dir:      String,
+    val model_name:     String,
+    val plugin_id:      String,            // authoritative — prefer this over UI selection
+    val mmproj_path:    String? = null,    // VLM projection weights (llama.cpp)
+    val tokenizer_path: String? = null,
+    val device_id:      String? = null,
+)
+```
+
+### `FileProgress`
+
+```kotlin
+data class FileProgress(
+    val file_name:        String,
+    val downloaded_bytes: Long,
+    val total_bytes:      Long,   // -1 when unknown (pre-HEAD)
+)
+```
+
+<Note>
+AI Hub pulls on Android **require** an explicit `chipset`. The Rust side only auto-detects on Windows-on-Snapdragon. Use `"SM8750"` for Snapdragon 8 Elite Gen 5.
+</Note>
+
+---
+
+## **LLM data structures**
+
+### `LlmCreateInput`
 
 ```kotlin
 data class LlmCreateInput(
-    val model_name: String? = null,      // Model name (required for NPU, empty for CPU/GPU)
-    val model_path: String,              // Path to model file or folder
-    val tokenizer_path: String? = null,  // Optional tokenizer path
-    val config: ModelConfig,             // Model configuration
-    val plugin_id: String? = null,       // "npu", "cpu_gpu", etc.
-    val device_id: String? = null        // null, "gpu", "dev0"
+    val model_name:     String,
+    val model_path:     String,
+    val tokenizer_path: String? = null,
+    val config:         ModelConfig,
+    val plugin_id:      String? = null,   // see Plugin selection
+    val device_id:      String? = null,   // see Device selection
 )
 ```
 
-### ChatMessage
+### `ChatMessage`
 
 ```kotlin
 data class ChatMessage(
-    val role: String,        // "system", "user", "assistant"
-    val content: String      // Message text
+    var role:    String,   // "system" | "user" | "assistant"
+    var content: String,
 )
 ```
 
-### GenerationConfig
+### `ModelConfig`
 
 ```kotlin
-data class GenerationConfig(
-    val maxTokens: Int? = null,           // Maximum tokens to generate
-    val temperature: Float = 0.7f,        // Sampling temperature
-    val topP: Float = 0.9f,              // Nucleus sampling
-    val topK: Int = 40,                  // Top-K sampling
-    val repeatPenalty: Float = 1.1f,     // Repetition penalty
-    val seed: Int = -1                   // Random seed (-1 for random)
+data class ModelConfig(
+    var nCtx:                  Int     = 2048,     // context size; 0 = model default
+    var nThreads:              Int     = 8,
+    var nThreadsBatch:         Int     = 8,
+    var nBatch:                Int     = 2048,
+    var nUBatch:               Int     = 512,
+    var nSeqMax:               Int     = 1,
+    var nGpuLayers:            Int     = 0,        // see note below
+    val chat_template_path:    String  = "",
+    val chat_template_content: String  = "",
+    val max_tokens:            Int     = 2048,
+    val enable_thinking:       Boolean = false,
+    val verbose:               Boolean = false,
 )
 ```
 
-### LlmStreamResult
+<Note>
+`nGpuLayers` is rewritten by the JNI when you pass a `device_id` alias: `cpu` forces 0, `hybrid` forces 999. For `gpu` and `npu` the value you pass is used as-is — set it to 999 to offload all layers.
+</Note>
+
+### `GenerationConfig` and streaming
+
+The streaming API emits:
 
 ```kotlin
 sealed class LlmStreamResult {
-    data class Token(val text: String) : LlmStreamResult()
-    object Completed : LlmStreamResult()
+    data class Token(val text: String)    : LlmStreamResult()
+    object         Completed              : LlmStreamResult()
     data class Error(val throwable: Throwable) : LlmStreamResult()
 }
 ```
 
+Construct a `GenerationConfig` with `maxTokens`, sampling params, and grammar as needed. Full fields are in [`GenerationConfigSample`](https://github.com/qcom-ai-hub/geniex/blob/main/examples/android/app/src/main/java/com/geniex/demo/GenerationConfigSample.kt).
+
 ---
 
-## **Multimodal Data Structures**
+## **Multimodal data structures**
 
-### VlmCreateInput
+### `VlmCreateInput`
 
 ```kotlin
 data class VlmCreateInput(
-    val model_name: String? = null,            // Model name (required for NPU)
-    val model_path: String,                    // Path to VLM model
-    val tokenizer_path: String? = null,        // Optional tokenizer path
-    val mmproj_path: String? = null,           // Vision projection weights (for GGUF models)
-    val config: ModelConfig,                   // Model configuration
-    val plugin_id: String? = null,             // "npu" for NPU, "cpu_gpu" for CPU/GPU
-    val device_id: String? = null              // null for CPU, "gpu" for GPU, "dev0" for NPU
+    val model_name:  String,
+    val model_path:  String,
+    val mmproj_path: String? = null,     // vision projection weights (GGUF VLMs)
+    val config:      ModelConfig,
+    val plugin_id:   String? = null,
+    val device_id:   String? = null,
 )
 ```
 
-### VlmChatMessage
+### `VlmChatMessage` / `VlmContent`
 
 ```kotlin
 data class VlmChatMessage(
-    val role: String,                          // "system", "user", "assistant"
-    val contents: List<VlmContent>             // Mixed text/image/audio content
+    val role:     String?,                 // "system" | "user" | "assistant"
+    val contents: List<VlmContent>,
 )
-```
 
-### VlmContent
-
-```kotlin
 data class VlmContent(
-    val type: String,                          // "text", "image", "audio"
-    val content: String                        // Text or file path
+    val type: String?,                     // "text" | "image" | "audio"
+    val text: String?,                     // text content, or absolute file path for image/audio
 )
 ```
 
 ---
 
-## **Embeddings Data Structures**
+## **Embeddings**
 
-### EmbedderCreateInput
+### `EmbedderCreateInput`
 
 ```kotlin
 data class EmbedderCreateInput(
-    val model_name: String? = null,            // Model name for NPU
-    val model_path: String,                    // Path to embedder model
-    val tokenizer_path: String? = null,        // Path to tokenizer
-    val config: ModelConfig,                   // Model configuration
-    val plugin_id: String? = null,             // "npu" for NPU, null for CPU
-    val device_id: String? = null              // Device ID (optional)
+    val model_name:     String,
+    val model_path:     String,
+    val tokenizer_path: String? = null,
+    val config:         ModelConfig,
+    val plugin_id:      String? = null,
+    val device_id:      String? = null,
 )
-```
 
-### EmbeddingConfig
-
-```kotlin
 data class EmbeddingConfig(
-    val normalize: Boolean = true              // Normalize embeddings (default: true)
+    val normalize: Boolean = true,
 )
 ```
 
 ---
 
-## **ASR Data Structures**
+## **ASR**
 
-### AsrCreateInput
+### `AsrCreateInput`
 
 ```kotlin
 data class AsrCreateInput(
-    val model_name: String? = null,            // Model name for NPU
-    val model_path: String,                    // Path to ASR model
-    val config: ModelConfig,                   // Model configuration
-    val plugin_id: String? = null,             // "whisper_cpp" for whisper.cpp, "npu" for NPU
-    val device_id: String? = null              // Device ID (optional)
+    val model_name: String,
+    val model_path: String,
+    val config:     ModelConfig,
+    val plugin_id:  String? = null,
+    val device_id:  String? = null,
 )
-```
 
-### AsrTranscribeInput
-
-```kotlin
 data class AsrTranscribeInput(
-    val audioPath: String,                     // Path to audio file (.wav, .mp3, etc.)
-    val language: String,                      // Language code: "en", "zh", "es", etc.
-    val timestamps: String? = null             // Optional: timestamp format
+    val audioPath:  String,     // .wav / .mp3 / .flac etc.
+    val language:   String,     // "en" | "zh" | "es" | ...
+    val timestamps: String? = null,
 )
-```
 
-### AsrTranscriptionResult
-
-```kotlin
 data class AsrTranscriptionResult(
-    val result: AsrResult,                     // Transcription result
-    val profileData: String                    // Performance metrics
+    val result:      AsrResult,
+    val profileData: String,
 )
 ```
 
 ---
 
-## **TTS Data Structures**
-
-### TtsCreateInput
-
-```kotlin
-data class TtsCreateInput(
-    val model_name: String? = null,            // Model name (empty for CPU/GPU)
-    val model_path: String,                    // Path to TTS model
-    val vocoder_path: String? = null,          // Optional vocoder path
-    val config: ModelConfig,                   // Model configuration
-    val plugin_id: String? = null,             // "tts_cpp" for TTS backend
-    val device_id: String? = null              // Device ID (optional)
-)
-```
-
-### TtsSynthesizeInput
-
-```kotlin
-data class TtsSynthesizeInput(
-    val textUtf8: String,                      // Text to synthesize (UTF-8 encoding)
-    val config: TtsConfig? = null,             // Optional TTS configuration
-    val outputPath: String? = null             // Optional output file path (null for auto-generated)
-)
-```
-
-### TtsConfig
-
-```kotlin
-data class TtsConfig(
-    val voice: String? = null,                 // Voice identifier
-    val speed: Float = 1.0f,                   // Speech speed (1.0 = normal)
-    val seed: Int = -1,                        // Random seed (-1 for random)
-    val sampleRate: Int = 22050                // Output sample rate in Hz
-)
-```
-
-### TtsSynthesizeOutput
-
-```kotlin
-data class TtsSynthesizeOutput(
-    val outputPath: String,                    // Path to generated audio file
-    val profileData: String                    // Performance metrics
-)
-```
-
----
-
-## **Rerank Data Structures**
-
-### RerankerCreateInput
+## **Reranker**
 
 ```kotlin
 data class RerankerCreateInput(
-    val model_name: String? = null,            // Model name for NPU
-    val model_path: String,                    // Path to reranker model
-    val tokenizer_path: String? = null,        // Path to tokenizer
-    val config: ModelConfig,                   // Model configuration
-    val plugin_id: String? = null,             // "npu" for NPU, null for CPU
-    val device_id: String? = null              // Device ID (optional)
+    val model_name:     String,
+    val model_path:     String,
+    val tokenizer_path: String? = null,
+    val config:         ModelConfig,
+    val plugin_id:      String? = null,
+    val device_id:      String? = null,
 )
-```
 
-### RerankConfig
-
-```kotlin
 data class RerankConfig(
-    val topN: Int? = null                      // Return only top N results (null = all)
+    val topN: Int? = null,          // null = all
 )
-```
 
-### RerankerResult
-
-```kotlin
 data class RerankerResult(
-    val scores: FloatArray,                    // Relevance scores (0.0 - 1.0)
-    val scoreCount: Int,                       // Number of scores
-    val profileData: String                    // Performance metrics
+    val scores:      FloatArray,
+    val scoreCount:  Int,
+    val profileData: String,
 )
 ```
 
 ---
 
-## **Computer Vision Data Structures**
-
-### CVCreateInput
+## **Computer vision**
 
 ```kotlin
 data class CVCreateInput(
-    val model_name: String,                    // Model name: "paddleocr", etc.
-    val config: CVModelConfig,                 // CV model configuration
-    val plugin_id: String? = null              // "npu" for NPU, "cpu_gpu" for CPU/GPU
+    val model_name: String,
+    val config:     CVModelConfig,
+    val plugin_id:  String? = null,
 )
-```
 
-### CVModelConfig
-
-```kotlin
 data class CVModelConfig(
-    val capabilities: CVCapability,            // OCR, DETECTION, CLASSIFICATION
-    val det_model_path: String? = null,        // Detection model path
-    val rec_model_path: String? = null,        // Recognition model path
-    val char_dict_path: String? = null,        // Character dictionary path
-    val qnn_model_folder_path: String? = null, // QNN model folder (NPU)
-    val qnn_lib_folder_path: String? = null    // QNN library path (NPU)
+    val capabilities:          CVCapability,     // OCR | DETECTION | CLASSIFICATION
+    val det_model_path:        String? = null,
+    val rec_model_path:        String? = null,
+    val char_dict_path:        String? = null,
+    val qnn_model_folder_path: String? = null,   // NPU
+    val qnn_lib_folder_path:   String? = null,   // NPU
 )
-```
 
-### CVCapability
+enum class CVCapability { OCR, DETECTION, CLASSIFICATION }
 
-```kotlin
-enum class CVCapability {
-    OCR,                                       // Optical Character Recognition
-    DETECTION,                                 // Object detection
-    CLASSIFICATION                             // Image classification
-}
-```
-
-### CVResult
-
-```kotlin
 data class CVResult(
-    val text: String,                          // Recognized text (OCR)
-    val confidence: Float,                     // Confidence score (0.0 - 1.0)
-    val boundingBox: BoundingBox?,             // Bounding box coordinates
-    val label: String?,                        // Class label (classification)
-    val score: Float                           // Detection/classification score
+    val text:        String,
+    val confidence:  Float,
+    val boundingBox: BoundingBox?,
+    val label:       String?,
+    val score:       Float,
 )
 ```
 
 ---
 
-## **Need Help?**
-
-Join our community to get support, share your projects, and connect with other developers.
+## **Need help?**
 
 <CardGroup cols={2}>
-  <Card title="Discord Community" icon="discord" href="https://discord.com/invite/thRu2HaK4D">
-    Get real-time support and chat with the GenieX AI community
+  <Card title="Discord" icon="discord" href="https://discord.com/invite/thRu2HaK4D">
+    Real-time support from the GenieX community.
   </Card>
-  <Card title="Slack Community" icon="slack" href="https://join.slack.com/t/nexa-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw">
-    Collaborate with developers and access community resources
+  <Card title="Slack" icon="slack" href="https://join.slack.com/t/nexa-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw">
+    Developer collaboration and resources.
   </Card>
 </CardGroup>
 

@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: Start here to set up and explore the GenieX SDK for running latest models on Android devices.
+description: GenieX Android SDK — run LLMs, VLMs, ASR, embeddings, rerank, and CV on Snapdragon NPU, GPU, or CPU.
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
@@ -18,8 +18,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   alt="GenieX Android SDK"
 />
 
-
-GenieXSDK for Android enables on-device AI inference for Android applications. It built upon GenieX AI's proprietary GenieXML engine and enables developers to run Large Language Models (LLMs), Vision-Language Models (VLMs), Embeddings, Speech Recognition (ASR), Reranking, and Computer Vision models directly on Android devices with support for NPU, GPU, and CPU inference.
+GenieX Android SDK brings on-device inference for LLMs, VLMs, embeddings, ASR, reranking, and computer-vision models to Android apps — with a unified Kotlin API over CPU, Adreno GPU, and Qualcomm Hexagon NPU. The SDK and the demo app both live in this repo and share a single download pipeline (the Rust-based model manager) for pulling weights from Hugging Face or Qualcomm AI Hub.
 
 ## **Why NPU on mobile**
 
@@ -32,37 +31,87 @@ GenieXSDK for Android enables on-device AI inference for Android applications. I
   allowFullScreen
 ></iframe>
 
-## **Key Features**
+## **Architecture**
 
-- **Multiple Model Types**: Support for LLM, VLM, Embeddings, ASR, Reranker, and Computer Vision models
-- **Hardware Acceleration**: CPU, GPU, and NPU (Qualcomm Hexagon NPU) support
-- **Easy Integration**: Simple Kotlin/Java API with builder pattern
+The SDK is split into two layers that you configure per model:
 
-## **Supported Models**
+- **`plugin_id`** — selects the inference backend.
+  - `"llama_cpp"` → GGUF models via llama.cpp + GGML Hexagon backend. Runs on CPU, Adreno GPU, or Hexagon NPU.
+  - `"qairt"` → Qualcomm AI Hub pre-compiled models via QAIRT. NPU-only.
+- **`device_id`** — friendly alias (`cpu` / `gpu` / `npu` / `hybrid`, or `null` for the plugin default). `hybrid` is llama.cpp's per-tensor HTP+CPU scheduler and is the default fast path on Snapdragon.
 
-The following models are supported on Android ARM64 with NPU acceleration :
+Both map to `geniex_resolve_device` in the native SDK — the binding is a thin wrapper and never re-implements the alias table.
 
-| Modality | Model |
-|----------|-------|
-| **LLM** | [`NexaAI/Qwen3-4B-Instruct-2507`](https://huggingface.co/NexaAI/Qwen3-4B-Instruct-2507-npu-mobile)<br/>[`NexaAI/Llama3.2-3B-NPU-Turbo`](https://huggingface.co/NexaAI/Llama3.2-3B-NPU-Turbo-NPU-mobile)<br/>[`NexaAI/Granite-4-Micro`](https://huggingface.co/NexaAI/Granite-4-Micro-NPU-mobile)<br/>[`NexaAI/phi3.5-mini`](https://huggingface.co/NexaAI/phi3.5-mini-npu-mobile)<br/>[`NexaAI/phi4-mini`](https://huggingface.co/NexaAI/phi4-mini-npu-mobile)<br/>[`NexaAI/LFM2-1.2B-npu`](https://huggingface.co/NexaAI/LFM2-1.2B-npu-mobile) |
-| **VLM** | [`NexaAI/OmniNeural-4B`](https://huggingface.co/NexaAI/OmniNeural-4B-mobile) |
-| **Embedding** | [`NexaAI/embeddinggemma-300m-npu`](https://huggingface.co/NexaAI/embeddinggemma-300m-npu-mobile) |
-| **ASR** | [`NexaAI/parakeet-tdt-0.6b-v3-npu`](https://huggingface.co/NexaAI/parakeet-tdt-0.6b-v3-npu-mobile) |
-| **CV** | [`NexaAI/paddleocr`](https://huggingface.co/NexaAI/paddleocr-npu-mobile)<br/>[`NexaAI/yolo26x`](https://huggingface.co/NexaAI/yolo26x-npu-mobile)<br/>[`NexaAI/yolo26l`](https://huggingface.co/NexaAI/yolo26l-npu-mobile)<br/>[`NexaAI/yolo26m`](https://huggingface.co/NexaAI/yolo26m-npu-mobile)<br/>[`NexaAI/yolo26s`](https://huggingface.co/NexaAI/yolo26s-npu-mobile)<br/>[`NexaAI/yolo26n`](https://huggingface.co/NexaAI/yolo26n-npu-mobile)<br/>[`NexaAI/depth-anything-v2`](https://huggingface.co/NexaAI/depth-anything-v2-npu-mobile) |
+## **Model distribution**
+
+The demo app downloads models directly through the bundled Rust model manager (`ModelManagerWrapper` in `bindings/android`) — no per-file URL lists, no manual `adb push`. First time a user taps **Download**, weights land under `filesDir/geniex/models/<org>/<repo>/` with a `geniex.json` manifest. Downloads are resumable and chunked.
+
+Sources supported:
+- **Hugging Face** (`hub = "HUGGINGFACE"` or `AUTO`) — any public GGUF repo. Pass `quant` to pick the quantization (e.g. `Q4_0`, `Q8_0`).
+- **Qualcomm AI Hub** (`hub = "AIHUB"` or `AUTO` when the repo starts with `qualcomm/`) — pre-compiled NPU bundles. Android needs an explicit `chipset` (e.g. `"SM8750"`) because AI Hub auto-detect only works on Windows-on-Snapdragon.
+
+## **Supported models**
+
+The demo app ships with the following catalog. All models listed here are downloadable and runnable out of the box.
+
+### llama.cpp (GGUF)
+
+Runs on CPU / GPU / Hexagon NPU depending on `device_id`.
+
+| Modality | Model | Quant |
+|---|---|---|
+| LLM  | `unsloth/Qwen3-0.6B-GGUF` | Q4_0 |
+| LLM  | `unsloth/Qwen3-1.7B-GGUF` | Q4_0 |
+| LLM  | `unsloth/Llama-3.2-3B-Instruct-GGUF` | Q4_K_M |
+| LLM  | `unsloth/Ministral-3-3B-Instruct-2512-GGUF` | Q4_0 |
+| LLM  | `unsloth/granite-4.0-micro-GGUF` | Q4_0 |
+| LLM  | `unsloth/Phi-4-mini-instruct-GGUF` | Q4_0 |
+| LLM  | `unsloth/gemma-4-E2B-it-GGUF` | Q4_0 |
+| LLM  | `unsloth/gpt-oss-20b-GGUF` | Q4_0 |
+| VLM  | `unsloth/Qwen3.5-0.8B-GGUF` | Q4_0 |
+| VLM  | `unsloth/Qwen3.5-2B-GGUF` | Q4_0 |
+| VLM  | `unsloth/Qwen3-VL-2B-Instruct-GGUF` | Q4_0 |
 
 <Note>
-Beyond the NEXA-optimized models listed above, **any GGUF model from the community** can also run on Qualcomm Hexagon NPU. Use the `cpu_gpu` plugin and set `device_id = "dev0"`, powered by the GGML Hexagon backend.
+`gemma-4-E2B-it-GGUF` is a VLM upstream, but VLM wiring for llama.cpp is not yet hooked up in this demo — the text-only path works. `gpt-oss-20b` is incompatible with `hybrid` and is pinned to `npu` automatically by the SDK.
 </Note>
 
-## **Get Started**
+### QAIRT (Qualcomm AI Hub NPU)
 
-<Card
-  title="Quickstart for Android"
-  href="/en/geniex-android/quickstart"
-  icon="rocket"
->
-  Start building with GenieX Android SDK in minutes. Follow our step-by-step guide to integrate AI models into your Android application.
-</Card>
+Requires a Snapdragon 8 Elite Gen 5 (Hexagon v81) device. Chipset is pinned to `SM8750`.
+
+| Modality | Model |
+|---|---|
+| LLM  | `qualcomm/Qwen3-4B-Instruct-2507` |
+| VLM  | `qualcomm/Qwen2.5-VL-7B-Instruct` |
+
+## **Device compatibility**
+
+<AccordionGroup>
+  <Accordion title="Snapdragon NPU" icon="microchip">
+    - **Snapdragon 8 Elite Gen 5** (Hexagon v81) — primary target for QAIRT models and tested for all demo scenarios.
+    - **Snapdragon 8 Elite** (Hexagon v79) — llama.cpp GGUF models on NPU work; QAIRT models in the current catalog are SM8750-specific.
+  </Accordion>
+
+  <Accordion title="Adreno GPU (OpenCL)" icon="bolt">
+    Any Adreno GPU that supports OpenCL 2.0+. Select with `device_id = "gpu"`.
+  </Accordion>
+
+  <Accordion title="CPU" icon="memory">
+    ARM64-v8a. Minimum `minSdk = 27` (Android 8.1).
+  </Accordion>
+</AccordionGroup>
+
+## **Get started**
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" href="/en/geniex-android/quickstart" icon="rocket">
+    Install the prebuilt demo APK or build from source.
+  </Card>
+  <Card title="API Reference" href="/en/geniex-android/APIReference" icon="book">
+    Plugin / device selection and wrapper data structures.
+  </Card>
+</CardGroup>
 
 <br />
 

@@ -1,375 +1,164 @@
 ---
 title: NPU
-description: NPU-accelerated inference for GenieX Android SDK using Qualcomm Hexagon NPU.
+description: NPU-accelerated inference on Qualcomm Hexagon — AI Hub pre-compiled models via QAIRT, or GGUF via the llama.cpp Hexagon backend.
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
+There are two ways to run a model on Qualcomm Hexagon NPU:
 
-## **Model Name Mapping**
-For all NPU model, we use an internal namming mapping and please fill in plugin id accordingly.
+1. **Qualcomm AI Hub pre-compiled models via `"qairt"`** — purpose-built for specific chipsets (e.g. `SM8750` = Snapdragon 8 Elite Gen 5). Fastest and most memory-efficient path, but limited to the models Qualcomm publishes on AI Hub.
+2. **Any GGUF model via `"llama_cpp"`** with `device_id = "npu"` (pinned) or `"hybrid"` (fast path). Works with any community GGUF; see [CPU / GPU / Hybrid](/en/geniex-android/APIReference_CPUGPU).
 
-| Model Name | Plugin ID | Huggingface repository name|
-|------------|-----------|------------|
-| omni-neural | npu | NexaAI/OmniNeural-4B-mobile |
-| phi3.5 | npu | NexaAI/phi3.5-mini-npu-mobile |
-| phi4 | npu | NexaAI/phi4-mini-npu-mobile |
-| granite4 | npu | NexaAI/Granite-4-Micro-NPU-mobile |
-| embed-gemma | npu | NexaAI/embeddinggemma-300m-npu-mobile |
-| qwen3-4b | npu | NexaAI/Qwen3-4B-Instruct-2507-npu-mobile |
-| llama3-3b | npu | NexaAI/Llama3.2-3B-NPU-Turbo-NPU-mobile |
-| liquid-v2 | npu | NexaAI/LFM2-1.2B-npu-mobile |
-| paddleocr | npu | NexaAI/paddleocr-npu-mobile |
-| parakeet | npu | NexaAI/parakeet-tdt-0.6b-v3-npu-mobile |
-| yolo26x | npu | NexaAI/yolo26x-npu-mobile |
-| yolo26l | npu | NexaAI/yolo26l-npu-mobile |
-| yolo26m | npu | NexaAI/yolo26m-npu-mobile |
-| yolo26s | npu | NexaAI/yolo26s-npu-mobile |
-| yolo26n | npu | NexaAI/yolo26n-npu-mobile |
-| depth-anything-v2 | npu | NexaAI/depth-anything-v2-npu-mobile |
+This page covers path #1. For path #2 see the CPU / GPU / Hybrid doc — the wrapper code is identical; only `plugin_id` changes.
+
+---
+
+## **Supported AI Hub models**
+
+The demo app ships with the following QAIRT models. All are pinned to chipset `SM8750` (Snapdragon 8 Elite Gen 5 / Hexagon v81).
+
+| Modality | Hub repo |
+|---|---|
+| LLM | `qualcomm/Qwen3-4B-Instruct-2507` |
+| VLM | `qualcomm/Qwen2.5-VL-7B-Instruct` |
+
+Beyond these, any model under [Qualcomm AI Hub](https://aihub.qualcomm.com/) that ships a pre-compiled NPU bundle for your chipset can be pulled the same way — register the AI Hub model id in the Rust model manager's QAIRT LLM / VLM registry, and it becomes available to the SDK.
+
+---
+
+## **Download an AI Hub model**
+
+```kotlin
+ModelManagerWrapper.pullFlow(
+    ModelPullInput(
+        model_name = "qualcomm/Qwen2.5-VL-7B-Instruct",
+        hub        = HubSource.AUTO,     // AUTO routes `qualcomm/*` to AI Hub
+        chipset    = "SM8750",           // REQUIRED on Android
+    )
+).collect { event ->
+    when (event) {
+        is ModelManagerWrapper.PullEvent.Progress  -> updateProgressBar(event.files)
+        ModelManagerWrapper.PullEvent.Completed    -> println("done")
+        is ModelManagerWrapper.PullEvent.Error     -> println("err ${event.code}: ${event.message}")
+    }
+}
+```
 
 <Note>
-Beyond the NEXA-optimized models listed above, **any GGUF model from the community** can also run on Qualcomm Hexagon NPU. Use the `cpu_gpu` plugin and set `device_id = "dev0"`, powered by the GGML Hexagon backend.
+On Android you **must** pass `chipset` for AI Hub pulls. The Rust side only auto-detects on Windows-on-Snapdragon. Omitting it returns `GENIEX_ERROR_COMMON_INVALID_INPUT`.
 </Note>
 
 ---
 
-## **Two Ways to Run on NPU**
-
-You can run models on Qualcomm Hexagon NPU in **two different ways**:
-
-### 1) NEXA models via "npu" plugin
-- Use the `npu` plugin
-- Pick a supported **NEXA model** from the table above and set `model_name` accordingly
-
-### 2) GGUF models via GGML Hexagon backend
-- Load a **GGUF model**
-- Use the `cpu_gpu` plugin
-- Set `device_id` to `dev0`
-- Set `nGpuLayers > 0` in `ModelConfig`
-
-## **LLM Usage**
-
-Large Language Models for text generation and chat applications.
-
-### 1) NEXA Models ("npu" plugin)
-We support NPU inference for NEXA format models.
+## **LLM**
 
 ```kotlin
+val paths = ModelManagerWrapper.getPaths("qualcomm/Qwen3-4B-Instruct-2507")
+    ?: error("Model not downloaded")
+
 LlmWrapper.builder()
     .llmCreateInput(
         LlmCreateInput(
-            model_name = "liquid-v2",
-            model_path = <your-model-folder-path>,
-            config = ModelConfig(
-                    max_tokens = 2048
-            ),
-        ),
-        plugin_id = "npu"
-    )
-    .build()
-    .onSuccess { llmWrapper = it }
-
-val chatList = arrayListOf(ChatMessage("user", "What is AI?"))
-
-llmWrapper.applyChatTemplate(chatList.toTypedArray(), null, false).onSuccess { template ->
-    llmWrapper.generateStreamFlow(template.formattedText, GenerationConfig()).collect { result ->
-        when (result) {
-            is LlmStreamResult.Token -> println(result.text)
-            is LlmStreamResult.Completed -> println("Done!")
-            is LlmStreamResult.Error -> println("Error: ${result.throwable}")
-        }
-    }
-}
-```
-
-### 2) GGUF Models on Hexagon NPU (GGML Hexagon backend)
-Run a GGUF model on Hexagon NPU by using the `cpu_gpu` plugin with `device_id = "dev0"` and setting `nGpuLayers > 0`.
-
-```kotlin
-LlmWrapper.builder()
-    .llmCreateInput(
-        LlmCreateInput(
-            model_name = "", // GGUF: keep model_name empty
-            model_path = "<your-gguf-model-path>", // e.g. /data/data/<com.your.app>/files/models/gpt-oss-GGUF/gpt-oss-Q4_0.gguf
-            config = ModelConfig(
-                nCtx = 4096,
-                nGpuLayers = 999 // > 0 enables offloading; 999 attempts to offload all layers
-            ),
-            plugin_id = "cpu_gpu",
-            device_id = "dev0"  // Use NPU device to run models like GPT-OSS 20B
+            model_name = paths.model_name,
+            model_path = paths.model_path,
+            config     = ModelConfig(max_tokens = 2048, enable_thinking = false),
+            plugin_id  = "qairt",        // QAIRT is NPU-only
+            device_id  = null,           // null → NPU (plugin default)
         )
     )
     .build()
     .onSuccess { llmWrapper = it }
-    .onFailure { error -> println("Error: ${error.message}") }
-```
+    .onFailure { println("Error: ${it.message}") }
 
----
+val chat = arrayListOf(ChatMessage("user", "What is AI?"))
 
-## **Multimodal Usage**
-
-Vision-Language Models for image understanding and multimodal applications.
-
-### 1) NEXA Models ("npu" plugin)
-We support NPU inference for NEXA format models.
-
-```kotlin
-VlmWrapper.builder()
-    .vlmCreateInput(
-        VlmCreateInput(
-            model_name = "omni-neural",  // Model name for NPU plugin
-            model_path = <your-model-folder-path>,
-            config = ModelConfig(
-                max_tokens = 2048,
-                enable_thinking = false
-            ),
-            plugin_id = "npu"  // Use NPU backend
-        )
-    )
-    .build()
-    .onSuccess { vlmWrapper = it }
-    .onFailure { error -> 
-        println("Error: ${error.message}")
-    }
-
-// Use the loaded VLM with image and text
-val contents = listOf(
-    VlmContent("image", <your-image-path>),
-    VlmContent("text", <your-text>)
-)
-
-val chatList = arrayListOf(VlmChatMessage("user", contents))
-
-vlmWrapper.applyChatTemplate(chatList.toTypedArray(), null, false).onSuccess { template ->
-    val config = vlmWrapper.injectMediaPathsToConfig(chatList.toTypedArray(), GenerationConfig())
-    vlmWrapper.generateStreamFlow(template.formattedText, config).collect { result ->
+llmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
+    llmWrapper.generateStreamFlow(t.formattedText, GenerationConfig()).collect { result ->
         when (result) {
-            is LlmStreamResult.Token -> println(result.text)
-            is LlmStreamResult.Completed -> println("Done!")
-            is LlmStreamResult.Error -> println("Error: ${result.throwable}")
+            is LlmStreamResult.Token     -> print(result.text)
+            is LlmStreamResult.Completed -> println("\nDone")
+            is LlmStreamResult.Error     -> println("Error: ${result.throwable}")
         }
     }
 }
 ```
 
-### 2) GGUF Models on Hexagon NPU (GGML Hexagon backend)
-Run a GGUF VLM on Hexagon NPU by using the `cpu_gpu` plugin with `device_id = "dev0"` and setting `nGpuLayers > 0`.
+<Note>
+QAIRT rejects `nGpuLayers != 0` and `nCtx != 0` with `PARAM_NOT_SUPPORTED` — the KV cache and context length are fixed at compile time by the AI Hub bundle. Leave both at their defaults (the SDK handles this for you) and use `max_tokens` / `enable_thinking` only.
+</Note>
+
+---
+
+## **VLM**
 
 ```kotlin
+val paths = ModelManagerWrapper.getPaths("qualcomm/Qwen2.5-VL-7B-Instruct")
+    ?: error("Model not downloaded")
+
 VlmWrapper.builder()
     .vlmCreateInput(
         VlmCreateInput(
-            model_name = "",  // GGUF: keep model_name empty
-            model_path = <your-gguf-model-path>,
-            mmproj_path = <your-mmproj-path>,  // vision projection weights
-            config = ModelConfig(
-                nCtx = 4096,
-                nGpuLayers = 999 // > 0 enables offloading; 999 attempts to offload all layers
-            ),
-            plugin_id = "cpu_gpu",
-            device_id = "dev0"
+            model_name  = paths.model_name,
+            model_path  = paths.model_path,
+            mmproj_path = paths.mmproj_path,   // vision encoder .bin (populated for AI Hub VLMs)
+            config      = ModelConfig(max_tokens = 2048, enable_thinking = false),
+            plugin_id   = "qairt",
+            device_id   = null,
         )
     )
     .build()
     .onSuccess { vlmWrapper = it }
-    .onFailure { error -> 
-        println("Error: ${error.message}")
-    }
 
-// Use the loaded VLM with image and text
-val contents = listOf(
-    VlmContent("image", <your-image-path>),
-    VlmContent("text", "<your-text>")
+val msg = VlmChatMessage(
+    role     = "user",
+    contents = listOf(
+        VlmContent("image", "/storage/emulated/0/Pictures/cat.jpg"),
+        VlmContent("text",  "What's in this image?"),
+    ),
 )
+val chat = arrayListOf(msg)
 
-val chatList = arrayListOf(VlmChatMessage("user", contents))
-
-vlmWrapper.applyChatTemplate(chatList.toTypedArray(), null, false).onSuccess { template ->
-    val baseConfig = GenerationConfig(maxTokens = 2048)
-    val configWithMedia = vlmWrapper.injectMediaPathsToConfig(
-        chatList.toTypedArray(),
-        baseConfig
-    )
-    vlmWrapper.generateStreamFlow(template.formattedText, configWithMedia).collect { result ->
+vlmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
+    val base = GenerationConfig(maxTokens = 2048)
+    val gen  = vlmWrapper.injectMediaPathsToConfig(chat.toTypedArray(), base)
+    vlmWrapper.generateStreamFlow(t.formattedText, gen).collect { result ->
         when (result) {
-            is LlmStreamResult.Token -> println(result.text)
-            is LlmStreamResult.Completed -> println("Done!")
-            is LlmStreamResult.Error -> println("Error: ${result.throwable}")
+            is LlmStreamResult.Token     -> print(result.text)
+            is LlmStreamResult.Completed -> println("\nDone")
+            is LlmStreamResult.Error     -> println("Error: ${result.throwable}")
         }
     }
 }
 ```
 
+<Note>
+Pass the **chat-templated** prompt (`t.formattedText`) to `generateStreamFlow`, never the raw user text. The QAIRT VLM pipeline treats its prompt argument as already-templated; sending raw text puts the model into completion mode and produces degenerate output on structured inputs.
+</Note>
+
 ---
 
-## **Embeddings Usage**
+## **Authoritative `plugin_id` from paths**
 
-Generate vector embeddings for semantic search and RAG applications.
-
-### Basic Usage
+If your UI lets the user pick CPU / GPU / NPU but you want to honour what the model was actually compiled for, use `paths.plugin_id`:
 
 ```kotlin
-// Load embedder for NPU inference
-EmbedderWrapper.builder()
-    .embedderCreateInput(
-        EmbedderCreateInput(
-            model_name = "embed-gemma",  // Model name for NPU plugin
-            model_path = <your-model-folder-path>,
-            tokenizer_path = <your-tokenizer-path>,  // Optional
-            config = ModelConfig(
-                max_tokens = 2048
-            ),
-            plugin_id = "npu",  // Use NPU backend
-            device_id = null    // Optional device ID
-        )
-    )
-    .build()
-    .onSuccess { embedderWrapper = it }
-    .onFailure { error -> 
-        println("Error: ${error.message}")
-    }
-
-// Generate embeddings for multiple texts
-val texts = arrayOf(<your-text1>, <your-text2>, ...)
-
-embedderWrapper.embed(texts, EmbeddingConfig()).onSuccess { embeddings ->
-    val dimension = embeddings.size / texts.size
-    println("Dimension: $dimension")
-    println("First 5 values: ${embeddings.take(5)}")
-}
+val paths    = ModelManagerWrapper.getPaths(name) ?: return
+val pluginId = paths.plugin_id          // "qairt" for AI Hub models, "llama_cpp" for GGUF
 ```
+
+This is what the demo app does — the plugin picker dialog is used only to pick `device_id` for `llama_cpp` models.
 
 ---
 
-## **ASR Usage**
-
-Automatic Speech Recognition for audio transcription.
-
-### Basic Usage
-
-```kotlin
-// Load ASR model for NPU inference
-AsrWrapper.builder()
-    .asrCreateInput(
-        AsrCreateInput(
-            model_name = "parakeet",  // Model name for NPU plugin
-            model_path = <your-model-folder-path>,
-            config = ModelConfig(
-                max_tokens = 2048
-            ),
-            plugin_id = "npu"  // Use NPU backend
-        )
-    )
-    .build()
-    .onSuccess { asrWrapper = it }
-    .onFailure { error -> 
-        println("Error: ${error.message}")
-    }
-
-// Transcribe audio file
-asrWrapper.transcribe(
-    AsrTranscribeInput(
-        audioPath = <your-audio-path>,  // Path to .wav, .mp3, etc.
-        language = "en",                // Language code: "en", "zh", "es", etc.
-        timestamps = null               // Optional timestamp format
-    )
-).onSuccess { result ->
-    println("Transcription: ${result.result.transcript}")
-}
-```
-
----
-
-## **Rerank Usage**
-
-Improve search relevance by reranking documents based on query relevance.
-
-### Basic Usage
-
-```kotlin
-// Load reranker model for NPU inference
-RerankerWrapper.builder()
-    .rerankerCreateInput(
-        RerankerCreateInput(
-            model_name = "jina-rerank",  // Model name for NPU plugin
-            model_path = <your-model-folder-path>,
-            tokenizer_path = <your-tokenizer-path>,  // Optional
-            config = ModelConfig(
-                max_tokens = 2048
-            ),
-            plugin_id = "npu",  // Use NPU backend
-            device_id = null    // Optional device ID
-        )
-    )
-    .build()
-    .onSuccess { rerankerWrapper = it }
-    .onFailure { error -> 
-        println("Error: ${error.message}")
-    }
-
-// Rerank documents based on query relevance
-val query = "What is machine learning?"
-val docs = arrayOf("ML is AI subset", "Weather forecast", "Deep learning tutorial")
-
-rerankerWrapper.rerank(query, docs, RerankConfig()).onSuccess { result ->
-    result.scores?.withIndex()?.sortedByDescending { it.value }?.forEach { (idx, score) ->
-        println("Score: ${"%.4f".format(score)} - ${docs[idx]}")
-    }
-}
-```
-
----
-
-## **CV Usage**
-
-Computer Vision models for OCR, object detection, and image classification.
-
-### Basic Usage
-
-```kotlin
-// Load PaddleOCR model for NPU inference
-CvWrapper.builder()
-    .createInput(
-        CVCreateInput(
-            model_name = "paddleocr",  // Model name
-            config = CVModelConfig(
-                capabilities = CVCapability.OCR,
-                det_model_path = <your-det-model-folder-path>,
-                rec_model_path = <your-rec-model-path>,
-                char_dict_path = <your-char-dict-path>,
-                qnn_model_folder_path = <your-qnn-model-folder-path>,  // For NPU
-                qnn_lib_folder_path = <your-qnn-lib-folder-path>       // For NPU
-            ),
-            plugin_id = "npu"  // Use NPU backend
-        )
-    )
-    .build()
-    .onSuccess { cvWrapper = it }
-    .onFailure { error -> 
-        println("Error: ${error.message}")
-    }
-
-// Perform OCR on image
-cvWrapper.infer(<your-image-path>).onSuccess { results ->
-    results.forEach { result ->
-        println("Text: ${result.text}, Confidence: ${result.confidence}")
-    }
-}
-```
-
----
-
-## **Need Help?**
-
-Join our community to get support, share your projects, and connect with other developers.
+## **Need help?**
 
 <CardGroup cols={2}>
-  <Card title="Discord Community" icon="discord" href="https://discord.com/invite/thRu2HaK4D">
-    Get real-time support and chat with the GenieX AI community
+  <Card title="Discord" icon="discord" href="https://discord.com/invite/thRu2HaK4D">
+    Real-time support from the GenieX community.
   </Card>
-  <Card title="Slack Community" icon="slack" href="https://join.slack.com/t/nexa-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw">
-    Collaborate with developers and access community resources
+  <Card title="Slack" icon="slack" href="https://join.slack.com/t/nexa-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw">
+    Developer collaboration and resources.
   </Card>
 </CardGroup>
 
