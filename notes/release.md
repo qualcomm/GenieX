@@ -50,8 +50,14 @@ Rules:
 
 This is the algorithm `/release` follows. Apply in order.
 
-1. **Find the latest stable tag** `v0.A.B` via `gh release list --limit 20` (filter out pre-releases). If none exists, target `v0.1.0` and skip to step 3.
-2. **Pick the target `X.Y.Z`** from `git log v0.A.B..HEAD`:
+1. **Find the latest stable tag** `v0.A.B` locally — avoids a `gh` round-trip:
+
+   ```bash
+   git tag --sort=-v:refname --list "v[0-9]*.[0-9]*.[0-9]*" | grep -v -- '-' | head -1
+   ```
+
+   Don't use `git describe` — it only looks at HEAD's ancestor chain and will miss stable tags cut on side branches. If the command prints nothing, target `v0.1.0` and skip to step 3.
+2. **Pick the target `X.Y.Z`** from `git log v0.A.B..HEAD --format="%h %s" --stat` (subject + touched files in one pass; run `git show <sha>` only if that's still ambiguous):
    - any commit with a breaking change → `v0.(A+1).0` (while `X = 0`, breaking bumps MINOR);
    - else any feature commit → `v0.(A+1).0`;
    - else → `v0.A.(B+1)`.
