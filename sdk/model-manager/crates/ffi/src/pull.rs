@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use model_manager_core::config::StoreConfig;
 use model_manager_core::manifest_builder::ManifestHint;
-use model_manager_core::mapping::aihub_display_name_from_repo;
+use model_manager_core::mapping::{aihub_display_name_from_repo, canonicalize_model_name};
 use model_manager_core::pull::{pull_blocking, PullIntent, PullRequest};
 
 use crate::init::{get_store, runtime_handle};
@@ -49,10 +49,14 @@ pub struct GeniexModelPullInput {
     /// `hub == GENIEX_HUB_AIHUB`; ignored otherwise. Matched against the
     /// `name` / `aliases` fields of `platform.json`.
     pub chipset: *const c_char,
-    /// AI Hub `display_name` of the model to download. Required when
-    /// `hub == GENIEX_HUB_AIHUB`; ignored otherwise. `model_name` still
-    /// names the on-disk directory ("org/repo" shape), mirroring the
-    /// Go CLI's `storedName` / `displayName` split.
+    /// AI Hub `display_name` of the model to download. Used when
+    /// `hub == GENIEX_HUB_AIHUB` or `hub == GENIEX_HUB_AUTO` resolves
+    /// to AI Hub. If NULL and `model_name` is in the form
+    /// `qualcomm/<repo>`, `qai-hub-models/<repo>`, or `aihub/<repo>`,
+    /// `<repo>` is used as the display_name; otherwise the caller must
+    /// set this. `model_name` still names the on-disk directory
+    /// ("org/repo" shape), mirroring the Go CLI's `storedName` /
+    /// `displayName` split.
     pub display_name: *const c_char,
     pub on_progress: GeniexDownloadProgressCb,
     pub user_data: *mut c_void,
@@ -87,10 +91,13 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
 
         let inp = unsafe { &*input };
 
-        let model_name = match unsafe { cstr_to_str(inp.model_name) } {
+        let raw_model_name = match unsafe { cstr_to_str(inp.model_name) } {
             Some(s) => s.to_string(),
             None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
         };
+        // Bare names (no '/') are treated as AI Hub model ids and stored
+        // under `aihub/<name>`; anything with '/' is passed through.
+        let model_name = canonicalize_model_name(&raw_model_name);
 
         // Explicit token wins; env var is the fallback; anonymous otherwise.
         let hf_token = unsafe { cstr_to_str(inp.hf_token) }
@@ -109,9 +116,10 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
 
         let intent = match inp.hub {
             GeniexHubSource::Auto => {
-                // "qualcomm/*" / "qai-hub-models/*" route to AI Hub without
-                // requiring the caller to set hub=AIHUB explicitly. The
-                // derived display_name is the repo after the slash;
+                // "qualcomm/*", "qai-hub-models/*", "aihub/*" and bare names
+                // (which canonicalize_model_name above rewrote to "aihub/<name>")
+                // all route to AI Hub without the caller setting hub=AIHUB.
+                // The derived display_name is the repo after the slash;
                 // callers may still override via inp.display_name.
                 if let Some(repo) = aihub_display_name_from_repo(&model_name) {
                     PullIntent::AiHub {
@@ -139,7 +147,13 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
             GeniexHubSource::AiHub => {
                 // chipset NULL or empty → SDK auto-detects (currently
                 // Windows-on-Snapdragon only). Non-empty: caller override.
-                let display_name = match explicit_display_name {
+                // display_name mirrors the Auto branch: explicit value
+                // wins; otherwise derive from repos we recognise
+                // ("qualcomm/*", "qai-hub-models/*", "aihub/*"). Only
+                // reject when neither source yields a name.
+                let display_name = explicit_display_name
+                    .or_else(|| aihub_display_name_from_repo(&model_name).map(str::to_string));
+                let display_name = match display_name {
                     Some(s) => s,
                     None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
                 };

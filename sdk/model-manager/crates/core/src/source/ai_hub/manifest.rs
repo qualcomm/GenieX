@@ -42,6 +42,28 @@ pub struct ManifestModelEntry {
 pub struct ManifestUrls {
     #[serde(default)]
     pub release_assets: String,
+    /// Per-model `info.json` pointer. Live manifests populate it for
+    /// every entry; kept optional so older cached manifests still parse.
+    #[serde(default)]
+    pub info: String,
+}
+
+/// Per-model `info.json`: verbose metadata used to distinguish VLM from
+/// text-only LLM when `domain` alone is insufficient. Manifest-level
+/// `domain` for Qwen2.5-VL, Llama-v3, and text-only LLMs is all
+/// `MODEL_DOMAIN_GENERATIVE_AI`; the free-text `description` /
+/// `headline` fields are what actually differ.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct InfoJson {
+    #[serde(default)]
+    pub domain: String,
+    #[serde(default)]
+    pub headline: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 /// Per-model `release-assets.json`: one entry per (chipset, runtime,

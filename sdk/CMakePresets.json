@@ -86,7 +86,6 @@
       },
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm64-linux-gnu.cmake",
-        "GGML_OPENCL": "OFF",
         "PREBUILT_LIB_DIR": "linux_aarch64"
       }
     },
@@ -94,64 +93,31 @@
       "name": "default",
       "displayName": "Default (SDK Release)",
       "description": "Build SDK in Release mode with standard options",
-      "inherits": [
-        "release",
-        "base"
-      ]
+      "inherits": ["release", "base"]
     },
     {
       "name": "arm64-windows-snapdragon-debug",
-      "inherits": [
-        "arm64-windows-snapdragon",
-        "snapdragon",
-        "debug",
-        "base"
-      ]
+      "inherits": ["arm64-windows-snapdragon", "snapdragon", "debug", "base"]
     },
     {
       "name": "arm64-windows-snapdragon-release",
-      "inherits": [
-        "arm64-windows-snapdragon",
-        "snapdragon",
-        "release",
-        "base"
-      ]
+      "inherits": ["arm64-windows-snapdragon", "snapdragon", "release", "base"]
     },
     {
       "name": "arm64-android-snapdragon-debug",
-      "inherits": [
-        "arm64-android-snapdragon",
-        "snapdragon",
-        "debug",
-        "base"
-      ]
+      "inherits": ["arm64-android-snapdragon", "snapdragon", "debug", "base"]
     },
     {
       "name": "arm64-android-snapdragon-release",
-      "inherits": [
-        "arm64-android-snapdragon",
-        "snapdragon",
-        "release",
-        "base"
-      ]
+      "inherits": ["arm64-android-snapdragon", "snapdragon", "release", "base"]
     },
     {
       "name": "arm64-linux-snapdragon-debug",
-      "inherits": [
-        "arm64-linux-snapdragon",
-        "snapdragon",
-        "debug",
-        "base"
-      ]
+      "inherits": ["arm64-linux-snapdragon", "snapdragon", "debug", "base"]
     },
     {
       "name": "arm64-linux-snapdragon-release",
-      "inherits": [
-        "arm64-linux-snapdragon",
-        "snapdragon",
-        "release",
-        "base"
-      ]
+      "inherits": ["arm64-linux-snapdragon", "snapdragon", "release", "base"]
     }
   ],
   "buildPresets": [
@@ -192,3 +158,4 @@
     }
   ]
 }
+

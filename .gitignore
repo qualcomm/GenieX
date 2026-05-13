@@ -15,3 +15,6 @@ modelfiles/*
 CLAUDE.local.md
 
 *.exe
+
+# Prebuilt Android demo APKs — distribute via GitHub Releases, not in-repo.
+*.apk

@@ -7,16 +7,20 @@ on:
     paths:
       - "sdk/**"
       - "cli/**"
-      - "bindings/python/**"
-      - "bindings/go/**"
-      - "bindings/android/**"
+      - "bindings/**"
+      - "third-party/**"
+      - ".gitmodules"
       - ".github/**"
+      - "*bazel*"
   # Seeds ccache on main so the first PR run off a new base hits warm.
   push:
     branches: [main]
     paths:
       - "sdk/**"
+      - "third-party/**"
+      - ".gitmodules"
       - ".github/**"
+      - "*bazel*"
   workflow_dispatch:
 
 permissions:

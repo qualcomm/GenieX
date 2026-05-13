@@ -16,6 +16,7 @@ use crate::manifest_builder::{infer_manifest_from_names, ManifestHint};
 use super::{BytesSource, FileSpec, ModelSource, Plan};
 
 const MANIFEST_FILE: &str = "geniex.json";
+const CONFIG_FILE: &str = "config.json";
 
 pub struct LocalFsSource {
     source_dir: PathBuf,
@@ -63,7 +64,12 @@ impl ModelSource for LocalFsSource {
             let data = std::fs::read_to_string(&manifest_path)?;
             serde_json::from_str(&data)?
         } else {
-            infer_manifest_from_names(&self.model_name, &file_names, &sizes, self.hint.clone())?
+            let mut infer_hint = self.hint.clone();
+            if file_names.iter().any(|n| n == CONFIG_FILE) {
+                infer_hint.config_json_bytes =
+                    std::fs::read(self.source_dir.join(CONFIG_FILE)).ok();
+            }
+            infer_manifest_from_names(&self.model_name, &file_names, &sizes, infer_hint)?
         };
         manifest.name = self.model_name.clone();
 
@@ -133,6 +139,24 @@ mod tests {
             BytesSource::Local { path } => assert!(path.ends_with("model-Q4_K_M.gguf")),
             _ => panic!("LocalFs should emit BytesSource::Local"),
         }
+    }
+
+    #[tokio::test]
+    async fn config_json_beats_stray_mmproj_file() {
+        // #19 — localfs with config.json(LlamaForCausalLM) plus a stray
+        // mmproj file: config wins, manifest is LLM.
+        let tmp = tempfile::tempdir().unwrap();
+        let src_dir = tmp.path().to_path_buf();
+        fs::write(src_dir.join("model-Q4_K_M.gguf"), b"fake-weights").unwrap();
+        fs::write(src_dir.join("mmproj-x.gguf"), b"stray").unwrap();
+        fs::write(
+            src_dir.join("config.json"),
+            r#"{"architectures":["LlamaForCausalLM"]}"#,
+        )
+        .unwrap();
+        let src = LocalFsSource::new(src_dir, "Org/LLM".to_string(), ManifestHint::default());
+        let plan = src.plan().await.unwrap();
+        assert_eq!(plan.manifest.model_type, crate::manifest::ModelType::Llm);
     }
 
     #[tokio::test]

@@ -10,13 +10,15 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use serde::Deserialize;
+
 use crate::error::{Error, Result};
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
 
 /// Optional caller-supplied overrides used when inferring a manifest.
 #[derive(Debug, Default, Clone)]
 pub struct ManifestHint {
-    /// Force this `ModelType`; otherwise inferred from presence of mmproj.
+    /// Force this `ModelType`; otherwise inferred via [`infer_model_type`].
     pub model_type: Option<ModelType>,
     /// Force this plugin id; otherwise defaults to "llama_cpp".
     pub plugin_id: Option<String>,
@@ -27,6 +29,10 @@ pub struct ManifestHint {
     /// `model_file`, so `pull` only fetches the requested quant. An
     /// unrecognised value is an error rather than a silent no-op.
     pub quant: Option<String>,
+    /// Raw bytes of a transformers-style `config.json` sibling, when the
+    /// source has one. Parsed by [`classify_from_config`] to decide LLM
+    /// vs VLM more reliably than the mmproj filename heuristic.
+    pub config_json_bytes: Option<Vec<u8>>,
 }
 
 /// Quantization priority order (earlier = preferred). Mirrors the Go CLI.
@@ -216,14 +222,7 @@ pub fn infer_manifest_from_names(
         }
     }
 
-    // Derive model_type: mmproj present => VLM, else LLM.
-    let model_type = hint.model_type.unwrap_or_else(|| {
-        if !mmproj_file.name.is_empty() {
-            ModelType::Vlm
-        } else {
-            ModelType::Llm
-        }
-    });
+    let model_type = infer_model_type(&hint, file_names);
 
     // Derive model_name: last path component of `name`, with -GGUF suffix
     // stripped. e.g. "Qwen/Qwen3-4B-GGUF" -> "Qwen3-4B".
@@ -247,6 +246,126 @@ pub fn infer_manifest_from_names(
         tokenizer_file,
         extra_files,
     })
+}
+
+/// Tiered modality classifier. Order is deliberate: explicit user
+/// override wins, then positive signals from `config.json`, then the
+/// legacy `mmproj` filename rule (kept so pure-GGUF repos still work),
+/// then a LLM-biased default.
+///
+/// Why LLM-biased: mis-labeling an LLM as VLM breaks inference loudly
+/// (mmproj missing), while mis-labeling a VLM as LLM silently drops
+/// image input. Users can always override via `--model-type`, so we'd
+/// rather fail loud than carry image tensors nowhere.
+pub(crate) fn infer_model_type(hint: &ManifestHint, file_names: &[String]) -> ModelType {
+    if let Some(t) = hint.model_type.clone() {
+        return t;
+    }
+    if let Some(bytes) = hint.config_json_bytes.as_deref() {
+        if let Some(t) = classify_from_config(bytes) {
+            return t;
+        }
+    }
+    if classify_from_filenames(file_names) == Some(ModelType::Vlm) {
+        return ModelType::Vlm;
+    }
+    ModelType::Llm
+}
+
+/// Subset of HuggingFace `config.json` we inspect. Extra fields are
+/// ignored so we don't break on schema drift.
+#[derive(Debug, Default, Deserialize)]
+struct ConfigJson {
+    #[serde(default)]
+    architectures: Option<Vec<String>>,
+    #[serde(default)]
+    model_type: Option<String>,
+    #[serde(default)]
+    vision_config: Option<serde_json::Value>,
+    #[serde(default)]
+    mm_vision_tower: Option<serde_json::Value>,
+}
+
+/// Architecture substrings that mark a `*ForConditionalGeneration`
+/// class as vision-capable. Case-insensitive match.
+const VLM_ARCH_TOKENS: &[&str] = &[
+    "VL",
+    "Vision",
+    "Llava",
+    "MLlama",
+    "PaliGemma",
+    "MiniCPM-V",
+    "MiniCPMV",
+    "Idefics",
+    "Aria",
+    "Fuyu",
+    "InternVL",
+    "Llama4",
+];
+
+/// Explicit LLM architectures — checked before the VLM substring scan
+/// so names like "Gemma3ForCausalLM" don't match the generic "Gemma3"
+/// substring and get promoted to VLM.
+const LLM_ARCH_EXPLICIT: &[&str] = &["Gemma3ForCausalLM"];
+
+/// Positive-signal classifier over a `config.json` byte blob. Returns
+/// `None` when the file parses but carries no modality-determining
+/// fields, so the caller can fall through to other tiers.
+fn classify_from_config(bytes: &[u8]) -> Option<ModelType> {
+    let cfg: ConfigJson = serde_json::from_slice(bytes).ok()?;
+
+    if let Some(mt) = cfg.model_type.as_deref() {
+        if mt.eq_ignore_ascii_case("gemma3_text") {
+            return Some(ModelType::Llm);
+        }
+    }
+
+    let archs = cfg.architectures.as_deref().unwrap_or(&[]);
+    for arch in archs {
+        if LLM_ARCH_EXPLICIT.iter().any(|e| arch == *e) {
+            return Some(ModelType::Llm);
+        }
+    }
+
+    if matches!(&cfg.vision_config, Some(v) if v.is_object()) {
+        return Some(ModelType::Vlm);
+    }
+    if matches!(&cfg.mm_vision_tower, Some(v) if !v.is_null()) {
+        return Some(ModelType::Vlm);
+    }
+
+    for arch in archs {
+        if arch.ends_with("ForConditionalGeneration") {
+            let lower = arch.to_lowercase();
+            if VLM_ARCH_TOKENS
+                .iter()
+                .any(|tok| lower.contains(&tok.to_lowercase()))
+            {
+                return Some(ModelType::Vlm);
+            }
+        }
+    }
+
+    for arch in archs {
+        if arch.ends_with("ForCausalLM") {
+            return Some(ModelType::Llm);
+        }
+    }
+
+    None
+}
+
+/// Legacy mmproj-filename heuristic, retained as Tier 2 fallback for
+/// llama.cpp-converted GGUF repos that ship no `config.json`.
+fn classify_from_filenames(file_names: &[String]) -> Option<ModelType> {
+    if file_names
+        .iter()
+        .any(|n| n.to_lowercase().starts_with("mmproj"))
+    {
+        Some(ModelType::Vlm)
+    } else {
+        None
+    }
 }
 
 /// Extract a quant tag like `Q4_K_M` or `Q8_0` from a filename.
@@ -400,5 +519,150 @@ mod tests {
     fn rejects_empty_dir() {
         let (names, sizes) = sizes_of(&[]);
         assert!(infer_manifest_from_names("Org/X", &names, &sizes, Default::default()).is_err());
+    }
+
+    // -- modality classifier ------------------------------------------
+
+    /// Trimmed Qwen2.5-VL config — only the fields the classifier reads.
+    const QWEN25_VL_CONFIG: &str = r#"{
+        "architectures": ["Qwen2_5_VLForConditionalGeneration"],
+        "model_type": "qwen2_5_vl",
+        "vision_config": {"depth": 32, "hidden_size": 1280}
+    }"#;
+
+    const LLAMA31_CONFIG: &str = r#"{
+        "architectures": ["LlamaForCausalLM"],
+        "model_type": "llama"
+    }"#;
+
+    const QWEN3_CONFIG: &str = r#"{
+        "architectures": ["Qwen3ForCausalLM"],
+        "model_type": "qwen3"
+    }"#;
+
+    const GPT_OSS_CONFIG: &str = r#"{
+        "architectures": ["GptOssForCausalLM"],
+        "model_type": "gpt_oss"
+    }"#;
+
+    const GEMMA3_1B_CONFIG: &str = r#"{
+        "architectures": ["Gemma3ForCausalLM"],
+        "model_type": "gemma3_text"
+    }"#;
+
+    const GEMMA3_4B_CONFIG: &str = r#"{
+        "architectures": ["Gemma3ForConditionalGeneration"],
+        "model_type": "gemma3",
+        "vision_config": {"hidden_size": 1152}
+    }"#;
+
+    fn hint_with_config(bytes: &[u8]) -> ManifestHint {
+        ManifestHint {
+            config_json_bytes: Some(bytes.to_vec()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn config_vlm_with_vision_config() {
+        // #1 — Qwen2.5-VL safetensors, no mmproj anywhere.
+        let names = vec!["model.safetensors".to_string()];
+        let t = infer_model_type(&hint_with_config(QWEN25_VL_CONFIG.as_bytes()), &names);
+        assert_eq!(t, ModelType::Vlm);
+    }
+
+    #[test]
+    fn config_llm_llama31() {
+        // #2 — LLaMA-3.1 GGUF.
+        let names = vec!["model-Q4_K_M.gguf".to_string()];
+        let t = infer_model_type(&hint_with_config(LLAMA31_CONFIG.as_bytes()), &names);
+        assert_eq!(t, ModelType::Llm);
+    }
+
+    #[test]
+    fn config_llm_qwen3() {
+        // #3 — Qwen3 text-only.
+        let t = infer_model_type(&hint_with_config(QWEN3_CONFIG.as_bytes()), &[]);
+        assert_eq!(t, ModelType::Llm);
+    }
+
+    #[test]
+    fn config_llm_gpt_oss() {
+        // #4 — gpt-oss.
+        let t = infer_model_type(&hint_with_config(GPT_OSS_CONFIG.as_bytes()), &[]);
+        assert_eq!(t, ModelType::Llm);
+    }
+
+    #[test]
+    fn config_llm_gemma3_1b_text() {
+        // #5 — Gemma-3-1B text-only: model_type="gemma3_text" must short-
+        // circuit before the generic `gemma3` substring promotes VLM.
+        let t = infer_model_type(&hint_with_config(GEMMA3_1B_CONFIG.as_bytes()), &[]);
+        assert_eq!(t, ModelType::Llm);
+    }
+
+    #[test]
+    fn config_vlm_gemma3_4b() {
+        // #6 — Gemma-3-4B-IT multimodal.
+        let t = infer_model_type(&hint_with_config(GEMMA3_4B_CONFIG.as_bytes()), &[]);
+        assert_eq!(t, ModelType::Vlm);
+    }
+
+    #[test]
+    fn mmproj_fallback_preserved_without_config() {
+        // #7 — pure GGUF VLM repo, no config.json.
+        let names = vec!["model-Q4_K_M.gguf".into(), "mmproj-f16.gguf".into()];
+        let t = infer_model_type(&ManifestHint::default(), &names);
+        assert_eq!(t, ModelType::Vlm);
+    }
+
+    #[test]
+    fn pure_gguf_llm_without_config() {
+        // #8 — pure GGUF LLM: no config.json, no mmproj → LLM.
+        let names = vec!["model-Q4_K_M.gguf".into()];
+        let t = infer_model_type(&ManifestHint::default(), &names);
+        assert_eq!(t, ModelType::Llm);
+    }
+
+    #[test]
+    fn config_llm_wins_over_stray_mmproj_file() {
+        // #9 — conflict case: config says LLM, directory has a stray
+        // mmproj file. Config wins (Tier 1 beats Tier 2).
+        let names = vec!["model-Q4_K_M.gguf".into(), "mmproj-x.gguf".into()];
+        let t = infer_model_type(&hint_with_config(LLAMA31_CONFIG.as_bytes()), &names);
+        assert_eq!(t, ModelType::Llm);
+    }
+
+    #[test]
+    fn corrupt_config_defaults_to_llm() {
+        // #10 — unparseable config degrades to Tier 2/3.
+        let t = infer_model_type(&hint_with_config(b"{not json"), &[]);
+        assert_eq!(t, ModelType::Llm);
+    }
+
+    #[test]
+    fn user_override_beats_config() {
+        // #11 — --model-type flag always wins.
+        let mut hint = hint_with_config(LLAMA31_CONFIG.as_bytes());
+        hint.model_type = Some(ModelType::Vlm);
+        let t = infer_model_type(&hint, &[]);
+        assert_eq!(t, ModelType::Vlm);
+    }
+
+    #[test]
+    fn full_pipeline_vlm_config_with_gguf_files() {
+        // End-to-end check that `infer_manifest_from_names` plumbs the
+        // config-derived VLM through to ModelManifest.model_type even
+        // when the directory has no mmproj file.
+        let (names, sizes) =
+            sizes_of(&[("model-Q4_K_M.gguf", 1_000_000), ("tokenizer.json", 2_000)]);
+        let m = infer_manifest_from_names(
+            "Org/Repo",
+            &names,
+            &sizes,
+            hint_with_config(QWEN25_VL_CONFIG.as_bytes()),
+        )
+        .unwrap();
+        assert_eq!(m.model_type, ModelType::Vlm);
     }
 }

@@ -24,6 +24,8 @@ classifiers = [
 geniex-py = "geniex.cli:main"
 
 [project.optional-dependencies]
+test = ["pytest>=7.0"]
+
 [project.urls]
 # TODO: add the current GenieX-Bridge project homepage.
 
