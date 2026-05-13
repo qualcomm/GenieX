@@ -136,11 +136,11 @@ def _ensure_init() -> None:
 def _maybe_resolve_alias(model_name: str, quant: str | None) -> tuple[str, str | None]:
     """Expand a short alias to ``org/repo[:quant]`` if the input has no ``/``.
 
-    Mirrors ``ensure_cached``'s rules: splits a trailing ``:quant`` off the
-    input, routes the bare name through :func:`resolve_alias` when it looks
-    like an alias (no ``/``), and lets any quant suffix on the resolved name
-    or on the original input fill in when the caller didn't pass ``quant``.
-    Canonical ``org/repo`` inputs pass through unchanged.
+    Splits a trailing ``:quant`` off the input, then tries :func:`resolve_alias`
+    for bare names (no ``/``). If the alias is unknown, the bare name is passed
+    through unchanged — the SDK canonicalises bare names to ``aihub/<name>`` so
+    they route to AI Hub without a registered alias. Canonical ``org/repo``
+    inputs pass through unchanged.
     """
     name_part = model_name
     if ':' in model_name:
@@ -153,12 +153,9 @@ def _maybe_resolve_alias(model_name: str, quant: str | None) -> tuple[str, str |
 
     try:
         resolved = resolve_alias(name_part)
-    except GeniexError as exc:
-        raise GeniexError(
-            exc.code,
-            f'Unknown model alias: {name_part!r}. Use canonical org/repo form '
-            f'or see geniex.model_manager.resolve_alias for registered aliases.',
-        ) from exc
+    except GeniexError:
+        # Unknown alias: let the SDK treat it as a bare AI Hub model id.
+        return name_part, quant
 
     if ':' in resolved:
         resolved_name, resolved_quant = resolved.rsplit(':', 1)
