@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import os
 import platform
+import sys
 
 import pytest
 
@@ -42,9 +43,8 @@ QAIRT_VLM_MODEL = os.environ.get('GENIEX_QAIRT_VLM_MODEL', 'qualcomm/Qwen2.5-VL-
 def _is_snapdragon_host() -> bool:
     if platform.machine().lower() not in ('arm64', 'aarch64'):
         return False
-    if platform.system() == 'Windows':
+    if platform.system() == 'Windows' or hasattr(sys, 'getandroidapilevel'):
         return True
-    # Linux / Android: probe the DeviceTree compatible string for a Qualcomm SoC.
     try:
         with open('/sys/firmware/devicetree/base/compatible', 'rb') as f:
             return b'qcom' in f.read()
