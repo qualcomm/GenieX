@@ -15,6 +15,7 @@ go_library(
         "//cli/internal/types",
         "@dev_resty_v3//:resty",
         "@org_golang_google_protobuf//encoding/protojson",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 
