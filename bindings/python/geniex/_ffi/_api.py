@@ -73,6 +73,7 @@ _LEVEL_STR_TO_PY = {
 geniex_log_callback = CFUNCTYPE(None, c_int32, c_char_p)
 
 _logger = logging.getLogger('geniex')
+_logger.addHandler(logging.NullHandler())
 
 # Strong reference — ctypes callbacks must outlive the C side.
 _log_cb_ref: 'geniex_log_callback | None' = None
@@ -125,12 +126,6 @@ def install_log_callback() -> None:
     if requested in _LEVEL_STR_TO_INT:
         _logger.setLevel(_LEVEL_STR_TO_PY[requested])
         lib.geniex_set_log_level(c_int32(_LEVEL_STR_TO_INT[requested]))
-
-    if not _logger.handlers and _logger.level != logging.NOTSET:
-        handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
-        _logger.addHandler(handler)
-        _logger.propagate = False
 
 
 class GeniexError(Exception):
@@ -285,6 +280,7 @@ def _ensure_bound() -> None:
     if not _bound:
         _bind_all()
         _bound = True
+        install_log_callback()
 
 
 _initialized = False
@@ -296,7 +292,6 @@ def init() -> None:
     if _initialized:
         return
     _ensure_bound()
-    install_log_callback()
     lib = load_library()
     _check(lib.geniex_init())
     _initialized = True
