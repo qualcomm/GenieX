@@ -1,9 +1,11 @@
 .venv
 .vscode
+.ccache
 
 # Claude Code: track shared config, ignore per-user overrides.
 .claude/settings.local.json
 .claude/.credentials.json
+CLAUDE.local.md
 
 bazel-*
 
@@ -12,7 +14,6 @@ CMakeUserPresets.json
 
 modelfiles/*
 
-CLAUDE.local.md
 
 *.exe
 
