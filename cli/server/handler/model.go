@@ -25,8 +25,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v3"
 
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
-	"github.com/qcom-it-nexa-ai/geniex/cli/server/utils"
 )
 
 func ListModels(c *gin.Context) {
@@ -63,7 +63,7 @@ func ListModels(c *gin.Context) {
 
 func RetrieveModel(c *gin.Context) {
 	name := strings.TrimPrefix(c.Param("model"), "/")
-	name, quant := utils.NormalizeModelName(name)
+	name, quant := model_hub.NormalizeModelName(name)
 
 	// check model exist
 	s := store.Get()
