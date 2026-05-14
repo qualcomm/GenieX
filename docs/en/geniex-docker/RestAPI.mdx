@@ -10,14 +10,13 @@ import Feedback from '/snippets/page-feedback.mdx';
 To use the API, first start the GenieXSDK Docker container in server mode:
 
 ```bash bash
-export NEXA_TOKEN="YOUR_LONG_TOKEN_HERE"
-docker run --rm -d -p 18181:18181 --privileged \
-  -v /path/to/data:/data \
-  -v /etc/machine-id:/etc/machine-id:ro \
-  -e NEXA_TOKEN \
-  geniex-ai/geniexsdk serve
+docker run -it --rm --privileged \
+  -v "$PWD/data:/data" \
+  -v /usr/lib:/opt/qcom-lib:ro \
+  --network=host \
+  ghcr.io/qcom-ai-hub/geniex-cli:latest \
+  serve
 ```
-
 The server runs on `http://127.0.0.1:18181` by default. Keep the container running, and make your requests from another terminal or application.
 
 <Info>
@@ -25,11 +24,7 @@ You can also access the interactive Swagger UI documentation at [`http://127.0.0
 </Info>
 
 <Note>
-Replace `YOUR_LONG_TOKEN_HERE` with your actual GenieX token. You can obtain a token by creating an account at [sdk.geniex.ai](https://sdk.geniex.ai) and generating one in **Deployment → Create Token**.
-</Note>
-
-<Note>
-The `--privileged` flag is required for NPU access.
+The `--privileged` flag is required for NPU access. `geniex serve` won't auto download models — make sure to pre-download the models you intend to use.
 </Note>
 
 ## Model Choice

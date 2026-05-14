@@ -132,7 +132,7 @@ int32_t geniex_init(void) {
         }
     }
 
-    GENIEX_LOG_INFO("initializing ml");
+    GENIEX_LOG_DEBUG("initializing ml");
 
     try {
         Registry::instance().scan_plugins();
@@ -144,7 +144,7 @@ int32_t geniex_init(void) {
 }
 
 int32_t geniex_register_plugin(geniex_plugin_id_func plugin_id_func, geniex_create_plugin_func create_func) {
-    GENIEX_LOG_INFO("register plugin");
+    GENIEX_LOG_DEBUG("register plugin");
 
     try {
         void* plugin_id     = (void*)plugin_id_func;
@@ -158,7 +158,7 @@ int32_t geniex_register_plugin(geniex_plugin_id_func plugin_id_func, geniex_crea
 }
 
 int32_t geniex_deinit(void) {
-    GENIEX_LOG_INFO("deinitializing ml");
+    GENIEX_LOG_DEBUG("deinitializing ml");
 
     try {
         // Clean up the registry to ensure proper plugin destruction

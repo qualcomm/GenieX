@@ -123,11 +123,3 @@ func SaveURIToTempFile(uri string) (string, error) {
 	}
 	return tmpFile.Name(), nil
 }
-
-func NormalizeModelName(name string) (string, string) {
-	if strings.Contains(name, ":") {
-		parts := strings.SplitN(name, ":", 2)
-		return parts[0], parts[1]
-	}
-	return name, ""
-}

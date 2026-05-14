@@ -10,7 +10,7 @@ readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 authors = [{ name = "Qualcomm" }]
-dependencies = []
+dependencies = ["tqdm>=4.65"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: OS Independent",
@@ -24,6 +24,7 @@ classifiers = [
 geniex-py = "geniex.cli:main"
 
 [project.optional-dependencies]
+notebook = ["ipywidgets>=8"]
 test = ["pytest>=7.0"]
 
 [project.urls]

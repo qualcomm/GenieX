@@ -31,23 +31,29 @@ If the SDK name ends in `-selfsigned`, first follow [notes/run.md § Self-signed
 docker pull ghcr.io/qcom-ai-hub/geniex-cli:<TAG>
 
 # interactive mode
-docker run -it --rm --privileged -v "$PWD/data:/data" \
+docker run -it --rm --privileged \
+  -v "$PWD/data:/data" \
+  -v /usr/lib:/opt/qcom-lib:ro \
   ghcr.io/qcom-ai-hub/geniex-cli:<TAG> \
   infer Qwen/Qwen3-0.6B-GGUF
 
 # server mode
-docker run -it --rm --privileged -v "$PWD/data:/data" \
+docker run -it --rm --privileged \
+  -v "$PWD/data:/data" \
+  -v /usr/lib:/opt/qcom-lib:ro \
   --network=host \
   ghcr.io/qcom-ai-hub/geniex-cli:<TAG> \
   serve
 # interactive shell connect to server
-docker run -it --rm --privileged -v "$PWD/data:/data" \
+docker run -it --rm --privileged \
+  -v "$PWD/data:/data" \
+  -v /usr/lib:/opt/qcom-lib:ro \
   --network=host \
   ghcr.io/qcom-ai-hub/geniex-cli:<TAG> \
   run <model>
 ```
 
-`--privileged` + the `./data` bind mount enable NPU device access and model cache persistence. `:latest` tracks the most recent stable tag.
+`--privileged` exposes the NPU/GPU devices and `./data` persists the model cache. `:latest` tracks the most recent stable tag.
 
 ### Python
 

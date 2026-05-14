@@ -22,7 +22,17 @@ from .._ffi._types import geniex_ProfileData
 _THINK_RE = re.compile(r'<think>(.*?)</think>', re.DOTALL)
 
 
-@dataclass
+def _format_us(us: int) -> str:
+    if us <= 0:
+        return '0 µs'
+    if us < 1_000:
+        return f'{us} µs'
+    if us < 1_000_000:
+        return f'{us / 1_000:.1f} ms'
+    return f'{us / 1_000_000:.2f} s'
+
+
+@dataclass(repr=False)
 class ProfileData:
     ttft: int = 0
     prompt_time: int = 0
@@ -45,6 +55,19 @@ class ProfileData:
             prefill_speed=c.prefill_speed,
             decode_speed=c.decoding_speed,
             stop_reason=stop,
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f'ProfileData('
+            f'ttft={_format_us(self.ttft)}, '
+            f'prompt_time={_format_us(self.prompt_time)}, '
+            f'decode_time={_format_us(self.decode_time)}, '
+            f'prompt_tokens={self.prompt_tokens} tok, '
+            f'generated_tokens={self.generated_tokens} tok, '
+            f'prefill_speed={self.prefill_speed:.1f} tok/s, '
+            f'decode_speed={self.decode_speed:.1f} tok/s, '
+            f'stop_reason={self.stop_reason})'
         )
 
 

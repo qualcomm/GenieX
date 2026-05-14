@@ -64,7 +64,7 @@ func pull() *cobra.Command {
 	pullCmd.Flags().StringVarP(&modelType, "model-type", "", "", "specify model type to use: [llm|vlm]")
 
 	pullCmd.Run = func(cmd *cobra.Command, args []string) {
-		name, quant := normalizeModelName(args[0])
+		name, quant := model_hub.NormalizeModelName(args[0])
 		if err := pullModel(name, quant); err != nil {
 			fmt.Println(render.GetTheme().Error.Sprintf("✘  Failed to pull model: %s", err))
 			os.Exit(1)
@@ -89,7 +89,7 @@ func remove() *cobra.Command {
 
 	removeCmd.Run = func(cmd *cobra.Command, args []string) {
 		for _, arg := range args {
-			name, quant := normalizeModelName(arg)
+			name, quant := model_hub.NormalizeModelName(arg)
 			if quant != "" {
 				fmt.Println(render.GetTheme().Error.Sprintf("Currently not support remove a single quant, please remove the whole model: %s", name))
 				os.Exit(1)
@@ -223,7 +223,7 @@ func setTypeCmd() *cobra.Command {
 			return s
 		}(),
 		Run: func(cmd *cobra.Command, args []string) {
-			name, _ := normalizeModelName(args[0])
+			name, _ := model_hub.NormalizeModelName(args[0])
 
 			// Verify the model is present before prompting for a type.
 			if _, err := store.Get().GetManifest(name); err != nil {

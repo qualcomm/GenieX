@@ -10,14 +10,13 @@ import Feedback from '/snippets/page-feedback.mdx';
 使用 API 前，先以服务器模式启动 GenieX SDK Docker 容器：
 
 ```bash bash
-export NEXA_TOKEN="YOUR_LONG_TOKEN_HERE"
-docker run --rm -d -p 18181:18181 --privileged \
-  -v /path/to/data:/data \
-  -v /etc/machine-id:/etc/machine-id:ro \
-  -e NEXA_TOKEN \
-  geniex-ai/geniexsdk serve
+docker run -it --rm --privileged \
+  -v "$PWD/data:/data" \
+  -v /usr/lib:/opt/qcom-lib:ro \
+  --network=host \
+  ghcr.io/qcom-ai-hub/geniex-cli:latest \
+  serve
 ```
-
 服务器默认运行在 `http://127.0.0.1:18181`。保持容器运行，从另一个终端或应用发送请求。
 
 <Info>
@@ -25,11 +24,7 @@ docker run --rm -d -p 18181:18181 --privileged \
 </Info>
 
 <Note>
-将 `YOUR_LONG_TOKEN_HERE` 替换为你的实际 GenieX 令牌。你可以在 [sdk.geniex.ai](https://sdk.geniex.ai) 创建账户并在 **Deployment -> Create Token** 中生成令牌。
-</Note>
-
-<Note>
-`--privileged` 标志是 NPU 访问所必需的。
+`--privileged` 标志是 NPU 访问所必需的。`geniex serve` 不会自动下载模型，请确保预先下载要使用的模型。
 </Note>
 
 ## 模型选择

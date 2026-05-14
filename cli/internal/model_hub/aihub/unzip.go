@@ -22,8 +22,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
@@ -77,7 +81,14 @@ func ExtractFlat(zipPath, destDir string) (*ExtractResult, error) {
 		seen[base] = e.Name
 	}
 
-	result := &ExtractResult{}
+	// DEFLATE is CPU-bound; decompress shards in parallel. Each *zip.File
+	// opens its own SectionReader over the underlying file, so concurrent
+	// Open/Copy from different goroutines is safe.
+	type job struct {
+		entry *zip.File
+		base  string
+	}
+	var jobs []job
 	for _, e := range r.File {
 		if e.FileInfo().IsDir() {
 			continue
@@ -86,18 +97,44 @@ func ExtractFlat(zipPath, destDir string) (*ExtractResult, error) {
 		if base == "" || base == "." || base == ".." {
 			continue
 		}
+		jobs = append(jobs, job{entry: e, base: base})
+	}
 
-		size, werr := extractOne(e, filepath.Join(destDir, base))
-		if werr != nil {
-			return nil, fmt.Errorf("extract %s: %w", e.Name, werr)
-		}
+	result := &ExtractResult{Files: make([]types.ModelFileInfo, len(jobs))}
+	limit := runtime.NumCPU()
+	if limit > 8 {
+		limit = 8
+	}
+	if limit > len(jobs) {
+		limit = len(jobs)
+	}
+	if limit < 1 {
+		limit = 1
+	}
 
-		result.Files = append(result.Files, types.ModelFileInfo{
-			Name:       base,
-			Size:       size,
-			Downloaded: true,
+	var mu sync.Mutex
+	g := new(errgroup.Group)
+	g.SetLimit(limit)
+	for i, j := range jobs {
+		i, j := i, j
+		g.Go(func() error {
+			size, werr := extractOne(j.entry, filepath.Join(destDir, j.base))
+			if werr != nil {
+				return fmt.Errorf("extract %s: %w", j.entry.Name, werr)
+			}
+			result.Files[i] = types.ModelFileInfo{
+				Name:       j.base,
+				Size:       size,
+				Downloaded: true,
+			}
+			mu.Lock()
+			result.TotalSize += size
+			mu.Unlock()
+			return nil
 		})
-		result.TotalSize += size
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 
 	sort.Slice(result.Files, func(i, j int) bool {

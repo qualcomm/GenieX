@@ -42,8 +42,10 @@ GenieXSDK Docker supports two usage modes: server mode for REST API access and i
 
 Run GenieXSDK in interactive CLI mode for direct model inference:
 
-```bash bash  
-docker run -it --rm --privileged -v "$PWD/data:/data" \
+```bash bash
+docker run -it --rm --privileged \
+  -v "$PWD/data:/data" \
+  -v /usr/lib:/opt/qcom-lib:ro \
   ghcr.io/qcom-ai-hub/geniex-cli:latest \
   infer Qwen/Qwen3-0.6B-GGUF
 ```
@@ -58,7 +60,9 @@ The `-it` flags enable interactive mode. Replace `Qwen/Qwen3-0.6B-GGUF` with any
 Run GenieXSDK in server mode to expose a REST API endpoint. This mode runs in the background:
 
 ```bash bash
-docker run -it --rm --privileged -v "$PWD/data:/data" \
+docker run -it --rm --privileged \
+  -v "$PWD/data:/data" \
+  -v /usr/lib:/opt/qcom-lib:ro \
   --network=host \
   ghcr.io/qcom-ai-hub/geniex-cli:latest \
   serve

@@ -23,10 +23,9 @@ import (
 
 	"github.com/gofrs/flock"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
-
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 type Store struct {

@@ -22,19 +22,17 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 )
 
-func registerAIHub() {
+func registerModelHub() {
 	s := store.Get()
 	model_hub.RegisterHub(model_hub.NewHuggingFace())
 	model_hub.RegisterHub(model_hub.NewAIHub(
@@ -62,10 +60,7 @@ func RootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use: "geniex",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			// log
-			common.ApplyLogLevel()
-
-			registerAIHub()
+			registerModelHub()
 
 			subCmd := cmd.CalledAs()
 			if !skipUpdate {
@@ -108,7 +103,7 @@ func RootCmd() *cobra.Command {
 }
 
 func checkDependency() {
-	if _, err := exec.LookPath("sox"); err == nil {
+	if _, err := exec.LookPath("sox"); err != nil {
 		fmt.Println(render.GetTheme().Warning.Sprintf("SoX is not installed, some features may not work. Try:"))
 		switch runtime.GOOS {
 		case "linux":
@@ -124,35 +119,11 @@ func checkDependency() {
 	}
 }
 
-func normalizeModelName(name string) (string, string) {
-	// split quant
-	parts := strings.SplitN(name, ":", 2)
-	name = parts[0]
-	quant := ""
-	if len(parts) == 2 {
-		quant = strings.ToUpper(parts[1])
-	}
-
-	// support shortcuts
-	if actualName, exists := config.GetModelMapping(name); exists {
-		return actualName, quant
-	}
-
-	// support qwen3 -> qualcomm/qwen3
-	if !strings.Contains(name, "/") {
-		return "qualcomm/" + name, quant
-	}
-
-	// support https://huggingface.co/Qwen/Qwen3-0.6B-GGUF -> Qwen/Qwen3-0.6B-GGUF
-	if strings.HasPrefix(name, model_hub.HF_ENDPOINT) {
-		return strings.TrimPrefix(name, model_hub.HF_ENDPOINT+"/"), quant
-	}
-
-	return name, quant
-}
-
 // main is the entry point that executes the root command.
 func main() {
+	// log
+	common.ApplyLogLevel()
+
 	if err := RootCmd().Execute(); err != nil {
 		slog.Error("geniex failed", "err", err)
 		os.Exit(1)

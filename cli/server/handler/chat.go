@@ -34,6 +34,7 @@ import (
 	"github.com/openai/openai-go/v3/shared/constant"
 
 	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 	"github.com/qcom-it-nexa-ai/geniex/cli/server/service"
@@ -68,8 +69,8 @@ func defaultChatCompletionRequest() ChatCompletionRequest {
 		Stream: false,
 
 		EnableThink:       true,
-		NCtx:              0,   // llama_cpp only; 0 = not set, resolved to 4096 for llama_cpp
-		Ngl:               0,   // llama_cpp only; 0 = not set, resolved to 999 for llama_cpp
+		NCtx:              0, // llama_cpp only; 0 = not set, resolved to 4096 for llama_cpp
+		Ngl:               0, // llama_cpp only; 0 = not set, resolved to 999 for llama_cpp
 		ImageMaxLength:    512,
 		TopK:              0,
 		MinP:              0.0,
@@ -101,7 +102,7 @@ func ChatCompletions(c *gin.Context) {
 
 	slog.Info("ChatCompletions", "param", param)
 	s := store.Get()
-	name, _ := utils.NormalizeModelName(param.Model)
+	name, _ := model_hub.NormalizeModelName(param.Model)
 	manifest, err := s.GetManifest(name)
 	if err != nil {
 		slog.Error("Failed to get model manifest", "model", param.Model, "error", err)
