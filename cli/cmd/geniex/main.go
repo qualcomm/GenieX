@@ -108,7 +108,7 @@ func RootCmd() *cobra.Command {
 }
 
 func checkDependency() {
-	if _, err := exec.LookPath("sox"); err == nil {
+	if _, err := exec.LookPath("sox"); err != nil {
 		fmt.Println(render.GetTheme().Warning.Sprintf("SoX is not installed, some features may not work. Try:"))
 		switch runtime.GOOS {
 		case "linux":
