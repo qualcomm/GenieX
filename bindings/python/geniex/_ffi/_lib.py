@@ -33,10 +33,22 @@ def _lib_name() -> str:
 
 
 def _preload_shared_libs(directories: list[str]) -> None:
-    # Pre-load sibling shared libs with RTLD_GLOBAL so their symbols are
-    # visible to libgeniex when it dlopens. LD_LIBRARY_PATH mutations after
-    # process start have no effect; pre-loading is the portable equivalent.
-    flags = getattr(ctypes, 'RTLD_GLOBAL', 0x100)
+    # Pre-load sibling shared libs so they're already mapped when libgeniex
+    # dlopens its plugins. LD_LIBRARY_PATH mutations after process start have
+    # no effect on glibc's dlopen; pre-loading is the portable equivalent for
+    # making DT_NEEDED resolution succeed in the wheel layout.
+    #
+    # Use RTLD_LOCAL (not RTLD_GLOBAL): the SDK's own plugin loader opens
+    # each plugin with RTLD_LOCAL, and we must not promote plugin siblings
+    # into the global symbol scope. Specifically, libggml-hexagon.so (in the
+    # llama_cpp plugin) re-exports the FastRPC ABI as default-visibility
+    # forwarders (remote_handle64_*, fastrpc_*, rpcmem_*, dspqueue_*) that
+    # are NULL until htpdrv_init() runs. With RTLD_GLOBAL, those symbols
+    # shadow libcdsprpc.so for any later-loaded module — including the QAIRT
+    # plugin's libQnnHtpV*.so — and the first FastRPC call from QnnHtp
+    # segfaults at PC=0. The Go CLI and Windows path don't have this problem
+    # because neither uses a global-scope preload.
+    flags = getattr(ctypes, 'RTLD_LOCAL', 0)
 
     def _so_files(d: str) -> list[str]:
         try:
