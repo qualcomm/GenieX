@@ -28,6 +28,52 @@ pkg_tar(
     },
 )
 
+# Qualcomm user-space libs aren't on Debian; bind-mount host /usr/lib onto
+# /opt/qcom-lib at runtime. These symlinks route ld.so's default search
+# path to the mount.
+_QCOM_LIBS = [
+    "libOpenCL.so.1",
+    "libOpenCL_adreno.so.1",
+    "libCB.so.1",
+    "libadreno_utils.so.1",
+    "libgsl.so.1",
+    "libllvm-qcom.so.1",
+    "libllvm-qgl.so.1",
+    "libllvm-glnext.so.1",
+    "libpropertyvault.so.0.0.0",
+    "libdmabufheap.so.0.0.0",
+    "libcdsprpc.so.1.0.0",
+]
+
+# Unversioned aliases for libs dlopen'd by short name.
+_QCOM_SHORT_ALIASES = {
+    "libOpenCL_adreno.so":  "libOpenCL_adreno.so.1",
+    "libCB.so":             "libCB.so.1",
+    "libadreno_utils.so":   "libadreno_utils.so.1",
+    "libgsl.so":            "libgsl.so.1",
+    "libllvm-qcom.so":      "libllvm-qcom.so.1",
+    "libllvm-qgl.so":       "libllvm-qgl.so.1",
+    "libllvm-glnext.so":    "libllvm-glnext.so.1",
+    "libpropertyvault.so.0": "libpropertyvault.so.0.0.0",
+    "libdmabufheap.so.0":    "libdmabufheap.so.0.0.0",
+    "libcdsprpc.so":         "libcdsprpc.so.1.0.0",
+    "libcdsprpc.so.1":       "libcdsprpc.so.1.0.0",
+}
+
+pkg_tar(
+    name = "_qcom_symlinks",
+    mode = "0755",
+    symlinks = dict(
+        [
+            ("/usr/lib/" + name, "/opt/qcom-lib/" + name)
+            for name in _QCOM_LIBS
+        ] + [
+            ("/usr/lib/" + alias, target)
+            for alias, target in _QCOM_SHORT_ALIASES.items()
+        ],
+    ),
+)
+
 # package image
 
 dedup_tar(
@@ -65,7 +111,7 @@ oci_image(
     tars = [
         ":apt_layer",
         ":_ca_bundle_layer",
-        "lib.tar",
+        ":_qcom_symlinks",
         ":_geniex_files",
         ":_geniex_symlinks",
     ],

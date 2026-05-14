@@ -48,11 +48,6 @@ jobs:
           fetch-depth: 1
           submodules: false
           token: ${{ secrets.GH_PAT }}
-          # cli/release/linux/lib.tar is LFS-tracked; without this flag
-          # Bazel gets the LFS pointer file and bakes it into the image as
-          # a broken layer (docker pull later fails with
-          # `failed to register layer: unexpected EOF` on that tiny blob).
-          lfs: true
 
       - name: Detect build version
         id: version

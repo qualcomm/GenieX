@@ -211,6 +211,544 @@
 			"version": "14.2.0-19"
 		},
 		{
+			"arch": "amd64",
+			"dependencies": [
+				{
+					"key": "zlib1g_1-1.3.dfsg-p-really1.3.1-1-p-b1_amd64",
+					"name": "zlib1g",
+					"version": "1:1.3.dfsg+really1.3.1-1+b1"
+				},
+				{
+					"key": "libc6_2.41-12-p-deb13u2_amd64",
+					"name": "libc6",
+					"version": "2.41-12+deb13u2"
+				},
+				{
+					"key": "libgcc-s1_14.2.0-19_amd64",
+					"name": "libgcc-s1",
+					"version": "14.2.0-19"
+				},
+				{
+					"key": "gcc-14-base_14.2.0-19_amd64",
+					"name": "gcc-14-base",
+					"version": "14.2.0-19"
+				},
+				{
+					"key": "libselinux1_3.8.1-1_amd64",
+					"name": "libselinux1",
+					"version": "3.8.1-1"
+				},
+				{
+					"key": "libpcre2-8-0_10.46-1_deb13u1_amd64",
+					"name": "libpcre2-8-0",
+					"version": "10.46-1~deb13u1"
+				},
+				{
+					"key": "libmount1_2.41-5_amd64",
+					"name": "libmount1",
+					"version": "2.41-5"
+				},
+				{
+					"key": "libblkid1_2.41-5_amd64",
+					"name": "libblkid1",
+					"version": "2.41-5"
+				},
+				{
+					"key": "libffi8_3.4.8-2_amd64",
+					"name": "libffi8",
+					"version": "3.4.8-2"
+				},
+				{
+					"key": "libatomic1_14.2.0-19_amd64",
+					"name": "libatomic1",
+					"version": "14.2.0-19"
+				}
+			],
+			"key": "libglib2.0-0t64_2.84.4-3_deb13u2_amd64",
+			"name": "libglib2.0-0t64",
+			"sha256": "6d4c07e17b9809eca7078b49851da8e1d16e510e80897cc96681bd4c75b27353",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/g/glib2.0/libglib2.0-0t64_2.84.4-3~deb13u2_amd64.deb"
+			],
+			"version": "2.84.4-3~deb13u2"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libselinux1_3.8.1-1_amd64",
+			"name": "libselinux1",
+			"sha256": "68bb8d32bd8d6d7d2f5952a169db03d1484b46ae1e52abccdec42a19dccea5d5",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libs/libselinux/libselinux1_3.8.1-1_amd64.deb"
+			],
+			"version": "3.8.1-1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libpcre2-8-0_10.46-1_deb13u1_amd64",
+			"name": "libpcre2-8-0",
+			"sha256": "6aa452af6a07e34498bf8e734e8789c9dd602fb34f12572e62dc1bba4889a60e",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/p/pcre2/libpcre2-8-0_10.46-1~deb13u1_amd64.deb"
+			],
+			"version": "10.46-1~deb13u1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libmount1_2.41-5_amd64",
+			"name": "libmount1",
+			"sha256": "cd9efc7addd2556062f6d148b502e38a64e08c0ab220806219cfffd865f0f6f6",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/u/util-linux/libmount1_2.41-5_amd64.deb"
+			],
+			"version": "2.41-5"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libblkid1_2.41-5_amd64",
+			"name": "libblkid1",
+			"sha256": "bed93f11942524e5338074c46cce376197740635bf0745ccb7d259e0f6ce7117",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/u/util-linux/libblkid1_2.41-5_amd64.deb"
+			],
+			"version": "2.41-5"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libffi8_3.4.8-2_amd64",
+			"name": "libffi8",
+			"sha256": "0ebdc340de33333639c3c63874cd4b15ac2e83dfa1ef3053b7eefaf4919f4f68",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libf/libffi/libffi8_3.4.8-2_amd64.deb"
+			],
+			"version": "3.4.8-2"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [
+				{
+					"key": "libc6_2.41-12-p-deb13u2_amd64",
+					"name": "libc6",
+					"version": "2.41-12+deb13u2"
+				},
+				{
+					"key": "libgcc-s1_14.2.0-19_amd64",
+					"name": "libgcc-s1",
+					"version": "14.2.0-19"
+				},
+				{
+					"key": "gcc-14-base_14.2.0-19_amd64",
+					"name": "gcc-14-base",
+					"version": "14.2.0-19"
+				},
+				{
+					"key": "libsox3_14.4.2-p-git20190427-5-p-b3_amd64",
+					"name": "libsox3",
+					"version": "14.4.2+git20190427-5+b3"
+				},
+				{
+					"key": "zlib1g_1-1.3.dfsg-p-really1.3.1-1-p-b1_amd64",
+					"name": "zlib1g",
+					"version": "1:1.3.dfsg+really1.3.1-1+b1"
+				},
+				{
+					"key": "libpng16-16t64_1.6.48-1-p-deb13u4_amd64",
+					"name": "libpng16-16t64",
+					"version": "1.6.48-1+deb13u4"
+				},
+				{
+					"key": "libmagic1t64_1-5.46-5_amd64",
+					"name": "libmagic1t64",
+					"version": "1:5.46-5"
+				},
+				{
+					"key": "libmagic-mgc_1-5.46-5_amd64",
+					"name": "libmagic-mgc",
+					"version": "1:5.46-5"
+				},
+				{
+					"key": "liblzma5_5.8.1-1_amd64",
+					"name": "liblzma5",
+					"version": "5.8.1-1"
+				},
+				{
+					"key": "libbz2-1.0_1.0.8-6_amd64",
+					"name": "libbz2-1.0",
+					"version": "1.0.8-6"
+				},
+				{
+					"key": "libltdl7_2.5.4-4_amd64",
+					"name": "libltdl7",
+					"version": "2.5.4-4"
+				},
+				{
+					"key": "libgsm1_1.0.22-1-p-b2_amd64",
+					"name": "libgsm1",
+					"version": "1.0.22-1+b2"
+				},
+				{
+					"key": "libgomp1_14.2.0-19_amd64",
+					"name": "libgomp1",
+					"version": "14.2.0-19"
+				},
+				{
+					"key": "libsox-fmt-base_14.4.2-p-git20190427-5-p-b3_amd64",
+					"name": "libsox-fmt-base",
+					"version": "14.4.2+git20190427-5+b3"
+				},
+				{
+					"key": "libwavpack1_5.8.1-1_amd64",
+					"name": "libwavpack1",
+					"version": "5.8.1-1"
+				},
+				{
+					"key": "libvorbisfile3_1.3.7-3_amd64",
+					"name": "libvorbisfile3",
+					"version": "1.3.7-3"
+				},
+				{
+					"key": "libvorbis0a_1.3.7-3_amd64",
+					"name": "libvorbis0a",
+					"version": "1.3.7-3"
+				},
+				{
+					"key": "libogg0_1.3.5-3-p-b2_amd64",
+					"name": "libogg0",
+					"version": "1.3.5-3+b2"
+				},
+				{
+					"key": "libvorbisenc2_1.3.7-3_amd64",
+					"name": "libvorbisenc2",
+					"version": "1.3.7-3"
+				},
+				{
+					"key": "libsndfile1_1.2.2-2-p-deb13u1_amd64",
+					"name": "libsndfile1",
+					"version": "1.2.2-2+deb13u1"
+				},
+				{
+					"key": "libopus0_1.5.2-2_amd64",
+					"name": "libopus0",
+					"version": "1.5.2-2"
+				},
+				{
+					"key": "libmpg123-0t64_1.32.10-1-p-deb13u1_amd64",
+					"name": "libmpg123-0t64",
+					"version": "1.32.10-1+deb13u1"
+				},
+				{
+					"key": "libmp3lame0_3.100-6-p-b3_amd64",
+					"name": "libmp3lame0",
+					"version": "3.100-6+b3"
+				},
+				{
+					"key": "libflac14_1.5.0-p-ds-2_amd64",
+					"name": "libflac14",
+					"version": "1.5.0+ds-2"
+				},
+				{
+					"key": "libopencore-amrwb0_0.1.6-1-p-b2_amd64",
+					"name": "libopencore-amrwb0",
+					"version": "0.1.6-1+b2"
+				},
+				{
+					"key": "libopencore-amrnb0_0.1.6-1-p-b2_amd64",
+					"name": "libopencore-amrnb0",
+					"version": "0.1.6-1+b2"
+				},
+				{
+					"key": "libsox-fmt-alsa_14.4.2-p-git20190427-5-p-b3_amd64",
+					"name": "libsox-fmt-alsa",
+					"version": "14.4.2+git20190427-5+b3"
+				},
+				{
+					"key": "libasound2t64_1.2.14-1_amd64",
+					"name": "libasound2t64",
+					"version": "1.2.14-1"
+				},
+				{
+					"key": "libasound2-data_1.2.14-1_amd64",
+					"name": "libasound2-data",
+					"version": "1.2.14-1"
+				}
+			],
+			"key": "sox_14.4.2-p-git20190427-5-p-b3_amd64",
+			"name": "sox",
+			"sha256": "918cef8e8675b2de562af0266b2dab1b9c4609c24590bcdfe8e39ce7e8e8aacb",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/s/sox/sox_14.4.2+git20190427-5+b3_amd64.deb"
+			],
+			"version": "14.4.2+git20190427-5+b3"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libsox3_14.4.2-p-git20190427-5-p-b3_amd64",
+			"name": "libsox3",
+			"sha256": "063e0162c4c1998b992e5807191ea6c010f7747238d2c31a4945853f6a0b4701",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/s/sox/libsox3_14.4.2+git20190427-5+b3_amd64.deb"
+			],
+			"version": "14.4.2+git20190427-5+b3"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libpng16-16t64_1.6.48-1-p-deb13u4_amd64",
+			"name": "libpng16-16t64",
+			"sha256": "4fc01e2201bd2658511fe1c1f65d3bc20ae875b17945b507c6844c321c2946f5",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian-security/20260401T000000Z/pool/updates/main/libp/libpng1.6/libpng16-16t64_1.6.48-1+deb13u4_amd64.deb"
+			],
+			"version": "1.6.48-1+deb13u4"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libmagic1t64_1-5.46-5_amd64",
+			"name": "libmagic1t64",
+			"sha256": "53f653873216b135570b42c423ea93825c008ac464780b4578e80ee424237a4e",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/f/file/libmagic1t64_5.46-5_amd64.deb"
+			],
+			"version": "1:5.46-5"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libmagic-mgc_1-5.46-5_amd64",
+			"name": "libmagic-mgc",
+			"sha256": "1368da7c4c7dd10fb2f9ee3ed8a70801650c0c1d249a4076af15e2ddfbb14b46",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/f/file/libmagic-mgc_5.46-5_amd64.deb"
+			],
+			"version": "1:5.46-5"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "liblzma5_5.8.1-1_amd64",
+			"name": "liblzma5",
+			"sha256": "3a4b863e62478b1895909c5d3b719da0395d6fe6da46f2218db2b0436e0fe892",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/x/xz-utils/liblzma5_5.8.1-1_amd64.deb"
+			],
+			"version": "5.8.1-1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libbz2-1.0_1.0.8-6_amd64",
+			"name": "libbz2-1.0",
+			"sha256": "cba4cda04244b5e481bb15524bc3c983a7d1b6f330013b9b381706a2fcb65310",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/b/bzip2/libbz2-1.0_1.0.8-6_amd64.deb"
+			],
+			"version": "1.0.8-6"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libltdl7_2.5.4-4_amd64",
+			"name": "libltdl7",
+			"sha256": "ab38167fc5aba8d133309fa98ca0a8b4e8b3c31588214ea70803a2bf3c6aa5ba",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libt/libtool/libltdl7_2.5.4-4_amd64.deb"
+			],
+			"version": "2.5.4-4"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libgsm1_1.0.22-1-p-b2_amd64",
+			"name": "libgsm1",
+			"sha256": "388909810b0133b0dd8ea84884cd34db7bcbbd0f2643a7a65296a34644704a5e",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libg/libgsm/libgsm1_1.0.22-1+b2_amd64.deb"
+			],
+			"version": "1.0.22-1+b2"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libsox-fmt-base_14.4.2-p-git20190427-5-p-b3_amd64",
+			"name": "libsox-fmt-base",
+			"sha256": "d48b0df2f4a3eb80a80a299eb517edf3717045c55a85503a77ad736cf9045710",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/s/sox/libsox-fmt-base_14.4.2+git20190427-5+b3_amd64.deb"
+			],
+			"version": "14.4.2+git20190427-5+b3"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libwavpack1_5.8.1-1_amd64",
+			"name": "libwavpack1",
+			"sha256": "1816cc05b018d19f2c4050d2e46b18f1b5f8a894b1a4367cc9c77066fa3669df",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/w/wavpack/libwavpack1_5.8.1-1_amd64.deb"
+			],
+			"version": "5.8.1-1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libvorbisfile3_1.3.7-3_amd64",
+			"name": "libvorbisfile3",
+			"sha256": "02822ab3da107b6f65bb3f7ac5bc8d68f51f998dd6886dd38f509f4d04d0ccd6",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libv/libvorbis/libvorbisfile3_1.3.7-3_amd64.deb"
+			],
+			"version": "1.3.7-3"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libvorbis0a_1.3.7-3_amd64",
+			"name": "libvorbis0a",
+			"sha256": "0465f7f602f7b00965e58e7273b5876060ab7946f0452a9f95d979046932cc42",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libv/libvorbis/libvorbis0a_1.3.7-3_amd64.deb"
+			],
+			"version": "1.3.7-3"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libogg0_1.3.5-3-p-b2_amd64",
+			"name": "libogg0",
+			"sha256": "911aec914f5bda0788164ff8068b682537378bf8d407b1d6c1b377522f96b83b",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libo/libogg/libogg0_1.3.5-3+b2_amd64.deb"
+			],
+			"version": "1.3.5-3+b2"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libvorbisenc2_1.3.7-3_amd64",
+			"name": "libvorbisenc2",
+			"sha256": "5fbbf06a5b196235aa2753cd12bbe7f843328571d368f15b1c337578e29f73a2",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libv/libvorbis/libvorbisenc2_1.3.7-3_amd64.deb"
+			],
+			"version": "1.3.7-3"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libsndfile1_1.2.2-2-p-deb13u1_amd64",
+			"name": "libsndfile1",
+			"sha256": "d92263a045554e6f39c6b1c2ee4cca44a3248d9b9339301ff195969bf84b75eb",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libs/libsndfile/libsndfile1_1.2.2-2+deb13u1_amd64.deb"
+			],
+			"version": "1.2.2-2+deb13u1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libopus0_1.5.2-2_amd64",
+			"name": "libopus0",
+			"sha256": "794056db33d71b2ac4bd8b5a4eb23b627bcb8a49d123c33b6e841a996253a067",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/o/opus/libopus0_1.5.2-2_amd64.deb"
+			],
+			"version": "1.5.2-2"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libmpg123-0t64_1.32.10-1-p-deb13u1_amd64",
+			"name": "libmpg123-0t64",
+			"sha256": "31fa6ef638f1fdbe198faee0b6fe50d9dd468077f8247cc3dbf6b2250abb6101",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/m/mpg123/libmpg123-0t64_1.32.10-1+deb13u1_amd64.deb"
+			],
+			"version": "1.32.10-1+deb13u1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libmp3lame0_3.100-6-p-b3_amd64",
+			"name": "libmp3lame0",
+			"sha256": "3867319c9fbbc8cc25f2d1dc1d75d13548c84c37fa709c1ac9ca02ac051b63ab",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/l/lame/libmp3lame0_3.100-6+b3_amd64.deb"
+			],
+			"version": "3.100-6+b3"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libflac14_1.5.0-p-ds-2_amd64",
+			"name": "libflac14",
+			"sha256": "658b9f77d35638caf75dfaea4f6d5cde196104d5662f0776e23d7cc450bd4cb5",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/f/flac/libflac14_1.5.0+ds-2_amd64.deb"
+			],
+			"version": "1.5.0+ds-2"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libopencore-amrwb0_0.1.6-1-p-b2_amd64",
+			"name": "libopencore-amrwb0",
+			"sha256": "60a8c7d19fb58e9a727d9dd03f988d3b5ecb3adfccc7c2a73c055283fda57f08",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/o/opencore-amr/libopencore-amrwb0_0.1.6-1+b2_amd64.deb"
+			],
+			"version": "0.1.6-1+b2"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libopencore-amrnb0_0.1.6-1-p-b2_amd64",
+			"name": "libopencore-amrnb0",
+			"sha256": "25ec8a9f76a9b4377e676c3223d59eed5a0a3a943438c8cab066238328b24315",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/o/opencore-amr/libopencore-amrnb0_0.1.6-1+b2_amd64.deb"
+			],
+			"version": "0.1.6-1+b2"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libsox-fmt-alsa_14.4.2-p-git20190427-5-p-b3_amd64",
+			"name": "libsox-fmt-alsa",
+			"sha256": "0003bbf460dd55526f44d0f83d6cff6af5c4640acd9455cb0095fc08f8cd2623",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/s/sox/libsox-fmt-alsa_14.4.2+git20190427-5+b3_amd64.deb"
+			],
+			"version": "14.4.2+git20190427-5+b3"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libasound2t64_1.2.14-1_amd64",
+			"name": "libasound2t64",
+			"sha256": "f03a2bd9d234f4e6d283c36520d66befd0952d6f5ba454badd8fae2305ad70a1",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/a/alsa-lib/libasound2t64_1.2.14-1_amd64.deb"
+			],
+			"version": "1.2.14-1"
+		},
+		{
+			"arch": "amd64",
+			"dependencies": [],
+			"key": "libasound2-data_1.2.14-1_amd64",
+			"name": "libasound2-data",
+			"sha256": "fe973f6467a6fc553ead004bd5aebfea4eb45c5da827cd3fb32650d9672ac947",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/a/alsa-lib/libasound2-data_1.2.14-1_all.deb"
+			],
+			"version": "1.2.14-1"
+		},
+		{
 			"arch": "arm64",
 			"dependencies": [
 				{
@@ -419,6 +957,544 @@
 				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/g/gcc-14/libgomp1_14.2.0-19_arm64.deb"
 			],
 			"version": "14.2.0-19"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [
+				{
+					"key": "zlib1g_1-1.3.dfsg-p-really1.3.1-1-p-b1_arm64",
+					"name": "zlib1g",
+					"version": "1:1.3.dfsg+really1.3.1-1+b1"
+				},
+				{
+					"key": "libc6_2.41-12-p-deb13u2_arm64",
+					"name": "libc6",
+					"version": "2.41-12+deb13u2"
+				},
+				{
+					"key": "libgcc-s1_14.2.0-19_arm64",
+					"name": "libgcc-s1",
+					"version": "14.2.0-19"
+				},
+				{
+					"key": "gcc-14-base_14.2.0-19_arm64",
+					"name": "gcc-14-base",
+					"version": "14.2.0-19"
+				},
+				{
+					"key": "libselinux1_3.8.1-1_arm64",
+					"name": "libselinux1",
+					"version": "3.8.1-1"
+				},
+				{
+					"key": "libpcre2-8-0_10.46-1_deb13u1_arm64",
+					"name": "libpcre2-8-0",
+					"version": "10.46-1~deb13u1"
+				},
+				{
+					"key": "libmount1_2.41-5_arm64",
+					"name": "libmount1",
+					"version": "2.41-5"
+				},
+				{
+					"key": "libblkid1_2.41-5_arm64",
+					"name": "libblkid1",
+					"version": "2.41-5"
+				},
+				{
+					"key": "libffi8_3.4.8-2_arm64",
+					"name": "libffi8",
+					"version": "3.4.8-2"
+				},
+				{
+					"key": "libatomic1_14.2.0-19_arm64",
+					"name": "libatomic1",
+					"version": "14.2.0-19"
+				}
+			],
+			"key": "libglib2.0-0t64_2.84.4-3_deb13u2_arm64",
+			"name": "libglib2.0-0t64",
+			"sha256": "61ac86d96726c10403028a7674575504f46c0e0a4f6fac7c9447502d579b7649",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/g/glib2.0/libglib2.0-0t64_2.84.4-3~deb13u2_arm64.deb"
+			],
+			"version": "2.84.4-3~deb13u2"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libselinux1_3.8.1-1_arm64",
+			"name": "libselinux1",
+			"sha256": "fc13da4c7783b8f4361d92ef1045931f298d1b0ac78ed1a85c2232615f49fc6f",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libs/libselinux/libselinux1_3.8.1-1_arm64.deb"
+			],
+			"version": "3.8.1-1"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libpcre2-8-0_10.46-1_deb13u1_arm64",
+			"name": "libpcre2-8-0",
+			"sha256": "f74d3e1082c2d6d2f7b4d47e41070de4a7e2f7f9d0e6e0c901ebfe0e82cdd3ee",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/p/pcre2/libpcre2-8-0_10.46-1~deb13u1_arm64.deb"
+			],
+			"version": "10.46-1~deb13u1"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libmount1_2.41-5_arm64",
+			"name": "libmount1",
+			"sha256": "2e791f8faf7bbbc94d354cf7b6c3728dc303b7aa327dfe7a2aa6954320977c8f",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/u/util-linux/libmount1_2.41-5_arm64.deb"
+			],
+			"version": "2.41-5"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libblkid1_2.41-5_arm64",
+			"name": "libblkid1",
+			"sha256": "ee91c24cc227ed977c39d746d09532d357e66f147bd670be6cb69e2c3435cf76",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/u/util-linux/libblkid1_2.41-5_arm64.deb"
+			],
+			"version": "2.41-5"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libffi8_3.4.8-2_arm64",
+			"name": "libffi8",
+			"sha256": "d84a783b818f2386627604e64b793eb4ac5bb9ea1ba321a194a1c9c82fe09a01",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libf/libffi/libffi8_3.4.8-2_arm64.deb"
+			],
+			"version": "3.4.8-2"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [
+				{
+					"key": "libc6_2.41-12-p-deb13u2_arm64",
+					"name": "libc6",
+					"version": "2.41-12+deb13u2"
+				},
+				{
+					"key": "libgcc-s1_14.2.0-19_arm64",
+					"name": "libgcc-s1",
+					"version": "14.2.0-19"
+				},
+				{
+					"key": "gcc-14-base_14.2.0-19_arm64",
+					"name": "gcc-14-base",
+					"version": "14.2.0-19"
+				},
+				{
+					"key": "libsox3_14.4.2-p-git20190427-5-p-b3_arm64",
+					"name": "libsox3",
+					"version": "14.4.2+git20190427-5+b3"
+				},
+				{
+					"key": "zlib1g_1-1.3.dfsg-p-really1.3.1-1-p-b1_arm64",
+					"name": "zlib1g",
+					"version": "1:1.3.dfsg+really1.3.1-1+b1"
+				},
+				{
+					"key": "libpng16-16t64_1.6.48-1-p-deb13u4_arm64",
+					"name": "libpng16-16t64",
+					"version": "1.6.48-1+deb13u4"
+				},
+				{
+					"key": "libmagic1t64_1-5.46-5_arm64",
+					"name": "libmagic1t64",
+					"version": "1:5.46-5"
+				},
+				{
+					"key": "libmagic-mgc_1-5.46-5_arm64",
+					"name": "libmagic-mgc",
+					"version": "1:5.46-5"
+				},
+				{
+					"key": "liblzma5_5.8.1-1_arm64",
+					"name": "liblzma5",
+					"version": "5.8.1-1"
+				},
+				{
+					"key": "libbz2-1.0_1.0.8-6_arm64",
+					"name": "libbz2-1.0",
+					"version": "1.0.8-6"
+				},
+				{
+					"key": "libltdl7_2.5.4-4_arm64",
+					"name": "libltdl7",
+					"version": "2.5.4-4"
+				},
+				{
+					"key": "libgsm1_1.0.22-1-p-b2_arm64",
+					"name": "libgsm1",
+					"version": "1.0.22-1+b2"
+				},
+				{
+					"key": "libgomp1_14.2.0-19_arm64",
+					"name": "libgomp1",
+					"version": "14.2.0-19"
+				},
+				{
+					"key": "libsox-fmt-base_14.4.2-p-git20190427-5-p-b3_arm64",
+					"name": "libsox-fmt-base",
+					"version": "14.4.2+git20190427-5+b3"
+				},
+				{
+					"key": "libwavpack1_5.8.1-1_arm64",
+					"name": "libwavpack1",
+					"version": "5.8.1-1"
+				},
+				{
+					"key": "libvorbisfile3_1.3.7-3_arm64",
+					"name": "libvorbisfile3",
+					"version": "1.3.7-3"
+				},
+				{
+					"key": "libvorbis0a_1.3.7-3_arm64",
+					"name": "libvorbis0a",
+					"version": "1.3.7-3"
+				},
+				{
+					"key": "libogg0_1.3.5-3-p-b2_arm64",
+					"name": "libogg0",
+					"version": "1.3.5-3+b2"
+				},
+				{
+					"key": "libvorbisenc2_1.3.7-3_arm64",
+					"name": "libvorbisenc2",
+					"version": "1.3.7-3"
+				},
+				{
+					"key": "libsndfile1_1.2.2-2-p-deb13u1_arm64",
+					"name": "libsndfile1",
+					"version": "1.2.2-2+deb13u1"
+				},
+				{
+					"key": "libopus0_1.5.2-2_arm64",
+					"name": "libopus0",
+					"version": "1.5.2-2"
+				},
+				{
+					"key": "libmpg123-0t64_1.32.10-1-p-deb13u1_arm64",
+					"name": "libmpg123-0t64",
+					"version": "1.32.10-1+deb13u1"
+				},
+				{
+					"key": "libmp3lame0_3.100-6-p-b3_arm64",
+					"name": "libmp3lame0",
+					"version": "3.100-6+b3"
+				},
+				{
+					"key": "libflac14_1.5.0-p-ds-2_arm64",
+					"name": "libflac14",
+					"version": "1.5.0+ds-2"
+				},
+				{
+					"key": "libopencore-amrwb0_0.1.6-1-p-b2_arm64",
+					"name": "libopencore-amrwb0",
+					"version": "0.1.6-1+b2"
+				},
+				{
+					"key": "libopencore-amrnb0_0.1.6-1-p-b2_arm64",
+					"name": "libopencore-amrnb0",
+					"version": "0.1.6-1+b2"
+				},
+				{
+					"key": "libsox-fmt-alsa_14.4.2-p-git20190427-5-p-b3_arm64",
+					"name": "libsox-fmt-alsa",
+					"version": "14.4.2+git20190427-5+b3"
+				},
+				{
+					"key": "libasound2t64_1.2.14-1_arm64",
+					"name": "libasound2t64",
+					"version": "1.2.14-1"
+				},
+				{
+					"key": "libasound2-data_1.2.14-1_arm64",
+					"name": "libasound2-data",
+					"version": "1.2.14-1"
+				}
+			],
+			"key": "sox_14.4.2-p-git20190427-5-p-b3_arm64",
+			"name": "sox",
+			"sha256": "7a4c29facd26bd9963fd1e0cd015fbc3684481b51652e7e381e595fbdbf2ed28",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/s/sox/sox_14.4.2+git20190427-5+b3_arm64.deb"
+			],
+			"version": "14.4.2+git20190427-5+b3"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libsox3_14.4.2-p-git20190427-5-p-b3_arm64",
+			"name": "libsox3",
+			"sha256": "47ce72b4dd094a34fcc9c165778ba12babb77fbd8d1883eb9b24b0035919f2a3",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/s/sox/libsox3_14.4.2+git20190427-5+b3_arm64.deb"
+			],
+			"version": "14.4.2+git20190427-5+b3"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libpng16-16t64_1.6.48-1-p-deb13u4_arm64",
+			"name": "libpng16-16t64",
+			"sha256": "cd815d564dd9204f0fe75102d3e288607dcab757a27e413762dd13e8d2853da9",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian-security/20260401T000000Z/pool/updates/main/libp/libpng1.6/libpng16-16t64_1.6.48-1+deb13u4_arm64.deb"
+			],
+			"version": "1.6.48-1+deb13u4"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libmagic1t64_1-5.46-5_arm64",
+			"name": "libmagic1t64",
+			"sha256": "c37244e188d63139b0e7d175a1d8e81253a6b505dac7b5c14e2fd9142f1f5672",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/f/file/libmagic1t64_5.46-5_arm64.deb"
+			],
+			"version": "1:5.46-5"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libmagic-mgc_1-5.46-5_arm64",
+			"name": "libmagic-mgc",
+			"sha256": "3b09b5391373b137ea8c881fafdf708d621816c27cd546edaaf559204490ab5d",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/f/file/libmagic-mgc_5.46-5_arm64.deb"
+			],
+			"version": "1:5.46-5"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "liblzma5_5.8.1-1_arm64",
+			"name": "liblzma5",
+			"sha256": "cf6dcb3a8ee0b86c4f021c7dc07458fe6db6686c1d4e7b12217cecd2a80a40b9",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/x/xz-utils/liblzma5_5.8.1-1_arm64.deb"
+			],
+			"version": "5.8.1-1"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libbz2-1.0_1.0.8-6_arm64",
+			"name": "libbz2-1.0",
+			"sha256": "3537fe4fc577a60c8a9568873cd577db7ebc135eb8bb1825f18caf8972d9d2f2",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/b/bzip2/libbz2-1.0_1.0.8-6_arm64.deb"
+			],
+			"version": "1.0.8-6"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libltdl7_2.5.4-4_arm64",
+			"name": "libltdl7",
+			"sha256": "f8877edda0d64026421de4e73c306903be05cf291721c6d0b9dee01af2445180",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libt/libtool/libltdl7_2.5.4-4_arm64.deb"
+			],
+			"version": "2.5.4-4"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libgsm1_1.0.22-1-p-b2_arm64",
+			"name": "libgsm1",
+			"sha256": "dc9a761c9cca7d886db0474fe28b9697e72d376fa2112590cf5f7ed737944f6c",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libg/libgsm/libgsm1_1.0.22-1+b2_arm64.deb"
+			],
+			"version": "1.0.22-1+b2"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libsox-fmt-base_14.4.2-p-git20190427-5-p-b3_arm64",
+			"name": "libsox-fmt-base",
+			"sha256": "c7c9d5f9ff483c87eef67d555a6c204c42db77303ff5e9bb3bfebf26879c0202",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/s/sox/libsox-fmt-base_14.4.2+git20190427-5+b3_arm64.deb"
+			],
+			"version": "14.4.2+git20190427-5+b3"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libwavpack1_5.8.1-1_arm64",
+			"name": "libwavpack1",
+			"sha256": "464cc2f7b2c5ae64f37668d834e5e0edd9c051976c92794a1560f0a639df225e",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/w/wavpack/libwavpack1_5.8.1-1_arm64.deb"
+			],
+			"version": "5.8.1-1"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libvorbisfile3_1.3.7-3_arm64",
+			"name": "libvorbisfile3",
+			"sha256": "6eea69ab6f851955736abe56002551e304eb36cffdc9e9a1a21fb578ca3632ff",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libv/libvorbis/libvorbisfile3_1.3.7-3_arm64.deb"
+			],
+			"version": "1.3.7-3"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libvorbis0a_1.3.7-3_arm64",
+			"name": "libvorbis0a",
+			"sha256": "6e8e64ebe692dd2d019af7f914f2e3b81bf13d4b1ce2516fb4248a0310ef7cf6",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libv/libvorbis/libvorbis0a_1.3.7-3_arm64.deb"
+			],
+			"version": "1.3.7-3"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libogg0_1.3.5-3-p-b2_arm64",
+			"name": "libogg0",
+			"sha256": "d59a83ab352bf0c16ce9513fdf264f87214813ca8c628c652801ef476ece8286",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libo/libogg/libogg0_1.3.5-3+b2_arm64.deb"
+			],
+			"version": "1.3.5-3+b2"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libvorbisenc2_1.3.7-3_arm64",
+			"name": "libvorbisenc2",
+			"sha256": "4a477b3ae19ba50a288f036c8176d61cd9f3836ba65472f88b95e3f6b3bf2dd3",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libv/libvorbis/libvorbisenc2_1.3.7-3_arm64.deb"
+			],
+			"version": "1.3.7-3"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libsndfile1_1.2.2-2-p-deb13u1_arm64",
+			"name": "libsndfile1",
+			"sha256": "6c94f17e1f02778f98b96bb9ae19ff30085662e96685898a018c26bfd4bfc3f2",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/libs/libsndfile/libsndfile1_1.2.2-2+deb13u1_arm64.deb"
+			],
+			"version": "1.2.2-2+deb13u1"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libopus0_1.5.2-2_arm64",
+			"name": "libopus0",
+			"sha256": "1d980e8a4717074805a98dbe07671cb3bee068c25709315f3de836980c629836",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/o/opus/libopus0_1.5.2-2_arm64.deb"
+			],
+			"version": "1.5.2-2"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libmpg123-0t64_1.32.10-1-p-deb13u1_arm64",
+			"name": "libmpg123-0t64",
+			"sha256": "d284df39ff3b64f1cdf274352613c52534c55eed82c3a2ff0fc7ba154acd7bf0",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/m/mpg123/libmpg123-0t64_1.32.10-1+deb13u1_arm64.deb"
+			],
+			"version": "1.32.10-1+deb13u1"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libmp3lame0_3.100-6-p-b3_arm64",
+			"name": "libmp3lame0",
+			"sha256": "ed3563722129ffa4def03b7af0b589fa20eef972bdcc4599202ddb1ac654c58e",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/l/lame/libmp3lame0_3.100-6+b3_arm64.deb"
+			],
+			"version": "3.100-6+b3"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libflac14_1.5.0-p-ds-2_arm64",
+			"name": "libflac14",
+			"sha256": "11800827306e56fcbd1a65ea67d9d13126fc02bf87fdfecd35e0f48a145b3c59",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/f/flac/libflac14_1.5.0+ds-2_arm64.deb"
+			],
+			"version": "1.5.0+ds-2"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libopencore-amrwb0_0.1.6-1-p-b2_arm64",
+			"name": "libopencore-amrwb0",
+			"sha256": "d84b048ca977e5103d0c25ece28f07cbb1fe4146edf266febac42f20b2501692",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/o/opencore-amr/libopencore-amrwb0_0.1.6-1+b2_arm64.deb"
+			],
+			"version": "0.1.6-1+b2"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libopencore-amrnb0_0.1.6-1-p-b2_arm64",
+			"name": "libopencore-amrnb0",
+			"sha256": "56ff1db89f45f7e488fced4b6468001ab5da98638a19d115e7d87233d4f3915c",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/o/opencore-amr/libopencore-amrnb0_0.1.6-1+b2_arm64.deb"
+			],
+			"version": "0.1.6-1+b2"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libsox-fmt-alsa_14.4.2-p-git20190427-5-p-b3_arm64",
+			"name": "libsox-fmt-alsa",
+			"sha256": "ab20261553d593db26ddbb6a7f227ab1059400eb184daad3193230715cd1a1a9",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/s/sox/libsox-fmt-alsa_14.4.2+git20190427-5+b3_arm64.deb"
+			],
+			"version": "14.4.2+git20190427-5+b3"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libasound2t64_1.2.14-1_arm64",
+			"name": "libasound2t64",
+			"sha256": "b89f299d77281df9984795701c915c92e736ca3840fb552604a305d1e9813a4a",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/a/alsa-lib/libasound2t64_1.2.14-1_arm64.deb"
+			],
+			"version": "1.2.14-1"
+		},
+		{
+			"arch": "arm64",
+			"dependencies": [],
+			"key": "libasound2-data_1.2.14-1_arm64",
+			"name": "libasound2-data",
+			"sha256": "fe973f6467a6fc553ead004bd5aebfea4eb45c5da827cd3fb32650d9672ac947",
+			"urls": [
+				"https://snapshot.debian.org/archive/debian/20260401T000000Z/pool/main/a/alsa-lib/libasound2-data_1.2.14-1_all.deb"
+			],
+			"version": "1.2.14-1"
 		}
 	],
 	"version": 1
