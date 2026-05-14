@@ -329,7 +329,9 @@ mod tests {
         // rather than leave an orphan manifest with an empty ModelFile map.
         // Also guards against the Windows os-error-267 regression (colon in path).
         let store = make_store();
-        store.write_manifest(&sample_manifest("Org/WithQuant")).unwrap();
+        store
+            .write_manifest(&sample_manifest("Org/WithQuant"))
+            .unwrap();
         store.remove("Org/WithQuant:Q4_K_M").unwrap();
         assert!(!store.cfg.model_dir("Org/WithQuant").exists());
     }
@@ -380,11 +382,17 @@ mod tests {
     #[test]
     fn remove_unknown_quant_errors() {
         let store = make_store();
-        store.write_manifest(&multi_quant_manifest("Org/Multi2")).unwrap();
+        store
+            .write_manifest(&multi_quant_manifest("Org/Multi2"))
+            .unwrap();
         let err = store.remove("Org/Multi2:Q2_K").unwrap_err();
         assert!(matches!(err, Error::QuantNotFound(..)), "got {err:?}");
         // Nothing should have been touched.
-        assert!(store.cfg.model_dir("Org/Multi2").join(MANIFEST_FILE).exists());
+        assert!(store
+            .cfg
+            .model_dir("Org/Multi2")
+            .join(MANIFEST_FILE)
+            .exists());
     }
 
     #[test]
