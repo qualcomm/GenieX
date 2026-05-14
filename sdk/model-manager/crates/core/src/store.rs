@@ -148,7 +148,11 @@ impl Store {
         Ok(())
     }
 
-    pub fn remove(&self, name: &str) -> Result<()> {
+    pub fn remove(&self, name_with_quant: &str) -> Result<()> {
+        // Accept an optional ":quant" suffix (mirrors get_paths) so bindings
+        // can forward the user's raw "org/repo:quant" argument without
+        // tripping validate_model_name or producing a Windows path with ':'.
+        let (name, _) = split_quant(name_with_quant);
         validate_model_name(name)?;
         self.with_model_lock(name, || {
             let dir = self.cfg.model_dir(name);
@@ -282,6 +286,17 @@ mod tests {
         store.write_manifest(&sample_manifest("Org/C")).unwrap();
         store.remove("Org/C").unwrap();
         assert!(!store.cfg.model_dir("Org/C").exists());
+    }
+
+    #[test]
+    fn remove_accepts_name_with_quant() {
+        // Bindings forward the user's raw "org/repo:quant" arg; remove must
+        // strip the suffix (not probe a path containing ':' which is invalid
+        // on Windows: ERROR_DIRECTORY / os error 267).
+        let store = make_store();
+        store.write_manifest(&sample_manifest("Org/WithQuant")).unwrap();
+        store.remove("Org/WithQuant:Q4_K_M").unwrap();
+        assert!(!store.cfg.model_dir("Org/WithQuant").exists());
     }
 
     #[test]
