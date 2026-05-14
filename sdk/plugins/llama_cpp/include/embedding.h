@@ -3,6 +3,7 @@
 #include <memory>
 #include <vector>
 
+#include "htp_session.h"
 #include "llama.h"
 #include "plugin/IEmbedding.h"
 
@@ -30,6 +31,9 @@ class LlamaCppEmbedding : public IEmbedding {
 
    private:
     std::unique_ptr<EmbeddingState> state_;
+
+    // Tracks whether this instance pinned an HTP session; releases on last handoff.
+    htp::SessionGuard htp_guard_;
 
     // Helper methods
     void normalize_embeddings(const float* inp, float* out, int n, const char* method);

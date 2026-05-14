@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "htp_session.h"
 #include "llama.h"
 #include "plugin/ILlm.h"
 #include "sampling.h"
@@ -24,7 +25,9 @@ class LlamaLlm : public ILlm {
     // Instance-level storage for model loading parameters (thread-safe)
     llama_model_tensor_buft_override tensor_overrides[2];           // MoE override + null terminator
     bool                             allow_special_tokens = false;  // Control special token output
-    bool                             uses_htp             = false;  // True when loaded on the Hexagon backend
+
+    // Tracks whether this instance pinned an HTP session; releases on last handoff.
+    htp::SessionGuard htp_guard_;
 
    public:
     virtual ~LlamaLlm() override;

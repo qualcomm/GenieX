@@ -1,7 +1,6 @@
 #include "llm.h"
 
 #include <algorithm>
-#include <atomic>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -13,41 +12,11 @@
 #include "ggml-backend.h"
 #include "ggml.h"
 #include "gguf.h"
+#include "htp_session.h"
 #include "logging.h"
 #include "profiler.h"
 
 namespace geniex {
-
-namespace {
-// Refcount of live LlamaLlm instances that bound to the HTP backend. When the
-// last one goes away we ask the HTP backend to close its FastRPC channels so a
-// subsequent QAIRT load can re-create its own HTP context without tripping
-// CONTEXT_ERROR_CREATE_FROM_BINARY_FAILED (err 1007). Before the next
-// llama.cpp load we ask the HTP backend to recreate those sessions. See
-// sdk/patches/llama-hexagon-release-sessions.patch.
-std::atomic<int> g_htp_refcount{0};
-
-using htp_reg_fn = void (*)(ggml_backend_reg_t);
-
-void call_htp_proc(const char* name, const char* log_msg) {
-    auto* reg = ggml_backend_reg_by_name("HTP");
-    if (!reg) return;
-    auto fn = reinterpret_cast<htp_reg_fn>(ggml_backend_reg_get_proc_address(reg, name));
-    if (!fn) return;
-    GENIEX_LOG_DEBUG("{}", log_msg);
-    fn(reg);
-}
-
-void reacquire_htp_sessions() {
-    call_htp_proc("ggml_backend_hexagon_reacquire_sessions", "Reacquiring HTP sessions before llama.cpp load");
-}
-
-void try_release_htp_sessions_if_last() {
-    if (g_htp_refcount.fetch_sub(1, std::memory_order_acq_rel) != 1) return;
-    call_htp_proc(
-        "ggml_backend_hexagon_release_sessions", "Releasing HTP sessions on last llama.cpp HTP handle destroy");
-}
-}  // namespace
 
 LlamaLlm::~LlamaLlm() {
     if (sampler) common_sampler_free(sampler);
@@ -57,8 +26,6 @@ LlamaLlm::~LlamaLlm() {
     // Free threadpools
     if (threadpool) this->threadpool_free_fn(threadpool);
     if (threadpool_batch) this->threadpool_free_fn(threadpool_batch);
-
-    if (this->uses_htp) try_release_htp_sessions_if_last();
 }
 
 int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
@@ -70,12 +37,12 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
-    // If a prior LlamaLlm tore down HTP sessions to hand off to QAIRT, the
-    // ggml registry still holds cached HTP device pointers whose session
-    // context was nulled out. Recreate those sessions now so the upcoming
-    // device lookup / model load does not dereference a null session.
-    // No-op when HTP is unused or sessions are already live.
-    reacquire_htp_sessions();
+    // If a prior llama.cpp instance tore down HTP sessions to hand off to
+    // QAIRT, the ggml registry still holds cached HTP device pointers whose
+    // session context was nulled out. Recreate those sessions now so the
+    // upcoming device lookup / model load does not dereference a null
+    // session. No-op when HTP is unused or sessions are already live.
+    htp::reacquire_before_load();
 
     ggml_backend_dev_t device_array[9] = {nullptr};
     auto               mpar            = llama_model_default_params();
@@ -145,9 +112,6 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
         if (!devices.empty()) {
             for (size_t i = 0; i < devices.size() && i < 8; ++i) {
                 device_array[i] = devices[i];
-                auto*       reg = ggml_backend_dev_backend_reg(devices[i]);
-                const char* rn  = reg ? ggml_backend_reg_name(reg) : nullptr;
-                if (rn && strcmp(rn, "HTP") == 0) this->uses_htp = true;
             }
             mpar.devices = device_array;
             GENIEX_LOG_INFO("Using {} device(s): {}", devices.size(), input->device_id);
@@ -156,20 +120,14 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
     }
-    // hybrid path (no explicit device_id, n_gpu_layers > 0) also routes through
-    // HTP via llama.cpp's per-tensor scheduler. Mark as HTP user to be safe.
-    if (!this->uses_htp && mpar.n_gpu_layers != 0) {
-        auto n_devs = ggml_backend_dev_count();
-        for (size_t i = 0; i < n_devs; ++i) {
-            auto*       reg = ggml_backend_dev_backend_reg(ggml_backend_dev_get(i));
-            const char* rn  = reg ? ggml_backend_reg_name(reg) : nullptr;
-            if (rn && strcmp(rn, "HTP") == 0) {
-                this->uses_htp = true;
-                break;
-            }
-        }
+    // Explicit HTP devices. The hybrid path (n_gpu_layers != 0, no device_id)
+    // also routes through HTP via llama.cpp's per-tensor scheduler, so mark
+    // HTP as used whenever the backend is present.
+    if (htp::devices_include_htp(device_array)) {
+        htp_guard_.mark_htp();
+    } else if (mpar.n_gpu_layers != 0 && htp::htp_backend_present()) {
+        htp_guard_.mark_htp();
     }
-    if (this->uses_htp) g_htp_refcount.fetch_add(1, std::memory_order_acq_rel);
 
     this->model = llama_model_load_from_file(input->model_path, mpar);
     if (!this->model) {

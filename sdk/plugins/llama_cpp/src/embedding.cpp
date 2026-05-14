@@ -8,6 +8,7 @@
 #include <cstring>
 #include <thread>
 
+#include "htp_session.h"
 #include "logging.h"
 #include "profiler.h"
 
@@ -50,13 +51,18 @@ int32_t LlamaCppEmbedding::create_impl(const geniex_EmbedderCreateInput* input) 
 
     GENIEX_LOG_INFO("Creating embedder with model: {}", input->model_path);
 
+    // See llm.cpp for the rationale behind the HTP session release/reacquire
+    // dance. Any llama.cpp class that might load onto HTP must participate.
+    htp::reacquire_before_load();
+
     // Set up model parameters
     GENIEX_LOG_INFO("Setting up model parameters for embedder");
-    llama_model_params mparams = llama_model_default_params();
-    mparams.use_mmap           = true;
-    mparams.use_mlock          = false;
-    mparams.n_gpu_layers       = 999;  // Use GPU if available
-                                       //
+    llama_model_params mparams         = llama_model_default_params();
+    ggml_backend_dev_t device_array[2] = {nullptr, nullptr};
+    mparams.use_mmap                   = true;
+    mparams.use_mlock                  = false;
+    mparams.n_gpu_layers               = 999;  // Use GPU if available
+                                               //
     GENIEX_LOG_INFO("Model params: use_mmap={}, use_mlock={}, n_gpu_layers={}",
         mparams.use_mmap,
         mparams.use_mlock,
@@ -68,12 +74,15 @@ int32_t LlamaCppEmbedding::create_impl(const geniex_EmbedderCreateInput* input) 
             GENIEX_LOG_ERROR("Device '{}' not found", input->device_id);
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         } else {
-            // Create a NULL-terminated array with the device
-            static ggml_backend_dev_t device_array[2];
             device_array[0] = device;
-            device_array[1] = nullptr;  // NULL-terminated
             mparams.devices = device_array;
         }
+    }
+
+    if (htp::devices_include_htp(device_array)) {
+        htp_guard_.mark_htp();
+    } else if (mparams.n_gpu_layers != 0 && htp::htp_backend_present()) {
+        htp_guard_.mark_htp();
     }
 
     // Load the model
