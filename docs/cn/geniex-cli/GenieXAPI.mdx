@@ -114,6 +114,40 @@ curl -o demo.jpg https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub
 ![响应体展示 200 成功响应及 VLM 对图像的描述](/Images/server/curl-5.png)
 
 
+## **Python 示例（OpenAI SDK）**
+
+由于服务器使用 OpenAI 协议，你可以直接将官方 `openai` Python 客户端指向本地端点，复用已有的 OpenAI 代码。先通过 `pip install openai` 安装 SDK，然后：
+
+```python python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://127.0.0.1:18181/v1",
+    api_key="geniex",  # 任意非空字符串，服务器不会校验
+)
+
+stream = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",  # org/repo[:quant]，Q4_0 对 Hexagon NPU 支持最佳
+    messages=[
+        {"role": "user", "content": "你好！请简单介绍一下你自己。"},
+    ],
+    max_tokens=256,
+    temperature=0.7,
+    stream=True,
+)
+
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="", flush=True)
+print()
+```
+
+<Note>
+请将 `model` 替换为已经下载好的模型。`geniex serve` 不会自动下载模型。可选的 `:<quant>` 后缀用于选择量化版本（例如 `Q4_0`、`Q4_K_M`、`Q8_0`），其中 `Q4_0` 对 llama.cpp Hexagon NPU 后端支持最好。
+</Note>
+
+
 <br />
 
 <Feedback/>
