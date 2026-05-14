@@ -120,12 +120,12 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
     }
-    // Explicit HTP devices. The hybrid path (n_gpu_layers != 0, no device_id)
-    // also routes through HTP via llama.cpp's per-tensor scheduler, so mark
-    // HTP as used whenever the backend is present.
-    if (htp::devices_include_htp(device_array)) {
-        htp_guard_.mark_htp();
-    } else if (mpar.n_gpu_layers != 0 && htp::htp_backend_present()) {
+    // The HTP backend opens FastRPC channels at registry construction time
+    // (ggml_hexagon_registry), not per-instance. Those channels live until we
+    // explicitly call release_sessions, so we mark the guard whenever HTP is
+    // registered — the lifetime to track is the registry, not the
+    // device_id/n_gpu_layers selection of this particular load.
+    if (htp::htp_backend_present()) {
         htp_guard_.mark_htp();
     }
 

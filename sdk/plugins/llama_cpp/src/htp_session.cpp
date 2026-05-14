@@ -1,7 +1,6 @@
 #include "htp_session.h"
 
 #include <atomic>
-#include <cstring>
 
 #include "logging.h"
 
@@ -27,16 +26,6 @@ void reacquire_before_load() {
 }
 
 bool htp_backend_present() { return ggml_backend_reg_by_name("HTP") != nullptr; }
-
-bool devices_include_htp(ggml_backend_dev_t* device_array) {
-    if (!device_array) return false;
-    for (size_t i = 0; device_array[i] != nullptr; ++i) {
-        auto*       reg = ggml_backend_dev_backend_reg(device_array[i]);
-        const char* rn  = reg ? ggml_backend_reg_name(reg) : nullptr;
-        if (rn && strcmp(rn, "HTP") == 0) return true;
-    }
-    return false;
-}
 
 void SessionGuard::mark_htp() {
     if (uses_htp_) return;
