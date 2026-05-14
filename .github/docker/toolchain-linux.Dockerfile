@@ -18,6 +18,14 @@ RUN apt-get update \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# gcc-13 cross: base image's gcc-14 emits CXXABI_1.3.15 which Qualcomm
+# Linux on-device libstdc++ 6.0.32 lacks. See #458.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        gcc-13-aarch64-linux-gnu \
+        g++-13-aarch64-linux-gnu \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV RUSTUP_HOME=/opt/rust/rustup \
     CARGO_HOME=/opt/rust/cargo \
     PATH=/opt/rust/cargo/bin:$PATH

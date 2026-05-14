@@ -1,7 +1,8 @@
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
-set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc)
-set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
+# gcc-13: default gcc-14 emits CXXABI_1.3.15, missing on Qualcomm Linux. See #458.
+set(CMAKE_C_COMPILER aarch64-linux-gnu-gcc-13)
+set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++-13)
 
-message(STATUS "Using cross compile toolchain for ARM64 Linux")
+message(STATUS "Using cross compile toolchain for ARM64 Linux (gcc-13)")
