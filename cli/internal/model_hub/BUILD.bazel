@@ -24,7 +24,10 @@ go_library(
 
 go_test(
     name = "model_hub_test",
-    srcs = ["model_hub_test.go"],
+    srcs = [
+        "model_hub_hf_test.go",
+        "model_hub_test.go",
+    ],
     embed = [":model_hub"],
     deps = ["@com_github_lmittmann_tint//:tint"],
 )

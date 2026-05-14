@@ -25,12 +25,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync/atomic"
 
 	"github.com/bytedance/sonic"
 	"golang.org/x/sync/errgroup"
 	"resty.dev/v3"
 
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/downloader"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
@@ -355,6 +357,33 @@ func StartDownloadURL(ctx context.Context, urlStr, outputDir, dstName string, si
 	}()
 
 	return resCh, errCh
+}
+
+func NormalizeModelName(name string) (string, string) {
+	// split quant
+	parts := strings.SplitN(name, ":", 2)
+	name = parts[0]
+	quant := ""
+	if len(parts) == 2 {
+		quant = strings.ToUpper(parts[1])
+	}
+
+	// support shortcuts
+	if actualName, exists := config.GetModelMapping(name); exists {
+		return actualName, quant
+	}
+
+	// support qwen3 -> qualcomm/qwen3
+	if !strings.Contains(name, "/") {
+		return "qualcomm/" + name, quant
+	}
+
+	// support https://huggingface.co/Qwen/Qwen3-0.6B-GGUF -> Qwen/Qwen3-0.6B-GGUF
+	if strings.HasPrefix(name, HF_ENDPOINT) {
+		return strings.TrimPrefix(name, HF_ENDPOINT+"/"), quant
+	}
+
+	return name, quant
 }
 
 func getHub(ctx context.Context, modelName string) (ModelHub, error) {

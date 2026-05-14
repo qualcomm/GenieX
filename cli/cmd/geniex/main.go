@@ -22,13 +22,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
@@ -119,33 +117,6 @@ func checkDependency() {
 			fmt.Println(render.GetTheme().Warning.Sprintf("Please install it manually for your OS: %s\n", runtime.GOOS))
 		}
 	}
-}
-
-func normalizeModelName(name string) (string, string) {
-	// split quant
-	parts := strings.SplitN(name, ":", 2)
-	name = parts[0]
-	quant := ""
-	if len(parts) == 2 {
-		quant = strings.ToUpper(parts[1])
-	}
-
-	// support shortcuts
-	if actualName, exists := config.GetModelMapping(name); exists {
-		return actualName, quant
-	}
-
-	// support qwen3 -> qualcomm/qwen3
-	if !strings.Contains(name, "/") {
-		return "qualcomm/" + name, quant
-	}
-
-	// support https://huggingface.co/Qwen/Qwen3-0.6B-GGUF -> Qwen/Qwen3-0.6B-GGUF
-	if strings.HasPrefix(name, model_hub.HF_ENDPOINT) {
-		return strings.TrimPrefix(name, model_hub.HF_ENDPOINT+"/"), quant
-	}
-
-	return name, quant
 }
 
 // main is the entry point that executes the root command.
