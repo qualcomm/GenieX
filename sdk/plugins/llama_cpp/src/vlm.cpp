@@ -7,6 +7,7 @@
 #include "chat.h"
 #include "common.h"
 #include "geniex.h"
+#include "htp_session.h"
 #include "llama.h"
 #include "logging.h"
 #include "mtmd-helper.h"
@@ -31,10 +32,15 @@ int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
-    llama_model_params mpar = llama_model_default_params();
-    mpar.use_mmap           = false;
-    mpar.use_mlock          = false;
-    mpar.n_gpu_layers       = input->config.n_gpu_layers;
+    // See llm.cpp for the rationale behind the HTP session release/reacquire
+    // dance. Any llama.cpp class that might load onto HTP must participate.
+    htp::reacquire_before_load();
+
+    llama_model_params mpar            = llama_model_default_params();
+    ggml_backend_dev_t device_array[2] = {nullptr, nullptr};
+    mpar.use_mmap                      = false;
+    mpar.use_mlock                     = false;
+    mpar.n_gpu_layers                  = input->config.n_gpu_layers;
     if (input->device_id) {
         auto device = ggml_backend_dev_by_name(input->device_id);
         if (!device) {
@@ -42,12 +48,15 @@ int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
             GENIEX_LOG_ERROR("Device '{}' not found", input->device_id);
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         } else {
-            // Create a NULL-terminated array with the device
-            static ggml_backend_dev_t device_array[2];
             device_array[0] = device;
-            device_array[1] = nullptr;  // NULL-terminated
             mpar.devices    = device_array;
         }
+    }
+
+    if (htp::devices_include_htp(device_array)) {
+        htp_guard_.mark_htp();
+    } else if (mpar.n_gpu_layers != 0 && htp::htp_backend_present()) {
+        htp_guard_.mark_htp();
     }
 
     this->model = llama_model_load_from_file(input->model_path, mpar);
