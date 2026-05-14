@@ -23,9 +23,7 @@ if(WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
             RENAME "libomp140.aarch64.dll")
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
-   AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64"
-   AND CMAKE_CROSSCOMPILING)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Qualcomm Linux does not ship libgomp; bundle it so the wheel is self-contained.
     execute_process(
         COMMAND ${CMAKE_C_COMPILER} -print-file-name=libgomp.so.1
