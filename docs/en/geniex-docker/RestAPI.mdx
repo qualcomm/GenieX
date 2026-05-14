@@ -45,39 +45,6 @@ The GenieXSDK REST API provides OpenAI-compatible endpoints for various AI tasks
 All API endpoints, request/response formats, and usage examples are documented in the [CLI REST API page](/en/geniex-cli/GenieXAPI). The API interface is identical whether running via CLI or Docker - only the server startup method differs.
 </Info>
 
-## **Python Example (OpenAI SDK)**
-
-Because the server speaks the OpenAI protocol, you can point the official `openai` Python client at the local endpoint and reuse any existing OpenAI code. Install the SDK with `pip install openai`, then:
-
-```python python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://127.0.0.1:18181/v1",
-    api_key="geniex",  # any non-empty string; the server does not check it
-)
-
-stream = client.chat.completions.create(
-    model="Qwen/Qwen3-0.6B-GGUF:Q4_0",  # org/repo[:quant] — Q4_0 has the best Hexagon NPU support
-    messages=[
-        {"role": "user", "content": "Hello! Briefly introduce yourself."},
-    ],
-    max_tokens=256,
-    temperature=0.7,
-    stream=True,
-)
-
-for chunk in stream:
-    delta = chunk.choices[0].delta.content
-    if delta:
-        print(delta, end="", flush=True)
-print()
-```
-
-<Note>
-Replace the `model` value with a model you have already pulled into the container's `/data` volume. `geniex serve` does not auto-download models. The optional `:<quant>` suffix selects a quantization variant (e.g. `Q4_0`, `Q4_K_M`, `Q8_0`) — `Q4_0` is recommended for the llama.cpp Hexagon NPU backend.
-</Note>
-
 <br />
 
 <Feedback/>
