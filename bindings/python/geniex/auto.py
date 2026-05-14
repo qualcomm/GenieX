@@ -21,9 +21,11 @@ import os
 import sys
 from ctypes import byref, c_void_p
 
+from . import _progress
 from . import model_manager as _mm
 from ._ffi._api import _check, ensure_init, get_plugin_list, load_library, resolve_device
 from ._ffi._types import geniex_LlmCreateInput, geniex_ModelConfig, geniex_VlmCreateInput
+from .model_manager import ProgressCallback
 from .modeling import GeniexLLM, GeniexVLM
 
 _logger = logging.getLogger('geniex')
@@ -119,6 +121,7 @@ def _resolve_model_sources(
     model_name_or_path: str,
     quant: str | None,
     hf_token: str | None,
+    progress: ProgressCallback | bool | None,
 ) -> tuple[str, str | None, str | None, _mm.ModelPaths | None]:
     if os.path.exists(model_name_or_path):
         return _resolve_local_anchor(model_name_or_path), None, None, None
@@ -132,12 +135,17 @@ def _resolve_model_sources(
     except Exception:  # noqa: BLE001 — any failure = cache miss, fall through
         pass
 
-    paths = _mm.ensure_cached(
-        model_name_or_path,
-        quant=quant,
-        hub='auto',
-        hf_token=hf_token,
-    )
+    printer = _progress.resolve(progress)
+    try:
+        paths = _mm.ensure_cached(
+            model_name_or_path,
+            quant=quant,
+            hub='auto',
+            hf_token=hf_token,
+            on_progress=printer,
+        )
+    finally:
+        _progress.finish(printer)
     return paths.model_path, paths.mmproj_path, paths.tokenizer_path, paths
 
 
@@ -180,6 +188,7 @@ class AutoModelForCausalLM:
         license_id: str | None = None,
         license_key: str | None = None,
         hf_token: str | None = None,
+        progress: ProgressCallback | bool | None = None,
         **kwargs,
     ) -> GeniexLLM:
         """Load a causal LM by HF repo id, alias, or local path.
@@ -194,9 +203,12 @@ class AutoModelForCausalLM:
             tokenizer_path: Optional tokenizer path override.
             license_id / license_key: NPU licence credentials.
             hf_token: HuggingFace bearer token; falls back to ``GENIEX_HFTOKEN`` env.
+            progress: Download progress display. ``None`` (default) auto-detects
+                Jupyter / TTY / non-interactive; ``False`` silences output; a
+                callable is used as-is (see :data:`model_manager.ProgressCallback`).
         """
         ensure_init()
-        model_path, _mmproj, _tok, paths = _resolve_model_sources(model_name_or_path, quant, hf_token)
+        model_path, _mmproj, _tok, paths = _resolve_model_sources(model_name_or_path, quant, hf_token, progress)
         # QAIRT uses `model_name` as a registry key (e.g. `qwen3_4b`), not org/repo —
         # carry the cached manifest's ModelName forward when the caller didn't override.
         resolved_name = model_name or (
@@ -253,6 +265,7 @@ class AutoModelForVision2Seq:
         license_id: str | None = None,
         license_key: str | None = None,
         hf_token: str | None = None,
+        progress: ProgressCallback | bool | None = None,
         **kwargs,
     ) -> GeniexVLM:
         """Load a VLM by HF repo id, alias, or local path.
@@ -261,7 +274,7 @@ class AutoModelForVision2Seq:
         ``mmproj_path`` is an optional override for the multimodal projector file.
         """
         ensure_init()
-        model_path, _mmproj, _tok, paths = _resolve_model_sources(model_name_or_path, quant, hf_token)
+        model_path, _mmproj, _tok, paths = _resolve_model_sources(model_name_or_path, quant, hf_token, progress)
         resolved_name = paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
         effective_device_map = device_map
         if (not device_map or device_map == 'auto') and paths and paths.plugin_id:

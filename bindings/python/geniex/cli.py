@@ -34,6 +34,7 @@ from geniex import (
     AutoModelForCausalLM,
     AutoModelForVision2Seq,
     GeniexError,
+    _progress,
     get_device_list,
     get_plugin_list,
     init,
@@ -84,33 +85,6 @@ def _parse_media(prompt: str) -> tuple[str, list[str], list[str]]:
     return cleaned.strip(), images, audios
 
 
-def _fmt_bytes(n: int) -> str:
-    if n < 0:
-        return '?'
-    size = float(n)
-    for unit in ('B', 'KiB', 'MiB', 'GiB'):
-        if size < 1024:
-            return f'{size:.1f}{unit}' if unit != 'B' else f'{int(size)}B'
-        size /= 1024
-    return f'{size:.1f}TiB'
-
-
-def _make_progress_printer():
-    def _cb(files):
-        parts = []
-        for f in files:
-            total = f.total_bytes
-            got = f.downloaded_bytes
-            pct = f' {got * 100 // total}%' if total > 0 else ''
-            parts.append(f'{f.file_name} {_fmt_bytes(got)}/{_fmt_bytes(total)}{pct}')
-        line = ' | '.join(parts)
-        sys.stderr.write('\r' + line.ljust(80)[:120])
-        sys.stderr.flush()
-        return True
-
-    return _cb
-
-
 def _ensure_downloaded(
     model: str,
     quant: str | None,
@@ -129,6 +103,7 @@ def _ensure_downloaded(
         raise SystemExit('error: --local-path is required when --hub localfs')
 
     result: dict = {}
+    printer = _progress.default_progress_printer()
 
     def _worker():
         try:
@@ -141,7 +116,7 @@ def _ensure_downloaded(
                     hf_token=os.environ.get('GENIEX_HFTOKEN'),
                     chipset=chipset,
                     display_name=display_name,
-                    on_progress=_make_progress_printer(),
+                    on_progress=printer,
                 )
                 key = f'{model}:{quant}' if quant else model
                 result['paths'] = _mm.get_paths(key)
@@ -151,7 +126,7 @@ def _ensure_downloaded(
                     quant=quant,
                     hub=hub,
                     hf_token=os.environ.get('GENIEX_HFTOKEN'),
-                    on_progress=_make_progress_printer(),
+                    on_progress=printer,
                 )
         except BaseException as e:  # noqa: BLE001 — forward to main thread
             result['error'] = e
@@ -163,11 +138,11 @@ def _ensure_downloaded(
         while t.is_alive():
             t.join(timeout=0.1)
     except KeyboardInterrupt:
-        sys.stderr.write('\n(aborted — partial download preserved; rerun to resume)\n')
+        _progress.finish(printer)
+        sys.stderr.write('(aborted — partial download preserved; rerun to resume)\n')
         sys.stderr.flush()
         os._exit(130)
-    sys.stderr.write('\n')
-    sys.stderr.flush()
+    _progress.finish(printer)
     if 'error' in result:
         raise result['error']
     return result.get('paths')
