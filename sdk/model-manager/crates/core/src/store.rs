@@ -149,16 +149,51 @@ impl Store {
     }
 
     pub fn remove(&self, name_with_quant: &str) -> Result<()> {
-        // Accept an optional ":quant" suffix (mirrors get_paths) so bindings
-        // can forward the user's raw "org/repo:quant" argument without
-        // tripping validate_model_name or producing a Windows path with ':'.
-        let (name, _) = split_quant(name_with_quant);
+        // Accept an optional ":quant" suffix:
+        //   "org/repo"         -> remove the whole model directory
+        //   "org/repo:quant"   -> remove only that quant's .gguf and drop it
+        //                        from the manifest; delete the whole directory
+        //                        only when that was the last remaining quant,
+        //                        otherwise mmproj/tokenizer/extras stay shared
+        //                        with the other quants.
+        let (name, quant) = split_quant(name_with_quant);
         validate_model_name(name)?;
         self.with_model_lock(name, || {
             let dir = self.cfg.model_dir(name);
-            if dir.exists() {
-                fs::remove_dir_all(&dir)?;
+            let Some(quant) = quant else {
+                if dir.exists() {
+                    fs::remove_dir_all(&dir)?;
+                }
+                return Ok(());
+            };
+
+            let manifest_path = dir.join(MANIFEST_FILE);
+            if !manifest_path.exists() {
+                return Err(Error::ModelNotFound(name.to_string()));
             }
+            let mut manifest = read_manifest(&manifest_path)?;
+            let file_info = manifest
+                .model_file
+                .get(&quant)
+                .ok_or_else(|| Error::QuantNotFound(quant.clone(), name.to_string()))?
+                .clone();
+
+            if manifest.model_file.len() == 1 {
+                fs::remove_dir_all(&dir)?;
+                return Ok(());
+            }
+
+            if !file_info.name.is_empty() {
+                let file_path = dir.join(&file_info.name);
+                match fs::remove_file(&file_path) {
+                    Ok(()) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(e) => return Err(e.into()),
+                }
+            }
+            manifest.model_file.remove(&quant);
+            let data = serde_json::to_string(&manifest)?;
+            fs::write(&manifest_path, data)?;
             Ok(())
         })
     }
@@ -289,14 +324,67 @@ mod tests {
     }
 
     #[test]
-    fn remove_accepts_name_with_quant() {
-        // Bindings forward the user's raw "org/repo:quant" arg; remove must
-        // strip the suffix (not probe a path containing ':' which is invalid
-        // on Windows: ERROR_DIRECTORY / os error 267).
+    fn remove_last_quant_deletes_whole_dir() {
+        // Single-quant manifest: rm "name:Q4_K_M" should nuke the whole dir
+        // rather than leave an orphan manifest with an empty ModelFile map.
+        // Also guards against the Windows os-error-267 regression (colon in path).
         let store = make_store();
         store.write_manifest(&sample_manifest("Org/WithQuant")).unwrap();
         store.remove("Org/WithQuant:Q4_K_M").unwrap();
         assert!(!store.cfg.model_dir("Org/WithQuant").exists());
+    }
+
+    fn multi_quant_manifest(name: &str) -> ModelManifest {
+        let mut m = sample_manifest(name);
+        m.model_file.insert(
+            "Q8_0".to_string(),
+            ModelFileInfo {
+                name: "model-Q8_0.gguf".to_string(),
+                downloaded: true,
+                size: 200,
+            },
+        );
+        m.mmproj_file = ModelFileInfo {
+            name: "mmproj.gguf".to_string(),
+            downloaded: true,
+            size: 50,
+        };
+        m
+    }
+
+    fn touch(p: &std::path::Path) {
+        fs::write(p, b"x").unwrap();
+    }
+
+    #[test]
+    fn remove_quant_keeps_other_quants_and_shared_files() {
+        let store = make_store();
+        let m = multi_quant_manifest("Org/Multi");
+        store.write_manifest(&m).unwrap();
+        let dir = store.cfg.model_dir("Org/Multi");
+        touch(&dir.join("model-Q4_K_M.gguf"));
+        touch(&dir.join("model-Q8_0.gguf"));
+        touch(&dir.join("mmproj.gguf"));
+
+        store.remove("Org/Multi:Q4_K_M").unwrap();
+
+        assert!(dir.exists());
+        assert!(!dir.join("model-Q4_K_M.gguf").exists());
+        assert!(dir.join("model-Q8_0.gguf").exists());
+        assert!(dir.join("mmproj.gguf").exists());
+        let after = store.get_manifest("Org/Multi").unwrap();
+        assert!(!after.model_file.contains_key("Q4_K_M"));
+        assert!(after.model_file.contains_key("Q8_0"));
+    }
+
+    #[test]
+    fn remove_unknown_quant_errors() {
+        let store = make_store();
+        store.write_manifest(&multi_quant_manifest("Org/Multi2")).unwrap();
+        let err = store.remove("Org/Multi2:Q2_K").unwrap_err();
+        assert!(matches!(err, Error::QuantNotFound(..)), "got {err:?}");
+        // Nothing should have been touched.
+        assert!(store.cfg.model_dir("Org/Multi2").join(MANIFEST_FILE).exists());
     }
 
     #[test]
