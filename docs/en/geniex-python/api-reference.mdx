@@ -19,7 +19,7 @@ Factory for loading text-only causal language models. Returns a [`GeniexLLM`](#g
 from geniex import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
-    "Qualcomm/Qwen3-4B-Instruct",
+    "qualcomm/Qwen3-4B-Instruct",
     device_map="auto",
 )
 ```
@@ -53,7 +53,7 @@ Factory for loading vision-language / multimodal models. Returns a [`GeniexVLM`]
 ```python
 from geniex import AutoModelForVision2Seq
 
-model = AutoModelForVision2Seq.from_pretrained("qwen3vl", device_map="auto")
+model = AutoModelForVision2Seq.from_pretrained("qualcomm/Qwen2.5-7B-Instruct", device_map="qairt")
 ```
 
 ### `from_pretrained()`
