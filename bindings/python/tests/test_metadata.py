@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import geniex
+from geniex import ProfileData
 
 
 def test_version_nonempty(geniex_session):
@@ -87,3 +88,33 @@ def test_exports_public_surface():
     ]:
         assert name in geniex.__all__, f'{name} missing from geniex.__all__'
         assert hasattr(geniex, name), f'{name} missing from geniex'
+
+
+def test_profile_data_repr_has_units():
+    p = ProfileData(
+        ttft=850,
+        prompt_time=120_500,
+        decode_time=1_850_000,
+        prompt_tokens=128,
+        generated_tokens=256,
+        prefill_speed=533.3,
+        decode_speed=138.4,
+        stop_reason='eos',
+    )
+    s = repr(p)
+    assert 'ttft=850 µs' in s
+    assert 'prompt_time=120.5 ms' in s
+    assert 'decode_time=1.85 s' in s
+    assert 'prompt_tokens=128 tok' in s
+    assert 'generated_tokens=256 tok' in s
+    assert 'prefill_speed=533.3 tok/s' in s
+    assert 'decode_speed=138.4 tok/s' in s
+    assert 'stop_reason=eos' in s
+
+
+def test_profile_data_repr_zero_defaults():
+    s = repr(ProfileData())
+    assert 'ttft=0 µs' in s
+    assert 'prompt_time=0 µs' in s
+    assert 'decode_time=0 µs' in s
+    assert 'stop_reason=None' in s
