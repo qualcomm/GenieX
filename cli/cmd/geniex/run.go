@@ -32,6 +32,7 @@ import (
 	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
@@ -76,7 +77,7 @@ func run() *cobra.Command {
 	})
 
 	runCmd.Run = func(cmd *cobra.Command, args []string) {
-		name, quant := normalizeModelName(args[0])
+		name, quant := model_hub.NormalizeModelName(args[0])
 		if quant != "" {
 			name = name + ":" + quant
 		}

@@ -24,9 +24,9 @@ import (
 
 	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
-	"github.com/qcom-it-nexa-ai/geniex/cli/server/utils"
 )
 
 // KeepAliveGet retrieves a model from the keepalive cache or creates it if not found
@@ -108,7 +108,7 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 	keepAlive.Lock()
 	defer keepAlive.Unlock()
 
-	name, quant := utils.NormalizeModelName(name)
+	name, quant := model_hub.NormalizeModelName(name)
 	slog.Debug("KeepAliveGet", "name", name, "quant", quant, "param", param)
 
 	s := store.Get()
