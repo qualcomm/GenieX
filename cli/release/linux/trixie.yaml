@@ -23,6 +23,5 @@ archs:
 packages:
   - "ca-certificates"
   - "libatomic1"
-  - "libgomp1"
   - "libglib2.0-0t64"
   - "sox"
