@@ -19,11 +19,13 @@ namespace geniex {
 // ggml_backend_hexagon_reacquire_sessions so the cached device pointers in
 // ggml-backend-reg have live sessions again.
 //
-// Classes that may load a model on the HTP backend (LlamaLlm / LlamaVlm /
-// LlamaCppEmbedding / LlamaCppReranker) own an htp::SessionGuard with RAII
-// semantics: call reacquire_before_load() before llama_model_load_from_file,
-// decide uses_htp from the device array + n_gpu_layers, and the destructor
-// releases when it was the last live user.
+// Classes that may load on HTP (LlamaLlm / LlamaVlm / LlamaCppEmbedding /
+// LlamaCppReranker) own an htp::SessionGuard with RAII semantics: call
+// reacquire_before_load() before llama_model_load_from_file, mark_htp() when
+// the HTP backend is registered, and the destructor releases when it was the
+// last live user. Tracking is registry-scoped (not device-scoped) because
+// llama.cpp opens HTP FastRPC channels at ggml_hexagon_registry construction
+// time regardless of per-load device_id/n_gpu_layers.
 namespace htp {
 
 // Recreate any HTP sessions that were released by a prior handoff. No-op if
@@ -31,13 +33,10 @@ namespace htp {
 // every llama.cpp load.
 void reacquire_before_load();
 
-// Scan the ggml backend registry for a backend named "HTP". Used by callers
-// that take the hybrid path (n_gpu_layers != 0, no explicit device_id).
+// Returns true iff the ggml backend registry has a backend named "HTP".
+// When true, llama.cpp has live FastRPC channels to CDSP that need to be
+// torn down before a QAIRT plugin can take over.
 bool htp_backend_present();
-
-// Returns true if any device in `device_array` belongs to the HTP backend.
-// `device_array` must be nullptr-terminated.
-bool devices_include_htp(ggml_backend_dev_t* device_array);
 
 class SessionGuard {
    public:
