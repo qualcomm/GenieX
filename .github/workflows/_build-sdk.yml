@@ -40,7 +40,7 @@ jobs:
           - platform: linux-arm64
             runner: ubuntu-latest
             preset: arm64-linux-snapdragon-release
-            container_image: ghcr.io/qcom-ai-hub/geniex-toolchain-linux:v0.0.1
+            container_image: ghcr.io/qcom-ai-hub/geniex-toolchain-linux:v0.0.2
           - platform: android-arm64
             runner: ubuntu-latest
             preset: arm64-android-snapdragon-release

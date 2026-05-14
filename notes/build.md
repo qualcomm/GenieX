@@ -96,7 +96,7 @@ docker run --rm -u $(id -u):$(id -g) \
     --workdir /workspace/sdk \
     -e CCACHE_DIR=/workspace/.ccache \
     --platform linux/amd64 \
-    ghcr.io/qcom-ai-hub/geniex-toolchain-linux:v0.0.1 \
+    ghcr.io/qcom-ai-hub/geniex-toolchain-linux:v0.0.2 \
     bash -c 'cmake --preset arm64-linux-snapdragon-debug -B build-linux . \
       && cmake --build build-linux -j \
       && cmake --install build-linux --prefix pkg-geniex'
@@ -110,7 +110,7 @@ docker run --rm -it -u $(id -u):$(id -g) \
     --workdir /workspace/sdk \
     -e CCACHE_DIR=/workspace/.ccache \
     --platform linux/amd64 \
-    ghcr.io/qcom-ai-hub/geniex-toolchain-linux:v0.0.1 bash
+    ghcr.io/qcom-ai-hub/geniex-toolchain-linux:v0.0.2 bash
 # then, inside the container:
 cmake --preset arm64-linux-snapdragon-debug -B build-linux .
 cmake --build build-linux -j
