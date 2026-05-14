@@ -34,7 +34,7 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 )
 
-func registerAIHub() {
+func registerModelHub() {
 	s := store.Get()
 	model_hub.RegisterHub(model_hub.NewHuggingFace())
 	model_hub.RegisterHub(model_hub.NewAIHub(
@@ -62,10 +62,7 @@ func RootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use: "geniex",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			// log
-			common.ApplyLogLevel()
-
-			registerAIHub()
+			registerModelHub()
 
 			subCmd := cmd.CalledAs()
 			if !skipUpdate {
@@ -153,6 +150,9 @@ func normalizeModelName(name string) (string, string) {
 
 // main is the entry point that executes the root command.
 func main() {
+	// log
+	common.ApplyLogLevel()
+
 	if err := RootCmd().Execute(); err != nil {
 		slog.Error("geniex failed", "err", err)
 		os.Exit(1)
