@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <string_view>
 #include <vector>
 
 #if defined(_WIN32)
@@ -15,9 +16,41 @@
 #include "llama.h"
 #include "llm.h"
 #include "logging.h"
+#include "mtmd-helper.h"
 #include "plugin/Plugin.h"
 #include "rerank.h"
 #include "vlm.h"
+
+namespace {
+
+void ggml_to_geniex_log(ggml_log_level l, const char* t, void*) {
+    geniex_LogLevel level;
+    switch (l) {
+        case GGML_LOG_LEVEL_DEBUG:
+            level = GENIEX_LOG_LEVEL_DEBUG;
+            break;
+        case GGML_LOG_LEVEL_INFO:
+            level = GENIEX_LOG_LEVEL_INFO;
+            break;
+        case GGML_LOG_LEVEL_WARN:
+            level = GENIEX_LOG_LEVEL_WARN;
+            break;
+        case GGML_LOG_LEVEL_ERROR:
+            level = GENIEX_LOG_LEVEL_ERROR;
+            break;
+        case GGML_LOG_LEVEL_CONT:
+            level = GENIEX_LOG_LEVEL_DEBUG;
+            break;
+        default:
+            return;
+    }
+    std::string_view s = t ? t : "";
+    while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.remove_suffix(1);
+    if (s.empty()) return;
+    GENIEX_LEVEL_LOG(level, "{}", s);
+}
+
+}  // namespace
 
 namespace geniex {
 
@@ -25,18 +58,8 @@ class LlamaPlugin : public Plugin {
    public:
     LlamaPlugin() {
         GENIEX_LOG_TRACE("creating and initializing llama plugin");
-        llama_log_set(
-            [](ggml_log_level l, const char* t, void*) {
-#ifdef GENIEX_DEBUG
-                if (l < 1 || l > 4) return;
-#else   // GENIEX_DEBUG
-                if (l < 3 || l > 4) return;
-#endif  // GENIEX_DEBUG
-                std::string_view s = t ? t : "";
-                while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.remove_suffix(1);
-                GENIEX_LEVEL_LOG(static_cast<geniex_LogLevel>(l - 1), "{}", s);
-            },
-            nullptr);
+        llama_log_set(ggml_to_geniex_log, nullptr);
+        mtmd_helper_log_set(ggml_to_geniex_log, nullptr);
 
         std::filesystem::path backend_dir;
 #if defined(_WIN32)

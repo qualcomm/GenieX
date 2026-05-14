@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from ctypes import byref, c_void_p
 
 from . import _progress
@@ -78,10 +77,9 @@ def resolve_device_map(
         if device_id.lower() in _KNOWN_ALIASES:
             return _call_sdk(plugin_id, model_name, device_id.lower())
         if plugin_id == PLUGIN_QAIRT and device_id.upper() != 'NPU':
-            print(
-                f'warning: qairt plugin only supports NPU inference; '
-                f'ignoring device_map={device_map!r} and running on NPU',
-                file=sys.stderr,
+            _logger.warning(
+                'qairt plugin only supports NPU inference; ignoring device_map=%r and running on NPU',
+                device_map,
             )
             return plugin_id, 'NPU', None
         return plugin_id, device_id, None
@@ -98,7 +96,7 @@ def _call_sdk(
     # from "alias passed through" and surface the latter as None.
     device_id, ngl, warning = resolve_device(plugin_id, model_name, alias, -1)
     if warning:
-        print(f'warning: {warning}', file=sys.stderr)
+        _logger.warning('%s', warning)
     ngl_override: int | None = None if ngl == -1 else ngl
     return plugin_id, device_id, ngl_override
 
