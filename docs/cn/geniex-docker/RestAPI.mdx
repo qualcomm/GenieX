@@ -13,11 +13,11 @@ import Feedback from '/snippets/page-feedback.mdx';
 export NEXA_TOKEN="YOUR_LONG_TOKEN_HERE"
 docker run --rm -d -p 18181:18181 --privileged \
   -v /path/to/data:/data \
+  -v /usr/lib:/opt/qcom-lib:ro \
   -v /etc/machine-id:/etc/machine-id:ro \
   -e NEXA_TOKEN \
   geniex-ai/geniexsdk serve
 ```
-
 服务器默认运行在 `http://127.0.0.1:18181`。保持容器运行，从另一个终端或应用发送请求。
 
 <Info>

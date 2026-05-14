@@ -13,11 +13,11 @@ To use the API, first start the GenieXSDK Docker container in server mode:
 export NEXA_TOKEN="YOUR_LONG_TOKEN_HERE"
 docker run --rm -d -p 18181:18181 --privileged \
   -v /path/to/data:/data \
+  -v /usr/lib:/opt/qcom-lib:ro \
   -v /etc/machine-id:/etc/machine-id:ro \
   -e NEXA_TOKEN \
   geniex-ai/geniexsdk serve
 ```
-
 The server runs on `http://127.0.0.1:18181` by default. Keep the container running, and make your requests from another terminal or application.
 
 <Info>
