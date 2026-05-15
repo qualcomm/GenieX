@@ -40,6 +40,7 @@ from geniex import (
     init,
     resolve_device_map,
 )
+from geniex.auto import _apply_plugin_hint
 
 _mm = geniex.model_manager
 
@@ -303,7 +304,11 @@ def _cmd_chat(args: argparse.Namespace) -> int:
     elapsed = time.monotonic() - t0
     is_vlm = isinstance(model, GeniexVLM)
     model_type = 'vlm' if is_vlm else 'llm'
-    plugin_id, device_id, _ngl = resolve_device_map(args.device, args.model)
+    try:
+        manifest_plugin = _mm.get_paths(args.model).plugin_id
+    except GeniexError:
+        manifest_plugin = None
+    plugin_id, device_id, _ngl = resolve_device_map(_apply_plugin_hint(args.device, manifest_plugin), args.model)
     where = f'{plugin_id}:{device_id}' if plugin_id and device_id else (plugin_id or args.device)
     print(f'{_DIM}done ({model_type}, {elapsed:.1f}s, {where}){_RESET}')
 

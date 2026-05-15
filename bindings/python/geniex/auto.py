@@ -44,6 +44,23 @@ _ALIAS_OWNERS = {
 }
 
 
+def _apply_plugin_hint(device_map: str, plugin_id: str | None) -> str:
+    """Bind a bare alias to the manifest's plugin so ``device_map='npu'`` on a
+    cached llama_cpp model resolves to ``llama_cpp:npu`` instead of being
+    captured by the static alias-owner table.
+
+    No-op when the manifest doesn't carry a plugin (e.g. user passed a raw
+    local path) — alias resolution then falls back to ``_ALIAS_OWNERS``.
+    """
+    if not plugin_id:
+        return device_map
+    if not device_map or device_map == 'auto':
+        return plugin_id
+    if device_map.lower() in _KNOWN_ALIASES:
+        return f'{plugin_id}:{device_map.lower()}'
+    return device_map
+
+
 def resolve_device_map(
     device_map: str,
     model_name: str | None = None,
@@ -259,9 +276,7 @@ class AutoModelForCausalLM:
         resolved_name = model_name or (
             paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
         )
-        effective_device_map = device_map
-        if (not device_map or device_map == 'auto') and paths and paths.plugin_id:
-            effective_device_map = paths.plugin_id
+        effective_device_map = _apply_plugin_hint(device_map, paths.plugin_id if paths else None)
         plugin_id, device_id, ngl_override = resolve_device_map(effective_device_map, resolved_name)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
@@ -341,9 +356,7 @@ class AutoModelForVision2Seq:
         resolved_name = model_name or (
             paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
         )
-        effective_device_map = device_map
-        if (not device_map or device_map == 'auto') and paths and paths.plugin_id:
-            effective_device_map = paths.plugin_id
+        effective_device_map = _apply_plugin_hint(device_map, paths.plugin_id if paths else None)
         plugin_id, device_id, ngl_override = resolve_device_map(effective_device_map, resolved_name)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
