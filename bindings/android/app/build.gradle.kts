@@ -69,20 +69,18 @@ val copyBridgeLibs = tasks.register<Copy>("copyBridgeLibs") {
         rename("libgeniex_plugin\\.so", "libgeniex_plugin_llama_cpp.so")
     }
     from(File(libDir, "qairt")) {
-        include(
-            "libgeniex_core.so",
-            "libgeniex_plugin.so",
-            "libgeniex_vlm.so",
-            "libgeniex-proc.so",
-            "libgeniex-proc-vision.so",
-        )
+        // Pull every top-level .so so new transitive deps in libgeniex_plugin.so
+        // (e.g. libgeniex_vlm.so, libgeniex-proc.so) get packaged automatically.
+        // htp-files/ is excluded — see comment below.
+        include("*.so")
+        exclude("htp-files/**")
         rename("libgeniex_plugin\\.so", "libgeniex_plugin_qairt.so")
     }
-    // Do NOT copy from qairt/htp-files/: that dir is populated by the
-    // Windows CLI package install and ships Hexagon DSP (32-bit)
-    // binaries whose basenames collide with the Android CPU-side libs
-    // (libQnnSystem.so, libQnnSaver.so). Android's loader then rejects
-    // them with "is 32-bit instead of 64-bit" when QAIRT dlopens them.
+    // Do NOT copy from qairt/htp-files/: on Windows CLI packages it ships
+    // Hexagon DSP (32-bit) binaries whose basenames collide with the
+    // Android CPU-side libs (libQnnSystem.so, libQnnSaver.so), and Android's
+    // loader then rejects them with "is 32-bit instead of 64-bit" when
+    // QAIRT dlopens them.
     //
     // Instead, pull from the qairt submodule's Android third-party dir
     // which ships both the ARM64 CPU libs and DSP skels under
