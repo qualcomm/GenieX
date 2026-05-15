@@ -291,7 +291,7 @@ func pullModel(name string, quant string) error {
 	if modelHub != "" {
 		switch strings.ToLower(modelHub) {
 		case "aihub":
-			// model_hub.SetHub(model_hub.NewAIHub())
+			model_hub.SetHub(model_hub.NewAIHub(chipsetGet(s)))
 		case "hf", "huggingface":
 			model_hub.SetHub(model_hub.NewHuggingFace())
 		case "local", "localfs":
@@ -304,8 +304,11 @@ func pullModel(name string, quant string) error {
 		}
 	}
 
+	// Resolve chipset before the spinner — chipsetEnsure may pop an
+	// interactive device picker, which can't share the terminal with a
+	// spinner.
 	if _, ok := aihub.IsAIHubName(name); ok {
-		if err := ensureChipset(context.TODO()); err != nil {
+		if err := chipsetEnsure(context.TODO(), s); err != nil {
 			return err
 		}
 	}

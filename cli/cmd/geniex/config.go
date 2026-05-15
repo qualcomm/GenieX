@@ -128,51 +128,48 @@ func configSetCmd() *cobra.Command {
 	}
 }
 
-// ensureChipset makes sure ConfigKeyDevice is populated before an AI Hub
-// pull. If it's already set, it's a no-op. Otherwise it first tries a
-// silent host probe (currently Windows-only, reading the CPU brand from
-// the registry); on failure it falls back to the interactive pickDevice.
-func ensureChipset(ctx context.Context) error {
-	if v, _, _ := store.Get().ConfigGet(store.ConfigKeyDevice); v != "" {
+// chipsetGet returns a closure that reads the cached chipset config key.
+// Returns "" when unset — callers must run chipsetEnsure first if they
+// need a real value. Kept passive so AIHub can hold it across a spinner
+// without triggering UI from inside the spinner.
+func chipsetGet(s *store.Store) func() string {
+	return func() string {
+		v, _, _ := s.ConfigGet(store.ConfigKeyDevice)
+		return v
+	}
+}
+
+// chipsetEnsure makes sure a chipset is configured: cached value wins,
+// then host probe, then interactive picker. Returns an error if the user
+// bails on the picker. Must be called before any flow that surrounds the
+// AIHub fetch with a spinner.
+func chipsetEnsure(ctx context.Context, s *store.Store) error {
+	if v, _, _ := s.ConfigGet(store.ConfigKeyDevice); v != "" {
 		return nil
 	}
-	if canonical, ok := autoDetectChipset(ctx); ok {
-		if err := store.Get().ConfigSet(store.ConfigKeyDevice, canonical); err == nil {
-			fmt.Println(render.GetTheme().Info.Sprintf("device = %s (auto-detected)", canonical))
-			return nil
+
+	plat, err := loadPlatform(ctx)
+	if err != nil {
+		return err
+	}
+
+	if alias, ok := sochost.DetectChipsetAlias(); ok {
+		if canonical, err := aihub.ResolveChipset(plat, alias); err == nil {
+			if err := s.ConfigSet(store.ConfigKeyDevice, canonical); err == nil {
+				fmt.Println(render.GetTheme().Info.Sprintf("device = %s (auto-detected)", canonical))
+				return nil
+			}
 		}
 	}
+
 	fmt.Println(render.GetTheme().Info.Sprint("No device configured. Please select your device first."))
-	return pickDevice(ctx)
+	if err := pickDeviceFrom(plat); err != nil {
+		return fmt.Errorf("device chipset not configured (run: geniex config set device <chipset>): %w", err)
+	}
+	return nil
 }
 
-// autoDetectChipset probes the host for a Snapdragon CPU and, on success,
-// resolves the alias against platform.json into the canonical chipset
-// name AI Hub uses as an asset key. Returns false on any failure so the
-// caller falls back to interactive selection.
-func autoDetectChipset(ctx context.Context) (string, bool) {
-	alias, ok := sochost.DetectChipsetAlias()
-	if !ok {
-		return "", false
-	}
-	client := aihub.NewClient()
-	defer client.Close()
-
-	plat, err := client.LoadPlatformDirect(ctx)
-	if err != nil {
-		return "", false
-	}
-	canonical, err := aihub.ResolveChipset(plat, alias)
-	if err != nil {
-		return "", false
-	}
-	return canonical, true
-}
-
-// pickDevice fetches platform.json, filters devices by the host OS, and
-// presents an interactive selector. The selected device's chipset string is
-// stored under the "device" config key.
-func pickDevice(ctx context.Context) error {
+func loadPlatform(ctx context.Context) (*qaihm.PlatformInfo, error) {
 	client := aihub.NewClient()
 	defer client.Close()
 
@@ -182,9 +179,22 @@ func pickDevice(ctx context.Context) error {
 	spin.Stop()
 	if err != nil {
 		fmt.Println(render.GetTheme().Error.Sprintf("Failed to fetch device list: %s", err))
+		return nil, err
+	}
+	return plat, nil
+}
+
+func pickDevice(ctx context.Context) error {
+	plat, err := loadPlatform(ctx)
+	if err != nil {
 		return err
 	}
+	return pickDeviceFrom(plat)
+}
 
+// pickDeviceFrom presents an interactive selector over plat's devices for the
+// host OS, persisting the chosen chipset under the "device" config key.
+func pickDeviceFrom(plat *qaihm.PlatformInfo) error {
 	var osType qaihm.OperatingSystemType
 	switch runtime.GOOS {
 	case "windows":
@@ -197,17 +207,15 @@ func pickDevice(ctx context.Context) error {
 		return err
 	}
 
+	displayByChipset := map[string]string{}
 	var options []huh.Option[string]
 	for _, d := range plat.GetDevices() {
-		if d.GetOs().GetOstype() != osType {
+		if d.GetOs().GetOstype() != osType || d.GetChipset() == "" {
 			continue
 		}
-		if d.GetChipset() == "" {
-			continue
-		}
+		displayByChipset[d.GetChipset()] = d.GetName()
 		options = append(options, huh.NewOption(d.GetName(), d.GetChipset()))
 	}
-
 	if len(options) == 0 {
 		fmt.Println(render.GetTheme().Error.Sprint("No devices found for this operating system."))
 		return fmt.Errorf("no devices available")
@@ -226,16 +234,7 @@ func pickDevice(ctx context.Context) error {
 		fmt.Println(render.GetTheme().Error.Sprintf("Failed to save device: %s", err))
 		return err
 	}
-
-	// Find the display name for the confirmation message.
-	displayName := selected
-	for _, d := range plat.GetDevices() {
-		if d.GetChipset() == selected {
-			displayName = d.GetName()
-			break
-		}
-	}
-	fmt.Println(render.GetTheme().Info.Sprintf("device = %s (%s)", displayName, selected))
+	fmt.Println(render.GetTheme().Info.Sprintf("device = %s (%s)", displayByChipset[selected], selected))
 	return nil
 }
 
