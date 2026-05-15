@@ -126,8 +126,8 @@ New code MUST route log output through the existing channels — no raw
 | Android / JNI    | `android.util.Log` in Kotlin; JNI forwards through `geniex_set_log` |
 
 The user-facing control is `GENIEX_LOG` (`trace`/`debug`/`info`/`warn`/`error`/`none`),
-with bindings exposing an API override (`geniex.set_log_level` / `geniex_sdk.SetLogLevel` /
-`GeniexSdk.setLogLevel`).
+read by each binding's logger. Filtering happens on the binding side — the SDK
+forwards every log line to the registered callback.
 
 ## 5. Opening a PR
 

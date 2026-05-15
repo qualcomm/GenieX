@@ -192,19 +192,5 @@ class GeniexSdk private constructor() {
         fun getInstance() = instance ?: synchronized(this) {
             instance ?: GeniexSdk().also { instance = it }
         }
-
-        @JvmStatic
-        private external fun nativeSetLogLevel(level: String)
-
-        /**
-         * Set the SDK runtime log level. Accepted values:
-         * "trace", "debug", "info", "warn", "error", "none".
-         * Unknown values are ignored. Safe to call at any time after
-         * System.loadLibrary("npu_jni"); takes precedence over GENIEX_LOG.
-         */
-        @JvmStatic
-        fun setLogLevel(level: String) {
-            nativeSetLogLevel(level)
-        }
     }
 }

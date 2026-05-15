@@ -218,28 +218,3 @@ func go_log_wrap(level C.geniex_LogLevel, msg *C.char) {
 func EnableBridgeLog(enable bool) {
 	bridgeLogEnabled = enable
 }
-
-// SetLogLevel sets the SDK runtime log level threshold. Accepted values:
-// "trace", "debug", "info", "warn", "error", "none". Takes precedence over
-// the GENIEX_LOG environment variable. Unknown values are ignored.
-func SetLogLevel(level string) {
-	var cLevel C.geniex_LogLevel
-	switch level {
-	case "trace":
-		cLevel = C.GENIEX_LOG_LEVEL_TRACE
-	case "debug":
-		cLevel = C.GENIEX_LOG_LEVEL_DEBUG
-	case "info":
-		cLevel = C.GENIEX_LOG_LEVEL_INFO
-	case "warn":
-		cLevel = C.GENIEX_LOG_LEVEL_WARN
-	case "error":
-		cLevel = C.GENIEX_LOG_LEVEL_ERROR
-	case "none":
-		// Sentinel: above ERROR silences everything.
-		cLevel = C.geniex_LogLevel(C.GENIEX_LOG_LEVEL_ERROR + 1)
-	default:
-		return
-	}
-	C.geniex_set_log_level(cLevel)
-}

@@ -52,15 +52,6 @@ _LEVEL_WARN = 3
 _LEVEL_ERROR = 4
 _LEVEL_NONE = 5  # sentinel above ERROR silences SDK output entirely
 
-_LEVEL_STR_TO_INT = {
-    'trace': _LEVEL_TRACE,
-    'debug': _LEVEL_DEBUG,
-    'info': _LEVEL_INFO,
-    'warn': _LEVEL_WARN,
-    'error': _LEVEL_ERROR,
-    'none': _LEVEL_NONE,
-}
-
 _LEVEL_STR_TO_PY = {
     'trace': logging.DEBUG,
     'debug': logging.DEBUG,
@@ -95,22 +86,19 @@ def _sdk_log_bridge(level: int, msg_bytes):
 
 
 def set_log_level(level: str) -> None:
-    """Set both the ``geniex`` logger level and the SDK threshold.
+    """Set the ``geniex`` Python logger level.
 
     Accepts ``'trace' | 'debug' | 'info' | 'warn' | 'error' | 'none'``.
     Unknown values are ignored. Safe to call before or after :func:`init`.
     """
     level_norm = level.lower().strip() if level else ''
-    if level_norm not in _LEVEL_STR_TO_INT:
+    if level_norm not in _LEVEL_STR_TO_PY:
         return
     _logger.setLevel(_LEVEL_STR_TO_PY[level_norm])
-    _ensure_bound()
-    lib = load_library()
-    lib.geniex_set_log_level(c_int32(_LEVEL_STR_TO_INT[level_norm]))
 
 
 def install_log_callback() -> None:
-    """Register the SDK → logging bridge and sync with the ``GENIEX_LOG`` env var."""
+    """Register the SDK → logging bridge and seed the logger from ``GENIEX_LOG``."""
     global _log_cb_ref
     if _log_cb_ref is not None:
         return
@@ -123,9 +111,8 @@ def install_log_callback() -> None:
     requested = os.environ.get('GENIEX_LOG', '').strip().lower()
     if requested in {'off', '0', 'false'}:
         requested = 'none'
-    if requested in _LEVEL_STR_TO_INT:
+    if requested in _LEVEL_STR_TO_PY:
         _logger.setLevel(_LEVEL_STR_TO_PY[requested])
-        lib.geniex_set_log_level(c_int32(_LEVEL_STR_TO_INT[requested]))
 
 
 class GeniexError(Exception):
@@ -152,12 +139,6 @@ def _bind_all() -> None:
 
     lib.geniex_set_log.argtypes = [geniex_log_callback]
     lib.geniex_set_log.restype = c_int32
-
-    lib.geniex_set_log_level.argtypes = [c_int32]
-    lib.geniex_set_log_level.restype = c_int32
-
-    lib.geniex_get_log_level.argtypes = []
-    lib.geniex_get_log_level.restype = c_int32
 
     lib.geniex_init.argtypes = []
     lib.geniex_init.restype = c_int32

@@ -27,20 +27,18 @@ void ggml_to_geniex_log(ggml_log_level l, const char* t, void*) {
     geniex_LogLevel level;
     switch (l) {
         case GGML_LOG_LEVEL_DEBUG:
-            level = GENIEX_LOG_LEVEL_DEBUG;
+            level = GENIEX_LOG_LEVEL_TRACE;
             break;
         case GGML_LOG_LEVEL_INFO:
-            level = GENIEX_LOG_LEVEL_INFO;
-            break;
-        case GGML_LOG_LEVEL_WARN:
-            level = GENIEX_LOG_LEVEL_WARN;
-            break;
-        case GGML_LOG_LEVEL_ERROR:
-            level = GENIEX_LOG_LEVEL_ERROR;
-            break;
-        case GGML_LOG_LEVEL_CONT:
             level = GENIEX_LOG_LEVEL_DEBUG;
             break;
+        case GGML_LOG_LEVEL_WARN:
+            level = GENIEX_LOG_LEVEL_INFO;
+            break;
+        case GGML_LOG_LEVEL_ERROR:
+            level = GENIEX_LOG_LEVEL_WARN;
+            break;
+        case GGML_LOG_LEVEL_CONT:  // drop CONT level
         default:
             return;
     }
