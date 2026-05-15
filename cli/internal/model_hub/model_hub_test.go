@@ -18,11 +18,14 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/lmittmann/tint"
 )
 
+// MODEL_NAME is the well-known AI Hub model used by the network-dependent
+// tests below. They only run when -short is not set.
 const MODEL_NAME = "qualcomm/Qwen3-4B-Instruct-2507"
 
 func TestMain(m *testing.M) {
@@ -31,46 +34,39 @@ func TestMain(m *testing.M) {
 		Level:     slog.LevelDebug,
 	})))
 
-	// only test aihub; chipset getter returns a fixed Snapdragon X Elite
-	// since there is no store singleton in the test binary.
+	// Tests in this file need a real AIHub hub; chipset is hard-coded since
+	// there is no store singleton in the test binary.
 	hubs = []ModelHub{NewAIHub(
 		func() string { return "qualcomm-snapdragon-x-elite" },
-		os.TempDir(),
 	)}
 
 	os.Exit(m.Run())
 }
 
 func TestModelInfo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("network test")
+	}
 	files, mf, err := ModelInfo(context.Background(), MODEL_NAME)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("files: %+v", files)
-	t.Logf("pseudo manifest: %+v", mf)
-
-	if mf == nil {
-		t.Fatal("expected pseudo geniex.json to be parsed into *types.ModelManifest")
+	if mf != nil {
+		t.Errorf("expected no manifest from AI Hub ModelInfo, got %+v", mf)
 	}
-	if mf.PluginId != "qairt" {
-		t.Errorf("PluginId: got %q, want qairt", mf.PluginId)
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file (the zip), got %d: %+v", len(files), files)
 	}
-}
-
-func TestGetFileContent(t *testing.T) {
-	// The pseudo geniex.json is always present; round-trip it via
-	// GetFileContent so we don't depend on a real zip download.
-	if _, _, err := ModelInfo(context.Background(), MODEL_NAME); err != nil {
-		t.Fatal(err)
+	if !strings.HasSuffix(files[0].Name, ".zip") || files[0].Size <= 0 {
+		t.Errorf("unexpected file: %+v", files[0])
 	}
-	data, err := GetFileContent(context.Background(), MODEL_NAME, "geniex.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Logf("GetFileContent(geniex.json):\n%s", data)
 }
 
 func TestDownload(t *testing.T) {
+	if testing.Short() {
+		t.Skip("network test")
+	}
 	files, _, err := ModelInfo(context.Background(), MODEL_NAME)
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +79,26 @@ func TestDownload(t *testing.T) {
 	}
 	for e := range errCh {
 		t.Error(e)
+	}
+}
+
+func TestChoosePluginId(t *testing.T) {
+	cases := []struct {
+		name  string
+		files []ModelFileInfo
+		want  string
+	}{
+		{"gguf only", []ModelFileInfo{{Name: "qwen3-q4_k_m.gguf"}}, PluginLlamaCpp},
+		{"bin shards only", []ModelFileInfo{{Name: "model.bin"}, {Name: "metadata.json"}}, PluginQairt},
+		{"mixed picks llama_cpp", []ModelFileInfo{{Name: "model.bin"}, {Name: "extra.gguf"}}, PluginLlamaCpp},
+		{"empty falls back to qairt", nil, PluginQairt},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ChoosePluginId(tc.files); got != tc.want {
+				t.Errorf("ChoosePluginId = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }
 

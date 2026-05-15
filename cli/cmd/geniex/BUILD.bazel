@@ -53,6 +53,10 @@ go_test(
         # "sonic",
         "avx",
     ],
+    deps = [
+        "//cli/internal/model_hub",
+        "//cli/internal/types",
+    ],
 )
 
 go_binary(

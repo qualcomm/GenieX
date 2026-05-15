@@ -19,10 +19,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
+// LocalFS side-loads a model from a local directory or a single .zip file.
 type LocalFS struct {
 	basePath string
 }
@@ -35,26 +37,56 @@ func (d *LocalFS) MaxConcurrency() int {
 	return 4
 }
 
+// isZipPath: basePath is a single .zip (extracted in PostDownload) rather
+// than a directory walked recursively.
+func (d *LocalFS) isZipPath() bool {
+	info, err := os.Stat(d.basePath)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir() && strings.HasSuffix(strings.ToLower(d.basePath), ".zip")
+}
+
 func (d *LocalFS) CheckAvailable(ctx context.Context, name string) error {
-	// check is directory exists
 	info, err := os.Stat(d.basePath)
 	if err != nil {
 		return err
 	}
-	if !info.IsDir() {
-		return os.ErrNotExist
+	if info.IsDir() || strings.HasSuffix(strings.ToLower(d.basePath), ".zip") {
+		return nil
 	}
-	return nil
+	return os.ErrNotExist
 }
 
+// PostDownload finalises the manifest by PluginId: GGUF → mmproj-based
+// ModelType, qairt → unzip (if needed) + metadata.json.
 func (d *LocalFS) PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error {
+	// gguf model
+	if mf.PluginId == PluginLlamaCpp {
+		applyGGUFModelType(mf)
+		return nil
+	}
+	// qairt zip
+	if d.isZipPath() {
+		if err := extractQairtZip(filepath.Join(outputDir, filepath.Base(d.basePath)), outputDir, mf); err != nil {
+			return err
+		}
+	}
+	// qairt folder
+	applyQairtMetadata(outputDir, mf)
 	return nil
 }
 
 func (d *LocalFS) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, error) {
-	res := make([]ModelFileInfo, 0)
+	if d.isZipPath() {
+		info, err := os.Stat(d.basePath)
+		if err != nil {
+			return nil, err
+		}
+		return []ModelFileInfo{{Name: filepath.Base(d.basePath), Size: info.Size()}}, nil
+	}
 
-	// recursive list files in basePath
+	res := make([]ModelFileInfo, 0)
 	err := filepath.Walk(d.basePath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -71,16 +103,16 @@ func (d *LocalFS) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, 
 		}
 		return nil
 	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
+	return res, err
 }
 
 func (d *LocalFS) GetFileContent(ctx context.Context, modelName, fileName string, offset, limit int64, writer io.Writer) error {
-	file, err := os.Open(filepath.Join(d.basePath, fileName))
+	path := filepath.Join(d.basePath, fileName)
+	if d.isZipPath() {
+		// basePath is the zip itself; fileName is its basename.
+		path = d.basePath
+	}
+	file, err := os.Open(path)
 	if err != nil {
 		return err
 	}

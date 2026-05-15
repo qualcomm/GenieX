@@ -183,13 +183,17 @@ func TestResolveChipset(t *testing.T) {
 	}
 }
 
-func TestMatch_HappyPath(t *testing.T) {
+func TestMatchAll_HappyPath(t *testing.T) {
 	p, ra := loadFixtures(t)
 
-	asset, err := Match(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI, "qualcomm-snapdragon-x-elite")
+	cands, err := MatchAll(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI, "qualcomm-snapdragon-x-elite")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
+	if len(cands) != 1 {
+		t.Fatalf("expected 1 candidate, got %d", len(cands))
+	}
+	asset := cands[0]
 	if asset.GetChipset() != "qualcomm-snapdragon-x-elite" {
 		t.Errorf("wrong chipset: %s", asset.GetChipset())
 	}
@@ -201,10 +205,10 @@ func TestMatch_HappyPath(t *testing.T) {
 	}
 }
 
-func TestMatch_ChipsetNotAvailable(t *testing.T) {
+func TestMatchAll_ChipsetNotAvailable(t *testing.T) {
 	p, ra := loadFixtures(t)
 
-	_, err := Match(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI, "qualcomm-snapdragon-8gen1")
+	_, err := MatchAll(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI, "qualcomm-snapdragon-8gen1")
 	if !errors.Is(err, ErrChipsetNotAvailable) {
 		t.Fatalf("expected ErrChipsetNotAvailable, got %v", err)
 	}
@@ -218,19 +222,19 @@ func TestMatch_ChipsetNotAvailable(t *testing.T) {
 	}
 }
 
-func TestMatch_UnsupportedDomain(t *testing.T) {
+func TestMatchAll_UnsupportedDomain(t *testing.T) {
 	p, ra := loadFixtures(t)
 
-	_, err := Match(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_COMPUTER_VISION, "qualcomm-snapdragon-x-elite")
+	_, err := MatchAll(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_COMPUTER_VISION, "qualcomm-snapdragon-x-elite")
 	if !errors.Is(err, ErrUnsupportedDomain) {
 		t.Errorf("expected ErrUnsupportedDomain, got %v", err)
 	}
 }
 
-func TestMatch_UnknownChipset(t *testing.T) {
+func TestMatchAll_UnknownChipset(t *testing.T) {
 	p, ra := loadFixtures(t)
 
-	_, err := Match(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI, "nvidia-a100")
+	_, err := MatchAll(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI, "nvidia-a100")
 	if !errors.Is(err, ErrUnknownChipset) {
 		t.Errorf("expected ErrUnknownChipset, got %v", err)
 	}

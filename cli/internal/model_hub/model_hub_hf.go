@@ -67,7 +67,19 @@ func (d *HuggingFace) CheckAvailable(ctx context.Context, name string) error {
 }
 
 func (d *HuggingFace) PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error {
+	applyGGUFModelType(mf)
 	return nil
+}
+
+// applyGGUFModelType: mmproj shard ⇒ VLM, otherwise LLM. Pre-set mf.ModelType wins.
+func applyGGUFModelType(mf *types.ModelManifest) {
+	if mf.ModelType == "" {
+		if mf.MMProjFile.Name != "" {
+			mf.ModelType = types.ModelTypeVLM
+		} else {
+			mf.ModelType = types.ModelTypeLLM
+		}
+	}
 }
 
 func (d *HuggingFace) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, error) {

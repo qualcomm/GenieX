@@ -16,7 +16,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -60,7 +59,7 @@ func pull() *cobra.Command {
 
 	pullCmd.Flags().SortFlags = false
 	pullCmd.Flags().StringVarP(&modelHub, "model-hub", "", "", "specify model hub to use: aihub|hf|localfs")
-	pullCmd.Flags().StringVarP(&localPath, "local-path", "", "", "[localfs] path to local directory")
+	pullCmd.Flags().StringVarP(&localPath, "local-path", "", "", "[localfs] path to local directory or aihub zip file")
 	pullCmd.Flags().StringVarP(&modelType, "model-type", "", "", "specify model type to use: [llm|vlm]")
 
 	pullCmd.Run = func(cmd *cobra.Command, args []string) {
@@ -247,9 +246,11 @@ func setTypeCmd() *cobra.Command {
 					return
 				}
 			} else {
-				var err error
-				mt, err = chooseModelType()
-				if err != nil {
+				if err := huh.NewSelect[types.ModelType]().
+					Title("Choose Model Type").
+					Options(huh.NewOptions(types.AllModelTypes...)...).
+					Value(&mt).
+					Run(); err != nil {
 					return
 				}
 			}
@@ -269,19 +270,8 @@ func pullModel(name string, quant string) error {
 	s := store.Get()
 
 	mf, err := s.GetManifest(name)
-	if err == nil {
-		downloaded := true
-		for _, f := range mf.ModelFile {
-			if !f.Downloaded {
-				downloaded = false
-				break
-			}
-		}
-
-		if downloaded {
-			fmt.Println(render.GetTheme().Info.Sprint("Already downloaded all quant"))
-			return nil
-		}
+	if err != nil && !os.IsNotExist(err) { // model not exist is not an error, we will create it
+		return err
 	}
 
 	// specify model hub
@@ -291,7 +281,7 @@ func pullModel(name string, quant string) error {
 	if modelHub != "" {
 		switch strings.ToLower(modelHub) {
 		case "aihub":
-			// model_hub.SetHub(model_hub.NewAIHub())
+			model_hub.SetHub(model_hub.NewAIHub(chipsetGet(s)))
 		case "hf", "huggingface":
 			model_hub.SetHub(model_hub.NewHuggingFace())
 		case "local", "localfs":
@@ -304,8 +294,11 @@ func pullModel(name string, quant string) error {
 		}
 	}
 
+	// Resolve chipset before the spinner — chipsetEnsure may pop an
+	// interactive device picker, which can't share the terminal with a
+	// spinner. Skip when the explicit hub doesn't need it.
 	if _, ok := aihub.IsAIHubName(name); ok {
-		if err := ensureChipset(context.TODO()); err != nil {
+		if err := chipsetEnsure(context.TODO(), s); err != nil {
 			return err
 		}
 	}
@@ -320,19 +313,34 @@ func pullModel(name string, quant string) error {
 	}
 
 	if mf != nil {
+		// check all downloaded
+		downloaded := true
+		for _, f := range mf.ModelFile {
+			if !f.Downloaded {
+				downloaded = false
+				break
+			}
+		}
+		if downloaded {
+			fmt.Println(render.GetTheme().Info.Sprint("Already downloaded all quant"))
+			return nil
+		}
+
 		// deepcopy manifest
 		var omf types.ModelManifest
 		mfs, _ := sonic.Marshal(mf)
 		sonic.Unmarshal(mfs, &omf)
 
+		// choose quant to download
 		err := chooseQuantFiles(quant, mf)
 		if err != nil {
 			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			return err
 		}
+
+		// start download
 		pgCh, errCh := s.PullExtraQuant(context.TODO(), omf, *mf)
 		bar := render.NewProgressBar(mf.GetSize()-omf.GetSize(), "downloading")
-
 		for pg := range pgCh {
 			bar.Set(pg.TotalDownloaded)
 		}
@@ -352,11 +360,8 @@ func pullModel(name string, quant string) error {
 			manifest.ModelType = hmf.ModelType
 		}
 
-		if manifest.ModelName == "" {
-			manifest.ModelName = name
-		}
 		if manifest.PluginId == "" {
-			manifest.PluginId = choosePluginId(name)
+			manifest.PluginId = model_hub.ChoosePluginId(files)
 		}
 
 		err := chooseFiles(name, quant, files, &manifest)
@@ -382,22 +387,9 @@ func pullModel(name string, quant string) error {
 			manifest.ModelType = mt
 		}
 
-		if manifest.ModelType == "" {
-			switch manifest.PluginId {
-			case "llama_cpp":
-				// For GGUF models, presence of an mmproj file indicates VLM.
-				manifest.ModelType = inferModelTypeFromManifest(&manifest)
-			case "qairt":
-				// For AI Hub models, type is detected from metadata.json inside
-				// the zip by PostDownload. Leave ModelType blank here; re-read
-				// the manifest after Pull to surface the detected type to the user.
-			}
-		}
-
+		// start download
 		pgCh, errCh := s.Pull(context.TODO(), manifest)
-
 		bar := render.NewProgressBar(manifest.GetSize(), "downloading")
-
 		for pg := range pgCh {
 			bar.Set(pg.TotalDownloaded)
 		}
@@ -405,30 +397,22 @@ func pullModel(name string, quant string) error {
 
 		for err := range errCh {
 			bar.Clear()
-			var detErr *model_hub.ErrModelTypeDetection
-			if errors.As(err, &detErr) {
-				// Detection failure is non-fatal: the model downloaded successfully
-				// but we couldn't determine its type from metadata.json.
-				fmt.Println(render.GetTheme().Warning.Sprintf(
-					"⚠  Model type detection failed; defaulting to llm.\n"+
-						"   To set the correct type, run:\n"+
-						"     geniex model set-type %s <llm|vlm>", name))
-				continue
-			}
 			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			return err
 		}
 
-		// For qairt models the type was written to disk by PostDownload;
-		// re-read the manifest so we can report the correct detected type.
 		detectedType := manifest.ModelType
-		if manifest.PluginId == "qairt" {
-			if updated, err := s.GetManifest(name); err == nil {
-				detectedType = updated.ModelType
-			}
+		if updated, err := s.GetManifest(name); err == nil {
+			detectedType = updated.ModelType
 		}
 
-		fmt.Println(render.GetTheme().Info.Sprintf("   Detected model type: %s", detectedType))
+		if detectedType == "" {
+			fmt.Println(render.GetTheme().Warning.Sprintf(
+				"⚠  Could not detect model type; run:\n"+
+					"     geniex model set-type %s <llm|vlm>", name))
+		} else {
+			fmt.Println(render.GetTheme().Info.Sprintf("   Detected model type: %s", detectedType))
+		}
 	}
 
 	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success"))
@@ -455,38 +439,7 @@ func getQuant(name string) string {
 	return quant
 }
 
-func choosePluginId(name string) string {
-	name = strings.ToLower(name)
-	switch {
-	// prefer plugin by model name keyword
-	default:
-		return "llama_cpp"
-	}
-
-}
-
-func chooseModelType() (types.ModelType, error) {
-	var modelType types.ModelType
-	if err := huh.NewSelect[types.ModelType]().
-		Title("Choose Model Type").
-		Options(huh.NewOptions(types.AllModelTypes...)...).
-		Value(&modelType).
-		Run(); err != nil {
-		return "", err
-	}
-	return modelType, nil
-}
-
 var partRegex = regexp.MustCompile(`-\d+-of-\d+\.gguf$`)
-
-// inferModelTypeFromManifest returns the model type inferred from the manifest
-// for a GGUF model.
-func inferModelTypeFromManifest(manifest *types.ModelManifest) types.ModelType {
-	if manifest.MMProjFile.Name != "" {
-		return types.ModelTypeVLM
-	}
-	return types.ModelTypeLLM
-}
 
 func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, res *types.ModelManifest) (err error) {
 	if len(files) == 0 {
@@ -516,7 +469,8 @@ func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, r
 
 	// choose model file
 	if len(ggufs) > 0 {
-		// detect gguf
+		// gguf models
+
 		if len(ggufs) == 1 {
 			// single quant
 			fileInfo := types.ModelFileInfo{}
@@ -633,17 +587,29 @@ func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, r
 		}
 
 	} else {
-		// qairt only have one zip file
+		// qairt models
+
 		if specifiedQuant != "" {
 			return fmt.Errorf("specified quant %s only support in gguf model", specifiedQuant)
 		}
 
-		mainFile := files[0]
-
-		res.ModelFile["N/A"] = types.ModelFileInfo{
-			Name:       mainFile.Name,
-			Downloaded: true,
-			Size:       mainFile.Size,
+		if len(files) == 1 {
+			// single file (typically the AI Hub .zip)
+			mainFile := files[0]
+			res.ModelFile["N/A"] = types.ModelFileInfo{
+				Name:       mainFile.Name,
+				Downloaded: true,
+				Size:       mainFile.Size,
+			}
+		} else {
+			// folder structure
+			for _, f := range files {
+				res.ExtraFiles = append(res.ExtraFiles, types.ModelFileInfo{
+					Name:       f.Name,
+					Downloaded: true,
+					Size:       f.Size,
+				})
+			}
 		}
 	}
 

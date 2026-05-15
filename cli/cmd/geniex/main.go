@@ -19,7 +19,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"slices"
 
@@ -31,18 +30,6 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 )
-
-func registerModelHub() {
-	s := store.Get()
-	model_hub.RegisterHub(model_hub.NewHuggingFace())
-	model_hub.RegisterHub(model_hub.NewAIHub(
-		func() string {
-			v, _, _ := s.ConfigGet(store.ConfigKeyDevice)
-			return v
-		},
-		filepath.Join(s.DataPath(), "aihub"),
-	))
-}
 
 var (
 	dataDir    string
@@ -60,7 +47,10 @@ func RootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use: "geniex",
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			registerModelHub()
+			// Register ModelHub
+			s := store.Get()
+			model_hub.RegisterHub(model_hub.NewHuggingFace())
+			model_hub.RegisterHub(model_hub.NewAIHub(chipsetGet(s)))
 
 			subCmd := cmd.CalledAs()
 			if !skipUpdate {
