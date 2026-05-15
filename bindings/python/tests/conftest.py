@@ -37,7 +37,7 @@ LLAMA_CPP_QUANT = 'Q4_0'
 # Pre-cached QAIRT models used by the NPU tests. Override with
 # GENIEX_QAIRT_MODEL / GENIEX_QAIRT_VLM_MODEL to exercise other models.
 QAIRT_MODEL = os.environ.get('GENIEX_QAIRT_MODEL', 'aihub/qwen3_4b')
-QAIRT_VLM_MODEL = os.environ.get('GENIEX_QAIRT_VLM_MODEL', 'qualcomm/Qwen2.5-VL-7B-Instruct')
+QAIRT_VLM_MODEL = os.environ.get('GENIEX_QAIRT_VLM_MODEL', 'aihub/Qwen2.5-VL-7B-Instruct')
 
 
 def _is_snapdragon_host() -> bool:
