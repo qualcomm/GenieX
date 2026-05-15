@@ -8,17 +8,17 @@ import Feedback from "/snippets/page-feedback.mdx";
 The demo app groups models into two buckets:
 
 - **GGUF via `llama_cpp`** — runs on CPU / Adreno GPU / Hexagon NPU. You pick the device at load time.
-- **AI Hub via `qairt`** — NPU-only pre-compiled bundles from Qualcomm AI Hub. Runs on Snapdragon 8 Elite Gen 5 (chipset `SM8750`).
+- **AI Hub via `qairt`** — NPU-only pre-compiled bundles from Qualcomm AI Hub. Runs on Snapdragon 8 Elite (chipset `SM8750`) and Snapdragon 8 Elite Gen 5 (chipset `SM8850`).
 
 The two tutorials below show one of each.
 
 ## **1. GGUF LLM: `unsloth/Qwen3-0.6B-GGUF`**
 
-A small Qwen3 0.6 B chat model, Q4_0. Fast first download, runs on any device.
+A small Qwen3 0.6B chat model, Q4_0. Fast first download, runs on any device.
 
 <Steps>
   <Step title="Install the app">
-    See [Quickstart](/en/geniex-android/quickstart) — install the prebuilt APK or build from source in Android Studio.
+    See Quickstart — [install the prebuilt APK](/en/geniex-android/quickstart#option-1-install-the-prebuilt-apk) or [build from source](/en/geniex-android/quickstart#option-2-build-the-demo-app-from-source) in Android Studio.
   </Step>
   <Step title="Select the model">
     Open the model dropdown at the top and pick **Qwen3-0.6B (GGUF)**.
@@ -27,9 +27,8 @@ A small Qwen3 0.6 B chat model, Q4_0. Fast first download, runs on any device.
     Tap **Download**. Progress streams live from the Rust model manager; killing the app mid-download and relaunching resumes from the last byte.
   </Step>
   <Step title="Load">
-    Tap **Load**. A dialog appears — choose **CPU**, **GPU**, **NPU**, or **Hybrid**:
-    - **Hybrid** (recommended on Snapdragon) — llama.cpp's per-tensor HTP+CPU scheduler. Fastest LLM path.
-    - **NPU** — pinned single-HTP session. More deterministic, slower than hybrid for most LLMs.
+    Tap **Load**. A dialog appears — choose **NPU**, **GPU**, or **CPU**:
+    - **NPU** (recommended on Snapdragon) — Hexagon NPU acceleration.
     - **GPU** — Adreno via OpenCL.
     - **CPU** — works on any ARM64 device.
   </Step>
@@ -40,10 +39,10 @@ A small Qwen3 0.6 B chat model, Q4_0. Fast first download, runs on any device.
 
 ## **2. AI Hub VLM: `qualcomm/Qwen2.5-VL-7B-Instruct`**
 
-A vision-language model pre-compiled for Snapdragon 8 Elite Gen 5.
+A vision-language model pre-compiled for Snapdragon 8 Elite and 8 Elite Gen 5.
 
 <Warning>
-Requires a device with chipset `SM8750`. On other chipsets the AI Hub entries will download but fail to load.
+Requires a device with chipset `SM8750` (Snapdragon 8 Elite) or `SM8850` (Snapdragon 8 Elite Gen 5).
 </Warning>
 
 <Steps>
