@@ -12,7 +12,6 @@
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "GENIEX_DEBUG": "ON",
         "GENIEX_TEST": "ON"
       }
     },
