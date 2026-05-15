@@ -41,9 +41,19 @@ jobs:
       # third-party/geniex-qairt/third-party/android/. Without these the QAIRT
       # plugin loads but every model creation fails with
       # 'dlopen failed: library "libQnnHtp.so" not found' at QnnInterface init.
+      #
+      # geniex-qairt is private and .gitmodules pins it to a git@ SSH URL, so
+      # rewrite to HTTPS-with-token before init (CI has no SSH key). Same trick
+      # actions/checkout uses internally when submodules:recursive + token are
+      # set together.
       - name: Init geniex-qairt submodule
         shell: bash
-        run: git submodule update --init --depth=1 third-party/geniex-qairt
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "git@github.com:"
+          git submodule update --init --depth=1 third-party/geniex-qairt
 
       - name: Download Android SDK package
         uses: actions/download-artifact@v8
