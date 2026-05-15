@@ -1,8 +1,10 @@
 #include "llm.h"
 
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <string>
+#include <utility>
 #include <vector>
 
 #if defined(_WIN32)
@@ -11,8 +13,10 @@
 #define portable_strdup strdup
 #endif
 
+#include "external/json.hpp"
 #include "llm_model_registry.h"  // provided by geniex-qairt/models/
 #include "logging.h"
+#include "pipeline/chat_template.h"
 #include "pipeline/llm_pipeline.h"
 #include "qnn_runtime_utils.h"
 #include "sampler_config_utils.h"
@@ -160,6 +164,39 @@ int32_t QairtLlm::apply_chat_template(
     if (is_first_turn_) {
         const char* sp = (system_prompt && system_prompt[0] != '\0') ? system_prompt : kDefaultSystemPrompt;
         pipeline_->setSystemPrompt(sp);
+    }
+
+    // Tools may change between turns (dynamic tool registration), so stage
+    // unconditionally — not gated by is_first_turn_. Parse OAI-compat tools
+    // JSON here at the plugin boundary; the qairt core sees only typed
+    // ChatTool entries and never raw JSON.
+    if (input->tools && input->tools[0] != '\0') {
+        try {
+            auto j = nlohmann::ordered_json::parse(input->tools);
+            if (!j.is_array()) {
+                GENIEX_LOG_ERROR("tools JSON must be an array");
+                return GENIEX_ERROR_COMMON_INVALID_INPUT;
+            }
+            ChatTools tools;
+            tools.reserve(j.size());
+            for (const auto& el : j) {
+                // OAI compat wraps each entry as {"type":"function","function":{...}};
+                // tolerate the un-wrapped form too.
+                const auto& fn = (el.is_object() && el.contains("function")) ? el["function"] : el;
+                if (!fn.is_object()) continue;
+                ChatTool t;
+                t.name        = fn.value("name", std::string{});
+                t.description = fn.value("description", std::string{});
+                if (fn.contains("parameters")) {
+                    t.parameters_json = fn["parameters"].dump();
+                }
+                if (!t.name.empty()) tools.push_back(std::move(t));
+            }
+            pipeline_->setTools(std::move(tools));
+        } catch (const std::exception& e) {
+            GENIEX_LOG_ERROR("Failed to parse tools JSON: {}", e.what());
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
     }
 
     bool        thinking  = input->enable_thinking || enable_thinking_;
