@@ -12,11 +12,11 @@ There are two ways to get the GenieX Android demo running: install the prebuilt 
 Download the latest demo APK:
 
 <Card
-  title="geniex-demo-v0.1.4.apk"
+  title="geniex-demo.apk"
   icon="download"
-  href="https://github.com/qcom-ai-hub/geniex/releases/download/untagged-0ec4024212c07721bbf9/geniex-demo-v0.1.4.apk"
+  href="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-demo.apk"
 >
-  Latest GenieX Android demo APK (v0.1.4). Signed debug build — install with `adb install` or upload to a QDC session.
+  Latest GenieX Android demo APK. Signed debug build — install with `adb install` or upload to a QDC session.
 </Card>
 
 ### **1a. With a physical Snapdragon 8 Elite device**
@@ -35,7 +35,7 @@ Requires [`adb`](https://developer.android.com/tools/adb) on your host machine a
   </Step>
   <Step title="Install the APK">
     ```bash
-    adb install -r geniex-demo-v0.1.4.apk
+    adb install -r geniex-demo.apk
     ```
     `-r` lets you reinstall over a previous version without uninstalling first.
   </Step>
@@ -60,7 +60,7 @@ If you don't have a Snapdragon 8 Elite or 8 Elite Gen 5 phone on hand, you can r
     SSH is **not** required for this flow.
   </Step>
   <Step title="Upload the APK">
-    **Before starting the session**, use **Upload file** in the session setup page to push `geniex-demo-v0.1.4.apk` onto the device. The file must be uploaded before the session begins.
+    **Before starting the session**, use **Upload file** in the session setup page to push `geniex-demo.apk` onto the device. The file must be uploaded before the session begins.
   </Step>
   <Step title="Start and test">
     Start the session. In the mirrored screen, tap the uploaded APK to install it, then open **GenieX Demo** from the app drawer — no local adb needed.
@@ -80,7 +80,7 @@ If you don't have a Snapdragon 8 Elite or 8 Elite Gen 5 phone on hand, you can r
 Build the demo in Android Studio — useful for modifying the demo UI or pinning a specific published SDK version.
 
 <Note>
-Gradle pulls the GenieX SDK from **Maven Central** (coordinates: `com.qualcomm.qti:geniex-android:0.1.4`). You do **not** need to build the native SDK yourself for this path.
+Gradle pulls the GenieX SDK from **Maven Central** (coordinates: `com.qualcomm.qti:geniex-android:0.1.6`). You do **not** need to build the native SDK yourself for this path.
 </Note>
 
 <Steps>
@@ -94,7 +94,7 @@ Gradle pulls the GenieX SDK from **Maven Central** (coordinates: `com.qualcomm.q
     Open **`examples/android/`** (the demo app). Do **not** open `bindings/android/` — that's the SDK binding module, which this flow consumes from Maven Central.
   </Step>
   <Step title="Sync Gradle">
-    Android Studio will prompt you to sync. The sync resolves `com.qualcomm.qti:geniex-android:0.1.4` from Maven Central — this is the only SDK artifact the demo needs.
+    Android Studio will prompt you to sync. The sync resolves `com.qualcomm.qti:geniex-android:0.1.6` from Maven Central — this is the only SDK artifact the demo needs.
   </Step>
   <Step title="Connect a device">
     Plug in a Snapdragon 8 Elite or 8 Elite Gen 5 phone with USB debugging enabled (see Option 1a), and let Android Studio detect it.
