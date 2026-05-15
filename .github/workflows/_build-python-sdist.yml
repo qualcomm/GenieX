@@ -65,6 +65,20 @@ jobs:
             exit 1
           fi
 
+      - name: Verify sdist ships the in-tree PEP 517 backend (#538)
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball=$(ls dist/geniex-*.tar.gz | head -n1)
+          # Materialise the tarball listing first; piping into `grep -q`
+          # closes the pipe early and SIGPIPEs tar, which under
+          # `set -o pipefail` would fail the step regardless of match.
+          listing=$(tar -tzf "$tarball")
+          if ! grep -qE '/_geniex_backend\.py$' <<<"$listing"; then
+            echo "sdist missing _geniex_backend.py — install will break on stripped Python 3.12 (GH #538)" >&2
+            exit 1
+          fi
+
       - name: Upload sdist artifact
         if: inputs.upload_artifact
         uses: actions/upload-artifact@v7

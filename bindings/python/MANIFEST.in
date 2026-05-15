@@ -1,5 +1,6 @@
 include setup.py
 include _sdk_fetch.py
+include _geniex_backend.py
 include README.md
 include LICENSE
 include pyproject.toml
