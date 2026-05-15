@@ -215,7 +215,7 @@ impl Store {
 
     /// Resolve a model name (with optional ":quant" suffix) to ModelPaths.
     ///
-    /// Accepts a bare name (no '/') and canonicalises it to `aihub/<name>`
+    /// Accepts a bare name (no '/') and canonicalises it to `qualcomm/<name>`
     /// so callers can refer to AI Hub models without the prefix.
     pub fn get_paths(&self, name_with_quant: &str) -> Result<(String, ModelPaths)> {
         let (name, quant) = split_quant(name_with_quant);

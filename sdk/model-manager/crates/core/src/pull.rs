@@ -82,7 +82,7 @@ pub enum PullIntent {
 /// Async-native; sync callers should use [`pull_blocking`] (which
 /// drives this on the FFI runtime).
 pub async fn pull(store: &Store, mut req: PullRequest) -> Result<()> {
-    // Bare AI Hub ids (no '/') are stored under `aihub/<name>` so they
+    // Bare AI Hub ids (no '/') are stored under `qualcomm/<name>` so they
     // satisfy validate_model_name's org/repo invariant.
     req.model_name = canonicalize_model_name(&req.model_name);
     validate_model_name(&req.model_name)?;
