@@ -11,7 +11,7 @@ GenieX Python SDK 遵循与 Hugging Face `transformers` 相同的设计模式—
 
 ## AutoModelForCausalLM
 
-用于加载纯文本因果语言模型的工厂类。返回 [`GeniexLLM`](#geniexllm) 实例。
+用于加载因果语言模型的工厂类——同时支持纯文本和多模态模型。对于纯文本模型返回 [`GeniexLLM`](#geniexllm)，检测到多模态模型（如 phi4_multimodal、qwen3.5-vl、gemma4）时返回 [`GeniexVLM`](#geniexvlm)。
 
 ```python
 from geniex import AutoModelForCausalLM
@@ -35,6 +35,7 @@ model = AutoModelForCausalLM.from_pretrained(
 | `tokenizer_path` | `str \| None` | `None` | 覆盖分词器文件路径。 |
 | `license_id` | `str \| None` | `None` | NPU 许可证 ID。 |
 | `license_key` | `str \| None` | `None` | NPU 许可证密钥。 |
+| `mmproj_path` | `str \| None` | `None` | 多模态投影器文件路径。从 Hub 下载时自动解析；显式传入可强制启用 VLM 模式。 |
 | `hf_token` | `str \| None` | `None` | HuggingFace 令牌，用于访问受限模型。 |
 | `enable_thinking` | `bool` | `False` | 启用思考模式（如 Qwen 推理模型）。 |
 | `n_threads` | `int` | — | 推理线程数。 |
@@ -42,7 +43,7 @@ model = AutoModelForCausalLM.from_pretrained(
 | `max_tokens` | `int` | — | 生成的最大 token 数。 |
 | `system_prompt` | `str` | — | 预置系统提示。 |
 
-**返回值：** [`GeniexLLM`](#geniexllm)
+**返回值：** [`GeniexLLM`](#geniexllm) 或 [`GeniexVLM`](#geniexvlm)（根据模型自动检测）
 
 ---
 

@@ -101,11 +101,11 @@ curl -o demo.jpg https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub
 
 ```python
 import os
-from geniex import AutoModelForVision2Seq
+from geniex import AutoModelForCausalLM
 
 image_path = os.path.abspath("demo.jpg")
 
-model = AutoModelForVision2Seq.from_pretrained("unsloth/Qwen2.5-VL-3B-Instruct-GGUF", quant="Q8_0", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("unsloth/Qwen2.5-VL-3B-Instruct-GGUF", quant="Q8_0", device_map="auto")
 messages = [{
     "role": "user",
     "content": [

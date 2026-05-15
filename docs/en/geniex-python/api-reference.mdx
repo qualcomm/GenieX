@@ -13,7 +13,7 @@ The GenieX Python SDK follows the same design patterns as Hugging Face `transfor
 
 ## AutoModelForCausalLM
 
-Factory for loading text-only causal language models. Returns a [`GeniexLLM`](#geniexllm) instance.
+Factory for loading causal language models — both text-only and multimodal. Returns a [`GeniexLLM`](#geniexllm) for text-only models, or a [`GeniexVLM`](#geniexvlm) when a multimodal model is detected (e.g. phi4_multimodal, qwen3.5-vl, gemma4).
 
 ```python
 from geniex import AutoModelForCausalLM
@@ -31,6 +31,7 @@ model = AutoModelForCausalLM.from_pretrained(
 | `model_name_or_path` | `str` | *required* | HuggingFace repo id, short alias (e.g. `"qwen3"`), or local path. |
 | `device_map` | `str` | `"auto"` | `"auto"` picks the first available plugin/device. Also accepts `"<plugin_id>"` or `"<plugin_id>:<device_id>"`. |
 | `quant` | `str \| None` | `None` | Quantization variant (e.g. `"Q4_K_M"`). Filters files when downloading from Hub. |
+| `mmproj_path` | `str \| None` | `None` | Path to the multimodal projector file. Auto-resolved from Hub; pass explicitly to force VLM mode. |
 
 <Expandable title="Additional parameters">
 
@@ -42,7 +43,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 </Expandable>
 
-**Returns:** [`GeniexLLM`](#geniexllm)
+**Returns:** [`GeniexLLM`](#geniexllm) or [`GeniexVLM`](#geniexvlm) (auto-detected based on the model)
 
 ---
 
