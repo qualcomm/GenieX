@@ -23,6 +23,10 @@ jobs:
         with:
           fetch-depth: 1
           submodules: false
+          # examples/android tracks its gradle-wrapper.jar and app/libs/*.aar
+          # via Git LFS (see examples/android/.gitattributes). Without lfs:true
+          # those land as 130-byte pointer files and gradlew can't bootstrap.
+          lfs: true
 
       # Silences the default-branch hint gradle's internal git init prints.
       - name: Configure git
