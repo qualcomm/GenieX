@@ -72,6 +72,14 @@ jobs:
     with:
       upload_artifact: true
 
+  build-android-apk:
+    name: build-android-apk
+    needs: [build-sdk]
+    uses: ./.github/workflows/_build-android-apk.yml
+    secrets: inherit
+    with:
+      upload_artifact: true
+
   build-docker:
     name: build-docker
     needs: [build-cli]

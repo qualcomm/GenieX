@@ -1,0 +1,122 @@
+name: Build Android Demo APK
+
+on:
+  workflow_call:
+    inputs:
+      upload_artifact:
+        description: "Whether to upload the APK artifact"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+          # examples/android tracks its gradle-wrapper.jar and app/libs/*.aar
+          # via Git LFS (see examples/android/.gitattributes). Without lfs:true
+          # those land as 130-byte pointer files and gradlew can't bootstrap.
+          lfs: true
+          # geniex-qairt is private; needs a PAT to clone (same pattern as
+          # _build-cli.yml / _build-sdk.yml).
+          token: ${{ secrets.GH_PAT }}
+
+      # Silences the default-branch hint gradle's internal git init prints.
+      - name: Configure git
+        shell: bash
+        run: git config --global init.defaultBranch main
+
+      # The binding's copyBridgeLibs Gradle task pulls QNN ARM64 runtime libs
+      # (libQnnHtp.so, libQnnHtpV*.so, libCalculator_skel.so, ...) from
+      # third-party/geniex-qairt/third-party/android/. Without these the QAIRT
+      # plugin loads but every model creation fails with
+      # 'dlopen failed: library "libQnnHtp.so" not found' at QnnInterface init.
+      #
+      # geniex-qairt is private and .gitmodules pins it to a git@ SSH URL, so
+      # rewrite to HTTPS-with-token before init (CI has no SSH key). Same trick
+      # actions/checkout uses internally when submodules:recursive + token are
+      # set together.
+      - name: Init geniex-qairt submodule
+        shell: bash
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "git@github.com:"
+          git submodule update --init --depth=1 third-party/geniex-qairt
+
+      - name: Download Android SDK package
+        uses: actions/download-artifact@v8
+        with:
+          name: sdk-android-arm64
+          path: sdk/pkg-geniex
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Versions must match bindings/android/app/build.gradle.kts.
+      - name: Install Android SDK packages (sdkmanager)
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${ANDROID_SDK_ROOT:?ANDROID_SDK_ROOT must be set on the runner}"
+          sdkmanager_bin="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$sdkmanager_bin" ] || {
+            echo "::error::sdkmanager not found at $sdkmanager_bin"; exit 1;
+          }
+          yes | "$sdkmanager_bin" --licenses >/dev/null 2>&1 || true
+          "$sdkmanager_bin" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "cmake;3.22.1" \
+            "ndk;29.0.14206865"
+          echo "ANDROID_NDK_ROOT=${ANDROID_SDK_ROOT}/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - name: Cache Gradle
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-android-apk-${{ hashFiles('bindings/android/**/*.gradle*', 'examples/android/**/*.gradle*', 'examples/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: gradle-android-apk-
+
+      # Debug variant — the example app's `test` keystore in the repo signs
+      # both debug and release with the same demo key, so debug is sufficient
+      # and avoids the release-only minification pass.
+      - name: Assemble demo APK
+        working-directory: examples/android
+        run: ./gradlew --no-daemon :app:assembleDebug
+
+      - name: Collect APK
+        id: apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="examples/android/app/build/outputs/apk/debug/app-debug.apk"
+          [ -f "$src" ] || { echo "::error::APK not found at $src"; exit 1; }
+          mkdir -p dist-apk
+          cp "$src" dist-apk/geniex-demo.apk
+          echo "path=dist-apk/geniex-demo.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        if: inputs.upload_artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-apk
+          path: dist-apk/geniex-demo.apk
+          if-no-files-found: error
+          retention-days: 1

@@ -71,6 +71,14 @@ jobs:
     with:
       upload_artifact: true
 
+  build-android-apk:
+    name: build-android-apk
+    needs: [build-sdk]
+    uses: ./.github/workflows/_build-android-apk.yml
+    secrets: inherit
+    with:
+      upload_artifact: true
+
   build-python-sdist:
     name: build-python-sdist
     needs: [resolve-tag]
@@ -158,6 +166,7 @@ jobs:
       - build-cli
       - build-python-sdist
       - build-android-aar
+      - build-android-apk
       - sign-windows
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -206,6 +215,11 @@ jobs:
           name: android-aar
           path: .
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-apk
+          path: .
+
       - name: Package artifacts and write SHA256 sidecars
         run: |
           set -euo pipefail
@@ -213,6 +227,7 @@ jobs:
 
           mv geniex-cli-setup.exe "geniex-cli-setup-windows-arm64-${RELEASE_TAG}.exe"
           mv geniex-android-aar.aar "geniex-android-aar-${RELEASE_TAG}.aar"
+          mv geniex-demo.apk "geniex-demo-${RELEASE_TAG}.apk"
 
           staged="geniex-cli-linux-arm64-${RELEASE_TAG}"
           mkdir -p "${staged}"
@@ -238,7 +253,7 @@ jobs:
           rm -rf sdk-windows-arm64 sdk-linux-arm64 cli-linux-arm64 to-sign
 
           shopt -s nullglob
-          files=(*.zip *.exe *.tar.gz *.cer *.aar)
+          files=(*.zip *.exe *.tar.gz *.cer *.aar *.apk)
           for f in "${files[@]}"; do sha256sum "$f" > "$f.sha256"; done
 
       - uses: actions/upload-artifact@v7
@@ -255,6 +270,8 @@ jobs:
             *.cer.sha256
             *.aar
             *.aar.sha256
+            *.apk
+            *.apk.sha256
           if-no-files-found: error
           retention-days: 1
 
@@ -281,7 +298,7 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          files=(*.zip *.zip.sha256 *.exe *.exe.sha256 *.tar.gz *.tar.gz.sha256 *.cer *.cer.sha256 *.aar *.aar.sha256)
+          files=(*.zip *.zip.sha256 *.exe *.exe.sha256 *.tar.gz *.tar.gz.sha256 *.cer *.cer.sha256 *.aar *.aar.sha256 *.apk *.apk.sha256)
           {
             echo "files<<EOF"
             for f in "${files[@]}"; do echo "$f"; done
@@ -365,6 +382,29 @@ jobs:
           if [[ "${IS_PRERELEASE}" != "true" ]]; then
             aws s3 cp "${src}" \
               "s3://qaihub-public-assets/qai-hub-geniex/geniex-cli.exe" \
+              --acl public-read \
+              --cache-control "no-cache, max-age=0"
+          fi
+
+      - name: Upload Android demo APK to S3
+        shell: bash
+        env:
+          AWS_PROFILE: bitsy
+          AWS_DEFAULT_REGION: us-west-2
+        run: |
+          set -euo pipefail
+          src="geniex-demo-${RELEASE_TAG}.apk"
+          # Versioned copy at the qai-hub-geniex/ root — same flat-layout
+          # convention as geniex-cli.exe.
+          aws s3 cp "${src}" \
+            "s3://qaihub-public-assets/qai-hub-geniex/${src}" \
+            --acl public-read
+          # Mutable "latest stable" pointer at geniex-demo.apk — only advance
+          # it on bare vX.Y.Z so rc/alpha builds never become the default
+          # download.
+          if [[ "${IS_PRERELEASE}" != "true" ]]; then
+            aws s3 cp "${src}" \
+              "s3://qaihub-public-assets/qai-hub-geniex/geniex-demo.apk" \
               --acl public-read \
               --cache-control "no-cache, max-age=0"
           fi
