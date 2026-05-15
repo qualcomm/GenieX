@@ -1,11 +1,11 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "GenieX",
+  "name": "Qualcomm® AI Hub GenieX",
   "colors": {
-    "primary": "#454545",
-    "light": "#44b7bd",
-    "dark": "#2b9aa1"
+    "primary": "#2a2aea",
+    "light": "#2a2aea",
+    "dark": "#99b3fd"
   },
   "styling": {
     "codeblocks": "dark"
