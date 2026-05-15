@@ -158,7 +158,6 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 	}
 
 	processor := &common.Processor{
-		HideThink: hideThink,
 		ParseFile: manifest.ModelType == types.ModelTypeVLM,
 		Verbose:   verbose,
 		TestMode:  testMode,
@@ -207,7 +206,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 				MaxCompletionTokens: openai.Int(int64(maxTokens)),
 			},
 
-				option.WithJSONSet("enable_think", !noThink),
+				option.WithJSONSet("enable_think", enableThink),
 				option.WithJSONSet("top_k", topK),
 				option.WithJSONSet("min_p", minP),
 				option.WithJSONSet("repetition_penalty", repetitionPenalty),

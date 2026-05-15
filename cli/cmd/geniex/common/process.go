@@ -38,7 +38,6 @@ var (
 
 type Processor struct {
 	ParseFile bool
-	HideThink bool
 
 	Verbose  bool
 	TestMode bool
@@ -198,35 +197,25 @@ const (
 	STATE_END
 )
 
-var thinkSpin = render.NewSpinner("thinking...")
-
 func (p *Processor) fsmInit() {
 	thinkStart := func(extraLine bool) func() {
 		return func() {
-			if p.HideThink {
-				thinkSpin.Start()
+			render.GetTheme().Set(render.GetTheme().ThinkOutput)
+			if extraLine {
+				fmt.Print("<think>\n")
 			} else {
-				render.GetTheme().Set(render.GetTheme().ThinkOutput)
-				if extraLine {
-					fmt.Print("<think>\n")
-				} else {
-					fmt.Print("<think>")
-				}
+				fmt.Print("<think>")
 			}
 		}
 	}
 	thinkEnd := func(extraLine bool) func() {
 		return func() {
-			if p.HideThink {
-				thinkSpin.Stop()
+			if extraLine {
+				fmt.Print("\n</think>\n\n")
 			} else {
-				if extraLine {
-					fmt.Print("\n</think>\n\n")
-				} else {
-					fmt.Print("</think>")
-				}
-				render.GetTheme().Set(render.GetTheme().ModelOutput)
+				fmt.Print("</think>")
 			}
+			render.GetTheme().Set(render.GetTheme().ModelOutput)
 		}
 	}
 	p.fsm = map[[2]any][2]any{
@@ -258,9 +247,7 @@ func (p *Processor) fsmEvent(token string) {
 		return
 	}
 
-	if !(p.HideThink && p.fsmState == STATE_THINK) {
-		fmt.Print(token)
-	}
+	fmt.Print(token)
 }
 
 // print profile data

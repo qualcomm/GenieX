@@ -48,8 +48,7 @@ var (
 	stop           []string
 	stopFile       string
 	imageMaxLength int32
-	noThink        bool
-	hideThink      bool
+	enableThink bool
 	prompt         []string
 	tokenFile      string
 	input          string
@@ -97,8 +96,7 @@ var (
 		llmFlags.Int32VarP(&maxTokens, "max-tokens", "", 2048, "max tokens")
 		llmFlags.StringArrayVarP(&stop, "stop", "", nil, "stop sequences (llama_cpp only)")
 		llmFlags.StringVarP(&stopFile, "stop-file", "", "", "file containing stop sequences (llama_cpp only)")
-		llmFlags.BoolVarP(&noThink, "no-think", "", false, "disable thinking mode")
-		llmFlags.BoolVarP(&hideThink, "hide-think", "", false, "hide thinking output")
+		llmFlags.BoolVarP(&enableThink, "think", "", true, "enable thinking mode (use --no-think to disable)")
 		llmFlags.StringVarP(&systemPrompt, "system-prompt", "s", "", "system prompt to set model behavior")
 		llmFlags.StringVarP(&input, "input", "i", "", "prompt txt file")
 		llmFlags.StringArrayVarP(&prompt, "prompt", "p", nil, "pass prompt")
@@ -438,7 +436,6 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 	}
 
 	processor := &common.Processor{
-		HideThink: hideThink,
 		Verbose:   verbose,
 		TestMode:  testMode,
 		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
@@ -466,7 +463,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 
 				templateOutput, err := p.ApplyChatTemplate(geniex_sdk.LlmApplyChatTemplateInput{
 					Messages:            history,
-					EnableThink:         !noThink,
+					EnableThink:         enableThink,
 					AddGenerationPrompt: true,
 				})
 				if err != nil {
@@ -592,7 +589,6 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 
 	processor := &common.Processor{
 		ParseFile: true,
-		HideThink: hideThink,
 		Verbose:   verbose,
 		TestMode:  testMode,
 		Run: func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
@@ -609,7 +605,7 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 
 			tmplOut, err := p.ApplyChatTemplate(geniex_sdk.VlmApplyChatTemplateInput{
 				Messages:    history,
-				EnableThink: !noThink,
+				EnableThink: enableThink,
 			})
 			if err != nil {
 				return "", geniex_sdk.ProfileData{}, err
