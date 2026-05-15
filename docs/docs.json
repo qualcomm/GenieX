@@ -56,6 +56,18 @@
                 ]
               },
               {
+                "group": "Android SDK",
+                "icon": "android",
+                "pages": [
+                  "en/geniex-android/overview",
+                  "en/geniex-android/quickstart",
+                  "en/geniex-android/model-tutorial",
+                  "en/geniex-android/APIReference",
+                  "en/geniex-android/APIReference_NPU",
+                  "en/geniex-android/APIReference_CPUGPU"
+                ]
+              },
+              {
                 "group": "Misc",
                 "pages": [
                   {
@@ -114,6 +126,18 @@
                   "cn/geniex-python/overview",
                   "cn/geniex-python/quickstart",
                   "cn/geniex-python/api-reference"
+                ]
+              },
+              {
+                "group": "Android SDK",
+                "icon": "android",
+                "pages": [
+                  "cn/geniex-android/overview",
+                  "cn/geniex-android/quickstart",
+                  "cn/geniex-android/model-tutorial",
+                  "cn/geniex-android/APIReference",
+                  "cn/geniex-android/APIReference_NPU",
+                  "cn/geniex-android/APIReference_CPUGPU"
                 ]
               }
             ]
