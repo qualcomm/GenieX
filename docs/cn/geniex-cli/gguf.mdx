@@ -19,6 +19,18 @@ import Feedback from "/snippets/page-feedback.mdx";
 | unsloth/Ministral-3-3B-Instruct-2507-GGUF |
 | unsloth/GPT-OSS-20B-GGUF |
 | ibm-granite/granite-4.0-micro-GGUF |
-| bartowski/microsoft_Phi-4-mini-instruct-GGUF |
+| unsloth/Phi-4-mini-instruct-GGUF |
 | Qwen/Qwen3-VL-2B-Instruct-GGUF |
 | Qwen/Qwen3-VL-4B-Instruct-GGUF |
+
+
+运行模型，以 `unsloth/Qwen3.5-0.8B-GGUF` 为例：
+```powershell windows
+geniex infer unsloth/Qwen3.5-0.8B-GGUF
+```
+
+系统提示时，请选择：
+- **模型类型**：视觉语言模型（Qwen3-VL）选择 `vlm`，其他选择 `llm`
+- **量化**：`Q4_0` — llama.cpp 的 Hexagon NPU 支持最佳
+
+<Note>对 `Qwen3.5` 和 `Gemma4` 的多模态支持即将推出。</Note>
