@@ -66,6 +66,24 @@ def test_resolve_device_map_cpu_forces_0(geniex_session):
     assert ngl == 0
 
 
+def test_resolve_device_map_llama_cpp_npu_pins_htp0(geniex_session):
+    plugin_id, device_id, _ = geniex.resolve_device_map('llama_cpp:npu')
+    assert plugin_id == 'llama_cpp'
+    assert device_id == 'HTP0'
+
+
+def test_apply_plugin_hint_binds_alias_to_manifest_plugin():
+    # Bare aliases bind to the manifest's plugin so a llama_cpp model loaded
+    # with device_map='npu' goes to llama_cpp:HTP0 instead of qairt.
+    from geniex.auto import _apply_plugin_hint
+
+    assert _apply_plugin_hint('npu', 'llama_cpp') == 'llama_cpp:npu'
+    assert _apply_plugin_hint('npu', 'qairt') == 'qairt:npu'
+    assert _apply_plugin_hint('auto', 'llama_cpp') == 'llama_cpp'
+    assert _apply_plugin_hint('npu', None) == 'npu'  # falls back to alias-owner table
+    assert _apply_plugin_hint('llama_cpp:HTP0', 'qairt') == 'llama_cpp:HTP0'  # explicit form wins
+
+
 def test_exports_public_surface():
     for name in [
         'AutoModelForCausalLM',
