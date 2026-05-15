@@ -20,6 +20,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -30,11 +31,14 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
-// readManifestAt reads and unmarshals the manifest file at the given directory
-// path. It does NOT acquire the model lock — callers are responsible for
-// locking when needed.
-func readManifestAt(dir string) (*types.ModelManifest, error) {
-	data, err := os.ReadFile(filepath.Join(dir, types.ManifestFileName))
+// matches gguf multi-part suffix like "-00001-of-00003.gguf".
+var ggufPartRegex = regexp.MustCompile(`-\d+-of-\d+\.gguf$`)
+
+// readManifest reads and unmarshals the manifest file for the given model.
+// It does NOT acquire the model lock — callers are responsible for locking
+// when needed.
+func (s *Store) readManifest(name string) (*types.ModelManifest, error) {
+	data, err := os.ReadFile(s.ModelfilePath(name, types.ManifestFileName))
 	if err != nil {
 		return nil, err
 	}
@@ -45,12 +49,12 @@ func readManifestAt(dir string) (*types.ModelManifest, error) {
 	return &mf, nil
 }
 
-// writeManifestAt marshals mf and writes it to types.ManifestFileName inside dir.
+// writeManifest marshals mf and writes it to the given model's manifest file.
 // It does NOT acquire the model lock — callers are responsible for locking
 // when needed.
-func writeManifestAt(dir string, mf types.ModelManifest) error {
+func (s *Store) writeManifest(name string, mf types.ModelManifest) error {
 	data, _ := sonic.Marshal(mf) // Marshal of a plain struct never fails
-	if err := os.WriteFile(filepath.Join(dir, types.ManifestFileName), data, 0o664); err != nil {
+	if err := os.WriteFile(s.ModelfilePath(name, types.ManifestFileName), data, 0o664); err != nil {
 		return fmt.Errorf("write manifest: %w", err)
 	}
 	return nil
@@ -92,16 +96,65 @@ func (s *Store) List() ([]types.ModelManifest, error) {
 	return res, nil
 }
 
-// Remove deletes a specific model and all its files
-func (s *Store) Remove(name string) error {
-	slog.Debug("Remove model", "model", name)
+// Remove deletes a cached model. Empty quant removes the whole model;
+// otherwise only that quant's files are removed (and the model directory
+// itself when no downloaded quants remain).
+func (s *Store) Remove(name, quant string) error {
+	slog.Debug("Remove model", "model", name, "quant", quant)
 
-	err := s.LockModel(name)
-	if err != nil {
+	if err := s.LockModel(name); err != nil {
 		return err
 	}
 	defer s.UnlockModel(name)
-	return os.RemoveAll(s.ModelfilePath(name, ""))
+
+	dir := s.ModelfilePath(name, "")
+	if quant == "" {
+		return os.RemoveAll(dir)
+	}
+
+	mf, err := s.readManifest(name)
+	if err != nil {
+		return fmt.Errorf("read manifest: %w", err)
+	}
+
+	target, ok := mf.ModelFile[quant]
+	if !ok || !target.Downloaded {
+		return fmt.Errorf("quant %s not downloaded", quant)
+	}
+
+	remaining := 0
+	for q, f := range mf.ModelFile {
+		if q != quant && f.Downloaded {
+			remaining++
+		}
+	}
+	if remaining == 0 {
+		return os.RemoveAll(dir)
+	}
+
+	// Keep manifest entries (Downloaded=false) so a later pull re-fetches all fragments.
+	base := ggufPartRegex.ReplaceAllString(target.Name, "")
+	toDelete := []string{target.Name}
+	for i, f := range mf.ExtraFiles {
+		if f.Downloaded && ggufPartRegex.ReplaceAllString(f.Name, "") == base {
+			toDelete = append(toDelete, f.Name)
+			mf.ExtraFiles[i].Downloaded = false
+		}
+	}
+
+	for _, fname := range toDelete {
+		if err := os.Remove(filepath.Join(dir, fname)); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove %s: %w", fname, err)
+		}
+	}
+
+	mf.ModelFile[quant] = types.ModelFileInfo{
+		Name:       target.Name,
+		Downloaded: false,
+		Size:       target.Size,
+	}
+
+	return s.writeManifest(name, *mf)
 }
 
 // Clean removes all stored models and the models directory
@@ -116,7 +169,7 @@ func (s *Store) Clean() int {
 	// Get list of all model names to remove
 	count := 0
 	for _, model := range models {
-		if err := s.Remove(model); err != nil {
+		if err := s.Remove(model, ""); err != nil {
 			slog.Warn("Failed to remove model", "model", model, "err", err)
 			continue
 		}
@@ -132,7 +185,7 @@ func (s *Store) GetManifest(name string) (*types.ModelManifest, error) {
 	}
 	defer s.UnlockModel(name)
 
-	return readManifestAt(s.ModelfilePath(name, ""))
+	return s.readManifest(name)
 }
 
 // Pull downloads a model from HuggingFace and stores it locally
@@ -165,7 +218,7 @@ func (s *Store) Pull(ctx context.Context, mf types.ModelManifest) (infoCh <-chan
 			}
 		}
 		if !hasProgress {
-			if err := s.Remove(mf.Name); err != nil {
+			if err := s.Remove(mf.Name, ""); err != nil {
 				errC <- err
 				return
 			}
@@ -217,7 +270,7 @@ func (s *Store) Pull(ctx context.Context, mf types.ModelManifest) (infoCh <-chan
 			return
 		}
 
-		if err := writeManifestAt(s.ModelfilePath(mf.Name, ""), mf); err != nil {
+		if err := s.writeManifest(mf.Name, mf); err != nil {
 			errC <- err
 			return
 		}
@@ -281,7 +334,7 @@ func (s *Store) PullExtraQuant(ctx context.Context, omf, nmf types.ModelManifest
 			return
 		}
 
-		if err := writeManifestAt(s.ModelfilePath(nmf.Name, ""), nmf); err != nil {
+		if err := s.writeManifest(nmf.Name, nmf); err != nil {
 			errC <- err
 			return
 		}
@@ -312,13 +365,12 @@ func (s *Store) SetModelType(name string, modelType types.ModelType) error {
 	}
 	defer s.UnlockModel(name)
 
-	dir := s.ModelfilePath(name, "")
-	mf, err := readManifestAt(dir)
+	mf, err := s.readManifest(name)
 	if err != nil {
 		return fmt.Errorf("read manifest: %w", err)
 	}
 	mf.ModelType = modelType
-	return writeManifestAt(dir, *mf)
+	return s.writeManifest(name, *mf)
 }
 
 func (s *Store) scanModelDir() ([]string, error) {
