@@ -4,6 +4,9 @@
 #ifndef FMT_USE_CONSTEVAL
 #define FMT_USE_CONSTEVAL 0
 #endif
+
+#include <cstring>
+
 #include "external/fmt/core.h"
 #include "geniex.h"
 
@@ -28,20 +31,12 @@ inline auto lp(T arg) {
     }
 }
 
-#ifdef GENIEX_DEBUG
-
-#include <cstring>
-
 template <typename... Args>
 void geniex_log_internal(geniex_LogLevel level, const char* file, int32_t line, const char* func,
     fmt::format_string<Args...> fmt, Args&&... args) {
     if (geniex_log == nullptr) return;
-#ifdef PROJECT_SOURCE_DIR
     auto p        = std::strstr(file, PROJECT_SOURCE_DIR);
     auto filename = p ? p + std::strlen(PROJECT_SOURCE_DIR) + 1 : file;
-#else
-    auto filename = file;
-#endif
     geniex_log(level,
         fmt::format("[{}:{}:{}] {}", filename, line, func, fmt::format(fmt, lp(std::forward<Args>(args))...)).c_str());
 }
@@ -52,31 +47,9 @@ void geniex_log_internal(geniex_LogLevel level, const char* file, int32_t line, 
         }                                                                            \
     } while (0)
 
-#else  // GENIEX_DEBUG
-
-template <typename... Args>
-inline void geniex_log_internal(geniex_LogLevel level, fmt::format_string<Args...> fmt, Args&&... args) {
-    if (geniex_log == nullptr) return;
-    geniex_log(level, fmt::format(fmt, lp(std::forward<Args>(args))...).c_str());
-}
-#define GENIEX_LEVEL_LOG(level, ...)                                \
-    do {                                                            \
-        if ((level) >= geniex_log_level && geniex_log != nullptr) { \
-            geniex_log_internal((level), __VA_ARGS__);              \
-        }                                                           \
-    } while (0)
-
-#endif  // GENIEX_DEBUG
-
-// TRACE remains compile-time gated: only emitted in GENIEX_DEBUG builds.
-// DEBUG/INFO/WARN/ERROR are always forwarded to the log callback; the
-// embedder is responsible for any further filtering.
-#ifdef GENIEX_DEBUG
+// All log macros forward to the registered callback; the embedder is
+// responsible for any further filtering.
 #define GENIEX_LOG_TRACE(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_TRACE, __VA_ARGS__)
-#else
-#define GENIEX_LOG_TRACE(...) ((void)0)
-#endif
-
 #define GENIEX_LOG_DEBUG(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_DEBUG, __VA_ARGS__)
 #define GENIEX_LOG_INFO(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_INFO, __VA_ARGS__)
 #define GENIEX_LOG_WARN(...) GENIEX_LEVEL_LOG(GENIEX_LOG_LEVEL_WARN, __VA_ARGS__)

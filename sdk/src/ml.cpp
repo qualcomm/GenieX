@@ -128,9 +128,7 @@ int32_t geniex_deinit(void) {
 
 geniex_log_callback geniex_log = default_log_handler;
 
-// All non-TRACE levels are always forwarded to the callback; the embedder is
-// responsible for filtering. TRACE is still compile-time gated by GENIEX_DEBUG
-// in logging.h.
+// Every level is forwarded to the callback; the embedder filters.
 geniex_LogLevel geniex_log_level = GENIEX_LOG_LEVEL_TRACE;
 
 int32_t geniex_set_log(geniex_log_callback callback) {
