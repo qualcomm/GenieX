@@ -8,7 +8,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 示例应用将模型分为两类：
 
 - **GGUF via `llama_cpp`** — 在 CPU / Adreno GPU / Hexagon NPU 上运行。加载时选择设备。
-- **AI Hub via `qairt`** — 来自 Qualcomm AI Hub 的预编译 NPU 专用包。在骁龙 8 Elite Gen 5（芯片组 `SM8750`）上运行。
+- **AI Hub via `qairt`** — 来自 Qualcomm AI Hub 的预编译 NPU 专用包。在骁龙 8 Elite（芯片组 `SM8750`）和骁龙 8 Elite Gen 5（芯片组 `SM8850`）上运行。
 
 以下两个示例各展示一种。
 
@@ -18,7 +18,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <Steps>
   <Step title="安装应用">
-    参见 [快速入门](/cn/geniex-android/quickstart) — 安装预构建 APK 或在 Android Studio 中从源码构建。
+    参见快速入门 — [安装预构建 APK](/cn/geniex-android/quickstart#方式一安装预构建-apk) 或在 Android Studio 中[从源码构建](/cn/geniex-android/quickstart#方式二从源码构建示例应用)。
   </Step>
   <Step title="选择模型">
     打开顶部模型下拉菜单，选择 **Qwen3-0.6B (GGUF)**。
@@ -27,9 +27,8 @@ import Feedback from "/snippets/page-feedback.mdx";
     点击 **Download**。进度由 Rust 模型管理器实时流式传输；下载中途关闭应用后重启会从断点继续。
   </Step>
   <Step title="加载">
-    点击 **Load**。弹出对话框 — 选择 **CPU**、**GPU**、**NPU** 或 **Hybrid**：
-    - **Hybrid**（骁龙推荐）— llama.cpp 逐张量 HTP+CPU 调度器。最快的 LLM 路径。
-    - **NPU** — 固定单 HTP 会话。更确定性，但对大多数 LLM 比 hybrid 慢。
+    点击 **Load**。弹出对话框 — 选择 **NPU**、**GPU** 或 **CPU**：
+    - **NPU**（骁龙推荐）— Hexagon NPU 加速。
     - **GPU** — 通过 OpenCL 使用 Adreno。
     - **CPU** — 适用于任何 ARM64 设备。
   </Step>
@@ -40,10 +39,10 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ## **2. AI Hub VLM：`qualcomm/Qwen2.5-VL-7B-Instruct`**
 
-为骁龙 8 Elite Gen 5 预编译的视觉语言模型。
+为骁龙 8 Elite 和 8 Elite Gen 5 预编译的视觉语言模型。
 
 <Warning>
-需要芯片组 `SM8750` 的设备。在其他芯片组上，AI Hub 条目可以下载但无法加载。
+需要芯片组 `SM8750`（骁龙 8 Elite）或 `SM8850`（骁龙 8 Elite Gen 5）的设备。
 </Warning>
 
 <Steps>

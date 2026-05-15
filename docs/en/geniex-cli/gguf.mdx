@@ -1,30 +1,33 @@
 ---
 title: "llama.cpp Plugin"
-description: "Running Geniex through llama.cpp plugin on Snapdragon NPU."
+description: "Run any GGUF model on Snapdragon NPU, GPU, or CPU through the llama.cpp plugin."
 ---
 import Feedback from "/snippets/page-feedback.mdx";
 
+The llama.cpp plugin supports **any GGUF model** from the community — you are not limited to the list below. The following are tested examples that work well on Snapdragon NPU with `Q4_0` quantization.
 
-## **Supported Model List**
-We curated a list of top, high quality models in GGUF format.
+## **Example Models**
 
-| Model ID |
-|---|
-| unsloth/Qwen3.5-0.8B-GGUF |
-| unsloth/Qwen3.5-2B-GGUF |
-| unsloth/Gemma4-E4B-it-GGUF |
-| unsloth/Gemma4-E2B-it-GGUF |
-| unsloth/Qwen3-0.6B-GGUF |
-| unsloth/Qwen3-1.7B-GGUF |
-| unsloth/Ministral-3-3B-Instruct-2507-GGUF |
-| unsloth/GPT-OSS-20B-GGUF |
-| ibm-granite/granite-4.0-micro-GGUF |
-| unsloth/Phi-4-mini-instruct-GGUF |
-| Qwen/Qwen3-VL-2B-Instruct-GGUF |
-| Qwen/Qwen3-VL-4B-Instruct-GGUF |
+| Model ID | Type |
+|---|---|
+| unsloth/Qwen3.5-0.8B-GGUF | LLM |
+| unsloth/Qwen3.5-2B-GGUF | LLM |
+| unsloth/Gemma4-E4B-it-GGUF | LLM |
+| unsloth/Gemma4-E2B-it-GGUF | LLM |
+| unsloth/Qwen3-0.6B-GGUF | LLM |
+| unsloth/Qwen3-1.7B-GGUF | LLM |
+| unsloth/Ministral-3-3B-Instruct-2507-GGUF | LLM |
+| unsloth/GPT-OSS-20B-GGUF | LLM |
+| ibm-granite/granite-4.0-micro-GGUF | LLM |
+| unsloth/Phi-4-mini-instruct-GGUF | LLM |
+| Qwen/Qwen3-VL-2B-Instruct-GGUF | VLM |
+| Qwen/Qwen3-VL-4B-Instruct-GGUF | VLM |
 
+<Tip>To try other GGUF models, visit Hugging Face, copy the path of any compatible GGUF model, and replace the model path in the command below.</Tip>
 
-To run a model, take `unsloth/Qwen3.5-0.8B-GGUF` for example:
+## **Usage**
+
+Take `unsloth/Qwen3.5-0.8B-GGUF` for example:
 ```powershell windows
 geniex infer unsloth/Qwen3.5-0.8B-GGUF
 ```
@@ -34,3 +37,7 @@ When prompted, select:
 - **Quantization**: `Q4_0` — best Hexagon NPU support for llama.cpp
 
 <Note>Multimodal support for `Qwen3.5` and `Gemma4` is coming soon.</Note>
+
+<br />
+
+<Feedback/>

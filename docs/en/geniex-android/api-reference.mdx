@@ -28,23 +28,18 @@ Constants are exposed as [`PluginIdValue`](https://github.com/qcom-ai-hub/geniex
 Friendly hardware aliases forwarded to `geniex_resolve_device` in the native SDK.
 
 ```kotlin
-val device_id: String?   // "cpu" | "gpu" | "npu" | "hybrid" | null
+val device_id: String?   // "cpu" | "gpu" | "npu" | null
 ```
 
-| Alias      | Effect                                                                                    |
-|------------|-------------------------------------------------------------------------------------------|
-| `null`     | Plugin default — `hybrid` for `llama_cpp`, `npu` for `qairt`.                             |
-| `"cpu"`    | Pure CPU. Forces `nGpuLayers = 0`.                                                        |
-| `"gpu"`    | Adreno GPU via OpenCL (`llama_cpp` only).                                                 |
-| `"npu"`    | Pinned Hexagon session (`HTP0`). Deterministic; slower than `hybrid` on most LLMs.        |
-| `"hybrid"` | Per-tensor HTP+CPU scheduler. Forces `nGpuLayers = 999`. Fastest LLM path on Snapdragon. |
+| Alias   | Effect                                                              |
+|---------|---------------------------------------------------------------------|
+| `null`  | Plugin default — `npu` for `llama_cpp`, `npu` for `qairt`.         |
+| `"npu"` | Hexagon NPU acceleration. Recommended on Snapdragon.                |
+| `"gpu"` | Adreno GPU via OpenCL (`llama_cpp` only).                           |
+| `"cpu"` | Pure CPU. Forces `nGpuLayers = 0`.                                  |
 
 <Note>
-QAIRT only supports NPU. Passing `"cpu"`, `"gpu"`, or `"hybrid"` with a QAIRT model logs a warning and falls back to NPU — it won't error.
-</Note>
-
-<Note>
-Some model families can't run on `hybrid` (e.g. `gpt-oss-*`) and are pinned to `npu` automatically by the native SDK. No caller-side branching needed.
+QAIRT only supports NPU. Passing `"cpu"` or `"gpu"` with a QAIRT model logs a warning and falls back to NPU — it won't error.
 </Note>
 
 ---
@@ -127,7 +122,7 @@ data class ModelPaths(
 ```
 
 <Note>
-AI Hub pulls on Android **require** an explicit `chipset`. The Rust side only auto-detects on Windows-on-Snapdragon. Use `"SM8750"` for Snapdragon 8 Elite Gen 5.
+AI Hub pulls on Android **require** an explicit `chipset`. The Rust side only auto-detects on Windows-on-Snapdragon. Use `"SM8750"` for Snapdragon 8 Elite or `"SM8850"` for Snapdragon 8 Elite Gen 5.
 </Note>
 
 ---
@@ -180,7 +175,7 @@ data class ModelConfig(
 ```
 
 <Note>
-`nGpuLayers` is rewritten by the JNI based on `device_id`: `cpu` forces 0, `hybrid` forces 999. For `gpu` and `npu` the value you pass is used as-is — set 999 to offload all layers.
+`nGpuLayers` is rewritten by the JNI based on `device_id`: `cpu` forces 0, `npu` forces 999. For `gpu` the value you pass is used as-is — set 999 to offload all layers.
 </Note>
 
 ### `ChatMessage`
@@ -206,13 +201,33 @@ data class VlmContent(
 )
 ```
 
+### `GenerationConfig`
+
+```kotlin
+data class GenerationConfig(
+    var maxTokens:     Int              = 32,
+    var stopWords:     Array<String>?   = null,
+    var stopCount:     Int              = 0,
+    var nPast:         Int              = 0,
+    var samplerConfig: SamplerConfig?   = null,
+    var imagePaths:    Array<String>?   = null,
+    var imageCount:    Int              = 0,
+    var audioPaths:    Array<String>?   = null,
+    var audioCount:    Int              = 0,
+)
+```
+
+<Note>
+The default `maxTokens` is **32**. Most use cases should set a higher value (e.g. `maxTokens = 2048`).
+</Note>
+
 ### `LlmStreamResult`
 
 ```kotlin
 sealed class LlmStreamResult {
-    data class Token(val text: String)         : LlmStreamResult()
-    object         Completed                   : LlmStreamResult()
-    data class Error(val throwable: Throwable) : LlmStreamResult()
+    data class Token(val text: String)              : LlmStreamResult()
+    data class Completed(val profile: ProfilingData) : LlmStreamResult()
+    data class Error(val throwable: Throwable)      : LlmStreamResult()
 }
 ```
 
@@ -235,7 +250,7 @@ LlmWrapper.builder()
             model_path = paths.model_path,
             config     = ModelConfig(nCtx = 4096),
             plugin_id  = "llama_cpp",
-            device_id  = null,       // null → hybrid (fastest on Snapdragon)
+            device_id  = null,       // null → npu (recommended on Snapdragon)
         )
     )
     .build()
@@ -259,10 +274,9 @@ llmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
 
 | Goal | `device_id` | Notes |
 |---|---|---|
-| Snapdragon fast path (recommended) | `"hybrid"` or `null` | Per-tensor HTP+CPU scheduler. |
-| Pure CPU | `"cpu"` | Works on any ARM64 device. |
+| Snapdragon NPU (recommended) | `"npu"` or `null` | Hexagon NPU acceleration. |
 | Adreno GPU (OpenCL) | `"gpu"` | Set `nGpuLayers = 999` to offload all layers. |
-| Pinned single-HTP session | `"npu"` | Deterministic; slower than `hybrid` on LLMs. |
+| Pure CPU | `"cpu"` | Works on any ARM64 device. |
 
 ### VLM
 
@@ -315,7 +329,7 @@ Always pass `t.formattedText` (the chat-templated prompt) into `generateStreamFl
 
 ## **QAIRT (AI Hub NPU models)**
 
-Pre-compiled models from Qualcomm AI Hub. NPU-only, pinned to a specific chipset (e.g. `SM8750` = Snapdragon 8 Elite Gen 5).
+Pre-compiled models from Qualcomm AI Hub. NPU-only, pinned to a specific chipset (`SM8750` = Snapdragon 8 Elite, `SM8850` = Snapdragon 8 Elite Gen 5).
 
 ### Downloading AI Hub models
 

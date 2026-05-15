@@ -19,9 +19,9 @@ Download the latest demo APK:
   Latest GenieX Android demo APK (v0.1.4). Signed debug build — install with `adb install` or upload to a QDC session.
 </Card>
 
-### **1a. With a physical Snapdragon 8 Elite Gen 5 device**
+### **1a. With a physical Snapdragon 8 Elite device**
 
-Requires [`adb`](https://developer.android.com/tools/adb) on your host machine and a phone with **Snapdragon 8 Elite Gen 5** (Hexagon v81 NPU).
+Requires [`adb`](https://developer.android.com/tools/adb) on your host machine and a phone with **Snapdragon 8 Elite** (SM8750) or **Snapdragon 8 Elite Gen 5** (SM8850).
 
 <Steps>
   <Step title="Enable USB debugging">
@@ -46,11 +46,11 @@ Requires [`adb`](https://developer.android.com/tools/adb) on your host machine a
 
 ### **1b. Without a physical device — use Qualcomm Device Cloud (QDC)**
 
-If you don't have an Elite Gen 5 phone on hand, you can rent one by the minute on Qualcomm Device Cloud.
+If you don't have a Snapdragon 8 Elite or 8 Elite Gen 5 phone on hand, you can rent one by the minute on Qualcomm Device Cloud.
 
 <Steps>
   <Step title="Pick a device">
-    Sign in to [Qualcomm Device Cloud](https://qdc.qualcomm.com/), choose **Snapdragon 8 Elite Gen 5**, and select **Interactive session**.
+    Sign in to [Qualcomm Device Cloud](https://qdc.qualcomm.com/), choose **Snapdragon 8 Elite** or **Snapdragon 8 Elite Gen 5**, and select **Interactive session**.
   </Step>
   <Step title="Configure the session">
     Before starting the session, enable:
@@ -60,10 +60,18 @@ If you don't have an Elite Gen 5 phone on hand, you can rent one by the minute o
     SSH is **not** required for this flow.
   </Step>
   <Step title="Upload the APK">
-    In the session setup, use **Upload file** to push `geniex-demo-v0.1.4.apk` onto the device.
+    **Before starting the session**, use **Upload file** in the session setup page to push `geniex-demo-v0.1.4.apk` onto the device. The file must be uploaded before the session begins.
   </Step>
   <Step title="Start and test">
-    Start the session. Use the mirrored screen in the browser to tap through installation and launch the demo app — no local adb needed.
+    Start the session. In the mirrored screen, tap the uploaded APK to install it, then open **GenieX Demo** from the app drawer — no local adb needed.
+  </Step>
+  <Step title="(Optional) Test a VLM with an image">
+    To try a vision-language model, upload a test image via the QDC terminal:
+    ```bash
+    curl -L "https://s7d1.scene7.com/is/image/dmqualcommprod/Qualcomm_AIHub_image2-1?$QC_Responsive$&fmt=png-alpha" -o /data/local/tmp/qualcomm.png
+    cp /data/local/tmp/qualcomm.png /sdcard/Download/
+    ```
+    The image will appear in the app's image picker when you tap the image button in a VLM chat.
   </Step>
 </Steps>
 
@@ -89,7 +97,7 @@ Gradle pulls the GenieX SDK from **Maven Central** (coordinates: `com.qualcomm.q
     Android Studio will prompt you to sync. The sync resolves `com.qualcomm.qti:geniex-android:0.1.4` from Maven Central — this is the only SDK artifact the demo needs.
   </Step>
   <Step title="Connect a device">
-    Plug in a Snapdragon 8 Elite Gen 5 phone with USB debugging enabled (see Option 1a), and let Android Studio detect it.
+    Plug in a Snapdragon 8 Elite or 8 Elite Gen 5 phone with USB debugging enabled (see Option 1a), and let Android Studio detect it.
   </Step>
   <Step title="Run">
     Click **Run ▶**. Android Studio builds the APK, installs it on the phone, and launches the demo.
@@ -104,7 +112,7 @@ Once the app launches:
    - **Hugging Face GGUF (llama.cpp)** — Qwen3, Phi-4, Gemma, Granite, Qwen3-VL, etc.
    - **AI Hub NPU (QAIRT)** — `qualcomm/Qwen3-4B-Instruct-2507`, `qualcomm/Qwen2.5-VL-7B-Instruct`.
 2. **Download** — tap Download. Progress is resumable: killing the app mid-download and relaunching resumes from the last byte.
-3. **Load** — a dialog lets you pick the execution target (CPU / GPU / NPU / Hybrid for GGUF; NPU-only for AI Hub models).
+3. **Load** — a dialog lets you pick the execution target (NPU / GPU / CPU for GGUF; NPU-only for AI Hub models).
 4. **Chat** — type text, or tap the image / audio button for VLMs.
 
 ## **Next steps**

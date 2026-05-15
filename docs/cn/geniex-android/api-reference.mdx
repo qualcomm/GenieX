@@ -28,23 +28,18 @@ val plugin_id: String?   // "llama_cpp" | "qairt" | null
 硬件别名，由 JNI 层转发给原生 SDK 中的 `geniex_resolve_device`。
 
 ```kotlin
-val device_id: String?   // "cpu" | "gpu" | "npu" | "hybrid" | null
+val device_id: String?   // "cpu" | "gpu" | "npu" | null
 ```
 
-| 别名       | 效果                                                                                      |
-|------------|-------------------------------------------------------------------------------------------|
-| `null`     | 插件默认值 — `llama_cpp` 为 `hybrid`，`qairt` 为 `npu`。                                  |
-| `"cpu"`    | 纯 CPU。强制 `nGpuLayers = 0`。                                                           |
-| `"gpu"`    | Adreno GPU via OpenCL（仅 `llama_cpp`）。                                                 |
-| `"npu"`    | 固定 Hexagon 会话（`HTP0`）。确定性；对多数 LLM 比 `hybrid` 慢。                          |
-| `"hybrid"` | 逐张量 HTP+CPU 调度器。强制 `nGpuLayers = 999`。骁龙上最快的 LLM 路径。                   |
+| 别名    | 效果                                                        |
+|---------|-------------------------------------------------------------|
+| `null`  | 插件默认值 — `llama_cpp` 为 `npu`，`qairt` 为 `npu`。      |
+| `"npu"` | Hexagon NPU 加速。骁龙推荐。                                |
+| `"gpu"` | Adreno GPU via OpenCL（仅 `llama_cpp`）。                   |
+| `"cpu"` | 纯 CPU。强制 `nGpuLayers = 0`。                             |
 
 <Note>
-QAIRT 仅支持 NPU。传入 `"cpu"`、`"gpu"` 或 `"hybrid"` 时会记录警告并回退到 NPU，不会报错。
-</Note>
-
-<Note>
-某些模型家族无法在 `hybrid` 上运行（如 `gpt-oss-*`），由原生 SDK 自动固定到 `npu`。调用方无需特殊处理。
+QAIRT 仅支持 NPU。传入 `"cpu"` 或 `"gpu"` 时会记录警告并回退到 NPU，不会报错。
 </Note>
 
 ---
@@ -127,7 +122,7 @@ data class ModelPaths(
 ```
 
 <Note>
-Android 上 AI Hub 拉取**必须**提供 `chipset`。Rust 端仅在 Windows-on-Snapdragon 上自动检测。骁龙 8 Elite Gen 5 使用 `"SM8750"`。
+Android 上 AI Hub 拉取**必须**提供 `chipset`。Rust 端仅在 Windows-on-Snapdragon 上自动检测。骁龙 8 Elite 使用 `"SM8750"`，骁龙 8 Elite Gen 5 使用 `"SM8850"`。
 </Note>
 
 ---
@@ -180,7 +175,7 @@ data class ModelConfig(
 ```
 
 <Note>
-JNI 根据 `device_id` 重写 `nGpuLayers`：`cpu` 强制为 0，`hybrid` 强制为 999。`gpu` 和 `npu` 使用传入值 — 设置 999 可卸载所有层。
+JNI 根据 `device_id` 重写 `nGpuLayers`：`cpu` 强制为 0，`npu` 强制为 999。`gpu` 使用传入值 — 设置 999 可卸载所有层。
 </Note>
 
 ### `ChatMessage`
@@ -206,13 +201,33 @@ data class VlmContent(
 )
 ```
 
+### `GenerationConfig`
+
+```kotlin
+data class GenerationConfig(
+    var maxTokens:     Int              = 32,
+    var stopWords:     Array<String>?   = null,
+    var stopCount:     Int              = 0,
+    var nPast:         Int              = 0,
+    var samplerConfig: SamplerConfig?   = null,
+    var imagePaths:    Array<String>?   = null,
+    var imageCount:    Int              = 0,
+    var audioPaths:    Array<String>?   = null,
+    var audioCount:    Int              = 0,
+)
+```
+
+<Note>
+默认 `maxTokens` 为 **32**。大多数场景应设置更高的值（如 `maxTokens = 2048`）。
+</Note>
+
 ### `LlmStreamResult`
 
 ```kotlin
 sealed class LlmStreamResult {
-    data class Token(val text: String)         : LlmStreamResult()
-    object         Completed                   : LlmStreamResult()
-    data class Error(val throwable: Throwable) : LlmStreamResult()
+    data class Token(val text: String)              : LlmStreamResult()
+    data class Completed(val profile: ProfilingData) : LlmStreamResult()
+    data class Error(val throwable: Throwable)      : LlmStreamResult()
 }
 ```
 
@@ -235,7 +250,7 @@ LlmWrapper.builder()
             model_path = paths.model_path,
             config     = ModelConfig(nCtx = 4096),
             plugin_id  = "llama_cpp",
-            device_id  = null,       // null → hybrid（骁龙上最快）
+            device_id  = null,       // null → npu（骁龙推荐）
         )
     )
     .build()
@@ -259,10 +274,9 @@ llmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
 
 | 目标 | `device_id` | 说明 |
 |---|---|---|
-| 骁龙快速路径（推荐） | `"hybrid"` 或 `null` | 逐张量 HTP+CPU 调度器。 |
-| 纯 CPU | `"cpu"` | 适用于任何 ARM64 设备。 |
+| 骁龙 NPU（推荐） | `"npu"` 或 `null` | Hexagon NPU 加速。 |
 | Adreno GPU (OpenCL) | `"gpu"` | 设置 `nGpuLayers = 999` 卸载所有层。 |
-| 固定单 HTP 会话 | `"npu"` | 确定性；对 LLM 比 `hybrid` 慢。 |
+| 纯 CPU | `"cpu"` | 适用于任何 ARM64 设备。 |
 
 ### VLM
 
@@ -315,7 +329,7 @@ vlmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
 
 ## **QAIRT（AI Hub NPU 模型）**
 
-来自 Qualcomm AI Hub 的预编译模型。仅 NPU，固定到特定芯片组（如 `SM8750` = 骁龙 8 Elite Gen 5）。
+来自 Qualcomm AI Hub 的预编译模型。仅 NPU，固定到特定芯片组（`SM8750` = 骁龙 8 Elite，`SM8850` = 骁龙 8 Elite Gen 5）。
 
 ### 下载 AI Hub 模型
 

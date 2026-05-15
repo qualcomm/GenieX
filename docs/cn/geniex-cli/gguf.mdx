@@ -1,24 +1,43 @@
 ---
 title: "llama.cpp 插件"
-description: "通过 llama.cpp 插件在骁龙 NPU 上运行 GenieX。"
+description: "通过 llama.cpp 插件在骁龙 NPU、GPU 或 CPU 上运行任意 GGUF 模型。"
 ---
 import Feedback from "/snippets/page-feedback.mdx";
 
+llama.cpp 插件支持社区中的**任意 GGUF 模型** — 你不限于以下列表。以下是经过测试的示例，在骁龙 NPU 上使用 `Q4_0` 量化表现良好。
 
-## **支持的模型列表**
-我们精选了一批高质量的 GGUF 格式顶尖模型。
+## **示例模型**
 
-| 模型 ID |
-|---|
-| unsloth/Qwen3.5-0.8B-GGUF |
-| unsloth/Qwen3.5-2B-GGUF |
-| unsloth/Gemma4-E4B-it-GGUF |
-| unsloth/Gemma4-E2B-it-GGUF |
-| unsloth/Qwen3-0.6B-GGUF |
-| unsloth/Qwen3-1.7B-GGUF |
-| unsloth/Ministral-3-3B-Instruct-2507-GGUF |
-| unsloth/GPT-OSS-20B-GGUF |
-| ibm-granite/granite-4.0-micro-GGUF |
-| bartowski/microsoft_Phi-4-mini-instruct-GGUF |
-| Qwen/Qwen3-VL-2B-Instruct-GGUF |
-| Qwen/Qwen3-VL-4B-Instruct-GGUF |
+| 模型 ID | 类型 |
+|---|---|
+| unsloth/Qwen3.5-0.8B-GGUF | LLM |
+| unsloth/Qwen3.5-2B-GGUF | LLM |
+| unsloth/Gemma4-E4B-it-GGUF | LLM |
+| unsloth/Gemma4-E2B-it-GGUF | LLM |
+| unsloth/Qwen3-0.6B-GGUF | LLM |
+| unsloth/Qwen3-1.7B-GGUF | LLM |
+| unsloth/Ministral-3-3B-Instruct-2507-GGUF | LLM |
+| unsloth/GPT-OSS-20B-GGUF | LLM |
+| ibm-granite/granite-4.0-micro-GGUF | LLM |
+| unsloth/Phi-4-mini-instruct-GGUF | LLM |
+| Qwen/Qwen3-VL-2B-Instruct-GGUF | VLM |
+| Qwen/Qwen3-VL-4B-Instruct-GGUF | VLM |
+
+<Tip>要尝试其他 GGUF 模型，请访问 Hugging Face，复制任意兼容 GGUF 模型的路径，替换下方命令中的模型路径即可。</Tip>
+
+## **用法**
+
+以 `unsloth/Qwen3.5-0.8B-GGUF` 为例：
+```powershell windows
+geniex infer unsloth/Qwen3.5-0.8B-GGUF
+```
+
+提示时选择：
+- **模型类型**：视觉语言模型（Qwen3-VL）选 `vlm`，其他选 `llm`
+- **量化**：`Q4_0` — llama.cpp 对 Hexagon NPU 支持最好的量化格式
+
+<Note>`Qwen3.5` 和 `Gemma4` 的多模态支持即将推出。</Note>
+
+<br />
+
+<Feedback/>
