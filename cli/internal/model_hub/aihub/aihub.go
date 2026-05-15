@@ -20,8 +20,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -32,32 +30,6 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 )
 
-// DefaultCacheTTL is how long cached index JSONs are considered fresh.
-const DefaultCacheTTL = 24 * time.Hour
-const NeverExpireTTL = time.Duration(1<<63 - 1) // math.MaxInt64
-
-// FetchOption configures the behaviour of a single fetchJSON call.
-type FetchOption func(*fetchOptions)
-
-type fetchOptions struct {
-	ttl       time.Duration
-	skipCache bool
-}
-
-func defaultFetchOptions() fetchOptions {
-	return fetchOptions{ttl: DefaultCacheTTL}
-}
-
-// WithTTL overrides the cache TTL for a single fetch.
-func WithTTL(d time.Duration) FetchOption {
-	return func(o *fetchOptions) { o.ttl = d }
-}
-
-// WithSkipCache disables the on-disk cache for a single fetch.
-func WithSkipCache() FetchOption {
-	return func(o *fetchOptions) { o.skipCache = true }
-}
-
 // ErrModelNotFound signals that an id was not present in the AI Hub manifest.
 // The CLI uses this sentinel to fall back to the HuggingFace-style pull path.
 var ErrModelNotFound = errors.New("aihub: model not found in manifest")
@@ -66,21 +38,20 @@ var ErrModelNotFound = errors.New("aihub: model not found in manifest")
 // release_assets URL (some legacy/LLM entries lack one).
 var ErrNoReleaseAssets = errors.New("aihub: model has no release_assets URL")
 
-// Client fetches AI Hub index JSONs with a small on-disk TTL cache. Use
-// NewClient; the zero value is not usable.
+// Client fetches AI Hub index JSONs over the network. Use NewClient; the zero
+// value is not usable.
 type Client struct {
-	baseURL  string
-	version  string
-	cacheDir string
+	baseURL string
+	version string
 
 	http *resty.Client
 
 	modelIndex map[string]*qaihm.ManifestModelEntry
 }
 
-// NewClient builds a Client rooted at cacheDir (typically <data-dir>/aihub).
-// Base URL and pinned aihm version come from CLI config.
-func NewClient(cacheDir string) *Client {
+// NewClient builds a Client. Base URL and pinned aihm version come from CLI
+// config.
+func NewClient() *Client {
 	cfg := config.Get()
 
 	base := strings.TrimRight(cfg.AIHubBaseURL, "/")
@@ -96,10 +67,9 @@ func NewClient(cacheDir string) *Client {
 	c.SetTimeout(30 * time.Second)
 
 	return &Client{
-		baseURL:  base,
-		version:  version,
-		cacheDir: cacheDir,
-		http:     c,
+		baseURL: base,
+		version: version,
+		http:    c,
 	}
 }
 
@@ -114,11 +84,10 @@ func (c *Client) Close() error {
 // LoadManifest fetches the manifest.json for the pinned aihm release (the
 // public bucket has no `latest` alias) and builds an O(1) model lookup index
 // on first success.
-func (c *Client) LoadManifest(ctx context.Context, opts ...FetchOption) (*qaihm.ReleaseManifest, error) {
+func (c *Client) LoadManifest(ctx context.Context) (*qaihm.ReleaseManifest, error) {
 	url := fmt.Sprintf("%s/releases/%s/manifest.json", c.baseURL, c.version)
-	cachePath := filepath.Join(c.cacheDir, "manifest.json")
 
-	data, err := c.fetchJSON(ctx, url, cachePath, opts...)
+	data, err := c.fetchJSON(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("load manifest: %w", err)
 	}
@@ -150,16 +119,12 @@ func (c *Client) LookupModelByDisplayName(displayName string) (*qaihm.ManifestMo
 	return m, nil
 }
 
-// LoadPlatformDirect fetches and caches platform.json by constructing the URL
-// directly from the client's base URL and version — no manifest required.
-// The default TTL is NeverExpireTTL since the device/chipset list is stable.
-func (c *Client) LoadPlatformDirect(ctx context.Context, opts ...FetchOption) (*qaihm.PlatformInfo, error) {
+// LoadPlatformDirect fetches platform.json by constructing the URL directly
+// from the client's base URL and version — no manifest required.
+func (c *Client) LoadPlatformDirect(ctx context.Context) (*qaihm.PlatformInfo, error) {
 	url := fmt.Sprintf("%s/releases/%s/platform.json", c.baseURL, c.version)
-	cachePath := filepath.Join(c.cacheDir, "platform.json")
 
-	// Default to never-expire; caller may override with WithTTL.
-	merged := append([]FetchOption{WithTTL(NeverExpireTTL)}, opts...)
-	data, err := c.fetchJSON(ctx, url, cachePath, merged...)
+	data, err := c.fetchJSON(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("load platform: %w", err)
 	}
@@ -171,15 +136,13 @@ func (c *Client) LoadPlatformDirect(ctx context.Context, opts ...FetchOption) (*
 	return &p, nil
 }
 
-// LoadPlatform fetches and caches platform.json (referenced by manifest).
-func (c *Client) LoadPlatform(ctx context.Context, m *qaihm.ReleaseManifest, opts ...FetchOption) (*qaihm.PlatformInfo, error) {
+// LoadPlatform fetches platform.json (URL referenced by manifest).
+func (c *Client) LoadPlatform(ctx context.Context, m *qaihm.ReleaseManifest) (*qaihm.PlatformInfo, error) {
 	if m == nil || m.GetPlatformUrl() == "" {
 		return nil, errors.New("aihub: manifest has no platform_url")
 	}
 
-	cachePath := filepath.Join(c.cacheDir, "platform.json")
-
-	data, err := c.fetchJSON(ctx, m.GetPlatformUrl(), cachePath, opts...)
+	data, err := c.fetchJSON(ctx, m.GetPlatformUrl())
 	if err != nil {
 		return nil, fmt.Errorf("load platform: %w", err)
 	}
@@ -193,7 +156,7 @@ func (c *Client) LoadPlatform(ctx context.Context, m *qaihm.ReleaseManifest, opt
 
 // LoadReleaseAssets fetches release-assets.json for a given model id.
 // Returns ErrNoReleaseAssets if the manifest entry lacks the URL.
-func (c *Client) LoadReleaseAssets(ctx context.Context, m *qaihm.ReleaseManifest, id string, opts ...FetchOption) (*qaihm.ModelReleaseAssets, error) {
+func (c *Client) LoadReleaseAssets(ctx context.Context, m *qaihm.ReleaseManifest, id string) (*qaihm.ModelReleaseAssets, error) {
 	var model *qaihm.ManifestModelEntry
 	for _, entry := range m.GetModels() {
 		if entry.GetId() == id {
@@ -208,7 +171,7 @@ func (c *Client) LoadReleaseAssets(ctx context.Context, m *qaihm.ReleaseManifest
 		return nil, ErrNoReleaseAssets
 	}
 
-	data, err := c.fetchDirect(ctx, model.GetManifestUrls().GetReleaseAssets())
+	data, err := c.fetchJSON(ctx, model.GetManifestUrls().GetReleaseAssets())
 	if err != nil {
 		return nil, fmt.Errorf("load release assets for %s: %w", id, err)
 	}
@@ -220,37 +183,8 @@ func (c *Client) LoadReleaseAssets(ctx context.Context, m *qaihm.ReleaseManifest
 	return &ra, nil
 }
 
-// fetchDirect fetches url and returns the body bytes without touching disk.
-func (c *Client) fetchDirect(ctx context.Context, url string) ([]byte, error) {
-	slog.Debug("aihub: fetching (no-cache)", "url", url)
-	resp, err := c.http.R().SetContext(ctx).Get(url)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("http %d from %s", resp.StatusCode(), url)
-	}
-	return resp.Bytes(), nil
-}
-
-// fetchJSON returns the bytes of url, serving from cachePath if the cached
-// file is younger than the effective TTL. Defaults: TTL=DefaultCacheTTL,
-// skipCache=false. Cache write failures are logged and swallowed.
-func (c *Client) fetchJSON(ctx context.Context, url, cachePath string, opts ...FetchOption) ([]byte, error) {
-	fo := defaultFetchOptions()
-	for _, o := range opts {
-		o(&fo)
-	}
-
-	if !fo.skipCache && cachePath != "" {
-		if info, err := os.Stat(cachePath); err == nil && time.Since(info.ModTime()) < fo.ttl {
-			if data, err := os.ReadFile(cachePath); err == nil {
-				slog.Debug("aihub: cache hit", "url", url, "path", cachePath)
-				return data, nil
-			}
-		}
-	}
-
+// fetchJSON GETs url and returns the body bytes.
+func (c *Client) fetchJSON(ctx context.Context, url string) ([]byte, error) {
 	slog.Debug("aihub: fetching", "url", url)
 	resp, err := c.http.R().SetContext(ctx).Get(url)
 	if err != nil {
@@ -259,17 +193,7 @@ func (c *Client) fetchJSON(ctx context.Context, url, cachePath string, opts ...F
 	if resp.StatusCode() != http.StatusOK {
 		return nil, fmt.Errorf("http %d from %s", resp.StatusCode(), url)
 	}
-	body := resp.Bytes()
-
-	if !fo.skipCache && cachePath != "" {
-		if err := os.MkdirAll(filepath.Dir(cachePath), 0o770); err == nil {
-			if werr := os.WriteFile(cachePath, body, 0o664); werr != nil {
-				slog.Warn("aihub: cache write failed", "path", cachePath, "err", werr)
-			}
-		}
-	}
-
-	return body, nil
+	return resp.Bytes(), nil
 }
 
 // aiHubOrgs is the allowlist of HuggingFace-style org names that route through

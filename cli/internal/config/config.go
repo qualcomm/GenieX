@@ -49,7 +49,6 @@ type Config struct {
 	Log          string
 	AIHubBaseURL string // Override the AI Hub public assets base URL (rarely used)
 	AIHubVersion string // Override the pinned aihm release version
-	AIHubNoCache bool   // If true, always refetch AI Hub index JSONs (no disk cache)
 }
 
 // init sets up viper defaults and env binding. Runs once at package load.
@@ -59,7 +58,6 @@ func init() {
 	viper.SetDefault("log", "none")                       // Default log level
 	viper.SetDefault("aihubbaseurl", DefaultAIHubBaseURL) // AI Hub public assets base URL
 	viper.SetDefault("aihubversion", DefaultAIHubVersion) // Pinned aihm release version
-	viper.SetDefault("aihubnocache", false)               // Disable AI Hub JSON caching
 
 	viper.SetEnvPrefix("geniex")
 	viper.AutomaticEnv()

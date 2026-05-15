@@ -19,7 +19,6 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"slices"
 
@@ -40,7 +39,6 @@ func registerModelHub() {
 			v, _, _ := s.ConfigGet(store.ConfigKeyDevice)
 			return v
 		},
-		filepath.Join(s.DataPath(), "aihub"),
 	))
 }
 

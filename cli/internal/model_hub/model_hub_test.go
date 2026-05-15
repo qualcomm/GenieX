@@ -35,7 +35,6 @@ func TestMain(m *testing.M) {
 	// since there is no store singleton in the test binary.
 	hubs = []ModelHub{NewAIHub(
 		func() string { return "qualcomm-snapdragon-x-elite" },
-		os.TempDir(),
 	)}
 
 	os.Exit(m.Run())

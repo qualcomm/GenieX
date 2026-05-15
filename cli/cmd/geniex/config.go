@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"slices"
 	"sort"
@@ -27,7 +26,6 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
@@ -157,15 +155,10 @@ func autoDetectChipset(ctx context.Context) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	cacheDir := filepath.Join(store.Get().DataPath(), "aihub")
-	client := aihub.NewClient(cacheDir)
+	client := aihub.NewClient()
 	defer client.Close()
 
-	var fetchOpts []aihub.FetchOption
-	if config.Get().AIHubNoCache {
-		fetchOpts = append(fetchOpts, aihub.WithSkipCache())
-	}
-	plat, err := client.LoadPlatformDirect(ctx, fetchOpts...)
+	plat, err := client.LoadPlatformDirect(ctx)
 	if err != nil {
 		return "", false
 	}
@@ -180,18 +173,12 @@ func autoDetectChipset(ctx context.Context) (string, bool) {
 // presents an interactive selector. The selected device's chipset string is
 // stored under the "device" config key.
 func pickDevice(ctx context.Context) error {
-	cacheDir := filepath.Join(store.Get().DataPath(), "aihub")
-	client := aihub.NewClient(cacheDir)
+	client := aihub.NewClient()
 	defer client.Close()
-
-	var fetchOpts []aihub.FetchOption
-	if config.Get().AIHubNoCache {
-		fetchOpts = append(fetchOpts, aihub.WithSkipCache())
-	}
 
 	spin := render.NewSpinner("fetching device list...")
 	spin.Start()
-	plat, err := client.LoadPlatformDirect(ctx, fetchOpts...)
+	plat, err := client.LoadPlatformDirect(ctx)
 	spin.Stop()
 	if err != nil {
 		fmt.Println(render.GetTheme().Error.Sprintf("Failed to fetch device list: %s", err))

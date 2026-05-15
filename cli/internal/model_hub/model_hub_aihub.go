@@ -30,7 +30,6 @@ import (
 
 	"github.com/bytedance/sonic"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/downloader"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
@@ -66,9 +65,9 @@ type resolvedAsset struct {
 	manifestJSON []byte // serialised pseudo geniex.json
 }
 
-func NewAIHub(chipsetGetter func() string, cacheDir string) *AIHub {
+func NewAIHub(chipsetGetter func() string) *AIHub {
 	return &AIHub{
-		client:        aihub.NewClient(cacheDir),
+		client:        aihub.NewClient(),
 		chipsetGetter: chipsetGetter,
 		http:          downloader.NewDownloader(),
 		resolved:      make(map[string]resolvedAsset),
@@ -101,12 +100,7 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 		return nil, ErrChipsetNotConfigured
 	}
 
-	var fetchOpts []aihub.FetchOption
-	if config.Get().AIHubNoCache {
-		fetchOpts = append(fetchOpts, aihub.WithSkipCache())
-	}
-
-	manifest, err := h.client.LoadManifest(ctx, fetchOpts...)
+	manifest, err := h.client.LoadManifest(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -118,11 +112,11 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 		return nil, rerr
 	}
 
-	plat, err := h.client.LoadPlatform(ctx, manifest, fetchOpts...)
+	plat, err := h.client.LoadPlatform(ctx, manifest)
 	if err != nil {
 		return nil, err
 	}
-	ra, err := h.client.LoadReleaseAssets(ctx, manifest, model.GetId(), fetchOpts...)
+	ra, err := h.client.LoadReleaseAssets(ctx, manifest, model.GetId())
 	if err != nil {
 		return nil, err
 	}
