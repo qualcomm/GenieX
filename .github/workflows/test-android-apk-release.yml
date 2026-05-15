@@ -6,7 +6,12 @@
 # Delete this file once the new pipeline is validated.
 name: TEMP - Test Android APK Release
 
+# TEMP: also auto-runs on every push to perry/feat/apk-automation so we can
+# iterate without clicking "Run workflow". Drop the `push:` trigger before
+# merging — see the file header.
 on:
+  push:
+    branches: [perry/feat/apk-automation]
   workflow_dispatch:
     inputs:
       rc_tag:
@@ -34,7 +39,10 @@ jobs:
     steps:
       - id: check
         env:
-          TAG: ${{ inputs.rc_tag }}
+          # On workflow_dispatch use the user-supplied rc_tag; on push, derive
+          # a per-commit RC tag (always a pre-release so the safety check below
+          # passes and the mutable geniex-demo.apk pointer is never touched).
+          TAG: ${{ inputs.rc_tag || format('v0.0.0-rc.{0}', github.sha) }}
         run: |
           set -euo pipefail
           semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
