@@ -1,134 +1,122 @@
 ---
-title: 快速入门
-description: 几分钟内开始使用 GenieX AI Android SDK。
+title: "快速入门"
+description: 安装 GenieX 示例应用或从源码构建，在 Android 上运行你的第一个模型。
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-## **教程视频**
+有两种方式运行 GenieX Android 示例：安装预构建 APK（最快）或在 Android Studio 中从源码构建（可修改界面并锁定特定 SDK 版本）。
 
-{/* YouTube embed following Mintlify format */}
-<iframe
-  className="w-full aspect-video rounded-xl"
-  src="https://www.youtube.com/embed/v_bASJDlhME"
-  title="GenieX AI Android SDK Quickstart Tutorial"
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-  allowFullScreen
-></iframe>
+## **方式一：安装预构建 APK**
 
-## **安装**
+下载最新示例 APK：
 
-GenieX AI Android SDK 可从 Maven Central 获取，最新版本为 [0.0.24](https://repo1.maven.org/maven2/ai/nexa/core/0.0.24/)。你也可以在 [Maven Repository](https://mvnrepository.com/artifact/ai.nexa/core) 查看（更新略慢于 Maven Central）。
+<Card
+  title="geniex-demo-v0.1.4.apk"
+  icon="download"
+  href="https://github.com/qcom-ai-hub/geniex/releases/download/untagged-0ec4024212c07721bbf9/geniex-demo-v0.1.4.apk"
+>
+  最新 GenieX Android 示例 APK（v0.1.4）。已签名的调试构建 — 通过 `adb install` 安装或上传到 QDC 会话。
+</Card>
 
-### **添加依赖**
+### **1a. 使用物理骁龙 8 Elite Gen 5 设备**
 
-在 `app/build.gradle.kts` 中添加以下内容以导入 GenieX SDK：
-
-```kotlin
-android{
-  packagingOptions {
-    jniLibs.useLegacyPackaging = true
-  }
-}
-dependencies {
-  implementation("ai.nexa:core:0.0.24")
-}
-```
-<Note>
-  默认仓库为 mavenCentral()。你也可以在 settings.gradle.kts 中添加 GitHub 原始仓库：
-  ```kotlin
-  dependencyResolutionManagement{
-      repositories {
-          maven {
-              url = uri("https://raw.githubusercontent.com/NexaAI/core/main")
-          }
-      }
-  }
-  ```
-</Note>
-
-## **运行第一个模型**
+需要主机上安装 [`adb`](https://developer.android.com/tools/adb)，以及一部 **骁龙 8 Elite Gen 5**（Hexagon v81 NPU）手机。
 
 <Steps>
-  <Step title="初始化 SDK">
-    在 Android 应用中初始化 GenieX SDK：
-
-    ```kotlin
-    NexaSdk.getInstance().init(this)
-    ```
+  <Step title="启用 USB 调试">
+    在手机上，打开 **设置 → 关于手机**，连续点击 **版本号** 七次，然后进入 **设置 → 系统 → 开发者选项**，启用 **USB 调试**。
   </Step>
-
-  <Step title="下载并加载模型">
-    创建 VLM 包装器并加载用于 NPU 推理的模型。你可以从 Hugging Face 下载 [OmniNeural-4B 模型](https://huggingface.co/NexaAI/OmniNeural-4B-mobile)，并将其放置在应用有权访问的文件夹中，例如：`/data/data/${your-app-packagename}/files/models/OmniNeural-4B`
-
-    ```kotlin
-    VlmWrapper.builder()
-        .vlmCreateInput(
-            VlmCreateInput(
-                model_name = "omni-neural",
-                model_path = <your-model-file-absolute-path>,
-                config = ModelConfig(
-                    max_tokens = 2048,
-                    enable_thinking = false
-                ),
-                plugin_id = "npu"
-            )
-        )
-        .build()
-        .onSuccess { vlmWrapper = it }
+  <Step title="连接并验证">
+    ```bash
+    adb devices
     ```
-
-    <Note>
-      应用需要对模型文件夹有访问权限。例如在示例应用中，model_path 设置为 `/data/data/com.nexa.demo/files/models/OmniNeural-4B/files-1-1.nexa`
-    </Note>
+    手机应显示为 `device` 状态。如果显示 `unauthorized`，请在手机上接受 RSA 提示。
   </Step>
-
-  <Step title="生成内容">
-    使用已加载的模型生成响应：
-
-    ```kotlin
-    vlmWrapper.generateStreamFlow("Who are you?", GenerationConfig()).collect { result ->
-        println(result)
-    }
+  <Step title="安装 APK">
+    ```bash
+    adb install -r geniex-demo-v0.1.4.apk
     ```
+    `-r` 允许覆盖安装之前的版本。
+  </Step>
+  <Step title="启动">
+    从应用列表打开 **GenieX Demo**。首次使用时模型会从 Hugging Face / Qualcomm AI Hub 下载 — 请保持 Wi-Fi 连接。
   </Step>
 </Steps>
 
-## **支持的模型**
+### **1b. 无物理设备 — 使用高通设备云（QDC）**
 
-我们为你精选了兼容模型合集：
+如果没有 Elite Gen 5 手机，可以在高通设备云上按分钟租用。
 
-<CardGroup cols={2}>
-  <Card title="NPU 模型" icon="microchip" href="https://huggingface.co/collections/NexaAI/qualcomm-npu-mobile">
-    针对高通 NPU 优化的模型
-  </Card>
-  <Card title="GGUF 模型" icon="file-code">
-    任何 GGUF 格式的 LLM 和 VLM 模型
-  </Card>
-</CardGroup>
+<Steps>
+  <Step title="选择设备">
+    登录 [Qualcomm Device Cloud](https://qdc.qualcomm.com/)，选择 **Snapdragon 8 Elite Gen 5**，然后选择 **Interactive session**。
+  </Step>
+  <Step title="配置会话">
+    启动会话前，启用：
+    - **Wi-Fi** — 示例应用需要从 Hugging Face / AI Hub 下载模型。
+    - **保持屏幕常亮** — 避免下载过程中锁屏。
 
-## **设备兼容性**
+    此流程**不需要** SSH。
+  </Step>
+  <Step title="上传 APK">
+    在会话设置中，使用 **Upload file** 将 `geniex-demo-v0.1.4.apk` 推送到设备。
+  </Step>
+  <Step title="启动并测试">
+    启动会话。使用浏览器中的镜像屏幕完成安装和启动示例应用 — 无需本地 adb。
+  </Step>
+</Steps>
 
-<AccordionGroup>
-  <Accordion title="NPU 支持" icon="microchip">
-    - 高通骁龙 8 Elite
-    - 高通骁龙 8 Elite Gen 5
-  </Accordion>
-  
-  <Accordion title="GPU 支持" icon="bolt">
-    - 高通 Adreno GPU
-  </Accordion>
-  
-  <Accordion title="CPU 支持" icon="memory">
-    - ARM64-v8a
-  </Accordion>
-</AccordionGroup>
+## **方式二：从源码构建示例应用**
+
+在 Android Studio 中构建示例 — 适用于修改界面或锁定特定已发布的 SDK 版本。
+
+<Note>
+Gradle 从 **Maven Central** 拉取 GenieX SDK（坐标：`com.qualcomm.qti:geniex-android:0.1.4`）。此方式**不需要**自行构建原生 SDK。
+</Note>
+
+<Steps>
+  <Step title="克隆仓库">
+    ```bash
+    git clone https://github.com/qcom-ai-hub/geniex.git
+    cd geniex
+    ```
+  </Step>
+  <Step title="在 Android Studio 中打开示例项目">
+    打开 **`examples/android/`**（示例应用）。**不要**打开 `bindings/android/` — 那是 SDK 绑定模块，此流程通过 Maven Central 消费。
+  </Step>
+  <Step title="同步 Gradle">
+    Android Studio 会提示同步。同步会从 Maven Central 解析 `com.qualcomm.qti:geniex-android:0.1.4` — 这是示例需要的唯一 SDK 依赖。
+  </Step>
+  <Step title="连接设备">
+    将启用了 USB 调试的骁龙 8 Elite Gen 5 手机插入电脑（参见方式 1a），让 Android Studio 检测到它。
+  </Step>
+  <Step title="运行">
+    点击 **Run ▶**。Android Studio 构建 APK，安装到手机并启动示例。
+  </Step>
+</Steps>
+
+## **使用示例应用**
+
+应用启动后：
+
+1. **选择模型** — 从顶部下拉菜单选择：
+   - **Hugging Face GGUF (llama.cpp)** — Qwen3、Phi-4、Gemma、Granite、Qwen3-VL 等。
+   - **AI Hub NPU (QAIRT)** — `qualcomm/Qwen3-4B-Instruct-2507`、`qualcomm/Qwen2.5-VL-7B-Instruct`。
+2. **下载** — 点击 Download。进度可断点续传：关闭应用后重启会从断点继续。
+3. **加载** — 弹窗让你选择执行目标（GGUF 可选 CPU / GPU / NPU / Hybrid；AI Hub 模型仅 NPU）。
+4. **聊天** — 输入文字，或点击图像按钮使用 VLM。
 
 ## **下一步**
 
-<Card title="API 参考" icon="book" href="/cn/geniex-android/APIReference">
-  查看所有模型类型的详细文档，了解其用法。
-</Card>
+<CardGroup cols={2}>
+  <Card title="示例" href="/cn/geniex-android/model-tutorial" icon="book-open">
+    下载、加载和运行 LLM 及 VLM 模型的分步示例。
+  </Card>
+  <Card title="API 参考" href="/cn/geniex-android/api-reference" icon="code">
+    插件/设备选择和数据结构。
+  </Card>
+</CardGroup>
 
 <br />
 
