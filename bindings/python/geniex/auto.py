@@ -175,6 +175,18 @@ def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **
     return cfg
 
 
+def _is_vlm(mmproj_path: str | None, model_name: str) -> bool:
+    # mmproj_path is the llama_cpp signal (multimodal projector file).
+    # QAIRT VLMs bundle the vision encoder into the QNN binary, so they have
+    # no mmproj — fall back to the cached manifest's ModelType.
+    if mmproj_path is not None:
+        return True
+    try:
+        return _mm.get_type(model_name) == 'vlm'
+    except Exception:  # noqa: BLE001 — uncached / unknown → treat as LLM
+        return False
+
+
 def _create_vlm_handle(
     resolved_name: str,
     model_path: str,
@@ -256,7 +268,7 @@ class AutoModelForCausalLM:
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
 
         resolved_mmproj = mmproj_path or _mmproj
-        if resolved_mmproj is not None:
+        if _is_vlm(resolved_mmproj, model_name_or_path):
             return _create_vlm_handle(
                 resolved_name,
                 model_path,
