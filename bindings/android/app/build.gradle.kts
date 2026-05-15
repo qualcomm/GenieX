@@ -69,7 +69,13 @@ val copyBridgeLibs = tasks.register<Copy>("copyBridgeLibs") {
         rename("libgeniex_plugin\\.so", "libgeniex_plugin_llama_cpp.so")
     }
     from(File(libDir, "qairt")) {
-        include("libgeniex_core.so", "libgeniex_plugin.so")
+        include(
+            "libgeniex_core.so",
+            "libgeniex_plugin.so",
+            "libgeniex_vlm.so",
+            "libgeniex-proc.so",
+            "libgeniex-proc-vision.so",
+        )
         rename("libgeniex_plugin\\.so", "libgeniex_plugin_qairt.so")
     }
     // Do NOT copy from qairt/htp-files/: that dir is populated by the
