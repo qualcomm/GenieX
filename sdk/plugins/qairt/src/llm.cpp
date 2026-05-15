@@ -166,11 +166,11 @@ int32_t QairtLlm::apply_chat_template(
         pipeline_->setSystemPrompt(sp);
     }
 
-    // Tools may change between turns (dynamic tool registration), so stage
-    // unconditionally — not gated by is_first_turn_. Parse OAI-compat tools
-    // JSON here at the plugin boundary; the qairt core sees only typed
-    // ChatTool entries and never raw JSON.
-    if (input->tools && input->tools[0] != '\0') {
+    // Tools usually live in the first-turn system block. They are part of the cached
+    // KV-cache prefix — re-staging on later turns would emit a duplicate
+    // system block. Callers that need a different tool list mid-conversation
+    // must call reset() first.
+    if (is_first_turn_ && input->tools && input->tools[0] != '\0') {
         try {
             auto j = nlohmann::ordered_json::parse(input->tools);
             if (!j.is_array()) {
