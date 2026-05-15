@@ -77,6 +77,6 @@ def test_cli_chat_qairt_single_prompt(qairt_paths):
         timeout=300,
     )
     assert r.returncode == 0, r.stderr
-    # Should print the `(llm)` dispatch tag and a non-empty generation.
-    assert '(llm)' in r.stdout
+    # Should print the `(llm, ...)` dispatch tag and a non-empty generation.
+    assert '(llm,' in r.stdout
     assert r.stdout.strip() != ''
