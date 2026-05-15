@@ -11,7 +11,10 @@
 //!   STORED zip entry inside an AI Hub asset).
 //! - [`BytesSource::HttpDeflate`] — single-range fetch + inline flate2
 //!   decode. Resume is entry-granular because DEFLATE is not seekable.
-//! - [`BytesSource::Local`] — plain copy for `LocalFsSource`.
+//! - [`BytesSource::Local`] — plain copy for `LocalFsSource` directories.
+//! - [`BytesSource::LocalRange`] / [`BytesSource::LocalDeflate`] —
+//!   byte ranges inside a local zip, with optional DEFLATE decode.
+//!   Used when the user pulls from an AI Hub `.zip` on disk.
 
 pub mod chunk;
 
@@ -279,7 +282,141 @@ async fn run_one(
             tokio::fs::write(&marker, [chunk::PROGRESS_DONE_BYTE]).await?;
             Ok(())
         }
+        BytesSource::LocalRange { path, offset, len } => {
+            copy_local_range(&spec.name, path, offset, len, state, dest_dir).await
+        }
+        BytesSource::LocalDeflate {
+            path,
+            offset,
+            compressed_len,
+        } => {
+            decode_local_deflate(
+                &spec.name,
+                spec.size,
+                path,
+                offset,
+                compressed_len,
+                state,
+                dest_dir,
+            )
+            .await
+        }
     }
+}
+
+/// Copy `[offset, offset+len)` from a local file into `dest_dir/name`.
+/// Single-shot read — local IO doesn't benefit from chunked parallelism
+/// the way remote ranges do.
+async fn copy_local_range(
+    name: &str,
+    src_path: PathBuf,
+    offset: u64,
+    len: u64,
+    state: Arc<FileState>,
+    dest_dir: &Path,
+) -> Result<()> {
+    state.total_bytes.store(len, Ordering::Relaxed);
+    let output_path = dest_dir.join(name);
+    if let Some(parent) = output_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let marker_path = PathBuf::from(format!("{}{}", output_path.display(), PROGRESS_SUFFIX));
+
+    let written = tokio::task::spawn_blocking(move || -> Result<u64> {
+        use std::io::{Read, Seek, SeekFrom, Write};
+        let mut src = std::fs::File::open(&src_path)?;
+        src.seek(SeekFrom::Start(offset))?;
+        let mut limited = src.take(len);
+        let mut out = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&output_path)?;
+        let mut buf = vec![0u8; 64 * 1024];
+        let mut total: u64 = 0;
+        loop {
+            let n = limited.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            out.write_all(&buf[..n])?;
+            total += n as u64;
+        }
+        out.sync_all()?;
+        Ok(total)
+    })
+    .await
+    .map_err(|e| Error::Http(format!("local range join: {e}")))??;
+
+    if written != len {
+        return Err(Error::Hub(format!(
+            "local range short read for {name}: got {written} / expected {len}"
+        )));
+    }
+    state.downloaded_bytes.store(len, Ordering::Relaxed);
+    tokio::fs::write(&marker_path, [chunk::PROGRESS_DONE_BYTE]).await?;
+    Ok(())
+}
+
+/// DEFLATE-decode `[offset, offset+compressed_len)` from a local zip
+/// into `dest_dir/name`. Mirrors the remote [`download_http_deflate`]
+/// path: read the compressed slice into RAM, hand it to a blocking
+/// `flate2::DeflateDecoder`. RAM is bounded by `compressed_len` per
+/// in-flight entry; `file_concurrency` bounds parallelism.
+async fn decode_local_deflate(
+    name: &str,
+    uncompressed_size: u64,
+    src_path: PathBuf,
+    offset: u64,
+    compressed_len: u64,
+    state: Arc<FileState>,
+    dest_dir: &Path,
+) -> Result<()> {
+    state
+        .total_bytes
+        .store(uncompressed_size, Ordering::Relaxed);
+    let output_path = dest_dir.join(name);
+    if let Some(parent) = output_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let marker_path = PathBuf::from(format!("{}{}", output_path.display(), PROGRESS_SUFFIX));
+
+    let name_owned = name.to_string();
+    let out_path = output_path.clone();
+    let decoded_size = tokio::task::spawn_blocking(move || -> Result<u64> {
+        use flate2::write::DeflateDecoder;
+        use std::io::{Read, Seek, SeekFrom, Write as IoWrite};
+        let mut src = std::fs::File::open(&src_path)?;
+        src.seek(SeekFrom::Start(offset))?;
+        let mut compressed = vec![0u8; compressed_len as usize];
+        src.read_exact(&mut compressed)?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&out_path)?;
+        let mut dec = DeflateDecoder::new(&mut file);
+        dec.write_all(&compressed)
+            .map_err(|e| Error::Hub(format!("inflate {}: {e}", out_path.display())))?;
+        let written = dec.total_out();
+        dec.finish()
+            .map_err(|e| Error::Hub(format!("inflate finish {}: {e}", out_path.display())))?;
+        file.sync_all()?;
+        Ok(written)
+    })
+    .await
+    .map_err(|e| Error::Http(format!("local deflate join: {e}")))??;
+
+    if decoded_size != uncompressed_size {
+        return Err(Error::Hub(format!(
+            "local deflate short decode for {name_owned}: got {decoded_size} / expected {uncompressed_size}"
+        )));
+    }
+    state
+        .downloaded_bytes
+        .store(uncompressed_size, Ordering::Relaxed);
+    tokio::fs::write(&marker_path, [chunk::PROGRESS_DONE_BYTE]).await?;
+    Ok(())
 }
 
 /// Chunked parallel download for `Http` and `HttpRange`. The only

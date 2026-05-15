@@ -7,6 +7,7 @@
 //! downloading the multi-GB payload.
 
 pub mod detect;
+pub mod local_transport;
 pub mod manifest;
 pub mod remote_zip;
 pub mod selector;
@@ -334,7 +335,7 @@ impl ModelSource for AiHubSource {
 /// Reduce the raw central-directory entries to a flat list of
 /// `(basename, entry)` pairs, skipping directories + macOS AppleDouble
 /// metadata and rejecting basename collisions.
-fn prepare_flat_entries(raw: &[ZipEntry]) -> Result<Vec<(String, ZipEntry)>> {
+pub(crate) fn prepare_flat_entries(raw: &[ZipEntry]) -> Result<Vec<(String, ZipEntry)>> {
     let mut seen: HashSet<String> = HashSet::new();
     let mut out: Vec<(String, ZipEntry)> = Vec::new();
     for e in raw {
@@ -450,6 +451,32 @@ const AI_HUB_VLM_KEYWORDS: &[&str] = &[
     "understanding images",
     "vlm",
 ];
+
+/// Modality classifier driven by the `metadata.json` shipped *inside*
+/// an AI Hub archive. Mirrors the Go CLI's `detectModelTypeFromDir`:
+/// only `genie.supports_vision` is consulted today. Returns `None` when
+/// the bytes don't parse or the field is absent so the caller can fall
+/// back to a default (LLM) — matching the Go behaviour where an absent
+/// or unparseable file degrades to LLM rather than aborting the pull.
+pub(crate) fn classify_from_metadata_json(bytes: &[u8]) -> Option<ModelType> {
+    #[derive(serde::Deserialize)]
+    struct Outer {
+        #[serde(default)]
+        genie: Option<GenieSection>,
+    }
+    #[derive(serde::Deserialize)]
+    struct GenieSection {
+        #[serde(default)]
+        supports_vision: Option<bool>,
+    }
+    let outer: Outer = serde_json::from_slice(bytes).ok()?;
+    let supports_vision = outer.genie?.supports_vision?;
+    Some(if supports_vision {
+        ModelType::Vlm
+    } else {
+        ModelType::Llm
+    })
+}
 
 /// Modality classifier for the AI Hub source. `domain == MULTIMODAL`
 /// is retained as a positive signal; for `GENERATIVE_AI` models (which

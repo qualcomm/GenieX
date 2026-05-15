@@ -13,6 +13,7 @@
 
 pub mod ai_hub;
 pub mod hf;
+pub mod local_kind;
 pub mod localfs;
 
 use std::path::PathBuf;
@@ -66,9 +67,9 @@ pub struct FileSpec {
 
 /// Byte source for a [`FileSpec`].
 ///
-/// The four variants are what we actually need to cover HF, LocalFS,
-/// and AI Hub. A future ModelScope / Volces hub should be expressible
-/// with `Http` + manifest-side overrides; if not, extend this enum.
+/// Variants cover HF, LocalFS, and AI Hub (remote and local archives).
+/// A future ModelScope / Volces hub should be expressible with `Http` +
+/// manifest-side overrides; if not, extend this enum.
 #[derive(Debug, Clone)]
 pub enum BytesSource {
     /// Full HTTP GET, size known (or discoverable via HEAD). Chunked
@@ -95,7 +96,23 @@ pub enum BytesSource {
         offset: u64,
         compressed_len: u64,
     },
-    /// Local file copy. `LocalFsSource` uses this; tests sometimes do
-    /// too for offline fixtures.
+    /// Local file copy. `LocalFsSource` uses this when the source
+    /// directory is already an unpacked tree; tests sometimes do too
+    /// for offline fixtures.
     Local { path: PathBuf },
+    /// Byte range inside a local file, no decoding. STORED zip entries
+    /// inside an AI Hub archive that the user is pulling from disk.
+    LocalRange {
+        path: PathBuf,
+        offset: u64,
+        len: u64,
+    },
+    /// Byte range inside a local file, DEFLATE-decoded inline. DEFLATE
+    /// zip entries inside an AI Hub archive on disk; counterpart to
+    /// `HttpDeflate` for the local-zip path.
+    LocalDeflate {
+        path: PathBuf,
+        offset: u64,
+        compressed_len: u64,
+    },
 }
