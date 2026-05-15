@@ -14,6 +14,13 @@ same GitHub Release tag, verifies its SHA-256 sidecar, and bundles the
 
 The sdist itself is pure Python — it never contains prebuilt libs.
 
+`pyproject.toml` declares an in-tree PEP 517 wrapper (`_geniex_backend`,
+`backend-path = ["."]`) that aliases `tomli` → `tomllib` before
+delegating to `setuptools.build_meta`. This is the only thing that lets
+`pip install` succeed on Qualcomm Linux's stripped Python 3.12 (which
+omits stdlib `tomllib`). On hosts with stdlib `tomllib` the alias path
+is skipped entirely. See GH #538.
+
 ## Install sources
 
 ```bash
