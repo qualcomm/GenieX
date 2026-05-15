@@ -27,11 +27,23 @@ jobs:
           # via Git LFS (see examples/android/.gitattributes). Without lfs:true
           # those land as 130-byte pointer files and gradlew can't bootstrap.
           lfs: true
+          # geniex-qairt is private; needs a PAT to clone (same pattern as
+          # _build-cli.yml / _build-sdk.yml).
+          token: ${{ secrets.GH_PAT }}
 
       # Silences the default-branch hint gradle's internal git init prints.
       - name: Configure git
         shell: bash
         run: git config --global init.defaultBranch main
+
+      # The binding's copyBridgeLibs Gradle task pulls QNN ARM64 runtime libs
+      # (libQnnHtp.so, libQnnHtpV*.so, libCalculator_skel.so, ...) from
+      # third-party/geniex-qairt/third-party/android/. Without these the QAIRT
+      # plugin loads but every model creation fails with
+      # 'dlopen failed: library "libQnnHtp.so" not found' at QnnInterface init.
+      - name: Init geniex-qairt submodule
+        shell: bash
+        run: git submodule update --init --depth=1 third-party/geniex-qairt
 
       - name: Download Android SDK package
         uses: actions/download-artifact@v8
