@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chat.h"
+#include "htp_session.h"
 #include "mtmd.h"
 #include "plugin/IVlm.h"
 #include "sampling.h"
@@ -21,6 +22,9 @@ class LlamaVlm : public IVlm {
     // Conversation state tracking
     int32_t n_past              = 0;
     int32_t global_n_past_chars = 0;  // Track character position in prompt text (not tokens)
+
+    // Tracks whether this instance pinned an HTP session; releases on last handoff.
+    htp::SessionGuard htp_guard_;
 
    public:
     ~LlamaVlm() override;

@@ -112,6 +112,44 @@ endif()
 
 enable_testing()
 
+# ===============================================================================
+# Third-party patches
+# ===============================================================================
+# Apply local patches to vendored submodules at configure time so the submodules
+# themselves stay pointed at upstream commits. Runs every configure and detects
+# an already-patched tree via `git apply --reverse --check`, so `git submodule
+# update --force` or a manual submodule revert can't silently leave a
+# half-patched build. Rebasing a submodule onto a new upstream tip requires
+# refreshing the corresponding .patch.
+#
+# * llama-hexagon-release-sessions.patch exposes a
+#   "ggml_backend_hexagon_release_sessions" entry via get_proc_address, used by
+#   the llama.cpp plugin to tear down HTP FastRPC channels on model unload so
+#   QAIRT's HTP re-init is not poisoned by stale sessions. See
+#   sdk/plugins/llama_cpp/src/llm.cpp for the caller.
+if(GENIEX_PLUGIN_LLAMA_CPP)
+    set(_LLAMA_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/../third-party/llama.cpp")
+    set(_LLAMA_PATCH "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-release-sessions.patch")
+    if(EXISTS "${_LLAMA_PATCH}")
+        find_package(Git QUIET REQUIRED)
+        execute_process(
+            COMMAND ${GIT_EXECUTABLE} -C "${_LLAMA_DIR}" apply --reverse --check "${_LLAMA_PATCH}"
+            RESULT_VARIABLE _reverse_check_rc
+            OUTPUT_QUIET ERROR_QUIET)
+        if(NOT _reverse_check_rc EQUAL 0)
+            message(STATUS "Applying llama.cpp patch: ${_LLAMA_PATCH}")
+            execute_process(
+                COMMAND ${GIT_EXECUTABLE} -C "${_LLAMA_DIR}" apply "${_LLAMA_PATCH}"
+                RESULT_VARIABLE _apply_rc)
+            if(NOT _apply_rc EQUAL 0)
+                message(FATAL_ERROR
+                    "Failed to apply ${_LLAMA_PATCH} to ${_LLAMA_DIR}. "
+                    "If the submodule was bumped, refresh the patch against the new tip.")
+            endif()
+        endif()
+    endif()
+endif()
+
 # headers
 
 set(COMMON_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/include)

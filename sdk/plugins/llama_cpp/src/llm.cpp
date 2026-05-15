@@ -12,6 +12,7 @@
 #include "ggml-backend.h"
 #include "ggml.h"
 #include "gguf.h"
+#include "htp_session.h"
 #include "logging.h"
 #include "profiler.h"
 
@@ -35,6 +36,13 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     if (!input->model_path) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
+
+    // If a prior llama.cpp instance tore down HTP sessions to hand off to
+    // QAIRT, the ggml registry still holds cached HTP device pointers whose
+    // session context was nulled out. Recreate those sessions now so the
+    // upcoming device lookup / model load does not dereference a null
+    // session. No-op when HTP is unused or sessions are already live.
+    htp::reacquire_before_load();
 
     ggml_backend_dev_t device_array[9] = {nullptr};
     auto               mpar            = llama_model_default_params();
@@ -111,6 +119,14 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
             GENIEX_LOG_ERROR("No valid devices found in '{}'", input->device_id);
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
+    }
+    // The HTP backend opens FastRPC channels at registry construction time
+    // (ggml_hexagon_registry), not per-instance. Those channels live until we
+    // explicitly call release_sessions, so we mark the guard whenever HTP is
+    // registered — the lifetime to track is the registry, not the
+    // device_id/n_gpu_layers selection of this particular load.
+    if (htp::htp_backend_present()) {
+        htp_guard_.mark_htp();
     }
 
     this->model = llama_model_load_from_file(input->model_path, mpar);

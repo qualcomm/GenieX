@@ -8,6 +8,7 @@
 #include <cstring>
 #include <thread>
 
+#include "htp_session.h"
 #include "logging.h"
 #include "profiler.h"
 
@@ -50,6 +51,10 @@ int32_t LlamaCppEmbedding::create_impl(const geniex_EmbedderCreateInput* input) 
 
     GENIEX_LOG_INFO("Creating embedder with model: {}", input->model_path);
 
+    // See llm.cpp for the rationale behind the HTP session release/reacquire
+    // dance. Any llama.cpp class that might load onto HTP must participate.
+    htp::reacquire_before_load();
+
     // Set up model parameters
     GENIEX_LOG_INFO("Setting up model parameters for embedder");
     llama_model_params mparams = llama_model_default_params();
@@ -74,6 +79,11 @@ int32_t LlamaCppEmbedding::create_impl(const geniex_EmbedderCreateInput* input) 
             device_array[1] = nullptr;  // NULL-terminated
             mparams.devices = device_array;
         }
+    }
+
+    // See llm.cpp for why this is registry-scoped rather than per-device.
+    if (htp::htp_backend_present()) {
+        htp_guard_.mark_htp();
     }
 
     // Load the model
