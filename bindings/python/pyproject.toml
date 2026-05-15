@@ -1,6 +1,11 @@
+# In-tree wrapper backend; see _geniex_backend.py and GH #538. tomli is
+# in `requires` so the isolated build env can shim a missing stdlib
+# `tomllib` (Qualcomm Linux 3.12 strip). setuptools 77+ matches the
+# PEP 639 `license` table form already used in `[project]` below.
 [build-system]
-requires = ["setuptools>=74.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["setuptools>=77.0", "wheel", "tomli>=2.0"]
+build-backend = "_geniex_backend"
+backend-path = ["."]
 
 [project]
 name = "geniex"
