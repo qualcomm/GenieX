@@ -30,16 +30,14 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 )
 
-// ErrModelNotFound signals that an id was not present in the AI Hub manifest.
-// The CLI uses this sentinel to fall back to the HuggingFace-style pull path.
+// ErrModelNotFound: id is not in the AI Hub manifest. The CLI uses this
+// sentinel to fall back to the HuggingFace-style pull path.
 var ErrModelNotFound = errors.New("aihub: model not found in manifest")
 
-// ErrNoReleaseAssets signals that the manifest entry exists but has no
-// release_assets URL (some legacy/LLM entries lack one).
+// ErrNoReleaseAssets: manifest entry exists but has no release_assets URL.
 var ErrNoReleaseAssets = errors.New("aihub: model has no release_assets URL")
 
-// Client fetches AI Hub index JSONs over the network. Use NewClient; the zero
-// value is not usable.
+// Client fetches AI Hub index JSONs. Build with NewClient.
 type Client struct {
 	baseURL string
 	version string
@@ -49,8 +47,7 @@ type Client struct {
 	modelIndex map[string]*qaihm.ManifestModelEntry
 }
 
-// NewClient builds a Client. Base URL and pinned aihm version come from CLI
-// config.
+// NewClient: base URL and pinned aihm version come from CLI config.
 func NewClient() *Client {
 	cfg := config.Get()
 
@@ -73,7 +70,6 @@ func NewClient() *Client {
 	}
 }
 
-// Close releases the underlying HTTP client.
 func (c *Client) Close() error {
 	if c.http != nil {
 		return c.http.Close()
@@ -81,9 +77,9 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// LoadManifest fetches the manifest.json for the pinned aihm release (the
-// public bucket has no `latest` alias) and builds an O(1) model lookup index
-// on first success.
+// LoadManifest fetches manifest.json for the pinned aihm release and
+// builds an O(1) display_name → entry index. The public bucket has no
+// `latest` alias, so the version must be pinned.
 func (c *Client) LoadManifest(ctx context.Context) (*qaihm.ReleaseManifest, error) {
 	url := fmt.Sprintf("%s/releases/%s/manifest.json", c.baseURL, c.version)
 
@@ -105,9 +101,8 @@ func (c *Client) LoadManifest(ctx context.Context) (*qaihm.ReleaseManifest, erro
 	return &m, nil
 }
 
-// LookupModelByDisplayName returns the manifest entry whose display_name
-// matches the given string, or ErrModelNotFound.
-// Must be called after LoadManifest has succeeded.
+// LookupModelByDisplayName returns the entry for displayName or
+// ErrModelNotFound. Requires LoadManifest first.
 func (c *Client) LookupModelByDisplayName(displayName string) (*qaihm.ManifestModelEntry, error) {
 	if c.modelIndex == nil {
 		return nil, errors.New("aihub: LookupModelByDisplayName called before LoadManifest")
@@ -119,34 +114,24 @@ func (c *Client) LookupModelByDisplayName(displayName string) (*qaihm.ManifestMo
 	return m, nil
 }
 
-// LoadPlatformDirect fetches platform.json by constructing the URL directly
-// from the client's base URL and version — no manifest required.
+// LoadPlatformDirect fetches platform.json without needing a manifest.
 func (c *Client) LoadPlatformDirect(ctx context.Context) (*qaihm.PlatformInfo, error) {
-	url := fmt.Sprintf("%s/releases/%s/platform.json", c.baseURL, c.version)
-
-	data, err := c.fetchJSON(ctx, url)
-	if err != nil {
-		return nil, fmt.Errorf("load platform: %w", err)
-	}
-
-	var p qaihm.PlatformInfo
-	if err := protojson.Unmarshal(data, &p); err != nil {
-		return nil, fmt.Errorf("parse platform: %w", err)
-	}
-	return &p, nil
+	return c.loadPlatform(ctx, fmt.Sprintf("%s/releases/%s/platform.json", c.baseURL, c.version))
 }
 
-// LoadPlatform fetches platform.json (URL referenced by manifest).
+// LoadPlatform fetches platform.json via the URL in m.
 func (c *Client) LoadPlatform(ctx context.Context, m *qaihm.ReleaseManifest) (*qaihm.PlatformInfo, error) {
 	if m == nil || m.GetPlatformUrl() == "" {
 		return nil, errors.New("aihub: manifest has no platform_url")
 	}
+	return c.loadPlatform(ctx, m.GetPlatformUrl())
+}
 
-	data, err := c.fetchJSON(ctx, m.GetPlatformUrl())
+func (c *Client) loadPlatform(ctx context.Context, url string) (*qaihm.PlatformInfo, error) {
+	data, err := c.fetchJSON(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("load platform: %w", err)
 	}
-
 	var p qaihm.PlatformInfo
 	if err := protojson.Unmarshal(data, &p); err != nil {
 		return nil, fmt.Errorf("parse platform: %w", err)
@@ -154,28 +139,28 @@ func (c *Client) LoadPlatform(ctx context.Context, m *qaihm.ReleaseManifest) (*q
 	return &p, nil
 }
 
-// LoadReleaseAssets fetches release-assets.json for a given model id.
-// Returns ErrNoReleaseAssets if the manifest entry lacks the URL.
+// LoadReleaseAssets fetches release-assets.json for id. Returns
+// ErrModelNotFound or ErrNoReleaseAssets.
 func (c *Client) LoadReleaseAssets(ctx context.Context, m *qaihm.ReleaseManifest, id string) (*qaihm.ModelReleaseAssets, error) {
-	var model *qaihm.ManifestModelEntry
-	for _, entry := range m.GetModels() {
-		if entry.GetId() == id {
-			model = entry
+	var entry *qaihm.ManifestModelEntry
+	for _, e := range m.GetModels() {
+		if e.GetId() == id {
+			entry = e
 			break
 		}
 	}
-	if model == nil {
+	if entry == nil {
 		return nil, ErrModelNotFound
 	}
-	if model.GetManifestUrls().GetReleaseAssets() == "" {
+	url := entry.GetManifestUrls().GetReleaseAssets()
+	if url == "" {
 		return nil, ErrNoReleaseAssets
 	}
 
-	data, err := c.fetchJSON(ctx, model.GetManifestUrls().GetReleaseAssets())
+	data, err := c.fetchJSON(ctx, url)
 	if err != nil {
 		return nil, fmt.Errorf("load release assets for %s: %w", id, err)
 	}
-
 	var ra qaihm.ModelReleaseAssets
 	if err := protojson.Unmarshal(data, &ra); err != nil {
 		return nil, fmt.Errorf("parse release assets: %w", err)
@@ -183,7 +168,6 @@ func (c *Client) LoadReleaseAssets(ctx context.Context, m *qaihm.ReleaseManifest
 	return &ra, nil
 }
 
-// fetchJSON GETs url and returns the body bytes.
 func (c *Client) fetchJSON(ctx context.Context, url string) ([]byte, error) {
 	slog.Debug("aihub: fetching", "url", url)
 	resp, err := c.http.R().SetContext(ctx).Get(url)
@@ -196,13 +180,11 @@ func (c *Client) fetchJSON(ctx context.Context, url string) ([]byte, error) {
 	return resp.Bytes(), nil
 }
 
-// aiHubOrgs is the allowlist of HuggingFace-style org names that route through
-// the AI Hub S3/QAIRT pull path instead of HuggingFace.
-var aiHubOrgs = []string{"qualcomm", "qai-hub-models"}
+// aiHubOrgs are HF-style orgs that route to the AI Hub pull path.
+var aiHubOrgs = []string{"qualcomm"}
 
-// IsAIHubName reports whether name belongs to an AI Hub org
-// (e.g. "qualcomm/Qwen3-4B"). It returns the repo portion (after the slash)
-// as a convenience.
+// IsAIHubName reports whether name belongs to an AI Hub org and returns
+// the repo portion (e.g. "qualcomm/Qwen3-4B" → "Qwen3-4B", true).
 func IsAIHubName(name string) (repo string, ok bool) {
 	parts := strings.SplitN(name, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
@@ -216,7 +198,7 @@ func IsAIHubName(name string) (repo string, ok bool) {
 	return "", false
 }
 
-// HeadContentLength issues a HEAD against url and returns its Content-Length.
+// HeadContentLength returns the Content-Length of url via HEAD.
 func HeadContentLength(ctx context.Context, url string) (int64, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if err != nil {

@@ -68,9 +68,6 @@ func TestExtractFlat_HappyPath(t *testing.T) {
 		t.Fatalf("ExtractFlat: %v", err)
 	}
 
-	if res.EntrypointBasename != "shard_0.bin" {
-		t.Errorf("wrong entrypoint: %s", res.EntrypointBasename)
-	}
 	if len(res.Files) != 4 {
 		t.Errorf("expected 4 files, got %d", len(res.Files))
 	}
@@ -107,21 +104,3 @@ func TestExtractFlat_CollisionFails(t *testing.T) {
 	}
 }
 
-func TestExtractFlat_NoBinShardFails(t *testing.T) {
-	tmp := t.TempDir()
-	zipPath := filepath.Join(tmp, "nobin.zip")
-	dest := filepath.Join(tmp, "out")
-	if err := os.MkdirAll(dest, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	writeZip(t, zipPath, map[string]string{
-		"tokenizer.json": "{}",
-		"config.json":    "{}",
-	})
-
-	_, err := ExtractFlat(zipPath, dest)
-	if !errors.Is(err, ErrNoBinShard) {
-		t.Fatalf("expected ErrNoBinShard, got %v", err)
-	}
-}

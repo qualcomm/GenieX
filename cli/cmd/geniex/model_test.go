@@ -14,7 +14,12 @@
 
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
+)
 
 func TestQuantRegix_MatchAllQuantLevels(t *testing.T) {
 	// Test all quantization levels based on the provided list
@@ -54,5 +59,24 @@ func TestQuantRegix_MatchAllQuantLevels(t *testing.T) {
 		if matched != level {
 			t.Errorf("quantRegix did not match: %s, %s", level, matched)
 		}
+	}
+}
+
+
+// Single-file qairt input (e.g. AI Hub's <repo>.zip) goes straight into
+// ModelFile["N/A"]; multi-file qairt input is left for the hub's
+// PostDownload to promote a placeholder entrypoint.
+func TestChooseFiles_QairtSingleFile(t *testing.T) {
+	files := []model_hub.ModelFileInfo{{Name: "foo.zip", Size: 1234}}
+	res := &types.ModelManifest{PluginId: "qairt"}
+	if err := chooseFiles("acme/foo", "", files, res); err != nil {
+		t.Fatalf("chooseFiles: %v", err)
+	}
+	main, ok := res.ModelFile["N/A"]
+	if !ok || main.Name != "foo.zip" || main.Size != 1234 {
+		t.Errorf("main = %+v, want foo.zip/1234", main)
+	}
+	if len(res.ExtraFiles) != 0 {
+		t.Errorf("ExtraFiles = %v, want none for single-file qairt", res.ExtraFiles)
 	}
 }

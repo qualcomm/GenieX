@@ -17,32 +17,28 @@ package aihub
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"sort"
 	"strings"
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 )
 
-// Errors returned by Match. Callers pattern-match these so they can print
-// actionable hints (e.g. the list of supported chipsets).
+// Sentinel errors returned by MatchAll.
 var (
 	ErrUnknownChipset      = errors.New("aihub: chipset not found in platform.json")
 	ErrChipsetNotAvailable = errors.New("aihub: chipset is not a target for this model")
 	ErrUnsupportedDomain   = errors.New("aihub: model domain not supported by CLI (only LLM/VLM)")
 )
 
-// Availability lists the (chipset, runtime, precision) triples a
-// ReleaseAssets file publishes, for error messages.
+// Availability: one (chipset, runtime, precision) triple from ReleaseAssets.
 type Availability struct {
 	Chipset   string
 	Runtime   string
 	Precision string
 }
 
-// ChipsetNotAvailableError is the typed form of ErrChipsetNotAvailable and
-// carries the list of chipsets actually supported by the model, so the
-// caller can render a user-friendly hint.
+// ChipsetNotAvailableError carries the chipsets actually supported by
+// the model so callers can render a hint. Wraps ErrChipsetNotAvailable.
 type ChipsetNotAvailableError struct {
 	Requested string
 	Available []Availability
@@ -67,8 +63,8 @@ func (e *ChipsetNotAvailableError) Is(target error) bool {
 	return target == ErrChipsetNotAvailable
 }
 
-// RuntimeForDomain maps a ModelDomain enum value to the runtime enum the CLI
-// knows how to download + execute. Returns ErrUnsupportedDomain otherwise.
+// RuntimeForDomain maps a ModelDomain to the runtime the CLI can run.
+// Returns ErrUnsupportedDomain for non-LLM/VLM domains.
 func RuntimeForDomain(domain qaihm.ModelDomain) (qaihm.Runtime, error) {
 	switch domain {
 	case qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI, qaihm.ModelDomain_MODEL_DOMAIN_MULTIMODAL:
@@ -78,9 +74,8 @@ func RuntimeForDomain(domain qaihm.ModelDomain) (qaihm.Runtime, error) {
 	}
 }
 
-// ResolveChipset looks up the user-supplied chipset string against
-// platform.json, matching either ChipsetInfo.Name or any of its aliases. It
-// returns the canonical name.
+// ResolveChipset returns the canonical chipset name matching chipset
+// (case-insensitive, against name + aliases) or ErrUnknownChipset.
 func ResolveChipset(plat *qaihm.PlatformInfo, chipset string) (string, error) {
 	if plat == nil {
 		return "", errors.New("aihub: nil platform")
@@ -104,26 +99,8 @@ func ResolveChipset(plat *qaihm.PlatformInfo, chipset string) (string, error) {
 	return "", fmt.Errorf("%w: %s", ErrUnknownChipset, chipset)
 }
 
-// SupportedChipsetsFor returns the sorted list of canonical chipset names
-// that appear in the given release assets. Used only for error messages.
-func SupportedChipsetsFor(ra *qaihm.ModelReleaseAssets) []string {
-	seen := make(map[string]struct{})
-	for _, a := range ra.GetAssets() {
-		seen[a.GetChipset()] = struct{}{}
-	}
-	names := make([]string, 0, len(seen))
-	for n := range seen {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	return names
-}
-
-// MatchAll returns all assets that match the requested chipset + model domain,
-// sorted by Precision enum value for deterministic ordering.
-//
-// Returns ChipsetNotAvailableError (wrapping ErrChipsetNotAvailable) when no
-// asset matches the requested chipset.
+// MatchAll returns assets matching chipset+domain, sorted by precision.
+// Returns ChipsetNotAvailableError when no asset matches the chipset.
 func MatchAll(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qaihm.ModelDomain, chipset string) ([]*qaihm.ModelReleaseAssets_AssetDetails, error) {
 	if ra == nil || len(ra.GetAssets()) == 0 {
 		return nil, errors.New("aihub: empty release assets")
@@ -161,7 +138,6 @@ func MatchAll(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qai
 		}
 	}
 
-	// Sort by Precision enum int value for deterministic display order.
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].GetPrecision() < candidates[j].GetPrecision()
 	})
@@ -169,23 +145,3 @@ func MatchAll(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qai
 	return candidates, nil
 }
 
-// Match picks exactly one asset for the requested chipset + model domain.
-// When multiple precision variants are available, the one with the lowest
-// Precision enum value is returned. Prefer MatchAll when the caller wants to
-// let the user choose a precision interactively.
-func Match(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qaihm.ModelDomain, chipset string) (*qaihm.ModelReleaseAssets_AssetDetails, error) {
-	candidates, err := MatchAll(ra, plat, domain, chipset)
-	if err != nil {
-		return nil, err
-	}
-	if len(candidates) > 1 {
-		extras := make([]string, 0, len(candidates))
-		for _, c := range candidates {
-			extras = append(extras, c.GetPrecision().String())
-		}
-		slog.Debug("aihub: multiple assets match, picking first",
-			"model", ra.GetModelId(), "chipset", chipset, "runtime", candidates[0].GetRuntime(),
-			"picked", candidates[0].GetPrecision(), "available", extras)
-	}
-	return candidates[0], nil
-}

@@ -15,12 +15,53 @@
 package model_hub
 
 import (
+	"context"
 	"io"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
+
+func TestHFPostDownload_InfersVLMFromMMProj(t *testing.T) {
+	mf := &types.ModelManifest{
+		MMProjFile: types.ModelFileInfo{Name: "mmproj-f16.gguf"},
+	}
+	h := &HuggingFace{}
+	if err := h.PostDownload(context.Background(), "x/y", t.TempDir(), mf); err != nil {
+		t.Fatalf("PostDownload: %v", err)
+	}
+	if mf.ModelType != types.ModelTypeVLM {
+		t.Fatalf("ModelType = %q, want %q", mf.ModelType, types.ModelTypeVLM)
+	}
+}
+
+func TestHFPostDownload_DefaultsToLLM(t *testing.T) {
+	mf := &types.ModelManifest{}
+	h := &HuggingFace{}
+	if err := h.PostDownload(context.Background(), "x/y", t.TempDir(), mf); err != nil {
+		t.Fatalf("PostDownload: %v", err)
+	}
+	if mf.ModelType != types.ModelTypeLLM {
+		t.Fatalf("ModelType = %q, want %q", mf.ModelType, types.ModelTypeLLM)
+	}
+}
+
+func TestHFPostDownload_PreservesPresetType(t *testing.T) {
+	mf := &types.ModelManifest{
+		ModelType:  types.ModelTypeLLM,
+		MMProjFile: types.ModelFileInfo{Name: "mmproj-f16.gguf"},
+	}
+	h := &HuggingFace{}
+	if err := h.PostDownload(context.Background(), "x/y", t.TempDir(), mf); err != nil {
+		t.Fatalf("PostDownload: %v", err)
+	}
+	if mf.ModelType != types.ModelTypeLLM {
+		t.Fatalf("ModelType = %q, want preserved %q", mf.ModelType, types.ModelTypeLLM)
+	}
+}
 
 func TestHFMaxConcurrency_WarnsWithoutToken(t *testing.T) {
 	home := t.TempDir()

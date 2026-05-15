@@ -24,7 +24,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
-	"strings"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -32,31 +31,19 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
-// ErrNoBinShard signals that the zip contains no *.bin file; the qairt
-// plugin has nothing to load without one.
-var ErrNoBinShard = errors.New("aihub: no .bin shard in archive")
-
-// ErrFileCollision signals that two zip entries share the same basename.
-// Flattening them would silently overwrite one, so we fail instead.
+// ErrFileCollision: two zip entries share the same basename. Flattening
+// would silently overwrite one, so we fail instead.
 var ErrFileCollision = errors.New("aihub: duplicate basename in archive")
 
-// ExtractResult summarises the outcome of ExtractFlat.
+// ExtractResult summarises ExtractFlat's output.
 type ExtractResult struct {
-	// EntrypointBasename is the lex-first *.bin shard. The CLI stores this
-	// in ModelManifest.ModelFile["N/A"].Name so the qairt plugin can take
-	// <dir>/<entrypoint> and parent_path() back to the model directory.
-	EntrypointBasename string
-
-	// Files is every extracted file (basename, uncompressed size, Downloaded=true).
-	Files []types.ModelFileInfo
-
-	// TotalSize is the sum of uncompressed sizes across all extracted files.
-	TotalSize int64
+	Files     []types.ModelFileInfo // basename, uncompressed size, Downloaded=true
+	TotalSize int64                 // sum of uncompressed sizes
 }
 
 // ExtractFlat unzips zipPath into destDir, collapsing sub-directories so
-// every file lands at destDir/<basename>. Directory entries and "."/".."
-// names are skipped; basename collisions raise ErrFileCollision.
+// every file lands at destDir/<basename>. Basename collisions raise
+// ErrFileCollision.
 func ExtractFlat(zipPath, destDir string) (*ExtractResult, error) {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
@@ -81,9 +68,8 @@ func ExtractFlat(zipPath, destDir string) (*ExtractResult, error) {
 		seen[base] = e.Name
 	}
 
-	// DEFLATE is CPU-bound; decompress shards in parallel. Each *zip.File
-	// opens its own SectionReader over the underlying file, so concurrent
-	// Open/Copy from different goroutines is safe.
+	// DEFLATE is CPU-bound; decompress in parallel. Each *zip.File opens
+	// its own SectionReader, so concurrent Open/Copy is safe.
 	type job struct {
 		entry *zip.File
 		base  string
@@ -101,22 +87,14 @@ func ExtractFlat(zipPath, destDir string) (*ExtractResult, error) {
 	}
 
 	result := &ExtractResult{Files: make([]types.ModelFileInfo, len(jobs))}
-	limit := runtime.NumCPU()
-	if limit > 8 {
-		limit = 8
-	}
-	if limit > len(jobs) {
-		limit = len(jobs)
-	}
-	if limit < 1 {
-		limit = 1
-	}
+	limit := min(runtime.NumCPU(), 8)
+	limit = min(limit, len(jobs))
+	limit = max(limit, 1)
 
 	var mu sync.Mutex
 	g := new(errgroup.Group)
 	g.SetLimit(limit)
 	for i, j := range jobs {
-		i, j := i, j
 		g.Go(func() error {
 			size, werr := extractOne(j.entry, filepath.Join(destDir, j.base))
 			if werr != nil {
@@ -141,26 +119,14 @@ func ExtractFlat(zipPath, destDir string) (*ExtractResult, error) {
 		return result.Files[i].Name < result.Files[j].Name
 	})
 
-	for _, f := range result.Files {
-		if strings.HasSuffix(strings.ToLower(f.Name), ".bin") {
-			result.EntrypointBasename = f.Name
-			break
-		}
-	}
-	if result.EntrypointBasename == "" {
-		return nil, ErrNoBinShard
-	}
-
 	slog.Debug("aihub: extracted",
 		"zip", zipPath, "dest", destDir,
-		"files", len(result.Files), "size", result.TotalSize,
-		"entrypoint", result.EntrypointBasename)
+		"files", len(result.Files), "size", result.TotalSize)
 	return result, nil
 }
 
-// extractOne streams one zip entry to outPath and returns the uncompressed
-// size written. O_EXCL guards against overwriting any leftover from a prior
-// aborted extract.
+// extractOne streams one entry to outPath. O_EXCL guards against
+// overwriting leftovers from a prior aborted extract.
 func extractOne(e *zip.File, outPath string) (int64, error) {
 	rc, err := e.Open()
 	if err != nil {

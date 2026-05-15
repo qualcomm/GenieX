@@ -33,15 +33,30 @@ import (
 	"resty.dev/v3"
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/downloader"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 const ProgressSuffix = ".progress"
 
+// Plugin IDs used in ModelManifest.PluginId.
+const (
+	PluginLlamaCpp = "llama_cpp"
+	PluginQairt    = "qairt"
+)
+
 type ModelFileInfo struct {
 	Name string `json:"name"`
 	Size int64  `json:"size"`
+}
+
+// ChoosePluginId picks llama_cpp when any file is a GGUF, otherwise qairt.
+func ChoosePluginId(files []ModelFileInfo) string {
+	for _, f := range files {
+		if strings.HasSuffix(strings.ToLower(f.Name), ".gguf") {
+			return PluginLlamaCpp
+		}
+	}
+	return PluginQairt
 }
 
 type ModelHub interface {
@@ -56,20 +71,17 @@ var hubs = []ModelHub{}
 
 var errUnavailable = fmt.Errorf("no model hub contains the model")
 
-// Specify hub to use
+// SetHub replaces the hub list with a single hub.
 func SetHub(h ModelHub) {
 	hubs = []ModelHub{h}
 }
 
 // RegisterHub prepends h to the hub list. Used by downstream packages
-// (e.g. store) to plug in hubs that need runtime dependencies the
-// model_hub package can't take directly, like the AI Hub hub which
-// needs access to the chipset configuration and on-disk cache dir.
+// (e.g. store) to plug in hubs needing runtime dependencies the model_hub
+// package cannot take directly.
 func RegisterHub(h ModelHub) {
 	hubs = append([]ModelHub{h}, hubs...)
 }
-
-// list model files
 
 func ModelInfo(ctx context.Context, modelName string) ([]ModelFileInfo, *types.ModelManifest, error) {
 	slog.Debug("fetching model info", "model", modelName)
@@ -84,7 +96,7 @@ func ModelInfo(ctx context.Context, modelName string) ([]ModelFileInfo, *types.M
 		return nil, nil, err
 	}
 
-	// check manifest available
+	// Strip the manifest entry (if any) from files; parse it separately.
 	var hasManifest bool
 	for i := 0; i < len(files); i++ {
 		if files[i].Name == types.ManifestFileName {
@@ -97,7 +109,6 @@ func ModelInfo(ctx context.Context, modelName string) ([]ModelFileInfo, *types.M
 		return files, nil, nil
 	}
 
-	// parse manifest
 	data, err := GetFileContent(ctx, modelName, types.ManifestFileName)
 	if err != nil {
 		slog.Warn("failed to get manifest file, ignore", "error", err)
@@ -114,8 +125,6 @@ func ModelInfo(ctx context.Context, modelName string) ([]ModelFileInfo, *types.M
 
 }
 
-// PostDownload resolves the active hub for modelName and delegates to it.
-// See ModelHub.PostDownload.
 func PostDownload(ctx context.Context, modelName, outputDir string, mf *types.ModelManifest) error {
 	hub, err := getHub(ctx, modelName)
 	if err != nil {
@@ -123,8 +132,6 @@ func PostDownload(ctx context.Context, modelName, outputDir string, mf *types.Mo
 	}
 	return hub.PostDownload(ctx, modelName, outputDir, mf)
 }
-
-// Get single file content
 
 func GetFileContent(ctx context.Context, modelName, fileName string) ([]byte, error) {
 	slog.Debug("fetching file content", "model", modelName, "file", fileName)
@@ -141,27 +148,19 @@ func GetFileContent(ctx context.Context, modelName, fileName string) ([]byte, er
 	return buf.Bytes(), nil
 }
 
-// Batch download
+const minChunkSize = 16 * 1024 * 1024 // 16MiB
 
-const (
-	minChunkSize = 16 * 1024 * 1024 // 16MiB
-)
-
-// chunkFetcher writes the bytes [offset, offset+limit) of some remote resource
-// into w. Implementations must be safe for concurrent use.
+// chunkFetcher writes the bytes [offset, offset+limit) into w. Must be
+// safe for concurrent use.
 type chunkFetcher func(ctx context.Context, offset, limit int64, w io.Writer) error
 
-// downloadChunked is the shared engine behind StartDownload and
-// StartDownloadURL. It pre-allocates outPath to size bytes, initialises (or
-// reuses) a marker sidecar file for resume support, and dispatches missing
-// chunks to the errgroup g. Completed-chunk progress is reported on resCh.
+// downloadChunked pre-allocates outPath, dispatches missing chunks via g,
+// and reports per-chunk progress on resCh. Resume is supported through
+// the marker sidecar file at markerPath.
 //
-// downloaded must be a pointer to the caller's running total (shared across
-// multiple files in StartDownload). totalSize is the grand total used only for
-// progress reporting.
-//
-// The caller is responsible for calling g.Wait() and removing markerPath on
-// clean completion.
+// downloaded is the caller's running total (shared across files);
+// totalSize is the grand total for progress reporting. The caller waits
+// on g and removes markerPath on success.
 func downloadChunked(
 	ctx context.Context,
 	outPath, markerPath string,
@@ -199,10 +198,8 @@ func downloadChunked(
 	}
 	f.Close()
 
-	// Dispatch chunks.
 	for i, marker := range markers {
 		if marker == 0x01 {
-			// Already downloaded; count it toward progress immediately.
 			atomic.AddInt64(downloaded, min(chunkSize, size-int64(i)*chunkSize))
 			continue
 		}
@@ -303,64 +300,9 @@ func StartDownload(ctx context.Context, modelName, outputPath string, files []Mo
 	return resCh, errCh
 }
 
-// StartDownloadURL downloads a single remote URL into a specific file on
-// disk using the same chunked, resumable, parallel machinery as StartDownload.
-// Used by the AI Hub (qairt) flow, where the asset is a single .zip whose
-// direct URL is resolved before the download begins.
-//
-// outputDir must exist. dstName is the basename under outputDir. A sidecar
-// <dstName>.progress marker file is created for resume support and removed
-// on clean completion. size must be the exact Content-Length of the URL.
-func StartDownloadURL(ctx context.Context, urlStr, outputDir, dstName string, size int64) (chan types.DownloadInfo, chan error) {
-	const maxConcurrency = 8
-	resCh := make(chan types.DownloadInfo)
-	errCh := make(chan error, maxConcurrency)
-
-	slog.Info("Starting URL download", "url", urlStr, "outputDir", outputDir, "file", dstName, "size", size)
-
-	go func() {
-		defer close(errCh)
-		defer close(resCh)
-
-		if size <= 0 {
-			errCh <- fmt.Errorf("StartDownloadURL: invalid size %d", size)
-			return
-		}
-		if err := os.MkdirAll(outputDir, 0o755); err != nil {
-			errCh <- fmt.Errorf("create outputDir: %w", err)
-			return
-		}
-
-		outPath := filepath.Join(outputDir, dstName)
-		markerPath := outPath + ProgressSuffix
-
-		hd := downloader.NewDownloader()
-		fetch := func(ctx context.Context, offset, limit int64, w io.Writer) error {
-			return hd.DownloadChunk(ctx, urlStr, offset, limit, w)
-		}
-
-		var downloaded int64
-		g, gctx := errgroup.WithContext(ctx)
-		g.SetLimit(maxConcurrency)
-
-		if err := downloadChunked(gctx, outPath, markerPath, size, size, &downloaded, g, resCh, fetch); err != nil {
-			errCh <- err
-			return
-		}
-
-		if err := g.Wait(); err != nil {
-			errCh <- err
-			return
-		}
-		_ = os.Remove(markerPath)
-		slog.Info("url download complete", "url", urlStr, "outPath", outPath)
-	}()
-
-	return resCh, errCh
-}
-
+// NormalizeModelName splits "<name>[:<quant>]" and applies shortcuts:
+// bare name → "qualcomm/<name>", HF URL → repo path.
 func NormalizeModelName(name string) (string, string) {
-	// split quant
 	parts := strings.SplitN(name, ":", 2)
 	name = parts[0]
 	quant := ""
@@ -368,33 +310,24 @@ func NormalizeModelName(name string) (string, string) {
 		quant = strings.ToUpper(parts[1])
 	}
 
-	// support shortcuts
 	if actualName, exists := config.GetModelMapping(name); exists {
 		return actualName, quant
 	}
-
-	// support qwen3 -> qualcomm/qwen3
 	if !strings.Contains(name, "/") {
 		return "qualcomm/" + name, quant
 	}
-
-	// support https://huggingface.co/Qwen/Qwen3-0.6B-GGUF -> Qwen/Qwen3-0.6B-GGUF
 	if strings.HasPrefix(name, HF_ENDPOINT) {
 		return strings.TrimPrefix(name, HF_ENDPOINT+"/"), quant
 	}
-
 	return name, quant
 }
 
 func getHub(ctx context.Context, modelName string) (ModelHub, error) {
-	// if only one hub specified, check availability first
 	if len(hubs) == 1 {
 		h := hubs[0]
 		slog.Info("specified single hub", "hub", reflect.TypeOf(h))
 		return h, h.CheckAvailable(ctx, modelName)
 	}
-
-	// try each hub
 	for _, h := range hubs {
 		if err := h.CheckAvailable(ctx, modelName); err != nil {
 			slog.Warn("hub not available, try next", "hub", reflect.TypeOf(h), "err", err)
@@ -403,7 +336,6 @@ func getHub(ctx context.Context, modelName string) (ModelHub, error) {
 			return h, nil
 		}
 	}
-
 	return nil, errUnavailable
 }
 
