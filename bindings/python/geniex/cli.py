@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import re
 import sys
@@ -38,7 +39,10 @@ from geniex import (
     get_device_list,
     get_plugin_list,
     init,
+    qairt_version,
     resolve_device_map,
+    set_log_level,
+    version,
 )
 from geniex.auto import _apply_plugin_hint
 
@@ -264,6 +268,46 @@ def _chat_loop(
         _run_turn(model, history, user, max_tokens, temperature, is_vlm=is_vlm)
 
 
+_VERBOSITY_TO_LEVEL = {1: 'info', 2: 'debug'}
+_LOG_LEVEL_CHOICES = ('trace', 'debug', 'info', 'warn', 'error', 'none')
+
+
+def _resolve_log_level(args: argparse.Namespace) -> str | None:
+    """Pick the effective log level from CLI flags. None = leave defaults alone."""
+    if args.log_level:
+        return args.log_level
+    if args.verbose <= 0:
+        return None
+    return _VERBOSITY_TO_LEVEL.get(args.verbose, 'trace')
+
+
+def _apply_log_level(level: str) -> None:
+    """Wire the SDK→Python log bridge to stderr at ``level``."""
+    set_log_level(level)
+    py_level = {
+        'trace': logging.DEBUG,
+        'debug': logging.DEBUG,
+        'info': logging.INFO,
+        'warn': logging.WARNING,
+        'error': logging.ERROR,
+        'none': logging.CRITICAL + 1,
+    }.get(level, logging.INFO)
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter('%(levelname)s %(name)s: %(message)s'))
+    logger = logging.getLogger('geniex')
+    logger.addHandler(handler)
+    logger.setLevel(py_level)
+    logger.propagate = False
+
+
+def _cmd_version(_args: argparse.Namespace) -> int:
+    init()
+    print(f'geniex (python): {geniex.__version__}')
+    print(f'SDK:             {version()}')
+    print(f'QAIRT:           {qairt_version()}')
+    return 0
+
+
 def _cmd_devices(_args: argparse.Namespace) -> int:
     init()
     plugins = get_plugin_list()
@@ -485,6 +529,19 @@ def _add_hub_args(p: argparse.ArgumentParser) -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog='geniex-py', description='GenieX Python CLI')
+    parser.add_argument(
+        '-v',
+        '--verbose',
+        action='count',
+        default=0,
+        help='Increase log verbosity: -v=info, -vv=debug, -vvv+=trace',
+    )
+    parser.add_argument(
+        '--log-level',
+        choices=_LOG_LEVEL_CHOICES,
+        default=None,
+        help='Set SDK log level explicitly (overrides -v and GENIEX_LOG)',
+    )
     sub = parser.add_subparsers(dest='cmd', required=True)
 
     chat = sub.add_parser('chat', help='Interactive chat with a model')
@@ -530,13 +587,20 @@ def _build_parser() -> argparse.ArgumentParser:
     devices = sub.add_parser('devices', help='List available plugins and devices')
     devices.set_defaults(func=_cmd_devices)
 
+    ver = sub.add_parser('version', help='Print binding, SDK, and QAIRT versions')
+    ver.set_defaults(func=_cmd_version)
+
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    level = _resolve_log_level(args)
     try:
+        if level is not None:
+            init()
+            _apply_log_level(level)
         return args.func(args)
     except GeniexError as e:
         print(f'error: {e}', file=sys.stderr)
