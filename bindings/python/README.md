@@ -54,10 +54,12 @@ local path to a `.gguf` file or a pre-downloaded directory.
 
 ### VLM
 
-```python
-from geniex import AutoModelForVision2Seq
+`AutoModelForCausalLM` auto-detects multimodal models and returns a `GeniexVLM`:
 
-model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen3-VL-2B-Instruct-GGUF", device_map="auto")
+```python
+from geniex import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-VL-2B-Instruct-GGUF", device_map="auto")
 messages = [{
     "role": "user",
     "content": [

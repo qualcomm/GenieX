@@ -32,8 +32,8 @@ import time
 import geniex
 from geniex import (
     AutoModelForCausalLM,
-    AutoModelForVision2Seq,
     GeniexError,
+    GeniexVLM,
     _progress,
     get_device_list,
     get_plugin_list,
@@ -290,29 +290,22 @@ def _cmd_chat(args: argparse.Namespace) -> int:
         local_path=args.local_path,
     )
 
-    # Dispatch LLM vs VLM from the cached manifest. Fall back to LLM when
-    # the model type can't be resolved (local paths, fresh installs, etc.).
-    try:
-        model_type = _mm.get_type(args.model)
-    except GeniexError:
-        model_type = 'llm'
-    is_vlm = model_type == 'vlm'
-    factory = AutoModelForVision2Seq if is_vlm else AutoModelForCausalLM
-
     name = f'{args.model}:{args.quant}' if args.quant else args.model
-    sys.stdout.write(f'{_DIM}loading {name} ({model_type}) ...{_RESET} ')
+    sys.stdout.write(f'{_DIM}loading {name} ...{_RESET} ')
     sys.stdout.flush()
     t0 = time.monotonic()
-    model = factory.from_pretrained(
+    model = AutoModelForCausalLM.from_pretrained(
         args.model,
         quant=args.quant,
         device_map=args.device,
         n_ctx=args.n_ctx,
     )
     elapsed = time.monotonic() - t0
+    is_vlm = isinstance(model, GeniexVLM)
+    model_type = 'vlm' if is_vlm else 'llm'
     plugin_id, device_id, _ngl = resolve_device_map(args.device, args.model)
     where = f'{plugin_id}:{device_id}' if plugin_id and device_id else (plugin_id or args.device)
-    print(f'{_DIM}done ({elapsed:.1f}s, {where}){_RESET}')
+    print(f'{_DIM}done ({model_type}, {elapsed:.1f}s, {where}){_RESET}')
 
     try:
         if args.prompt is not None:

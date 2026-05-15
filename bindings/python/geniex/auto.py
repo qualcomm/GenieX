@@ -120,8 +120,14 @@ def _resolve_model_sources(
     quant: str | None,
     hf_token: str | None,
     progress: ProgressCallback | bool | None,
+    model_name: str | None = None,
 ) -> tuple[str, str | None, str | None, _mm.ModelPaths | None]:
     if os.path.exists(model_name_or_path):
+        if model_name:
+            local_dir = model_name_or_path if os.path.isdir(model_name_or_path) else os.path.dirname(model_name_or_path)
+            _mm.pull(model_name, hub='localfs', local_path=os.path.abspath(local_dir))
+            paths = _mm.get_paths(model_name)
+            return paths.model_path, paths.mmproj_path, paths.tokenizer_path, paths
         return _resolve_local_anchor(model_name_or_path), None, None, None
 
     # Try the local cache first so AiHub/LocalFs models pulled previously
@@ -169,8 +175,43 @@ def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **
     return cfg
 
 
+def _create_vlm_handle(
+    resolved_name: str,
+    model_path: str,
+    mmproj_path: str | None,
+    tokenizer_path: str | None,
+    plugin_id: str | None,
+    device_id: str | None,
+    config: geniex_ModelConfig,
+    license_id: str | None,
+    license_key: str | None,
+) -> GeniexVLM:
+    inp = geniex_VlmCreateInput(
+        model_name=resolved_name.encode(),
+        model_path=model_path.encode(),
+        config=config,
+    )
+    if mmproj_path:
+        inp.mmproj_path = mmproj_path.encode()
+    if tokenizer_path:
+        inp.tokenizer_path = tokenizer_path.encode()
+    if plugin_id:
+        inp.plugin_id = plugin_id.encode()
+    if device_id:
+        inp.device_id = device_id.encode()
+    if license_id:
+        inp.license_id = license_id.encode()
+    if license_key:
+        inp.license_key = license_key.encode()
+
+    handle = c_void_p()
+    lib = load_library()
+    _check(lib.geniex_vlm_create(byref(inp), byref(handle)))
+    return GeniexVLM(handle)
+
+
 class AutoModelForCausalLM:
-    """Factory for text-only causal language models."""
+    """Factory for causal language models (text-only and multimodal)."""
 
     @classmethod
     def from_pretrained(
@@ -182,39 +223,30 @@ class AutoModelForCausalLM:
         device_map: str = 'auto',
         n_ctx: int = 0,
         n_gpu_layers: int = 999,
+        mmproj_path: str | None = None,
         tokenizer_path: str | None = None,
         license_id: str | None = None,
         license_key: str | None = None,
         hf_token: str | None = None,
         progress: ProgressCallback | bool | None = None,
         **kwargs,
-    ) -> GeniexLLM:
-        """Load a causal LM by HF repo id, alias, or local path.
+    ) -> GeniexLLM | GeniexVLM:
+        """Load a causal LM or VLM by HF repo id, alias, or local path.
 
-        Args:
-            model_name_or_path: HuggingFace repo id, short alias, or local path.
-            model_name: Override the registry model name (e.g. ``'granite4'`` for QAIRT).
-            quant: Quantization variant (e.g. ``'Q4_K_M'``).
-            device_map: See :func:`resolve_device_map`.
-            n_ctx: Context length (``0`` = model default; forced to ``0`` on qairt).
-            n_gpu_layers: Layers offloaded to GPU/NPU; coerced for ``cpu``/``hybrid``/qairt.
-            tokenizer_path: Optional tokenizer path override.
-            license_id / license_key: NPU licence credentials.
-            hf_token: HuggingFace bearer token; falls back to ``GENIEX_HFTOKEN`` env.
-            progress: Download progress display. ``None`` (default) auto-detects
-                Jupyter / TTY / non-interactive; ``False`` silences output; a
-                callable is used as-is (see :data:`model_manager.ProgressCallback`).
+        When the model is detected as multimodal (e.g. phi4_multimodal,
+        qwen3.5-vl, gemma4), a :class:`GeniexVLM` is returned instead.
         """
         ensure_init()
-        model_path, _mmproj, _tok, paths = _resolve_model_sources(model_name_or_path, quant, hf_token, progress)
-        # QAIRT uses `model_name` as a registry key (e.g. `qwen3_4b`), not org/repo —
-        # carry the cached manifest's ModelName forward when the caller didn't override.
+        model_path, _mmproj, _tok, paths = _resolve_model_sources(
+            model_name_or_path,
+            quant,
+            hf_token,
+            progress,
+            model_name,
+        )
         resolved_name = model_name or (
             paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
         )
-        # When the caller leaves device_map as 'auto' and the cache knows which
-        # plugin produced the model, route to that plugin instead of the first
-        # registered one — otherwise QAIRT bins fall through to llama_cpp.
         effective_device_map = device_map
         if (not device_map or device_map == 'auto') and paths and paths.plugin_id:
             effective_device_map = paths.plugin_id
@@ -222,6 +254,20 @@ class AutoModelForCausalLM:
         if ngl_override is not None:
             n_gpu_layers = ngl_override
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
+
+        resolved_mmproj = mmproj_path or _mmproj
+        if resolved_mmproj is not None:
+            return _create_vlm_handle(
+                resolved_name,
+                model_path,
+                resolved_mmproj,
+                tokenizer_path or _tok,
+                plugin_id,
+                device_id,
+                config,
+                license_id,
+                license_key,
+            )
 
         inp = geniex_LlmCreateInput(
             model_name=resolved_name.encode(),
@@ -254,6 +300,7 @@ class AutoModelForVision2Seq:
         cls,
         model_name_or_path: str,
         *,
+        model_name: str | None = None,
         quant: str | None = None,
         device_map: str = 'auto',
         n_ctx: int = 0,
@@ -272,8 +319,16 @@ class AutoModelForVision2Seq:
         ``mmproj_path`` is an optional override for the multimodal projector file.
         """
         ensure_init()
-        model_path, _mmproj, _tok, paths = _resolve_model_sources(model_name_or_path, quant, hf_token, progress)
-        resolved_name = paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
+        model_path, _mmproj, _tok, paths = _resolve_model_sources(
+            model_name_or_path,
+            quant,
+            hf_token,
+            progress,
+            model_name,
+        )
+        resolved_name = model_name or (
+            paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
+        )
         effective_device_map = device_map
         if (not device_map or device_map == 'auto') and paths and paths.plugin_id:
             effective_device_map = paths.plugin_id
@@ -282,27 +337,14 @@ class AutoModelForVision2Seq:
             n_gpu_layers = ngl_override
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
 
-        inp = geniex_VlmCreateInput(
-            model_name=resolved_name.encode(),
-            model_path=model_path.encode(),
-            config=config,
+        return _create_vlm_handle(
+            resolved_name,
+            model_path,
+            mmproj_path or _mmproj,
+            tokenizer_path or _tok,
+            plugin_id,
+            device_id,
+            config,
+            license_id,
+            license_key,
         )
-        resolved_mmproj = mmproj_path or _mmproj
-        if resolved_mmproj:
-            inp.mmproj_path = resolved_mmproj.encode()
-        resolved_tokenizer = tokenizer_path or _tok
-        if resolved_tokenizer:
-            inp.tokenizer_path = resolved_tokenizer.encode()
-        if plugin_id:
-            inp.plugin_id = plugin_id.encode()
-        if device_id:
-            inp.device_id = device_id.encode()
-        if license_id:
-            inp.license_id = license_id.encode()
-        if license_key:
-            inp.license_key = license_key.encode()
-
-        handle = c_void_p()
-        lib = load_library()
-        _check(lib.geniex_vlm_create(byref(inp), byref(handle)))
-        return GeniexVLM(handle)

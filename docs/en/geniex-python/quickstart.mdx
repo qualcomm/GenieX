@@ -102,11 +102,11 @@ Then run inference using the full path to the downloaded image:
 
 ```python
 import os
-from geniex import AutoModelForVision2Seq
+from geniex import AutoModelForCausalLM
 
 image_path = os.path.abspath("demo.jpg")
 
-model = AutoModelForVision2Seq.from_pretrained("unsloth/Qwen2.5-VL-3B-Instruct-GGUF", quant="Q8_0", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("unsloth/Qwen2.5-VL-3B-Instruct-GGUF", quant="Q8_0", device_map="auto")
 messages = [{
     "role": "user",
     "content": [
