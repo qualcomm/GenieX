@@ -29,7 +29,6 @@ set(GENIEX_VERSION "v0.0.0" CACHE STRING "Geniex library version")
 
 option(GENIEX_PLUGIN_LLAMA_CPP  "Enable llama.cpp backend"       ON)
 option(GENIEX_PLUGIN_QAIRT      "Enable QAIRT backend"           ON)
-option(GENIEX_DEBUG             "Enable debug mode"              OFF)
 option(GENIEX_TEST              "Enable unit tests"              OFF)
 option(GENIEX_MODEL_MANAGER     "Enable model manager"           ON)
 
@@ -37,7 +36,6 @@ message(STATUS "=============== Options ===============")
 message(STATUS "GENIEX_VERSION:          ${GENIEX_VERSION}")
 message(STATUS "GENIEX_PLUGIN_LLAMA_CPP: ${GENIEX_PLUGIN_LLAMA_CPP}")
 message(STATUS "GENIEX_PLUGIN_QAIRT:     ${GENIEX_PLUGIN_QAIRT}")
-message(STATUS "GENIEX_DEBUG:            ${GENIEX_DEBUG}")
 message(STATUS "GENIEX_TEST:             ${GENIEX_TEST}")
 message(STATUS "GENIEX_MODEL_MANAGER:    ${GENIEX_MODEL_MANAGER}")
 message(STATUS "=======================================")
@@ -120,10 +118,7 @@ set(COMMON_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # compile definitions
 
-if(GENIEX_DEBUG)
-    add_compile_definitions(GENIEX_DEBUG)
-    add_compile_definitions(PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
-endif()
+add_compile_definitions(PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 # subdirectories
 
