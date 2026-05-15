@@ -12,11 +12,11 @@ import Feedback from "/snippets/page-feedback.mdx";
 下载最新示例 APK：
 
 <Card
-  title="geniex-demo-v0.1.4.apk"
+  title="geniex-demo.apk"
   icon="download"
-  href="https://github.com/qcom-ai-hub/geniex/releases/download/untagged-0ec4024212c07721bbf9/geniex-demo-v0.1.4.apk"
+  href="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-demo.apk"
 >
-  最新 GenieX Android 示例 APK（v0.1.4）。已签名的调试构建 — 通过 `adb install` 安装或上传到 QDC 会话。
+  最新 GenieX Android 示例 APK。已签名的调试构建 — 通过 `adb install` 安装或上传到 QDC 会话。
 </Card>
 
 ### **1a. 使用物理骁龙 8 Elite 设备**
@@ -35,7 +35,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Step>
   <Step title="安装 APK">
     ```bash
-    adb install -r geniex-demo-v0.1.4.apk
+    adb install -r geniex-demo.apk
     ```
     `-r` 允许覆盖安装之前的版本。
   </Step>
@@ -60,7 +60,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     此流程**不需要** SSH。
   </Step>
   <Step title="上传 APK">
-    **在启动会话之前**，在会话设置页面使用 **Upload file** 将 `geniex-demo-v0.1.4.apk` 推送到设备。文件必须在会话开始前上传。
+    **在启动会话之前**，在会话设置页面使用 **Upload file** 将 `geniex-demo.apk` 推送到设备。文件必须在会话开始前上传。
   </Step>
   <Step title="启动并测试">
     启动会话。在镜像屏幕中点击已上传的 APK 进行安装，然后从应用列表打开 **GenieX Demo** — 无需本地 adb。
@@ -80,7 +80,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 在 Android Studio 中构建示例 — 适用于修改界面或锁定特定已发布的 SDK 版本。
 
 <Note>
-Gradle 从 **Maven Central** 拉取 GenieX SDK（坐标：`com.qualcomm.qti:geniex-android:0.1.4`）。此方式**不需要**自行构建原生 SDK。
+Gradle 从 **Maven Central** 拉取 GenieX SDK（坐标：`com.qualcomm.qti:geniex-android:0.1.6`）。此方式**不需要**自行构建原生 SDK。
 </Note>
 
 <Steps>
@@ -94,7 +94,7 @@ Gradle 从 **Maven Central** 拉取 GenieX SDK（坐标：`com.qualcomm.qti:geni
     打开 **`examples/android/`**（示例应用）。**不要**打开 `bindings/android/` — 那是 SDK 绑定模块，此流程通过 Maven Central 消费。
   </Step>
   <Step title="同步 Gradle">
-    Android Studio 会提示同步。同步会从 Maven Central 解析 `com.qualcomm.qti:geniex-android:0.1.4` — 这是示例需要的唯一 SDK 依赖。
+    Android Studio 会提示同步。同步会从 Maven Central 解析 `com.qualcomm.qti:geniex-android:0.1.6` — 这是示例需要的唯一 SDK 依赖。
   </Step>
   <Step title="连接设备">
     将启用了 USB 调试的骁龙 8 Elite 或 8 Elite Gen 5 手机插入电脑（参见方式 1a），让 Android Studio 检测到它。
