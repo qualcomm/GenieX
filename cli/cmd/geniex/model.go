@@ -74,35 +74,31 @@ func pull() *cobra.Command {
 	return pullCmd
 }
 
-// remove creates a command to delete a cached model by name.
-// Usage: geniex remove <model-name>
+// Usage: geniex remove <model-name>[:<quant>]
 func remove() *cobra.Command {
 	removeCmd := &cobra.Command{
 		GroupID: "model",
-		Use:     "remove <model-name> [<model-name> ...]",
+		Use:     "remove <model-name>[:<quant>] [<model-name>[:<quant>] ...]",
 		Aliases: []string{"rm"},
 		Short:   "Remove cached model",
-		Long:    "Delete a cached model by name. This will remove the model files from the local cache.",
+		Long:    "Delete a cached model by name. Append ':<quant>' to remove a single quant; otherwise the whole model is removed.",
 	}
 
 	removeCmd.Args = cobra.MatchAll(cobra.MinimumNArgs(1), cobra.OnlyValidArgs)
 
 	removeCmd.Run = func(cmd *cobra.Command, args []string) {
+		s := store.Get()
 		for _, arg := range args {
 			name, quant := model_hub.NormalizeModelName(arg)
+			label := name
 			if quant != "" {
-				fmt.Println(render.GetTheme().Error.Sprintf("Currently not support remove a single quant, please remove the whole model: %s", name))
+				label = name + ":" + quant
+			}
+			if err := s.Remove(name, quant); err != nil {
+				fmt.Println(render.GetTheme().Error.Sprintf("✘  Failed to remove %s: %s", label, err))
 				os.Exit(1)
 			}
-
-			s := store.Get()
-			e := s.Remove(name)
-			if e != nil {
-				fmt.Println(render.GetTheme().Error.Sprintf("✘  Failed to remove model: %s", name))
-				os.Exit(1)
-			} else {
-				fmt.Println(render.GetTheme().Success.Sprintf("✔  Removed %s", name))
-			}
+			fmt.Println(render.GetTheme().Success.Sprintf("✔  Removed %s", label))
 		}
 	}
 
