@@ -67,6 +67,25 @@ Yes. GenieX targets Qualcomm Snapdragon platforms — Hexagon NPU, Adreno GPU, a
 
 No. QAIRT is NPU-only by design. `cpu` and `gpu` aliases are coerced to NPU with a warning. Use the llama.cpp backend (with a GGUF) if you need CPU/GPU fallback.
 
+## **QDC (Qualcomm Device Cloud)**
+
+### How do I connect to a QDC device?
+
+SSH into a QDC device in two steps:
+
+1. **Setup SSH tunneling** — In the QDC portal, go to **Interactive Sessions** → **Connect** to get the SSH command. Run it with your private key to establish a tunnel.
+2. **Connect** — In a new terminal, SSH into the forwarded port:
+
+```bash bash
+ssh -o StrictHostKeychecking=no -o UserKnownHostsFile=/dev/null -p 2222 root@localhost
+```
+
+The default password is `oelinux123`. See the [CLI Quick Start](/en/geniex-cli/quickstart#connecting-to-a-qdc-device) for screenshots and full walkthrough.
+
+### Do I need my own QDC device?
+
+No. You can request access to Qualcomm Device Cloud for remote testing on Snapdragon hardware. See [Supported devices](/en/get-started/devices) for details.
+
 ## **Server / API**
 
 ### Is the local server OpenAI-compatible?
