@@ -1,18 +1,118 @@
 name: Test
 
-# Placeholder for the pytest-via-FFI harness (matrix: plugin x platform).
+# Pytest harness for the SDK end-to-end suite under tests/. Phase 1 runs
+# only the model-free API subset and the llama_cpp CPU subset on
+# windows-arm64 — the matrix is markered so a future self-hosted
+# Snapdragon runner can drop in by filtering on `-m snapdragon` (and
+# providing AI Hub credentials for the qairt cells).
 
 on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, ready_for_review]
+    paths:
+      - "sdk/**"
+      - "bindings/python/**"
+      - "tests/**"
+      - "third-party/**"
+      - ".gitmodules"
+      - ".github/workflows/test.yml"
+      - ".github/workflows/_build-sdk.yml"
   workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Explicit version tag (passed through to build-sdk)."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
+  packages: read
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
-    name: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+  build-sdk:
+    name: build-sdk
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_build-sdk.yml
+    secrets: inherit
+    with:
+      upload_artifact: true
+      version_tag: ${{ inputs.version_tag || '' }}
+
+  pytest-windows-arm64:
+    name: pytest-windows-arm64
+    needs: [build-sdk]
+    runs-on: windows-arm64
+    timeout-minutes: 45
+
     steps:
-      - name: Placeholder
-        run: 'echo "TODO: wire pytest harness."'
+      - name: Configure Windows Git
+        shell: cmd
+        run: |
+          echo C:\Program Files\Git\bin>>%GITHUB_PATH%
+          git config --global core.longpaths true
+          git config --global core.protectNTFS false
+
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Download SDK artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: sdk-windows-arm64
+          path: sdk/pkg-geniex
+
+      - name: Setup Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+
+      - name: Install Python binding (editable)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install "pytest>=7.0"
+          # Skip the auto SDK download — _ffi/_lib.py picks the libs up
+          # from sdk/pkg-geniex/lib/ that we just downloaded.
+          GENIEX_SKIP_SDK_DOWNLOAD=1 python -m pip install -e bindings/python --no-build-isolation
+          python -c "import geniex; geniex.init(); print('plugins:', geniex.get_plugin_list()); geniex.deinit()"
+
+      # ~/.cache/geniex is only populated by the llama_cpp HF pull on
+      # first run; key the cache by the model identifiers in the suite
+      # so any future model bump invalidates cached blobs automatically.
+      - name: Cache HF GGUF blobs
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/geniex
+          key: geniex-models-llama_cpp-windows-arm64-v1-${{ hashFiles('tests/_models.py') }}
+          restore-keys: |
+            geniex-models-llama_cpp-windows-arm64-v1-
+
+      - name: Run pytest — API subset
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pytest tests -m api --junitxml=.pytest-junit-api.xml
+
+      - name: Run pytest — llama_cpp CPU subset
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pytest tests -m "llama_cpp and device_cpu" --junitxml=.pytest-junit-llama_cpp-cpu.xml
+
+      - name: Upload junit XML
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pytest-junit-windows-arm64
+          path: .pytest-junit-*.xml
+          retention-days: 7

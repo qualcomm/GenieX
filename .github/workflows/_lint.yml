@@ -69,7 +69,7 @@ jobs:
         id: files
         uses: ./.github/actions/changed-files
         with:
-          include: '^bindings/python/.*\.py$'
+          include: '^(bindings/python|tests)/.*\.py$'
 
       - name: Ruff check
         if: steps.files.outputs.any == 'true'
