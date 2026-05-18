@@ -70,15 +70,14 @@ jobs:
           name: sdk-windows-arm64
           path: sdk/pkg-geniex
 
-      - name: Setup Python 3.10
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.10"
-
+      # actions/setup-python@v6 has no Python 3.10 ARM64 build on
+      # Windows; the windows-arm64 runner ships a system Python that
+      # imports the SDK natively, so use it directly.
       - name: Install Python binding (editable)
         shell: bash
         run: |
           set -euo pipefail
+          python --version
           python -m pip install --upgrade pip
           python -m pip install "pytest>=7.0"
           # Skip the auto SDK download — _ffi/_lib.py picks the libs up
