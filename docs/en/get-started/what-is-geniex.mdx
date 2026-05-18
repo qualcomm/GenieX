@@ -7,6 +7,16 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 GenieX is an on-device AI inference runtime built for Qualcomm Snapdragon platforms. It runs frontier language and vision-language models locally on Hexagon NPU, Adreno GPU, or CPU — with no cloud dependency.
 
+## **Architecture**
+
+<img
+  src="/Mintlify-image/geniex_arch.png"
+  alt="GenieX architecture stack: CLI, Python API, Java API, Docker, and Serve interfaces sit on the GenieX SDK, which dispatches to the llama.cpp plugin (GGML runtime over CPU/GPU/HTP kernels) or the QAIRT plugin (QAIRT SDK on NPU). Targets Windows, Android, and Linux."
+  style={{ borderRadius: '0.5rem' }}
+/>
+
+GenieX exposes five entry points — CLI, Python, Java/Kotlin, Docker, and an OpenAI-compatible server — over a single SDK that dispatches to either the **llama.cpp plugin** (GGML kernels for CPU / GPU / Hexagon HTP) or the **QAIRT plugin** (Qualcomm AI Runtime, NPU-only). The same SDK runs on Windows on Arm, Android, and Linux ARM64.
+
 ## **What you can do with GenieX**
 
 - **Run models locally** on Snapdragon X (Windows on Arm), Snapdragon 8 Elite (Android), and Dragonwing IoT devices.
