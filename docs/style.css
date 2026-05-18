@@ -1025,7 +1025,7 @@ ul#sidebar-group li div.group:hover {
 }
 
 #header {
-  margin-bottom: 24px;
+  display: none !important;
 }
 
 .flex.flex-col.gap-8 {

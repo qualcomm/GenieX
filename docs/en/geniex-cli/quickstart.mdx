@@ -1,0 +1,153 @@
+---
+title: "Quick Start"
+description: "Get started with GenieXSDK on Windows ARM64 and Linux ARM64"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **Quick Start**
+
+Install GenieX CLI on Windows ARM64 or Linux ARM64 and run your first LLM or multimodal model in minutes.
+
+## **Running Your First Model**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ### **Windows ARM64 Installation**
+
+    Download the installer:
+
+    - [GenieX CLI Download](https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-cli.exe)
+
+    click the downloaded `.exe` file and follow the installation. The App is not signed yet, so you need to click "More info" then click "run anyway".
+    
+    Currently, we support LLM and Multimodal models. Before you run any command, please firstly add geniex to your `PATH`:
+    ```powershell windows
+    Set-Alias geniex (where.exe geniex)
+    ```
+
+    ### **Running Your First Model through QAIRT plugin**
+
+    **Language Model (LLM)**
+
+    ```bash Windows
+   geniex infer qualcomm/Qwen3-4B
+    ```
+
+    **Multimodal Model**
+    ```bash Windows
+    geniex infer qualcomm/Qwen2.5-VL-7B-Instruct
+    ```
+
+    ### **Running Your First Model through llama.cpp plugin**
+    Remember to select `Q4_0` as quant type which has the best support with llama.cpp Hexagon backend.
+
+    **Language Model (LLM)**
+
+    ```bash Windows
+    geniex infer unsloth/Qwen3.5-0.8B-GGUF
+    ```
+
+    **Multimodal Model**
+    ```bash Windows
+    geniex infer Qwen/Qwen3-VL-2B-Instruct-GGUF
+    ```
+
+    When prompted, select:
+    - **Model type**: `vlm` for vision-language models, `llm` for language models. Currently for Gemma4 and Qwen3.5, please select `llm`, currently `vlm` path is not supported.
+
+    - **Quantization**: `Q4_0` — best Hexagon NPU support for llama.cpp
+
+    <Note>Multimodal support for `Qwen3.5` and `Gemma4` is coming soon.</Note>
+
+    <Tip>To try other GGUF models, visit Hugging Face, copy the path of any compatible GGUF model (e.g., `unsloth/Phi-4-mini-instruct-GGUF`), and replace the model path in the command above.</Tip>
+
+  </Tab>
+
+  <Tab title="Linux ARM64">
+    ### **Linux ARM64 Installation (Docker)**
+
+    GenieX on Linux ARM64 runs via Docker. Log in to GitHub Container Registry and pull the image:
+
+    ```bash
+    export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxx
+    export GITHUB_USERNAME=your_github_username
+    docker login ghcr.io -u "$GITHUB_USERNAME" -p "$GITHUB_TOKEN"
+    ```
+    Then you expect to see a "Login Succeeded" message. After that, pull the latest GenieXSDK Docker image:
+
+    ```bash
+    docker pull ghcr.io/qcom-ai-hub/geniex-cli:latest
+    ```
+
+    <Note>
+    `--privileged` is required for NPU/GPU device access. The `-v /usr/lib:/opt/qcom-lib:ro` mount exposes host Qualcomm libraries to the container. `-v "$PWD/data:/data"` persists the model cache across runs.
+    </Note>
+
+    ### **Running Your First Model (CLI Mode)**
+
+    Run GenieX in interactive CLI mode for direct model inference:
+
+    ```bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      infer Qwen/Qwen3-0.6B-GGUF
+    ```
+
+    **Language Model (LLM)**
+
+    ```bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      infer unsloth/Qwen3.5-0.8B-GGUF
+    ```
+
+    **Multimodal Model**
+
+    ```bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      infer Qwen/Qwen3-VL-2B-Instruct-GGUF
+    ```
+
+    ### **Server Mode**
+
+    Start the OpenAI-compatible REST API server:
+
+    ```bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      --network=host \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      serve
+    ```
+
+    The server listens on `http://localhost:18181`. From another terminal, connect an interactive shell to the running server:
+
+    ```bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      --network=host \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      run <model>
+    ```
+
+    <Note>`geniex serve` does not auto-download models. Pre-download models with `infer` or `pull` before starting the server.</Note>
+
+
+  </Tab>
+
+</Tabs>
+
+
+<br />
+
+<Feedback/>

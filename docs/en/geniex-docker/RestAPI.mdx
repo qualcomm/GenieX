@@ -1,0 +1,88 @@
+---
+title: "Local Server"
+description: "Local OpenAI-compatible API for text generation"
+---
+
+import Feedback from '/snippets/page-feedback.mdx';
+
+## **Local Server**
+
+Run GenieX as an OpenAI-compatible REST API server in Docker for integration with applications and agentic workflows.
+
+## **Starting the Server**
+
+Run GenieXSDK in server mode to expose a REST API endpoint:
+
+```bash bash
+docker run -it --rm --privileged \
+  -v "$PWD/data:/data" \
+  -v /usr/lib:/opt/qcom-lib:ro \
+  --network=host \
+  ghcr.io/qcom-ai-hub/geniex-cli:latest \
+  serve
+```
+
+<Note>
+The `--privileged` flag is required for NPU/GPU device access. `--network=host` exposes the server on your host's network so you can reach it at `http://localhost:18181`.
+</Note>
+
+The server runs on `http://127.0.0.1:18181` by default. Keep the container running, and make your requests from another terminal or application.
+
+`geniex serve` won't auto-download models. Make sure to pre-download the models you intend to use (e.g., via `infer` or `pull`).
+
+<Info>
+You can also access the interactive Swagger UI documentation at [`http://127.0.0.1:18181/docs/ui`](http://127.0.0.1:18181/docs/ui) to explore and test the API endpoints directly from your browser.
+</Info>
+
+
+## **API Endpoints**
+
+The GenieXSDK REST API provides OpenAI-compatible endpoints for various AI tasks. For detailed API documentation including request/response formats, examples, and all available endpoints, please refer to the [CLI REST API documentation](/en/geniex-cli/GenieXAPI).
+
+### **Available Endpoints**
+
+- **`/v1/chat/completions`** - Creates model responses for conversations (LLM and VLM)
+- **`/v1/models`** - Lists available models
+- **`/v1/models/{model}`** - Retrieves information about a specific model
+
+<Info>
+All API endpoints, request/response formats, and usage examples are documented in the [CLI REST API page](/en/geniex-cli/GenieXAPI). The API interface is identical whether running via CLI or Docker - only the server startup method differs.
+</Info>
+
+## **Python Example (OpenAI SDK)**
+
+Because the server speaks the OpenAI protocol, you can point the official `openai` Python client at the local endpoint and reuse any existing OpenAI code. Install the SDK with `pip install openai`, then:
+
+```python python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://127.0.0.1:18181/v1",
+    api_key="geniex",  # any non-empty string; the server does not check it
+)
+
+stream = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",  # org/repo[:quant] — Q4_0 has the best Hexagon NPU support
+    messages=[
+        {"role": "user", "content": "Hello! Briefly introduce yourself."},
+    ],
+    max_tokens=256,
+    temperature=0.7,
+    stream=True,
+)
+
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="", flush=True)
+print()
+```
+
+<Note>
+Replace the `model` value with a model you have already pulled. `geniex serve` does not auto-download models. The optional `:<quant>` suffix selects a quantization variant (e.g. `Q4_0`, `Q4_K_M`, `Q8_0`) — `Q4_0` is recommended for the llama.cpp Hexagon NPU backend.
+</Note>
+
+<br />
+
+<Feedback/>
+

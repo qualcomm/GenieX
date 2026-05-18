@@ -75,7 +75,7 @@ docker run -it --rm --privileged \
 ```
 
 <Note>
-`--privileged` 标志是 NPU 访问所必需的。将 `YOUR_LONG_TOKEN_HERE` 替换为你的实际 GenieX 令牌。你可以在 [sdk.geniex.ai](https://sdk.geniex.ai) 创建账户并在 **Deployment -> Create Token** 中生成令牌。
+`--privileged` 标志是 NPU/GPU 设备访问所必需的。`--network=host` 将服务器暴露在主机网络上，可通过 `http://localhost:18181` 访问。
 </Note>
 
 `geniex serve` 不会自动下载模型。请确保预先下载要使用的模型。

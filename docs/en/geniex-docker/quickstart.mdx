@@ -1,0 +1,110 @@
+---
+title: "Quick Start"
+description: Get started with GenieXSDK Docker on Linux ARM64 in minutes.
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **Quick Start**
+
+Get GenieX running on Linux ARM64 via Docker — pull the image, run a model, and optionally connect to QDC devices.
+
+## **Installation**
+
+### **Pull Docker Image**
+
+Log in to GitHub Container Registry (GHCR) using your GitHub PAT (Personal Access Token) and your GitHub username:
+
+```bash bash
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxx
+export GITHUB_USERNAME=your_github_username
+docker login ghcr.io -u "$GITHUB_USERNAME" -p "$GITHUB_TOKEN"
+```
+
+Then you expect to see a "Login Succeeded" message. After that, pull the latest GenieXSDK Docker image:
+
+```bash bash
+docker pull ghcr.io/qcom-ai-hub/geniex-cli:latest
+```
+
+## **Running Your First Model**
+
+Run GenieXSDK in interactive CLI mode on a local Linux ARM64 machine or a [QDC device via SSH](#connecting-to-a-qdc-device).
+
+```bash bash
+docker run -it --rm --privileged \
+  -v "$PWD/data:/data" \
+  -v /usr/lib:/opt/qcom-lib:ro \
+  ghcr.io/qcom-ai-hub/geniex-cli:latest \
+  infer Qwen/Qwen3-0.6B-GGUF
+```
+
+<Note>
+The `-it` flags enable interactive mode. Replace `Qwen/Qwen3-0.6B-GGUF` with any supported model name. For a complete list of supported models, see the [Overview](/en/geniex-docker/overview#supported-models) page.
+</Note>
+
+
+## **Connecting to a QDC Device**
+
+To test on a Qualcomm Device Cloud (QDC) device, follow these steps to establish an SSH connection:
+
+### **Step 1: Setup SSH Tunneling**
+
+In the QDC portal, navigate to **Interactive Sessions** and click **Connect** to view the SSH connection instructions.
+
+<img
+  src="/Images/qdc/qdc-1.png"
+  alt="QDC portal showing the Connect button for SSH instructions"
+  style={{ borderRadius: '0.5rem' }}
+/>
+
+Open a terminal and run the SSH tunnel command provided by QDC. Replace `<PRIVATE_KEY_FILE_PATH>` with the path to your private key file:
+
+<img
+  src="/Images/qdc/qdc-2.png"
+  alt="SSH tunneling setup with private key and port forwarding"
+  style={{ borderRadius: '0.5rem' }}
+/>
+
+### **Step 2: Connect to the Device**
+
+Open a new terminal and SSH into the device using the forwarded port. The default password is `oelinux123`:
+
+```bash bash
+ssh -o StrictHostKeychecking=no -o UserKnownHostsFile=/dev/null -p 2222 root@localhost
+```
+
+<img
+  src="/Images/qdc/qdc-3.png"
+  alt="Successful SSH connection to the QDC device"
+  style={{ borderRadius: '0.5rem' }}
+/>
+
+Once connected, you can run the Docker commands above directly on the device.
+
+## **Python Library**
+
+For programmatic access on Linux ARM64, you can also use the GenieX Python Library. See the [Python Library Quick Start](/en/geniex-python/quickstart#linux-arm64) for setup and usage instructions.
+
+## **Next Steps**
+
+<CardGroup cols={2}>
+  <Card
+    title="Local Server"
+    href="/en/geniex-docker/RestAPI"
+    icon="code"
+  >
+    Learn how to use the REST API endpoints for chat completions, embeddings, reranking, and more.
+  </Card>
+  <Card
+    title="NPU Models"
+    href="/en/geniex-cli/npu"
+    icon="microchip"
+  >
+    Explore the full collection of NPU-optimized models available for Qualcomm devices.
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>
