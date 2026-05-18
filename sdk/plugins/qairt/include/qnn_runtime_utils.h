@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,9 +31,12 @@ inline std::vector<std::string> collect_bin_files(const std::filesystem::path& d
     return bins;
 }
 
-inline std::string find_optional_file(const std::filesystem::path& dir, const char* filename) {
+inline std::optional<std::string> find_optional_file(const std::filesystem::path& dir, const char* filename) {
     const auto file_path = dir / filename;
-    return std::filesystem::exists(file_path) ? file_path.string() : std::string{};
+    if (std::filesystem::exists(file_path)) {
+        return file_path.string();
+    }
+    return std::nullopt;
 }
 
 // Returns a QnnRuntimeConfig for the given model directory and optional user-supplied

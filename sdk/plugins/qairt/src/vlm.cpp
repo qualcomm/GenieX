@@ -72,7 +72,7 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
     if (input->mmproj_path && input->mmproj_path[0] != '\0') {
         resolved_vision_bin = input->mmproj_path;
     } else {
-        resolved_vision_bin = qairt::runtime::find_optional_file(model_dir, "vision_encoder.bin");
+        resolved_vision_bin = qairt::runtime::find_optional_file(model_dir, "vision_encoder.bin").value_or("");
     }
 
     // ── LLM config ────────────────────────────────────────────────────────────
@@ -101,19 +101,19 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
     if (input->tokenizer_path && input->tokenizer_path[0] != '\0') {
         llm_cfg.tokenizer_path = input->tokenizer_path;
     } else {
-        llm_cfg.tokenizer_path = qairt::runtime::find_optional_file(model_dir, "tokenizer.json");
+        llm_cfg.tokenizer_path = qairt::runtime::find_optional_file(model_dir, "tokenizer.json").value_or("");
     }
     if (llm_cfg.tokenizer_path.empty()) {
         GENIEX_LOG_ERROR("tokenizer.json not found in: {}", model_dir.string());
         return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
 
-    // Embedding table (optional - AI Hub models do embedding on-device)
+    // Embedding table (nullopt — AI Hub models do embedding on-device).
     llm_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embedding_weights.raw");
-    if (llm_cfg.embedding_path.empty()) {
+    if (!llm_cfg.embedding_path) {
         llm_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
     }
-    llm_cfg.htp_config_path = qairt::runtime::find_optional_file(model_dir, "htp_backend_ext_config.json");
+    llm_cfg.htp_config_path = qairt::runtime::find_optional_file(model_dir, "htp_backend_ext_config.json").value_or("");
 
     // ── Vision encoder config ─────────────────────────────────────────────────
     ModelConfig vision_cfg{};

@@ -91,7 +91,7 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     if (input->tokenizer_path && input->tokenizer_path[0] != '\0') {
         model_cfg.tokenizer_path = input->tokenizer_path;
     } else {
-        model_cfg.tokenizer_path = qairt::runtime::find_optional_file(model_dir, "tokenizer.json");
+        model_cfg.tokenizer_path = qairt::runtime::find_optional_file(model_dir, "tokenizer.json").value_or("");
     }
     if (model_cfg.tokenizer_path.empty()) {
         GENIEX_LOG_ERROR("tokenizer.json not found in: {}", model_dir.string());
@@ -100,12 +100,17 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
 
     // Embedding table (optional - AI Hub models do embedding on-device)
     model_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embedding_weights.raw");
-    if (model_cfg.embedding_path.empty()) {
+    if (!model_cfg.embedding_path) {
         model_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
     }
 
     // HTP backend config
-    model_cfg.htp_config_path = qairt::runtime::find_optional_file(model_dir, "htp_backend_ext_config.json");
+    model_cfg.htp_config_path =
+        qairt::runtime::find_optional_file(model_dir, "htp_backend_ext_config.json").value_or("");
+
+    // Forecast-prefix KV cache only needed for SSD models; non-SSD models leave this nullopt.
+    model_cfg.forecast_prefix_path =
+        qairt::runtime::find_optional_file(model_dir, "forecast-prefix/kv-cache.primary.qnn-htp");
 
     // Create LLMPipeline via the per-model factory (handles makeModel + chat template internally).
     // Returns std::nullopt on QNN init failure, missing tokenizer, etc.
