@@ -5,7 +5,7 @@ description: "Common questions about GenieX, its backends, and supported devices
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-## **General**
+## General
 
 ### What is GenieX?
 
@@ -24,7 +24,7 @@ The [Quickstart](/en/get-started/quickstart) is a router into all four.
 
 [Supported devices](/en/get-started/devices) — Snapdragon X for compute, 8 Elite for mobile, Dragonwing IQ9 / QCS for IoT.
 
-## **Backends**
+## Backends
 
 ### What's the difference between llama.cpp and QAIRT?
 
@@ -45,7 +45,7 @@ Some models override this — e.g. `gpt-oss` falls back to `npu` on `llama_cpp`.
 
 For llama.cpp on Snapdragon NPU: **`Q4_0`**. It has the best Hexagon backend support. QAIRT bundles are pre-quantized — no choice. See [Quantization](/en/models/quantization).
 
-## **Models**
+## Models
 
 ### Can I run any model from Hugging Face?
 
@@ -57,7 +57,7 @@ QAIRT requires a pre-compiled AI Hub bundle — adding a new one means registeri
 
 [Supported models](/en/models/supported) — split by backend (QAIRT, llama.cpp).
 
-## **Hardware & devices**
+## Hardware & devices
 
 ### Do I need a Snapdragon device?
 
@@ -67,7 +67,7 @@ Yes. GenieX targets Qualcomm Snapdragon platforms — Hexagon NPU, Adreno GPU, a
 
 No. QAIRT is NPU-only by design. `cpu` and `gpu` aliases are coerced to NPU with a warning. Use the llama.cpp backend (with a GGUF) if you need CPU/GPU fallback.
 
-## **QDC (Qualcomm Device Cloud)**
+## QDC (Qualcomm Device Cloud)
 
 ### How do I connect to a QDC device?
 
@@ -86,13 +86,13 @@ The default password is `oelinux123`. See the [CLI Quick Start](/en/geniex-cli/q
 
 No. You can request access to Qualcomm Device Cloud for remote testing on Snapdragon hardware. See [Supported devices](/en/get-started/devices) for details.
 
-## **Server / API**
+## Server / API
 
 ### Is the local server OpenAI-compatible?
 
 Yes — see [Local server](/en/run/cli/local-server). You can point the official `openai` Python client at `http://127.0.0.1:18181/v1` and reuse OpenAI code unchanged.
 
-### Does `geniex serve` auto-download models?
+### Does geniex serve auto-download models?
 
 No. Pull models with `geniex pull` before starting the server.
 

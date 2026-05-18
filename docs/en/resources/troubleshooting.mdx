@@ -5,9 +5,9 @@ description: "Common errors and how to fix them."
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-## **Install / pip**
+## Install / pip
 
-### SSL or certificate errors during `pip install` (corporate proxy / QDC)
+### SSL or certificate errors during pip install (corporate proxy / QDC)
 
 Common on networks with TLS inspection — including **Qualcomm Developer Cloud (QDC)**. Pre-download the SDK and point pip at the local file. See the full PowerShell snippet in [Python install](/en/run/python/install#install-via-pip).
 
@@ -15,9 +15,9 @@ Common on networks with TLS inspection — including **Qualcomm Developer Cloud 
 
 The `.exe` is not yet code-signed. Click **More info → Run anyway** in the SmartScreen dialog.
 
-## **CLI**
+## CLI
 
-### `geniex` not found after install
+### geniex not found after install
 
 The installer doesn't add itself to `PATH`. Run:
 
@@ -25,13 +25,13 @@ The installer doesn't add itself to `PATH`. Run:
 Set-Alias geniex (where.exe geniex)
 ```
 
-### `--device cpu` or `--device gpu` errors with a QAIRT model
+### --device cpu or --device gpu errors with a QAIRT model
 
 QAIRT is NPU-only. Use `--device npu` (or omit the flag — `npu` is the default for QAIRT). To run on CPU/GPU, switch to a GGUF model on the [llama.cpp backend](/en/get-started/choose-backend#llamacpp).
 
-## **Server**
+## Server
 
-### `geniex serve` returns "model not found"
+### geniex serve returns "model not found"
 
 The server doesn't auto-download. Pull the model first:
 
@@ -45,13 +45,13 @@ Then restart `geniex serve`.
 
 The `--privileged` flag is required for NPU access. Make sure your `docker run` includes it, plus the volume mounts for `/usr/lib`. See [CLI install (Docker)](/en/run/cli/install).
 
-## **Android**
+## Android
 
 ### Model loads but generation self-repeats or outputs nothing
 
 The demo (or your code) is passing the **raw user text** into `generateStreamFlow` instead of the chat-templated prompt. QAIRT pipelines treat their input as already-templated — pass `applyChatTemplate().formattedText`, not the raw user message.
 
-### AI Hub pull fails with `INVALID_INPUT`
+### AI Hub pull fails with INVALID_INPUT
 
 Android needs an explicit `chipset` for AI Hub pulls — auto-detect only runs on Windows on Snapdragon. Set `ModelPullInput.chipset` to `"SM8750"` (Snapdragon 8 Elite) or `"SM8850"` (Snapdragon 8 Elite Gen 5). See [Android API reference → ModelPullInput](/en/run/android/api-reference#modelpullinput).
 
@@ -59,11 +59,11 @@ Android needs an explicit `chipset` for AI Hub pulls — auto-detect only runs o
 
 The model id returned by AI Hub must match an entry in the QAIRT plugin's registry (`qwen3_4b_instruct_2507`, `qwen2_5_vl_7b_instruct`, etc.). To add a new AI Hub model, register it on the C++ side first — see `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`.
 
-### `nGpuLayers != 0` or `nCtx != 0` rejected on QAIRT
+### nGpuLayers or nCtx rejected on QAIRT
 
 QAIRT bundles are compiled with fixed KV cache and context length. Leave both `nGpuLayers` and `nCtx` at their defaults; tune `max_tokens` and `enable_thinking` instead.
 
-## **Still stuck?**
+## Still stuck?
 
 <CardGroup cols={2}>
   <Card title="GitHub Issues" icon="github" href="https://github.com/qualcomm/nexa-sdk/issues">
