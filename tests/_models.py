@@ -28,5 +28,5 @@ LLAMA_CPP_LLM_MODEL = 'bartowski/Qwen_Qwen3-0.6B-GGUF'
 LLAMA_CPP_LLM_QUANT = 'Q4_0'
 LLAMA_CPP_VLM_MODEL = 'ggml-org/SmolVLM-500M-Instruct-GGUF'
 
-QAIRT_LLM_MODEL = os.environ.get('GENIEX_QAIRT_MODEL', 'aihub/qwen3_4b')
-QAIRT_VLM_MODEL = os.environ.get('GENIEX_QAIRT_VLM_MODEL', 'aihub/Qwen2.5-VL-7B-Instruct')
+QAIRT_LLM_MODEL = os.environ.get('GENIEX_QAIRT_MODEL', 'qualcomm/Qwen3-4B-Instruct-2507')
+QAIRT_VLM_MODEL = os.environ.get('GENIEX_QAIRT_VLM_MODEL', 'qualcomm/Qwen2.5-VL-7B-Instruct')
