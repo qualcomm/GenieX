@@ -8,17 +8,42 @@ name: Test
 #
 # Triggered as a child of pr-check.yml so the SDK only builds once per
 # PR — pr-check's build-sdk uploads the artifact this workflow consumes.
+# Independent workflow_dispatch is also supported for "just rerun
+# pytest" scenarios; that path builds its own SDK on demand.
 
 on:
   workflow_call:
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "Explicit version tag (passed to build-sdk on workflow_dispatch)."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
   packages: read
 
 jobs:
+  # Only runs on workflow_dispatch — when invoked by pr-check via
+  # workflow_call, pr-check's own build-sdk job has already produced
+  # the artifact pytest consumes.
+  build-sdk:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/_build-sdk.yml
+    secrets: inherit
+    with:
+      upload_artifact: true
+      version_tag: ${{ inputs.version_tag || '' }}
+
   pytest-windows-arm64:
     name: pytest-windows-arm64
+    needs: [build-sdk]
+    # `needs` skipped (workflow_call path) is treated as failed by the
+    # default conditional; force the job to run as long as build-sdk
+    # didn't actually fail.
+    if: ${{ !cancelled() && (needs.build-sdk.result == 'success' || needs.build-sdk.result == 'skipped') }}
     runs-on: windows-arm64
     timeout-minutes: 45
 
