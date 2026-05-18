@@ -7,20 +7,13 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 
 
-## **Prerequisites**
-
-The GenieX Python SDK requires ARM64 Python 3.10+.
-
-| Platform | Python requirement |
-|----------|-------------------|
-| Windows ARM64 | [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe) |
-| Linux ARM64 | System Python 3.10+ (aarch64) — available via `apt` or your distro's package manager |
-
 ## **Installation**
 
 <Tabs>
   <Tab title="Windows ARM64">
     ### **Windows ARM64**
+
+    The GenieX Python SDK requires ARM64 Python 3.10+. If Python is not installed, download [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe).
 
     For QDC, we recommend using the Python script method below.
 
@@ -59,13 +52,36 @@ The GenieX Python SDK requires ARM64 Python 3.10+.
   <Tab title="Linux ARM64">
     ### **Linux ARM64**
 
-    This is an embedded Yocto-based Linux, for simplicity, directly pip install:
+    The GenieX Python SDK requires ARM64 Python 3.10+. The Qualcomm embedded Linux (Yocto) ships with Python pre-installed. Verify with:
+
+    ```bash
+    python3 --version
+    ```
+
+    Directly pip install:
 
     ```bash
     python3 -m pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
     ```
 
     This will download the python package from [test PyPI](https://test.pypi.org/project/geniex/) and auto-fetch the Linux ARM64 SDK libraries.
+
+    <Note>
+    **Building Python from source (non-QDC devices)**
+
+    If you are not using QDC but your own Qualcomm IoT device and Python is not pre-installed, you can download and build from source:
+
+    ```bash
+    apt update && apt install -y build-essential libffi-dev libssl-dev zlib1g-dev
+    wget https://www.python.org/ftp/python/3.13.3/Python-3.13.3.tar.xz
+    tar -xf Python-3.13.3.tar.xz
+    cd Python-3.13.3
+    ./configure --enable-optimizations
+    make -j$(nproc)
+    make altinstall
+    python3.13 --version
+    ```
+    </Note>
 
   </Tab>
 </Tabs>
