@@ -1,34 +1,11 @@
 ---
 title: "Supported models"
-description: "Tested LLMs and VLMs across the llama.cpp and QAIRT backends."
+description: "Tested LLMs and VLMs across the QAIRT and llama.cpp backends."
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-GenieX runs **any GGUF model** through the llama.cpp backend, and a curated set of pre-compiled bundles through the QAIRT backend. The lists below are tested examples — you are not limited to them on the llama.cpp side.
-
-## **llama.cpp (GGUF)**
-
-Run any GGUF model from Hugging Face on Snapdragon NPU, GPU, or CPU. Tested examples that work well with `Q4_0`:
-
-| Model ID | Type |
-|---|---|
-| `unsloth/Qwen3.5-0.8B-GGUF` | LLM |
-| `unsloth/Qwen3.5-2B-GGUF` | LLM |
-| `unsloth/Gemma4-E4B-it-GGUF` | LLM |
-| `unsloth/Gemma4-E2B-it-GGUF` | LLM |
-| `unsloth/Qwen3-0.6B-GGUF` | LLM |
-| `unsloth/Qwen3-1.7B-GGUF` | LLM |
-| `unsloth/Ministral-3-3B-Instruct-2507-GGUF` | LLM |
-| `unsloth/GPT-OSS-20B-GGUF` | LLM |
-| `ibm-granite/granite-4.0-micro-GGUF` | LLM |
-| `unsloth/Phi-4-mini-instruct-GGUF` | LLM |
-| `Qwen/Qwen3-VL-2B-Instruct-GGUF` | VLM |
-| `Qwen/Qwen3-VL-4B-Instruct-GGUF` | VLM |
-
-<Tip>To try other GGUF models, copy the path of any compatible GGUF model from Hugging Face and substitute it into the commands in [Bring your own model](/en/models/bring-your-own).</Tip>
-
-<Note>Multimodal support for `Qwen3.5` and `Gemma4` is coming soon — pick `llm` when prompted for now.</Note>
+GenieX runs a curated set of pre-compiled bundles through the QAIRT backend, and **any GGUF model** through the llama.cpp backend. The lists below are tested examples — you are not limited to them on the llama.cpp side.
 
 ## **QAIRT (AI Hub bundles)**
 
@@ -56,18 +33,28 @@ geniex infer qualcomm/Qwen3-4B
 
 For self-converted bundles, follow the [bring-your-own model guide](/en/models/bring-your-own#qairt-self-converted-bundles).
 
-## **Docker / IoT (NPU on Linux ARM64)**
+## **llama.cpp (GGUF)**
 
-The Docker image targets Dragonwing IQ9 and similar Linux ARM64 platforms with a different curated NPU model set:
+Run any GGUF model from Hugging Face on Snapdragon NPU, GPU, or CPU. Tested examples that work well with `Q4_0`:
 
-| Modality | Model |
+| Model ID | Type |
 |---|---|
-| LLM | [`NexaAI/LFM2-1.2B-npu`](https://huggingface.co/NexaAI/LFM2-1.2B-npu), [`NexaAI/Granite-4.0-h-350M-NPU`](https://huggingface.co/NexaAI/Granite-4.0-h-350M-NPU) |
-| VLM | [`NexaAI/OmniNeural-4B`](https://huggingface.co/NexaAI/OmniNeural-4B) |
-| Embedding | [`NexaAI/embeddinggemma-300m-npu`](https://huggingface.co/NexaAI/embeddinggemma-300m-npu), [`NexaAI/EmbedNeural`](https://huggingface.co/NexaAI/EmbedNeural) |
-| Rerank | [`NexaAI/jina-v2-rerank-npu`](https://huggingface.co/NexaAI/jina-v2-rerank-npu) |
-| CV | [`NexaAI/yolov12-npu`](https://huggingface.co/NexaAI/yolov12-npu), [`NexaAI/convnext-tiny-npu-IoT`](https://huggingface.co/NexaAI/convnext-tiny-npu-IoT) |
-| ASR | [`NexaAI/parakeet-tdt-0.6b-v3-npu`](https://huggingface.co/NexaAI/parakeet-tdt-0.6b-v3-npu) |
+| `unsloth/Qwen3.5-0.8B-GGUF` | LLM |
+| `unsloth/Qwen3.5-2B-GGUF` | LLM |
+| `unsloth/Gemma4-E4B-it-GGUF` | LLM |
+| `unsloth/Gemma4-E2B-it-GGUF` | LLM |
+| `unsloth/Qwen3-0.6B-GGUF` | LLM |
+| `unsloth/Qwen3-1.7B-GGUF` | LLM |
+| `unsloth/Ministral-3-3B-Instruct-2507-GGUF` | LLM |
+| `unsloth/GPT-OSS-20B-GGUF` | LLM |
+| `ibm-granite/granite-4.0-micro-GGUF` | LLM |
+| `unsloth/Phi-4-mini-instruct-GGUF` | LLM |
+| `Qwen/Qwen3-VL-2B-Instruct-GGUF` | VLM |
+| `Qwen/Qwen3-VL-4B-Instruct-GGUF` | VLM |
+
+<Tip>To try other GGUF models, copy the path of any compatible GGUF model from Hugging Face and substitute it into the commands in [Bring your own model](/en/models/bring-your-own).</Tip>
+
+<Note>Multimodal support for `Qwen3.5` and `Gemma4` is coming soon — pick `llm` when prompted for now.</Note>
 
 <br />
 

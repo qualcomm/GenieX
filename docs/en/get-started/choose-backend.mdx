@@ -55,8 +55,6 @@ llama.cpp accepts the full GGML quantization range. **Use `Q4_0` for best Hexago
 
 ### Limitations
 
-- Multimodal support for `Qwen3.5` and `Gemma4` is not yet available — pick `llm` when prompted.
-- `gpt-oss` family cannot run on the hybrid path; the runtime falls back to `npu` automatically.
 - Quants outside `Q4_0` typically don't land on Hexagon NPU and use GPU/CPU instead.
 
 ---
@@ -68,8 +66,6 @@ The `qairt` backend runs pre-compiled bundles from **Qualcomm AI Hub** through t
 ### Pick QAIRT if…
 
 - You want the **fastest NPU path** on Snapdragon, and your model is available on Qualcomm AI Hub.
-- You're shipping on **Snapdragon 8 Elite** (Android) or **Snapdragon X** (Windows on Arm) and you can use a pre-compiled bundle.
-- You don't need GPU/CPU fallback.
 
 ### Devices
 
