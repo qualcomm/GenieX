@@ -21,3 +21,13 @@ Use a Snapdragon X-series laptop or desktop (e.g., a Copilot+ PC with Snapdragon
 **Option 2: Qualcomm Developer Cloud**
 
 Click "Compute" at the [Qualcomm Developer Cloud - Compute page](https://qdc.qualcomm.com/devices/compute) and open a `Snapdragon X Elite` or `Snapdragon X2 Elite` device.
+
+<Tip>
+**SSH key permission error?** If you see `WARNING: UNPROTECTED PRIVATE KEY FILE!` when connecting, your `.pem` file permissions are too open. Fix with:
+
+```bash
+chmod 600 /path/to/your-key.pem
+```
+
+SSH requires private keys to be readable only by the owner (mode `600`).
+</Tip>

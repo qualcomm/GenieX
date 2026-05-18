@@ -141,14 +141,6 @@
                   "cn/geniex-android/model-tutorial",
                   "cn/geniex-android/api-reference"
                 ]
-              },
-              {
-                "group": "Linux SDK",
-                "icon": "docker",
-                "pages": [
-                  "cn/geniex-docker/quickstart",
-                  "cn/geniex-docker/RestAPI"
-                ]
               }
             ]
           }

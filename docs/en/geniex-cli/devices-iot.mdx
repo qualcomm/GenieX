@@ -22,3 +22,13 @@ Use a Qualcomm IoT development kit (e.g., Dragonwing RB3 Gen 2 or QCS8550 HDK). 
 **Option 2: Qualcomm Developer Cloud**
 
 Click "IOT" at the [Qualcomm Developer Cloud - IOT page](https://qdc.qualcomm.com/devices/iot) and open a `Qualcomm Dragonwing IQ-9075` or `Qualcomm Dragonwing IQ-9100 Beta` device.
+
+<Tip>
+**SSH key permission error?** If you see `WARNING: UNPROTECTED PRIVATE KEY FILE!` when connecting, your `.pem` file permissions are too open. Fix with:
+
+```bash
+chmod 600 /path/to/your-key.pem
+```
+
+SSH requires private keys to be readable only by the owner (mode `600`).
+</Tip>

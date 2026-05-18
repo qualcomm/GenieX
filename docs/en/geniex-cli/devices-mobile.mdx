@@ -21,3 +21,13 @@ Use a Snapdragon 8 Elite-series Android device. Connect via ADB, push GenieX to 
 **Option 2: Qualcomm Developer Cloud**
 
 Click "Mobile" at the [Qualcomm Developer Cloud - Mobile page](https://qdc.qualcomm.com/devices/mobile) and open a `Snapdragon 8 Elite Gen5` or `Snapdragon 8 Elite` device.
+
+<Tip>
+**SSH key permission error?** If you see `WARNING: UNPROTECTED PRIVATE KEY FILE!` when connecting, your `.pem` file permissions are too open. Fix with:
+
+```bash
+chmod 600 /path/to/your-key.pem
+```
+
+SSH requires private keys to be readable only by the owner (mode `600`).
+</Tip>
