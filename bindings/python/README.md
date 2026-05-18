@@ -5,11 +5,32 @@ Qualcomm platforms (CPU, GPU, Hexagon NPU) with a single `pip install`.
 
 ## Install
 
+Pick a distribution based on which native backend you need. Three
+distributions ship the same Python surface — they only differ in which
+plugin libraries the install-time SDK fetcher stages:
+
+| Command                        | Plugins staged           | Approx download |
+|--------------------------------|--------------------------|-----------------|
+| `pip install geniex`           | llama.cpp **and** QAIRT  | ~220 MB         |
+| `pip install geniex-llama-cpp` | llama.cpp only           | ~15 MB          |
+| `pip install geniex-qairt`     | QAIRT only               | ~210 MB         |
+
 ```bash
 pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+# or, e.g.:
+# pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex-llama-cpp
 ```
 
-Supported platforms (wheels auto-provision the native SDK on install):
+The three distributions share the same top-level ``geniex`` package — they
+are **mutually exclusive**. Installing two into the same environment will
+have the second install overwrite the first; install the variant matching
+the backend you intend to use.
+
+Each installer contacts the GenieX SDK release mirror and pulls only the
+plugin slice it needs via HTTP Range requests, falling back to a full
+download if the mirror doesn't honor ranges.
+
+Supported platforms (the install-time fetcher auto-provisions the native SDK):
 
 | OS      | Arch      |
 |---------|-----------|

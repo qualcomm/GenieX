@@ -6,7 +6,7 @@
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 
-"""Setuptools driver for the meta ``geniex`` sdist (both backends).
+"""Setuptools driver for the ``geniex-qairt`` sibling sdist.
 
 The shared logic lives in ``_shared_setup.run_setup``; this file picks the
 backend tuple. See ``_shared_setup.py`` for details.
@@ -22,4 +22,4 @@ sys.path.insert(0, str(HERE))
 
 from _shared_setup import run_setup  # noqa: E402
 
-run_setup(here=HERE, backends=('llama-cpp', 'qairt'))
+run_setup(here=HERE, backends=('qairt',))

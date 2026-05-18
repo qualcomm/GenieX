@@ -27,8 +27,18 @@ import sys
 
 import pytest
 
-import geniex
-from geniex import model_manager as _mm
+try:
+    import geniex
+    from geniex import model_manager as _mm
+except (ImportError, OSError) as _geniex_import_error:
+    # Pure-Python unit tests under tests/unit/ must collect even when the
+    # native SDK isn't staged yet (no geniex/lib/), so we defer the import
+    # error until a fixture that actually needs the runtime is requested.
+    geniex = None
+    _mm = None
+    _geniex_import_error_reason = repr(_geniex_import_error)
+else:
+    _geniex_import_error_reason = ''
 
 # Small, HF-public GGUF chosen for fast download.
 LLAMA_CPP_MODEL = 'bartowski/Qwen_Qwen3-0.6B-GGUF'
@@ -65,6 +75,8 @@ def geniex_session():
     run tests against the default ``~/.cache/geniex`` and avoid any
     destructive ``clean()`` calls.
     """
+    if geniex is None:
+        pytest.skip(f'geniex runtime unavailable ({_geniex_import_error_reason})')
     geniex.init()
     _mm.init()  # default: GENIEX_DATADIR env → ~/.cache/geniex
     yield

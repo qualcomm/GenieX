@@ -6,13 +6,29 @@ or working from a repo checkout.
 
 ## Artifact layout
 
-The published artifact is a **source distribution (sdist)**. When
-`pip install` assembles a wheel from the sdist, a custom `build_py`
-command downloads the SDK zip matching the target platform from the
-same GitHub Release tag, verifies its SHA-256 sidecar, and bundles the
-`lib/` tree into the resulting wheel.
+Three sibling **source distributions (sdists)** ship from the same release
+tag (#554):
 
-The sdist itself is pure Python — it never contains prebuilt libs.
+| sdist             | source tree                       | plugins staged               |
+|-------------------|-----------------------------------|------------------------------|
+| `geniex`          | `bindings/python/`                | llama.cpp **and** QAIRT      |
+| `geniex-llama-cpp`| `bindings/python-llama-cpp/`      | llama.cpp only               |
+| `geniex-qairt`    | `bindings/python-qairt/`          | QAIRT only                   |
+
+Each tree carries its own `pyproject.toml` / `setup.py` / `MANIFEST.in`.
+Everything else — the `geniex/` Python package, `_sdk_fetch.py`,
+`_geniex_backend.py`, `README.md`, `LICENSE` — lives only in
+`bindings/python/` and is mirrored into the sibling trees by
+[`bindings/sync_siblings.py`](../sync_siblings.py) immediately before each
+build. The mirrored copies are git-ignored.
+
+When `pip install` assembles a wheel from any of the three sdists, the
+custom `build_py` command runs `_sdk_fetch.fetch(..., backends=...)` to
+pull just the requested slice of the platform-matching SDK zip via HTTP
+Range requests, falling back to a full download with SHA-256 sidecar
+verification when the mirror doesn't support ranges.
+
+All three sdists are pure Python — they never contain prebuilt libs.
 
 `pyproject.toml` declares an in-tree PEP 517 wrapper (`_geniex_backend`,
 `backend-path = ["."]`) that aliases `tomli` → `tomllib` before
@@ -24,11 +40,15 @@ is skipped entirely. See GH #538.
 ## Install sources
 
 ```bash
-# From GitHub Release (canonical)
+# From GitHub Release (canonical) — pick the distribution you need
 pip install https://github.com/qcom-ai-hub/geniex/releases/download/v0.0.3-alpha.1/geniex-0.0.3a1.tar.gz
+pip install https://github.com/qcom-ai-hub/geniex/releases/download/v0.0.3-alpha.1/geniex_llama_cpp-0.0.3a1.tar.gz
+pip install https://github.com/qcom-ai-hub/geniex/releases/download/v0.0.3-alpha.1/geniex_qairt-0.0.3a1.tar.gz
 
 # From TestPyPI (pre-release tags are auto-published)
 pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex-llama-cpp
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex-qairt
 ```
 
 ### Supported platforms (automatic SDK download)
@@ -102,15 +122,24 @@ Android cross-compile) live in [`notes/build.md`](../../notes/build.md).
 After `cmake --install`, the libs land in `sdk/pkg-geniex/lib/` and both
 dev mode and `GENIEX_LIB_PATH` pick them up.
 
-## Build the sdist locally
+## Build the sdists locally
+
+Mirror the shared sources into the sibling trees, then build each sdist:
 
 ```bash
 python -m pip install build
-python -m build --sdist bindings/python --outdir dist/
-# produces dist/geniex-<version>.tar.gz — no native libs inside
+python bindings/sync_siblings.py
+python -m build --sdist bindings/python            --outdir dist/   # geniex
+python -m build --sdist bindings/python-llama-cpp  --outdir dist/   # geniex-llama-cpp
+python -m build --sdist bindings/python-qairt      --outdir dist/   # geniex-qairt
+ls dist/
+# geniex-<version>.tar.gz
+# geniex_llama_cpp-<version>.tar.gz
+# geniex_qairt-<version>.tar.gz
 ```
 
-The sdist is pure Python; SDK libs are fetched at install time.
+All three sdists are pure Python; the corresponding SDK lib slice is
+fetched at install time.
 
 ### End-to-end local test with a file mirror
 

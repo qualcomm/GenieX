@@ -47,42 +47,46 @@ jobs:
           } > bindings/python/geniex/_version.py
           cat bindings/python/geniex/_version.py
 
-      - name: Build sdist
+      - name: Mirror shared sources into sibling sdist trees (#554)
+        shell: bash
+        run: python3 bindings/sync_siblings.py
+
+      - name: Build sdists (geniex, geniex-llama-cpp, geniex-qairt)
         shell: bash
         run: |
           set -euo pipefail
           python3 -m pip install --upgrade pip build
-          python3 -m build --sdist bindings/python --outdir dist/
+          for src in bindings/python bindings/python-llama-cpp bindings/python-qairt; do
+            python3 -m build --sdist "$src" --outdir dist/
+          done
           ls -la dist/
 
-      - name: Verify sdist contains no prebuilt libs
+      - name: Verify sdists are pure Python (no prebuilt libs) and ship the in-tree backend (#538)
         shell: bash
         run: |
           set -euo pipefail
-          tarball=$(ls dist/geniex-*.tar.gz | head -n1)
-          if tar -tzf "$tarball" | grep -E 'geniex/lib/'; then
-            echo "sdist unexpectedly contains geniex/lib/ — should be pure Python" >&2
-            exit 1
-          fi
-
-      - name: Verify sdist ships the in-tree PEP 517 backend (#538)
-        shell: bash
-        run: |
-          set -euo pipefail
-          tarball=$(ls dist/geniex-*.tar.gz | head -n1)
-          # Materialise the tarball listing first; piping into `grep -q`
-          # closes the pipe early and SIGPIPEs tar, which under
-          # `set -o pipefail` would fail the step regardless of match.
-          listing=$(tar -tzf "$tarball")
-          if ! grep -qE '/_geniex_backend\.py$' <<<"$listing"; then
-            echo "sdist missing _geniex_backend.py — install will break on stripped Python 3.12 (GH #538)" >&2
-            exit 1
-          fi
+          shopt -s nullglob
+          tarballs=(dist/geniex-*.tar.gz dist/geniex_llama_cpp-*.tar.gz dist/geniex_qairt-*.tar.gz)
+          [ ${#tarballs[@]} -eq 3 ] || { echo "expected 3 sdists, got ${#tarballs[@]}: ${tarballs[*]}" >&2; exit 1; }
+          for tarball in "${tarballs[@]}"; do
+            listing=$(tar -tzf "$tarball")
+            if grep -qE 'geniex/lib/' <<<"$listing"; then
+              echo "$tarball unexpectedly contains geniex/lib/ — should be pure Python" >&2
+              exit 1
+            fi
+            if ! grep -qE '/_geniex_backend\.py$' <<<"$listing"; then
+              echo "$tarball missing _geniex_backend.py — install will break on stripped Python 3.12 (GH #538)" >&2
+              exit 1
+            fi
+          done
 
       - name: Upload sdist artifact
         if: inputs.upload_artifact
         uses: actions/upload-artifact@v7
         with:
           name: python-sdist
-          path: dist/geniex-*.tar.gz
+          path: |
+            dist/geniex-*.tar.gz
+            dist/geniex_llama_cpp-*.tar.gz
+            dist/geniex_qairt-*.tar.gz
           retention-days: 7
