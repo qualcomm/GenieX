@@ -68,18 +68,25 @@ jobs:
           path: sdk/pkg-geniex
 
       # actions/setup-python@v6 has no Python 3.10 ARM64 build on
-      # Windows; the windows-arm64 runner ships a system Python that
-      # imports the SDK natively, so use it directly.
-      - name: Install Python binding (editable)
+      # Windows; the runner's hosted Python (3.13 ARM64) is fine. Skip
+      # the wheel build entirely: drop bindings/python on PYTHONPATH and
+      # point GENIEX_LIB_PATH at the SDK artifact's lib/ tree, which
+      # short-circuits _ffi/_lib.py's auto-discovery.
+      - name: Install pytest and configure binding
         shell: bash
         run: |
           set -euo pipefail
           python --version
           python -m pip install --upgrade pip
           python -m pip install "pytest>=7.0"
-          # Skip the auto SDK download — _ffi/_lib.py picks the libs up
-          # from sdk/pkg-geniex/lib/ that we just downloaded.
-          GENIEX_SKIP_SDK_DOWNLOAD=1 python -m pip install -e bindings/python --no-build-isolation
+
+      - name: Smoke-test the binding
+        shell: bash
+        env:
+          PYTHONPATH: bindings/python
+          GENIEX_LIB_PATH: sdk/pkg-geniex/lib
+        run: |
+          set -euo pipefail
           python -c "import geniex; geniex.init(); print('plugins:', geniex.get_plugin_list()); geniex.deinit()"
 
       # ~/.cache/geniex is only populated by the llama_cpp HF pull on
@@ -95,12 +102,18 @@ jobs:
 
       - name: Run pytest — API subset
         shell: bash
+        env:
+          PYTHONPATH: bindings/python
+          GENIEX_LIB_PATH: sdk/pkg-geniex/lib
         run: |
           set -euo pipefail
           python -m pytest tests -m api --junitxml=.pytest-junit-api.xml
 
       - name: Run pytest — llama_cpp CPU subset
         shell: bash
+        env:
+          PYTHONPATH: bindings/python
+          GENIEX_LIB_PATH: sdk/pkg-geniex/lib
         run: |
           set -euo pipefail
           python -m pytest tests -m "llama_cpp and device_cpu" --junitxml=.pytest-junit-llama_cpp-cpu.xml
