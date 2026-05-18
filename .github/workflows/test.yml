@@ -2,51 +2,23 @@ name: Test
 
 # Pytest harness for the SDK end-to-end suite under tests/. Phase 1 runs
 # only the model-free API subset and the llama_cpp CPU subset on
-# windows-arm64 — the matrix is markered so a future self-hosted
+# windows-arm64. The matrix is markered so a future self-hosted
 # Snapdragon runner can drop in by filtering on `-m snapdragon` (and
 # providing AI Hub credentials for the qairt cells).
+#
+# Triggered as a child of pr-check.yml so the SDK only builds once per
+# PR — pr-check's build-sdk uploads the artifact this workflow consumes.
 
 on:
-  pull_request:
-    branches: [main]
-    types: [opened, synchronize, ready_for_review]
-    paths:
-      - "sdk/**"
-      - "bindings/python/**"
-      - "tests/**"
-      - "third-party/**"
-      - ".gitmodules"
-      - ".github/workflows/test.yml"
-      - ".github/workflows/_build-sdk.yml"
-  workflow_dispatch:
-    inputs:
-      version_tag:
-        description: "Explicit version tag (passed through to build-sdk)."
-        required: false
-        type: string
-        default: ""
+  workflow_call:
 
 permissions:
   contents: read
   packages: read
 
-concurrency:
-  group: test-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  build-sdk:
-    name: build-sdk
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    uses: ./.github/workflows/_build-sdk.yml
-    secrets: inherit
-    with:
-      upload_artifact: true
-      version_tag: ${{ inputs.version_tag || '' }}
-
   pytest-windows-arm64:
     name: pytest-windows-arm64
-    needs: [build-sdk]
     runs-on: windows-arm64
     timeout-minutes: 45
 

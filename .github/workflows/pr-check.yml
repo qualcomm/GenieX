@@ -8,6 +8,7 @@ on:
       - "sdk/**"
       - "cli/**"
       - "bindings/**"
+      - "tests/**"
       - "third-party/**"
       - ".gitmodules"
       - ".github/**"
@@ -87,3 +88,10 @@ jobs:
     secrets: inherit
     with:
       push: false
+
+  test:
+    name: test
+    needs: [build-sdk]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
