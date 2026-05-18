@@ -12,91 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package sochost provides best-effort host SoC detection so the CLI can
-// pick an AI Hub chipset without asking the user. The Rust model-manager
-// has an equivalent probe in
-// sdk/model-manager/crates/core/src/source/ai_hub/detect.rs; this file
-// mirrors its SKU table.
+// Package sochost is a best-effort host SoC probe — Windows reads the
+// registry CPU brand, Linux reads the boot Device Tree `compatible` node.
+// Mirrors sdk/model-manager/crates/core/src/source/ai_hub/detect.rs.
 package sochost
 
-// CPUNameToChipsetAlias maps a Qualcomm Oryon CPU brand string to the
-// matching AI Hub chipset alias. Returns ("", false) for unknown CPUs.
-func CPUNameToChipsetAlias(brand string) (string, bool) {
-	sku, ok := extractOryonSKU(brand)
-	if !ok {
-		return "", false
-	}
-	switch sku[:3] {
-	case "X1E":
-		return "qualcomm-snapdragon-x-elite", true
-	case "X1P":
-		return "qualcomm-snapdragon-x-plus-8-core", true
-	case "X2E":
-		return "qualcomm-snapdragon-x2-elite", true
-	default:
-		return "", false
-	}
+import "strings"
+
+// First marker that appears in the probe wins. `qcm6490` is the
+// commercial SKU spelling many upstream QCS6490 board dts files use for
+// the SoC row instead of `qcs6490`.
+var chipsetMarkers = []struct{ marker, alias string }{
+	{"x1e", "qualcomm-snapdragon-x-elite"},
+	{"x1p", "qualcomm-snapdragon-x-plus-8-core"},
+	{"x2e", "qualcomm-snapdragon-x2-elite"},
+	{"qcs6490", "qualcomm-qcs6490"},
+	{"qcm6490", "qualcomm-qcs6490"},
+	{"qcs9075", "qualcomm-qcs9075"},
 }
 
-func extractOryonSKU(brand string) (string, bool) {
-	start := -1
-	for i := 0; i <= len(brand); i++ {
-		if i == len(brand) || !isAlphanumeric(brand[i]) {
-			if start >= 0 {
-				tok := brand[start:i]
-				if isOryonSKU(tok) {
-					return toUpper(tok), true
-				}
-				start = -1
-			}
-		} else if start < 0 {
-			start = i
+// DetectChipsetAlias returns ("", false) on any failure so callers can
+// fall back to interactive selection.
+func DetectChipsetAlias() (string, bool) {
+	return chipsetFromProbe(readHostProbe())
+}
+
+func chipsetFromProbe(probe string) (string, bool) {
+	probe = strings.ToLower(probe)
+	for _, m := range chipsetMarkers {
+		if strings.Contains(probe, m.marker) {
+			return m.alias, true
 		}
 	}
 	return "", false
-}
-
-func isOryonSKU(tok string) bool {
-	if len(tok) < 6 {
-		return false
-	}
-	if toUpperByte(tok[0]) != 'X' {
-		return false
-	}
-	if !isDigit(tok[1]) {
-		return false
-	}
-	c := toUpperByte(tok[2])
-	if c != 'E' && c != 'P' {
-		return false
-	}
-	for i := 3; i < len(tok); i++ {
-		if !isDigit(tok[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-func isAlphanumeric(b byte) bool {
-	return isDigit(b) || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
-}
-
-func isDigit(b byte) bool {
-	return b >= '0' && b <= '9'
-}
-
-func toUpperByte(b byte) byte {
-	if b >= 'a' && b <= 'z' {
-		return b - 32
-	}
-	return b
-}
-
-func toUpper(s string) string {
-	out := make([]byte, len(s))
-	for i := 0; i < len(s); i++ {
-		out[i] = toUpperByte(s[i])
-	}
-	return string(out)
 }

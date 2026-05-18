@@ -4,7 +4,7 @@ go_library(
     name = "sochost",
     srcs = [
         "sochost.go",
-        "sochost_other.go",
+        "sochost_linux.go",
         "sochost_windows.go",
     ],
     importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/sochost",
