@@ -65,6 +65,14 @@
                 ]
               },
               {
+                "group": "Linux SDK",
+                "icon": "docker",
+                "pages": [
+                  "en/geniex-docker/quickstart",
+                  "en/geniex-docker/RestAPI"
+                ]
+              },
+              {
                 "group": "Misc",
                 "pages": [
                   {
@@ -132,6 +140,14 @@
                   "cn/geniex-android/quickstart",
                   "cn/geniex-android/model-tutorial",
                   "cn/geniex-android/api-reference"
+                ]
+              },
+              {
+                "group": "Linux SDK",
+                "icon": "docker",
+                "pages": [
+                  "cn/geniex-docker/quickstart",
+                  "cn/geniex-docker/RestAPI"
                 ]
               }
             ]
