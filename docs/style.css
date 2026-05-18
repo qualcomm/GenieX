@@ -508,16 +508,193 @@ nav a:has(img.nav-logo) *,
 [data-component-part="code-group-tab-bar"] svg {
   height: 16px !important;
   width: 16px !important;
+  color: #636364 !important;
+  stroke: #636364 !important;
+  background-color: transparent !important;
+}
+
+.dark [data-component-part="code-block-header"] svg,
+.dark [data-component-part="code-group-tab-bar"] svg {
   color: #c8c8c8 !important;
   stroke: #c8c8c8 !important;
+}
 
-  -webkit-mask: url("data:image/svg+xml,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M3.33464%2013.3327C2.41797%2013.3327%201.66797%2012.5827%201.66797%2011.666L1.66797%203.33268C1.66797%202.41602%202.41797%201.66602%203.33464%201.66602L11.668%201.66602C12.5846%201.66602%2013.3346%202.41602%2013.3346%203.33268M8.33464%206.66602H16.668C17.5884%206.66602%2018.3346%207.41221%2018.3346%208.33268V16.666C18.3346%2017.5865%2017.5884%2018.3327%2016.668%2018.3327H8.33464C7.41416%2018.3327%206.66797%2017.5865%206.66797%2016.666V8.33268C6.66797%207.41221%207.41416%206.66602%208.33464%206.66602Z%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E")
-    no-repeat center;
-  mask: url("data:image/svg+xml,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M3.33464%2013.3327C2.41797%2013.3327%201.66797%2012.5827%201.66797%2011.666L1.66797%203.33268C1.66797%202.41602%202.41797%201.66602%203.33464%201.66602L11.668%201.66602C12.5846%201.66602%2013.3346%202.41602%2013.3346%203.33268M8.33464%206.66602H16.668C17.5884%206.66602%2018.3346%207.41221%2018.3346%208.33268V16.666C18.3346%2017.5865%2017.5884%2018.3327%2016.668%2018.3327H8.33464C7.41416%2018.3327%206.66797%2017.5865%206.66797%2016.666V8.33268C6.66797%207.41221%207.41416%206.66602%208.33464%206.66602Z%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E")
-    no-repeat center;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-  background-color: #c8c8c8;
+[data-component-part="code-block-header"] button,
+[data-component-part="code-block-header"] button:hover {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: #636364 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+[data-component-part="code-block-header"] button *,
+[data-component-part="code-block-header"] [role="button"] *,
+[data-component-part="code-block-header"] [class*="copy"] *,
+[data-component-part="code-block-header"] [aria-label*="Copy"] * {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+[data-component-part="code-block-header"] button svg,
+[data-component-part="code-block-header"] [role="button"] svg,
+[data-component-part="code-block-header"] [class*="copy"] svg,
+[data-component-part="code-block-header"] [aria-label*="Copy"] svg {
+  color: #636364 !important;
+  stroke: #636364 !important;
+  fill: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+[data-component-part="code-block-header"] button svg *,
+[data-component-part="code-block-header"] [role="button"] svg *,
+[data-component-part="code-block-header"] [class*="copy"] svg *,
+[data-component-part="code-block-header"] [aria-label*="Copy"] svg * {
+  stroke: #636364 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.dark [data-component-part="code-block-header"] button svg,
+.dark [data-component-part="code-block-header"] [role="button"] svg,
+.dark [data-component-part="code-block-header"] [class*="copy"] svg,
+.dark [data-component-part="code-block-header"] [aria-label*="Copy"] svg {
+  color: #c8c8c8 !important;
+  stroke: #c8c8c8 !important;
+}
+
+.dark [data-component-part="code-block-header"] button {
+  color: #c8c8c8 !important;
+}
+
+.dark [data-component-part="code-block-header"] button svg *,
+.dark [data-component-part="code-block-header"] [role="button"] svg *,
+.dark [data-component-part="code-block-header"] [class*="copy"] svg *,
+.dark [data-component-part="code-block-header"] [aria-label*="Copy"] svg * {
+  stroke: #c8c8c8 !important;
+}
+
+[data-component-part="code-block-root"] span,
+.code-block span,
+.code-group span {
+  filter: none;
+}
+
+[data-component-part="code-block-root"]::before,
+[data-component-part="code-block-root"]::after,
+.code-block::before,
+.code-block::after,
+.code-group::before,
+.code-group::after,
+[data-component-part="code-block-root"] [class*="gradient"],
+[data-component-part="code-block-root"] [class*="shadow"],
+[data-component-part="code-block-root"] [class*="fade"],
+.code-block [class*="gradient"],
+.code-block [class*="shadow"],
+.code-block [class*="fade"] {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+[data-component-part="code-block-root"] [class*="right-0"],
+.code-block [class*="right-0"],
+.code-group [class*="right-0"] {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+[data-component-part="code-block-root"] button,
+[data-component-part="code-block-root"] button:hover,
+[data-component-part="code-block-root"] [role="button"],
+[data-component-part="code-block-root"] [role="button"]:hover,
+.code-block button,
+.code-block button:hover,
+.code-block [role="button"],
+.code-block [role="button"]:hover {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: #636364 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+[data-component-part="code-block-root"] button svg,
+[data-component-part="code-block-root"] [role="button"] svg,
+[data-component-part="code-block-root"] [aria-label*="Copy"] svg,
+.code-block button svg,
+.code-block [role="button"] svg,
+.code-block [aria-label*="Copy"] svg {
+  color: #636364 !important;
+  stroke: #636364 !important;
+  fill: none !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+[data-component-part="code-block-root"] button svg *,
+[data-component-part="code-block-root"] [role="button"] svg *,
+[data-component-part="code-block-root"] [aria-label*="Copy"] svg *,
+.code-block button svg *,
+.code-block [role="button"] svg *,
+.code-block [aria-label*="Copy"] svg * {
+  stroke: #636364 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.dark [data-component-part="code-block-root"] button,
+.dark [data-component-part="code-block-root"] [role="button"],
+.dark .code-block button,
+.dark .code-block [role="button"] {
+  color: #c8c8c8 !important;
+}
+
+.dark [data-component-part="code-block-root"] button svg,
+.dark [data-component-part="code-block-root"] [role="button"] svg,
+.dark [data-component-part="code-block-root"] [aria-label*="Copy"] svg,
+.dark .code-block button svg,
+.dark .code-block [role="button"] svg,
+.dark .code-block [aria-label*="Copy"] svg {
+  color: #c8c8c8 !important;
+  stroke: #c8c8c8 !important;
+}
+
+.dark [data-component-part="code-block-root"] button svg *,
+.dark [data-component-part="code-block-root"] [role="button"] svg *,
+.dark [data-component-part="code-block-root"] [aria-label*="Copy"] svg *,
+.dark .code-block button svg *,
+.dark .code-block [role="button"] svg *,
+.dark .code-block [aria-label*="Copy"] svg * {
+  stroke: #c8c8c8 !important;
+}
+
+[data-component-part="code-block-root"] [style*="gradient"],
+[data-component-part="code-block-root"] [style*="--shiki-dark-bg"],
+[data-component-part="code-block-root"] [style*="rgb(11, 12, 14)"],
+[data-component-part="code-block-root"] [style*="#0B0C0E"],
+.code-block [style*="gradient"],
+.code-block [style*="--shiki-dark-bg"],
+.code-block [style*="rgb(11, 12, 14)"],
+.code-block [style*="#0B0C0E"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+[data-component-part="code-block-root"] > div:not(:has(pre)):not(:has(code)),
+.code-block > div:not(:has(pre)):not(:has(code)) {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
 }
 
 [role="tablist"] {
@@ -734,6 +911,11 @@ button[data-state="active"] > div.absolute {
   filter: saturate(1.35) brightness(0.72);
 }
 
+[data-component-part="code-block-header"] span,
+[data-component-part="code-block-header"] button span {
+  filter: none !important;
+}
+
 .dark [data-component-part="code-block-root"] pre,
 .dark [data-component-part="code-block-root"] code,
 .dark .code-block pre,
@@ -749,6 +931,11 @@ button[data-state="active"] > div.absolute {
 .dark .code-block span,
 .dark .code-group span {
   filter: saturate(1.1) brightness(1.08);
+}
+
+.dark [data-component-part="code-block-header"] span,
+.dark [data-component-part="code-block-header"] button span {
+  filter: none !important;
 }
 
 code:not(pre code) {
