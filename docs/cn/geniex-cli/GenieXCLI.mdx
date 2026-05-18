@@ -15,24 +15,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 geniex pull <model-name>
 ```
 
-CLI 会引导你完成设置流程：
-
-**1. 设备选择**
-
-首次运行时（QAIRT 和 llama.cpp 插件均适用），系统会提示你选择设备：
-```powershell
-Select your device
-┃ > Snapdragon X Elite CRD
-┃   Snapdragon X Plus 8-Core CRD
-┃   Snapdragon X2 Elite CRD
-```
-
-如需更改设备：
-```powershell
-geniex config set device
-```
-
-**2. 量化选择（仅 llama.cpp 插件）**
+**量化选择（仅 llama.cpp 插件）**
 
 对于 llama.cpp 模型，CLI 会提示你选择量化版本：
 ```powershell

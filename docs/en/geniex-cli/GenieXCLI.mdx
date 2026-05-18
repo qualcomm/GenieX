@@ -5,6 +5,10 @@ description: "This page documents all available CLI commands with usage examples
 
 import Feedback from "/snippets/page-feedback.mdx";
 
+## **CLI Reference**
+
+All available GenieX CLI commands — model inference, server mode, configuration flags, and utility commands.
+
 ## **Model Inference**
 
 ### **geniex pull**
@@ -15,24 +19,7 @@ Download a model and store it locally.
 geniex pull <model-name>
 ```
 
-The CLI guides you through a setup process:
-
-**1. Device selection**
-
-On first run (for both QAIRT and llama.cpp plugins), you will be prompted to select your device:
-```powershell
-Select your device
-┃ > Snapdragon X Elite CRD
-┃   Snapdragon X Plus 8-Core CRD
-┃   Snapdragon X2 Elite CRD
-```
-
-To change your device later:
-```powershell
-geniex config set device
-```
-
-**2. Quantization selection (llama.cpp plugin only)**
+**Quantization selection (llama.cpp plugin only)**
 
 For llama.cpp models, the CLI prompts you to pick a quantized version:
 ```powershell

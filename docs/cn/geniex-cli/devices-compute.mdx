@@ -21,3 +21,13 @@ GenieX 在骁龙 X 系列计算平台上运行，支持在 Windows on Arm 笔记
 **方式 2：高通开发者云**
 
 在 [Qualcomm Developer Cloud - Compute 页面](https://qdc.qualcomm.com/devices/compute) 点击 "Compute"，打开 `Snapdragon X Elite` 或 `Snapdragon X2 Elite` 设备。
+
+<Tip>
+**SSH 密钥权限错误？** 如果连接时出现 `WARNING: UNPROTECTED PRIVATE KEY FILE!`，说明 `.pem` 文件权限过于开放。执行以下命令修复：
+
+```bash
+chmod 600 /path/to/your-key.pem
+```
+
+SSH 要求私钥仅对所有者可读（权限 `600`）。
+</Tip>

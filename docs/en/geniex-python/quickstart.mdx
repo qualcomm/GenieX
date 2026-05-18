@@ -5,22 +5,17 @@ description: Get started with GenieX Python SDK - through QAIRT and llama.cpp pl
 
 import Feedback from "/snippets/page-feedback.mdx";
 
+## **Quick Start**
 
-
-## **Prerequisites**
-
-The GenieX Python SDK requires ARM64 Python 3.10+.
-
-| Platform | Python requirement |
-|----------|-------------------|
-| Windows ARM64 | [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe) |
-| Linux ARM64 | System Python 3.10+ (aarch64) — available via `apt` or your distro's package manager |
+Install the GenieX Python SDK and run LLM or VLM inference through QAIRT and llama.cpp plugins.
 
 ## **Installation**
 
 <Tabs>
   <Tab title="Windows ARM64">
     ### **Windows ARM64**
+
+    The GenieX Python SDK requires ARM64 Python 3.10+. If Python is not installed, download [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe).
 
     For QDC, we recommend using the Python script method below.
 
@@ -29,7 +24,7 @@ The GenieX Python SDK requires ARM64 Python 3.10+.
     ```powershell
     python -m venv geniex-env
     .\geniex-env\Scripts\Activate.ps1
-    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
     ```
 
     This will download the python package from [test PyPI](https://test.pypi.org/project/geniex/)
@@ -48,7 +43,7 @@ The GenieX Python SDK requires ARM64 Python 3.10+.
     Invoke-WebRequest "$base/$zip.sha256" -OutFile "$zip.sha256"
 
     $env:GENIEX_SDK_DOWNLOAD_URL = "file:///$($(Get-Location).Path.Replace('\','/'))"
-    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
 
     Remove-Item $zip, "$zip.sha256"
     Remove-Item Env:GENIEX_SDK_DOWNLOAD_URL
@@ -59,42 +54,37 @@ The GenieX Python SDK requires ARM64 Python 3.10+.
   <Tab title="Linux ARM64">
     ### **Linux ARM64**
 
-    Create a virtual environment and install:
+    The GenieX Python SDK requires ARM64 Python 3.10+. The Qualcomm embedded Linux (Yocto) ships with Python pre-installed. Verify with:
 
     ```bash
-    python3 -m venv geniex-env
-    source geniex-env/bin/activate
-    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    python3 --version
+    ```
+
+    Directly pip install:
+
+    ```bash
+    python3 -m pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
     ```
 
     This will download the python package from [test PyPI](https://test.pypi.org/project/geniex/) and auto-fetch the Linux ARM64 SDK libraries.
 
     <Note>
-    **Troubleshooting: SSL / certificate errors**
+    **Building Python from source (non-QDC devices)**
 
-    If the installation fails with an SSL certificate error — common on corporate networks with TLS inspection — pre-download the SDK manually and point the installer to it:
+    If you are not using QDC but your own Qualcomm IoT device and Python is not pre-installed, you can download and build from source:
 
     ```bash
-    export GENIEX_VERSION="v0.1.5"
-    BASE="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/${GENIEX_VERSION}"
-    ZIP="geniex-sdk-linux-arm64-${GENIEX_VERSION}.zip"
-
-    curl -fSL -o "$ZIP" "${BASE}/${ZIP}"
-    curl -fSL -o "${ZIP}.sha256" "${BASE}/${ZIP}.sha256"
-
-    export GENIEX_SDK_DOWNLOAD_URL="file://$(pwd)"
-    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
-
-    rm -f "$ZIP" "${ZIP}.sha256"
-    unset GENIEX_SDK_DOWNLOAD_URL
+    apt update && apt install -y build-essential libffi-dev libssl-dev zlib1g-dev
+    wget https://www.python.org/ftp/python/3.13.3/Python-3.13.3.tar.xz
+    tar -xf Python-3.13.3.tar.xz
+    cd Python-3.13.3
+    ./configure --enable-optimizations
+    make -j$(nproc)
+    make altinstall
+    python3.13 --version
     ```
     </Note>
 
-    <Note>
-    **Running on Docker (IoT / headless devices)**
-
-    On Qualcomm IoT boards (Dragonwing IQ9, QCS9075, etc.), you can also use the pre-built Docker image which bundles the CLI and SDK. See the [Linux SDK quickstart](/en/geniex-docker/quickstart) for Docker usage.
-    </Note>
   </Tab>
 </Tabs>
 
@@ -156,7 +146,7 @@ from geniex import AutoModelForCausalLM
 
 image_path = os.path.abspath("demo.jpg")
 
-model = AutoModelForCausalLM.from_pretrained("unsloth/Qwen2.5-VL-3B-Instruct-GGUF", quant="Q8_0", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("unsloth/Qwen2.5-VL-3B-Instruct-GGUF", quant="Q4_0", device_map="auto")
 messages = [{
     "role": "user",
     "content": [
