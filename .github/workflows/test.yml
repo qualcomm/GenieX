@@ -62,7 +62,7 @@ jobs:
           token: ${{ secrets.GH_PAT }}
 
       - name: Download SDK artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: sdk-windows-arm64
           path: sdk/pkg-geniex
@@ -105,27 +105,49 @@ jobs:
             geniex-models-llama_cpp-windows-arm64-v1-
 
       - name: Run pytest — API subset
+        id: pytest_api
         shell: bash
         env:
           PYTHONPATH: ${{ github.workspace }}/bindings/python
           GENIEX_LIB_PATH: ${{ github.workspace }}/sdk/pkg-geniex/lib
         run: |
           set -euo pipefail
-          python -m pytest tests -m api --junitxml=.pytest-junit-api.xml
+          python -m pytest tests -m api -v | tee .pytest-api.log
 
       - name: Run pytest — llama_cpp CPU subset
+        id: pytest_cpu
         shell: bash
         env:
           PYTHONPATH: ${{ github.workspace }}/bindings/python
           GENIEX_LIB_PATH: ${{ github.workspace }}/sdk/pkg-geniex/lib
         run: |
           set -euo pipefail
-          python -m pytest tests -m "llama_cpp and device_cpu" --junitxml=.pytest-junit-llama_cpp-cpu.xml
+          python -m pytest tests -m "llama_cpp and device_cpu" -v | tee .pytest-cpu.log
 
-      - name: Upload junit XML
+      # Render a per-case summary in the Checks "Summary" tab so reviewers
+      # can see PASSED/FAILED for every test without digging into raw logs.
+      - name: Publish step summary
         if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: pytest-junit-windows-arm64
-          path: .pytest-junit-*.xml
-          retention-days: 7
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## pytest results"
+            echo
+            for label in api "llama_cpp / device_cpu"; do
+              case "$label" in
+                api) log=.pytest-api.log ;;
+                *)   log=.pytest-cpu.log ;;
+              esac
+              echo "### $label"
+              echo
+              if [ -f "$log" ]; then
+                echo '```'
+                grep -E "PASSED|FAILED|ERROR|SKIPPED|passed|failed" "$log" || echo "(no results captured)"
+                echo '```'
+              else
+                echo "(log missing)"
+              fi
+              echo
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
