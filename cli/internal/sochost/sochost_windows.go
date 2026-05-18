@@ -16,35 +16,18 @@
 
 package sochost
 
-import (
-	"golang.org/x/sys/windows/registry"
-)
+import "golang.org/x/sys/windows/registry"
 
-// DetectChipsetAlias reads the CPU brand string from the registry and
-// maps it to an AI Hub chipset alias. Returns ("", false) on any failure
-// so callers can fall back to interactive selection.
-func DetectChipsetAlias() (string, bool) {
-	brand, ok := readCPUBrand()
-	if !ok {
-		return "", false
-	}
-	return CPUNameToChipsetAlias(brand)
-}
-
-func readCPUBrand() (string, bool) {
+func readHostProbe() string {
 	k, err := registry.OpenKey(
 		registry.LOCAL_MACHINE,
 		`HARDWARE\DESCRIPTION\System\CentralProcessor\0`,
 		registry.QUERY_VALUE,
 	)
 	if err != nil {
-		return "", false
+		return ""
 	}
 	defer k.Close()
-
-	v, _, err := k.GetStringValue("ProcessorNameString")
-	if err != nil {
-		return "", false
-	}
-	return v, v != ""
+	v, _, _ := k.GetStringValue("ProcessorNameString")
+	return v
 }

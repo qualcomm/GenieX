@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:build !windows
+//go:build linux
 
 package sochost
 
-// DetectChipsetAlias is only implemented on Windows; on other platforms it
-// always reports failure so callers fall back to interactive selection.
-func DetectChipsetAlias() (string, bool) {
-	return "", false
+import "os"
+
+const dtCompatiblePath = "/sys/firmware/devicetree/base/compatible"
+
+func readHostProbe() string {
+	data, _ := os.ReadFile(dtCompatiblePath)
+	return string(data)
 }
