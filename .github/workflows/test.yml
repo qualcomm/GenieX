@@ -72,13 +72,17 @@ jobs:
       # the wheel build entirely: drop bindings/python on PYTHONPATH and
       # point GENIEX_LIB_PATH at the SDK artifact's lib/ tree, which
       # short-circuits _ffi/_lib.py's auto-discovery.
-      - name: Install pytest and configure binding
+      - name: Install pytest and binding runtime deps
         shell: bash
         run: |
           set -euo pipefail
           python --version
           python -m pip install --upgrade pip
-          python -m pip install "pytest>=7.0"
+          # tqdm is the only runtime dep declared by bindings/python.
+          # We skip the package install (PEP 517 backend resolution
+          # fails on hosted Python 3.13 + pip 26.1) so install the dep
+          # directly here.
+          python -m pip install "pytest>=7.0" "tqdm>=4.65"
 
       - name: Smoke-test the binding
         shell: bash
