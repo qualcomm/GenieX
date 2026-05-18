@@ -79,6 +79,32 @@ jobs:
           key: ccache-sdk-${{ matrix.platform }}-${{ github.sha }}
           restore-keys: ccache-sdk-${{ matrix.platform }}-
 
+      # Cargo target dir lives under the workspace so it's reachable both
+      # from the Windows runner and from the Linux/Android container
+      # (mounted at /workspace). Key on Cargo.lock + Cargo.toml so cache
+      # invalidates only when the dependency graph actually changes.
+      - name: Restore cargo target
+        uses: actions/cache@v5
+        with:
+          path: |
+            sdk/model-manager/target
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-sdk-${{ matrix.platform }}-${{ hashFiles('sdk/model-manager/Cargo.lock', 'sdk/model-manager/**/Cargo.toml') }}
+          restore-keys: cargo-sdk-${{ matrix.platform }}-
+
+      # Cache the CMake build tree so ninja deps, ExternalProject stamps,
+      # and link products survive across runs. hashFiles covers the
+      # configure-time inputs; a change there mints a new entry, while
+      # restore-keys lets unchanged-config runs reuse the previous tree.
+      - name: Restore CMake build dir
+        uses: actions/cache@v5
+        with:
+          path: sdk/build-${{ matrix.preset }}
+          key: cmake-build-${{ matrix.platform }}-${{ hashFiles('sdk/CMakeLists.txt', 'sdk/**/CMakeLists.txt', 'sdk/CMakePresets.json', 'sdk/cmake/**', 'sdk/patches/**', '.gitmodules') }}-${{ github.sha }}
+          restore-keys: cmake-build-${{ matrix.platform }}-
+
       # Linux/Android ccache lives in the toolchain container; host just
       # owns the dir so actions/cache can persist it.
       - name: Prepare ccache dir (Linux/Android)
@@ -97,7 +123,13 @@ jobs:
           # so `ccache --max-size` below edits the workspace config.
           $env:CCACHE_DIR = "${{ github.workspace }}/.ccache"
           Add-Content $env:GITHUB_ENV "CCACHE_DIR=$env:CCACHE_DIR"
-          ccache --max-size=1G
+          # CCACHE_BASEDIR rewrites absolute workspace paths to relative,
+          # so cache entries survive runner-to-runner workspace path drift.
+          # SLOPPINESS tolerates __DATE__/__TIME__ and mtime jitter that
+          # llama.cpp / ggml sources trip over.
+          Add-Content $env:GITHUB_ENV "CCACHE_BASEDIR=$env:GITHUB_WORKSPACE"
+          Add-Content $env:GITHUB_ENV "CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime"
+          ccache --max-size=5G
 
       - name: Setup Snapdragon SDKs
         if: matrix.platform == 'windows-arm64'
@@ -147,6 +179,8 @@ jobs:
             -e EXTRA_CMAKE_FLAGS \
             -e PRESET \
             -e CCACHE_DIR=/workspace/.ccache \
+            -e CCACHE_BASEDIR=/workspace \
+            -e CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime \
             -e HOST_UID="$uid" \
             -e HOST_GID="$gid" \
             --platform linux/amd64 \
@@ -160,6 +194,7 @@ jobs:
                 $EXTRA_CMAKE_FLAGS
               cmake --build "sdk/build-$PRESET" -j "$(nproc)"
               cmake --install "sdk/build-$PRESET" --prefix sdk/pkg-geniex
+              ccache -s -v || true
               chown -R "$HOST_UID:$HOST_GID" sdk .ccache || true
             '
 
@@ -176,7 +211,6 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $BuildDir = "sdk/build-$env:PRESET"
-          Remove-Item -Recurse -Force $BuildDir -ErrorAction SilentlyContinue
 
           # Source vcvars into this process so cmake's child processes
           # (clang, ninja, inf2cat.exe) inherit PATH/INCLUDE/LIB for the
