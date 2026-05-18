@@ -20,14 +20,15 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ### **拉取 Docker 镜像**
 
-使用你的 GitHub PAT（个人访问令牌）登录 GitHub Container Registry (GHCR)：
+使用你的 GitHub PAT（个人访问令牌）和 GitHub 用户名登录 GitHub Container Registry (GHCR)：
 
 ```bash bash
 export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxx
-docker login ghcr.io -u zackli_QCOM -p "$GITHUB_TOKEN"
+export GITHUB_USERNAME=your_github_username
+docker login ghcr.io -u "$GITHUB_USERNAME" -p "$GITHUB_TOKEN"
 ```
 
-从 Docker Hub 拉取最新 GenieX SDK Docker 镜像：
+登录成功后会显示 "Login Succeeded" 消息。然后拉取最新 GenieX SDK Docker 镜像：
 
 ```bash bash
 docker pull ghcr.io/qcom-ai-hub/geniex-cli:latest
@@ -69,7 +70,7 @@ docker run -it --rm --privileged \
 ```
 
 <Note>
-`--privileged` 标志是 NPU 访问所必需的。将 `YOUR_LONG_TOKEN_HERE` 替换为你的实际 GenieX 令牌。你可以在 [sdk.geniex.ai](https://sdk.geniex.ai) 创建账户并在 **Deployment -> Create Token** 中生成令牌。
+`--privileged` 标志是 NPU/GPU 设备访问所必需的。`--network=host` 将服务器暴露在主机网络上，可通过 `http://localhost:18181` 访问。
 </Note>
 
 `geniex serve` 不会自动下载模型。请确保预先下载要使用的模型。

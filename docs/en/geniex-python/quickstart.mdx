@@ -9,44 +9,94 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ## **Prerequisites**
 
-The GenieX Python SDK requires the ARM64 version of Python. Before installation, please download and install [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe).
+The GenieX Python SDK requires ARM64 Python 3.10+.
 
-## **Method 1 : Use Python script**
+| Platform | Python requirement |
+|----------|-------------------|
+| Windows ARM64 | [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe) |
+| Linux ARM64 | System Python 3.10+ (aarch64) — available via `apt` or your distro's package manager |
 
-For QDC, we recommend using the Python script method below.
+## **Installation**
 
-### **Installation**
+<Tabs>
+  <Tab title="Windows ARM64">
+    ### **Windows ARM64**
 
-On QDC, create a virtual environment and install the GenieX Python SDK using pip:
+    For QDC, we recommend using the Python script method below.
 
-```powershell
-python -m venv geniex-env
-.\geniex-env\Scripts\Activate.ps1
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
-```
+    Create a virtual environment and install the GenieX Python SDK using pip:
 
-This will download the python package from [test PyPI](https://test.pypi.org/project/geniex/)
+    ```powershell
+    python -m venv geniex-env
+    .\geniex-env\Scripts\Activate.ps1
+    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    ```
 
-<Note>
-**Troubleshooting: SSL / certificate errors (corporate proxy / QDC)**
+    This will download the python package from [test PyPI](https://test.pypi.org/project/geniex/)
 
-If the installation fails with an SSL certificate error — common on corporate networks with TLS inspection, including **Qualcomm Developer Cloud (QDC)** — pre-download the SDK manually and point the installer to it. Run the following **PowerShell** commands **before** `pip install`:
+    <Note>
+    **Troubleshooting: SSL / certificate errors (corporate proxy / QDC)**
 
-```powershell
-$env:GENIEX_VERSION = "v0.1.5"
-$base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/$env:GENIEX_VERSION"
-$zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
+    If the installation fails with an SSL certificate error — common on corporate networks with TLS inspection, including **Qualcomm Developer Cloud (QDC)** — pre-download the SDK manually and point the installer to it. Run the following **PowerShell** commands **before** `pip install`:
 
-Invoke-WebRequest "$base/$zip"        -OutFile $zip
-Invoke-WebRequest "$base/$zip.sha256" -OutFile "$zip.sha256"
+    ```powershell
+    $env:GENIEX_VERSION = "v0.1.5"
+    $base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/$env:GENIEX_VERSION"
+    $zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
 
-$env:GENIEX_SDK_DOWNLOAD_URL = "file:///$($(Get-Location).Path.Replace('\','/'))"
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    Invoke-WebRequest "$base/$zip"        -OutFile $zip
+    Invoke-WebRequest "$base/$zip.sha256" -OutFile "$zip.sha256"
 
-Remove-Item $zip, "$zip.sha256"
-Remove-Item Env:GENIEX_SDK_DOWNLOAD_URL
-```
-</Note>
+    $env:GENIEX_SDK_DOWNLOAD_URL = "file:///$($(Get-Location).Path.Replace('\','/'))"
+    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+
+    Remove-Item $zip, "$zip.sha256"
+    Remove-Item Env:GENIEX_SDK_DOWNLOAD_URL
+    ```
+    </Note>
+  </Tab>
+
+  <Tab title="Linux ARM64">
+    ### **Linux ARM64**
+
+    Create a virtual environment and install:
+
+    ```bash
+    python3 -m venv geniex-env
+    source geniex-env/bin/activate
+    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    ```
+
+    This will download the python package from [test PyPI](https://test.pypi.org/project/geniex/) and auto-fetch the Linux ARM64 SDK libraries.
+
+    <Note>
+    **Troubleshooting: SSL / certificate errors**
+
+    If the installation fails with an SSL certificate error — common on corporate networks with TLS inspection — pre-download the SDK manually and point the installer to it:
+
+    ```bash
+    export GENIEX_VERSION="v0.1.5"
+    BASE="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/${GENIEX_VERSION}"
+    ZIP="geniex-sdk-linux-arm64-${GENIEX_VERSION}.zip"
+
+    curl -fSL -o "$ZIP" "${BASE}/${ZIP}"
+    curl -fSL -o "${ZIP}.sha256" "${BASE}/${ZIP}.sha256"
+
+    export GENIEX_SDK_DOWNLOAD_URL="file://$(pwd)"
+    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+
+    rm -f "$ZIP" "${ZIP}.sha256"
+    unset GENIEX_SDK_DOWNLOAD_URL
+    ```
+    </Note>
+
+    <Note>
+    **Running on Docker (IoT / headless devices)**
+
+    On Qualcomm IoT boards (Dragonwing IQ9, QCS9075, etc.), you can also use the pre-built Docker image which bundles the CLI and SDK. See the [Linux SDK quickstart](/en/geniex-docker/quickstart) for Docker usage.
+    </Note>
+  </Tab>
+</Tabs>
 
 ### **LLM Inference**
 

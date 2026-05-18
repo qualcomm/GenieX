@@ -9,43 +9,94 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ## **前置条件**
 
-GenieX Python SDK 需要 ARM64 版本的 Python。在安装之前，请下载并安装 [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe)。
+GenieX Python SDK 需要 ARM64 版本的 Python 3.10+。
 
-## **方法 1：使用 Python 脚本**
+| 平台 | Python 要求 |
+|------|------------|
+| Windows ARM64 | [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe) |
+| Linux ARM64 | 系统 Python 3.10+（aarch64）— 可通过 `apt` 或发行版包管理器安装 |
 
-对于 QDC，我们推荐使用以下 Python 脚本方法。
+## **安装**
 
-### **安装**
+<Tabs>
+  <Tab title="Windows ARM64">
+    ### **Windows ARM64**
 
-在 QDC 上，创建虚拟环境并使用 pip 安装 GenieX Python SDK：
+    对于 QDC，我们推荐使用以下 Python 脚本方法。
 
-```powershell
-python -m venv geniex-env
-.\geniex-env\Scripts\Activate.ps1
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
-```
-这将从 [test PyPI](https://test.pypi.org/project/geniex/) 下载 Python 包。
+    创建虚拟环境并使用 pip 安装 GenieX Python SDK：
 
-<Note>
-**故障排查：SSL / 证书错误（企业代理 / QDC）**
+    ```powershell
+    python -m venv geniex-env
+    .\geniex-env\Scripts\Activate.ps1
+    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    ```
 
-如果安装时出现 SSL 证书错误——常见于启用了 TLS 检测的企业网络，包括 **Qualcomm Developer Cloud（QDC）**——请在运行 `pip install` 之前，按照以下 **PowerShell** 命令手动下载 SDK：
+    这将从 [test PyPI](https://test.pypi.org/project/geniex/) 下载 Python 包。
 
-```powershell
-$env:GENIEX_VERSION = "v0.1.5"
-$base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/$env:GENIEX_VERSION"
-$zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
+    <Note>
+    **故障排查：SSL / 证书错误（企业代理 / QDC）**
 
-Invoke-WebRequest "$base/$zip"        -OutFile $zip
-Invoke-WebRequest "$base/$zip.sha256" -OutFile "$zip.sha256"
+    如果安装时出现 SSL 证书错误——常见于启用了 TLS 检测的企业网络，包括 **Qualcomm Developer Cloud（QDC）**——请在运行 `pip install` 之前，按照以下 **PowerShell** 命令手动下载 SDK：
 
-$env:GENIEX_SDK_DOWNLOAD_URL = "file:///$($(Get-Location).Path.Replace('\','/'))"
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    ```powershell
+    $env:GENIEX_VERSION = "v0.1.5"
+    $base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/$env:GENIEX_VERSION"
+    $zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
 
-Remove-Item $zip, "$zip.sha256"
-Remove-Item Env:GENIEX_SDK_DOWNLOAD_URL
-```
-</Note>
+    Invoke-WebRequest "$base/$zip"        -OutFile $zip
+    Invoke-WebRequest "$base/$zip.sha256" -OutFile "$zip.sha256"
+
+    $env:GENIEX_SDK_DOWNLOAD_URL = "file:///$($(Get-Location).Path.Replace('\','/'))"
+    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+
+    Remove-Item $zip, "$zip.sha256"
+    Remove-Item Env:GENIEX_SDK_DOWNLOAD_URL
+    ```
+    </Note>
+  </Tab>
+
+  <Tab title="Linux ARM64">
+    ### **Linux ARM64**
+
+    创建虚拟环境并安装：
+
+    ```bash
+    python3 -m venv geniex-env
+    source geniex-env/bin/activate
+    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    ```
+
+    这将从 [test PyPI](https://test.pypi.org/project/geniex/) 下载 Python 包，并自动获取 Linux ARM64 SDK 库。
+
+    <Note>
+    **故障排查：SSL / 证书错误**
+
+    如果安装时出现 SSL 证书错误——常见于启用了 TLS 检测的企业网络——请在运行 `pip install` 之前手动下载 SDK：
+
+    ```bash
+    export GENIEX_VERSION="v0.1.5"
+    BASE="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/${GENIEX_VERSION}"
+    ZIP="geniex-sdk-linux-arm64-${GENIEX_VERSION}.zip"
+
+    curl -fSL -o "$ZIP" "${BASE}/${ZIP}"
+    curl -fSL -o "${ZIP}.sha256" "${BASE}/${ZIP}.sha256"
+
+    export GENIEX_SDK_DOWNLOAD_URL="file://$(pwd)"
+    pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+
+    rm -f "$ZIP" "${ZIP}.sha256"
+    unset GENIEX_SDK_DOWNLOAD_URL
+    ```
+    </Note>
+
+    <Note>
+    **在 Docker 上运行（IoT / 无头设备）**
+
+    在高通 IoT 开发板（Dragonwing IQ9、QCS9075 等）上，也可以使用预构建的 Docker 镜像。请查看 [Linux SDK 快速入门](/cn/geniex-docker/quickstart)。
+    </Note>
+  </Tab>
+</Tabs>
 
 ### **LLM 推理**
 

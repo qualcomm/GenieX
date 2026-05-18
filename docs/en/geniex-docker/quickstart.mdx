@@ -5,29 +5,20 @@ description: Get started with GenieXSDK Docker on Linux ARM64 in minutes.
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-## **Tutorial Video**
-
-{/* YouTube embed following Mintlify format */}
-<iframe
-  className="w-full aspect-video rounded-xl"
-  src="https://www.youtube.com/embed/auxoXSeMVsg"
-  title="SDK for Linux Tutorial"
-  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-  allowFullScreen
-></iframe>
 
 ## **Installation**
 
 ### **Pull Docker Image**
 
-login to GitHub Container Registry (GHCR) using your GitHub PAT (Personal Access Token):
+Log in to GitHub Container Registry (GHCR) using your GitHub PAT (Personal Access Token) and your GitHub username:
 
 ```bash bash
 export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxx
-docker login ghcr.io -u zackli_QCOM -p "$GITHUB_TOKEN"
+export GITHUB_USERNAME=your_github_username
+docker login ghcr.io -u "$GITHUB_USERNAME" -p "$GITHUB_TOKEN"
 ```
 
-Pull the latest GenieXSDK Docker image from Docker Hub:
+Then you expect to see a "Login Succeeded" message. After that, pull the latest GenieXSDK Docker image:
 
 ```bash bash
 docker pull ghcr.io/qcom-ai-hub/geniex-cli:latest
@@ -69,7 +60,7 @@ docker run -it --rm --privileged \
 ```
 
 <Note>
-The `--privileged` flag is required for NPU access. Replace `YOUR_LONG_TOKEN_HERE` with your actual GenieX token. You can obtain a token by creating an account at [sdk.geniex.ai](https://sdk.geniex.ai) and generating one in **Deployment → Create Token**.
+The `--privileged` flag is required for NPU/GPU device access. `--network=host` exposes the server on your host's network so you can reach it at `http://localhost:18181`.
 </Note>
 
 `geniex serve` won't auto download models. Make sure to pre-download the models you intend to use.

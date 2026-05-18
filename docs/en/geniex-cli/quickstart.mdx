@@ -1,6 +1,6 @@
 ---
 title: "Quick Start"
-description: "Get started with GenieXSDK on Windows ARM64"
+description: "Get started with GenieXSDK on Windows ARM64 and Linux ARM64"
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
@@ -57,6 +57,88 @@ import Feedback from "/snippets/page-feedback.mdx";
     <Note>Multimodal support for `Qwen3.5` and `Gemma4` is coming soon.</Note>
 
     <Tip>To try other GGUF models, visit Hugging Face, copy the path of any compatible GGUF model (e.g., `unsloth/Phi-4-mini-instruct-GGUF`), and replace the model path in the command above.</Tip>
+
+  </Tab>
+
+  <Tab title="Linux ARM64">
+    ### **Linux ARM64 Installation (Docker)**
+
+    GenieX on Linux ARM64 runs via Docker. Log in to GitHub Container Registry and pull the image:
+
+    ```bash
+    export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxx
+    export GITHUB_USERNAME=your_github_username
+    docker login ghcr.io -u "$GITHUB_USERNAME" -p "$GITHUB_TOKEN"
+    ```
+    Then you expect to see a "Login Succeeded" message. After that, pull the latest GenieXSDK Docker image:
+
+    ```bash
+    docker pull ghcr.io/qcom-ai-hub/geniex-cli:latest
+    ```
+
+    <Note>
+    `--privileged` is required for NPU/GPU device access. The `-v /usr/lib:/opt/qcom-lib:ro` mount exposes host Qualcomm libraries to the container. `-v "$PWD/data:/data"` persists the model cache across runs.
+    </Note>
+
+    ### **Running Your First Model (CLI Mode)**
+
+    Run GenieX in interactive CLI mode for direct model inference:
+
+    ```bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      infer Qwen/Qwen3-0.6B-GGUF
+    ```
+
+    **Language Model (LLM)**
+
+    ```bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      infer unsloth/Qwen3.5-0.8B-GGUF
+    ```
+
+    **Multimodal Model**
+
+    ```bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      infer Qwen/Qwen3-VL-2B-Instruct-GGUF
+    ```
+
+    ### **Server Mode**
+
+    Start the OpenAI-compatible REST API server:
+
+    ```bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      --network=host \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      serve
+    ```
+
+    The server listens on `http://localhost:18181`. From another terminal, connect an interactive shell to the running server:
+
+    ```bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      --network=host \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      run <model>
+    ```
+
+    <Note>`geniex serve` does not auto-download models. Pre-download models with `infer` or `pull` before starting the server.</Note>
+
+    <Tip>For detailed REST API usage (chat completions, embeddings, etc.), see the [REST API](/en/geniex-docker/RestAPI) page.</Tip>
 
   </Tab>
 
