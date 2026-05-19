@@ -14,6 +14,7 @@
 
 """Bound C functions from libgeniex with argtypes/restype annotations."""
 
+import atexit
 import logging
 import os
 from ctypes import CFUNCTYPE, POINTER, byref, c_char_p, c_int32, c_void_p
@@ -276,6 +277,7 @@ def init() -> None:
     lib = load_library()
     _check(lib.geniex_init())
     _initialized = True
+    atexit.register(deinit)
 
 
 def deinit() -> None:
