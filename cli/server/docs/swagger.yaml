@@ -75,7 +75,7 @@ components:
         messages:
           - role: "user"
             content: "Hello! Briefly introduce yourself."
-        nctx: 4096
+        nctx: 0
         max_completion_tokens: 2048
         temperature: 0.8
         top_p: 0.95
@@ -185,10 +185,7 @@ components:
       type: object
       required: [role, content]
       default:
-        {
-          "role": "user",
-          "content": "Hello! Briefly introduce yourself.",
-        }
+        { "role": "user", "content": "Hello! Briefly introduce yourself." }
       properties:
         role:
           type: string
