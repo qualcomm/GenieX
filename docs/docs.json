@@ -44,156 +44,146 @@
     "languages": [
       {
         "language": "en",
-        "tabs": [
+        "groups": [
           {
-            "tab": "GenieX",
-            "groups": [
+            "group": "Get Started",
+            "icon": "rocket",
+            "pages": [
+              "en/get-started/what-is-geniex",
+              "en/get-started/quickstart",
+              "en/get-started/choose-backend",
+              "en/get-started/devices"
+            ]
+          },
+          {
+            "group": "Models",
+            "icon": "cube",
+            "pages": [
+              "en/models/supported",
+              "en/models/quantization",
+              "en/models/bring-your-own"
+            ]
+          },
+          {
+            "group": "Run",
+            "icon": "play",
+            "pages": [
               {
-                "group": "Get Started",
-                "icon": "rocket",
+                "group": "Command Line",
+                "icon": "terminal",
                 "pages": [
-                  "en/get-started/what-is-geniex",
-                  "en/get-started/quickstart",
-                  "en/get-started/choose-backend",
-                  "en/get-started/devices"
+                  "en/run/cli/install",
+                  "en/run/cli/quickstart",
+                  "en/run/cli/local-server",
+                  "en/run/cli/reference"
                 ]
               },
               {
-                "group": "Models",
-                "icon": "cube",
+                "group": "Python",
+                "icon": "python",
                 "pages": [
-                  "en/models/supported",
-                  "en/models/quantization",
-                  "en/models/bring-your-own"
+                  "en/run/python/install",
+                  "en/run/python/quickstart",
+                  "en/run/python/api-reference"
                 ]
               },
               {
-                "group": "Run",
-                "icon": "play",
+                "group": "Linux (Docker)",
+                "icon": "docker",
                 "pages": [
-                  {
-                    "group": "Command Line",
-                    "icon": "terminal",
-                    "pages": [
-                      "en/run/cli/install",
-                      "en/run/cli/quickstart",
-                      "en/run/cli/local-server",
-                      "en/run/cli/reference"
-                    ]
-                  },
-                  {
-                    "group": "Python",
-                    "icon": "python",
-                    "pages": [
-                      "en/run/python/install",
-                      "en/run/python/quickstart",
-                      "en/run/python/api-reference"
-                    ]
-                  },
-                  {
-                    "group": "Linux (Docker)",
-                    "icon": "docker",
-                    "pages": [
-                      "en/run/linux/install"
-                    ]
-                  },
-                  {
-                    "group": "Android (Kotlin)",
-                    "icon": "android",
-                    "pages": [
-                      "en/run/android/install",
-                      "en/run/android/quickstart",
-                      "en/run/android/api-reference"
-                    ]
-                  }
+                  "en/run/linux/install"
                 ]
               },
               {
-                "group": "Resources",
-                "icon": "circle-question",
+                "group": "Android (Kotlin)",
+                "icon": "android",
                 "pages": [
-                  "en/resources/faq",
-                  "en/resources/troubleshooting"
+                  "en/run/android/install",
+                  "en/run/android/quickstart",
+                  "en/run/android/api-reference"
                 ]
               }
+            ]
+          },
+          {
+            "group": "Resources",
+            "icon": "circle-question",
+            "pages": [
+              "en/resources/faq",
+              "en/resources/troubleshooting"
             ]
           }
         ]
       },
       {
         "language": "cn",
-        "tabs": [
+        "groups": [
           {
-            "tab": "GenieX",
-            "groups": [
+            "group": "开始使用",
+            "icon": "rocket",
+            "pages": [
+              "cn/get-started/what-is-geniex",
+              "cn/get-started/quickstart",
+              "cn/get-started/choose-backend",
+              "cn/get-started/devices"
+            ]
+          },
+          {
+            "group": "模型",
+            "icon": "cube",
+            "pages": [
+              "cn/models/supported",
+              "cn/models/quantization",
+              "cn/models/bring-your-own"
+            ]
+          },
+          {
+            "group": "运行",
+            "icon": "play",
+            "pages": [
               {
-                "group": "开始使用",
-                "icon": "rocket",
+                "group": "命令行",
+                "icon": "terminal",
                 "pages": [
-                  "cn/get-started/what-is-geniex",
-                  "cn/get-started/quickstart",
-                  "cn/get-started/choose-backend",
-                  "cn/get-started/devices"
+                  "cn/run/cli/install",
+                  "cn/run/cli/quickstart",
+                  "cn/run/cli/local-server",
+                  "cn/run/cli/reference"
                 ]
               },
               {
-                "group": "模型",
-                "icon": "cube",
+                "group": "Python",
+                "icon": "python",
                 "pages": [
-                  "cn/models/supported",
-                  "cn/models/quantization",
-                  "cn/models/bring-your-own"
+                  "cn/run/python/install",
+                  "cn/run/python/quickstart",
+                  "cn/run/python/api-reference"
                 ]
               },
               {
-                "group": "运行",
-                "icon": "play",
+                "group": "Linux (Docker)",
+                "icon": "docker",
                 "pages": [
-                  {
-                    "group": "命令行",
-                    "icon": "terminal",
-                    "pages": [
-                      "cn/run/cli/install",
-                      "cn/run/cli/quickstart",
-                      "cn/run/cli/local-server",
-                      "cn/run/cli/reference"
-                    ]
-                  },
-                  {
-                    "group": "Python",
-                    "icon": "python",
-                    "pages": [
-                      "cn/run/python/install",
-                      "cn/run/python/quickstart",
-                      "cn/run/python/api-reference"
-                    ]
-                  },
-                  {
-                    "group": "Linux (Docker)",
-                    "icon": "docker",
-                    "pages": [
-                      "cn/run/linux/install"
-                    ]
-                  },
-                  {
-                    "group": "Android (Kotlin)",
-                    "icon": "android",
-                    "pages": [
-                      "cn/run/android/install",
-                      "cn/run/android/quickstart",
-                      "cn/run/android/api-reference"
-                    ]
-                  }
+                  "cn/run/linux/install"
                 ]
               },
               {
-                "group": "资源",
-                "icon": "circle-question",
+                "group": "Android (Kotlin)",
+                "icon": "android",
                 "pages": [
-                  "cn/resources/faq",
-                  "cn/resources/troubleshooting"
+                  "cn/run/android/install",
+                  "cn/run/android/quickstart",
+                  "cn/run/android/api-reference"
                 ]
               }
+            ]
+          },
+          {
+            "group": "资源",
+            "icon": "circle-question",
+            "pages": [
+              "cn/resources/faq",
+              "cn/resources/troubleshooting"
             ]
           }
         ]

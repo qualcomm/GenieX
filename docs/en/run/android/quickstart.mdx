@@ -1,106 +1,159 @@
 ---
 title: "Quickstart"
-description: "Run your first model in the GenieX Android demo or your own app."
+description: "Run your first model from the GenieX Android SDK in Kotlin."
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
+This page walks through running your first model from a Kotlin app, then swapping in a different model. For a complete reference app with chat UI, model picker, and VLM support, see the [sample app](https://github.com/qcom-ai-hub/geniex/tree/main/examples/android).
+
 ## **Prerequisites**
 
-- The demo APK installed (or the SDK pulled into your project) — see [Install](/en/run/android/install).
+- The SDK added to your Gradle project — see [Install](/en/run/android/install).
 - A device with **Snapdragon 8 Elite** or **Snapdragon 8 Elite Gen 5**.
+- `INTERNET` permission in your `AndroidManifest.xml` (the SDK pulls weights from Hugging Face / Qualcomm AI Hub on first use).
 
-## **Using the demo app**
+## **Run your first model**
 
-Once the demo launches:
-
-1. **Pick a model** from the dropdown at the top:
-   - **Hugging Face GGUF (llama.cpp)** — Qwen3, Phi-4, Gemma, Granite, Qwen3-VL, etc.
-   - **AI Hub NPU (QAIRT)** — `qualcomm/Qwen3-4B-Instruct-2507`, `qualcomm/Qwen2.5-VL-7B-Instruct`.
-2. **Download** — tap Download. Progress is resumable: killing the app mid-download and relaunching resumes from the last byte.
-3. **Load** — pick the execution target (NPU / GPU / CPU for GGUF; NPU-only for AI Hub models).
-4. **Chat** — type text, or tap the image / audio button for VLMs.
-
-## **Walkthrough: GGUF LLM**
-
-`unsloth/Qwen3-0.6B-GGUF` — small Qwen3 0.6B chat model, `Q4_0`. Fast first download, runs on any device.
+The flow is the same regardless of model: **init the SDK → pull weights → load → generate**. Below is a minimal end-to-end example using `unsloth/Qwen3-0.6B-GGUF` — a small Qwen3 0.6B chat model that runs on any supported device.
 
 <Steps>
-  <Step title="Select the model">
-    Open the model dropdown at the top and pick **Qwen3-0.6B (GGUF)**.
+  <Step title="Init the SDK">
+    Call once on app startup (idempotent — safe inside `Activity.onCreate`):
+
+    ```kotlin
+    GeniexSdk.getInstance().init(context)
+    ```
   </Step>
-  <Step title="Download">
-    Tap **Download**. Progress streams live from the Rust model manager; killing the app mid-download and relaunching resumes from the last byte.
+
+  <Step title="Pull the model">
+    `pullFlow` streams progress events. Run inside a coroutine on `Dispatchers.IO`:
+
+    ```kotlin
+    ModelManagerWrapper.pullFlow(
+        ModelPullInput(
+            model_name = "unsloth/Qwen3-0.6B-GGUF",
+            quant      = "Q4_0",
+            hub        = HubSource.HUGGINGFACE,
+        )
+    ).collect { event ->
+        when (event) {
+            is ModelManagerWrapper.PullEvent.Progress  -> /* update UI */
+            ModelManagerWrapper.PullEvent.Completed    -> /* done */
+            is ModelManagerWrapper.PullEvent.Error     -> /* show error */
+        }
+    }
+    ```
+
+    Downloads are resumable — killing the app mid-pull and re-running picks up where it left off.
   </Step>
-  <Step title="Load">
-    Tap **Load**. A dialog appears — choose **NPU**, **GPU**, or **CPU**:
-    - **NPU** *(recommended on Snapdragon)* — Hexagon NPU acceleration.
-    - **GPU** — Adreno via OpenCL.
-    - **CPU** — works on any ARM64 device.
+
+  <Step title="Load the model">
+    Resolve the on-disk paths and build an `LlmWrapper`:
+
+    ```kotlin
+    val paths = ModelManagerWrapper.getPaths("unsloth/Qwen3-0.6B-GGUF")
+        ?: error("Model not downloaded")
+
+    val llm = LlmWrapper.builder()
+        .llmCreateInput(
+            LlmCreateInput(
+                model_name = paths.model_name,
+                model_path = paths.model_path,
+                config     = ModelConfig(nCtx = 4096),
+                plugin_id  = "llama_cpp",
+                device_id  = null,   // null → NPU on Snapdragon (recommended)
+            )
+        )
+        .build()
+        .getOrThrow()
+    ```
   </Step>
-  <Step title="Chat">
-    Type a message in the input bar and tap **Send**. Tap **Clear** or unload the model to reset the conversation.
+
+  <Step title="Generate">
+    Apply the chat template, then collect tokens from the streaming flow:
+
+    ```kotlin
+    val chat = arrayListOf(ChatMessage("user", "What is AI?"))
+    val templated = llm.applyChatTemplate(chat.toTypedArray(), null, false).getOrThrow()
+
+    llm.generateStreamFlow(
+        templated.formattedText,
+        GenerationConfig(maxTokens = 2048),
+    ).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token     -> print(result.text)
+            is LlmStreamResult.Completed -> println("\nDone")
+            is LlmStreamResult.Error     -> println("Error: ${result.throwable}")
+        }
+    }
+    ```
+
+    <Warning>
+    Always pass `templated.formattedText` (the chat-templated prompt) into `generateStreamFlow`, **not** the raw user text. The native pipeline expects an already-templated prompt.
+    </Warning>
   </Step>
 </Steps>
 
-## **Walkthrough: AI Hub VLM**
+## **Switching models**
 
-`qualcomm/Qwen2.5-VL-7B-Instruct` — vision-language model pre-compiled for Snapdragon 8 Elite and 8 Elite Gen 5.
+Swapping models is mostly a matter of changing the `model_name` and the `plugin_id`. There are two backends:
 
-<Warning>
-Requires a device with chipset `SM8750` (Snapdragon 8 Elite) or `SM8850` (Snapdragon 8 Elite Gen 5).
-</Warning>
+- **`llama_cpp`** — runs any GGUF model. Supports NPU / GPU / CPU via `device_id`.
+- **`qairt`** — runs Qualcomm AI Hub bundles. NPU-only, requires an explicit `chipset` on Android.
 
-<Steps>
-  <Step title="Select the model">
-    Open the dropdown and pick **Qwen2.5-VL-7B-Instruct (NPU)**.
-  </Step>
-  <Step title="Download">
-    Tap **Download**. The AI Hub bundle is larger than the GGUF models (~4.6 GB) — stay on Wi-Fi. Downloads resume across app restarts.
-  </Step>
-  <Step title="Load">
-    Tap **Load**. The plugin picker only shows **NPU** for QAIRT models. Confirm.
-  </Step>
-  <Step title="Chat with an image">
-    Tap the **image** button, pick a photo from the gallery, type a question like "What's in this image?", and send. The VLM chat template is applied automatically by the SDK.
-  </Step>
-</Steps>
+### Another GGUF model (llama.cpp)
 
-## **Embedding the SDK in your own app**
-
-If you're not using the demo, the SDK Kotlin code looks like this:
+Just change the `model_name` (and `quant` if you want a different precision) — the rest of the flow is identical:
 
 ```kotlin
-val paths = ModelManagerWrapper.getPaths("unsloth/Qwen3-0.6B-GGUF")
-    ?: error("Model not downloaded")
-
-LlmWrapper.builder()
-    .llmCreateInput(
-        LlmCreateInput(
-            model_name = paths.model_name,
-            model_path = paths.model_path,
-            config     = ModelConfig(nCtx = 4096),
-            plugin_id  = "llama_cpp",
-            device_id  = null,       // null → npu (recommended on Snapdragon)
-        )
-    )
-    .build()
-    .onSuccess { llmWrapper = it }
-    .onFailure { println("Error: ${it.message}") }
+ModelPullInput(
+    model_name = "unsloth/Qwen3-VL-2B-Instruct-GGUF",
+    quant      = "Q4_0",
+    hub        = HubSource.HUGGINGFACE,
+)
 ```
 
-See the [API reference](/en/run/android/api-reference) for the full surface (model manager, LLM/VLM wrappers, data structures).
+For VLMs, also pass `paths.mmproj_path` into `VlmCreateInput` — see [API reference → VLM](/en/run/android/api-reference#vlm).
 
-## **Troubleshooting**
+### A QAIRT model (AI Hub NPU)
 
-**"Model loads but generation self-repeats or outputs nothing"**
-Make sure the demo passes the chat-templated prompt (`applyChatTemplate().formattedText`) into `generateStreamFlow`, not the raw user text. QAIRT pipelines treat their input as already-templated — sending raw text drops the model into completion mode.
+QAIRT bundles are pre-compiled per chipset and only run on the NPU. You **must** pass `chipset` on Android:
 
-**"AI Hub pull fails with `INVALID_INPUT`"**
-Android needs an explicit `chipset` for AI Hub pulls — auto-detect only runs on Windows on Snapdragon. The demo's `model_list.json` pins `SM8750`; if you've customised it, ensure the field is present.
+```kotlin
+ModelManagerWrapper.pullFlow(
+    ModelPullInput(
+        model_name = "qualcomm/Qwen3-4B-Instruct-2507",
+        hub        = HubSource.AUTO,   // routes qualcomm/* to AI Hub
+        chipset    = "SM8750",         // SM8750 = 8 Elite, SM8850 = 8 Elite Gen 5
+    )
+).collect { /* … */ }
+```
 
-**"QAIRT load fails with unknown model name"**
-The model id returned by AI Hub must match an entry in the QAIRT plugin's registry (`qwen3_4b_instruct_2507`, `qwen2_5_vl_7b_instruct`, etc.). To add a new AI Hub model, register it on the C++ side first — see `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`.
+Then switch `plugin_id = "qairt"` in `LlmCreateInput`. See the supported AI Hub repos in the [API reference](/en/run/android/api-reference#supported-models).
+
+### Switching device (NPU / GPU / CPU)
+
+For `llama_cpp` only — set `device_id` on `LlmCreateInput`:
+
+| `device_id`        | Backend                                    |
+|--------------------|--------------------------------------------|
+| `null` or `"npu"`  | Hexagon NPU (recommended on Snapdragon).   |
+| `"gpu"`            | Adreno GPU via OpenCL.                     |
+| `"cpu"`            | Pure CPU. Works on any ARM64 device.       |
+
+QAIRT ignores this — `cpu`/`gpu` are coerced to NPU with a warning.
+
+## **Using the sample app**
+
+The [sample app](https://github.com/qcom-ai-hub/geniex/tree/main/examples/android) at `examples/android/` is a fully wired chat client built on top of the snippets above. A few patterns worth borrowing when you build your own UI:
+
+- **Model picker UI** — the dropdown is driven by `examples/android/app/src/main/assets/model_list.json`. Each entry pins a `model_name`, `hub`, and (for QAIRT) a `chipset`. Edit this file to add new models without touching code.
+- **Resumable downloads with progress** — the `Progress` events from `pullFlow` carry per-file byte counts; the sample wires them straight into a `LinearProgressIndicator`.
+- **Plugin-aware device picker** — when the selected model is QAIRT, the picker hides GPU/CPU options. See `LoadDialog.kt`.
+- **VLM image picker** — for VLMs, the sample passes the absolute file path into `VlmContent("image", path)`. Don't pass content URIs — the native side reads the file directly.
+
+Open `examples/android/` in Android Studio (not `bindings/android/` — that's the SDK source) and hit **Run ▶**.
 
 ## **Next steps**
 

@@ -5,129 +5,170 @@ description: "Common questions about GenieX, its backends, and supported devices
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-## General
+## **General**
 
-### What is GenieX?
+<AccordionGroup>
+  <Accordion title="What is GenieX?">
+    A multi-platform AI inference runtime built for Qualcomm Snapdragon. GenieX runs frontier LLMs and VLMs on-device — Hexagon NPU, Adreno GPU, or CPU — across Windows ARM64, Android, and Linux ARM64. See [What is GenieX](/en/get-started/what-is-geniex).
+  </Accordion>
 
-A multi-platform AI inference runtime built for Qualcomm Snapdragon. GenieX runs frontier LLMs and VLMs on-device — Hexagon NPU, Adreno GPU, or CPU — across Windows ARM64, Android, and Linux ARM64. See [What is GenieX](/en/get-started/what-is-geniex).
+  <Accordion title="Which interface should I use?">
+    - **Trying things out, scripting** — [CLI](/en/run/cli/install) on Windows ARM64 or Linux ARM64.
+    - **Building an app** — [Local server](/en/run/cli/local-server) (OpenAI-compatible HTTP) or [Python SDK](/en/run/python/install).
+    - **Mobile** — [Android SDK](/en/run/android/install) (Kotlin, Maven Central).
+    - **Reproducible IoT deployment** — [Docker image](/en/run/cli/install) on Linux ARM64 EVKs, pinned to a release tag.
 
-### Which interface should I use?
+    The [Quickstart](/en/get-started/quickstart) is a router into all four.
+  </Accordion>
 
-- **Trying things out, scripting** — [CLI](/en/run/cli/install) on Windows ARM64 or Linux ARM64.
-- **Building an app** — [Local server](/en/run/cli/local-server) (OpenAI-compatible HTTP) or [Python SDK](/en/run/python/install).
-- **Mobile** — [Android SDK](/en/run/android/install) (Kotlin, Maven Central).
-- **Reproducible IoT deployment** — [Docker image](/en/run/cli/install) on Linux ARM64 EVKs, pinned to a release tag (no host-side install, identical across devices).
+  <Accordion title="Where do I see what hardware GenieX supports?">
+    [Supported devices](/en/get-started/devices) — Snapdragon X for compute, 8 Elite for mobile, Dragonwing IQ9 / QCS for IoT.
+  </Accordion>
+</AccordionGroup>
 
-The [Quickstart](/en/get-started/quickstart) is a router into all four.
+## **Backends**
 
-### Where do I see what hardware GenieX supports?
+<AccordionGroup>
+  <Accordion title="What's the difference between llama.cpp and QAIRT?">
+    - **llama.cpp** — runs any GGUF model, supports NPU/GPU/CPU. Best for trying community models.
+    - **QAIRT** — runs pre-compiled AI Hub bundles, NPU only. Typically the fastest path when your model is on AI Hub.
 
-[Supported devices](/en/get-started/devices) — Snapdragon X for compute, 8 Elite for mobile, Dragonwing IQ9 / QCS for IoT.
+    See [Choose your backend](/en/get-started/choose-backend).
+  </Accordion>
 
-## Backends
+  <Accordion title="Which backend is the default?">
+    If you don't pass a device:
+    - `llama_cpp` defaults to `hybrid` (HTP + CPU per-tensor scheduler — the fast path on Snapdragon).
+    - `qairt` defaults to `npu`.
 
-### What's the difference between llama.cpp and QAIRT?
+    Some models override this — e.g. `gpt-oss` falls back to `npu` on `llama_cpp`.
+  </Accordion>
 
-- **llama.cpp** — runs any GGUF model, supports NPU/GPU/CPU. Best for trying community models.
-- **QAIRT** — runs pre-compiled AI Hub bundles, NPU only. Typically the fastest path when your model is on AI Hub.
+  <Accordion title="Which quantization should I pick?">
+    For llama.cpp on Snapdragon NPU: **`Q4_0`**. It has the best Hexagon backend support. QAIRT bundles are pre-quantized — no choice. See [Quantization](/en/models/quantization).
+  </Accordion>
+</AccordionGroup>
 
-See [Choose your backend](/en/get-started/choose-backend).
+## **Models**
 
-### Which backend is the default?
+<AccordionGroup>
+  <Accordion title="Can I run any model from Hugging Face?">
+    Any **GGUF** model on the llama.cpp backend. See [Bring your own model](/en/models/bring-your-own).
 
-If you don't pass a device:
-- `llama_cpp` defaults to `hybrid` (HTP + CPU per-tensor scheduler — the fast path on Snapdragon).
-- `qairt` defaults to `npu`.
+    QAIRT requires a pre-compiled AI Hub bundle — adding a new one means registering it on the C++ side first.
+  </Accordion>
 
-Some models override this — e.g. `gpt-oss` falls back to `npu` on `llama_cpp`.
+  <Accordion title="Where's the supported models list?">
+    [Supported models](/en/models/supported) — split by backend (QAIRT, llama.cpp).
+  </Accordion>
+</AccordionGroup>
 
-### Which quantization should I pick?
+## **Hardware & devices**
 
-For llama.cpp on Snapdragon NPU: **`Q4_0`**. It has the best Hexagon backend support. QAIRT bundles are pre-quantized — no choice. See [Quantization](/en/models/quantization).
+<AccordionGroup>
+  <Accordion title="Do I need a Snapdragon device?">
+    Yes. GenieX targets Qualcomm Snapdragon platforms — Hexagon NPU, Adreno GPU, and Snapdragon ARM CPUs. There's no x86 or non-Snapdragon ARM build. If you don't have hardware on hand, use [Qualcomm Developer Cloud / Device Cloud](/en/get-started/devices).
+  </Accordion>
 
-## Models
+  <Accordion title="My QAIRT model says NPU is required — can I run it on CPU?">
+    No. QAIRT is NPU-only by design. `cpu` and `gpu` aliases are coerced to NPU with a warning. Use the llama.cpp backend (with a GGUF) if you need CPU/GPU fallback.
+  </Accordion>
+</AccordionGroup>
 
-### Can I run any model from Hugging Face?
+## **QDC (Qualcomm Device Cloud)**
 
-Any **GGUF** model on the llama.cpp backend. See [Bring your own model](/en/models/bring-your-own).
+<AccordionGroup>
+  <Accordion title="Do I need my own QDC device?">
+    No. You can request access to Qualcomm Device Cloud for remote testing on Snapdragon hardware. See [Supported devices](/en/get-started/devices) for details.
+  </Accordion>
 
-QAIRT requires a pre-compiled AI Hub bundle — adding a new one means registering it on the C++ side first.
+  <Accordion title="How do I connect to a QDC device over SSH?">
+    <Steps>
+      <Step title="Setup SSH tunneling">
+        In the QDC portal, navigate to **Interactive Sessions** and click **Connect** to view the SSH connection instructions.
 
-### Where's the supported models list?
+        <img
+          src="/Images/qdc/qdc-1.png"
+          alt="QDC portal showing the Connect button for SSH instructions"
+          style={{ borderRadius: '0.5rem' }}
+        />
 
-[Supported models](/en/models/supported) — split by backend (QAIRT, llama.cpp).
+        Open a terminal and run the SSH tunnel command from QDC, replacing `<PRIVATE_KEY_FILE_PATH>` with your private key path.
 
-## Hardware & devices
+        <img
+          src="/Images/qdc/qdc-2.png"
+          alt="SSH tunneling setup with private key and port forwarding"
+          style={{ borderRadius: '0.5rem' }}
+        />
 
-### Do I need a Snapdragon device?
+        <Tip>
+        **`WARNING: UNPROTECTED PRIVATE KEY FILE!`** — your `.pem` file permissions are too open. SSH requires private keys to be readable only by the owner:
 
-Yes. GenieX targets Qualcomm Snapdragon platforms — Hexagon NPU, Adreno GPU, and Snapdragon ARM CPUs. There's no x86 or non-Snapdragon ARM build. If you don't have hardware on hand, use [Qualcomm Developer Cloud / Device Cloud](/en/get-started/devices).
+        ```bash
+        chmod 600 /path/to/your-key.pem
+        ```
+        </Tip>
+      </Step>
 
-### My QAIRT model says NPU is required — can I run it on CPU?
+      <Step title="Connect to the device">
+        In a new terminal, SSH into the forwarded port. The default password is `oelinux123`:
 
-No. QAIRT is NPU-only by design. `cpu` and `gpu` aliases are coerced to NPU with a warning. Use the llama.cpp backend (with a GGUF) if you need CPU/GPU fallback.
+        ```bash
+        ssh -o StrictHostKeychecking=no -o UserKnownHostsFile=/dev/null -p 2222 root@localhost
+        ```
 
-## QDC (Qualcomm Device Cloud)
+        <img
+          src="/Images/qdc/qdc-3.png"
+          alt="Successful SSH connection to the QDC device"
+          style={{ borderRadius: '0.5rem' }}
+        />
+      </Step>
+    </Steps>
+  </Accordion>
 
-### How do I connect to a QDC device?
+  <Accordion title="How do I test the Android demo without a physical device?">
+    Use a **Snapdragon 8 Elite** or **8 Elite Gen 5** Interactive Session on QDC and install the prebuilt demo APK.
 
-SSH into a QDC device in two steps.
+    <Card title="geniex-demo.apk" icon="download" href="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-demo.apk">
+      Latest GenieX Android demo APK. Signed debug build.
+    </Card>
 
-<Steps>
-  <Step title="Setup SSH tunneling">
-    In the QDC portal, navigate to **Interactive Sessions** and click **Connect** to view the SSH connection instructions.
+    <Steps>
+      <Step title="Pick a device">
+        Sign in to [Qualcomm Device Cloud](https://qdc.qualcomm.com/), choose **Snapdragon 8 Elite** or **Snapdragon 8 Elite Gen 5**, and select **Interactive session**.
+      </Step>
+      <Step title="Configure the session">
+        Enable **Wi-Fi** (so the demo can download models) and **Keep screen on** (so the screen doesn't lock mid-download). SSH is **not** required.
+      </Step>
+      <Step title="Upload the APK">
+        Use **Upload file** in the session setup page to push `geniex-demo.apk` onto the device — the file must be uploaded **before** the session begins.
+      </Step>
+      <Step title="Start and test">
+        Start the session. In the mirrored screen, tap the uploaded APK to install, then open **GenieX Demo** from the app drawer.
+      </Step>
+      <Step title="(Optional) Test a VLM with an image">
+        Upload a test image via the QDC terminal:
+        ```bash
+        curl -L "https://s7d1.scene7.com/is/image/dmqualcommprod/Qualcomm_AIHub_image2-1?$QC_Responsive$&fmt=png-alpha" -o /data/local/tmp/qualcomm.png
+        cp /data/local/tmp/qualcomm.png /sdcard/Download/
+        ```
+        The image will appear in the app's image picker.
+      </Step>
+    </Steps>
+  </Accordion>
+</AccordionGroup>
 
-    <img
-      src="/Images/qdc/qdc-1.png"
-      alt="QDC portal showing the Connect button for SSH instructions"
-      style={{ borderRadius: '0.5rem' }}
-    />
+## **Server / API**
 
-    Open a terminal and run the SSH tunnel command from QDC, replacing `<PRIVATE_KEY_FILE_PATH>` with your private key path.
+<AccordionGroup>
+  <Accordion title="Is the local server OpenAI-compatible?">
+    Yes — see [Local server](/en/run/cli/local-server). You can point the official `openai` Python client at `http://127.0.0.1:18181/v1` and reuse OpenAI code unchanged.
+  </Accordion>
 
-    <img
-      src="/Images/qdc/qdc-2.png"
-      alt="SSH tunneling setup with private key and port forwarding"
-      style={{ borderRadius: '0.5rem' }}
-    />
-
-    <Tip>
-    **`WARNING: UNPROTECTED PRIVATE KEY FILE!`** — your `.pem` file permissions are too open. SSH requires private keys to be readable only by the owner:
-
-    ```bash bash
-    chmod 600 /path/to/your-key.pem
-    ```
-    </Tip>
-  </Step>
-
-  <Step title="Connect to the device">
-    In a new terminal, SSH into the forwarded port. The default password is `oelinux123`:
-
-    ```bash bash
-    ssh -o StrictHostKeychecking=no -o UserKnownHostsFile=/dev/null -p 2222 root@localhost
-    ```
-
-    <img
-      src="/Images/qdc/qdc-3.png"
-      alt="Successful SSH connection to the QDC device"
-      style={{ borderRadius: '0.5rem' }}
-    />
-  </Step>
-</Steps>
-
-### Do I need my own QDC device?
-
-No. You can request access to Qualcomm Device Cloud for remote testing on Snapdragon hardware. See [Supported devices](/en/get-started/devices) for details.
-
-## Server / API
-
-### Is the local server OpenAI-compatible?
-
-Yes — see [Local server](/en/run/cli/local-server). You can point the official `openai` Python client at `http://127.0.0.1:18181/v1` and reuse OpenAI code unchanged.
-
-### Does geniex serve auto-download models?
-
-No. Pull models with `geniex pull` before starting the server.
+  <Accordion title="Does geniex serve auto-download models?">
+    No. Pull models with `geniex pull` before starting the server.
+  </Accordion>
+</AccordionGroup>
 
 <br />
 

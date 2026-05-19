@@ -203,9 +203,12 @@ header p {
   color: #b9b9ba !important;
 }
 
-h1#page-title {
-  font-weight: 600;
-  font-size: 40px;
+h1#page-title,
+#header h1 {
+  font-weight: 600 !important;
+  font-size: 30px !important;
+  line-height: 1.2 !important;
+  margin-bottom: 8px !important;
 }
 
 #header .prose p {
@@ -1024,7 +1027,8 @@ ul#sidebar-group li div.group:hover {
   padding-right: 40px;
 }
 
-#header {
+#header .prose,
+#header p {
   display: none !important;
 }
 
