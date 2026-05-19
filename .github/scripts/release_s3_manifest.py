@@ -49,6 +49,10 @@ ASSET_PATTERNS: list[tuple[re.Pattern[str], dict[str, str]]] = [
      {"kind": "sdk", "platform": "linux", "arch": "arm64"}),
     (re.compile(r"^geniex-cli-setup-windows-arm64-.+\.exe$"),
      {"kind": "cli-installer", "platform": "windows", "arch": "arm64"}),
+    (re.compile(r"^geniex-cli-linux-arm64-.+\.tar\.gz$"),
+     {"kind": "cli-archive", "platform": "linux", "arch": "arm64"}),
+    (re.compile(r"^install-.+\.sh$"),
+     {"kind": "install-script", "platform": "linux", "arch": "arm64"}),
     (re.compile(r"^geniex-demo-.+\.apk$"),
      {"kind": "android-demo", "platform": "android", "arch": "arm64"}),
 ]

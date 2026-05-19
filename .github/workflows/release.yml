@@ -236,6 +236,11 @@ jobs:
           tar -czf "${staged}.tar.gz" "${staged}"
           rm -rf "${staged}"
 
+          # Stage the install script as a versioned release asset so users can
+          # pin to a specific tag's script — the mutable install.sh pointer is
+          # advanced only on stable tags (see publish-s3 below).
+          cp cli/release/linux/install.sh "install-${RELEASE_TAG}.sh"
+
           sdk_suffix=""
           if [[ "$HTP_SIGNED" != "true" ]]; then
             sdk_suffix="-selfsigned"
@@ -253,7 +258,7 @@ jobs:
           rm -rf sdk-windows-arm64 sdk-linux-arm64 cli-linux-arm64 to-sign
 
           shopt -s nullglob
-          files=(*.zip *.exe *.tar.gz *.cer *.aar *.apk)
+          files=(*.zip *.exe *.tar.gz *.cer *.aar *.apk install-*.sh)
           for f in "${files[@]}"; do sha256sum "$f" > "$f.sha256"; done
 
       - uses: actions/upload-artifact@v7
@@ -272,6 +277,8 @@ jobs:
             *.aar.sha256
             *.apk
             *.apk.sha256
+            install-*.sh
+            install-*.sh.sha256
           if-no-files-found: error
           retention-days: 1
 
@@ -372,8 +379,27 @@ jobs:
             --include 'geniex-sdk-linux-arm64-*.zip.sha256' \
             --include "geniex-cli-setup-windows-arm64-${RELEASE_TAG}.exe" \
             --include "geniex-cli-setup-windows-arm64-${RELEASE_TAG}.exe.sha256" \
+            --include "geniex-cli-linux-arm64-${RELEASE_TAG}.tar.gz" \
+            --include "geniex-cli-linux-arm64-${RELEASE_TAG}.tar.gz.sha256" \
+            --include "install-${RELEASE_TAG}.sh" \
+            --include "install-${RELEASE_TAG}.sh.sha256" \
             --include "geniex-demo-${RELEASE_TAG}.apk" \
             --include "geniex-demo-${RELEASE_TAG}.apk.sha256" \
+            --acl public-read
+
+      - name: Force text/x-shellscript content-type on the install scripts
+        shell: bash
+        env:
+          AWS_PROFILE: bitsy
+          AWS_DEFAULT_REGION: us-west-2
+        run: |
+          set -euo pipefail
+          # Re-upload the .sh objects so curl-piping browsers don't get a
+          # text/html or application/octet-stream that some shells refuse.
+          aws s3 cp \
+            "release-assets/install-${RELEASE_TAG}.sh" \
+            "s3://${S3_BUCKET}/${S3_PREFIX}install-${RELEASE_TAG}.sh" \
+            --content-type "text/x-shellscript; charset=utf-8" \
             --acl public-read
 
       - name: Refresh mutable "latest stable" pointers
@@ -390,6 +416,22 @@ jobs:
           aws s3 cp \
             "release-assets/geniex-cli-setup-windows-arm64-${RELEASE_TAG}.exe" \
             "s3://${S3_BUCKET}/${S3_PREFIX}geniex-cli.exe" \
+            --acl public-read \
+            --cache-control "no-cache, max-age=0"
+          aws s3 cp \
+            "release-assets/geniex-cli-linux-arm64-${RELEASE_TAG}.tar.gz" \
+            "s3://${S3_BUCKET}/${S3_PREFIX}geniex-cli-linux-arm64.tar.gz" \
+            --acl public-read \
+            --cache-control "no-cache, max-age=0"
+          aws s3 cp \
+            "release-assets/geniex-cli-linux-arm64-${RELEASE_TAG}.tar.gz.sha256" \
+            "s3://${S3_BUCKET}/${S3_PREFIX}geniex-cli-linux-arm64.tar.gz.sha256" \
+            --acl public-read \
+            --cache-control "no-cache, max-age=0"
+          aws s3 cp \
+            "release-assets/install-${RELEASE_TAG}.sh" \
+            "s3://${S3_BUCKET}/${S3_PREFIX}install.sh" \
+            --content-type "text/x-shellscript; charset=utf-8" \
             --acl public-read \
             --cache-control "no-cache, max-age=0"
           aws s3 cp \
