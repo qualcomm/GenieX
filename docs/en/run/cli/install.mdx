@@ -39,7 +39,25 @@ The CLI ships as a native Windows ARM64 executable, and as a Linux ARM64 Docker 
     Now jump to the [Quickstart](/en/run/cli/quickstart).
   </Tab>
 
-  <Tab title="Linux ARM64">
+  <Tab title="Linux ARM64 (Native)">
+    The Linux path runs through a container image built for Linux ARM64 with NPU access (Dragonwing IQ9 and similar IoT platforms).
+
+    ### **Prerequisites**
+
+    - Linux ARM64 host.
+    - Qualcomm IoT device — see [Supported devices](/en/get-started/devices#iot-linux-arm64).
+
+    ### **Install**
+
+    ### **Verify**
+
+    ```bash bash
+    geniex --help
+    ```
+
+  </Tab>
+
+  <Tab title="Linux ARM64 (Docker)">
     The Linux path runs through a container image built for Linux ARM64 with NPU access (Dragonwing IQ9 and similar IoT platforms).
 
     ### **Prerequisites**
@@ -70,10 +88,12 @@ The CLI ships as a native Windows ARM64 executable, and as a Linux ARM64 Docker 
       ghcr.io/qcom-ai-hub/geniex-cli:latest
     ```
 
-    Then run a model from the container shell:
+    ### **Verify**
+
+    Then run a test command from the container shell:
 
     ```bash bash
-    geniex infer Qwen/Qwen3-0.6B-GGUF
+    geniex --help
     ```
 
     <Note>The `--privileged` flag is required for NPU access.</Note>

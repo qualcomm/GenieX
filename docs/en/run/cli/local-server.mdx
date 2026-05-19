@@ -10,49 +10,24 @@ GenieX includes a built-in inference server that exposes an **OpenAI-compatible 
 ## **Prerequisites**
 
 - The CLI installed — see [Install](/en/run/cli/install).
+- Interactive shell from container (Docker only) — see [Run interactively](/en/run/cli/install#run-interactively).
 - A model pulled. `geniex serve` does **not** auto-download models.
 
 ## **Start the server**
 
-<Tabs>
-  <Tab title="Windows ARM64">
-    Pull a model:
+Pull a model:
 
-    ```bash bash
-    geniex pull qualcomm/Qwen3-4B-Instruct-2507
-    ```
+```bash bash
+geniex pull qualcomm/Qwen3-4B-Instruct-2507
+```
 
-    Start the server:
+Start the server:
 
-    ```bash bash
-    geniex serve
-    ```
+```bash bash
+geniex serve
+```
 
-    The server runs on `http://127.0.0.1:18181` by default. Keep this terminal open and make requests from another one. Run `geniex serve -h` for all configurable options.
-  </Tab>
-
-  <Tab title="Linux ARM64">
-    Drop into an interactive shell inside the container:
-
-    ```bash bash
-    docker run -it --rm --privileged \
-      -v "$PWD/data:/data" \
-      -v /usr/lib:/opt/qcom-lib:ro \
-      --network=host \
-      ghcr.io/qcom-ai-hub/geniex-cli:latest
-    ```
-
-    Then start the server from the container shell:
-
-    ```bash bash
-    geniex serve
-    ```
-
-    <Note>The `--privileged` flag is required for NPU access. The image won't auto-download models — pre-download anything you intend to serve.</Note>
-
-    The server runs on `http://localhost:18181` (or `127.0.0.1:18181`).
-  </Tab>
-</Tabs>
+The server runs on `http://127.0.0.1:18181` by default. Keep this terminal open and make requests from another one. Run `geniex serve -h` for all configurable options.
 
 ## **POST /v1/chat/completions**
 

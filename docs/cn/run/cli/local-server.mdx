@@ -10,42 +10,24 @@ GenieX 内置推理服务器，提供**兼容 OpenAI 协议的 API**。在设备
 ## **前置条件**
 
 - 已安装 CLI——详见[安装](/cn/run/cli/install)。
+- 容器内交互式 shell（仅 Docker）——详见[交互式运行](/cn/run/cli/install#交互式运行)。
 - 已拉取模型。`geniex serve` **不会**自动下载模型。
 
 ## **启动服务器**
 
-<Tabs>
-  <Tab title="Windows ARM64">
-    拉取模型：
+拉取模型：
 
-    ```bash bash
-    geniex pull qualcomm/Qwen3-4B-Instruct-2507
-    ```
+```bash bash
+geniex pull qualcomm/Qwen3-4B-Instruct-2507
+```
 
-    启动服务器：
+启动服务器：
 
-    ```bash bash
-    geniex serve
-    ```
+```bash bash
+geniex serve
+```
 
-    服务器默认运行在 `http://127.0.0.1:18181`。保持该终端开启，并在另一个终端中发送请求。运行 `geniex serve -h` 查看所有可配置选项。
-  </Tab>
-
-  <Tab title="Linux ARM64">
-    ```bash bash
-    docker run -it --rm --privileged \
-      -v "$PWD/data:/data" \
-      -v /usr/lib:/opt/qcom-lib:ro \
-      --network=host \
-      ghcr.io/qcom-ai-hub/geniex-cli:latest \
-      serve
-    ```
-
-    <Note>NPU 访问需要 `--privileged` 标志。镜像不会自动下载模型——请预先下载需要服务的模型。</Note>
-
-    服务器运行在 `http://localhost:18181`（或 `127.0.0.1:18181`）。
-  </Tab>
-</Tabs>
+服务器默认运行在 `http://127.0.0.1:18181`。保持该终端开启，并在另一个终端中发送请求。运行 `geniex serve -h` 查看所有可配置选项。
 
 ## **POST /v1/chat/completions**
 
