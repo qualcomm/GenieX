@@ -32,13 +32,20 @@ GenieX includes a built-in inference server that exposes an **OpenAI-compatible 
   </Tab>
 
   <Tab title="Linux ARM64">
+    Drop into an interactive shell inside the container:
+
     ```bash bash
     docker run -it --rm --privileged \
       -v "$PWD/data:/data" \
       -v /usr/lib:/opt/qcom-lib:ro \
       --network=host \
-      ghcr.io/qcom-ai-hub/geniex-cli:latest \
-      serve
+      ghcr.io/qcom-ai-hub/geniex-cli:latest
+    ```
+
+    Then start the server from the container shell:
+
+    ```bash bash
+    geniex serve
     ```
 
     <Note>The `--privileged` flag is required for NPU access. The image won't auto-download models — pre-download anything you intend to serve.</Note>

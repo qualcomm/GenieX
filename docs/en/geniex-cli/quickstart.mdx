@@ -29,14 +29,19 @@ docker pull ghcr.io/qcom-ai-hub/geniex-cli:latest
 
 ## **Running Your First Model**
 
-Run GenieXSDK in interactive CLI mode on a local Linux ARM64 machine or a [QDC device via SSH](#connecting-to-a-qdc-device).
+Drop into an interactive shell inside the container on a local Linux ARM64 machine or a [QDC device via SSH](#connecting-to-a-qdc-device):
 
 ```bash bash
 docker run -it --rm --privileged \
   -v "$PWD/data:/data" \
   -v /usr/lib:/opt/qcom-lib:ro \
-  ghcr.io/qcom-ai-hub/geniex-cli:latest \
-  infer Qwen/Qwen3-0.6B-GGUF
+  ghcr.io/qcom-ai-hub/geniex-cli:latest
+```
+
+Then run a model from the container shell:
+
+```bash bash
+geniex infer Qwen/Qwen3-0.6B-GGUF
 ```
 
 <Note>

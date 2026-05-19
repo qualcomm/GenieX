@@ -14,13 +14,20 @@ GenieX in Docker can run as an OpenAI-compatible REST API server for integration
 
 ## **Start the server**
 
+Drop into an interactive shell inside the container:
+
 ```bash bash
 docker run -it --rm --privileged \
   -v "$PWD/data:/data" \
   -v /usr/lib:/opt/qcom-lib:ro \
   --network=host \
-  ghcr.io/qcom-ai-hub/geniex-cli:latest \
-  serve
+  ghcr.io/qcom-ai-hub/geniex-cli:latest
+```
+
+Then start the server from the container shell:
+
+```bash bash
+geniex serve
 ```
 
 <Note>

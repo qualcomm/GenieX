@@ -13,16 +13,22 @@ import Feedback from '/snippets/page-feedback.mdx';
 
 ## **快速开始**
 
-使用 API 前，先以服务器模式启动 GenieX SDK Docker 容器：
+进入容器的交互式 shell：
 
 ```bash bash
 docker run -it --rm --privileged \
   -v "$PWD/data:/data" \
   -v /usr/lib:/opt/qcom-lib:ro \
   --network=host \
-  ghcr.io/qcom-ai-hub/geniex-cli:latest \
-  serve
+  ghcr.io/qcom-ai-hub/geniex-cli:latest
 ```
+
+然后在容器 shell 中以服务器模式启动 GenieX SDK：
+
+```bash bash
+geniex serve
+```
+
 服务器默认运行在 `http://127.0.0.1:18181`。保持容器运行，从另一个终端或应用发送请求。
 
 <Info>

@@ -52,14 +52,19 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Tab>
 
   <Tab title="Linux ARM64">
-    With the [image pulled](/en/run/cli/install), run a model interactively:
+    With the [image pulled](/en/run/cli/install), drop into an interactive shell inside the container:
 
     ```bash bash
     docker run -it --rm --privileged \
       -v "$PWD/data:/data" \
       -v /usr/lib:/opt/qcom-lib:ro \
-      ghcr.io/qcom-ai-hub/geniex-cli:latest \
-      infer Qwen/Qwen3-0.6B-GGUF
+      ghcr.io/qcom-ai-hub/geniex-cli:latest
+    ```
+
+    Then run a model from the container shell:
+
+    ```bash bash
+    geniex infer Qwen/Qwen3-0.6B-GGUF
     ```
 
     For an HTTP API, see [Local server](/en/run/cli/local-server).

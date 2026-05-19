@@ -61,12 +61,19 @@ The CLI ships as a native Windows ARM64 executable, and as a Linux ARM64 Docker 
 
     ### **Run interactively**
 
+    Drop into an interactive shell inside the container:
+
     ```bash bash
     docker run -it --rm --privileged \
       -v "$PWD/data:/data" \
       -v /usr/lib:/opt/qcom-lib:ro \
-      ghcr.io/qcom-ai-hub/geniex-cli:latest \
-      infer Qwen/Qwen3-0.6B-GGUF
+      ghcr.io/qcom-ai-hub/geniex-cli:latest
+    ```
+
+    Then run a model from the container shell:
+
+    ```bash bash
+    geniex infer Qwen/Qwen3-0.6B-GGUF
     ```
 
     <Note>The `--privileged` flag is required for NPU access.</Note>
