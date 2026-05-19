@@ -1,0 +1,35 @@
+name: Docs Check
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Mintlify CLI
+        run: npm i -g mint
+
+      - name: Validate docs export
+        working-directory: docs
+        run: mint export --output site.zip
