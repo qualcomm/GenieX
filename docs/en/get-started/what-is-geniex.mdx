@@ -17,6 +17,15 @@ GenieX is an on-device Gen AI inference runtime built for Qualcomm platforms. It
 
 GenieX exposes five entry points — CLI, Python, Java/Kotlin, Docker, and an OpenAI-compatible server — over a single SDK that dispatches to either the **llama.cpp plugin** (GGML kernels for CPU / GPU / Hexagon HTP) or the **QAIRT plugin** (Qualcomm AI Runtime, NPU-only). The same SDK runs on Windows ARM64, Android, and Linux ARM64.
 
+## **Why two plugins?**
+
+So you get both **broad model coverage** and **optimal performance** in one runtime:
+
+- **Most models just work** — point GenieX at almost any GGUF on Hugging Face and it runs on CPU / GPU / NPU via llama.cpp.
+- **AI Hub models run optimally** — models published to [Qualcomm AI Hub](https://aihub.qualcomm.com/) are pre-compiled per chipset and run through QAIRT on the Hexagon NPU for peak on-device performance.
+
+See [Choose your backend](/en/get-started/choose-backend) for when to pick which.
+
 ## **What you can do with GenieX**
 
 - **Run models locally** on Snapdragon X (Windows ARM64), Snapdragon 8 Elite (Android), and Dragonwing IoT devices.
