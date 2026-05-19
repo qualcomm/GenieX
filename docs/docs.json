@@ -120,43 +120,64 @@
             "tab": "GenieX",
             "groups": [
               {
-                "group": "快速开始",
+                "group": "开始使用",
+                "icon": "rocket",
                 "pages": [
-                  "cn/geniex-cli/overview",
-                  "cn/geniex-cli/quickstart",
+                  "cn/get-started/what-is-geniex",
+                  "cn/get-started/quickstart",
+                  "cn/get-started/choose-backend",
+                  "cn/get-started/devices"
+                ]
+              },
+              {
+                "group": "模型",
+                "icon": "cube",
+                "pages": [
+                  "cn/models/supported",
+                  "cn/models/quantization",
+                  "cn/models/bring-your-own"
+                ]
+              },
+              {
+                "group": "运行",
+                "icon": "play",
+                "pages": [
                   {
-                    "group": "支持的模型",
+                    "group": "命令行",
+                    "icon": "terminal",
                     "pages": [
-                      "cn/geniex-cli/npu",
-                      "cn/geniex-cli/gguf"
+                      "cn/run/cli/install",
+                      "cn/run/cli/quickstart",
+                      "cn/run/cli/local-server",
+                      "cn/run/cli/reference"
+                    ]
+                  },
+                  {
+                    "group": "Python",
+                    "icon": "python",
+                    "pages": [
+                      "cn/run/python/install",
+                      "cn/run/python/quickstart",
+                      "cn/run/python/api-reference"
+                    ]
+                  },
+                  {
+                    "group": "Android (Kotlin)",
+                    "icon": "android",
+                    "pages": [
+                      "cn/run/android/install",
+                      "cn/run/android/quickstart",
+                      "cn/run/android/api-reference"
                     ]
                   }
                 ]
               },
               {
-                "group": "GenieX CLI",
-                "icon": "code",
+                "group": "资源",
+                "icon": "circle-question",
                 "pages": [
-                  "cn/geniex-cli/GenieXCLI",
-                  "cn/geniex-cli/GenieXAPI"
-                ]
-              },
-              {
-                "group": "Python 库",
-                "icon": "python",
-                "pages": [
-                  "cn/geniex-python/overview",
-                  "cn/geniex-python/quickstart",
-                  "cn/geniex-python/api-reference"
-                ]
-              },
-              {
-                "group": "Android SDK",
-                "icon": "android",
-                "pages": [
-                  "cn/geniex-android/quickstart",
-                  "cn/geniex-android/model-tutorial",
-                  "cn/geniex-android/api-reference"
+                  "cn/resources/faq",
+                  "cn/resources/troubleshooting"
                 ]
               }
             ]
