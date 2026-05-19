@@ -119,6 +119,39 @@ SSH into a QDC device in two steps.
 
 No. You can request access to Qualcomm Device Cloud for remote testing on Snapdragon hardware. See [Supported devices](/en/get-started/devices) for details.
 
+### How do I test the Android demo without a physical device?
+
+Use a **Snapdragon 8 Elite** or **8 Elite Gen 5** Interactive Session on QDC. The flow is APK-based — install the prebuilt demo, drive it through the mirrored screen.
+
+<Card title="geniex-demo.apk" icon="download" href="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-demo.apk">
+  Latest GenieX Android demo APK. Signed debug build — install with `adb install` or upload to a QDC session.
+</Card>
+
+<Steps>
+  <Step title="Pick a device">
+    Sign in to [Qualcomm Device Cloud](https://qdc.qualcomm.com/), choose **Snapdragon 8 Elite** or **Snapdragon 8 Elite Gen 5**, and select **Interactive session**.
+  </Step>
+  <Step title="Configure the session">
+    Before starting, enable **Wi-Fi** (so the demo can download models) and **Keep screen on** (so the screen doesn't lock mid-download). SSH is **not** required.
+  </Step>
+  <Step title="Upload the APK">
+    Use **Upload file** in the session setup page to push `geniex-demo.apk` onto the device — the file must be uploaded **before** the session begins.
+  </Step>
+  <Step title="Start and test">
+    Start the session. In the mirrored screen, tap the uploaded APK to install, then open **GenieX Demo** from the app drawer.
+  </Step>
+  <Step title="(Optional) Test a VLM with an image">
+    To try a vision-language model, upload a test image via the QDC terminal:
+    ```bash
+    curl -L "https://s7d1.scene7.com/is/image/dmqualcommprod/Qualcomm_AIHub_image2-1?$QC_Responsive$&fmt=png-alpha" -o /data/local/tmp/qualcomm.png
+    cp /data/local/tmp/qualcomm.png /sdcard/Download/
+    ```
+    The image will appear in the app's image picker.
+  </Step>
+</Steps>
+
+If you have a physical phone instead, sideload the APK with `adb install -r geniex-demo.apk` after enabling USB debugging (**Settings → About phone**, tap **Build number** seven times, then **Developer options → USB debugging**).
+
 ## Server / API
 
 ### Is the local server OpenAI-compatible?
