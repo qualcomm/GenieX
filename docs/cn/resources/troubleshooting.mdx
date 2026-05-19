@@ -1,0 +1,79 @@
+---
+title: "故障排查"
+description: "常见错误及处理方法。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## 安装 / pip
+
+### pip 安装时出现 SSL 或证书错误（企业代理 / QDC）
+
+常见于启用了 TLS 检测的网络——包括 **Qualcomm Developer Cloud（QDC）**。预先下载 SDK 并把 pip 指向本地文件即可。完整 PowerShell 片段见 [Python 安装](/cn/run/python/install#通过-pip-安装)。
+
+### Windows SmartScreen 拦截 CLI 安装包
+
+`.exe` 尚未代码签名。在 SmartScreen 对话框中点击 **更多信息 → 仍要运行**。
+
+## CLI
+
+### 安装后 `geniex` 找不到
+
+安装包不会自动加入 `PATH`。运行：
+
+```powershell windows
+Set-Alias geniex (where.exe geniex)
+```
+
+### `--device cpu` 或 `--device gpu` 在 QAIRT 模型上报错
+
+QAIRT 仅支持 NPU。请使用 `--device npu`（或省略——QAIRT 默认即 `npu`）。如需 CPU/GPU，改用 [llama.cpp 后端](/cn/get-started/choose-backend#llamacpp)的 GGUF 模型。
+
+## 服务器
+
+### `geniex serve` 报 "model not found"
+
+服务器不会自动下载。先拉取模型：
+
+```bash
+geniex pull qualcomm/Qwen3-4B-Instruct-2507
+```
+
+随后重启 `geniex serve`。
+
+### Docker 容器看不到 NPU
+
+NPU 访问必须带 `--privileged` 标志，并挂载 `/usr/lib`。详见 [CLI 安装（Docker）](/cn/run/cli/install)。
+
+## Android
+
+### 模型可加载，但生成自我重复或无输出
+
+demo（或你的代码）把**原始用户文本**传给了 `generateStreamFlow`，而非 chat template 化后的 prompt。QAIRT 流水线把输入视为已格式化——请传 `applyChatTemplate().formattedText`，而不是原始消息。
+
+### AI Hub 拉取报 INVALID_INPUT
+
+Android 上 AI Hub 拉取必须显式传 `chipset`——自动识别仅在骁龙 Windows 上生效。把 `ModelPullInput.chipset` 设为 `"SM8750"`（骁龙 8 至尊版）或 `"SM8850"`（骁龙 8 至尊版 Gen 5）。详见 [Android API 参考 → ModelPullInput](/cn/run/android/api-reference#modelpullinput)。
+
+### QAIRT 加载报 "unknown model name"
+
+AI Hub 返回的 model id 必须匹配 QAIRT 插件注册表中的条目（`qwen3_4b_instruct_2507`、`qwen2_5_vl_7b_instruct` 等）。新增 AI Hub 模型需先在 C++ 侧注册——见 `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`。
+
+### QAIRT 拒绝 `nGpuLayers` 或 `nCtx`
+
+QAIRT 模型包在编译期固化了 KV 缓存与上下文长度。请保持 `nGpuLayers` 与 `nCtx` 为默认值，改用 `max_tokens` 与 `enable_thinking` 调节。
+
+## 仍有问题？
+
+<CardGroup cols={2}>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/qualcomm/nexa-sdk/issues">
+    提交 bug、提需求或浏览开放的 Issue。
+  </Card>
+  <Card title="Slack" icon="slack" href="https://nexa-ai-community.slack.com/ssb/redirect">
+    开发者协作。
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>

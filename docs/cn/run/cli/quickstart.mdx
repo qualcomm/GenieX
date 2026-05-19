@@ -1,0 +1,82 @@
+---
+title: "快速入门"
+description: "通过 GenieX CLI 运行你的第一个模型。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **前置条件**
+
+- 已安装 CLI——详见[安装](/cn/run/cli/install)。
+- 了解[后端选择](/cn/get-started/choose-backend)——`qairt` 用于 AI Hub 模型包，`llama_cpp` 用于任意 GGUF。
+
+## **运行你的第一个模型**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ### **QAIRT 插件（AI Hub）**
+
+    **语言模型：**
+
+    ```powershell windows
+    geniex infer qualcomm/Qwen3-4B
+    ```
+
+    **多模态模型：**
+
+    ```powershell windows
+    geniex infer qualcomm/Qwen2.5-VL-7B-Instruct
+    ```
+
+    ### **llama.cpp 插件（GGUF）**
+
+    系统提示量化时请选择 `Q4_0`——它在 Hexagon NPU 上支持最佳。
+
+    **语言模型：**
+
+    ```powershell windows
+    geniex infer unsloth/Qwen3.5-0.8B-GGUF
+    ```
+
+    **多模态模型：**
+
+    ```powershell windows
+    geniex infer Qwen/Qwen3-VL-2B-Instruct-GGUF
+    ```
+
+    系统提示时请选择：
+    - **模型类型** —— 视觉语言模型选 `vlm`，纯文本模型选 `llm`。`Qwen3.5` 与 `Gemma4` 目前请选 `llm`（多模态支持即将推出）。
+    - **量化** —— `Q4_0` 在 Hexagon NPU 上性能最佳。
+
+    <Tip>如需尝试其他 GGUF 模型，从 Hugging Face 复制任意兼容 GGUF 路径替换上面的命令即可。详见[自带模型](/cn/models/bring-your-own)。</Tip>
+  </Tab>
+
+  <Tab title="Linux ARM64">
+    在[已拉取镜像](/cn/run/cli/install)的前提下，交互式运行模型：
+
+    ```bash bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      infer Qwen/Qwen3-0.6B-GGUF
+    ```
+
+    HTTP API 详见[本地服务器](/cn/run/cli/local-server)。
+  </Tab>
+</Tabs>
+
+## **下一步**
+
+<CardGroup cols={2}>
+  <Card title="本地服务器" href="/cn/run/cli/local-server" icon="server">
+    在 `localhost:18181` 暴露兼容 OpenAI 协议的 HTTP API。
+  </Card>
+  <Card title="CLI 参考" href="/cn/run/cli/reference" icon="book">
+    每条命令、每个参数。
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>

@@ -1,0 +1,80 @@
+---
+title: "安装"
+description: "在 Windows ARM64 上安装 GenieX CLI，或在 Linux ARM64 上通过 Docker 运行。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+CLI 提供 Windows ARM64 原生可执行文件，以及面向 Dragonwing IoT 等设备的 Linux ARM64 Docker 镜像。
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ### **前置条件**
+
+    - 骁龙 X 系列设备（X Elite 或 X2 Elite）。详见[支持的设备](/cn/get-started/devices)。
+    - PowerShell 或任意 Windows ARM64 上可用的 shell。
+
+    ### **下载**
+
+    <Card title="GenieX CLI 安装包" icon="download" href="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-cli.exe">
+      最新 Windows ARM64 GenieX CLI。点击下载好的 `.exe` 并按提示完成安装。
+    </Card>
+
+    安装包尚未代码签名——Windows SmartScreen 会发出告警。点击 **更多信息 → 仍要运行**。
+
+    ### **加入 PATH**
+
+    让 `geniex` 在 shell 中可用：
+
+    ```powershell windows
+    Set-Alias geniex (where.exe geniex)
+    ```
+
+    ### **验证**
+
+    ```powershell windows
+    geniex --help
+    ```
+
+    现在跳转到[快速入门](/cn/run/cli/quickstart)。
+  </Tab>
+
+  <Tab title="Linux ARM64">
+    Linux 路径通过 Linux ARM64 容器镜像运行，并支持 NPU 访问（适用于 Dragonwing IQ9 等 IoT 平台）。
+
+    ### **前置条件**
+
+    - 安装了 Docker 的 Linux ARM64 主机。
+    - 高通 IoT 设备——详见[支持的设备](/cn/get-started/devices#iot-linux-arm64)。
+    - 拥有 GHCR 读权限的 GitHub Personal Access Token (PAT)。
+
+    ### **拉取镜像**
+
+    登录 GitHub Container Registry 后再拉取：
+
+    ```bash bash
+    export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxx
+    docker login ghcr.io -u <your-github-username> -p "$GITHUB_TOKEN"
+
+    docker pull ghcr.io/qcom-ai-hub/geniex-cli:latest
+    ```
+
+    ### **交互式运行**
+
+    ```bash bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      infer Qwen/Qwen3-0.6B-GGUF
+    ```
+
+    <Note>NPU 访问需要 `--privileged` 标志。</Note>
+
+    服务器模式参见[本地服务器](/cn/run/cli/local-server)。
+  </Tab>
+</Tabs>
+
+<br />
+
+<Feedback/>

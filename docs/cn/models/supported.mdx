@@ -1,0 +1,61 @@
+---
+title: "支持的模型"
+description: "在 QAIRT 与 llama.cpp 后端经过验证的 LLM 与 VLM。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+GenieX 在 QAIRT 后端运行一组精选的预编译模型包，并通过 llama.cpp 后端运行**任意 GGUF 模型**。下表为已验证的示例——llama.cpp 侧并不局限于这些模型。
+
+## **QAIRT（AI Hub 模型包）**
+
+来自 Qualcomm AI Hub 的预编译模型包，仅 NPU。
+
+| 模型 ID | 来源 |
+|---|---|
+| `qualcomm/Qwen3-4B` | Qualcomm AI Hub |
+| `qualcomm/Qwen3-4B-Instruct-2507` | Qualcomm AI Hub |
+| `qualcomm/Qwen2.5-VL-7B-Instruct` | Qualcomm AI Hub |
+| `llama_v3_1_8b_instruct` | 自行转换（Hugging Face） |
+| `llama_v3_1_sea_lion_3_5_8b_r` | 自行转换（Hugging Face） |
+| `llama_v3_2_1b_instruct` | 自行转换（Hugging Face） |
+| `llama_v3_2_3b_instruct` | 自行转换（Hugging Face） |
+| `llama_v3_8b_instruct` | 自行转换（Hugging Face） |
+| `llama_v3_elyza_jp_8b` | 自行转换（Hugging Face） |
+| `llama_v3_taide_8b_chat` | 自行转换（Hugging Face） |
+| `falcon_v3_7b_instruct` | 自行转换（Hugging Face） |
+
+直接运行 `qualcomm/*` 模型：
+
+```powershell windows
+geniex infer qualcomm/Qwen3-4B
+```
+
+自行转换的模型包，请参考[自带模型指南](/cn/models/bring-your-own#qairt-自行转换的模型包)。
+
+## **llama.cpp（GGUF）**
+
+可在骁龙 NPU、GPU 或 CPU 上运行 Hugging Face 上的任意 GGUF 模型。以下为在 `Q4_0` 下表现良好的已验证示例：
+
+| 模型 ID | 类型 |
+|---|---|
+| `unsloth/Qwen3.5-0.8B-GGUF` | LLM |
+| `unsloth/Qwen3.5-2B-GGUF` | LLM |
+| `unsloth/Gemma4-E4B-it-GGUF` | LLM |
+| `unsloth/Gemma4-E2B-it-GGUF` | LLM |
+| `unsloth/Qwen3-0.6B-GGUF` | LLM |
+| `unsloth/Qwen3-1.7B-GGUF` | LLM |
+| `unsloth/Ministral-3-3B-Instruct-2507-GGUF` | LLM |
+| `unsloth/GPT-OSS-20B-GGUF` | LLM |
+| `ibm-granite/granite-4.0-micro-GGUF` | LLM |
+| `unsloth/Phi-4-mini-instruct-GGUF` | LLM |
+| `Qwen/Qwen3-VL-2B-Instruct-GGUF` | VLM |
+| `Qwen/Qwen3-VL-4B-Instruct-GGUF` | VLM |
+
+<Tip>如需尝试其他 GGUF 模型，从 Hugging Face 复制任意兼容 GGUF 模型的路径，替换到[自带模型](/cn/models/bring-your-own)中的命令即可。</Tip>
+
+<Note>对 `Qwen3.5` 与 `Gemma4` 的多模态支持即将推出——目前选择 `llm` 即可。</Note>
+
+<br />
+
+<Feedback/>

@@ -1,0 +1,105 @@
+---
+title: "快速入门"
+description: "在 Windows ARM64 上通过 GenieX Python SDK 运行你的第一个模型。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **前置条件**
+
+- 已安装 Python SDK——详见[安装](/cn/run/python/install)。
+- 了解[后端选择](/cn/get-started/choose-backend)——`qairt` 用于 AI Hub 模型包，`llama_cpp` 用于任意 GGUF。
+
+SDK 与 Hugging Face `transformers` 设计一致——通过 `AutoModelForCausalLM.from_pretrained()` 加载，再调用 `.generate()`。
+
+## **LLM 推理**
+
+```python
+from geniex import AutoModelForCausalLM
+
+# GGUF 模型示例（llama.cpp 后端）
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B-GGUF",     # GGUF 模型的 HF 仓库 ID，或本地 .gguf 路径
+    device_map="auto",          # "auto" | "cpu" | "gpu" | "npu" | "hybrid"
+                                # | "<plugin>" | "<plugin>:<device>"
+                                # auto -> llama_cpp 时为 hybrid，qairt 时为 npu
+)
+
+# QAIRT 模型示例（从本地路径加载）
+# model = AutoModelForCausalLM.from_pretrained(
+#     r"C:\<your_path>\Qwen3-4B-Instruct-2507",   # 模型包目录中任意一个 .bin 文件
+#     model_name="qwen3_4b_instruct_2507",        # 与 AI Hub 上的 model id 一致
+#     device_map="qairt",                         # QAIRT 必须使用
+# )
+
+messages = [{"role": "user", "content": "What is 2+2?"}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, add_generation_prompt=True,
+)
+
+# 一次性生成
+output = model.generate(prompt, max_new_tokens=256)
+print(output.text)
+print(f"[{output.profile.generated_tokens} tok, "
+      f"{output.profile.decode_speed:.1f} tok/s, stop={output.profile.stop_reason}]")
+
+# 流式生成
+streamer = model.generate(prompt, max_new_tokens=256, stream=True)
+for chunk in streamer:
+    print(chunk, end="", flush=True)
+
+model.close()
+```
+
+## **VLM 推理**
+
+下载示例图片：
+
+```bash
+curl -o demo.jpg https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/demo.jpg
+```
+
+随后使用绝对路径运行推理：
+
+```python
+import os
+from geniex import AutoModelForCausalLM
+
+image_path = os.path.abspath("demo.jpg")
+
+model = AutoModelForCausalLM.from_pretrained(
+    "unsloth/Qwen2.5-VL-3B-Instruct-GGUF",
+    quant="Q8_0",
+    device_map="auto",
+)
+messages = [{
+    "role": "user",
+    "content": [
+        {"type": "image", "image": image_path},
+        {"type": "text", "text": "Describe the image."},
+    ],
+}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
+print(model.generate(prompt, images=[image_path]).text)
+```
+
+## **Jupyter Notebook 教程**
+
+笔记本电脑用户可参考 [examples/python/windows.ipynb](https://github.com/qcom-ai-hub/geniex/blob/main/examples/python/windows.ipynb) 中的逐步 Jupyter Notebook，覆盖环境配置与端到端推理。
+
+## **下一步**
+
+<CardGroup cols={2}>
+  <Card title="API 参考" href="/cn/run/python/api-reference" icon="book">
+    Python SDK 的全部类、方法与参数。
+  </Card>
+  <Card title="自带模型" href="/cn/models/bring-your-own" icon="cube">
+    自定义 GGUF 与自行转换的 QAIRT 模型包。
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>

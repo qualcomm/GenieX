@@ -1,0 +1,101 @@
+---
+title: "常见问题"
+description: "关于 GenieX、其后端及支持设备的常见问题。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## 通用
+
+### GenieX 是什么？
+
+面向高通骁龙的多平台 AI 推理运行时。GenieX 在 Hexagon NPU、Adreno GPU 或 CPU 上端侧运行前沿 LLM 与 VLM，覆盖 Windows ARM64、Android 与 Linux ARM64。详见 [GenieX 是什么](/cn/get-started/what-is-geniex)。
+
+### 应该选哪种接入方式？
+
+- **试用、写脚本** —— Windows ARM64 上的 [CLI](/cn/run/cli/install)。
+- **构建应用** —— [本地服务器](/cn/run/cli/local-server)（兼容 OpenAI 协议的 HTTP）或 [Python SDK](/cn/run/python/install)。
+- **移动端** —— [Android SDK](/cn/run/android/install)（Kotlin，Maven Central）。
+- **IoT / Linux ARM64** —— [Docker 镜像](/cn/run/cli/install)。
+
+[快速入门](/cn/get-started/quickstart)是这四条路径的统一入口。
+
+### 哪里能看到 GenieX 支持的硬件？
+
+[支持的设备](/cn/get-started/devices) —— 计算用骁龙 X，移动用 8 至尊版，IoT 用 Dragonwing IQ9 / QCS 系列。
+
+## 后端
+
+### llama.cpp 与 QAIRT 有什么区别？
+
+- **llama.cpp** —— 运行任意 GGUF 模型，支持 NPU/GPU/CPU。最适合试用社区模型。
+- **QAIRT** —— 运行 AI Hub 预编译模型包，仅 NPU。当模型在 AI Hub 可用时，通常是最快路径。
+
+详见[选择后端](/cn/get-started/choose-backend)。
+
+### 默认后端是哪个？
+
+如果不传设备：
+- `llama_cpp` 默认 `hybrid`（HTP + CPU 按张量调度——骁龙上的快速路径）。
+- `qairt` 默认 `npu`。
+
+部分模型会覆盖默认值——例如 `gpt-oss` 在 `llama_cpp` 下回退到 `npu`。
+
+### 应该选哪种量化？
+
+llama.cpp 在骁龙 NPU 上请用 **`Q4_0`**——它在 Hexagon 后端上支持最佳。QAIRT 模型已预量化——无需选择。详见[量化](/cn/models/quantization)。
+
+## 模型
+
+### 能运行 Hugging Face 上任意模型吗？
+
+llama.cpp 后端可运行任意 **GGUF** 模型。详见[自带模型](/cn/models/bring-your-own)。
+
+QAIRT 需要预编译的 AI Hub 模型包——新增模型需先在 C++ 侧注册。
+
+### 受支持模型列表在哪里？
+
+[支持的模型](/cn/models/supported) —— 按后端拆分（QAIRT、llama.cpp）。
+
+## 硬件与设备
+
+### 必须用骁龙设备吗？
+
+是。GenieX 面向高通骁龙平台——Hexagon NPU、Adreno GPU 与骁龙 ARM CPU。没有 x86 或非骁龙 ARM 构建。如手头无硬件，可使用 [Qualcomm Developer Cloud / Device Cloud](/cn/get-started/devices)。
+
+### 我的 QAIRT 模型提示需要 NPU——能在 CPU 上跑吗？
+
+不能。QAIRT 设计上仅支持 NPU。`cpu` 与 `gpu` 别名会被自动转为 NPU 并打印告警。如需 CPU/GPU 回退，请改用 llama.cpp 后端（GGUF 模型）。
+
+## QDC（Qualcomm Device Cloud）
+
+### 如何连接到 QDC 设备？
+
+通过 SSH 分两步连接：
+
+1. **建立 SSH 隧道** —— 在 QDC 控制台中前往 **Interactive Sessions** → **Connect** 获取 SSH 命令，使用私钥执行以建立隧道。
+2. **连接** —— 在新终端中通过转发端口 SSH：
+
+```bash bash
+ssh -o StrictHostKeychecking=no -o UserKnownHostsFile=/dev/null -p 2222 root@localhost
+```
+
+默认密码为 `oelinux123`。
+
+### 我必须有自己的 QDC 设备吗？
+
+不需要。可申请 Qualcomm Device Cloud 远程访问骁龙硬件进行测试。详见[支持的设备](/cn/get-started/devices)。
+
+## 服务器 / API
+
+### 本地服务器兼容 OpenAI 吗？
+
+是——详见[本地服务器](/cn/run/cli/local-server)。可将官方 `openai` Python 客户端指向 `http://127.0.0.1:18181/v1`，OpenAI 代码无需修改即可复用。
+
+### `geniex serve` 会自动下载模型吗？
+
+不会。请先用 `geniex pull` 拉取模型再启动服务器。
+
+<br />
+
+<Feedback/>

@@ -1,0 +1,100 @@
+---
+title: "安装"
+description: "在 Windows ARM64 或 Linux ARM64 上安装 GenieX Python SDK。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+GenieX Python SDK 以 ARM64 wheel 形式发布，覆盖 Windows ARM64 与 Linux ARM64。
+
+## **前置条件**
+
+- 骁龙 X 系列设备（X Elite 或 X2 Elite）。详见[支持的设备](/cn/get-started/devices)。
+- **ARM64 版本的 Python 3.10+**
+
+## **通过 pip 安装**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    如未安装 Python，请下载 [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe)。
+
+    对于 QDC，我们推荐使用以下 Python 脚本方法。
+
+    创建虚拟环境并从 test PyPI 安装：
+
+    ```powershell
+    python -m venv geniex-env
+    .\geniex-env\Scripts\Activate.ps1
+    pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    ```
+
+    这将从 [test PyPI](https://test.pypi.org/project/geniex/) 拉取 Python 包。
+
+    <Note>
+    **故障排查：SSL / 证书错误（企业代理 / QDC）**
+
+    如果安装时出现 SSL 证书错误——常见于启用了 TLS 检测的企业网络，包括 **Qualcomm Developer Cloud（QDC）**——请预先手动下载 SDK，并让安装程序指向本地文件。在 `pip install` **之前**执行以下 PowerShell 命令：
+
+    ```powershell
+    $env:GENIEX_VERSION = "v0.1.5"
+    $base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/$env:GENIEX_VERSION"
+    $zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
+
+    Invoke-WebRequest "$base/$zip"        -OutFile $zip
+    Invoke-WebRequest "$base/$zip.sha256" -OutFile "$zip.sha256"
+
+    $env:GENIEX_SDK_DOWNLOAD_URL = "file:///$($(Get-Location).Path.Replace('\','/'))"
+    pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+
+    Remove-Item $zip, "$zip.sha256"
+    Remove-Item Env:GENIEX_SDK_DOWNLOAD_URL
+    ```
+    </Note>
+  </Tab>
+
+  <Tab title="Linux ARM64">
+    高通嵌入式 Linux（Yocto）已预装 Python。验证：
+
+    ```bash
+    python3 --version
+    ```
+
+    直接 pip install：
+
+    ```bash
+    python3 -m pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    ```
+
+    这将从 [test PyPI](https://test.pypi.org/project/geniex/) 拉取 Python 包，并自动获取 Linux ARM64 SDK 库。
+
+    <Note>
+    **从源码构建 Python（非 QDC 设备）**
+
+    如果你不在 QDC，而是使用自己的高通 IoT 设备且未预装 Python，可下载源码自行构建：
+
+    ```bash
+    apt update && apt install -y build-essential libffi-dev libssl-dev zlib1g-dev
+    wget https://www.python.org/ftp/python/3.13.3/Python-3.13.3.tar.xz
+    tar -xf Python-3.13.3.tar.xz
+    cd Python-3.13.3
+    ./configure --enable-optimizations
+    make -j$(nproc)
+    make altinstall
+    python3.13 --version
+    ```
+    </Note>
+  </Tab>
+</Tabs>
+
+## **验证**
+
+```python
+import geniex
+print(geniex.version())
+```
+
+现在跳转到[快速入门](/cn/run/python/quickstart)。
+
+<br />
+
+<Feedback/>

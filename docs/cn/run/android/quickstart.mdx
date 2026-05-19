@@ -1,0 +1,118 @@
+---
+title: "快速入门"
+description: "在 GenieX Android demo 或你自己的 app 中运行第一个模型。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **前置条件**
+
+- 已安装 demo APK（或在项目中接入 SDK）——详见[安装](/cn/run/android/install)。
+- 一台搭载 **骁龙 8 至尊版** 或 **骁龙 8 至尊版 Gen 5** 的设备。
+
+## **使用 demo app**
+
+启动 demo 后：
+
+1. **选择模型**——从顶部下拉菜单中选取：
+   - **Hugging Face GGUF（llama.cpp）** —— Qwen3、Phi-4、Gemma、Granite、Qwen3-VL 等。
+   - **AI Hub NPU（QAIRT）** —— `qualcomm/Qwen3-4B-Instruct-2507`、`qualcomm/Qwen2.5-VL-7B-Instruct`。
+2. **下载** —— 点击 Download。下载支持断点续传：中途杀进程后重启会从上次字节续传。
+3. **加载** —— 选择执行目标（GGUF 可选 NPU / GPU / CPU；AI Hub 模型仅 NPU）。
+4. **对话** —— 输入文本，或点击图片 / 音频按钮使用 VLM。
+
+## **演练：GGUF LLM**
+
+`unsloth/Qwen3-0.6B-GGUF` —— 小型 Qwen3 0.6B 对话模型，`Q4_0`。首次下载快，几乎可以在任意设备上运行。
+
+<Steps>
+  <Step title="选择模型">
+    打开顶部模型下拉菜单，选择 **Qwen3-0.6B (GGUF)**。
+  </Step>
+  <Step title="下载">
+    点击 **Download**。进度由 Rust 模型管理器实时推送；中途杀进程后重启会从上次字节续传。
+  </Step>
+  <Step title="加载">
+    点击 **Load**。会弹出对话框——选择 **NPU**、**GPU** 或 **CPU**：
+    - **NPU** *(骁龙上推荐)* —— Hexagon NPU 加速。
+    - **GPU** —— 通过 OpenCL 使用 Adreno。
+    - **CPU** —— 兼容任意 ARM64 设备。
+  </Step>
+  <Step title="对话">
+    在输入框中输入消息并点击 **Send**。点击 **Clear** 或卸载模型可重置对话。
+  </Step>
+</Steps>
+
+## **演练：AI Hub VLM**
+
+`qualcomm/Qwen2.5-VL-7B-Instruct` —— 针对骁龙 8 至尊版及 8 至尊版 Gen 5 预编译的视觉语言模型。
+
+<Warning>
+需要芯片组为 `SM8750`（骁龙 8 至尊版）或 `SM8850`（骁龙 8 至尊版 Gen 5）的设备。
+</Warning>
+
+<Steps>
+  <Step title="选择模型">
+    打开下拉菜单，选择 **Qwen2.5-VL-7B-Instruct (NPU)**。
+  </Step>
+  <Step title="下载">
+    点击 **Download**。AI Hub 模型包大于 GGUF 模型（约 4.6 GB）——请保持 Wi-Fi。下载在 app 重启后可续传。
+  </Step>
+  <Step title="加载">
+    点击 **Load**。QAIRT 模型的插件选择器只展示 **NPU**。确认即可。
+  </Step>
+  <Step title="结合图片对话">
+    点击 **图片** 按钮，从相册选一张照片，输入类似 "What's in this image?" 的问题并发送。SDK 会自动应用 VLM 的 chat template。
+  </Step>
+</Steps>
+
+## **在自己的 app 中嵌入 SDK**
+
+如果不使用 demo，SDK 的 Kotlin 代码大致如下：
+
+```kotlin
+val paths = ModelManagerWrapper.getPaths("unsloth/Qwen3-0.6B-GGUF")
+    ?: error("Model not downloaded")
+
+LlmWrapper.builder()
+    .llmCreateInput(
+        LlmCreateInput(
+            model_name = paths.model_name,
+            model_path = paths.model_path,
+            config     = ModelConfig(nCtx = 4096),
+            plugin_id  = "llama_cpp",
+            device_id  = null,       // null → npu（骁龙上推荐）
+        )
+    )
+    .build()
+    .onSuccess { llmWrapper = it }
+    .onFailure { println("Error: ${it.message}") }
+```
+
+完整接口（模型管理器、LLM/VLM Wrapper、数据结构）详见 [API 参考](/cn/run/android/api-reference)。
+
+## **故障排查**
+
+**"模型可加载，但生成自我重复或无输出"**
+确认 demo 把 chat template 化的 prompt（`applyChatTemplate().formattedText`）传给了 `generateStreamFlow`，而不是原始用户文本。QAIRT 流水线把输入视为已格式化——传原始文本会让模型进入续写模式。
+
+**"AI Hub 拉取报 `INVALID_INPUT`"**
+Android 上 AI Hub 拉取必须显式传 `chipset`——自动识别仅在骁龙 Windows 上生效。demo 的 `model_list.json` 默认锁定 `SM8750`；如果你做了改动，请确保该字段存在。
+
+**"QAIRT 加载报 unknown model name"**
+AI Hub 返回的 model id 必须匹配 QAIRT 插件注册表中的条目（`qwen3_4b_instruct_2507`、`qwen2_5_vl_7b_instruct` 等）。新增 AI Hub 模型需先在 C++ 侧注册——见 `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`。
+
+## **下一步**
+
+<CardGroup cols={2}>
+  <Card title="API 参考" href="/cn/run/android/api-reference" icon="book">
+    Wrapper 类、插件/设备选择与数据结构。
+  </Card>
+  <Card title="后端" href="/cn/get-started/choose-backend" icon="route">
+    什么时候选 llama.cpp 或 QAIRT。
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback />

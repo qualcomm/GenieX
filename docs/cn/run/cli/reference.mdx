@@ -1,19 +1,13 @@
 ---
 title: "CLI 参考"
-description: "本页记录了所有可用的 CLI 命令及使用示例。"
+description: "GenieX CLI 的全部命令与参数，附使用示例。"
 ---
-
-<Warning>
-本页中文翻译尚未与最新英文文档同步。最新内容请参考 [English documentation](/en/get-started/what-is-geniex)。
-
-This Chinese translation is not yet in sync with the latest English docs. For the latest content, see the [English documentation](/en/get-started/what-is-geniex).
-</Warning>
 
 import Feedback from "/snippets/page-feedback.mdx";
 
 ## **模型推理**
 
-### **geniex pull**
+### **`geniex pull`**
 
 下载模型并存储到本地。
 
@@ -25,7 +19,8 @@ CLI 会引导你完成设置流程：
 
 **1. 设备选择**
 
-首次运行时（QAIRT 和 llama.cpp 插件均适用），系统会提示你选择设备：
+首次运行时（QAIRT 与 llama.cpp 插件均适用），系统会提示选择设备：
+
 ```powershell
 Select your device
 ┃ > Snapdragon X Elite CRD
@@ -33,14 +28,16 @@ Select your device
 ┃   Snapdragon X2 Elite CRD
 ```
 
-如需更改设备：
+如需更改：
+
 ```powershell
 geniex config set device
 ```
 
-**2. 量化选择（仅 llama.cpp 插件）**
+**2. 量化（仅 llama.cpp）**
 
-对于 llama.cpp 模型，CLI 会提示你选择量化版本：
+对于 GGUF 模型，CLI 会提示选择量化：
+
 ```powershell
 Choose a quant version to download
 > Q4_0       [1.2 GiB] (default)
@@ -48,12 +45,11 @@ Choose a quant version to download
   F16        [3.8 GiB]
 ```
 
-<Tip>推荐使用 `Q4_0`，Hexagon NPU 性能最佳。</Tip>
+<Tip>`Q4_0` 在 Hexagon NPU 上支持最佳。详见[量化](/cn/models/quantization)。</Tip>
 
-QAIRT 插件模型已预量化，无需选择。
+QAIRT 模型已预量化——无需选择。
 
-
-### **geniex infer — LLM**
+### **`geniex infer` — LLM**
 
 启动与语言模型的交互式对话。
 
@@ -61,14 +57,14 @@ QAIRT 插件模型已预量化，无需选择。
 geniex infer qualcomm/Qwen3-4B
 ```
 
-**思考模式** — 控制模型是否在回复前展示推理过程：
+**思考模式** —— 控制模型是否在回复前展示推理过程：
 
 ```powershell
 geniex infer qualcomm/Qwen3-4B --think      # 展示推理步骤
 geniex infer qualcomm/Qwen3-4B --no-think   # 直接回复
 ```
 
-**设备选择** — 选择运行后端（默认：`npu`）：
+**设备选择** —— 选择运行后端（默认：`npu`）：
 
 ```powershell
 # llama.cpp 模型支持所有后端
@@ -82,7 +78,7 @@ geniex infer qualcomm/Qwen3-4B --device npu
 
 <Warning>QAIRT 模型仅在 NPU 上运行。对 QAIRT 模型使用 `--device cpu` 或 `--device gpu` 会返回错误。</Warning>
 
-### **geniex infer — VLM**
+### **`geniex infer` — VLM**
 
 运行视觉语言模型推理，支持纯文本或图像输入：
 
@@ -90,17 +86,23 @@ geniex infer qualcomm/Qwen3-4B --device npu
 geniex infer Qualcomm/Qwen2.5-VL-7B-Instruct-GGUF
 ```
 
-如果只需文本输入，直接启动命令并开始对话即可。
-若需要模型基于图像回复，提供**绝对路径**或直接将图片文件拖入终端，例如：
+如果只需文本输入，直接启动并对话即可。若要让模型基于图像回复，请提供**绝对路径**或将图片文件直接拖入终端：
 
 ```bash
 Describe this picture </full/path/to/image.png>
 ```
 
+## **`geniex serve`**
+
+启动兼容 OpenAI 协议的本地服务器。API 详见[本地服务器](/cn/run/cli/local-server)。
+
+```bash
+geniex serve
+```
 
 ## **配置标志**
 
-以下标志可传入 `geniex infer` 以控制模型加载和生成行为。
+以下标志可传给 `geniex infer`，用于控制模型加载与生成行为。
 
 ### 采样器标志
 
@@ -122,7 +124,7 @@ Describe this picture </full/path/to/image.png>
 
 ### 模型标志
 
-控制模型加载、上下文和生成限制。
+控制模型加载、上下文与生成限制。
 
 | 标志 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -134,13 +136,11 @@ Describe this picture </full/path/to/image.png>
 | `--think` / `--no-think` | bool | `true` | 启用或禁用推理模型的思考模式。 |
 | `-s`, `--system-prompt` | string | — | 设置模型行为的系统提示。 |
 
----
-
 ## **实用命令**
 
 | 命令 | 说明 | 示例 |
 |---|---|---|
-| `geniex list` | 显示所有已下载模型的名称和大小。 | `geniex list` |
+| `geniex list` | 显示所有已下载模型的名称与大小。 | `geniex list` |
 | `geniex remove <model>` | 按名称删除指定的本地模型。 | `geniex remove unsloth/Qwen3-0.6B-GGUF` |
 | `geniex clean` | 删除所有本地缓存的模型。 | `geniex clean` |
 | `geniex infer -h` | 显示 `geniex infer` 的帮助菜单。 | `geniex infer -h` |

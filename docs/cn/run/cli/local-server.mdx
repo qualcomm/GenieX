@@ -1,0 +1,149 @@
+---
+title: "本地服务器"
+description: "在 localhost 提供兼容 OpenAI 协议的 HTTP API，由高通硬件加速支撑。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+GenieX 内置推理服务器，提供**兼容 OpenAI 协议的 API**。在设备端运行模型，并连接到任意支持 OpenAI 协议的应用或框架——例如 **LangChain** 等智能体框架、**OpenClaw** 等 AI 原生应用，或你自己的代码。无需云端依赖。
+
+## **前置条件**
+
+- 已安装 CLI——详见[安装](/cn/run/cli/install)。
+- 已拉取模型。`geniex serve` **不会**自动下载模型。
+
+## **启动服务器**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    拉取模型：
+
+    ```bash bash
+    geniex pull qualcomm/Qwen3-4B-Instruct-2507
+    ```
+
+    启动服务器：
+
+    ```bash bash
+    geniex serve
+    ```
+
+    服务器默认运行在 `http://127.0.0.1:18181`。保持该终端开启，并在另一个终端中发送请求。运行 `geniex serve -h` 查看所有可配置选项。
+  </Tab>
+
+  <Tab title="Linux ARM64">
+    ```bash bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      --network=host \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest \
+      serve
+    ```
+
+    <Note>NPU 访问需要 `--privileged` 标志。镜像不会自动下载模型——请预先下载需要服务的模型。</Note>
+
+    服务器运行在 `http://localhost:18181`（或 `127.0.0.1:18181`）。
+  </Tab>
+</Tabs>
+
+## **POST /v1/chat/completions**
+
+为给定对话创建模型响应。支持 LLM（纯文本）与 VLM（图像 + 文本）。
+
+### **LLM 请求**
+
+```json Example Value
+{
+  "model": "qualcomm/Qwen3-4B-Instruct-2507",
+  "messages": [
+    {"role": "user", "content": "Hello! Briefly introduce yourself."}
+  ],
+  "max_tokens": 256,
+  "temperature": 0.7,
+  "stream": false
+}
+```
+
+### **通过 Swagger UI 试用**
+
+在浏览器中打开 `http://127.0.0.1:18181` 即可访问内置的 Swagger UI。
+
+**步骤 1.** 展开 `POST /v1/chat/completions` 端点，查看示例请求体与 schema。
+
+![Swagger UI 展示 chat completions 端点及示例请求体](/Images/server/curl-1.png)
+
+**步骤 2.** 点击 **Try it out**，根据需要编辑请求体，然后点击 **Execute**。
+
+![在 Try-it-out 模式下编辑请求体后执行](/Images/server/curl-2.png)
+
+**步骤 3.** 查看响应——`200` 状态码以及模型生成的回复。
+
+![响应体展示 200 成功响应及模型回复](/Images/server/curl-3.png)
+
+### **VLM 请求**
+
+`image_url.url` 可以是服务器本地的文件路径（`file://` 前缀可选），例如 `C:/Users/Username/Pictures/photo.jpg`。
+
+```json Example Value
+{
+  "model": "qualcomm/Qwen2.5-VL-7B-Instruct",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Describe this image succinctly."},
+        {"type": "image_url", "image_url": {"url": "</path/to/image>"}}
+      ]
+    }
+  ]
+}
+```
+
+在 Swagger UI 中将请求体替换为上述 VLM payload，把 `image_url.url` 指向本地图片，然后点击 **Execute**。
+
+![在 Try-it-out 模式下编辑 VLM 请求体后执行](/Images/server/curl-4.png)
+
+![响应体展示 200 成功响应及 VLM 对图像的描述](/Images/server/curl-5.png)
+
+## **Python 客户端（OpenAI SDK）**
+
+由于服务器使用 OpenAI 协议，可直接将官方 `openai` Python 客户端指向本地端点，复用已有的 OpenAI 代码。先通过 `pip install openai` 安装：
+
+```python python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://127.0.0.1:18181/v1",
+    api_key="geniex",  # 任意非空字符串，服务器不会校验
+)
+
+stream = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",  # org/repo[:quant]，Q4_0 对 Hexagon NPU 支持最佳
+    messages=[
+        {"role": "user", "content": "Hello! Briefly introduce yourself."},
+    ],
+    max_tokens=256,
+    temperature=0.7,
+    stream=True,
+)
+
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="", flush=True)
+print()
+```
+
+<Note>
+请将 `model` 替换为已经拉取的模型。可选的 `:<quant>` 后缀用于选择量化版本（例如 `Q4_0`、`Q4_K_M`、`Q8_0`），`Q4_0` 对 llama.cpp Hexagon NPU 后端支持最佳。详见[量化](/cn/models/quantization)。
+</Note>
+
+## **其他端点**
+
+- `GET /v1/models` —— 列出可用模型。
+- `GET /v1/models/{model}` —— 查询指定模型的信息。
+
+<br />
+
+<Feedback/>

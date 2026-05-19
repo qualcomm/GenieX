@@ -1,0 +1,113 @@
+---
+title: "安装"
+description: "从 Maven Central 安装 GenieX Android SDK，或获取预编译的 demo APK。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+在 Android 上你有两种选择：安装预编译的 demo APK 用于体验，或在自己的 Gradle 项目中从 Maven Central 接入 SDK。
+
+## **前置条件**
+
+- 配备 **骁龙 8 至尊版**（`SM8750`）或 **骁龙 8 至尊版 Gen 5**（`SM8850`）的设备。详见[支持的设备](/cn/get-started/devices)。
+- 侧载场景：在主机上安装 [`adb`](https://developer.android.com/tools/adb)。
+- 从源码构建场景：Android Studio。
+
+## **方式 1 —— 预编译 demo APK**
+
+<Card title="geniex-demo.apk" icon="download" href="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-demo.apk">
+  最新 GenieX Android demo APK。已签名 debug 包——可通过 `adb install` 安装，或上传到 QDC 会话。
+</Card>
+
+### **使用真机**
+
+<Steps>
+  <Step title="开启 USB 调试">
+    打开 **设置 → 关于手机**，连续点击 **版本号** 七次，再进入 **设置 → 系统 → 开发者选项**，开启 **USB 调试**。
+  </Step>
+  <Step title="连接并验证">
+    ```bash
+    adb devices
+    ```
+    手机应显示状态为 `device`。若为 `unauthorized`，请在手机上接受 RSA 提示。
+  </Step>
+  <Step title="安装">
+    ```bash
+    adb install -r geniex-demo.apk
+    ```
+    `-r` 允许覆盖安装而无需先卸载。
+  </Step>
+  <Step title="启动">
+    在应用列表中打开 **GenieX Demo**。模型在首次使用时会从 Hugging Face / Qualcomm AI Hub 下载——请保持 Wi-Fi 连接。
+  </Step>
+</Steps>
+
+### **没有真机 —— Qualcomm Device Cloud（QDC）**
+
+<Steps>
+  <Step title="选择设备">
+    登录 [Qualcomm Device Cloud](https://qdc.qualcomm.com/)，选择 **Snapdragon 8 Elite** 或 **Snapdragon 8 Elite Gen 5**，再选择 **Interactive session**。
+  </Step>
+  <Step title="配置会话">
+    启动前请开启 **Wi-Fi**（用于下载模型）与 **Keep screen on**（避免下载中途锁屏）。**无需** SSH。
+  </Step>
+  <Step title="上传 APK">
+    在会话设置页面使用 **Upload file** 把 `geniex-demo.apk` 推送到设备——文件必须在会话开始**之前**上传。
+  </Step>
+  <Step title="启动并测试">
+    启动会话。在镜像屏幕中点击已上传的 APK 完成安装，再从应用列表打开 **GenieX Demo**。
+  </Step>
+  <Step title="（可选）用图片测试 VLM">
+    如需试用视觉语言模型，可通过 QDC 终端上传测试图片：
+    ```bash
+    curl -L "https://s7d1.scene7.com/is/image/dmqualcommprod/Qualcomm_AIHub_image2-1?$QC_Responsive$&fmt=png-alpha" -o /data/local/tmp/qualcomm.png
+    cp /data/local/tmp/qualcomm.png /sdcard/Download/
+    ```
+    图片会出现在 app 的图片选择器中。
+  </Step>
+</Steps>
+
+## **方式 2 —— 从源码构建 demo**
+
+适合需要修改 demo UI，或锁定特定已发布 SDK 版本的场景。
+
+<Note>
+Gradle 会从 **Maven Central** 拉取 GenieX SDK（坐标：`com.qualcomm.qti:geniex-android:0.1.6`）。该路径下你**无需**自行构建原生 SDK。
+</Note>
+
+<Steps>
+  <Step title="克隆仓库">
+    ```bash
+    git clone https://github.com/qcom-ai-hub/geniex.git
+    cd geniex
+    ```
+  </Step>
+  <Step title="打开 demo 项目">
+    在 Android Studio 中打开 **`examples/android/`**。**不要**打开 `bindings/android/`——那是 SDK 绑定模块，本流程通过 Maven Central 消费它。
+  </Step>
+  <Step title="同步 Gradle">
+    Android Studio 会提示同步。同步过程会从 Maven Central 解析 `com.qualcomm.qti:geniex-android:0.1.6`。
+  </Step>
+  <Step title="连接设备">
+    插入开启 USB 调试的骁龙 8 至尊版或 8 至尊版 Gen 5 手机，让 Android Studio 识别到。
+  </Step>
+  <Step title="运行">
+    点击 **Run ▶**。Android Studio 会构建、安装并启动 demo。
+  </Step>
+</Steps>
+
+## **方式 3 —— 仅 SDK（Maven Central）**
+
+要在自己的 Gradle 项目中嵌入 SDK，添加依赖：
+
+```kotlin Gradle (Kotlin DSL)
+dependencies {
+    implementation("com.qualcomm.qti:geniex-android:0.1.6")
+}
+```
+
+随后跳转到[快速入门](/cn/run/android/quickstart)了解端到端用法。
+
+<br />
+
+<Feedback/>
