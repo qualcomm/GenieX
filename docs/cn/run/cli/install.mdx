@@ -39,7 +39,25 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向 Dragonwing IoT 等
     现在跳转到[快速入门](/cn/run/cli/quickstart)。
   </Tab>
 
-  <Tab title="Linux ARM64">
+  <Tab title="Linux ARM64 (Native)">
+    Linux 路径通过 Linux ARM64 容器镜像运行，并支持 NPU 访问（适用于 Dragonwing IQ9 等 IoT 平台）。
+
+    ### **前置条件**
+
+    - Linux ARM64 主机。
+    - 高通 IoT 设备——详见[支持的设备](/cn/get-started/devices#iot-linux-arm64)。
+
+    ### **安装**
+
+    ### **验证**
+
+    ```bash bash
+    geniex --help
+    ```
+
+  </Tab>
+
+  <Tab title="Linux ARM64 (Docker)">
     Linux 路径通过 Linux ARM64 容器镜像运行，并支持 NPU 访问（适用于 Dragonwing IQ9 等 IoT 平台）。
 
     ### **前置条件**
@@ -61,12 +79,21 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向 Dragonwing IoT 等
 
     ### **交互式运行**
 
+    进入容器内交互式 shell：
+
     ```bash bash
     docker run -it --rm --privileged \
       -v "$PWD/data:/data" \
       -v /usr/lib:/opt/qcom-lib:ro \
-      ghcr.io/qcom-ai-hub/geniex-cli:latest \
-      infer Qwen/Qwen3-0.6B-GGUF
+      ghcr.io/qcom-ai-hub/geniex-cli:latest
+    ```
+
+    ### **验证**
+
+    在容器 shell 中运行测试命令：
+
+    ```bash bash
+    geniex --help
     ```
 
     <Note>NPU 访问需要 `--privileged` 标志。</Note>
