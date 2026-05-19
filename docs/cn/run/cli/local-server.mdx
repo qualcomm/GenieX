@@ -65,7 +65,17 @@ geniex serve
 
 ### **VLM 请求**
 
-`image_url.url` 可以是服务器本地的文件路径（`file://` 前缀可选），例如 `C:/Users/Username/Pictures/photo.jpg`。
+`image_url.url` 支持三种格式：
+
+| 格式 | 示例 |
+|---|---|
+| 本地文件路径（`file://` 前缀可选） | `C:/Users/Username/Pictures/photo.jpg`、`file:///tmp/photo.jpg` |
+| HTTP / HTTPS URL —— 由服务器拉取 | `https://example.com/image.jpg` |
+| Base64 data URL —— 内联图像字节 | `data:image/png;base64,iVBORw0KGgo...` |
+
+<Note>
+**在 Docker 中运行？** 本地路径会在**容器内**解析，而不是宿主机。安装命令已经把 `$PWD/data` 挂载到 `/data`——把图片放进去，然后传 `/data/cat.jpg` 即可。或者直接用 HTTP URL 或 base64 data URL，绕过文件系统。
+</Note>
 
 ```json Example Value
 {

@@ -65,7 +65,17 @@ Open `http://127.0.0.1:18181` in your browser to access the built-in Swagger UI.
 
 ### **VLM request**
 
-`image_url.url` can be a local file path on the server machine (the `file://` prefix is optional), e.g. `C:/Users/Username/Pictures/photo.jpg`.
+`image_url.url` accepts three formats:
+
+| Format | Example |
+|---|---|
+| Local file path (the `file://` prefix is optional) | `C:/Users/Username/Pictures/photo.jpg`, `file:///tmp/photo.jpg` |
+| HTTP / HTTPS URL — fetched by the server | `https://example.com/image.jpg` |
+| Base64 data URL — inline image bytes | `data:image/png;base64,iVBORw0KGgo...` |
+
+<Note>
+**Running in Docker?** Local paths are resolved **inside the container**, not on your host. The install command already mounts `$PWD/data` to `/data` — drop your images there and pass `/data/cat.jpg`. Alternatively, use an HTTP URL or base64 data URL to skip the filesystem entirely.
+</Note>
 
 ```json Example Value
 {
