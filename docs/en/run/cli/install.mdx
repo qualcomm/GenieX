@@ -1,0 +1,136 @@
+---
+title: "Install"
+description: "Install the GenieX CLI on Windows ARM64, or run it via Docker on Linux ARM64."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+The CLI ships as a native Windows ARM64 executable, and as a Linux ARM64 Docker image for Dragonwing IoT and similar devices.
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ### **Prerequisites**
+
+    - Snapdragon X-series device (X Elite or X2 Elite). See [Supported devices](/en/get-started/devices).
+    - PowerShell or any shell available on Windows ARM64.
+
+    ### **Download**
+
+    <Card title="GenieX CLI installer" icon="download" href="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-cli.exe">
+      Latest GenieX CLI for Windows ARM64. Click the downloaded `.exe` and follow the prompts.
+    </Card>
+
+    The installer is not yet code-signed — Windows SmartScreen will warn you. Click **More info → Run anyway**.
+
+    ### **Add to PATH**
+
+    Make `geniex` available in your shell:
+
+    ```powershell windows
+    Set-Alias geniex (where.exe geniex)
+    ```
+
+    ### **Verify**
+
+    ```powershell windows
+    geniex --help
+    ```
+
+    Now jump to the [Quickstart](/en/run/cli/quickstart).
+  </Tab>
+
+  <Tab title="Linux ARM64 (Native)">
+    Install directly on a Snapdragon ARM64 Linux host (EVK, container, or any device with a Qualcomm BSP) — no Docker required.
+
+    ### **Prerequisites**
+
+    - Linux ARM64 host.
+    - Qualcomm IoT device — see [Supported devices](/en/get-started/devices#iot-linux-arm64).
+
+    ### **Install**
+
+    ```bash bash
+    curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
+    ```
+
+    The script downloads the latest stable release, verifies its SHA256, and installs atomically. It runs without `sudo`:
+
+    - **Root** (EVK / container) → binary in `/usr/local/lib/geniex/`, launcher at `/usr/local/bin/geniex`.
+    - **Non-root** → binary in `${XDG_DATA_HOME:-~/.local/share}/geniex/`, launcher at `~/.local/bin/geniex`.
+
+    Common flags (pass after `sh -s --`):
+
+    ```bash bash
+    # Pin a specific version
+    curl -fsSL .../install.sh | sh -s -- --version v0.1.8
+
+    # Custom install prefix
+    curl -fsSL .../install.sh | sh -s -- --prefix /opt/geniex
+    ```
+
+    ### **Add to PATH**
+
+    If the launcher directory isn't on your `PATH`, the installer prints the exact line to add — typically:
+
+    ```bash bash
+    echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc   # or ~/.zshrc / ~/.profile
+    ```
+
+    Open a new shell or `source` that file.
+
+    ### **Verify**
+
+    ```bash bash
+    geniex --help
+    ```
+
+  </Tab>
+
+  <Tab title="Linux ARM64 (Docker)">
+    The Linux path runs through a container image built for Linux ARM64 with NPU access (Dragonwing IQ9 and similar IoT platforms).
+
+    ### **Prerequisites**
+
+    - Linux ARM64 host with Docker installed.
+    - Qualcomm IoT device — see [Supported devices](/en/get-started/devices#iot-linux-arm64).
+    - GitHub Personal Access Token (PAT) with read access to GHCR.
+
+    ### **Pull the image**
+
+    Authenticate to GitHub Container Registry, then pull:
+
+    ```bash bash
+    export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxx
+    docker login ghcr.io -u <your-github-username> -p "$GITHUB_TOKEN"
+
+    docker pull ghcr.io/qcom-ai-hub/geniex-cli:latest
+    ```
+
+    ### **Run interactively**
+
+    Drop into an interactive shell inside the container:
+
+    ```bash bash
+    docker run -it --rm --privileged \
+      -v "$PWD/data:/data" \
+      -v /usr/lib:/opt/qcom-lib:ro \
+      ghcr.io/qcom-ai-hub/geniex-cli:latest
+    ```
+
+    ### **Verify**
+
+    Then run a test command from the container shell:
+
+    ```bash bash
+    geniex --help
+    ```
+
+    <Note>The `--privileged` flag is required for NPU access.</Note>
+
+    For server mode, see [Local server](/en/run/cli/local-server).
+  </Tab>
+</Tabs>
+
+<br />
+
+<Feedback/>

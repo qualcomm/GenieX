@@ -100,7 +100,7 @@ oci_image(
         "@platforms//cpu:x86_64": "@debian_linux_amd64",
         "@platforms//cpu:arm64": "@debian_linux_arm64_v8",
     }),
-    entrypoint = ["/opt/geniex/geniex"],
+    entrypoint = ["/bin/bash"],
     env = {"LD_LIBRARY_PATH": "/opt/geniex"},
     exposed_ports = ["18181/tcp"],
     labels = {

@@ -1,0 +1,56 @@
+---
+title: "What is GenieX"
+description: "On-device AI inference runtime for Qualcomm Snapdragon — run frontier LLMs and VLMs across CLI, Python, Android, and Docker."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+GenieX is an on-device Gen AI inference runtime built for Qualcomm platforms. It is the easiest way to run frontier language and vision-language models locally on Hexagon NPU, Adreno GPU, or CPU with a few lines of code. It is the community version of Qualcomm GENIE.
+
+## **Architecture**
+
+<img
+  src="/Mintlify-image/geniex_arch.png"
+  alt="GenieX architecture stack: CLI, Python API, Java API, Docker, and Serve interfaces sit on the GenieX SDK, which dispatches to the llama.cpp plugin (GGML runtime over CPU/GPU/HTP kernels) or the QAIRT plugin (QAIRT SDK on NPU). Targets Windows, Android, and Linux."
+  style={{ borderRadius: '0.5rem' }}
+/>
+
+GenieX exposes five entry points — CLI, Python, Java/Kotlin, Docker, and an OpenAI-compatible server — over a single SDK that dispatches to either the **llama.cpp plugin** (GGML kernels for CPU / GPU / Hexagon HTP) or the **QAIRT plugin** (Qualcomm AI Runtime, NPU-only). The same SDK runs on Windows ARM64, Android, and Linux ARM64.
+
+## **What you can do with GenieX**
+
+- **Run models locally** on Snapdragon X (Windows ARM64), Snapdragon 8 Elite (Android), and Dragonwing IoT devices.
+- **Pick a backend** — `llama.cpp` for any community GGUF model, `QAIRT` for AI Hub pre-compiled NPU bundles.
+- **Build apps** through the CLI, an OpenAI-compatible local server, the Python SDK, the Android SDK, or a Docker image.
+
+## **Pick where to start**
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" href="/en/get-started/quickstart" icon="rocket">
+    Choose your interface and get to first inference in minutes.
+  </Card>
+  <Card title="Choose your backend" href="/en/get-started/choose-backend" icon="route">
+    Decide between llama.cpp and QAIRT based on your model and device.
+  </Card>
+  <Card title="Supported devices" href="/en/get-started/devices" icon="microchip">
+    Snapdragon compute, mobile, and IoT chipsets that GenieX supports.
+  </Card>
+  <Card title="Models" href="/en/models/supported" icon="cube">
+    Tested LLMs and VLMs across the llama.cpp and QAIRT backends.
+  </Card>
+</CardGroup>
+
+## **Community**
+
+<CardGroup cols={2}>
+  <Card title="Report an issue" href="https://github.com/qualcomm/nexa-sdk/issues" icon="github">
+    File a bug, request a feature, or browse open issues on GitHub.
+  </Card>
+  <Card title="Join Slack" href="https://nexa-ai-community.slack.com/ssb/redirect" icon="slack">
+    Collaborate with the GenieX team and other developers.
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>

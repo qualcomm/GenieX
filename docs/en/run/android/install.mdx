@@ -1,0 +1,113 @@
+---
+title: "Install"
+description: "Install the GenieX Android SDK from Maven Central, or grab the prebuilt demo APK."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+You have two options on Android: install the prebuilt demo APK to try things out, or pull the SDK from Maven Central into your own Gradle project.
+
+## **Prerequisites**
+
+- A device with **Snapdragon 8 Elite** (`SM8750`) or **Snapdragon 8 Elite Gen 5** (`SM8850`). See [Supported devices](/en/get-started/devices).
+- For sideloading: [`adb`](https://developer.android.com/tools/adb) on your host machine.
+- For building from source: Android Studio.
+
+## **Option 1 — Prebuilt demo APK**
+
+<Card title="geniex-demo.apk" icon="download" href="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-demo.apk">
+  Latest GenieX Android demo APK. Signed debug build — install with `adb install` or upload to a QDC session.
+</Card>
+
+### **With a physical device**
+
+<Steps>
+  <Step title="Enable USB debugging">
+    Open **Settings → About phone**, tap **Build number** seven times, then **Settings → System → Developer options** and enable **USB debugging**.
+  </Step>
+  <Step title="Connect and verify">
+    ```bash
+    adb devices
+    ```
+    The phone should appear with state `device`. If it shows `unauthorized`, accept the RSA prompt on the phone.
+  </Step>
+  <Step title="Install">
+    ```bash
+    adb install -r geniex-demo.apk
+    ```
+    `-r` lets you reinstall over a previous version without uninstalling first.
+  </Step>
+  <Step title="Launch">
+    Open **GenieX Demo** from the app drawer. Models download from Hugging Face / Qualcomm AI Hub on first use — keep the phone on Wi-Fi.
+  </Step>
+</Steps>
+
+### **Without a physical device — Qualcomm Device Cloud (QDC)**
+
+<Steps>
+  <Step title="Pick a device">
+    Sign in to [Qualcomm Device Cloud](https://qdc.qualcomm.com/), choose **Snapdragon 8 Elite** or **Snapdragon 8 Elite Gen 5**, and select **Interactive session**.
+  </Step>
+  <Step title="Configure the session">
+    Before starting, enable **Wi-Fi** (so the demo can download models) and **Keep screen on** (so the screen doesn't lock mid-download). SSH is **not** required.
+  </Step>
+  <Step title="Upload the APK">
+    Use **Upload file** in the session setup page to push `geniex-demo.apk` onto the device — the file must be uploaded **before** the session begins.
+  </Step>
+  <Step title="Start and test">
+    Start the session. In the mirrored screen, tap the uploaded APK to install, then open **GenieX Demo** from the app drawer.
+  </Step>
+  <Step title="(Optional) Test a VLM with an image">
+    To try a vision-language model, upload a test image via the QDC terminal:
+    ```bash
+    curl -L "https://s7d1.scene7.com/is/image/dmqualcommprod/Qualcomm_AIHub_image2-1?$QC_Responsive$&fmt=png-alpha" -o /data/local/tmp/qualcomm.png
+    cp /data/local/tmp/qualcomm.png /sdcard/Download/
+    ```
+    The image will appear in the app's image picker.
+  </Step>
+</Steps>
+
+## **Option 2 — Build the demo from source**
+
+Useful if you want to modify the demo UI or pin a specific published SDK version.
+
+<Note>
+Gradle pulls the GenieX SDK from **Maven Central** (coordinates: `com.qualcomm.qti:geniex-android:0.1.6`). You do **not** need to build the native SDK yourself for this path.
+</Note>
+
+<Steps>
+  <Step title="Clone the repo">
+    ```bash
+    git clone https://github.com/qcom-ai-hub/geniex.git
+    cd geniex
+    ```
+  </Step>
+  <Step title="Open the demo project">
+    Open **`examples/android/`** in Android Studio. Do **not** open `bindings/android/` — that's the SDK binding module, which this flow consumes from Maven Central.
+  </Step>
+  <Step title="Sync Gradle">
+    Android Studio prompts you to sync. The sync resolves `com.qualcomm.qti:geniex-android:0.1.6` from Maven Central.
+  </Step>
+  <Step title="Connect a device">
+    Plug in a Snapdragon 8 Elite or 8 Elite Gen 5 phone with USB debugging enabled, and let Android Studio detect it.
+  </Step>
+  <Step title="Run">
+    Click **Run ▶**. Android Studio builds, installs, and launches the demo.
+  </Step>
+</Steps>
+
+## **Option 3 — SDK only (Maven Central)**
+
+To embed the SDK in your own Gradle project, add the dependency:
+
+```kotlin Gradle (Kotlin DSL)
+dependencies {
+    implementation("com.qualcomm.qti:geniex-android:0.1.6")
+}
+```
+
+Then jump to [Quickstart](/en/run/android/quickstart) for end-to-end usage.
+
+<br />
+
+<Feedback/>

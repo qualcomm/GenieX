@@ -1,0 +1,72 @@
+---
+title: "自带模型"
+description: "在 llama.cpp 后端运行 Hugging Face 上的自定义 GGUF 模型，或从本地路径加载自行转换的 QAIRT 模型包。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+llama.cpp 后端可运行任意 GGUF 模型，QAIRT 后端可加载自行转换的模型包。
+
+## **Hugging Face 上的 GGUF 模型（llama.cpp）**
+
+Hugging Face 上任意兼容的 GGUF 模型均可使用。复制仓库路径并传给 `geniex infer`：
+
+```powershell windows
+geniex infer <org>/<repo>-GGUF
+```
+
+例如：
+
+```powershell windows
+geniex infer unsloth/Phi-4-mini-instruct-GGUF
+```
+
+提示时请选择：
+- **模型类型** —— 视觉语言模型（Qwen3-VL 系列）选 `vlm`，其他选 `llm`。
+- **量化** —— `Q4_0` 在 Hexagon NPU 上支持最佳。详见[量化](/cn/models/quantization)。
+
+<Note>对 `Qwen3.5` 与 `Gemma4` 的多模态支持即将推出——目前请选择 `llm`。</Note>
+
+## **QAIRT 自行转换的模型包**
+
+`qualcomm/*` 命名空间外的 QAIRT 模型包需先下载到本地，再通过 `--model-hub localfs` 拉取。
+
+确保已安装 [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/en/guides/cli)，然后在 Windows ARM64 上：
+
+```powershell windows
+# 设置模型名称（必须与 HF 子目录名完全一致）
+$model = "llama_v3_2_1b_instruct"
+
+# 从 Hugging Face 下载模型
+hf download yichqian/geniex-qairt-models `
+  --local-dir $model `
+  --include "$model/**"
+
+# 使用下载好的目录拉取（绝对路径）
+geniex pull local/$model --model-hub localfs `
+  --local-path (Resolve-Path "$model\$model").Path
+
+# 运行推理
+geniex infer local/$model
+```
+
+<Note>该流程使用 QAIRT 插件，仅支持 NPU。请传 `--device npu` 或省略该参数。</Note>
+
+## **Python 中的自定义模型**
+
+在 Python 中将 `from_pretrained` 指向本地路径：
+
+```python
+# 从本地目录加载 QAIRT 模型包
+model = AutoModelForCausalLM.from_pretrained(
+    r"C:\<your_path>\Qwen3-4B-Instruct-2507",
+    model_name="qwen3_4b_instruct_2507",
+    device_map="qairt",
+)
+```
+
+完整参数详见 [Python API 参考](/cn/run/python/api-reference)。
+
+<br />
+
+<Feedback/>

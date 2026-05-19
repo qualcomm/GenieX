@@ -1,0 +1,134 @@
+---
+title: "FAQ"
+description: "Common questions about GenieX, its backends, and supported devices."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## General
+
+### What is GenieX?
+
+A multi-platform AI inference runtime built for Qualcomm Snapdragon. GenieX runs frontier LLMs and VLMs on-device — Hexagon NPU, Adreno GPU, or CPU — across Windows ARM64, Android, and Linux ARM64. See [What is GenieX](/en/get-started/what-is-geniex).
+
+### Which interface should I use?
+
+- **Trying things out, scripting** — [CLI](/en/run/cli/install) on Windows ARM64 or Linux ARM64.
+- **Building an app** — [Local server](/en/run/cli/local-server) (OpenAI-compatible HTTP) or [Python SDK](/en/run/python/install).
+- **Mobile** — [Android SDK](/en/run/android/install) (Kotlin, Maven Central).
+- **Reproducible IoT deployment** — [Docker image](/en/run/cli/install) on Linux ARM64 EVKs, pinned to a release tag (no host-side install, identical across devices).
+
+The [Quickstart](/en/get-started/quickstart) is a router into all four.
+
+### Where do I see what hardware GenieX supports?
+
+[Supported devices](/en/get-started/devices) — Snapdragon X for compute, 8 Elite for mobile, Dragonwing IQ9 / QCS for IoT.
+
+## Backends
+
+### What's the difference between llama.cpp and QAIRT?
+
+- **llama.cpp** — runs any GGUF model, supports NPU/GPU/CPU. Best for trying community models.
+- **QAIRT** — runs pre-compiled AI Hub bundles, NPU only. Typically the fastest path when your model is on AI Hub.
+
+See [Choose your backend](/en/get-started/choose-backend).
+
+### Which backend is the default?
+
+If you don't pass a device:
+- `llama_cpp` defaults to `hybrid` (HTP + CPU per-tensor scheduler — the fast path on Snapdragon).
+- `qairt` defaults to `npu`.
+
+Some models override this — e.g. `gpt-oss` falls back to `npu` on `llama_cpp`.
+
+### Which quantization should I pick?
+
+For llama.cpp on Snapdragon NPU: **`Q4_0`**. It has the best Hexagon backend support. QAIRT bundles are pre-quantized — no choice. See [Quantization](/en/models/quantization).
+
+## Models
+
+### Can I run any model from Hugging Face?
+
+Any **GGUF** model on the llama.cpp backend. See [Bring your own model](/en/models/bring-your-own).
+
+QAIRT requires a pre-compiled AI Hub bundle — adding a new one means registering it on the C++ side first.
+
+### Where's the supported models list?
+
+[Supported models](/en/models/supported) — split by backend (QAIRT, llama.cpp).
+
+## Hardware & devices
+
+### Do I need a Snapdragon device?
+
+Yes. GenieX targets Qualcomm Snapdragon platforms — Hexagon NPU, Adreno GPU, and Snapdragon ARM CPUs. There's no x86 or non-Snapdragon ARM build. If you don't have hardware on hand, use [Qualcomm Developer Cloud / Device Cloud](/en/get-started/devices).
+
+### My QAIRT model says NPU is required — can I run it on CPU?
+
+No. QAIRT is NPU-only by design. `cpu` and `gpu` aliases are coerced to NPU with a warning. Use the llama.cpp backend (with a GGUF) if you need CPU/GPU fallback.
+
+## QDC (Qualcomm Device Cloud)
+
+### How do I connect to a QDC device?
+
+SSH into a QDC device in two steps.
+
+<Steps>
+  <Step title="Setup SSH tunneling">
+    In the QDC portal, navigate to **Interactive Sessions** and click **Connect** to view the SSH connection instructions.
+
+    <img
+      src="/Images/qdc/qdc-1.png"
+      alt="QDC portal showing the Connect button for SSH instructions"
+      style={{ borderRadius: '0.5rem' }}
+    />
+
+    Open a terminal and run the SSH tunnel command from QDC, replacing `<PRIVATE_KEY_FILE_PATH>` with your private key path.
+
+    <img
+      src="/Images/qdc/qdc-2.png"
+      alt="SSH tunneling setup with private key and port forwarding"
+      style={{ borderRadius: '0.5rem' }}
+    />
+
+    <Tip>
+    **`WARNING: UNPROTECTED PRIVATE KEY FILE!`** — your `.pem` file permissions are too open. SSH requires private keys to be readable only by the owner:
+
+    ```bash bash
+    chmod 600 /path/to/your-key.pem
+    ```
+    </Tip>
+  </Step>
+
+  <Step title="Connect to the device">
+    In a new terminal, SSH into the forwarded port. The default password is `oelinux123`:
+
+    ```bash bash
+    ssh -o StrictHostKeychecking=no -o UserKnownHostsFile=/dev/null -p 2222 root@localhost
+    ```
+
+    <img
+      src="/Images/qdc/qdc-3.png"
+      alt="Successful SSH connection to the QDC device"
+      style={{ borderRadius: '0.5rem' }}
+    />
+  </Step>
+</Steps>
+
+### Do I need my own QDC device?
+
+No. You can request access to Qualcomm Device Cloud for remote testing on Snapdragon hardware. See [Supported devices](/en/get-started/devices) for details.
+
+## Server / API
+
+### Is the local server OpenAI-compatible?
+
+Yes — see [Local server](/en/run/cli/local-server). You can point the official `openai` Python client at `http://127.0.0.1:18181/v1` and reuse OpenAI code unchanged.
+
+### Does geniex serve auto-download models?
+
+No. Pull models with `geniex pull` before starting the server.
+
+<br />
+
+<Feedback/>

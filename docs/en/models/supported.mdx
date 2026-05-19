@@ -1,0 +1,61 @@
+---
+title: "Supported models"
+description: "Tested LLMs and VLMs across the QAIRT and llama.cpp backends."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+GenieX runs a curated set of pre-compiled bundles through the QAIRT backend, and **any GGUF model** through the llama.cpp backend. The lists below are tested examples — you are not limited to them on the llama.cpp side.
+
+## **QAIRT (AI Hub bundles)**
+
+Pre-compiled bundles from Qualcomm AI Hub. NPU-only.
+
+| Model ID | Source |
+|---|---|
+| `qualcomm/Qwen3-4B` | Qualcomm AI Hub |
+| `qualcomm/Qwen3-4B-Instruct-2507` | Qualcomm AI Hub |
+| `qualcomm/Qwen2.5-VL-7B-Instruct` | Qualcomm AI Hub |
+| `llama_v3_1_8b_instruct` | Self-converted (Hugging Face) |
+| `llama_v3_1_sea_lion_3_5_8b_r` | Self-converted (Hugging Face) |
+| `llama_v3_2_1b_instruct` | Self-converted (Hugging Face) |
+| `llama_v3_2_3b_instruct` | Self-converted (Hugging Face) |
+| `llama_v3_8b_instruct` | Self-converted (Hugging Face) |
+| `llama_v3_elyza_jp_8b` | Self-converted (Hugging Face) |
+| `llama_v3_taide_8b_chat` | Self-converted (Hugging Face) |
+| `falcon_v3_7b_instruct` | Self-converted (Hugging Face) |
+
+To run a `qualcomm/*` model directly:
+
+```powershell windows
+geniex infer qualcomm/Qwen3-4B
+```
+
+For self-converted bundles, follow the [bring-your-own model guide](/en/models/bring-your-own#qairt-self-converted-bundles).
+
+## **llama.cpp (GGUF)**
+
+Run any GGUF model from Hugging Face on Snapdragon NPU, GPU, or CPU. Tested examples that work well with `Q4_0`:
+
+| Model ID | Type |
+|---|---|
+| `unsloth/Qwen3.5-0.8B-GGUF` | LLM |
+| `unsloth/Qwen3.5-2B-GGUF` | LLM |
+| `unsloth/Gemma4-E4B-it-GGUF` | LLM |
+| `unsloth/Gemma4-E2B-it-GGUF` | LLM |
+| `unsloth/Qwen3-0.6B-GGUF` | LLM |
+| `unsloth/Qwen3-1.7B-GGUF` | LLM |
+| `unsloth/Ministral-3-3B-Instruct-2507-GGUF` | LLM |
+| `unsloth/GPT-OSS-20B-GGUF` | LLM |
+| `ibm-granite/granite-4.0-micro-GGUF` | LLM |
+| `unsloth/Phi-4-mini-instruct-GGUF` | LLM |
+| `Qwen/Qwen3-VL-2B-Instruct-GGUF` | VLM |
+| `Qwen/Qwen3-VL-4B-Instruct-GGUF` | VLM |
+
+<Tip>To try other GGUF models, copy the path of any compatible GGUF model from Hugging Face and substitute it into the commands in [Bring your own model](/en/models/bring-your-own).</Tip>
+
+<Note>Multimodal support for `Qwen3.5` and `Gemma4` is coming soon — pick `llm` when prompted for now.</Note>
+
+<br />
+
+<Feedback/>

@@ -1,0 +1,302 @@
+---
+title: "API 参考"
+description: "GenieX Python SDK 的完整 API 文档。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+GenieX Python SDK 的设计与 Hugging Face `transformers` 一致——通过 `AutoModel*.from_pretrained()` 加载模型，再调用 `.generate()` 进行推理。
+
+---
+
+## AutoModelForCausalLM
+
+加载因果语言模型的工厂——同时支持纯文本与多模态。文本模型返回 [`GeniexLLM`](#geniexllm)，识别为多模态时返回 [`GeniexVLM`](#geniexvlm)（如 `phi4_multimodal`、`qwen3.5-vl`、`gemma4`）。
+
+```python
+from geniex import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "qualcomm/Qwen3-4B-Instruct",
+    device_map="auto",
+)
+```
+
+### `from_pretrained()`
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `model_name_or_path` | `str` | *必填* | HuggingFace 仓库 ID、短别名（例如 `"qwen3"`），或本地路径。 |
+| `device_map` | `str` | `"auto"` | `"auto"` 选择第一个可用的插件/设备。也支持 `"<plugin_id>"` 或 `"<plugin_id>:<device_id>"`。 |
+| `quant` | `str \| None` | `None` | 量化版本（例如 `"Q4_K_M"`）。从 Hub 下载时用于过滤文件。 |
+| `mmproj_path` | `str \| None` | `None` | 多模态投影文件路径。从 Hub 自动解析；显式传入可强制进入 VLM 模式。 |
+
+<Expandable title="其他参数">
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `model_name` | `str \| None` | `None` | 覆盖注册表中的模型名（例如 QAIRT 的 `"granite4"`）。 |
+| `hf_token` | `str \| None` | `None` | 受限模型使用的 HuggingFace bearer token。 |
+| `max_tokens` | `int` | — | 生成的最大 token 数。 |
+
+</Expandable>
+
+**返回：** [`GeniexLLM`](#geniexllm) 或 [`GeniexVLM`](#geniexvlm)（按模型自动判断）
+
+---
+
+## AutoModelForVision2Seq
+
+加载视觉语言/多模态模型的工厂。返回 [`GeniexVLM`](#geniexvlm) 实例。
+
+```python
+from geniex import AutoModelForVision2Seq
+
+model = AutoModelForVision2Seq.from_pretrained("qualcomm/Qwen2.5-7B-Instruct", device_map="qairt")
+```
+
+### `from_pretrained()`
+
+接受所有 [`AutoModelForCausalLM.from_pretrained()`](#from_pretrained) 的参数，加上：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `mmproj_path` | `str \| None` | `None` | 多模态投影文件路径。从 Hub 下载时自动解析。 |
+
+**返回：** [`GeniexVLM`](#geniexvlm)
+
+---
+
+## GeniexLLM
+
+由 `AutoModelForCausalLM.from_pretrained()` 返回的纯文本模型实例。
+
+### `generate()`
+
+基于格式化好的 prompt 字符串运行文本生成。
+
+```python
+output = model.generate(prompt, max_new_tokens=256)
+print(output.text)
+```
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `prompt` | `str` | *必填* | 格式化的 prompt 字符串（用 `model.tokenizer.apply_chat_template()` 构造）。 |
+| `max_new_tokens` | `int` | `512` | 生成的最大 token 数。 |
+| `temperature` | `float` | `0.7` | 采样温度。 |
+| `top_p` | `float` | `0.9` | 核采样阈值。 |
+| `top_k` | `int` | `40` | Top-k 采样。 |
+| `min_p` | `float` | `0.0` | 最小概率阈值。 |
+| `stream` | `bool` | `False` | 为 `True` 时返回 [`TextIteratorStreamer`](#textiteratorstreamer)。 |
+
+<Expandable title="惩罚与高级参数">
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `repetition_penalty` | `float` | `1.1` | 重复惩罚。 |
+| `presence_penalty` | `float` | `0.0` | 出现惩罚。 |
+| `frequency_penalty` | `float` | `0.0` | 频率惩罚。 |
+| `seed` | `int` | `-1` | 随机种子（`-1` 表示随机）。 |
+| `stop` | `list[str] \| None` | `None` | 停止序列。 |
+| `grammar` | `str \| None` | `None` | 用于约束生成的 GBNF 语法字符串。 |
+| `json_mode` | `bool` | `False` | 强制 JSON 输出。 |
+
+</Expandable>
+
+**返回：** [`GenerateOutput`](#generateoutput)（`stream=True` 时为 [`TextIteratorStreamer`](#textiteratorstreamer)）
+
+### `reset()`
+
+重置对话状态并清空 KV 缓存。
+
+### `save_kv_cache(path)` / `load_kv_cache(path)`
+
+将 KV 缓存保存到/加载自指定文件路径（`str`）。
+
+### `close()`
+
+释放模型句柄与资源。也支持上下文管理器：
+
+```python
+with AutoModelForCausalLM.from_pretrained("qwen3") as model:
+    output = model.generate(prompt)
+```
+
+---
+
+## GeniexVLM
+
+由 `AutoModelForVision2Seq.from_pretrained()` 返回的视觉语言模型实例。
+
+### `generate()`
+
+参数与 [`GeniexLLM.generate()`](#generate) 一致，新增：
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `images` | `list[str] \| None` | `None` | 模型处理的图片文件路径列表。 |
+| `audios` | `list[str] \| None` | `None` | 模型处理的音频文件路径列表。 |
+
+```python
+output = model.generate(prompt, images=["/path/to/image.jpg"], max_new_tokens=256)
+print(output.text)
+```
+
+**返回：** [`GenerateOutput`](#generateoutput)（`stream=True` 时为 [`TextIteratorStreamer`](#textiteratorstreamer)）
+
+### `reset()` / `close()`
+
+同 [`GeniexLLM`](#geniexllm)。
+
+---
+
+## ModelTokenizer
+
+通过 `model.tokenizer` 访问。提供与 `transformers` 兼容的 chat template 接口。
+
+### `apply_chat_template()`
+
+使用模型内置的 chat template 格式化对话消息。
+
+```python
+messages = [{"role": "user", "content": "What is 2+2?"}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
+```
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `messages` | `list[dict]` | *必填* | 包含 `"role"` 与 `"content"` 的消息字典列表。 |
+| `tokenize` | `bool` | `False` | 必须为 `False`——不支持独立的 tokenize。 |
+| `add_generation_prompt` | `bool` | `True` | 是否追加生成提示后缀。 |
+| `enable_thinking` | `bool` | `False` | 启用思考模式（如 Qwen 推理模型）。 |
+| `tools` | `list[dict] \| str \| None` | `None` | 工具定义，可为字典列表或预序列化的 JSON 字符串。 |
+
+**返回：** `str` —— 可直接传给 `model.generate()` 的格式化 prompt。
+
+---
+
+## 输出类
+
+### GenerateOutput
+
+由 `model.generate()` 返回。
+
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `text` | `str` | 生成文本（如有 thinking 标签会被剥离）。 |
+| `thinking` | `str \| None` | 模型的推理内容，无则为 `None`。 |
+| `profile` | [`ProfileData`](#profiledata) | 性能指标。 |
+
+### ProfileData
+
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `ttft` | `int` | 首 token 时延（ms）。 |
+| `prompt_tokens` | `int` | prompt token 数。 |
+| `generated_tokens` | `int` | 生成 token 数。 |
+| `prefill_speed` | `float` | Prefill 速度（tokens/s）。 |
+| `decode_speed` | `float` | Decode 速度（tokens/s）。 |
+| `stop_reason` | `str \| None` | 停止原因（例如 `"eos"`、`"limit"`）。 |
+
+<Expandable title="全部计时字段">
+
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `prompt_time` | `int` | Prompt 处理时间（ms）。 |
+| `decode_time` | `int` | Decode 时间（ms）。 |
+
+</Expandable>
+
+### TextIteratorStreamer
+
+由 `model.generate(..., stream=True)` 返回。生成时按片段产出解码后的文本。
+
+```python
+streamer = model.generate(prompt, max_new_tokens=256, stream=True)
+for chunk in streamer:
+    print(chunk, end="", flush=True)
+
+final = streamer.output  # 迭代结束后可访问 GenerateOutput
+```
+
+| 方法 / 属性 | 说明 |
+|---|---|
+| `__iter__()` | 按生成产出 `str` 片段。 |
+| `output` | `GenerateOutput \| None`——迭代结束后可用。 |
+| `cancel()` | 在下一个 token 边界停止生成。 |
+
+---
+
+## 模型管理器
+
+CLI 使用的同一个模型管理器也可在程序中通过 `geniex.model_manager` 调用。
+
+```python
+from geniex import model_manager as mm
+
+MODEL = "Qwen/Qwen3-0.6B-GGUF"
+mm.pull(MODEL)
+print(f"pull complete: {MODEL}")
+paths = mm.get_paths(MODEL)
+print(f"model path:    {paths}")
+local_models = mm.list_models()
+print(f"local models:  {local_models}")
+mm.remove(MODEL)
+print(f"model removed: {MODEL}")
+```
+
+| 函数 | 说明 |
+|---|---|
+| `pull(model_name, ...)` | 按别名或 `org/repo[:quant]` 下载模型。 |
+| `list_models()` | 返回缓存模型名列表 `list[str]`。 |
+| `get_paths(model_name)` | 返回包含本地路径的 `ModelPaths`。 |
+| `get_type(model_name)` | 返回 `"llm"` 或 `"vlm"`。 |
+| `resolve_alias(alias)` | 将短别名解析为规范的 `org/repo`。 |
+| `remove(model_name)` | 从磁盘删除缓存模型。 |
+| `clean()` | 清空所有缓存模型，返回删除数量。 |
+
+<Expandable title="pull() 参数">
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `model_name` | `str` | *必填* | `org/repo` 或短别名。 |
+| `quant` | `str \| None` | `None` | 量化提示（例如 `"Q4_K_M"`）。 |
+| `hub` | `str` | `"auto"` | `"auto"` \| `"hf"` \| `"localfs"`。 |
+| `local_path` | `str \| None` | `None` | 源目录（`hub="localfs"` 时必填）。 |
+| `hf_token` | `str \| None` | `None` | HuggingFace bearer token。 |
+| `on_progress` | `Callable \| None` | `None` | 回调 `(files: list[FileProgress]) -> bool`；返回 `False` 取消。 |
+
+</Expandable>
+
+<Expandable title="ModelPaths 属性">
+
+| 属性 | 类型 | 说明 |
+|---|---|---|
+| `model_path` | `str` | 主模型文件路径。 |
+| `model_dir` | `str` | 模型所在目录。 |
+| `model_name` | `str` | 规范模型名。 |
+| `plugin_id` | `str` | 插件标识。 |
+| `mmproj_path` | `str \| None` | 多模态投影路径（仅 VLM）。 |
+| `tokenizer_path` | `str \| None` | tokenizer 文件路径。 |
+| `device_id` | `str \| None` | 设备标识。 |
+
+</Expandable>
+
+---
+
+## 运行时函数
+
+| 函数 | 说明 |
+|---|---|
+| `geniex.init()` | 初始化运行时。首次加载模型时自动调用。 |
+| `geniex.deinit()` | 关闭运行时并释放资源。 |
+| `geniex.version()` | 返回 SDK 版本字符串。 |
+| `geniex.get_plugin_list()` | 返回可用插件 ID 列表 `list[str]`。 |
+| `geniex.get_device_list(plugin_id)` | 返回 `(device_id, device_name)` 元组列表。 |
+
+<br />
+
+<Feedback/>

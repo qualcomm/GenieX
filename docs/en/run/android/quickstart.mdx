@@ -1,0 +1,118 @@
+---
+title: "Quickstart"
+description: "Run your first model in the GenieX Android demo or your own app."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **Prerequisites**
+
+- The demo APK installed (or the SDK pulled into your project) — see [Install](/en/run/android/install).
+- A device with **Snapdragon 8 Elite** or **Snapdragon 8 Elite Gen 5**.
+
+## **Using the demo app**
+
+Once the demo launches:
+
+1. **Pick a model** from the dropdown at the top:
+   - **Hugging Face GGUF (llama.cpp)** — Qwen3, Phi-4, Gemma, Granite, Qwen3-VL, etc.
+   - **AI Hub NPU (QAIRT)** — `qualcomm/Qwen3-4B-Instruct-2507`, `qualcomm/Qwen2.5-VL-7B-Instruct`.
+2. **Download** — tap Download. Progress is resumable: killing the app mid-download and relaunching resumes from the last byte.
+3. **Load** — pick the execution target (NPU / GPU / CPU for GGUF; NPU-only for AI Hub models).
+4. **Chat** — type text, or tap the image / audio button for VLMs.
+
+## **Walkthrough: GGUF LLM**
+
+`unsloth/Qwen3-0.6B-GGUF` — small Qwen3 0.6B chat model, `Q4_0`. Fast first download, runs on any device.
+
+<Steps>
+  <Step title="Select the model">
+    Open the model dropdown at the top and pick **Qwen3-0.6B (GGUF)**.
+  </Step>
+  <Step title="Download">
+    Tap **Download**. Progress streams live from the Rust model manager; killing the app mid-download and relaunching resumes from the last byte.
+  </Step>
+  <Step title="Load">
+    Tap **Load**. A dialog appears — choose **NPU**, **GPU**, or **CPU**:
+    - **NPU** *(recommended on Snapdragon)* — Hexagon NPU acceleration.
+    - **GPU** — Adreno via OpenCL.
+    - **CPU** — works on any ARM64 device.
+  </Step>
+  <Step title="Chat">
+    Type a message in the input bar and tap **Send**. Tap **Clear** or unload the model to reset the conversation.
+  </Step>
+</Steps>
+
+## **Walkthrough: AI Hub VLM**
+
+`qualcomm/Qwen2.5-VL-7B-Instruct` — vision-language model pre-compiled for Snapdragon 8 Elite and 8 Elite Gen 5.
+
+<Warning>
+Requires a device with chipset `SM8750` (Snapdragon 8 Elite) or `SM8850` (Snapdragon 8 Elite Gen 5).
+</Warning>
+
+<Steps>
+  <Step title="Select the model">
+    Open the dropdown and pick **Qwen2.5-VL-7B-Instruct (NPU)**.
+  </Step>
+  <Step title="Download">
+    Tap **Download**. The AI Hub bundle is larger than the GGUF models (~4.6 GB) — stay on Wi-Fi. Downloads resume across app restarts.
+  </Step>
+  <Step title="Load">
+    Tap **Load**. The plugin picker only shows **NPU** for QAIRT models. Confirm.
+  </Step>
+  <Step title="Chat with an image">
+    Tap the **image** button, pick a photo from the gallery, type a question like "What's in this image?", and send. The VLM chat template is applied automatically by the SDK.
+  </Step>
+</Steps>
+
+## **Embedding the SDK in your own app**
+
+If you're not using the demo, the SDK Kotlin code looks like this:
+
+```kotlin
+val paths = ModelManagerWrapper.getPaths("unsloth/Qwen3-0.6B-GGUF")
+    ?: error("Model not downloaded")
+
+LlmWrapper.builder()
+    .llmCreateInput(
+        LlmCreateInput(
+            model_name = paths.model_name,
+            model_path = paths.model_path,
+            config     = ModelConfig(nCtx = 4096),
+            plugin_id  = "llama_cpp",
+            device_id  = null,       // null → npu (recommended on Snapdragon)
+        )
+    )
+    .build()
+    .onSuccess { llmWrapper = it }
+    .onFailure { println("Error: ${it.message}") }
+```
+
+See the [API reference](/en/run/android/api-reference) for the full surface (model manager, LLM/VLM wrappers, data structures).
+
+## **Troubleshooting**
+
+**"Model loads but generation self-repeats or outputs nothing"**
+Make sure the demo passes the chat-templated prompt (`applyChatTemplate().formattedText`) into `generateStreamFlow`, not the raw user text. QAIRT pipelines treat their input as already-templated — sending raw text drops the model into completion mode.
+
+**"AI Hub pull fails with `INVALID_INPUT`"**
+Android needs an explicit `chipset` for AI Hub pulls — auto-detect only runs on Windows on Snapdragon. The demo's `model_list.json` pins `SM8750`; if you've customised it, ensure the field is present.
+
+**"QAIRT load fails with unknown model name"**
+The model id returned by AI Hub must match an entry in the QAIRT plugin's registry (`qwen3_4b_instruct_2507`, `qwen2_5_vl_7b_instruct`, etc.). To add a new AI Hub model, register it on the C++ side first — see `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`.
+
+## **Next steps**
+
+<CardGroup cols={2}>
+  <Card title="API reference" href="/en/run/android/api-reference" icon="book">
+    Wrapper classes, plugin/device selection, and data structures.
+  </Card>
+  <Card title="Backends" href="/en/get-started/choose-backend" icon="route">
+    When to pick llama.cpp vs QAIRT.
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback />

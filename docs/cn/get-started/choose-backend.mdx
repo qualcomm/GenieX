@@ -1,0 +1,104 @@
+---
+title: "选择后端"
+description: "在 llama.cpp 与 QAIRT 两个运行时后端之间做出选择，包含设备适配、量化与限制。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+GenieX 通过两种后端之一运行模型。请根据你的模型格式、目标运行环境，以及所使用的骁龙硬件做出选择。
+
+## **概览对比**
+
+| | **llama.cpp** | **QAIRT** |
+|---|---|---|
+| **模型格式** | GGUF（任意社区模型） | AI Hub 预编译模型包 |
+| **设备** | NPU / GPU / CPU | 仅 NPU |
+| **运行平台** | Windows ARM64、Android、Linux ARM64 | Windows ARM64、Android |
+| **量化由谁决定** | 你来选（`Q4_0`、`Q8_0`、`F16` 等） | 模型包内已预量化 |
+| **最适合场景** | 从 Hugging Face 自带模型 | 在受支持的 AI Hub 模型上获得最佳 NPU 性能 |
+
+## **默认值**
+
+如果不传入设备，GenieX 会自动选择：
+
+| 后端 | 默认设备 |
+|---|---|
+| `llama_cpp` | `hybrid`（HTP + CPU 按张量调度——骁龙上的快速路径） |
+| `qairt` | `npu` |
+
+部分模型族会覆盖默认值——例如 `gpt-oss` 在 `llama_cpp` 下会回退到 `npu`，因为它无法在 hybrid 路径上运行。
+
+---
+
+## **llama.cpp**
+
+`llama_cpp` 后端通过 llama.cpp + 高通 GGML Hexagon 后端运行**任意 GGUF 模型**。这是覆盖面最广的路径——可以从 Hugging Face 拉取任意社区 GGUF 模型，并在骁龙 NPU、Adreno GPU 或纯 CPU 上运行。
+
+### 在以下场景选择 llama.cpp
+
+- 想运行 Hugging Face 上**任意 GGUF 模型**——Qwen、Phi、Gemma、Granite、Qwen3-VL 等。
+- 除了 NPU，还需要在 **CPU 或 GPU** 上运行（例如回退路径，或没有 HTP 的 IoT 设备）。
+- 处于原型阶段，需要最广的模型覆盖面。
+
+### 设备
+
+| 设备别名 | 行为 |
+|---|---|
+| `npu` | 固定到 Hexagon NPU（`HTP0`）。最佳 NPU 独占路径。 |
+| `gpu` | 通过 OpenCL 使用 Adreno GPU。 |
+| `cpu` | 纯 CPU。强制 `nGpuLayers = 0`。 |
+| `hybrid` *(默认)* | 空 `device_id` + `n_gpu_layers=999`——llama.cpp 的 HTP+CPU 按张量调度。**骁龙上的快速路径。** |
+
+### 量化
+
+llama.cpp 支持 GGML 全量化范围。**优先使用 `Q4_0` 以获得最佳 Hexagon NPU 支持**——其他量化主要落到 GPU/CPU。详见[量化](/cn/models/quantization)。
+
+### 限制
+
+- 非 `Q4_0` 的量化通常无法落到 Hexagon NPU，会改走 GPU/CPU。
+
+---
+
+## **QAIRT**
+
+`qairt` 后端通过高通 AI Runtime 运行 **Qualcomm AI Hub** 上的预编译模型包。仅支持 NPU，模型包针对特定骁龙芯片预编译并预量化——当模型在 AI Hub 可用时，通常是最快的 NPU 路径。
+
+### 在以下场景选择 QAIRT
+
+- 想要骁龙上**最快的 NPU 路径**，且模型在 Qualcomm AI Hub 已发布。
+
+### 设备
+
+QAIRT **仅支持 NPU**。
+
+| 设备别名 | 行为 |
+|---|---|
+| `npu` *(默认)* | 固定 `HTP0`——唯一支持的路径。 |
+| `cpu` / `gpu` | 自动转为 `npu` 并打印告警，不会报错。 |
+
+### 量化与上下文
+
+QAIRT 模型包在**编译期已预量化**。KV 缓存大小与上下文长度也已固化在模型包中——两者均无法在运行时修改。
+
+在 Android 上，这意味着 `nGpuLayers != 0` 与 `nCtx != 0` 会被拒绝并返回 `PARAM_NOT_SUPPORTED`。请保持两者为默认值，仅调整 `max_tokens` / `enable_thinking`。
+
+### Android 上的芯片组
+
+在 Android 上拉取 AI Hub 模型时**必须显式传入芯片组**——自动识别仅在骁龙 Windows 上生效。可选值：
+
+| 芯片组 | 手机 |
+|---|---|
+| `SM8750` | 骁龙 8 至尊版 |
+| `SM8850` | 骁龙 8 至尊版 Gen 5 |
+
+详见 [Android API 参考](/cn/run/android/api-reference#model-manager) 中的 `ModelPullInput.chipset`。
+
+### 限制
+
+- 仅 NPU——无 CPU/GPU 回退。
+- 上下文长度与 KV 缓存固化在模型包中。
+- 新增 AI Hub 模型需先在 C++ 侧注册（`third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`）。
+
+<br />
+
+<Feedback/>

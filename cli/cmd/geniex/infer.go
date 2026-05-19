@@ -48,7 +48,7 @@ var (
 	stop           []string
 	stopFile       string
 	imageMaxLength int32
-	enableThink bool
+	enableThink    bool
 	prompt         []string
 	tokenFile      string
 	input          string
@@ -96,7 +96,7 @@ var (
 		llmFlags.Int32VarP(&maxTokens, "max-tokens", "", 2048, "max tokens")
 		llmFlags.StringArrayVarP(&stop, "stop", "", nil, "stop sequences (llama_cpp only)")
 		llmFlags.StringVarP(&stopFile, "stop-file", "", "", "file containing stop sequences (llama_cpp only)")
-		llmFlags.BoolVarP(&enableThink, "think", "", true, "enable thinking mode (use --no-think to disable)")
+		llmFlags.BoolVarP(&enableThink, "think", "", true, "enable thinking mode (use --think=false to disable)")
 		llmFlags.StringVarP(&systemPrompt, "system-prompt", "s", "", "system prompt to set model behavior")
 		llmFlags.StringVarP(&input, "input", "i", "", "prompt txt file")
 		llmFlags.StringArrayVarP(&prompt, "prompt", "p", nil, "pass prompt")
@@ -180,7 +180,6 @@ func infer() *cobra.Command {
 		}
 
 		geniex_sdk.Init()
-		defer geniex_sdk.DeInit()
 
 		switch manifest.ModelType {
 		case types.ModelTypeLLM:
@@ -191,6 +190,8 @@ func infer() *cobra.Command {
 		default:
 			panic("not support model type")
 		}
+
+		geniex_sdk.DeInit()
 
 		switch err {
 		case nil:
@@ -436,8 +437,8 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 	}
 
 	processor := &common.Processor{
-		Verbose:   verbose,
-		TestMode:  testMode,
+		Verbose:  verbose,
+		TestMode: testMode,
 		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			var res geniex_sdk.LlmGenerateOutput
 			var err error

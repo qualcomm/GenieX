@@ -1,0 +1,56 @@
+---
+title: "GenieX 是什么"
+description: "面向高通骁龙的端侧 AI 推理运行时——通过 CLI、Python、Android 和 Docker 运行前沿 LLM 与 VLM。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+GenieX 是为高通平台打造的端侧生成式 AI 推理运行时。它是 Qualcomm GENIE 的社区版，让你用几行代码即可在 Hexagon NPU、Adreno GPU 或 CPU 上本地运行前沿语言模型与视觉语言模型。
+
+## **架构**
+
+<img
+  src="/Mintlify-image/geniex_arch.png"
+  alt="GenieX 架构栈：CLI、Python API、Java API、Docker 与 Serve 接口位于 GenieX SDK 之上，后者会分发到 llama.cpp 插件（基于 GGML 运行时，覆盖 CPU/GPU/HTP 内核）或 QAIRT 插件（QAIRT SDK，运行在 NPU 上）。目标平台为 Windows、Android 与 Linux。"
+  style={{ borderRadius: '0.5rem' }}
+/>
+
+GenieX 通过同一套 SDK 暴露五种入口——CLI、Python、Java/Kotlin、Docker 以及兼容 OpenAI 协议的服务器，并按需分发到 **llama.cpp 插件**（覆盖 CPU / GPU / Hexagon HTP 的 GGML 内核）或 **QAIRT 插件**（高通 AI Runtime，仅 NPU）。同一套 SDK 可运行在 Windows ARM64、Android 与 Linux ARM64 上。
+
+## **GenieX 能做什么**
+
+- **本地运行模型** —— 覆盖骁龙 X（Windows ARM64）、骁龙 8 至尊版（Android）以及 Dragonwing IoT 设备。
+- **选择后端** —— `llama.cpp` 适配任意社区 GGUF 模型，`QAIRT` 适配 AI Hub 预编译的 NPU 模型包。
+- **构建应用** —— 通过 CLI、兼容 OpenAI 协议的本地服务器、Python SDK、Android SDK 或 Docker 镜像。
+
+## **从这里开始**
+
+<CardGroup cols={2}>
+  <Card title="快速入门" href="/cn/get-started/quickstart" icon="rocket">
+    选择适合的接入方式，几分钟内完成首次推理。
+  </Card>
+  <Card title="选择后端" href="/cn/get-started/choose-backend" icon="route">
+    根据模型与设备在 llama.cpp 与 QAIRT 之间做出选择。
+  </Card>
+  <Card title="支持的设备" href="/cn/get-started/devices" icon="microchip">
+    GenieX 支持的骁龙计算、移动以及 IoT 芯片组。
+  </Card>
+  <Card title="模型" href="/cn/models/supported" icon="cube">
+    在 llama.cpp 与 QAIRT 后端上经过验证的 LLM 与 VLM。
+  </Card>
+</CardGroup>
+
+## **社区**
+
+<CardGroup cols={2}>
+  <Card title="提交 Issue" href="https://github.com/qualcomm/nexa-sdk/issues" icon="github">
+    在 GitHub 上提交 bug、提需求或浏览开放的 Issue。
+  </Card>
+  <Card title="加入 Slack" href="https://nexa-ai-community.slack.com/ssb/redirect" icon="slack">
+    与 GenieX 团队及其他开发者协作交流。
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>

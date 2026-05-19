@@ -1,0 +1,104 @@
+---
+title: "Choose your backend"
+description: "Decide between the llama.cpp and QAIRT runtime backends, including device targeting, quantization, and limitations."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+GenieX runs models through one of two backends. Pick based on the model format you have, where you want to run it, and which Snapdragon hardware you're on.
+
+## **At a glance**
+
+| | **llama.cpp** | **QAIRT** |
+|---|---|---|
+| **Model format** | GGUF (any community model) | AI Hub pre-compiled bundles |
+| **Devices** | NPU / GPU / CPU | NPU only |
+| **Where it runs** | Windows ARM64, Android, Linux ARM64 | Windows ARM64, Android |
+| **Quantization picked by** | You (`Q4_0`, `Q8_0`, `F16`, …) | Pre-quantized in the bundle |
+| **Best for** | Bringing your own model from Hugging Face | Highest NPU performance on supported AI Hub models |
+
+## **Defaults**
+
+If you don't pass a device, GenieX picks one for you:
+
+| Backend | Default device |
+|---|---|
+| `llama_cpp` | `hybrid` (HTP + CPU per-tensor scheduling — the fast path on Snapdragon) |
+| `qairt` | `npu` |
+
+Some model families override this — for example, `gpt-oss` falls back to `npu` on `llama_cpp` because it can't run on the hybrid path.
+
+---
+
+## **llama.cpp**
+
+The `llama_cpp` backend runs **any GGUF model** through llama.cpp with Qualcomm's GGML Hexagon backend. It's the broadest path — you can pull any community GGUF from Hugging Face and run it on Snapdragon NPU, Adreno GPU, or pure CPU.
+
+### Pick llama.cpp if…
+
+- You want to run **any GGUF model** from Hugging Face — Qwen, Phi, Gemma, Granite, Qwen3-VL, etc.
+- You need to **target CPU or GPU** as well as NPU (e.g. fallback paths, IoT devices without HTP).
+- You're prototyping and want the broadest model selection.
+
+### Devices
+
+| Device alias | Effect |
+|---|---|
+| `npu` | Pin to Hexagon NPU (`HTP0`). Best NPU-only path. |
+| `gpu` | Adreno GPU via OpenCL. |
+| `cpu` | Pure CPU. Forces `nGpuLayers = 0`. |
+| `hybrid` *(default)* | Empty `device_id` + `n_gpu_layers=999` — llama.cpp's per-tensor HTP+CPU scheduler. **The fast path on Snapdragon.** |
+
+### Quantization
+
+llama.cpp accepts the full GGML quantization range. **Use `Q4_0` for best Hexagon NPU support** — other quants run on GPU/CPU. See [Quantization](/en/models/quantization).
+
+### Limitations
+
+- Quants outside `Q4_0` typically don't land on Hexagon NPU and use GPU/CPU instead.
+
+---
+
+## **QAIRT**
+
+The `qairt` backend runs pre-compiled bundles from **Qualcomm AI Hub** through the Qualcomm AI Runtime. It's NPU-only, with the bundle compiled and quantized for a specific Snapdragon chipset — typically the fastest NPU path when your model is available on AI Hub.
+
+### Pick QAIRT if…
+
+- You want the **fastest NPU path** on Snapdragon, and your model is available on Qualcomm AI Hub.
+
+### Devices
+
+QAIRT is **NPU only**.
+
+| Device alias | Effect |
+|---|---|
+| `npu` *(default)* | Pin `HTP0` — the only supported path. |
+| `cpu` / `gpu` | Coerced to `npu` with a warning. Never an error. |
+
+### Quantization & context
+
+QAIRT bundles are **pre-quantized at compile time**. The KV cache size and context length are also baked into the bundle — neither can be changed at runtime.
+
+On Android, this means `nGpuLayers != 0` and `nCtx != 0` are rejected with `PARAM_NOT_SUPPORTED`. Leave both at defaults and tune `max_tokens` / `enable_thinking` only.
+
+### Chipset on Android
+
+AI Hub pulls on Android **require an explicit chipset** — auto-detect only runs on Windows on Snapdragon. Use:
+
+| Chipset | Phone |
+|---|---|
+| `SM8750` | Snapdragon 8 Elite |
+| `SM8850` | Snapdragon 8 Elite Gen 5 |
+
+See the [Android API reference](/en/run/android/api-reference#model-manager) for `ModelPullInput.chipset`.
+
+### Limitations
+
+- NPU only — no CPU/GPU fallback.
+- Context length and KV cache are fixed by the bundle.
+- Adding a new AI Hub model requires registering it on the C++ side first (`third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`).
+
+<br />
+
+<Feedback/>

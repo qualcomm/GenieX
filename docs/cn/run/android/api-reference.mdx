@@ -1,0 +1,456 @@
+---
+title: "API 参考"
+description: "GenieX Android SDK —— 插件/设备选择、模型管理与 LLM/VLM 推理 API。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **插件与设备选择**
+
+### 插件
+
+通过 `plugin_id` 选择推理后端：
+
+```kotlin
+val plugin_id: String?   // "llama_cpp" | "qairt" | null
+```
+
+| `plugin_id`   | 后端                              | 模型格式                 | 设备                            |
+|---------------|-----------------------------------|--------------------------|---------------------------------|
+| `"llama_cpp"` | llama.cpp + GGML Hexagon 后端     | GGUF                     | CPU / Adreno GPU / Hexagon NPU |
+| `"qairt"`     | 高通 AI Runtime                    | AI Hub 预编译 bin        | 仅 Hexagon NPU                  |
+| `null`        | SDK 根据模型路径自动判断           | —                        | —                               |
+
+常量定义见 [`PluginIdValue`](https://github.com/qcom-ai-hub/geniex/blob/main/bindings/android/app/src/main/java/com/geniex/sdk/bean/InputPluginBase.kt)（`LLAMA_CPP`、`QAIRT`）。
+
+### 设备
+
+转发给原生 SDK `geniex_resolve_device` 的硬件别名。
+
+```kotlin
+val device_id: String?   // "cpu" | "gpu" | "npu" | null
+```
+
+| 别名    | 行为                                                                |
+|---------|---------------------------------------------------------------------|
+| `null`  | 插件默认值——`llama_cpp` 与 `qairt` 均为 `npu`。                   |
+| `"npu"` | Hexagon NPU 加速。骁龙上推荐。                                       |
+| `"gpu"` | 通过 OpenCL 使用 Adreno GPU（仅 `llama_cpp`）。                      |
+| `"cpu"` | 纯 CPU。强制 `nGpuLayers = 0`。                                     |
+
+<Note>
+QAIRT 仅支持 NPU。对 QAIRT 模型传 `"cpu"` 或 `"gpu"` 仅记录告警并回退到 NPU，不会报错。
+</Note>
+
+---
+
+## **模型管理器**
+
+模型通过内置的 Rust 模型管理器在设备上拉取。**请勿**手动 `adb push` 权重——使用 `ModelManagerWrapper`。
+
+### `ModelManagerWrapper`
+
+```kotlin
+// 初始化（幂等——可在每个 Activity.onCreate 中安全调用）。
+GeniexSdk.getInstance().init(context)
+
+// 流式拉取并报告进度。
+ModelManagerWrapper.pullFlow(
+    ModelPullInput(
+        model_name = "unsloth/Qwen3-0.6B-GGUF",
+        quant      = "Q4_0",
+        hub        = HubSource.HUGGINGFACE,
+    )
+).collect { event ->
+    when (event) {
+        is ModelManagerWrapper.PullEvent.Progress  -> /* 更新 UI */
+        ModelManagerWrapper.PullEvent.Completed    -> /* 完成 */
+        is ModelManagerWrapper.PullEvent.Error     -> /* 显示错误 */
+    }
+}
+
+// 获取已拉取模型在磁盘上的路径。
+val paths: ModelPaths? = ModelManagerWrapper.getPaths("unsloth/Qwen3-0.6B-GGUF")
+
+// 列出 / 清理。
+ModelManagerWrapper.list()              // List<String>
+ModelManagerWrapper.remove("org/repo") // 0 = 成功
+ModelManagerWrapper.clean()            // 清空所有缓存模型
+```
+
+### `ModelPullInput`
+
+```kotlin
+data class ModelPullInput(
+    val model_name:   String,                     // "org/repo" 或别名
+    val quant:        String? = null,             // 例如 "Q4_0"、"Q4_K_M"
+    val hub:          HubSource = HubSource.AUTO, // AUTO 按 model_name 路由
+    val local_path:   String? = null,             // 仅在 hub == LOCALFS 时使用
+    val hf_token:     String? = null,             // 也可回退到 GENIEX_HFTOKEN 环境变量
+    val chipset:      String? = null,             // Android 上拉取 AI Hub 必填（例如 "SM8750"）
+    val display_name: String? = null,
+)
+```
+
+### `HubSource`
+
+```kotlin
+enum class HubSource(val value: Int) {
+    AUTO(0),          // 按前缀路由（例如 qualcomm/* → AIHUB）
+    HUGGINGFACE(1),
+    MODELSCOPE(2),
+    AIHUB(3),
+    VOLCES(4),
+    LOCALFS(127),
+}
+```
+
+### `ModelPaths`
+
+由 `getPaths()` 返回。其字段可直接传入 `LlmCreateInput` / `VlmCreateInput`：
+
+```kotlin
+data class ModelPaths(
+    val model_path:     String,
+    val model_dir:      String,
+    val model_name:     String,
+    val plugin_id:      String,            // 权威值——优先于 UI 选择
+    val mmproj_path:    String? = null,    // VLM 投影权重
+    val tokenizer_path: String? = null,
+    val device_id:      String? = null,
+)
+```
+
+<Note>
+在 Android 上拉取 AI Hub **必须**显式传 `chipset`。Rust 侧仅在骁龙 Windows 上自动识别。骁龙 8 至尊版用 `"SM8750"`，骁龙 8 至尊版 Gen 5 用 `"SM8850"`。
+</Note>
+
+---
+
+## **数据结构**
+
+### `LlmCreateInput`
+
+```kotlin
+data class LlmCreateInput(
+    val model_name:     String,
+    val model_path:     String,
+    val tokenizer_path: String? = null,
+    val config:         ModelConfig,
+    val plugin_id:      String? = null,
+    val device_id:      String? = null,
+)
+```
+
+### `VlmCreateInput`
+
+```kotlin
+data class VlmCreateInput(
+    val model_name:  String,
+    val model_path:  String,
+    val mmproj_path: String? = null,     // GGUF VLM 的视觉投影权重
+    val config:      ModelConfig,
+    val plugin_id:   String? = null,
+    val device_id:   String? = null,
+)
+```
+
+### `ModelConfig`
+
+```kotlin
+data class ModelConfig(
+    var nCtx:                  Int     = 2048,     // 上下文大小；0 表示模型默认值
+    var nThreads:              Int     = 8,
+    var nThreadsBatch:         Int     = 8,
+    var nBatch:                Int     = 2048,
+    var nUBatch:               Int     = 512,
+    var nSeqMax:               Int     = 1,
+    var nGpuLayers:            Int     = 0,
+    val chat_template_path:    String  = "",
+    val chat_template_content: String  = "",
+    val max_tokens:            Int     = 2048,
+    val enable_thinking:       Boolean = false,
+    val verbose:               Boolean = false,
+)
+```
+
+<Note>
+JNI 会根据 `device_id` 改写 `nGpuLayers`：`cpu` 强制为 0，`npu` 强制为 999。`gpu` 会保留传入值——如要全层卸载，请设为 999。
+</Note>
+
+### `ChatMessage`
+
+```kotlin
+data class ChatMessage(
+    var role:    String,   // "system" | "user" | "assistant"
+    var content: String,
+)
+```
+
+### `VlmChatMessage` / `VlmContent`
+
+```kotlin
+data class VlmChatMessage(
+    val role:     String?,                 // "system" | "user" | "assistant"
+    val contents: List<VlmContent>,
+)
+
+data class VlmContent(
+    val type: String?,                     // "text" | "image"
+    val text: String?,                     // 文本内容；image 时为绝对路径
+)
+```
+
+### `GenerationConfig`
+
+```kotlin
+data class GenerationConfig(
+    var maxTokens:     Int              = 32,
+    var stopWords:     Array<String>?   = null,
+    var stopCount:     Int              = 0,
+    var nPast:         Int              = 0,
+    var samplerConfig: SamplerConfig?   = null,
+    var imagePaths:    Array<String>?   = null,
+    var imageCount:    Int              = 0,
+    var audioPaths:    Array<String>?   = null,
+    var audioCount:    Int              = 0,
+)
+```
+
+<Note>
+`maxTokens` 默认为 **32**。多数场景应设为更大值（例如 `maxTokens = 2048`）。
+</Note>
+
+### `LlmStreamResult`
+
+```kotlin
+sealed class LlmStreamResult {
+    data class Token(val text: String)              : LlmStreamResult()
+    data class Completed(val profile: ProfilingData) : LlmStreamResult()
+    data class Error(val throwable: Throwable)      : LlmStreamResult()
+}
+```
+
+---
+
+## **llama.cpp（GGUF 模型）**
+
+可在 CPU、Adreno GPU 或 Hexagon NPU 上运行任意 GGUF 模型，设备由 `device_id` 控制。
+
+### LLM
+
+```kotlin
+val paths = ModelManagerWrapper.getPaths("unsloth/Qwen3-0.6B-GGUF")
+    ?: error("Model not downloaded")
+
+LlmWrapper.builder()
+    .llmCreateInput(
+        LlmCreateInput(
+            model_name = paths.model_name,
+            model_path = paths.model_path,
+            config     = ModelConfig(nCtx = 4096),
+            plugin_id  = "llama_cpp",
+            device_id  = null,       // null → npu（骁龙上推荐）
+        )
+    )
+    .build()
+    .onSuccess { llmWrapper = it }
+    .onFailure { println("Error: ${it.message}") }
+
+val chat = arrayListOf(ChatMessage("user", "What is AI?"))
+
+llmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
+    llmWrapper.generateStreamFlow(t.formattedText, GenerationConfig(maxTokens = 2048)).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token     -> print(result.text)
+            is LlmStreamResult.Completed -> println("\nDone")
+            is LlmStreamResult.Error     -> println("Error: ${result.throwable}")
+        }
+    }
+}
+```
+
+#### 设备变体
+
+| 目标 | `device_id` | 备注 |
+|---|---|---|
+| 骁龙 NPU（推荐） | `"npu"` 或 `null` | Hexagon NPU 加速。 |
+| Adreno GPU（OpenCL） | `"gpu"` | 设 `nGpuLayers = 999` 全层卸载。 |
+| 纯 CPU | `"cpu"` | 兼容任意 ARM64 设备。 |
+
+### VLM
+
+GGUF VLM 需要两份产物：LLM 权重（`model_path`）与视觉投影（`mmproj_path`）。两者均来自 `getPaths()`：
+
+```kotlin
+val paths = ModelManagerWrapper.getPaths("unsloth/Qwen3-VL-2B-Instruct-GGUF")
+    ?: error("Model not downloaded")
+
+VlmWrapper.builder()
+    .vlmCreateInput(
+        VlmCreateInput(
+            model_name  = paths.model_name,
+            model_path  = paths.model_path,
+            mmproj_path = paths.mmproj_path,
+            config      = ModelConfig(nCtx = 4096),
+            plugin_id   = "llama_cpp",
+            device_id   = null,
+        )
+    )
+    .build()
+    .onSuccess { vlmWrapper = it }
+
+val msg = VlmChatMessage(
+    role     = "user",
+    contents = listOf(
+        VlmContent("image", "/storage/emulated/0/Pictures/example.jpg"),
+        VlmContent("text",  "Describe this image."),
+    ),
+)
+val chat = arrayListOf(msg)
+
+vlmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
+    val gen = vlmWrapper.injectMediaPathsToConfig(chat.toTypedArray(), GenerationConfig(maxTokens = 2048))
+    vlmWrapper.generateStreamFlow(t.formattedText, gen).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token     -> print(result.text)
+            is LlmStreamResult.Completed -> println("\nDone")
+            is LlmStreamResult.Error     -> println("Error: ${result.throwable}")
+        }
+    }
+}
+```
+
+<Note>
+请始终把 `t.formattedText`（chat template 化后的 prompt）传入 `generateStreamFlow`，**不要**传原始用户文本。原生流水线把 prompt 视为已格式化。
+</Note>
+
+---
+
+## **QAIRT（AI Hub NPU 模型）**
+
+来自 Qualcomm AI Hub 的预编译模型。仅 NPU，绑定指定芯片组（`SM8750` = 骁龙 8 至尊版，`SM8850` = 骁龙 8 至尊版 Gen 5）。
+
+### 下载 AI Hub 模型
+
+```kotlin
+ModelManagerWrapper.pullFlow(
+    ModelPullInput(
+        model_name = "qualcomm/Qwen2.5-VL-7B-Instruct",
+        hub        = HubSource.AUTO,     // AUTO 把 `qualcomm/*` 路由到 AI Hub
+        chipset    = "SM8750",           // Android 上必填
+    )
+).collect { event ->
+    when (event) {
+        is ModelManagerWrapper.PullEvent.Progress  -> updateProgressBar(event.files)
+        ModelManagerWrapper.PullEvent.Completed    -> println("done")
+        is ModelManagerWrapper.PullEvent.Error     -> println("err ${event.code}: ${event.message}")
+    }
+}
+```
+
+### 已支持模型
+
+| 模态 | Hub 仓库 |
+|---|---|
+| LLM | `qualcomm/Qwen3-4B-Instruct-2507` |
+| VLM | `qualcomm/Qwen2.5-VL-7B-Instruct` |
+
+### LLM
+
+```kotlin
+val paths = ModelManagerWrapper.getPaths("qualcomm/Qwen3-4B-Instruct-2507")
+    ?: error("Model not downloaded")
+
+LlmWrapper.builder()
+    .llmCreateInput(
+        LlmCreateInput(
+            model_name = paths.model_name,
+            model_path = paths.model_path,
+            config     = ModelConfig(max_tokens = 2048, enable_thinking = false),
+            plugin_id  = "qairt",
+            device_id  = null,           // null → NPU（QAIRT 唯一选项）
+        )
+    )
+    .build()
+    .onSuccess { llmWrapper = it }
+    .onFailure { println("Error: ${it.message}") }
+
+val chat = arrayListOf(ChatMessage("user", "What is AI?"))
+
+llmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
+    llmWrapper.generateStreamFlow(t.formattedText, GenerationConfig()).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token     -> print(result.text)
+            is LlmStreamResult.Completed -> println("\nDone")
+            is LlmStreamResult.Error     -> println("Error: ${result.throwable}")
+        }
+    }
+}
+```
+
+<Note>
+QAIRT 会以 `PARAM_NOT_SUPPORTED` 拒绝 `nGpuLayers != 0` 与 `nCtx != 0`——KV 缓存与上下文长度由 AI Hub 模型包在编译期固化。两者保持默认即可，仅调整 `max_tokens` / `enable_thinking`。
+</Note>
+
+### VLM
+
+```kotlin
+val paths = ModelManagerWrapper.getPaths("qualcomm/Qwen2.5-VL-7B-Instruct")
+    ?: error("Model not downloaded")
+
+VlmWrapper.builder()
+    .vlmCreateInput(
+        VlmCreateInput(
+            model_name  = paths.model_name,
+            model_path  = paths.model_path,
+            mmproj_path = paths.mmproj_path,
+            config      = ModelConfig(max_tokens = 2048, enable_thinking = false),
+            plugin_id   = "qairt",
+            device_id   = null,
+        )
+    )
+    .build()
+    .onSuccess { vlmWrapper = it }
+
+val msg = VlmChatMessage(
+    role     = "user",
+    contents = listOf(
+        VlmContent("image", "/storage/emulated/0/Pictures/cat.jpg"),
+        VlmContent("text",  "What's in this image?"),
+    ),
+)
+val chat = arrayListOf(msg)
+
+vlmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
+    val gen = vlmWrapper.injectMediaPathsToConfig(chat.toTypedArray(), GenerationConfig(maxTokens = 2048))
+    vlmWrapper.generateStreamFlow(t.formattedText, gen).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token     -> print(result.text)
+            is LlmStreamResult.Completed -> println("\nDone")
+            is LlmStreamResult.Error     -> println("Error: ${result.throwable}")
+        }
+    }
+}
+```
+
+<Note>
+请把 **chat template 化的 prompt**（`t.formattedText`）传入 `generateStreamFlow`，绝不要传原始用户文本。QAIRT VLM 把 prompt 视为已格式化——传原始文本会得到退化的输出。
+</Note>
+
+---
+
+## **需要帮助？**
+
+<CardGroup cols={2}>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/qualcomm/nexa-sdk/issues">
+    提交 bug、提需求或浏览开放的 Issue。
+  </Card>
+  <Card title="Slack" icon="slack" href="https://join.slack.com/t/nexa-ai-community/shared_invite/zt-3837k9xpe-LEty0disTTUnTUQ4O3uuNw">
+    开发者协作与资源。
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>

@@ -1,0 +1,72 @@
+---
+title: "Bring your own model"
+description: "Run a custom GGUF model from Hugging Face or load a self-converted QAIRT bundle from a local path."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+You can run any GGUF model on the llama.cpp backend, and load self-converted bundles on QAIRT.
+
+## **GGUF models from Hugging Face (llama.cpp)**
+
+Any compatible GGUF model on Hugging Face works. Copy the repo path and pass it to `geniex infer`:
+
+```powershell windows
+geniex infer <org>/<repo>-GGUF
+```
+
+For example:
+
+```powershell windows
+geniex infer unsloth/Phi-4-mini-instruct-GGUF
+```
+
+When prompted:
+- **Model type** — `vlm` for vision-language models (Qwen3-VL family), `llm` otherwise.
+- **Quantization** — `Q4_0` for best Hexagon NPU support. See [Quantization](/en/models/quantization).
+
+<Note>Multimodal support for `Qwen3.5` and `Gemma4` is coming soon — pick `llm` for those.</Note>
+
+## **QAIRT self-converted bundles**
+
+QAIRT bundles outside the `qualcomm/*` namespace need to be downloaded locally first, then pulled with `--model-hub localfs`.
+
+Make sure the [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/en/guides/cli) is installed, then on Windows ARM64:
+
+```powershell windows
+# Set model name (must match the HF subfolder name exactly)
+$model = "llama_v3_2_1b_instruct"
+
+# Download the model from Hugging Face
+hf download yichqian/geniex-qairt-models `
+  --local-dir $model `
+  --include "$model/**"
+
+# Pull using the downloaded folder (absolute path)
+geniex pull local/$model --model-hub localfs `
+  --local-path (Resolve-Path "$model\$model").Path
+
+# Run inference
+geniex infer local/$model
+```
+
+<Note>This flow uses the QAIRT plugin, which is NPU-only. Pass `--device npu` or omit the flag.</Note>
+
+## **Custom models in Python**
+
+In Python, point `from_pretrained` at a local path:
+
+```python
+# QAIRT bundle from a local directory
+model = AutoModelForCausalLM.from_pretrained(
+    r"C:\<your_path>\Qwen3-4B-Instruct-2507",
+    model_name="qwen3_4b_instruct_2507",
+    device_map="qairt",
+)
+```
+
+See the [Python API reference](/en/run/python/api-reference) for all parameters.
+
+<br />
+
+<Feedback/>

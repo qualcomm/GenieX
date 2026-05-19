@@ -25,7 +25,32 @@ Download `geniex-cli-setup-windows-arm64-<TAG>.exe` and the matching `geniex-sdk
 
 If the SDK name ends in `-selfsigned`, first follow [notes/run.md § Self-signed fallback](notes/run.md#self-signed-fallback) to import `ggml-htp-v1.cer` and enable test-signing. Full walkthrough: [notes/run.md § Running a prebuilt CI release](notes/run.md#running-a-prebuilt-ci-release-windows-on-snapdragon).
 
-### Linux (Docker)
+### Linux ARM64
+
+Install on a Snapdragon device (EVK, container, or any ARM64 Linux with a Qualcomm BSP):
+
+```bash
+curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
+```
+
+If the launcher's directory isn't on your `PATH` yet, the installer prints the exact line to add — typically:
+
+```bash
+echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc   # or ~/.zshrc / ~/.profile
+```
+
+Open a new shell or `source` that file, then use it:
+
+```bash
+geniex pull Qwen/Qwen3-0.6B-GGUF
+geniex infer Qwen/Qwen3-0.6B-GGUF -p "Hello, in one short sentence please."
+```
+
+Pin a version: `... | sh -s -- --version v0.1.8`. Override the install location: `... | sh -s -- --prefix /opt/geniex`. Other flags: `-q`, `--help`.
+
+---
+
+Prefer Docker (versioned image, repeatable, no host-side install):
 
 ```bash
 docker pull ghcr.io/qcom-ai-hub/geniex-cli:<TAG>

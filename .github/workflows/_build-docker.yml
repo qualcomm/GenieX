@@ -75,8 +75,7 @@ jobs:
           RAW_VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
-          bare="${RAW_VERSION#v}"
-          bazelisk build //cli/release/linux --//sdk:sdk_type=local "--define=VERSION=${bare}"
+          bazelisk build //cli/release/linux --//sdk:sdk_type=local "--define=VERSION=${RAW_VERSION}"
 
       - name: Install crane (for OCI tarball → registry push)
         shell: bash

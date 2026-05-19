@@ -47,7 +47,7 @@ const (
 	defaultChunkSize  = 4 * 1024 * 1024
 	defaultNumWorkers = 16
 
-	linuxInstallScriptURL = "https://raw.githubusercontent.com/qcom-ai-hub/geniex/main/cli/release/linux/install.sh"
+	linuxInstallScriptURL = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh"
 )
 
 func update() *cobra.Command {

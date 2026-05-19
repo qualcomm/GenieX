@@ -10,7 +10,7 @@ git tag v1.2.3 && git push origin v1.2.3
 - Bare `vX.Y.Z` tags publish immediately.
 - Assets: `geniex-sdk-{linux,windows}-arm64-<tag>.zip`, `geniex-cli-linux-arm64-<tag>.tar.gz`, `geniex-cli-setup-windows-arm64-<tag>.exe`, `*.whl`, `*.aar`, and per-file `.sha256` sidecars.
 - Re-running the same tag via **Actions → Release → Run workflow** is safe — assets are replaced.
-- S3 mirror at `s3://qaihub-public-assets/qai-hub-geniex/`: the Windows SDK zip and the `geniex-cli-setup-windows-arm64-<tag>.exe` installer go up on every tag; the mutable pointer `geniex-cli.exe` is only advanced on stable (non-prerelease) tags and is served with `Cache-Control: no-cache` so downloaders always pick up the newest release.
+- S3 mirror at `s3://qaihub-public-assets/qai-hub-geniex/` — see [§ S3 mirror & manifest](#s3-mirror--manifest) below.
 
 > For the developer/user side of HTP signing (cert import, test-signing), see [run.md § Self-signed fallback](run.md#self-signed-fallback).
 
@@ -76,6 +76,81 @@ This is the algorithm `/release` follows. Apply in order.
 - Latest stable `v0.3.2`. `git log v0.3.2..HEAD` has one `fix:` and one `docs:`. On `main`, first tag → `v0.3.3-rc.1`, then `v0.3.3`.
 - Latest stable `v0.3.2`. Log contains a `feat:` adding a new backend. On a feature branch → `v0.4.0-alpha.1`; after merge to `main` → `v0.4.0-rc.1` → `v0.4.0`.
 - On `v0.4.0-rc.2`, a CLI flag rename (breaking) lands. Target rises from `0.4.0` to `0.5.0`. Leave `-rc.2` alone; next tag is `v0.5.0-alpha.1` or `v0.5.0-rc.1` depending on the branch.
+
+## S3 mirror & manifest
+
+A subset of every release is mirrored to `s3://qaihub-public-assets/qai-hub-geniex/` (anonymous-GET via `https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/...`) so that apps and installers can fetch artifacts without GitHub-API rate limits.
+
+### Layout (flat)
+
+All objects live directly under the prefix — no `<tag>/` subdirectories. The `<tag>` in each filename disambiguates versions.
+
+| Object | Per tag? | Cache | Purpose |
+|---|---|---|---|
+| `geniex-sdk-windows-arm64-<tag>.zip(.sha256)` | every tag | default | Windows SDK |
+| `geniex-sdk-linux-arm64-<tag>.zip(.sha256)` | every tag | default | Linux SDK |
+| `geniex-cli-setup-windows-arm64-<tag>.exe(.sha256)` | every tag | default | Windows CLI installer (versioned) |
+| `geniex-cli-linux-arm64-<tag>.tar.gz(.sha256)` | every tag | default | Linux CLI archive (versioned) |
+| `install-<tag>.sh(.sha256)` | every tag | default | Linux install script (versioned, pinned via `--version`) |
+| `geniex-demo-<tag>.apk(.sha256)` | every tag | default | Android demo APK (versioned) |
+| `geniex-cli.exe` | stable only | `no-cache` | Mutable pointer to latest stable Windows installer |
+| `geniex-cli-linux-arm64.tar.gz(.sha256)` | stable only | `no-cache` | Mutable pointer consumed by `install.sh` |
+| `install.sh` | stable only | `no-cache` | Mutable install script — `curl ... \| sh` entrypoint |
+| `geniex-demo.apk` | stable only | `no-cache` | Mutable pointer to latest stable demo APK |
+| `manifest-<tag>.json` | every tag | `immutable` | Per-tag asset listing |
+| `index.json` | every tag | `no-cache` | Full version catalogue |
+| `latest.json` | stable only | `no-cache` | Pointer to the latest stable manifest |
+
+Other assets (AAR, sdist, HTP cert/to-sign zips) ship via GitHub Releases / Maven Central / TestPyPI only — not via S3.
+
+### Manifest contract for client apps
+
+Schema lives in [.github/scripts/release_s3_manifest.py](../.github/scripts/release_s3_manifest.py); all files carry `schema_version: 1`.
+
+- **Update check (lightest)** — GET `latest.json`. Compare `tag` with the locally installed version. Cached `no-cache`, so the response is always current. Only present once a stable tag has shipped.
+
+- **Version picker (history / rollback)** — GET `index.json`:
+
+  ```json
+  {
+    "schema_version": 1,
+    "updated_at": "2026-05-19T08:23:11Z",
+    "latest_stable": "v0.1.5",
+    "latest_prerelease": "v0.1.6-rc.2",
+    "versions": [
+      { "tag": "v0.1.6-rc.2", "is_prerelease": true,  "released_at": "...", "manifest": "manifest-v0.1.6-rc.2.json" },
+      { "tag": "v0.1.5",      "is_prerelease": false, "released_at": "...", "manifest": "manifest-v0.1.5.json" }
+    ]
+  }
+  ```
+
+- **Asset download** — GET the per-tag manifest referenced by `versions[].manifest`:
+
+  ```json
+  {
+    "schema_version": 1,
+    "tag": "v0.1.5",
+    "is_prerelease": false,
+    "released_at": "...",
+    "llama_sha": "abc123",
+    "htp_signed": true,
+    "assets": [
+      {
+        "name": "geniex-sdk-windows-arm64-v0.1.5.zip",
+        "url":  "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-sdk-windows-arm64-v0.1.5.zip",
+        "size": 123456789,
+        "sha256": "...",
+        "kind": "sdk",
+        "platform": "windows",
+        "arch": "arm64"
+      }
+    ]
+  }
+  ```
+
+  `assets[].url` always points at the versioned object (never at the mutable `geniex-cli.exe` / `geniex-cli-linux-arm64.tar.gz` / `install.sh` / `geniex-demo.apk`), so the referenced bytes are immutable and the listed `sha256` is authoritative. `kind` is one of `sdk` / `cli-installer` / `cli-archive` / `install-script` / `android-demo` / `sha256`.
+
+The per-tag manifest is byte-stable across workflow re-runs of the same tag — `released_at` is preserved from the first publish, so clients can cache it forever.
 
 ## Hexagon HTP signing
 

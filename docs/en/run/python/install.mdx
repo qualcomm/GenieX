@@ -1,0 +1,100 @@
+---
+title: "Install"
+description: "Install the GenieX Python SDK on Windows ARM64 or Linux ARM64."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+The GenieX Python SDK ships as an ARM64 wheel for Windows ARM64 and Linux ARM64.
+
+## **Prerequisites**
+
+- Snapdragon X-series device (X Elite or X2 Elite). See [Supported devices](/en/get-started/devices).
+- **ARM64 Python 3.10+**
+
+## **Install via pip**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    If Python is not installed, download [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe).
+
+    For QDC, we recommend using the Python script method below.
+
+    Create a virtual environment and install from test PyPI:
+
+    ```powershell
+    python -m venv geniex-env
+    .\geniex-env\Scripts\Activate.ps1
+    pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    ```
+
+    This pulls the package from [test PyPI](https://test.pypi.org/project/geniex/).
+
+    <Note>
+    **Troubleshooting: SSL / certificate errors (corporate proxy / QDC)**
+
+    If installation fails with an SSL certificate error — common on corporate networks with TLS inspection, including **Qualcomm Developer Cloud (QDC)** — pre-download the SDK manually and point the installer at it. Run these PowerShell commands **before** `pip install`:
+
+    ```powershell
+    $env:GENIEX_VERSION = "v0.1.5"
+    $base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/$env:GENIEX_VERSION"
+    $zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
+
+    Invoke-WebRequest "$base/$zip"        -OutFile $zip
+    Invoke-WebRequest "$base/$zip.sha256" -OutFile "$zip.sha256"
+
+    $env:GENIEX_SDK_DOWNLOAD_URL = "file:///$($(Get-Location).Path.Replace('\','/'))"
+    pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+
+    Remove-Item $zip, "$zip.sha256"
+    Remove-Item Env:GENIEX_SDK_DOWNLOAD_URL
+    ```
+    </Note>
+  </Tab>
+
+  <Tab title="Linux ARM64">
+    The Qualcomm embedded Linux (Yocto) ships with Python pre-installed. Verify with:
+
+    ```bash
+    python3 --version
+    ```
+
+    Directly pip install:
+
+    ```bash
+    python3 -m pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    ```
+
+    This pulls the package from [test PyPI](https://test.pypi.org/project/geniex/) and auto-fetches the Linux ARM64 SDK libraries.
+
+    <Note>
+    **Building Python from source (non-QDC devices)**
+
+    If you are not using QDC but your own Qualcomm IoT device and Python is not pre-installed, you can download and build from source:
+
+    ```bash
+    apt update && apt install -y build-essential libffi-dev libssl-dev zlib1g-dev
+    wget https://www.python.org/ftp/python/3.13.3/Python-3.13.3.tar.xz
+    tar -xf Python-3.13.3.tar.xz
+    cd Python-3.13.3
+    ./configure --enable-optimizations
+    make -j$(nproc)
+    make altinstall
+    python3.13 --version
+    ```
+    </Note>
+  </Tab>
+</Tabs>
+
+## **Verify**
+
+```python
+import geniex
+print(geniex.version())
+```
+
+Now jump to the [Quickstart](/en/run/python/quickstart).
+
+<br />
+
+<Feedback/>
