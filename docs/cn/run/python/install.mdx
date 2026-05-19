@@ -35,9 +35,11 @@ GenieX Python SDK 以 ARM64 wheel 形式发布，覆盖 Windows ARM64 与 Linux 
 
     如果安装时出现 SSL 证书错误——常见于启用了 TLS 检测的企业网络，包括 **Qualcomm Developer Cloud（QDC）**——请预先手动下载 SDK，并让安装程序指向本地文件。在 `pip install` **之前**执行以下 PowerShell 命令：
 
+    *仅适用于 GenieX v0.1.8 及更新版本。*
+
     ```powershell
     $env:GENIEX_VERSION = "v0.1.8"
-    $base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/$env:GENIEX_VERSION"
+    $base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex"
     $zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
 
     Invoke-WebRequest "$base/$zip"        -OutFile $zip
