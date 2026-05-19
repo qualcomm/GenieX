@@ -15,31 +15,25 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ## **前置条件**
 
-GenieX Python SDK 需要 ARM64 版本的 Python。在安装之前，请下载并安装 [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe)。
-
-## **方法 1：使用 Python 脚本**
-
-对于 QDC，我们推荐使用以下 Python 脚本方法。
+GenieX Python SDK 需要 ARM64 版本的 Python 3.10+。
 
 ## **安装**
 
-在 QDC 上，创建虚拟环境并使用 pip 安装 GenieX Python SDK：
+<Tabs>
+  <Tab title="Windows ARM64">
+    ### **Windows ARM64**
 
-```powershell
-python -m venv geniex-env
-.\geniex-env\Scripts\Activate.ps1
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
-```
-这将从 [test PyPI](https://test.pypi.org/project/geniex/) 下载 Python 包。
+    如未安装 Python，请下载 [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe)。
 
     对于 QDC，我们推荐使用以下 Python 脚本方法。
 
     创建虚拟环境并使用 pip 安装 GenieX Python SDK：
 
-```powershell
-$env:GENIEX_VERSION = "v0.1.5"
-$base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/$env:GENIEX_VERSION"
-$zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
+    ```powershell
+    python -m venv geniex-env
+    .\geniex-env\Scripts\Activate.ps1
+    pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+    ```
 
     这将从 [test PyPI](https://test.pypi.org/project/geniex/) 下载 Python 包。
 
