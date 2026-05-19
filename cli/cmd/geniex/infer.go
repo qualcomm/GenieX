@@ -180,7 +180,6 @@ func infer() *cobra.Command {
 		}
 
 		geniex_sdk.Init()
-		defer geniex_sdk.DeInit()
 
 		switch manifest.ModelType {
 		case types.ModelTypeLLM:
@@ -191,6 +190,8 @@ func infer() *cobra.Command {
 		default:
 			panic("not support model type")
 		}
+
+		geniex_sdk.DeInit()
 
 		switch err {
 		case nil:
