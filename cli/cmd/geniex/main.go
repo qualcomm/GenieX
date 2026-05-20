@@ -115,7 +115,10 @@ func main() {
 	common.ApplyLogLevel()
 	common.EnableUTF8Console()
 
-	if err := RootCmd().Execute(); err != nil {
+	cmd := RootCmd()
+	applyHelpStyle(cmd)
+	cmd.SetErr(render.NewStyledWriter(os.Stderr, render.GetTheme().Error))
+	if err := cmd.Execute(); err != nil {
 		slog.Error("geniex failed", "err", err)
 		os.Exit(1)
 	}

@@ -20,9 +20,7 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strings"
 	"time"
-	"unicode"
 
 	"github.com/bytedance/sonic"
 	"github.com/openai/openai-go/v3"
@@ -52,29 +50,7 @@ func run() *cobra.Command {
 		runCmd.Flags().AddFlagSet(flags)
 	}
 
-	runCmd.SetUsageFunc(func(c *cobra.Command) error {
-		w := c.OutOrStdout()
-		fmt.Fprint(w, "Usage:")
-		if c.Runnable() {
-			fmt.Fprintf(w, "\n  %s", c.UseLine())
-		}
-		if len(c.Aliases) > 0 {
-			fmt.Fprintf(w, "\n\nAliases:\n")
-			fmt.Fprintf(w, "  %s", c.NameAndAliases())
-		}
-
-		for _, flags := range flagGroups {
-			fmt.Fprintf(w, "\n\n%s Flags:\n", flags.Name())
-			fmt.Fprint(w, strings.TrimRightFunc(flags.FlagUsages(), unicode.IsSpace))
-		}
-
-		if c.HasAvailableInheritedFlags() {
-			fmt.Fprintf(w, "\n\nGlobal Flags:\n")
-			fmt.Fprint(w, strings.TrimRightFunc(c.InheritedFlags().FlagUsages(), unicode.IsSpace))
-		}
-		fmt.Fprintln(w)
-		return nil
-	})
+	runCmd.SetUsageFunc(flagGroupedUsage)
 
 	runCmd.Run = func(cmd *cobra.Command, args []string) {
 		name, quant := model_hub.NormalizeModelName(args[0])
