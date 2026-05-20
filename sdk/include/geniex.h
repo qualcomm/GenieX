@@ -261,6 +261,16 @@ GENIEX_API const char* geniex_version(void);
  */
 GENIEX_API const char* geniex_qairt_version(void);
 
+/**
+ * @brief Get the bundled llama.cpp build commit hash.
+ *
+ * @return Null-terminated UTF-8 string. Returns "unavailable" when the
+ *         llama.cpp plugin was disabled at build time.
+ *
+ * @thread_safety: Thread-safe.
+ */
+GENIEX_API const char* geniex_llama_cpp_version(void);
+
 /** Output structure containing the list of available plugins */
 typedef struct {
     geniex_PluginId* plugin_ids;   /**< Array of plugin IDs (UTF-8) (caller must free with geniex_free) */

@@ -148,6 +148,8 @@ const char* geniex_version() { return version; }
 
 const char* geniex_qairt_version() { return build_config::kQairtVersion; }
 
+const char* geniex_llama_cpp_version() { return build_config::kLlamaCppVersion; }
+
 // Get Plugin List
 
 int32_t geniex_get_plugin_list(geniex_GetPluginListOutput* output) {

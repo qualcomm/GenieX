@@ -32,8 +32,9 @@ func version() *cobra.Command {
 	}
 
 	versionCmd.Run = func(cmd *cobra.Command, args []string) {
-		fmt.Println("QAIRT Version:      " + geniex_sdk.QairtVersion())
-		fmt.Println("GenieX CLI Version: " + Version)
+		fmt.Println("GenieX CLI Version:      " + Version)
+		fmt.Println("QAIRT Plugin Version:    " + geniex_sdk.QairtVersion())
+		fmt.Println("LlamaCPP Plugin Hash:    " + geniex_sdk.LlamaCppVersion())
 	}
 
 	return versionCmd

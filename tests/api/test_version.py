@@ -30,3 +30,8 @@ def test_qairt_runtime_version_nonempty(geniex_session):
     # library, not the device.
     v = geniex.qairt_version()
     assert isinstance(v, str) and v
+
+
+def test_llama_cpp_version_nonempty(geniex_session):
+    v = geniex.llama_cpp_version()
+    assert isinstance(v, str) and v

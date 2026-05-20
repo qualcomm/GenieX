@@ -156,6 +156,9 @@ def _bind_all() -> None:
     lib.geniex_qairt_version.argtypes = []
     lib.geniex_qairt_version.restype = c_char_p
 
+    lib.geniex_llama_cpp_version.argtypes = []
+    lib.geniex_llama_cpp_version.restype = c_char_p
+
     lib.geniex_get_plugin_list.argtypes = [POINTER(geniex_GetPluginListOutput)]
     lib.geniex_get_plugin_list.restype = c_int32
 
@@ -380,3 +383,10 @@ def qairt_version() -> str:
     _ensure_bound()
     lib = load_library()
     return lib.geniex_qairt_version().decode()
+
+
+def llama_cpp_version() -> str:
+    """Return the bundled llama.cpp build commit hash."""
+    _ensure_bound()
+    lib = load_library()
+    return lib.geniex_llama_cpp_version().decode()

@@ -97,6 +97,11 @@ func QairtVersion() string {
 	return C.GoString(C.geniex_qairt_version())
 }
 
+// LlamaCppVersion returns the bundled llama.cpp build commit hash.
+func LlamaCppVersion() string {
+	return C.GoString(C.geniex_llama_cpp_version())
+}
+
 type PluginListOutput struct {
 	PluginIDs []string
 }

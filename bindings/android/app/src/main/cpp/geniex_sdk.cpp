@@ -73,3 +73,11 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_GeniexSdk_registerPlugin(
     void* create_plugin_func = dlsym(pluginSo, "create_plugin");
     return geniex_register_plugin((geniex_plugin_id_func)plugin_id_func, (geniex_create_plugin_func)create_plugin_func);
 }
+
+extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_GeniexSdk_qairtVersion(JNIEnv* env, jobject thiz) {
+    return env->NewStringUTF(geniex_qairt_version());
+}
+
+extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_GeniexSdk_llamaCppVersion(JNIEnv* env, jobject thiz) {
+    return env->NewStringUTF(geniex_llama_cpp_version());
+}
