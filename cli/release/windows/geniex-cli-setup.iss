@@ -1,7 +1,10 @@
 #define MyAppName "GenieX CLI"
 #define MyAppPublisher "GenieX"
 #define MyAppExeName "geniex.exe"
-#define MyAppIconName "geniex.ico"
+#define MyAppIconSrc "geniex.ico"
+; Version-stamped destination filename so the Windows shell icon cache,
+; which keys on full path, does not serve a stale icon after an upgrade.
+#define MyAppIconName "geniex-" + Version + ".ico"
 #define MyAppGuid "e9b30237-d65d-4a79-a7c0-f4e217e78f54"
 #define LauncherTarget "powershell.exe"
 #define LauncherArgs "-NoExit -Command geniex"
@@ -19,7 +22,7 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 ChangesEnvironment=yes
-SetupIconFile={#MyAppIconName}
+SetupIconFile={#MyAppIconSrc}
 PrivilegesRequired=lowest
 UninstallDisplayName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppIconName}
@@ -28,7 +31,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 
 [Files]
 #include ArtifactIss
-Source: "{#MyAppIconName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#MyAppIconSrc}"; DestDir: "{app}"; DestName: "{#MyAppIconName}"; Flags: ignoreversion
 
 [Registry]
 Root: HKCU; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{#MyAppExeName}"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName}"; Flags: uninsdeletekey
