@@ -3,6 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "common",
     srcs = [
+        "console_other.go",
+        "console_windows.go",
         "log.go",
         "process.go",
         "repl.go",

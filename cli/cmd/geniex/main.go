@@ -113,6 +113,7 @@ func checkDependency() {
 func main() {
 	// log
 	common.ApplyLogLevel()
+	common.EnableUTF8Console()
 
 	if err := RootCmd().Execute(); err != nil {
 		slog.Error("geniex failed", "err", err)
