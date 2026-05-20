@@ -132,7 +132,7 @@ forwards every log line to the registered callback.
 ## 5. Opening a PR
 
 - **Base**: `main`.
-- **Merge strategy**: squash merge. The final commit is the PR title, so **the PR title MUST follow the Conventional Commits format** in § 1. Reviewers and agents reject titles that do not.
+- **Merge strategy**: Rebase. **The PR title MUST follow the Conventional Commits format** in § 1. Reviewers and agents reject titles that do not.
 - **Body**: follow the shape seen in recent merged PRs — `## Summary`, optional subsections for large changes, `## Test plan` as a checklist, and a `Closes #<issue>` line.
 - **Reviewers**: no required reviewers today; request review from the owner of the area you touched.
 
