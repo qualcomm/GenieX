@@ -19,3 +19,7 @@ modelfiles/*
 
 # Prebuilt Android demo APKs — distribute via GitHub Releases, not in-repo.
 *.apk
+
+# Benchmark output (timestamped JSON + Markdown per run).
+tests/benchmark/results/*.json
+tests/benchmark/results/*.md
