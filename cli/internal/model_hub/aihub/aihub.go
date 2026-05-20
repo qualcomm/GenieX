@@ -181,7 +181,7 @@ func (c *Client) fetchJSON(ctx context.Context, url string) ([]byte, error) {
 }
 
 // aiHubOrgs are HF-style orgs that route to the AI Hub pull path.
-var aiHubOrgs = []string{"qualcomm"}
+var aiHubOrgs = []string{"qualcomm", "ai-hub-models"}
 
 // IsAIHubName reports whether name belongs to an AI Hub org and returns
 // the repo portion (e.g. "qualcomm/Qwen3-4B" → "Qwen3-4B", true).
