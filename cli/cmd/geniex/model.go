@@ -51,7 +51,7 @@ func pull() *cobra.Command {
 		GroupID: "model",
 		Use:     "pull <model-name>",
 
-		Short: "Pull model from HuggingFace",
+		Short: "Pull model from HuggingFace or Qualcomm AI Hub Models",
 		Long:  "Download and cache a model by name.",
 	}
 
