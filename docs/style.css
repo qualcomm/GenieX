@@ -705,6 +705,8 @@ nav a:has(img.nav-logo) *,
   padding-top: 10px !important;
   padding-bottom: 0 !important;
   height: auto !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
   border-bottom: 1px solid #0000001a !important;
 }
 
@@ -850,6 +852,8 @@ button[data-state="active"] > div.absolute {
   border-top-right-radius: 0 !important;
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
   background-color: #f7f7f8 !important;
   --shiki-light-bg: #f7f7f8 !important;
   --shiki-bg: #f7f7f8 !important;
