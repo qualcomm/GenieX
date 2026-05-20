@@ -71,27 +71,21 @@ val copyBridgeLibs = tasks.register<Copy>("copyBridgeLibs") {
     from(File(libDir, "qairt")) {
         // Pull every top-level .so so new transitive deps in libgeniex_plugin.so
         // (e.g. libgeniex_vlm.so, libgeniex-proc.so) get packaged automatically.
-        // htp-files/ is excluded — see comment below.
         include("*.so")
-        exclude("htp-files/**")
         rename("libgeniex_plugin\\.so", "libgeniex_plugin_qairt.so")
     }
-    // Do NOT copy from qairt/htp-files/: on Windows CLI packages it ships
-    // Hexagon DSP (32-bit) binaries whose basenames collide with the
-    // Android CPU-side libs (libQnnSystem.so, libQnnSaver.so), and Android's
-    // loader then rejects them with "is 32-bit instead of 64-bit" when
-    // QAIRT dlopens them.
+    // QNN runtime libs (libQnnHtp.so, libQnnSystem.so, V79/V81 stubs/skels,
+    // libCalculator_skel.so, FastRPC bits) — installed by the SDK build via
+    // third-party/geniex-qairt/CMakeLists.txt's install(DIRECTORY) of its
+    // platform htp-files/ folder. Same single source the CLI/python SDK
+    // packages consume; no submodule needed at AAR build time.
     //
-    // Instead, pull from the qairt submodule's Android third-party dir
-    // which ships both the ARM64 CPU libs and DSP skels under
-    // non-colliding names:
-    //   - CPU ARM64: libQnnSystem.so, libQnnHtp*.so (dlopen'd by us)
-    //   - DSP:      libQnnHtpV??.so, libQnnHtpV??Skel.so, libCalculator_skel.so
-    //               (loaded by FastRPC on the Hexagon side; named so they
-    //               never collide with CPU libs, so Android happily
-    //               ships them alongside the ARM64 ones without trying
-    //               to dlopen them in the main process).
-    from(File(projectDir, "../../../third-party/geniex-qairt/third-party/android")) {
+    // The Windows CLI package's htp-files/ ships Hexagon DSP (32-bit)
+    // binaries whose basenames collide with the Android CPU-side libs and
+    // would crash on dlopen — but the Android sdk-android-arm64 artifact
+    // only ever contains ARM64 + non-colliding DSP skel names, so a flat
+    // copy into jniLibs/arm64-v8a/ is safe here.
+    from(File(libDir, "qairt/htp-files")) {
         include("*.so")
     }
     from(File(projectDir, "extLibs/arm64-v8a")) { include("*.so") }
