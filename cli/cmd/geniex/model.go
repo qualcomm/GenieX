@@ -49,10 +49,10 @@ var (
 func pull() *cobra.Command {
 	pullCmd := &cobra.Command{
 		GroupID: "model",
-		Use:     "pull <model-name>",
+		Use:     "pull <model-name>[:<precision>]",
 
 		Short: "Pull model from HuggingFace or Qualcomm AI Hub Models",
-		Long:  "Download and cache a model by name.",
+		Long:  "Download and cache a model by name. Append ':<precision>' to pull a specific precision; otherwise you'll be prompted to choose one.",
 	}
 
 	pullCmd.Args = cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs)

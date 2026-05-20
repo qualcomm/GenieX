@@ -118,9 +118,9 @@ var (
 func infer() *cobra.Command {
 	inferCmd := &cobra.Command{
 		GroupID: "inference",
-		Use:     "infer <model-name>",
+		Use:     "infer <model-name>[:<precision>]",
 		Short:   "Infer with a model",
-		Long:    "Run inference with a specified model. The model must be downloaded and cached locally.",
+		Long:    "Run inference with a specified model. The model must be downloaded and cached locally. Append ':<precision>' to pick a specific precision; otherwise you'll be prompted to choose one.",
 	}
 
 	inferCmd.Args = cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs)

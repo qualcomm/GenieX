@@ -42,9 +42,9 @@ var client openai.Client
 func run() *cobra.Command {
 	runCmd := &cobra.Command{
 		GroupID: "inference",
-		Use:     "run <model-name>",
+		Use:     "run <model-name>[:<precision>]",
 		Short:   "Infer a model with server",
-		Long:    "Infer a model with server. The server must be running and the model should be downloaded and cached locally.",
+		Long:    "Infer a model with server. The server must be running and the model should be downloaded and cached locally. Append ':<precision>' to pick a specific precision.",
 	}
 
 	runCmd.Args = cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs)
