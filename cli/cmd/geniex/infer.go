@@ -165,7 +165,8 @@ func infer() *cobra.Command {
 			checkDependency()
 			err = inferVLM(manifest, quant)
 		default:
-			panic("not support model type")
+			fmt.Println(render.GetTheme().Error.Sprintf("unsupported model type: %s", manifest.ModelType))
+			os.Exit(1)
 		}
 
 		geniex_sdk.DeInit()

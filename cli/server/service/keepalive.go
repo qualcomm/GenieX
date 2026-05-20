@@ -205,7 +205,7 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 			PluginID: manifest.PluginId,
 		})
 	default:
-		panic(fmt.Sprintf("not support type: %+#v", t))
+		return nil, fmt.Errorf("unsupported model type: %s", reflect.TypeFor[T]())
 	}
 	if e != nil {
 		return nil, e

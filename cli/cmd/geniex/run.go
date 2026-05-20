@@ -86,7 +86,8 @@ func run() *cobra.Command {
 		case types.ModelTypeLLM, types.ModelTypeVLM:
 			err = runCompletions(manifest, quant)
 		default:
-			panic("not support model type")
+			fmt.Println(render.GetTheme().Error.Sprintf("unsupported model type: %s", manifest.ModelType))
+			os.Exit(1)
 		}
 
 		switch err {

@@ -76,7 +76,7 @@ func (r *Repl) GetPrompt() (string, error) {
 		}
 		rl, err := readline.New(config)
 		if err != nil {
-			panic(err)
+			return "", fmt.Errorf("init readline: %w", err)
 		}
 		r.rl = rl
 
