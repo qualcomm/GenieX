@@ -451,11 +451,13 @@ func (v *VLM) Generate(input VlmGenerateInput) (*VlmGenerateOutput, error) {
 	defer freeVlmGenerateOutput(&cOutput)
 
 	res := C.geniex_vlm_generate(v.ptr, cInput, &cOutput)
-	if res < 0 {
+	if res < 0 && res != C.GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH {
 		return nil, SDKError(res)
 	}
-
 	output := newVlmGenerateOutputFromCPtr(&cOutput)
+	if res < 0 {
+		return &output, SDKError(res)
+	}
 
 	return &output, nil
 }

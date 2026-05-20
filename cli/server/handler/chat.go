@@ -382,6 +382,10 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 			},
 		},
 		)
+		if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
+			writeContextLengthExceeded(c, genOut.FullText, genOut.ProfileData)
+			return
+		}
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
@@ -391,6 +395,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 			toolCall, err := parseToolCalls(genOut.FullText)
 			if err == nil {
 				choice := openai.ChatCompletionChoice{}
+				choice.FinishReason = "tool_calls"
 				choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
 				choice.Message.ToolCalls = []openai.ChatCompletionMessageToolCallUnion{{Function: toolCall}}
 				res := openai.ChatCompletion{
@@ -405,6 +410,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		}
 
 		choice := openai.ChatCompletionChoice{}
+		choice.FinishReason = mapFinishReason(genOut.ProfileData.StopReason)
 		choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
 		choice.Message.Content = genOut.FullText
 		res := openai.ChatCompletion{
@@ -738,6 +744,10 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 			},
 		},
 		)
+		if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) && genOut != nil {
+			writeContextLengthExceeded(c, genOut.FullText, genOut.ProfileData)
+			return
+		}
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
@@ -747,6 +757,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 			toolCall, err := parseToolCalls(genOut.FullText)
 			if err == nil {
 				choice := openai.ChatCompletionChoice{}
+				choice.FinishReason = "tool_calls"
 				choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
 				choice.Message.ToolCalls = []openai.ChatCompletionMessageToolCallUnion{{Function: toolCall}}
 				res := openai.ChatCompletion{
@@ -761,6 +772,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		}
 
 		choice := openai.ChatCompletionChoice{}
+		choice.FinishReason = mapFinishReason(genOut.ProfileData.StopReason)
 		choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
 		choice.Message.Content = genOut.FullText
 		res := openai.ChatCompletion{
@@ -777,6 +789,43 @@ func profile2Usage(p geniex_sdk.ProfileData) openai.CompletionUsage {
 		CompletionTokens: p.GeneratedTokens,
 		PromptTokens:     p.PromptTokens,
 		TotalTokens:      p.TotalTokens(),
+	}
+}
+
+// writeContextLengthExceeded mirrors OpenAI's HTTP 400 + error body for the
+// context-length-exceeded case, but additionally surfaces the partial generation
+// as `choices` so clients that look there can recover the truncated output.
+// `fullText` and `profile` come from the regular SDK output struct (which the
+// C plugin populates even on the error path).
+func writeContextLengthExceeded(c *gin.Context, fullText string, profile geniex_sdk.ProfileData) {
+	choice := openai.ChatCompletionChoice{}
+	choice.FinishReason = "length"
+	choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
+	choice.Message.Content = fullText
+
+	c.JSON(http.StatusBadRequest, map[string]any{
+		"error": map[string]any{
+			"message": "model context window exceeded; output truncated",
+			"type":    "invalid_request_error",
+			"code":    "context_length_exceeded",
+		},
+		"choices": []openai.ChatCompletionChoice{choice},
+		"usage":   profile2Usage(profile),
+	})
+}
+
+// mapFinishReason translates the SDK's stop_reason values into the OpenAI
+// finish_reason vocabulary.
+func mapFinishReason(stopReason string) string {
+	switch stopReason {
+	case "length":
+		return "length"
+	case "user":
+		return "stop"
+	case "eos", "stop_sequence", "":
+		return "stop"
+	default:
+		return "stop"
 	}
 }
 

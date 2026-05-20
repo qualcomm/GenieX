@@ -530,11 +530,12 @@ func (l *LLM) Generate(input LlmGenerateInput) (LlmGenerateOutput, error) {
 	defer freeLlmGenerateOutput(&cOutput)
 
 	res := C.geniex_llm_generate(l.ptr, cInput, &cOutput)
-	if res < 0 {
+	if res < 0 && res != C.GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH {
 		return LlmGenerateOutput{}, SDKError(res)
 	}
-
 	output := newLlmGenerateOutputFromCPtr(&cOutput)
-
+	if res < 0 {
+		return output, SDKError(res)
+	}
 	return output, nil
 }

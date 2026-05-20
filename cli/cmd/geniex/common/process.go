@@ -32,8 +32,9 @@ import (
 )
 
 var (
-	ErrNoAudio = errors.New("no audio file provided")
-	ErrNoImage = errors.New("no image file provided")
+	ErrNoAudio               = errors.New("no audio file provided")
+	ErrNoImage               = errors.New("no image file provided")
+	ErrContextLengthExceeded = errors.New("model context length exceeded; output is truncated")
 )
 
 type Processor struct {
@@ -131,6 +132,9 @@ func (p *Processor) Process() error {
 			fmt.Println()
 		case errors.Is(err, ErrNoImage):
 			fmt.Println(render.GetTheme().Error.Sprintf("No image file provided, please provide an image file"))
+			fmt.Println()
+		case errors.Is(err, ErrContextLengthExceeded):
+			fmt.Println(render.GetTheme().Error.Sprintf("Model context length exceeded; output above is truncated"))
 			fmt.Println()
 		default:
 			return err

@@ -409,7 +409,7 @@ typedef struct {
     double decoding_speed;   /* Decoding speed (tokens/sec) */
     double real_time_factor; /* Real-Time Factor(RTF) (1.0 = real-time, >1.0 = faster, <1.0 = slower) */
 
-    const char* stop_reason; /* Stop reason: "eos", "length", "user", "stop_sequence" */
+    const char* stop_reason; /* Stop reason: "eos", "length", "user", "stop_sequence", "context_length" */
 } geniex_ProfileData;
 
 /* ========================================================================== */
