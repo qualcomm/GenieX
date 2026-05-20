@@ -95,7 +95,7 @@ func run() *cobra.Command {
 				os.Exit(1)
 			}
 			if e, ok := err.(*openai.Error); ok && e.StatusCode == http.StatusNotFound {
-				fmt.Println(render.GetTheme().Error.Sprintf("Model or quant not found: %s, Please download first", name))
+				fmt.Println(render.GetTheme().Error.Sprintf("Model or precision not found: %s, Please download first", name))
 				os.Exit(1)
 			} else {
 				fmt.Println(render.GetTheme().Error.Sprintf("get model error: %s", err.Error()))

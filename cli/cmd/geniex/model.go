@@ -77,10 +77,10 @@ func pull() *cobra.Command {
 func remove() *cobra.Command {
 	removeCmd := &cobra.Command{
 		GroupID: "model",
-		Use:     "remove <model-name>[:<quant>] [<model-name>[:<quant>] ...]",
+		Use:     "remove <model-name>[:<precision>] [<model-name>[:<precision>] ...]",
 		Aliases: []string{"rm"},
 		Short:   "Remove cached model",
-		Long:    "Delete a cached model by name. Append ':<quant>' to remove a single quant; otherwise the whole model is removed.",
+		Long:    "Delete a cached model by name. Append ':<precision>' to remove a single precision; otherwise the whole model is removed.",
 	}
 
 	removeCmd.Args = cobra.MatchAll(cobra.MinimumNArgs(1), cobra.OnlyValidArgs)
@@ -148,7 +148,7 @@ func list() *cobra.Command {
 		tw.SetOutputMirror(os.Stdout)
 		tw.SetStyle(table.StyleLight)
 		if verbose {
-			tw.AppendHeader(table.Row{"NAME", "SIZE", "PLUGIN", "TYPE", "QUANTS"})
+			tw.AppendHeader(table.Row{"NAME", "SIZE", "PLUGIN", "TYPE", "PRECISIONS"})
 			for _, model := range models {
 				tw.AppendRow(table.Row{
 					model.Name,
@@ -168,7 +168,7 @@ func list() *cobra.Command {
 				})
 			}
 		} else {
-			tw.AppendHeader(table.Row{"NAME", "SIZE", "QUANTS"})
+			tw.AppendHeader(table.Row{"NAME", "SIZE", "PRECISIONS"})
 			for _, model := range models {
 				tw.AppendRow(table.Row{model.Name, humanize.IBytes(uint64(model.GetSize())), strings.Join(func() []string {
 					quants := make([]string, 0)
@@ -322,7 +322,7 @@ func pullModel(name string, quant string) error {
 			}
 		}
 		if downloaded {
-			fmt.Println(render.GetTheme().Info.Sprint("Already downloaded all quant"))
+			fmt.Println(render.GetTheme().Info.Sprint("Already downloaded all precisions"))
 			return nil
 		}
 
@@ -489,7 +489,7 @@ func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, r
 				}
 			}
 			if specifiedQuant != "" && res.ModelFile[specifiedQuant].Name == "" {
-				return fmt.Errorf("Specified quant %s not found", specifiedQuant)
+				return fmt.Errorf("Specified precision %s not found", specifiedQuant)
 			}
 
 		} else {
@@ -526,7 +526,7 @@ func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, r
 					}
 				}
 				if getQuant(file) != specifiedQuant {
-					return fmt.Errorf("specified quant %s not found", specifiedQuant)
+					return fmt.Errorf("specified precision %s not found", specifiedQuant)
 				}
 			} else {
 				var options []huh.Option[string]
@@ -542,7 +542,7 @@ func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, r
 				}
 
 				if err = huh.NewSelect[string]().
-					Title("Choose a quant version to download").
+					Title("Choose a precision version to download").
 					Options(options...).
 					Value(&file).
 					Run(); err != nil {
@@ -590,7 +590,7 @@ func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, r
 		// qairt models
 
 		if specifiedQuant != "" {
-			return fmt.Errorf("specified quant %s only support in gguf model", specifiedQuant)
+			return fmt.Errorf("specified precision %s only supported in gguf model", specifiedQuant)
 		}
 
 		if len(files) == 1 {
@@ -630,9 +630,9 @@ func chooseQuantFiles(specifiedQuant string, res *types.ModelManifest) error {
 	var quant string
 	if specifiedQuant != "" {
 		if fileinfo, ok := res.ModelFile[specifiedQuant]; !ok {
-			return fmt.Errorf("specified quant %s not found", specifiedQuant)
+			return fmt.Errorf("specified precision %s not found", specifiedQuant)
 		} else if fileinfo.Downloaded {
-			return fmt.Errorf("specified quant %s already downloaded", specifiedQuant)
+			return fmt.Errorf("specified precision %s already downloaded", specifiedQuant)
 		}
 		quant = specifiedQuant
 	} else {
@@ -648,7 +648,7 @@ func chooseQuantFiles(specifiedQuant string, res *types.ModelManifest) error {
 		}
 
 		if err := huh.NewSelect[string]().
-			Title("Choose a quant version to download").
+			Title("Choose a precision version to download").
 			Options(options...).
 			Value(&quant).
 			Run(); err != nil {

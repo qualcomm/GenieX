@@ -164,10 +164,10 @@ func infer() *cobra.Command {
 
 		if quant != "" {
 			if fileinfo, exist := manifest.ModelFile[quant]; !exist {
-				fmt.Println(render.GetTheme().Error.Sprintf("Error: quant %s not found", quant))
+				fmt.Println(render.GetTheme().Error.Sprintf("Error: precision %s not found", quant))
 				os.Exit(1)
 			} else if !fileinfo.Downloaded {
-				fmt.Println(render.GetTheme().Error.Sprintf("Error: quant %s not downloaded", quant))
+				fmt.Println(render.GetTheme().Error.Sprintf("Error: precision %s not downloaded", quant))
 				os.Exit(1)
 			}
 		} else {
@@ -267,13 +267,13 @@ func selectQuant(manifest *types.ModelManifest) (string, error) {
 		}
 	}
 	if len(options) == 0 {
-		return "", fmt.Errorf("no quant found")
+		return "", fmt.Errorf("no precision found")
 	}
 	if len(options) == 1 {
 		return options[0].Value, nil
 	}
 	var quant string
-	if err := huh.NewSelect[string]().Title("Select a quant from local folder").Options(options...).Value(&quant).Run(); err != nil {
+	if err := huh.NewSelect[string]().Title("Select a precision from local folder").Options(options...).Value(&quant).Run(); err != nil {
 		return "", err
 	}
 	return quant, nil
