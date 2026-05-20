@@ -18,8 +18,6 @@ GenieX Python SDK 以 ARM64 wheel 形式发布，覆盖 Windows ARM64 与 Linux 
   <Tab title="Windows ARM64">
     如未安装 Python，请下载 [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe)。
 
-    对于 QDC，我们推荐使用以下 Python 脚本方法。
-
     创建虚拟环境并从 test PyPI 安装：
 
     ```powershell
@@ -29,29 +27,6 @@ GenieX Python SDK 以 ARM64 wheel 形式发布，覆盖 Windows ARM64 与 Linux 
     ```
 
     这将从 [test PyPI](https://test.pypi.org/project/geniex/) 拉取 Python 包。
-
-    <Note>
-    **故障排查：SSL / 证书错误（企业代理 / QDC）**
-
-    如果安装时出现 SSL 证书错误——常见于启用了 TLS 检测的企业网络，包括 **Qualcomm Developer Cloud（QDC）**——请预先手动下载 SDK，并让安装程序指向本地文件。在 `pip install` **之前**执行以下 PowerShell 命令：
-
-    *仅适用于 GenieX v0.1.8 及更新版本。*
-
-    ```powershell
-    $env:GENIEX_VERSION = "v0.1.8"
-    $base = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex"
-    $zip  = "geniex-sdk-windows-arm64-$env:GENIEX_VERSION.zip"
-
-    Invoke-WebRequest "$base/$zip"        -OutFile $zip
-    Invoke-WebRequest "$base/$zip.sha256" -OutFile "$zip.sha256"
-
-    $env:GENIEX_SDK_DOWNLOAD_URL = "file:///$($(Get-Location).Path.Replace('\','/'))"
-    pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
-
-    Remove-Item $zip, "$zip.sha256"
-    Remove-Item Env:GENIEX_SDK_DOWNLOAD_URL
-    ```
-    </Note>
   </Tab>
 
   <Tab title="Linux ARM64">
