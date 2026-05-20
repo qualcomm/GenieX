@@ -371,8 +371,11 @@ def fetch(
     if override:
         sources = [('override', override.rstrip('/'))]
     else:
+        # S3 mirror is flat: every release asset sits directly under
+        # qai-hub-geniex/, with the <tag> already in the filename. GitHub
+        # Releases are inherently per-tag, so that path keeps /{release_tag}.
         sources = [
-            ('s3', f'{DEFAULT_S3_BASE_URL}/{release_tag}'),
+            ('s3', DEFAULT_S3_BASE_URL),
             ('github', f'{DEFAULT_BASE_URL}/{release_tag}'),
         ]
 

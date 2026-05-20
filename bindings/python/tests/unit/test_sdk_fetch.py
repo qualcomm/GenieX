@@ -242,6 +242,34 @@ def test_skipped_when_env_flag_set(tmp_path, monkeypatch):
     assert not (tmp_path / 'lib').exists()
 
 
+def test_default_sources_url_shape(tmp_path, monkeypatch):
+    """S3 default uses the flat layout; GitHub default keeps /{tag}.
+
+    Regression for the case where ``pip install`` against the public mirror
+    failed because the S3 source still appended ``/{release_tag}/`` — but the
+    release pipeline switched to a flat ``qai-hub-geniex/`` prefix.
+    """
+    _patch_platform(monkeypatch)
+    monkeypatch.delenv('GENIEX_SDK_DOWNLOAD_URL', raising=False)
+    monkeypatch.delenv('GENIEX_SKIP_SDK_DOWNLOAD', raising=False)
+
+    seen: list[tuple[str, str]] = []
+
+    def fake_try(name, zip_url, lib_dir, backends, errors):
+        seen.append((name, zip_url))
+        return False  # force the loop to walk every default source
+
+    monkeypatch.setattr(sdk_fetch, '_try_one_source', fake_try)
+
+    with pytest.raises(RuntimeError, match='Failed to fetch SDK'):
+        sdk_fetch.fetch(tmp_path, RELEASE_TAG, backends=('llama-cpp',))
+
+    assert seen == [
+        ('s3', f'{sdk_fetch.DEFAULT_S3_BASE_URL}/{ASSET}'),
+        ('github', f'{sdk_fetch.DEFAULT_BASE_URL}/{RELEASE_TAG}/{ASSET}'),
+    ]
+
+
 def test_classify_entry_filters_paths():
     classify = sdk_fetch._classify_entry
     backends = frozenset({'llama-cpp', 'qairt'})
