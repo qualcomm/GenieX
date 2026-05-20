@@ -11,7 +11,7 @@ export GENIEX_LOG="debug" # bash
 拉取模型（非交互模式）
 
 ```bash
-geniex pull <model>[:<quant>] --model-type <model-type>
+geniex pull <model>[:<precision>] --model-type <model-type>
 ```
 
 从 model hub 拉取模型

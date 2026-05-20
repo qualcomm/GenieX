@@ -486,7 +486,7 @@ def _cmd_ls(args: argparse.Namespace) -> int:
             ]
         )
 
-    _render_table(rows, ['NAME', 'SIZE', 'PLUGIN', 'TYPE', 'QUANTS'])
+    _render_table(rows, ['NAME', 'SIZE', 'PLUGIN', 'TYPE', 'PRECISIONS'])
     return 0
 
 
@@ -570,7 +570,7 @@ def _build_parser() -> argparse.ArgumentParser:
     chat.set_defaults(func=_cmd_chat)
 
     pull = sub.add_parser('pull', help='Download a model into the local cache')
-    pull.add_argument('model', help='Alias or HF repo id (supports org/repo:quant)')
+    pull.add_argument('model', help='Alias or HF repo id (supports org/repo:precision)')
     pull.add_argument('--quant', default=None, help='Quantization variant (e.g. Q4_K_M)')
     _add_hub_args(pull)
     pull.set_defaults(func=_cmd_pull)

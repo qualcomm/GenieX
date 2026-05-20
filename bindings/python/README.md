@@ -70,7 +70,7 @@ model.close()
 ```
 
 `from_pretrained` accepts any of: a short alias (resolved via the bundled
-registry), a HuggingFace `org/repo` (optionally `org/repo:quant`), or a
+registry), a HuggingFace `org/repo` (optionally `org/repo:precision`), or a
 local path to a `.gguf` file or a pre-downloaded directory.
 
 ### VLM
@@ -101,7 +101,7 @@ The same model manager the CLI uses is available programmatically:
 ```python
 from geniex import model_manager as mm
 
-mm.pull("qwen3")                      # alias or "org/repo[:quant]"
+mm.pull("qwen3")                      # alias or "org/repo[:precision]"
 paths = mm.get_paths("qwen3")         # resolved local paths
 mm.list_models()                      # cached models
 mm.remove("qwen3")

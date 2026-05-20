@@ -119,7 +119,7 @@ func (s *Store) Remove(name, quant string) error {
 
 	target, ok := mf.ModelFile[quant]
 	if !ok || !target.Downloaded {
-		return fmt.Errorf("quant %s not downloaded", quant)
+		return fmt.Errorf("precision %s not downloaded", quant)
 	}
 
 	remaining := 0

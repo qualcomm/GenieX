@@ -27,7 +27,7 @@ export GENIEX_LOG="debug" # bash
 Pull model without interactive
 
 ```bash
-geniex pull <model>[:<quant>] --model-type <model-type>
+geniex pull <model>[:<precision>] --model-type <model-type>
 ```
 
 Pull model from model hub

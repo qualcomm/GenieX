@@ -111,7 +111,7 @@ client = OpenAI(
 )
 
 stream = client.chat.completions.create(
-    model="unsloth/Qwen3-4B-GGUF:Q4_0",  # org/repo[:quant] — Q4_0 has the best Hexagon NPU support
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",  # org/repo[:precision] — Q4_0 has the best Hexagon NPU support
     messages=[
         {"role": "user", "content": "Hello! Briefly introduce yourself."},
     ],
@@ -128,7 +128,7 @@ print()
 ```
 
 <Note>
-Replace the `model` value with a model you have already pulled. The optional `:<quant>` suffix selects a quantization variant (e.g. `Q4_0`, `Q4_K_M`, `Q8_0`) — `Q4_0` is recommended for the llama.cpp Hexagon NPU backend. See [Quantization](/en/models/quantization).
+Replace the `model` value with a model you have already pulled. The optional `:<precision>` suffix selects a quantization variant (e.g. `Q4_0`, `Q4_K_M`, `Q8_0`) — `Q4_0` is recommended for the llama.cpp Hexagon NPU backend. See [Quantization](/en/models/quantization).
 </Note>
 
 ## **Other endpoints**
