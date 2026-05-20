@@ -279,6 +279,19 @@ case ":${PATH-}:" in
         ;;
 esac
 
+# geniex stores its model cache under $HOME/.cache/geniex, so an empty $HOME
+# (common in stripped root containers) makes every command crash on startup.
+if [ -z "${HOME-}" ]; then
+    say ""
+    say "Warning: \$HOME is not set in this shell. 'geniex' uses it for the"
+    say "model cache and will fail to start. Export it before running:"
+    if [ "$IS_ROOT" -eq 1 ]; then
+        say "  export HOME=/root"
+    else
+        say "  export HOME=\"\$(getent passwd \"\$(id -un)\" | cut -d: -f6)\""
+    fi
+fi
+
 exit 0
 
 }  # end of script
