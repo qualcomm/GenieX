@@ -115,7 +115,12 @@ func main() {
 	common.ApplyLogLevel()
 	common.EnableUTF8Console()
 
-	if err := RootCmd().Execute(); err != nil {
+	cmd := RootCmd()
+	// Cobra writes its own "Error: unknown flag …" / "unknown command …" lines
+	// straight to stderr. Route them through a colorizer so they show up red,
+	// matching the rest of the CLI's error output (#636).
+	cmd.SetErr(render.NewErrorWriter(os.Stderr))
+	if err := cmd.Execute(); err != nil {
 		slog.Error("geniex failed", "err", err)
 		os.Exit(1)
 	}

@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"sync"
 
@@ -118,4 +119,23 @@ func defaultColorTheme() *Theme {
 		theme.Profile = color.NewRGBStyle(color.RGB(0, 215, 215))
 	}
 	return theme
+}
+
+// NewErrorWriter wraps w so every chunk written to it gets the Error theme
+// applied. Used to colorize cobra's "Error: …" / "unknown flag …" /
+// "unknown command …" lines (and the "Run '... --help' for usage." hint that
+// cobra prints alongside them) red.
+func NewErrorWriter(w io.Writer) io.Writer {
+	return &errorWriter{w: w}
+}
+
+type errorWriter struct {
+	w io.Writer
+}
+
+func (e *errorWriter) Write(p []byte) (int, error) {
+	if _, err := fmt.Fprint(e.w, GetTheme().Error.Sprint(string(p))); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
