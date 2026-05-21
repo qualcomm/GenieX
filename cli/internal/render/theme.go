@@ -35,6 +35,7 @@ type Theme struct {
 
 	Reference Style
 	Heading   Style
+	Command   Style
 	Flag      Style
 
 	Quant       Style
@@ -84,6 +85,7 @@ func noColorTheme() *Theme {
 
 		Reference: NoColor{},
 		Heading:   NoColor{},
+		Command:   NoColor{},
 		Flag:      NoColor{},
 
 		Quant:       NoColor{},
@@ -106,9 +108,10 @@ func defaultColorTheme() *Theme {
 		theme.Warning = color.Style{color.FgYellow}
 		theme.Error = color.Style{color.FgRed}
 
-		theme.Reference = color.Style{color.FgDarkGray}
+		theme.Reference = color.Style{color.OpFuzzy, color.FgDarkGray}
 		theme.Heading = color.Style{color.FgCyan, color.Bold}
-		theme.Flag = color.Style{color.FgGreen}
+		theme.Command = color.Style{color.FgGreen}
+		theme.Flag = color.Style{color.FgYellow}
 
 		theme.Quant = color.Style{color.FgLightBlue}
 		theme.Prompt = color.Style{color.FgGreen, color.Bold}
@@ -120,7 +123,6 @@ func defaultColorTheme() *Theme {
 	}
 	if color.Support256Color() {
 		slog.Debug("apply 256 color")
-		theme.Reference = color.S256(242)
 		theme.Quant = color.S256(31)
 		//theme.AddFiles = color.S256(7)
 		//theme.ModelOutput = color.S256(15)
@@ -128,7 +130,6 @@ func defaultColorTheme() *Theme {
 	}
 	if color.SupportTrueColor() {
 		slog.Debug("apply true color")
-		theme.Reference = color.NewRGBStyle(color.RGB(120, 120, 120))
 		theme.Quant = color.NewRGBStyle(color.RGB(0, 135, 175))
 		//theme.AddFiles = color.NewRGBStyle(color.RGB(192, 192, 192))
 		theme.Profile = color.NewRGBStyle(color.RGB(0, 215, 215))
