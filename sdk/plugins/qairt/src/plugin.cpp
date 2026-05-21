@@ -6,6 +6,7 @@
 #include "build_config.h"
 #include "llm.h"
 #include "logging.h"
+#include "version.h"  // GENIEX_QAIRT_VERSION from third-party/geniex-qairt/core/include
 #include "vlm.h"
 
 namespace geniex {
@@ -15,6 +16,8 @@ class QairtPlugin : public Plugin {
     QairtPlugin() { GENIEX_LOG_TRACE("creating and initializing qairt plugin"); }
 
     ~QairtPlugin() override { GENIEX_LOG_TRACE("destroying qairt plugin"); }
+
+    const char* version() override { return GENIEX_QAIRT_VERSION; }
 
     int32_t get_device_list(const geniex_GetDeviceListInput* input, geniex_GetDeviceListOutput* output) override {
         if (!input || !output) {

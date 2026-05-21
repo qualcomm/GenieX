@@ -11,6 +11,7 @@
 #endif
 
 #include "build_config.h"
+#include "common.h"
 #include "embedding.h"
 #include "ggml-backend.h"
 #include "llama.h"
@@ -114,6 +115,8 @@ class LlamaPlugin : public Plugin {
     }
 
     ~LlamaPlugin() override { GENIEX_LOG_TRACE("destroying llama plugin"); }
+
+    const char* version() override { return LLAMA_COMMIT; }
 
     int32_t get_device_list(const geniex_GetDeviceListInput* input, geniex_GetDeviceListOutput* output) override {
         GENIEX_LOG_TRACE("getting device list");

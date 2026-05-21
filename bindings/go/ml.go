@@ -94,14 +94,13 @@ func Version() string {
 	return C.GoString(C.geniex_version())
 }
 
-// QairtVersion returns the bundled QAIRT runtime version string.
-func QairtVersion() string {
-	return C.GoString(C.geniex_qairt_version())
-}
-
-// LlamaCppVersion returns the bundled llama.cpp build commit hash.
-func LlamaCppVersion() string {
-	return C.GoString(C.geniex_llama_cpp_version())
+// GetPluginVersion returns the version string the plugin reports for itself
+// (e.g. QAIRT runtime version, llama.cpp build commit). Returns the empty
+// string when the plugin is not registered.
+func GetPluginVersion(pluginID string) string {
+	cID := C.CString(pluginID)
+	defer C.free(unsafe.Pointer(cID))
+	return C.GoString(C.geniex_get_plugin_version(cID))
 }
 
 type PluginListOutput struct {

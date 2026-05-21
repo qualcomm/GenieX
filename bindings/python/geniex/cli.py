@@ -38,8 +38,8 @@ from geniex import (
     _progress,
     get_device_list,
     get_plugin_list,
+    get_plugin_version,
     init,
-    qairt_version,
     resolve_device_map,
     set_log_level,
     version,
@@ -304,7 +304,7 @@ def _cmd_version(_args: argparse.Namespace) -> int:
     init()
     print(f'geniex (python): {geniex.__version__}')
     print(f'SDK:             {version()}')
-    print(f'QAIRT:           {qairt_version()}')
+    print(f'QAIRT:           {get_plugin_version("qairt")}')
     return 0
 
 

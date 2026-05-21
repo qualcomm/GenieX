@@ -43,7 +43,7 @@ def test_public_surface_exports():
         'deinit',
         'set_log_level',
         'version',
-        'qairt_version',
+        'get_plugin_version',
         'get_plugin_list',
         'get_device_list',
         'resolve_device_map',
