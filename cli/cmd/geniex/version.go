@@ -16,6 +16,8 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -23,6 +25,18 @@ import (
 )
 
 var Version string
+
+func printVersion(w io.Writer) {
+	fmt.Fprintln(w, "GenieX CLI Version:      "+Version)
+	fmt.Fprintln(w, "QAIRT Plugin Version:    "+geniex_sdk.QairtVersion())
+	fmt.Fprintln(w, "LlamaCPP Plugin Hash:    "+geniex_sdk.LlamaCppVersion())
+}
+
+func versionTemplate() string {
+	var b strings.Builder
+	printVersion(&b)
+	return b.String()
+}
 
 func version() *cobra.Command {
 	versionCmd := &cobra.Command{
@@ -32,9 +46,7 @@ func version() *cobra.Command {
 	}
 
 	versionCmd.Run = func(cmd *cobra.Command, args []string) {
-		fmt.Println("GenieX CLI Version:      " + Version)
-		fmt.Println("QAIRT Plugin Version:    " + geniex_sdk.QairtVersion())
-		fmt.Println("LlamaCPP Plugin Hash:    " + geniex_sdk.LlamaCppVersion())
+		printVersion(cmd.OutOrStdout())
 	}
 
 	return versionCmd
