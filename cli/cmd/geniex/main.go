@@ -76,10 +76,14 @@ func RootCmd() *cobra.Command {
 	}
 	rootCmd.PersistentFlags().StringVarP(&dataDir, "data-dir", "", "", "Custom data directory (env: GENIEX_DATADIR)")
 	viper.BindPFlag("datadir", rootCmd.PersistentFlags().Lookup("data-dir"))
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
+	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&skipUpdate, "skip-update", "", false, "Skip checking for updates")
 	rootCmd.PersistentFlags().BoolVarP(&testMode, "test-mode", "", false, "Enable test mode")
 	rootCmd.PersistentFlags().MarkHidden("test-mode")
+
+	rootCmd.Version = Version
+	rootCmd.SetVersionTemplate(versionTemplate())
+	rootCmd.Flags().BoolP("version", "v", false, "Print version information")
 
 	rootCmd.AddGroup(
 		&cobra.Group{ID: "model", Title: "Model Commands"},
