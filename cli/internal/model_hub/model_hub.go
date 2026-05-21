@@ -49,14 +49,29 @@ type ModelFileInfo struct {
 	Size int64  `json:"size"`
 }
 
-// ChoosePluginId picks llama_cpp when any file is a GGUF, otherwise qairt.
-func ChoosePluginId(files []ModelFileInfo) string {
+// ChoosePluginId returns llama_cpp for GGUF, qairt for a single genie .zip
+// or a layout containing genie_config.json, and errors otherwise.
+func ChoosePluginId(files []ModelFileInfo) (string, error) {
+	// gguf
 	for _, f := range files {
 		if strings.HasSuffix(strings.ToLower(f.Name), ".gguf") {
-			return PluginLlamaCpp
+			return PluginLlamaCpp, nil
 		}
 	}
-	return PluginQairt
+	// qairt zip
+	if len(files) == 1 {
+		name := strings.ToLower(files[0].Name)
+		if strings.HasSuffix(name, ".zip") && strings.Contains(name, "genie") {
+			return PluginQairt, nil
+		}
+	}
+	// qairt folder
+	for _, f := range files {
+		if filepath.Base(f.Name) == "genie_config.json" {
+			return PluginQairt, nil
+		}
+	}
+	return "", fmt.Errorf("neither gguf nor aihub format detected, cannot determine plugin")
 }
 
 type ModelHub interface {

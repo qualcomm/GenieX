@@ -84,18 +84,26 @@ func TestDownload(t *testing.T) {
 
 func TestChoosePluginId(t *testing.T) {
 	cases := []struct {
-		name  string
-		files []ModelFileInfo
-		want  string
+		name    string
+		files   []ModelFileInfo
+		want    string
+		wantErr bool
 	}{
-		{"gguf only", []ModelFileInfo{{Name: "qwen3-q4_k_m.gguf"}}, PluginLlamaCpp},
-		{"bin shards only", []ModelFileInfo{{Name: "model.bin"}, {Name: "metadata.json"}}, PluginQairt},
-		{"mixed picks llama_cpp", []ModelFileInfo{{Name: "model.bin"}, {Name: "extra.gguf"}}, PluginLlamaCpp},
-		{"empty falls back to qairt", nil, PluginQairt},
+		{"gguf only", []ModelFileInfo{{Name: "qwen3-q4_k_m.gguf"}}, PluginLlamaCpp, false},
+		{"mixed picks llama_cpp", []ModelFileInfo{{Name: "model.bin"}, {Name: "extra.gguf"}}, PluginLlamaCpp, false},
+		{"single genie zip", []ModelFileInfo{{Name: "qwen3-genie-x-elite.zip"}}, PluginQairt, false},
+		{"directory with genie_config", []ModelFileInfo{{Name: "model.bin"}, {Name: "genie_config.json"}}, PluginQairt, false},
+		{"single non-genie zip rejected", []ModelFileInfo{{Name: "model.zip"}}, "", true},
+		{"bin shards without genie_config rejected", []ModelFileInfo{{Name: "model.bin"}, {Name: "metadata.json"}}, "", true},
+		{"empty rejected", nil, "", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := ChoosePluginId(tc.files); got != tc.want {
+			got, err := ChoosePluginId(tc.files)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("ChoosePluginId err = %v, wantErr = %v", err, tc.wantErr)
+			}
+			if got != tc.want {
 				t.Errorf("ChoosePluginId = %q, want %q", got, tc.want)
 			}
 		})

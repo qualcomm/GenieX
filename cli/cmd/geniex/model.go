@@ -364,7 +364,11 @@ func pullModel(name string, quant string) error {
 		}
 
 		if manifest.PluginId == "" {
-			manifest.PluginId = model_hub.ChoosePluginId(files)
+			pid, err := model_hub.ChoosePluginId(files)
+			if err != nil {
+				return err
+			}
+			manifest.PluginId = pid
 		}
 
 		err := chooseFiles(name, quant, files, &manifest)
