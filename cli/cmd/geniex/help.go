@@ -26,9 +26,24 @@ import (
 )
 
 var (
-	flagPattern      = regexp.MustCompile(`(^\s+)(-[a-zA-Z],\s+--[a-zA-Z0-9-]+|--[a-zA-Z0-9-]+|-[a-zA-Z])`)
-	parenHintPattern = regexp.MustCompile(`\([^()]*\)`)
+	flagPattern        = regexp.MustCompile(`(^\s+)(-[a-zA-Z],\s+--[a-zA-Z0-9-]+|--[a-zA-Z0-9-]+|-[a-zA-Z])(\s+(stringArray|stringSlice|bytesBase64|bytesHex|float64|float32|duration|ipMask|uint16|uint32|uint64|int16|int32|int64|string|float|count|ipNet|uint8|uint|int8|int|bool|ip))?`)
+	parenHintPattern   = regexp.MustCompile(`\([^()]*\)`)
+	placeholderPattern = regexp.MustCompile(`<[^<>]+>|\[[^\[\]]*\]`)
 )
+
+func colorPlaceholders(s string) string {
+	t := render.GetTheme()
+	return placeholderPattern.ReplaceAllStringFunc(s, func(m string) string {
+		switch m {
+		case "[flags]":
+			return t.Flag.Sprint(m)
+		case "[command]":
+			return t.Command.Sprint(m)
+		default:
+			return t.Reference.Sprint(m)
+		}
+	})
+}
 
 func colorFlagUsages(usages string) string {
 	t := render.GetTheme()
@@ -36,7 +51,11 @@ func colorFlagUsages(usages string) string {
 	for i, line := range lines {
 		line = flagPattern.ReplaceAllStringFunc(line, func(m string) string {
 			sub := flagPattern.FindStringSubmatch(m)
-			return sub[1] + t.Flag.Sprint(sub[2])
+			out := sub[1] + t.Flag.Sprint(sub[2])
+			if sub[4] != "" {
+				out += " " + t.Reference.Sprint(sub[4])
+			}
+			return out
 		})
 		line = parenHintPattern.ReplaceAllStringFunc(line, func(m string) string {
 			return t.Reference.Sprint(m)
@@ -49,16 +68,16 @@ func colorFlagUsages(usages string) string {
 func colorUseLine(c *cobra.Command) string {
 	line, path := c.UseLine(), c.CommandPath()
 	if strings.HasPrefix(line, path) {
-		return render.GetTheme().Flag.Sprint(path) + line[len(path):]
+		return render.GetTheme().Command.Sprint(path) + colorPlaceholders(line[len(path):])
 	}
-	return line
+	return colorPlaceholders(line)
 }
 
 func colorNameAndAliases(c *cobra.Command) string {
 	t := render.GetTheme()
 	names := append([]string{c.Name()}, c.Aliases...)
 	for i, n := range names {
-		names[i] = t.Flag.Sprint(n)
+		names[i] = t.Command.Sprint(n)
 	}
 	return strings.Join(names, ", ")
 }
@@ -92,7 +111,8 @@ func applyHelpStyle(cmd *cobra.Command) {
 	t := render.GetTheme()
 	cobra.AddTemplateFunc("heading", func(s string) string { return t.Heading.Sprint(s) })
 	cobra.AddTemplateFunc("colorFlags", colorFlagUsages)
-	cobra.AddTemplateFunc("colorCmd", func(s string) string { return t.Flag.Sprint(s) })
+	cobra.AddTemplateFunc("colorCmd", func(s string) string { return t.Command.Sprint(s) })
+	cobra.AddTemplateFunc("colorPlaceholder", colorPlaceholders)
 	cobra.AddTemplateFunc("colorUseLine", colorUseLine)
 	cobra.AddTemplateFunc("colorAliases", colorNameAndAliases)
 
@@ -102,7 +122,7 @@ func applyHelpStyle(cmd *cobra.Command) {
 
 const usageTemplate = `{{"Usage:" | heading}}{{if .Runnable}}
   {{. | colorUseLine}}{{end}}{{if .HasAvailableSubCommands}}
-  {{.CommandPath | colorCmd}} [command]{{end}}{{if gt (len .Aliases) 0}}
+  {{.CommandPath | colorCmd}} {{"[command]" | colorPlaceholder}}{{end}}{{if gt (len .Aliases) 0}}
 
 {{"Aliases:" | heading}}
   {{. | colorAliases}}{{end}}{{if .HasExample}}
