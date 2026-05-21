@@ -438,6 +438,11 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 						SamplerConfig: samplerConfig,
 					},
 				})
+				if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
+					res.ProfileData.StopReason = "context_length"
+					tokenIDs = nil
+					return res.FullText, res.ProfileData, common.ErrContextLengthExceeded
+				}
 				if err != nil {
 					return "", geniex_sdk.ProfileData{}, err
 				}
@@ -466,6 +471,11 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 					},
 				})
 
+				if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
+					res.ProfileData.StopReason = "context_length"
+					history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleAssistant, Content: res.FullText})
+					return res.FullText, res.ProfileData, common.ErrContextLengthExceeded
+				}
 				if err != nil {
 					return "", geniex_sdk.ProfileData{}, err
 				}
@@ -612,6 +622,16 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 					AudioPaths:     audios,
 				},
 			})
+			if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) && res != nil {
+				res.ProfileData.StopReason = "context_length"
+				history = append(history, geniex_sdk.VlmChatMessage{
+					Role: geniex_sdk.VlmRoleAssistant,
+					Contents: []geniex_sdk.VlmContent{
+						{Type: geniex_sdk.VlmContentTypeText, Text: res.FullText},
+					},
+				})
+				return res.FullText, res.ProfileData, common.ErrContextLengthExceeded
+			}
 			if err != nil {
 				return "", geniex_sdk.ProfileData{}, err
 			}

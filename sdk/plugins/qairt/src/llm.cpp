@@ -251,15 +251,8 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         on_token_fn = [cb, ud](const char* token) -> bool { return cb(token, ud); };
     }
 
-    // Generate
-    GenerateResult result;
-    try {
-        result = pipeline_->generate(input->prompt_utf8, gen_cfg, on_token_fn);
-    } catch (const ContextLengthExceededError& e) {
-        GENIEX_LOG_ERROR("QAIRT generate: context length exceeded: {}", e.what());
-        return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
-    }
-    is_first_turn_ = false;
+    GenerateResult result = pipeline_->generate(input->prompt_utf8, gen_cfg, on_token_fn);
+    is_first_turn_        = false;
 
     // Map result to output
     output->full_text = portable_strdup(result.full_text.c_str());
@@ -275,19 +268,23 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     output->profile_data.prefill_speed =
         result.prompt_tokens > 0 && result.ttft_ms > 0.0 ? result.prompt_tokens / (result.ttft_ms / 1000.0) : 0.0;
 
-    // Stop reason (string must be static/persistent)
+    // Stop reason (string must be static/persistent).
     static const char* kStopEos    = "eos";
     static const char* kStopLength = "length";
     static const char* kStopUser   = "user";
     if (result.stop_reason == "eos")
         output->profile_data.stop_reason = kStopEos;
-    else if (result.stop_reason == "length")
+    else if (result.stop_reason == "length" || result.stop_reason == "context_length")
         output->profile_data.stop_reason = kStopLength;
     else if (result.stop_reason == "user")
         output->profile_data.stop_reason = kStopUser;
     else
         output->profile_data.stop_reason = kStopEos;
 
+    if (result.stop_reason == "context_length") {
+        GENIEX_LOG_WARN("QAIRT generate: context length exceeded (partial result populated)");
+        return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+    }
     return GENIEX_SUCCESS;
 }
 

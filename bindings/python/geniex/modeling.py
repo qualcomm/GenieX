@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from ctypes import POINTER, byref, c_char_p, c_void_p, cast, pointer, string_at
 
-from ._ffi._api import _check, _str_list_to_c, load_library
+from ._ffi._api import GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH, _check, _str_list_to_c, load_library
 from ._ffi._types import (
     geniex_GenerationConfig,
     geniex_KvCacheLoadInput,
@@ -200,11 +200,19 @@ class GeniexLLM:
             user_data=None,
         )
         out = geniex_LlmGenerateOutput()
-        _check(lib.geniex_llm_generate(self._handle, byref(inp), byref(out)))
+        rc = lib.geniex_llm_generate(self._handle, byref(inp), byref(out))
         full = string_at(out.full_text).decode() if out.full_text else ''
         profile = ProfileData.from_c(out.profile_data)
         if out.full_text:
             lib.geniex_free(out.full_text)
+        if rc == GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH:
+            # Absorb the C error: surface truncation as a normal return with a
+            # synthesized discriminator on the profile. The C plugin reports
+            # 'length' for both max_tokens and context-length truncation; we
+            # promote the latter to its own value so callers can distinguish.
+            profile.stop_reason = 'context_length'
+            return GenerateOutput.from_raw(full, profile)
+        _check(rc)
         return GenerateOutput.from_raw(full, profile)
 
     def _generate_stream(self, prompt: str, cfg, sampler, *_keep) -> TextIteratorStreamer:
@@ -220,11 +228,15 @@ class GeniexLLM:
                 user_data=None,
             )
             out = geniex_LlmGenerateOutput()
-            _check(lib.geniex_llm_generate(self._handle, byref(inp), byref(out)))
+            rc = lib.geniex_llm_generate(self._handle, byref(inp), byref(out))
             full = string_at(out.full_text).decode() if out.full_text else ''
             profile = ProfileData.from_c(out.profile_data)
             if out.full_text:
                 lib.geniex_free(out.full_text)
+            if rc == GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH:
+                profile.stop_reason = 'context_length'
+                return GenerateOutput.from_raw(full, profile)
+            _check(rc)
             return GenerateOutput.from_raw(full, profile)
 
         streamer.start(_run)
@@ -392,11 +404,15 @@ class GeniexVLM:
             user_data=None,
         )
         out = geniex_VlmGenerateOutput()
-        _check(lib.geniex_vlm_generate(self._handle, byref(inp), byref(out)))
+        rc = lib.geniex_vlm_generate(self._handle, byref(inp), byref(out))
         full = string_at(out.full_text).decode() if out.full_text else ''
         profile = ProfileData.from_c(out.profile_data)
         if out.full_text:
             lib.geniex_free(out.full_text)
+        if rc == GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH:
+            profile.stop_reason = 'context_length'
+            return GenerateOutput.from_raw(full, profile)
+        _check(rc)
         return GenerateOutput.from_raw(full, profile)
 
     def _generate_stream(self, prompt: str, cfg, sampler, *_keep) -> TextIteratorStreamer:
@@ -412,11 +428,15 @@ class GeniexVLM:
                 user_data=None,
             )
             out = geniex_VlmGenerateOutput()
-            _check(lib.geniex_vlm_generate(self._handle, byref(inp), byref(out)))
+            rc = lib.geniex_vlm_generate(self._handle, byref(inp), byref(out))
             full = string_at(out.full_text).decode() if out.full_text else ''
             profile = ProfileData.from_c(out.profile_data)
             if out.full_text:
                 lib.geniex_free(out.full_text)
+            if rc == GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH:
+                profile.stop_reason = 'context_length'
+                return GenerateOutput.from_raw(full, profile)
+            _check(rc)
             return GenerateOutput.from_raw(full, profile)
 
         streamer.start(_run)

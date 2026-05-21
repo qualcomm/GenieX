@@ -37,6 +37,7 @@ static void set_token(const char* token) {
 import "C"
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -55,7 +56,8 @@ func (s SDKError) Error() string {
 }
 
 func SDKErrorCode(err error) int32 {
-	if sdkErr, ok := err.(SDKError); ok {
+	var sdkErr SDKError
+	if errors.As(err, &sdkErr) {
 		return int32(sdkErr)
 	}
 	return -1

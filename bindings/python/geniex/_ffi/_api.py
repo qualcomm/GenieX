@@ -124,6 +124,11 @@ class GeniexError(Exception):
         self.code = code
 
 
+# Subset of geniex_ErrorCode values that callers may want to check against.
+# Keep aligned with sdk/include/geniex.h; expand on demand.
+GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH = -200004
+
+
 def _check(code: int) -> None:
     if code < 0:
         lib = load_library()
