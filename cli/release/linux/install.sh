@@ -249,11 +249,14 @@ rm -rf "${PREFIX}.old"
 # Launcher wrapper instead of a bare symlink: the binary is built without
 # an $ORIGIN rpath, so it can't find sibling libgeniex.so / plugins unless
 # LD_LIBRARY_PATH is set. The wrapper does that transparently.
+#
+# `exec -a NAME` is bash/zsh-only; on Ubuntu /bin/sh is dash and rejects it
+# with `exec: -a: not found`, so plain `exec` is used here.
 cat > "$BIN_DIR/geniex" <<LAUNCHER
 #!/bin/sh
 GENIEX_PREFIX="$PREFIX"
 LD_LIBRARY_PATH="\${GENIEX_PREFIX}\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}" \\
-    exec -a geniex "\${GENIEX_PREFIX}/geniex" "\$@"
+    exec "\${GENIEX_PREFIX}/geniex" "\$@"
 LAUNCHER
 chmod +x "$BIN_DIR/geniex"
 
