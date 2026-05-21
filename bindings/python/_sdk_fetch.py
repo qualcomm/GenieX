@@ -405,10 +405,23 @@ def _try_one_source(
     print(f'[geniex] Trying {name}: {zip_url}')
 
     sha_bytes = _try_download(sha_url)
+    # GENIEX_SDK_DOWNLOAD_URL is an explicit user opt-in to a specific source
+    # (typically a file:// path or internal mirror) where the operator may
+    # have staged only the .zip. Treat a missing sidecar as best-effort: the
+    # range path validates each entry via CRC32 in-band, and the full-zip
+    # fallback proceeds without sha verification. Public defaults still
+    # hard-fail so unattended pip installs never silently skip the check.
     if sha_bytes is None:
-        errors.append(f'{sha_url}: download failed')
-        return False
-    want_sha = sha_bytes.decode().strip().split()[0]
+        if name != 'override':
+            errors.append(f'{sha_url}: download failed')
+            return False
+        print(
+            f'[geniex] {sha_url} unavailable; proceeding without sha256 verification (override mode).',
+            file=sys.stderr,
+        )
+        want_sha: str | None = None
+    else:
+        want_sha = sha_bytes.decode().strip().split()[0]
 
     lib_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -430,10 +443,11 @@ def _try_one_source(
     if zip_bytes is None:
         errors.append(f'{zip_url}: download failed')
         return False
-    got = hashlib.sha256(zip_bytes).hexdigest()
-    if got.lower() != want_sha.lower():
-        errors.append(f'{zip_url}: SHA256 mismatch (expected {want_sha}, got {got})')
-        return False
+    if want_sha is not None:
+        got = hashlib.sha256(zip_bytes).hexdigest()
+        if got.lower() != want_sha.lower():
+            errors.append(f'{zip_url}: SHA256 mismatch (expected {want_sha}, got {got})')
+            return False
     try:
         count = _full_extract(zip_bytes, lib_dir, backends)
     except RuntimeError as exc:
