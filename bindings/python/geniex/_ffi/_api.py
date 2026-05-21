@@ -159,11 +159,8 @@ def _bind_all() -> None:
     lib.geniex_version.argtypes = []
     lib.geniex_version.restype = c_char_p
 
-    lib.geniex_qairt_version.argtypes = []
-    lib.geniex_qairt_version.restype = c_char_p
-
-    lib.geniex_llama_cpp_version.argtypes = []
-    lib.geniex_llama_cpp_version.restype = c_char_p
+    lib.geniex_get_plugin_version.argtypes = [c_char_p]
+    lib.geniex_get_plugin_version.restype = c_char_p
 
     lib.geniex_get_plugin_list.argtypes = [POINTER(geniex_GetPluginListOutput)]
     lib.geniex_get_plugin_list.restype = c_int32
@@ -387,15 +384,14 @@ def version() -> str:
     return lib.geniex_version().decode()
 
 
-def qairt_version() -> str:
-    """Return the bundled QAIRT runtime version string."""
-    _ensure_bound()
-    lib = load_library()
-    return lib.geniex_qairt_version().decode()
+def get_plugin_version(plugin_id: str) -> str:
+    """Return the version string the named plugin reports for itself.
 
-
-def llama_cpp_version() -> str:
-    """Return the bundled llama.cpp build commit hash."""
-    _ensure_bound()
+    Plugin must be registered (i.e. :func:`init` has been called and the
+    plugin's shared library was discoverable). Returns the empty string
+    when the plugin is unknown.
+    """
+    ensure_init()
     lib = load_library()
-    return lib.geniex_llama_cpp_version().decode()
+    raw = lib.geniex_get_plugin_version(plugin_id.encode())
+    return raw.decode() if raw else ''

@@ -47,11 +47,6 @@ func RootCmd() *cobra.Command {
 		Use:          "geniex",
 		SilenceUsage: true,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			// Once flag-parsing has succeeded we silence cobra's own error
-			// printer: subcommand RunE callbacks already render their own
-			// (often multi-line) error blocks before returning. Leaving the
-			// flag-parse phase un-silenced preserves cobra's "unknown flag" /
-			// "unknown command" messages (#636).
 			cmd.SilenceErrors = true
 
 			// Register ModelHub
@@ -64,6 +59,7 @@ func RootCmd() *cobra.Command {
 				notifyUpdate()
 				// skip network probe for quick commands
 				if !slices.Contains([]string{
+					"geniex",
 					"remove", "rm", "clean", "list", "ls", "model",
 					"config",
 					"version", "update",
@@ -73,16 +69,21 @@ func RootCmd() *cobra.Command {
 				}
 			}
 		},
+		Run: func(cmd *cobra.Command, args []string) {
+			if showVer, _ := cmd.Flags().GetBool("version"); showVer {
+				runVersion()
+				return
+			}
+			cmd.Help()
+		},
 	}
 	rootCmd.PersistentFlags().StringVarP(&dataDir, "data-dir", "", "", "Custom data directory (env: GENIEX_DATADIR)")
 	viper.BindPFlag("datadir", rootCmd.PersistentFlags().Lookup("data-dir"))
-	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Enable verbose output")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "", false, "Enable verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&skipUpdate, "skip-update", "", false, "Skip checking for updates")
 	rootCmd.PersistentFlags().BoolVarP(&testMode, "test-mode", "", false, "Enable test mode")
 	rootCmd.PersistentFlags().MarkHidden("test-mode")
 
-	rootCmd.Version = Version
-	rootCmd.SetVersionTemplate(versionTemplate())
 	rootCmd.Flags().BoolP("version", "v", false, "Print version information")
 
 	rootCmd.AddGroup(

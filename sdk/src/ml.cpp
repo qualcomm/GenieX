@@ -146,9 +146,19 @@ const char* version = build_config::kBridgeVersion;
 
 const char* geniex_version() { return version; }
 
-const char* geniex_qairt_version() { return build_config::kQairtVersion; }
-
-const char* geniex_llama_cpp_version() { return build_config::kLlamaCppVersion; }
+const char* geniex_get_plugin_version(geniex_PluginId plugin_id) {
+    if (!plugin_id) {
+        GENIEX_LOG_ERROR("plugin_id is nullptr");
+        return nullptr;
+    }
+    try {
+        auto plugin = Registry::instance().get<Plugin>(plugin_id);
+        return plugin ? plugin->version() : nullptr;
+    } catch (const std::exception& e) {
+        GENIEX_LOG_ERROR("failed to get plugin version for {}: {}", plugin_id, e.what());
+        return nullptr;
+    }
+}
 
 // Get Plugin List
 

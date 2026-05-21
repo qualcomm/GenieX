@@ -17,7 +17,8 @@ namespace geniex {
 class Plugin {
    public:
     virtual ~Plugin() = default;
-    virtual int32_t get_device_list(const geniex_GetDeviceListInput*, geniex_GetDeviceListOutput* output) {
+    virtual const char* version() { return "unknown"; }
+    virtual int32_t     get_device_list(const geniex_GetDeviceListInput*, geniex_GetDeviceListOutput* output) {
         if (!output) {
             GENIEX_LOG_ERROR("output is nullptr");
             return GENIEX_ERROR_COMMON_INVALID_INPUT;

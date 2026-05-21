@@ -6,14 +6,7 @@ set_source_files_properties(version.cpp PROPERTIES
     COMPILE_DEFINITIONS GENIEX_VERSION="${GENIEX_VERSION}")
 target_compile_definitions(geniex PRIVATE GENIEX_SHARED GENIEX_BUILD)
 
-if(GENIEX_PLUGIN_LLAMA_CPP)
-    target_compile_definitions(geniex PRIVATE GENIEX_PLUGIN_LLAMA_CPP)
-    target_link_libraries(geniex PRIVATE common)
-endif()
-
 target_include_directories(geniex PUBLIC ${COMMON_INCLUDE})
-target_include_directories(geniex PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../third-party/geniex-qairt/core/include)
 
 if(GENIEX_MODEL_MANAGER)
     add_dependencies(geniex model_manager_build)

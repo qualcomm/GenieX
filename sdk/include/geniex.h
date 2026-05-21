@@ -253,23 +253,22 @@ GENIEX_API void geniex_free(void* ptr);
 GENIEX_API const char* geniex_version(void);
 
 /**
- * @brief Get the bundled QAIRT runtime version.
+ * @brief Get the version string reported by a registered plugin.
  *
- * @return Null-terminated UTF-8 string.
+ * Each plugin owns its own version (e.g. the QAIRT runtime version for
+ * `qairt`, the llama.cpp build commit for `llama_cpp`). The SDK bridge
+ * forwards to the plugin's `Plugin::version()` override so that
+ * `libgeniex` itself does not need to link against any plugin-specific
+ * runtime.
+ *
+ * @param plugin_id[in]: Plugin identifier (must be non-NULL).
+ *
+ * @return Null-terminated UTF-8 string owned by the plugin. Returns NULL
+ *         when `plugin_id` is NULL or no matching plugin is registered.
  *
  * @thread_safety: Thread-safe.
  */
-GENIEX_API const char* geniex_qairt_version(void);
-
-/**
- * @brief Get the bundled llama.cpp build commit hash.
- *
- * @return Null-terminated UTF-8 string. Returns "unavailable" when the
- *         llama.cpp plugin was disabled at build time.
- *
- * @thread_safety: Thread-safe.
- */
-GENIEX_API const char* geniex_llama_cpp_version(void);
+GENIEX_API const char* geniex_get_plugin_version(geniex_PluginId plugin_id);
 
 /** Output structure containing the list of available plugins */
 typedef struct {
