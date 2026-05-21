@@ -51,7 +51,7 @@ func serve() *cobra.Command {
 	viper.BindPFlag("keyfile", serveCmd.Flags().Lookup("keyfile"))
 
 	serveCmd.Run = func(cmd *cobra.Command, args []string) {
-		checkDependency()
+		checkAudioDependency()
 		geniex_sdk.Init()
 
 		server.Serve()

@@ -99,7 +99,7 @@ func RootCmd() *cobra.Command {
 	return rootCmd
 }
 
-func checkDependency() {
+func checkAudioDependency() {
 	if _, err := exec.LookPath("sox"); err != nil {
 		fmt.Println(render.GetTheme().Warning.Sprintf("SoX is not installed, some features may not work. Try:"))
 		switch runtime.GOOS {

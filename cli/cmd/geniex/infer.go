@@ -164,7 +164,6 @@ func infer() *cobra.Command {
 		case types.ModelTypeLLM:
 			err = inferLLM(manifest, quant)
 		case types.ModelTypeVLM:
-			checkDependency()
 			err = inferVLM(manifest, quant)
 		default:
 			geniex_sdk.DeInit()
@@ -234,7 +233,7 @@ func ensureModelAvailable(s *store.Store, name string, quant string) (*types.Mod
 	if errors.Is(err, os.ErrNotExist) {
 		fmt.Println(render.GetTheme().Info.Sprintf("Model is not currently cached, downloading..."))
 		if err := pullModel(name, quant); err != nil {
-			return nil, fmt.Errorf("download model failed")
+			return nil, fmt.Errorf("download model failed: %s", err)
 		}
 		manifest, err = s.GetManifest(name)
 	}
@@ -570,6 +569,9 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 
 	caps, _ := p.Capabilities()
 	slog.Debug("VLM capabilities", "vision", caps.SupportsVision, "audio", caps.SupportsAudio)
+	if caps.SupportsAudio {
+		checkAudioDependency()
+	}
 
 	var history []geniex_sdk.VlmChatMessage
 	if systemPrompt != "" {
@@ -648,7 +650,9 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 				}
 				return err
 			},
-			Record: func() (*string, error) {
+		}
+		if caps.SupportsAudio {
+			repl.Record = func() (*string, error) {
 				t := strconv.Itoa(int(time.Now().Unix()))
 				outputFile := filepath.Join(os.TempDir(), "geniex-cli", t+".wav")
 				rec, err := record.NewRecorder(outputFile)
@@ -664,7 +668,7 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 				}
 				outfile := rec.GetOutputFile()
 				return &outfile, nil
-			},
+			}
 		}
 		defer repl.Close()
 		processor.GetPrompt = repl.GetPrompt
