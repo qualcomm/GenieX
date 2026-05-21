@@ -71,6 +71,25 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Vlm_reset(JNIEnv* env,
     return result;
 }
 
+// JNI: getCapabilities - Query mmproj-reported modality support
+extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_getCapabilities(JNIEnv* env, jobject, jlong handle) {
+    if (!handle) {
+        throw_runtime_exception(env, "VLM getCapabilities failed: invalid handle");
+        return nullptr;
+    }
+    geniex_VlmCapabilities caps{};
+    int32_t                ret = geniex_vlm_get_capabilities(reinterpret_cast<geniex_VLM*>(handle), &caps);
+    if (ret != GENIEX_SUCCESS) {
+        LOGe("[JNI] getCapabilities() failed, error code: %d", ret);
+        throw_runtime_exception(env, "VLM getCapabilities failed, error code: %d", ret);
+        return nullptr;
+    }
+
+    jclass    cls  = env->FindClass("com/geniex/sdk/bean/VlmCapabilities");
+    jmethodID ctor = env->GetMethodID(cls, "<init>", "(ZZ)V");
+    return env->NewObject(cls, ctor, (jboolean)caps.supports_vision, (jboolean)caps.supports_audio);
+}
+
 // JNI: encode
 // extern "C"
 // JNIEXPORT jint JNICALL

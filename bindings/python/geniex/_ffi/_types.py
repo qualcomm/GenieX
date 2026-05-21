@@ -263,6 +263,13 @@ class geniex_VlmApplyChatTemplateOutput(Structure):
     _fields_ = [('formatted_text', c_void_p)]
 
 
+class geniex_VlmCapabilities(Structure):
+    _fields_ = [
+        ('supports_vision', c_bool),
+        ('supports_audio', c_bool),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Plugin / device query structs
 # ---------------------------------------------------------------------------

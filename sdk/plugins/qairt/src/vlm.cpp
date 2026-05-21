@@ -124,6 +124,7 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
     if (vision_cfg.model_paths.empty()) {
         GENIEX_LOG_WARN("No vision encoder found for VLM model '{}' — text-only mode", model_name_);
     }
+    has_vision_encoder_        = !vision_cfg.model_paths.empty();
     vision_cfg.htp_config_path = llm_cfg.htp_config_path;
 
     // ── Build VLMConfig and create pipeline ───────────────────────────────────
@@ -139,6 +140,13 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
     pipeline_ = std::make_unique<VLMPipeline>(std::move(*pipe));
 
     GENIEX_LOG_DEBUG("QAIRT VLM created successfully: model={}", model_name_);
+    return GENIEX_SUCCESS;
+}
+
+int32_t QairtVlm::get_capabilities(geniex_VlmCapabilities* output) {
+    if (!output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    output->supports_vision = has_vision_encoder_;
+    output->supports_audio  = false;
     return GENIEX_SUCCESS;
 }
 

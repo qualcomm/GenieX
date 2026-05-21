@@ -13,6 +13,9 @@ class QairtVlm : public IVlm {
 
     std::string model_name_;
     bool        enable_thinking_ = false;
+    // True iff a vision encoder shard was located at create time. Audio is not
+    // wired into the QAIRT VLM pipeline yet, so always reported as unsupported.
+    bool has_vision_encoder_ = false;
 
     // Incremental history tracking.
     // history_size_         — messages already committed to the KV cache (advanced by generate()).
@@ -31,6 +34,8 @@ class QairtVlm : public IVlm {
         const geniex_VlmApplyChatTemplateInput*, geniex_VlmApplyChatTemplateOutput*) override;
 
     virtual int32_t generate(const geniex_VlmGenerateInput*, geniex_VlmGenerateOutput*) override;
+
+    virtual int32_t get_capabilities(geniex_VlmCapabilities* output) override;
 };
 
 }  // namespace geniex

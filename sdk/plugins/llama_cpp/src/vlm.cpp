@@ -97,10 +97,22 @@ int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
 
         this->ctx_vision = mtmd_init_from_file(input->mmproj_path, this->model, mparams);
         // Continue even if vision context fails
+        if (this->ctx_vision) {
+            this->supports_vision = mtmd_support_vision(this->ctx_vision);
+            this->supports_audio  = mtmd_support_audio(this->ctx_vision);
+            GENIEX_LOG_INFO("mmproj loaded: vision={}, audio={}", this->supports_vision, this->supports_audio);
+        }
     }
 
     this->reset_sampler();
 
+    return GENIEX_SUCCESS;
+}
+
+int32_t LlamaVlm::get_capabilities(geniex_VlmCapabilities* output) {
+    if (!output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    output->supports_vision = this->supports_vision;
+    output->supports_audio  = this->supports_audio;
     return GENIEX_SUCCESS;
 }
 
@@ -193,32 +205,43 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     int                       n_media = 0;
 
     if (input->config && input->config->image_paths && input->config->image_count > 0 && this->ctx_vision) {
-        GENIEX_LOG_DEBUG("processing {} image(s)", input->config->image_count);
-        for (int i = 0; i < input->config->image_count; ++i) {
-            if (input->config->image_paths[i]) {
-                mtmd_bitmap* bmp = mtmd_helper_bitmap_init_from_file(this->ctx_vision, input->config->image_paths[i]);
-                if (bmp) {
-                    bitmaps.push_back(bmp);
-                    n_media++;
-                    GENIEX_LOG_DEBUG("successfully loaded image {}: {}", i, input->config->image_paths[i]);
-                } else {
-                    GENIEX_LOG_DEBUG("failed to load image {}: {}", i, input->config->image_paths[i]);
+        if (!this->supports_vision) {
+            GENIEX_LOG_WARN("model does not support image input; skipping {} image(s)", input->config->image_count);
+        } else {
+            GENIEX_LOG_DEBUG("processing {} image(s)", input->config->image_count);
+            for (int i = 0; i < input->config->image_count; ++i) {
+                if (input->config->image_paths[i]) {
+                    mtmd_bitmap* bmp =
+                        mtmd_helper_bitmap_init_from_file(this->ctx_vision, input->config->image_paths[i]);
+                    if (bmp) {
+                        bitmaps.push_back(bmp);
+                        n_media++;
+                        GENIEX_LOG_DEBUG("successfully loaded image {}: {}", i, input->config->image_paths[i]);
+                    } else {
+                        GENIEX_LOG_DEBUG("failed to load image {}: {}", i, input->config->image_paths[i]);
+                    }
                 }
             }
         }
     }
 
     if (input->config && input->config->audio_paths && input->config->audio_count > 0 && this->ctx_vision) {
-        GENIEX_LOG_DEBUG("processing %d audio file(s)", input->config->audio_count);
-        for (int i = 0; i < input->config->audio_count; ++i) {
-            if (input->config->audio_paths[i]) {
-                mtmd_bitmap* bmp = mtmd_helper_bitmap_init_from_file(this->ctx_vision, input->config->audio_paths[i]);
-                if (bmp) {
-                    bitmaps.push_back(bmp);
-                    n_media++;
-                    GENIEX_LOG_DEBUG("successfully loaded audio %d: %s", i, input->config->audio_paths[i]);
-                } else {
-                    GENIEX_LOG_DEBUG("failed to load audio %d: %s", i, input->config->audio_paths[i]);
+        if (!this->supports_audio) {
+            GENIEX_LOG_WARN(
+                "model does not support audio input; skipping {} audio file(s)", input->config->audio_count);
+        } else {
+            GENIEX_LOG_DEBUG("processing {} audio file(s)", input->config->audio_count);
+            for (int i = 0; i < input->config->audio_count; ++i) {
+                if (input->config->audio_paths[i]) {
+                    mtmd_bitmap* bmp =
+                        mtmd_helper_bitmap_init_from_file(this->ctx_vision, input->config->audio_paths[i]);
+                    if (bmp) {
+                        bitmaps.push_back(bmp);
+                        n_media++;
+                        GENIEX_LOG_DEBUG("successfully loaded audio {}: {}", i, input->config->audio_paths[i]);
+                    } else {
+                        GENIEX_LOG_DEBUG("failed to load audio {}: {}", i, input->config->audio_paths[i]);
+                    }
                 }
             }
         }

@@ -32,6 +32,7 @@ from ._ffi._types import (
     geniex_token_callback,
     geniex_VlmApplyChatTemplateInput,
     geniex_VlmApplyChatTemplateOutput,
+    geniex_VlmCapabilities,
     geniex_VlmChatMessage,
     geniex_VlmContent,
     geniex_VlmGenerateInput,
@@ -441,6 +442,16 @@ class GeniexVLM:
 
         streamer.start(_run)
         return streamer
+
+    def capabilities(self) -> dict[str, bool]:
+        """Return which input modalities (``vision`` / ``audio``) the loaded mmproj supports.
+
+        Plugins without modality probes (e.g. QAIRT) return both as ``False``.
+        """
+        lib = load_library()
+        out = geniex_VlmCapabilities()
+        _check(lib.geniex_vlm_get_capabilities(self._handle, byref(out)))
+        return {'vision': bool(out.supports_vision), 'audio': bool(out.supports_audio)}
 
     def reset(self) -> None:
         """Clear KV cache and reset sampler state."""

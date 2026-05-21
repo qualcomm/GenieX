@@ -398,6 +398,30 @@ func (v *VLM) Destroy() error {
 	return nil
 }
 
+// VlmCapabilities reports which input modalities the loaded model's mmproj supports.
+type VlmCapabilities struct {
+	SupportsVision bool
+	SupportsAudio  bool
+}
+
+// Capabilities queries which input modalities (image / audio) the underlying mmproj supports.
+// Plugins without modality probes return both flags as false.
+func (v *VLM) Capabilities() (VlmCapabilities, error) {
+	if v.ptr == nil {
+		return VlmCapabilities{}, SDKError(C.GENIEX_ERROR_COMMON_INVALID_INPUT)
+	}
+
+	var cOut C.geniex_VlmCapabilities
+	res := C.geniex_vlm_get_capabilities(v.ptr, &cOut)
+	if res < 0 {
+		return VlmCapabilities{}, SDKError(res)
+	}
+	return VlmCapabilities{
+		SupportsVision: bool(cOut.supports_vision),
+		SupportsAudio:  bool(cOut.supports_audio),
+	}, nil
+}
+
 // Reset resets the VLM internal state (clear KV cache, reset sampling)
 func (v *VLM) Reset() error {
 	slog.Debug("Reset called", "ptr", v.ptr)

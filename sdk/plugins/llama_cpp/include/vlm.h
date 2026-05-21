@@ -19,6 +19,10 @@ class LlamaVlm : public IVlm {
     common_sampler* sampler    = nullptr;
     mtmd_context*   ctx_vision = nullptr;
 
+    // mmproj-reported modality support; both false when no mmproj is loaded.
+    bool supports_vision = false;
+    bool supports_audio  = false;
+
     // Conversation state tracking
     int32_t n_past              = 0;
     int32_t global_n_past_chars = 0;  // Track character position in prompt text (not tokens)
@@ -37,6 +41,8 @@ class LlamaVlm : public IVlm {
         const geniex_VlmApplyChatTemplateInput* input, geniex_VlmApplyChatTemplateOutput* output) override;
 
     virtual int32_t generate(const geniex_VlmGenerateInput* input, geniex_VlmGenerateOutput* output) override;
+
+    virtual int32_t get_capabilities(geniex_VlmCapabilities* output) override;
 
    private:
     void reset_sampler();

@@ -77,6 +77,19 @@ int32_t geniex_vlm_apply_chat_template(
     }
 }
 
+int32_t geniex_vlm_get_capabilities(geniex_VLM* handle, geniex_VlmCapabilities* output) {
+    GENIEX_LOG_TRACE("querying vlm capabilities");
+
+    try {
+        auto backend = reinterpret_cast<IVlm*>(handle);
+        if (!backend || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        return backend->get_capabilities(output);
+    } catch (const std::exception& e) {
+        GENIEX_LOG_ERROR("failed to query VLM capabilities: {}", e.what());
+        return GENIEX_ERROR_COMMON_UNKNOWN;
+    }
+}
+
 int32_t geniex_vlm_generate(
     geniex_VLM* handle, const geniex_VlmGenerateInput* input, geniex_VlmGenerateOutput* output) {
     GENIEX_LOG_TRACE("{}", input);

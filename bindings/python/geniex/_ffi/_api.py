@@ -40,6 +40,7 @@ from ._types import (
     geniex_ResolveDeviceOutput,
     geniex_VlmApplyChatTemplateInput,
     geniex_VlmApplyChatTemplateOutput,
+    geniex_VlmCapabilities,
     geniex_VlmCreateInput,
     geniex_VlmGenerateInput,
     geniex_VlmGenerateOutput,
@@ -226,6 +227,9 @@ def _bind_all() -> None:
         POINTER(geniex_VlmApplyChatTemplateOutput),
     ]
     lib.geniex_vlm_apply_chat_template.restype = c_int32
+
+    lib.geniex_vlm_get_capabilities.argtypes = [c_void_p, POINTER(geniex_VlmCapabilities)]
+    lib.geniex_vlm_get_capabilities.restype = c_int32
 
     # Model manager
     lib.geniex_model_init.argtypes = [c_char_p]

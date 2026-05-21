@@ -716,6 +716,27 @@ typedef struct {
 GENIEX_API int32_t geniex_vlm_apply_chat_template(
     geniex_VLM* handle, const geniex_VlmApplyChatTemplateInput* input, geniex_VlmApplyChatTemplateOutput* output);
 
+/* ====================  Capability Query  ================================== */
+
+/** Modalities the loaded VLM (mmproj) reports as supported. */
+typedef struct {
+    bool supports_vision; /** Model can consume image inputs */
+    bool supports_audio;  /** Model can consume audio inputs */
+} geniex_VlmCapabilities;
+
+/**
+ * @brief Query the VLM for which input modalities its mmproj supports.
+ *
+ * For plugins that do not expose modality probes (e.g. QAIRT), both flags
+ * default to false. For llama.cpp this reflects `mtmd_support_vision/audio`.
+ *
+ * @param handle[in]:  VLM handle
+ * @param output[out]: Filled-in capability flags
+ *
+ * @return geniex_ErrorCode: GENIEX_SUCCESS on success, negative on failure.
+ */
+GENIEX_API int32_t geniex_vlm_get_capabilities(geniex_VLM* handle, geniex_VlmCapabilities* output);
+
 /* ====================  Streaming Generation  ============================= */
 
 /** Input structure for VLM streaming text generation */

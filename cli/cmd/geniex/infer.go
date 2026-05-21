@@ -568,6 +568,9 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 	}
 	defer p.Destroy()
 
+	caps, _ := p.Capabilities()
+	slog.Debug("VLM capabilities", "vision", caps.SupportsVision, "audio", caps.SupportsAudio)
+
 	var history []geniex_sdk.VlmChatMessage
 	if systemPrompt != "" {
 		history = append(history, geniex_sdk.VlmChatMessage{Role: geniex_sdk.VlmRoleSystem, Contents: []geniex_sdk.VlmContent{{Type: geniex_sdk.VlmContentTypeText, Text: systemPrompt}}})
