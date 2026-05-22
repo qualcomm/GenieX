@@ -22,6 +22,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -108,10 +109,14 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 		return nil, fmt.Errorf("HEAD %s: %w", asset.GetDownloadUrl(), err)
 	}
 
-	zipBasename := repo + ".zip"
+	zipURL := asset.GetDownloadUrl()
+	zipBasename := path.Base(zipURL)
+	if path.Ext(zipBasename) != ".zip" {
+		return nil, fmt.Errorf("expected zip file from AI Hub, got %q", zipBasename)
+	}
 	h.mu.Lock()
 	h.resolved[name] = resolvedAsset{
-		zipURL:      asset.GetDownloadUrl(),
+		zipURL:      zipURL,
 		zipSize:     zipSize,
 		zipBasename: zipBasename,
 	}
@@ -119,7 +124,7 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 
 	slog.Info("aihub: resolved asset",
 		"name", name, "chipset", asset.GetChipset(),
-		"url", asset.GetDownloadUrl(), "size", zipSize)
+		"url", zipURL, "size", zipSize)
 
 	return []ModelFileInfo{{Name: zipBasename, Size: zipSize}}, nil
 }
