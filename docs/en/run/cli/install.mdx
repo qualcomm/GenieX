@@ -53,36 +53,48 @@ The CLI ships as a native Windows ARM64 executable, and as a Linux ARM64 Docker 
     curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
     ```
 
-    The script downloads the latest stable release, verifies its SHA256, and installs atomically. It runs without `sudo`:
-
-    - **Root** (EVK / container) → binary in `/usr/local/lib/geniex/`, launcher at `/usr/local/bin/geniex`.
-    - **Non-root** → binary in `${XDG_DATA_HOME:-~/.local/share}/geniex/`, launcher at `~/.local/bin/geniex`.
-
-    Common flags (pass after `sh -s --`):
-
-    ```bash bash
-    # Pin a specific version
-    curl -fsSL .../install.sh | sh -s -- --version v0.1.8
-
-    # Custom install prefix
-    curl -fsSL .../install.sh | sh -s -- --prefix /opt/geniex
-    ```
-
-    ### **Add to PATH**
-
-    If the launcher directory isn't on your `PATH`, the installer prints the exact line to add — typically:
-
-    ```bash bash
-    echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc   # or ~/.zshrc / ~/.profile
-    ```
-
-    Open a new shell or `source` that file.
-
     ### **Verify**
 
     ```bash bash
     geniex --help
     ```
+
+    If `geniex` isn't found, open a new shell — or follow the `PATH` line the installer printed at the end of its output.
+
+    ### **Advanced**
+
+    <AccordionGroup>
+      <Accordion title="Install locations">
+        The script runs without `sudo` and picks a location based on who you are:
+
+        - **Root** (EVK / container) → binary in `/usr/local/lib/geniex/`, launcher at `/usr/local/bin/geniex`.
+        - **Non-root** → binary in `${XDG_DATA_HOME:-~/.local/share}/geniex/`, launcher at `~/.local/bin/geniex`.
+
+        It downloads the latest stable release, verifies its SHA256, and installs atomically.
+      </Accordion>
+
+      <Accordion title="Pin a version or use a custom prefix">
+        Pass flags after `sh -s --`:
+
+        ```bash bash
+        # Pin a specific version
+        curl -fsSL .../install.sh | sh -s -- --version v0.1.8
+
+        # Custom install prefix
+        curl -fsSL .../install.sh | sh -s -- --prefix /opt/geniex
+        ```
+      </Accordion>
+
+      <Accordion title="Add to PATH manually">
+        If the launcher directory isn't on your `PATH`, add the line the installer printed — typically:
+
+        ```bash bash
+        echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc   # or ~/.zshrc / ~/.profile
+        ```
+
+        Open a new shell or `source` that file.
+      </Accordion>
+    </AccordionGroup>
 
   </Tab>
 
