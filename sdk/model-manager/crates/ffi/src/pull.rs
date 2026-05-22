@@ -52,10 +52,10 @@ pub struct GeniexModelPullInput {
     /// AI Hub `display_name` of the model to download. Used when
     /// `hub == GENIEX_HUB_AIHUB` or `hub == GENIEX_HUB_AUTO` resolves
     /// to AI Hub. If NULL and `model_name` is in the form
-    /// `qualcomm/<repo>`, `<repo>` is used as the display_name;
-    /// otherwise the caller must set this. `model_name` still names
-    /// the on-disk directory ("org/repo" shape), mirroring the Go
-    /// CLI's `storedName` / `displayName` split.
+    /// `qualcomm/<repo>` or `qai-hub-models/<repo>`, `<repo>` is used
+    /// as the display_name; otherwise the caller must set this.
+    /// `model_name` still names the on-disk directory ("org/repo"
+    /// shape), mirroring the Go CLI's `storedName` / `displayName` split.
     pub display_name: *const c_char,
     pub on_progress: GeniexDownloadProgressCb,
     pub user_data: *mut c_void,
@@ -115,11 +115,12 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
 
         let intent = match inp.hub {
             GeniexHubSource::Auto => {
-                // "qualcomm/*" names and bare names
-                // (which canonicalize_model_name above rewrote to "qualcomm/<name>")
-                // route to AI Hub without the caller setting hub=AIHUB.
-                // The derived display_name is the repo after the slash;
-                // callers may still override via inp.display_name.
+                // "qualcomm/*" and "qai-hub-models/*" names, plus bare
+                // names (which canonicalize_model_name above rewrote to
+                // "qualcomm/<name>"), route to AI Hub without the caller
+                // setting hub=AIHUB. The derived display_name is the repo
+                // after the slash; callers may still override via
+                // inp.display_name.
                 if let Some(repo) = aihub_display_name_from_repo(&model_name) {
                     PullIntent::AiHub {
                         display_name: explicit_display_name.unwrap_or_else(|| repo.to_string()),
@@ -147,8 +148,9 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
                 // chipset NULL or empty → SDK auto-detects (currently
                 // Windows-on-Snapdragon only). Non-empty: caller override.
                 // display_name mirrors the Auto branch: explicit value
-                // wins; otherwise derive from "qualcomm/*" repos. Only
-                // reject when neither source yields a name.
+                // wins; otherwise derive from any AI Hub org repo
+                // ("qualcomm/*" or "qai-hub-models/*"). Only reject when
+                // neither source yields a name.
                 let display_name = explicit_display_name
                     .or_else(|| aihub_display_name_from_repo(&model_name).map(str::to_string));
                 let display_name = match display_name {
