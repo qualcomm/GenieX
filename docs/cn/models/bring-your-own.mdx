@@ -1,11 +1,11 @@
 ---
 title: "自带模型"
-description: "在 llama.cpp 后端运行 Hugging Face 上的自定义 GGUF 模型，或从本地路径加载自行转换的 QAIRT 模型包。"
+description: "在 llama.cpp 运行时执行 Hugging Face 上的自定义 GGUF 模型，或从本地路径加载自行转换的 QAIRT 模型包。"
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-llama.cpp 后端可运行任意 GGUF 模型，QAIRT 后端可加载自行转换的模型包。
+llama.cpp 运行时可执行任意 GGUF 模型，QAIRT 运行时可加载自行转换的模型包。
 
 ## **Hugging Face 上的 GGUF 模型（llama.cpp）**
 
@@ -50,7 +50,7 @@ geniex pull local/$model --model-hub localfs `
 geniex infer local/$model
 ```
 
-<Note>该流程使用 QAIRT 插件，仅支持 NPU。请传 `--device npu` 或省略该参数。</Note>
+<Note>该流程使用 QAIRT 运行时，仅支持 NPU。请传 `--device npu` 或省略该参数。</Note>
 
 ## **Python 中的自定义模型**
 

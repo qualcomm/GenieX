@@ -1,21 +1,21 @@
 ---
 title: "API reference"
-description: "GenieX Android SDK — plugin/device selection, model management, and inference APIs for LLM and VLM."
+description: "GenieX Android SDK — runtime / compute-unit selection, model management, and inference APIs for LLM and VLM."
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-## **Plugin & device selection**
+## **Runtime & compute unit selection**
 
-### Plugin
+### Runtime
 
-Choose the inference backend via `plugin_id`:
+Choose the inference runtime via `plugin_id`:
 
 ```kotlin
 val plugin_id: String?   // "llama_cpp" | "qairt" | null
 ```
 
-| `plugin_id`   | Backend                          | Model format             | Devices                        |
+| `plugin_id`   | Runtime                          | Model format             | Compute units                  |
 |---------------|----------------------------------|--------------------------|--------------------------------|
 | `"llama_cpp"` | llama.cpp + GGML Hexagon backend | GGUF                     | CPU / Adreno GPU / Hexagon NPU |
 | `"qairt"`     | Qualcomm AI Runtime              | AI Hub pre-compiled bins | Hexagon NPU only               |
@@ -23,9 +23,9 @@ val plugin_id: String?   // "llama_cpp" | "qairt" | null
 
 Constants are exposed as [`PluginIdValue`](https://github.com/qcom-ai-hub/geniex/blob/main/bindings/android/app/src/main/java/com/geniex/sdk/bean/InputPluginBase.kt) (`LLAMA_CPP`, `QAIRT`).
 
-### Device
+### Compute unit
 
-Friendly hardware aliases forwarded to `geniex_resolve_device` in the native SDK.
+Friendly compute-unit aliases forwarded to `geniex_resolve_device` in the native SDK.
 
 ```kotlin
 val device_id: String?   // "cpu" | "gpu" | "npu" | null
@@ -33,7 +33,7 @@ val device_id: String?   // "cpu" | "gpu" | "npu" | null
 
 | Alias   | Effect                                                              |
 |---------|---------------------------------------------------------------------|
-| `null`  | Plugin default — `npu` for `llama_cpp`, `npu` for `qairt`.         |
+| `null`  | Runtime default — `npu` for `llama_cpp`, `npu` for `qairt`.         |
 | `"npu"` | Hexagon NPU acceleration. Recommended on Snapdragon.                |
 | `"gpu"` | Adreno GPU via OpenCL (`llama_cpp` only).                           |
 | `"cpu"` | Pure CPU. Forces `nGpuLayers = 0`.                                  |
@@ -235,7 +235,7 @@ sealed class LlmStreamResult {
 
 ## **llama.cpp (GGUF models)**
 
-Runs any GGUF model on CPU, Adreno GPU, or Hexagon NPU. Device selection is controlled by `device_id`.
+Runs any GGUF model on CPU, Adreno GPU, or Hexagon NPU. Compute-unit selection is controlled by `device_id`.
 
 ### LLM
 
@@ -270,13 +270,13 @@ llmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
 }
 ```
 
-#### Device variants
+#### Compute-unit variants
 
 | Goal | `device_id` | Notes |
 |---|---|---|
 | Snapdragon NPU (recommended) | `"npu"` or `null` | Hexagon NPU acceleration. |
 | Adreno GPU (OpenCL) | `"gpu"` | Set `nGpuLayers = 999` to offload all layers. |
-| Pure CPU | `"cpu"` | Works on any ARM64 device. |
+| Pure CPU | `"cpu"` | Works on any ARM64 chipset. |
 
 ### VLM
 

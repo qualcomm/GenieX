@@ -1,27 +1,26 @@
 ---
-title: "Choose your backend"
-description: "Decide between the llama.cpp and QAIRT runtime backends, including device targeting, quantization, and limitations."
+title: "Choose your runtime"
+description: "Decide between the llama.cpp and QAIRT runtimes, including compute unit targeting, quantization, and limitations."
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-GenieX runs models through one of two backends. Pick based on the model format you have, where you want to run it, and which Snapdragon hardware you're on.
+GenieX runs models through one of two runtimes. Pick based on the model format you have, where you want to run it, and which Snapdragon chipset you're on.
 
 ## **At a glance**
 
 | | **llama.cpp** | **QAIRT** |
 |---|---|---|
 | **Model format** | GGUF (any community model) | AI Hub pre-compiled bundles |
-| **Devices** | NPU / GPU / CPU | NPU only |
-| **Where it runs** | Windows ARM64, Android, Linux ARM64 | Windows ARM64, Android |
+| **Compute units** | NPU / GPU / CPU | NPU only |
 | **Quantization picked by** | You (`Q4_0`, `Q8_0`, `F16`, …) | Pre-quantized in the bundle |
 | **Best for** | Bringing your own model from Hugging Face | Highest NPU performance on supported AI Hub models |
 
 ## **Defaults**
 
-If you don't pass a device, GenieX picks one for you:
+If you don't pass a compute unit, GenieX picks one for you:
 
-| Backend | Default device |
+| Runtime | Default compute unit |
 |---|---|
 | `llama_cpp` | `hybrid` (HTP + CPU per-tensor scheduling — the fast path on Snapdragon) |
 | `qairt` | `npu` |
@@ -32,7 +31,7 @@ Some model families override this — for example, `gpt-oss` falls back to `npu`
 
 ## **llama.cpp**
 
-The `llama_cpp` backend runs **any GGUF model** through llama.cpp with Qualcomm's GGML Hexagon backend. It's the broadest path — you can pull any community GGUF from Hugging Face and run it on Snapdragon NPU, Adreno GPU, or pure CPU.
+The `llama_cpp` runtime executes **any GGUF model** through llama.cpp with Qualcomm's GGML Hexagon backend. It's the broadest path — you can pull any community GGUF from Hugging Face and run it on Snapdragon NPU, Adreno GPU, or pure CPU.
 
 ### Pick llama.cpp if…
 
@@ -40,9 +39,11 @@ The `llama_cpp` backend runs **any GGUF model** through llama.cpp with Qualcomm'
 - You need to **target CPU or GPU** as well as NPU (e.g. fallback paths, IoT devices without HTP).
 - You're prototyping and want the broadest model selection.
 
-### Devices
+### Compute units
 
-| Device alias | Effect |
+Compute unit selection (via `--device`) maps to the underlying hardware as follows:
+
+| Alias | Effect |
 |---|---|
 | `npu` | Pin to Hexagon NPU (`HTP0`). Best NPU-only path. |
 | `gpu` | Adreno GPU via OpenCL. |
@@ -61,17 +62,17 @@ llama.cpp accepts the full GGML quantization range. **Use `Q4_0` for best Hexago
 
 ## **QAIRT**
 
-The `qairt` backend runs pre-compiled bundles from **Qualcomm AI Hub** through the Qualcomm AI Runtime. It's NPU-only, with the bundle compiled and quantized for a specific Snapdragon chipset — typically the fastest NPU path when your model is available on AI Hub.
+The `qairt` runtime executes pre-compiled bundles from **Qualcomm AI Hub** through the Qualcomm AI Runtime. It's NPU-only, with the bundle compiled and quantized for a specific Snapdragon chipset — typically the fastest NPU path when your model is available on AI Hub.
 
 ### Pick QAIRT if…
 
 - You want the **fastest NPU path** on Snapdragon, and your model is available on Qualcomm AI Hub.
 
-### Devices
+### Compute units
 
 QAIRT is **NPU only**.
 
-| Device alias | Effect |
+| Alias | Effect |
 |---|---|
 | `npu` *(default)* | Pin `HTP0` — the only supported path. |
 | `cpu` / `gpu` | Coerced to `npu` with a warning. Never an error. |
@@ -86,7 +87,7 @@ On Android, this means `nGpuLayers != 0` and `nCtx != 0` are rejected with `PARA
 
 AI Hub pulls on Android **require an explicit chipset** — auto-detect only runs on Windows on Snapdragon. Use:
 
-| Chipset | Phone |
+| Chipset ID | Chipset |
 |---|---|
 | `SM8750` | Snapdragon 8 Elite |
 | `SM8850` | Snapdragon 8 Elite Gen 5 |

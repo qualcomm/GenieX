@@ -47,10 +47,10 @@ geniex infer qualcomm/Qwen3-4B --think         # show reasoning steps
 geniex infer qualcomm/Qwen3-4B --think=false   # respond directly
 ```
 
-**Device selection** — choose the backend (default: `npu`):
+**Compute unit selection** (via `--device`) — pick which compute unit runs the model (default: `npu`):
 
 ```powershell
-# llama.cpp models support all backends
+# llama.cpp models support all compute units
 geniex infer unsloth/Qwen3.5-0.8B-GGUF --device npu
 geniex infer unsloth/Qwen3.5-0.8B-GGUF --device gpu
 geniex infer unsloth/Qwen3.5-0.8B-GGUF --device cpu

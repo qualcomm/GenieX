@@ -23,7 +23,7 @@ Tags follow [SemVer 2.0](https://semver.org/) with a `v` prefix: `vX.Y.Z` for st
 | Bump        | Meaning                                                       | Example triggers                                                                                |
 |-------------|---------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
 | MAJOR (`X`) | Breaking change to any public surface. Consumers must adapt.  | CLI flag removed/renamed, SDK header signature changed, Python API removed, config key renamed. |
-| MINOR (`Y`) | Backwards-compatible feature addition.                        | New backend, new model support, new CLI subcommand, new SDK function.                           |
+| MINOR (`Y`) | Backwards-compatible feature addition.                        | New runtime, new model support, new CLI subcommand, new SDK function.                           |
 | PATCH (`Z`) | Backwards-compatible fix or cleanup.                          | Bug fix, dependency bump, doc/CI-only change, internal refactor.                                |
 
 **Pre-1.0 rule.** The project is still pre-1.0 (`X = 0`). Do **not** bump MAJOR while private/unreleased — keep `X = 0`. Breaking changes bump **MINOR** (`0.Y → 0.(Y+1)`, resetting `Z` to 0) and must be flagged in the release notes. The project graduates to `X = 1` only on first public release.
@@ -74,7 +74,7 @@ This is the algorithm `/release` follows. Apply in order.
 ### Worked examples
 
 - Latest stable `v0.3.2`. `git log v0.3.2..HEAD` has one `fix:` and one `docs:`. On `main`, first tag → `v0.3.3-rc.1`, then `v0.3.3`.
-- Latest stable `v0.3.2`. Log contains a `feat:` adding a new backend. On a feature branch → `v0.4.0-alpha.1`; after merge to `main` → `v0.4.0-rc.1` → `v0.4.0`.
+- Latest stable `v0.3.2`. Log contains a `feat:` adding a new runtime. On a feature branch → `v0.4.0-alpha.1`; after merge to `main` → `v0.4.0-rc.1` → `v0.4.0`.
 - On `v0.4.0-rc.2`, a CLI flag rename (breaking) lands. Target rises from `0.4.0` to `0.5.0`. Leave `-rc.2` alone; next tag is `v0.5.0-alpha.1` or `v0.5.0-rc.1` depending on the branch.
 
 ## S3 mirror & manifest

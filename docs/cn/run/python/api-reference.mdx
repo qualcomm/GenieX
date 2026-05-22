@@ -27,7 +27,7 @@ model = AutoModelForCausalLM.from_pretrained(
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `model_name_or_path` | `str` | *必填* | HuggingFace 仓库 ID、短别名（例如 `"qwen3"`），或本地路径。 |
-| `device_map` | `str` | `"auto"` | `"auto"` 选择第一个可用的插件/设备。也支持 `"<plugin_id>"` 或 `"<plugin_id>:<device_id>"`。 |
+| `device_map` | `str` | `"auto"` | `"auto"` 选择第一个可用的运行时与计算单元。也支持 `"<plugin_id>"`（运行时）或 `"<plugin_id>:<device_id>"`（运行时 + 计算单元）。 |
 | `quant` | `str \| None` | `None` | 量化版本（例如 `"Q4_K_M"`）。从 Hub 下载时用于过滤文件。 |
 | `mmproj_path` | `str \| None` | `None` | 多模态投影文件路径。从 Hub 自动解析；显式传入可强制进入 VLM 模式。 |
 
@@ -278,24 +278,24 @@ print(f"model removed: {MODEL}")
 | `model_path` | `str` | 主模型文件路径。 |
 | `model_dir` | `str` | 模型所在目录。 |
 | `model_name` | `str` | 规范模型名。 |
-| `plugin_id` | `str` | 插件标识。 |
+| `plugin_id` | `str` | 运行时标识。 |
 | `mmproj_path` | `str \| None` | 多模态投影路径（仅 VLM）。 |
 | `tokenizer_path` | `str \| None` | tokenizer 文件路径。 |
-| `device_id` | `str \| None` | 设备标识。 |
+| `device_id` | `str \| None` | 计算单元标识。 |
 
 </Expandable>
 
 ---
 
-## 运行时函数
+## SDK 函数
 
 | 函数 | 说明 |
 |---|---|
-| `geniex.init()` | 初始化运行时。首次加载模型时自动调用。 |
-| `geniex.deinit()` | 关闭运行时并释放资源。 |
+| `geniex.init()` | 初始化 SDK。首次加载模型时自动调用。 |
+| `geniex.deinit()` | 关闭 SDK 并释放资源。 |
 | `geniex.version()` | 返回 SDK 版本字符串。 |
-| `geniex.get_plugin_list()` | 返回可用插件 ID 列表 `list[str]`。 |
-| `geniex.get_device_list(plugin_id)` | 返回 `(device_id, device_name)` 元组列表。 |
+| `geniex.get_plugin_list()` | 返回可用运行时 ID 列表 `list[str]`（即 `plugin_id`）。 |
+| `geniex.get_device_list(plugin_id)` | 返回指定运行时下的 `(device_id, device_name)` 计算单元元组列表。 |
 
 <br />
 
