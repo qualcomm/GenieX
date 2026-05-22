@@ -10,16 +10,20 @@ pub fn resolve_alias(alias: &str) -> Option<String> {
     }
 }
 
-/// The org whose "<org>/<repo>" names are published on AI Hub rather than HF.
-/// Lowercased; lookup is case-insensitive.
-const AI_HUB_ORG: &str = "qualcomm";
+/// Orgs whose "<org>/<repo>" names are published on AI Hub rather than HF.
+/// Lowercased; lookup is case-insensitive. `qualcomm` is the canonical
+/// org used in our docs; `qai-hub-models` matches the public HuggingFace
+/// mirror so users can paste names from either source.
+const AI_HUB_ORGS: &[&str] = &["qualcomm", "qai-hub-models"];
 
 /// Canonicalise a user-supplied model name into the "org/repo" shape
 /// that [`crate::validation::validate_model_name`] expects.
 ///
 /// A name without '/' is assumed to be a bare AI Hub model id
 /// (e.g. `llama_v3_2_3b_instruct`) and is rewritten to `qualcomm/<name>`.
-/// Anything that already contains '/' is returned unchanged.
+/// Anything that already contains '/' is returned unchanged — including
+/// `qai-hub-models/<repo>`, which is stored as a separate cache entry
+/// from `qualcomm/<repo>` even though both route to AI Hub.
 ///
 /// This is the single entry point callers should use before handing a
 /// name to `pull` / `get_paths` so the Store layout stays consistent.
@@ -45,7 +49,7 @@ pub fn aihub_display_name_from_repo(model_name: &str) -> Option<&str> {
         return None;
     }
     let org_lower = org.to_ascii_lowercase();
-    if org_lower == AI_HUB_ORG {
+    if AI_HUB_ORGS.iter().any(|o| *o == org_lower) {
         Some(repo)
     } else {
         None
@@ -78,8 +82,15 @@ mod tests {
     }
 
     #[test]
-    fn aihub_display_name_rejects_old_prefixes() {
-        assert!(aihub_display_name_from_repo("qai-hub-models/Phi-3.5-Mini-Instruct").is_none());
+    fn aihub_display_name_matches_qai_hub_models_org() {
+        assert_eq!(
+            aihub_display_name_from_repo("qai-hub-models/Llama-v3.2-3B-Chat"),
+            Some("Llama-v3.2-3B-Chat")
+        );
+    }
+
+    #[test]
+    fn aihub_display_name_rejects_retired_aihub_prefix() {
         assert!(aihub_display_name_from_repo("aihub/llama_v3_2_3b_instruct").is_none());
     }
 
@@ -88,6 +99,10 @@ mod tests {
         assert_eq!(
             aihub_display_name_from_repo("Qualcomm/Qwen3-4B"),
             Some("Qwen3-4B")
+        );
+        assert_eq!(
+            aihub_display_name_from_repo("QAI-Hub-Models/Llama-v3.2-3B-Chat"),
+            Some("Llama-v3.2-3B-Chat")
         );
     }
 
@@ -110,6 +125,7 @@ mod tests {
         assert!(aihub_display_name_from_repo("qualcomm").is_none());
         assert!(aihub_display_name_from_repo("qualcomm/").is_none());
         assert!(aihub_display_name_from_repo("/Qwen3-4B").is_none());
+        assert!(aihub_display_name_from_repo("qai-hub-models/").is_none());
     }
 
     #[test]
@@ -129,6 +145,12 @@ mod tests {
         assert_eq!(
             canonicalize_model_name("ggml-org/Qwen3-1.7B-GGUF"),
             "ggml-org/Qwen3-1.7B-GGUF"
+        );
+        // qai-hub-models/<repo> is preserved as a separate cache entry —
+        // we deliberately do not rewrite it to qualcomm/<repo>.
+        assert_eq!(
+            canonicalize_model_name("qai-hub-models/Llama-v3.2-3B-Chat"),
+            "qai-hub-models/Llama-v3.2-3B-Chat"
         );
     }
 }
