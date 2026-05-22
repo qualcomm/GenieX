@@ -1262,7 +1262,7 @@ space ::= | " " | "\n" | "\r" | "\t"
                             }
                         }
                         ggufLlmDeviceId = DeviceIdValue.GPU.value
-                    } else if (checkedId == R.id.rb_npu && isGgufLlmModel) {
+                    } else if (checkedId == R.id.rb_npu) {
                         nGpuLayers = 999
                         ggufLlmDeviceId = DeviceIdValue.NPU.value
                     }
