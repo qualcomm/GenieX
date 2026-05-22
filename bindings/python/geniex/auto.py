@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from ctypes import byref, c_void_p
@@ -140,6 +141,11 @@ def _resolve_model_sources(
     model_name: str | None = None,
 ) -> tuple[str, str | None, str | None, _mm.ModelPaths | None]:
     if os.path.exists(model_name_or_path):
+        # Optional: when the caller passes both a local path and `model_name=`,
+        # register the bundle in the cache via the localfs hub so subsequent
+        # `_mm.get_paths(model_name)` / `_mm.get_type(model_name)` lookups work
+        # (e.g. VLM auto-detect). Not required for QAIRT to *load* — the plugin
+        # reads metadata.json directly from the bundle.
         if model_name:
             local_dir = model_name_or_path if os.path.isdir(model_name_or_path) else os.path.dirname(model_name_or_path)
             _mm.pull(model_name, hub='localfs', local_path=os.path.abspath(local_dir))
@@ -192,14 +198,37 @@ def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **
     return cfg
 
 
-def _is_vlm(mmproj_path: str | None, model_name: str) -> bool:
+def _qairt_bundle_is_vlm(model_path: str) -> bool | None:
+    # Peek at metadata.json in the bundle dir. Returns None when the file is
+    # missing/unreadable so the caller falls through to other signals.
+    bundle_dir = model_path if os.path.isdir(model_path) else os.path.dirname(model_path)
+    meta_path = os.path.join(bundle_dir, 'metadata.json')
+    if not os.path.isfile(meta_path):
+        return None
+    try:
+        with open(meta_path, encoding='utf-8') as f:
+            meta = json.load(f)
+    except (OSError, ValueError):
+        return None
+    genie = meta.get('genie') or {}
+    return bool(genie.get('supports_vision'))
+
+
+def _is_vlm(mmproj_path: str | None, cache_key: str, model_path: str | None = None) -> bool:
     # mmproj_path is the llama_cpp signal (multimodal projector file).
-    # QAIRT VLMs bundle the vision encoder into the QNN binary, so they have
-    # no mmproj — fall back to the cached manifest's ModelType.
+    # QAIRT VLMs bundle the vision encoder into the QNN binary and have no
+    # mmproj. For raw local QAIRT bundles we read metadata.json directly so
+    # `from_pretrained("/path/to/qairt_vlm_bundle")` routes to VLM without
+    # requiring a prior `geniex pull`. Cached models fall through to the
+    # manifest's ModelType.
     if mmproj_path is not None:
         return True
+    if model_path:
+        from_meta = _qairt_bundle_is_vlm(model_path)
+        if from_meta is not None:
+            return from_meta
     try:
-        return _mm.get_type(model_name) == 'vlm'
+        return _mm.get_type(cache_key) == 'vlm'
     except Exception:  # noqa: BLE001 — uncached / unknown → treat as LLM
         return False
 
@@ -262,6 +291,13 @@ class AutoModelForCausalLM:
     ) -> GeniexLLM | GeniexVLM:
         """Load a causal LM or VLM by HF repo id, alias, or local path.
 
+        ``model_name`` is **optional**. The QAIRT plugin no longer needs it —
+        it dispatches by reading ``metadata.json`` from the bundle. Pass it
+        only if you want to register a local-path bundle in the geniex cache
+        (so it shows up in ``geniex list`` and survives across runs), or to
+        provide a hint to ``geniex_resolve_device`` for the gpt-oss
+        llama_cpp device-default override.
+
         When the model is detected as multimodal (e.g. phi4_multimodal,
         qwen3.5-vl, gemma4), a :class:`GeniexVLM` is returned instead.
         """
@@ -273,9 +309,7 @@ class AutoModelForCausalLM:
             progress,
             model_name,
         )
-        resolved_name = model_name or (
-            paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
-        )
+        resolved_name = model_name or (paths.model_name if paths and paths.model_name else model_name_or_path)
         effective_device_map = _apply_plugin_hint(device_map, paths.plugin_id if paths else None)
         plugin_id, device_id, ngl_override = resolve_device_map(effective_device_map, resolved_name)
         if ngl_override is not None:
@@ -283,7 +317,7 @@ class AutoModelForCausalLM:
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
 
         resolved_mmproj = mmproj_path or _mmproj
-        if _is_vlm(resolved_mmproj, model_name_or_path):
+        if _is_vlm(resolved_mmproj, model_name or model_name_or_path, model_path):
             return _create_vlm_handle(
                 resolved_name,
                 model_path,
@@ -343,7 +377,9 @@ class AutoModelForVision2Seq:
         """Load a VLM by HF repo id, alias, or local path.
 
         See :class:`AutoModelForCausalLM.from_pretrained` for shared parameters.
-        ``mmproj_path`` is an optional override for the multimodal projector file.
+        ``model_name`` is optional — the QAIRT plugin reads metadata.json from
+        the bundle directly. ``mmproj_path`` is an optional override for the
+        multimodal projector file.
         """
         ensure_init()
         model_path, _mmproj, _tok, paths = _resolve_model_sources(
@@ -353,9 +389,7 @@ class AutoModelForVision2Seq:
             progress,
             model_name,
         )
-        resolved_name = model_name or (
-            paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
-        )
+        resolved_name = model_name or (paths.model_name if paths and paths.model_name else model_name_or_path)
         effective_device_map = _apply_plugin_hint(device_map, paths.plugin_id if paths else None)
         plugin_id, device_id, ngl_override = resolve_device_map(effective_device_map, resolved_name)
         if ngl_override is not None:

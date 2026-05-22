@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <string>
 
 #include "pipeline/llm_pipeline.h"
 #include "plugin/ILlm.h"
@@ -10,7 +9,6 @@ namespace geniex {
 
 class QairtLlm : public ILlm {
     std::unique_ptr<LLMPipeline> pipeline_;
-    std::string                  model_name_;
     bool                         enable_thinking_ = false;
 
     bool is_first_turn_ = true;

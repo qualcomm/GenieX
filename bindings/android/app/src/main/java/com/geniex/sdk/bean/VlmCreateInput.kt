@@ -1,7 +1,12 @@
 package com.geniex.sdk.bean
 
 data class VlmCreateInput(
-    val model_name: String,
+    /**
+     * Optional model identifier. The QAIRT plugin reads `metadata.json` from
+     * the bundle directory directly; llama_cpp uses this only for the
+     * gpt-oss `geniex_resolve_device` override.
+     */
+    val model_name: String? = null,
     override val model_path: String,
     val mmproj_path: String? = null,
     override val config: ModelConfig,

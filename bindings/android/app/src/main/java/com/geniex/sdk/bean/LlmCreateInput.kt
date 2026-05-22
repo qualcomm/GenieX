@@ -1,7 +1,13 @@
 package com.geniex.sdk.bean
 
 data class LlmCreateInput(
-    val model_name: String,
+    /**
+     * Optional model identifier. The QAIRT plugin no longer needs it — it
+     * dispatches by reading `metadata.json` from the bundle directory. Pass
+     * a value only as a hint to `geniex_resolve_device` for the gpt-oss
+     * llama_cpp device-default override, or for diagnostics.
+     */
+    val model_name: String? = null,
     override val model_path: String,
     val tokenizer_path: String? = null,
     override val config: ModelConfig,
@@ -15,5 +21,5 @@ data class LlmCreateInput(
      * [DeviceIdValue.CPU] / [DeviceIdValue.GPU] / [DeviceIdValue.NPU] /
      * [DeviceIdValue.HYBRID] to pin a specific backend.
      */
-    override val device_id: String?= null,
+    override val device_id: String? = null,
 ) : CreateInputBase
