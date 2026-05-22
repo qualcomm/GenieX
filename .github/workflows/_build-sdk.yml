@@ -102,8 +102,8 @@ jobs:
         uses: actions/cache@v5
         with:
           path: sdk/build-${{ matrix.preset }}
-          key: cmake-build-${{ matrix.platform }}-${{ hashFiles('sdk/CMakeLists.txt', 'sdk/**/CMakeLists.txt', 'sdk/CMakePresets.json', 'sdk/cmake/**', 'sdk/patches/**', '.gitmodules') }}-${{ github.sha }}
-          restore-keys: cmake-build-${{ matrix.platform }}-
+          key: cmake-build-${{ matrix.platform }}-${{ hashFiles('sdk/CMakeLists.txt', 'sdk/**/CMakeLists.txt', 'sdk/CMakePresets.json', 'sdk/cmake/**', 'sdk/patches/**', '.gitmodules', 'third-party/**/CMakeLists.txt', 'third-party/**/*.cmake', 'third-party/**/cmake/**') }}-${{ github.sha }}
+          restore-keys: cmake-build-${{ matrix.platform }}-${{ hashFiles('sdk/CMakeLists.txt', 'sdk/**/CMakeLists.txt', 'sdk/CMakePresets.json', 'sdk/cmake/**', 'sdk/patches/**', '.gitmodules', 'third-party/**/CMakeLists.txt', 'third-party/**/*.cmake', 'third-party/**/cmake/**') }}-
 
       # Linux/Android ccache lives in the toolchain container; host just
       # owns the dir so actions/cache can persist it.
