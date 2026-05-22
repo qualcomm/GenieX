@@ -35,7 +35,7 @@ FFI-sync rule).
 |----------|-------------------------|-------------------------|---------------------------------------------------------------------------------------------|
 | `cpu`    | empty                   | `0`                     | Pure CPU.                                                                                   |
 | `gpu`    | `GPUOpenCL`             | (none; caller default)  | Adreno via OpenCL. Pair with a high `--ngl`.                                               |
-| `npu`    | `HTP0`                  | (none; caller default)  | Pinned single-session HTP. Deterministic, slower on LLMs — see § NPU compute-unit selection (llama_cpp). |
+| `npu`    | `HTP0`                  | `999`                   | Pinned single-session HTP. Deterministic, slower on LLMs — see § NPU compute-unit selection (llama_cpp). |
 | `hybrid` | empty                   | `999`                   | `llama_cpp` fast path: per-tensor HTP+CPU scheduler. Default when nothing is passed.         |
 
 Defaults when the user passes nothing (`--device ""` / `device_map="auto"`):
@@ -68,7 +68,7 @@ unchanged when supplied via `<plugin>:<device>`.
 
 1. **`device_id` null + `n_gpu_layers=999`** (the `hybrid` alias) → llama.cpp's **per-tensor scheduler**. It inspects each tensor and assigns it to whichever registered backend supports the op (HTP for computable ops, CPU for fallbacks), using CPU-resident buffers for the fallback tensors. **Fast path.** On X1E80100 + Qwen3-1.7B-Q8_0: ~90 tok/s prefill, ~27 tok/s decode, ~200 ms TTFT. Task Manager shows NPU pegged.
 
-2. **`device_id="HTP0"`** (the `npu` alias) → runtime calls `ggml_backend_dev_by_name("HTP0")` and sets `mpar.devices = {HTP0}`. This **pins the model to a single compute-unit layout** and disables per-tensor hybrid assignment. Any op HTP doesn't support gets handled less efficiently. On the same model: ~60 tok/s prefill, ~22 tok/s decode, ~350 ms TTFT. Task Manager shows CPU pegged (the host thread driving HTP busy-waits, *plus* all fallbacks run there). Useful when you want deterministic layout / all weights on a known compute unit.
+2. **`device_id="HTP0"` + `n_gpu_layers=999`** (the `npu` alias) → runtime calls `ggml_backend_dev_by_name("HTP0")` and sets `mpar.devices = {HTP0}`. This **pins the model to a single compute-unit layout** and disables per-tensor hybrid assignment. Any op HTP doesn't support gets handled less efficiently. On the same model: ~60 tok/s prefill, ~22 tok/s decode, ~350 ms TTFT. Task Manager shows CPU pegged (the host thread driving HTP busy-waits, *plus* all fallbacks run there). Useful when you want deterministic layout / all weights on a known compute unit. Note: `n_gpu_layers` is required even with the compute unit pinned — `device_id="HTP0"` with `ngl=0` opens an HTP session and then runs every layer on CPU, so the SDK forces `ngl=999` for this alias (`sdk/src/device.cpp`).
 
 Bonus: when the `device_id` string starts with `"HTP0"`, the runtime also flips KV cache to Q8_0 and enables flash-attn (`llm.cpp:136-140`). Orthogonal to perf — path (2) is slower than (1) even with those enabled.
 

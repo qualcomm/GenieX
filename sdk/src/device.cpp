@@ -115,7 +115,12 @@ int32_t geniex_resolve_device(const geniex_ResolveDeviceInput* input, geniex_Res
     } else if (alias == kAliasGPU) {
         output->device_id = portable_strdup(kDeviceGPUOpenCL);
     } else if (alias == kAliasNPU) {
+        // Pinning device_id="HTP0" tells the loader *which* backend to
+        // attach, but llama.cpp also needs ngl>=layer_count to actually
+        // offload. ngl=0 with a pinned NPU device opens an HTP session
+        // and then runs every layer on CPU — see BUG-android-npu-not-engaged.md.
         output->device_id = portable_strdup(kDeviceHTP0);
+        output->ngl       = 999;
     } else if (alias == kAliasHybrid) {
         output->ngl = 999;
     }
