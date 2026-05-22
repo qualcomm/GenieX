@@ -1,15 +1,15 @@
 ---
 title: "Quantization"
-description: "Supported quantization formats per backend, and which one to pick on Snapdragon NPU."
+description: "Supported quantization formats per runtime, and which one to pick on Snapdragon NPU."
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-Quantization choice depends on which backend you're using.
+Quantization choice depends on which runtime you're using.
 
 ## **llama.cpp**
 
-llama.cpp accepts the full range of GGML quantization formats. The runtime prompts you to pick one when you `geniex pull` a GGUF model:
+llama.cpp accepts the full range of GGML quantization formats. The CLI prompts you to pick one when you `geniex pull` a GGUF model:
 
 ```powershell
 Choose a precision version to download
@@ -23,7 +23,7 @@ Choose a precision version to download
 | **`Q4_0`** *(recommended on Snapdragon)* | Best Hexagon NPU support in llama.cpp. Default for most models. |
 | `Q8_0` | Better quality at ~2× the disk and memory cost. Falls back to GPU/CPU. |
 | `F16` | Reference precision. Mainly for evaluation — large and slow on NPU. |
-| `Q4_K_M`, `Q5_K_M`, etc. | Mixed-precision K-quants. Run on GPU/CPU; not optimized for the Hexagon backend. |
+| `Q4_K_M`, `Q5_K_M`, etc. | Mixed-precision K-quants. Run on GPU/CPU; not optimized for Hexagon NPU. |
 
 <Tip>Stick with `Q4_0` if you want the model to land on the Hexagon NPU. Other precisions will work but typically run on GPU or CPU.</Tip>
 

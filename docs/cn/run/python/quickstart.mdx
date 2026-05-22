@@ -8,7 +8,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 ## **前置条件**
 
 - 已安装 Python SDK——详见[安装](/cn/run/python/install)。
-- 了解[后端选择](/cn/get-started/choose-backend)——`qairt` 用于 AI Hub 模型包，`llama_cpp` 用于任意 GGUF。
+- 了解[运行时选择](/cn/get-started/choose-runtime)——`qairt` 用于 AI Hub 模型包，`llama_cpp` 用于任意 GGUF。
 
 SDK 与 Hugging Face `transformers` 设计一致——通过 `AutoModelForCausalLM.from_pretrained()` 加载，再调用 `.generate()`。
 
@@ -17,11 +17,11 @@ SDK 与 Hugging Face `transformers` 设计一致——通过 `AutoModelForCausal
 ```python
 from geniex import AutoModelForCausalLM
 
-# GGUF 模型示例（llama.cpp 后端）
+# GGUF 模型示例（llama.cpp 运行时）
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B-GGUF",     # GGUF 模型的 HF 仓库 ID，或本地 .gguf 路径
     device_map="auto",          # "auto" | "cpu" | "gpu" | "npu" | "hybrid"
-                                # | "<plugin>" | "<plugin>:<device>"
+                                # | "<runtime>" | "<runtime>:<compute-unit>"
                                 # auto -> llama_cpp 时为 hybrid，qairt 时为 npu
 )
 

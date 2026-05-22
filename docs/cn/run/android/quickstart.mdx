@@ -8,7 +8,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 ## **前置条件**
 
 - 已安装 demo APK（或在项目中接入 SDK）——详见[安装](/cn/run/android/install)。
-- 一台搭载 **骁龙 8 至尊版** 或 **骁龙 8 至尊版 Gen 5** 的设备。
+- 一台搭载 **骁龙 8 至尊版** 或 **骁龙 8 至尊版 Gen 5** 的手机。
 
 ## **使用 demo app**
 
@@ -36,7 +36,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     点击 **Load**。会弹出对话框——选择 **NPU**、**GPU** 或 **CPU**：
     - **NPU** *(骁龙上推荐)* —— Hexagon NPU 加速。
     - **GPU** —— 通过 OpenCL 使用 Adreno。
-    - **CPU** —— 兼容任意 ARM64 设备。
+    - **CPU** —— 兼容任意 ARM64 芯片。
   </Step>
   <Step title="对话">
     在输入框中输入消息并点击 **Send**。点击 **Clear** 或卸载模型可重置对话。
@@ -48,7 +48,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 `qualcomm/Qwen2.5-VL-7B-Instruct` —— 针对骁龙 8 至尊版及 8 至尊版 Gen 5 预编译的视觉语言模型。
 
 <Warning>
-需要芯片组为 `SM8750`（骁龙 8 至尊版）或 `SM8850`（骁龙 8 至尊版 Gen 5）的设备。
+需要搭载 `SM8750`（骁龙 8 至尊版）或 `SM8850`（骁龙 8 至尊版 Gen 5）芯片的手机。
 </Warning>
 
 <Steps>
@@ -59,7 +59,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     点击 **Download**。AI Hub 模型包大于 GGUF 模型（约 4.6 GB）——请保持 Wi-Fi。下载在 app 重启后可续传。
   </Step>
   <Step title="加载">
-    点击 **Load**。QAIRT 模型的插件选择器只展示 **NPU**。确认即可。
+    点击 **Load**。QAIRT 模型的运行时选择器只展示 **NPU**。确认即可。
   </Step>
   <Step title="结合图片对话">
     点击 **图片** 按钮，从相册选一张照片，输入类似 "What's in this image?" 的问题并发送。SDK 会自动应用 VLM 的 chat template。
@@ -100,15 +100,15 @@ LlmWrapper.builder()
 Android 上 AI Hub 拉取必须显式传 `chipset`——自动识别仅在骁龙 Windows 上生效。demo 的 `model_list.json` 默认锁定 `SM8750`；如果你做了改动，请确保该字段存在。
 
 **"QAIRT 加载报 unknown model name"**
-AI Hub 返回的 model id 必须匹配 QAIRT 插件注册表中的条目（`qwen3_4b_instruct_2507`、`qwen2_5_vl_7b_instruct` 等）。新增 AI Hub 模型需先在 C++ 侧注册——见 `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`。
+AI Hub 返回的 model id 必须匹配 QAIRT 运行时注册表中的条目（`qwen3_4b_instruct_2507`、`qwen2_5_vl_7b_instruct` 等）。新增 AI Hub 模型需先在 C++ 侧注册——见 `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`。
 
 ## **下一步**
 
 <CardGroup cols={2}>
   <Card title="API 参考" href="/cn/run/android/api-reference" icon="book">
-    Wrapper 类、插件/设备选择与数据结构。
+    Wrapper 类、运行时 / 计算单元选择与数据结构。
   </Card>
-  <Card title="后端" href="/cn/get-started/choose-backend" icon="route">
+  <Card title="运行时" href="/cn/get-started/choose-runtime" icon="route">
     什么时候选 llama.cpp 或 QAIRT。
   </Card>
 </CardGroup>

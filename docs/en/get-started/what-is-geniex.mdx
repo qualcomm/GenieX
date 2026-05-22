@@ -11,25 +11,25 @@ GenieX is an on-device Gen AI inference runtime built for Qualcomm platforms. It
 
 <img
   src="/Mintlify-image/geniex_arch.png"
-  alt="GenieX architecture stack: CLI, Python API, Java API, Docker, and Serve interfaces sit on the GenieX SDK, which dispatches to the llama.cpp plugin (GGML runtime over CPU/GPU/HTP kernels) or the QAIRT plugin (QAIRT SDK on NPU). Targets Windows, Android, and Linux."
+  alt="GenieX architecture stack: CLI, Python API, Java API, Docker, and Serve interfaces sit on the GenieX SDK, which dispatches to the llama.cpp runtime (GGML over CPU/GPU/HTP kernels) or the QAIRT runtime (QAIRT SDK on NPU). Targets Windows, Android, and Linux."
   style={{ borderRadius: '0.5rem' }}
 />
 
-GenieX exposes five entry points — CLI, Python, Java/Kotlin, Docker, and an OpenAI-compatible server — over a single SDK that dispatches to either the **llama.cpp plugin** (GGML kernels for CPU / GPU / Hexagon HTP) or the **QAIRT plugin** (Qualcomm AI Runtime, NPU-only). The same SDK runs on Windows ARM64, Android, and Linux ARM64.
+GenieX exposes five entry points — CLI, Python, Java/Kotlin, Docker, and an OpenAI-compatible server — over a single SDK that dispatches to either the **llama.cpp runtime** (GGML kernels for CPU / GPU / Hexagon HTP) or the **QAIRT runtime** (Qualcomm AI Runtime, NPU-only). The same SDK runs on Windows ARM64, Android, and Linux ARM64.
 
-## **Why two plugins?**
+## **Why two runtimes?**
 
-So you get both **broad model coverage** and **optimal performance** in one runtime:
+So you get both **broad model coverage** and **optimal performance** in one stack:
 
 - **Most models just work** — point GenieX at almost any GGUF on Hugging Face and it runs on CPU / GPU / NPU via llama.cpp.
 - **AI Hub models run optimally** — models published to [Qualcomm AI Hub](https://aihub.qualcomm.com/) are pre-compiled per chipset and run through QAIRT on the Hexagon NPU for peak on-device performance.
 
-See [Choose your backend](/en/get-started/choose-backend) for when to pick which.
+See [Choose your runtime](/en/get-started/choose-runtime) for when to pick which.
 
 ## **What you can do with GenieX**
 
-- **Run models locally** on Snapdragon X (Windows ARM64), Snapdragon 8 Elite (Android), and Dragonwing IoT devices.
-- **Pick a backend** — `llama.cpp` for any community GGUF model, `QAIRT` for AI Hub pre-compiled NPU bundles.
+- **Run models locally** on Snapdragon X (Windows ARM64), Snapdragon 8 Elite (Android), and Dragonwing IoT chipsets.
+- **Pick a runtime** — `llama.cpp` for any community GGUF model, `QAIRT` for AI Hub pre-compiled NPU bundles.
 - **Build apps** through the CLI, an OpenAI-compatible local server, the Python SDK, the Android SDK, or a Docker image.
 
 ## **Pick where to start**
@@ -38,14 +38,14 @@ See [Choose your backend](/en/get-started/choose-backend) for when to pick which
   <Card title="Quickstart" href="/en/get-started/quickstart" icon="rocket">
     Choose your interface and get to first inference in minutes.
   </Card>
-  <Card title="Choose your backend" href="/en/get-started/choose-backend" icon="route">
-    Decide between llama.cpp and QAIRT based on your model and device.
+  <Card title="Choose your runtime" href="/en/get-started/choose-runtime" icon="route">
+    Decide between llama.cpp and QAIRT based on your model and chipset.
   </Card>
-  <Card title="Supported devices" href="/en/get-started/devices" icon="microchip">
-    Snapdragon compute, mobile, and IoT chipsets that GenieX supports.
+  <Card title="Supported platforms" href="/en/get-started/platforms" icon="microchip">
+    Snapdragon chipsets that GenieX supports across Windows ARM64, Android, and Linux ARM64.
   </Card>
   <Card title="Models" href="/en/models/supported" icon="cube">
-    Tested LLMs and VLMs across the llama.cpp and QAIRT backends.
+    Tested LLMs and VLMs across the llama.cpp and QAIRT runtimes.
   </Card>
 </CardGroup>
 

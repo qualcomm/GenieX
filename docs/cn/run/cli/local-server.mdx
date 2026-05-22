@@ -1,6 +1,6 @@
 ---
 title: "本地服务器"
-description: "在 localhost 提供兼容 OpenAI 协议的 HTTP API，由高通硬件加速支撑。"
+description: "在 localhost 提供兼容 OpenAI 协议的 HTTP API，由骁龙 NPU/GPU/CPU 加速支撑。"
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
@@ -128,7 +128,7 @@ print()
 ```
 
 <Note>
-请将 `model` 替换为已经拉取的模型。可选的 `:<precision>` 后缀用于选择量化版本（例如 `Q4_0`、`Q4_K_M`、`Q8_0`），`Q4_0` 对 llama.cpp Hexagon NPU 后端支持最佳。详见[量化](/cn/models/quantization)。
+请将 `model` 替换为已经拉取的模型。可选的 `:<precision>` 后缀用于选择量化版本（例如 `Q4_0`、`Q4_K_M`、`Q8_0`），`Q4_0` 在 Hexagon NPU 上的 llama.cpp 运行时支持最佳。详见[量化](/cn/models/quantization)。
 </Note>
 
 ## **其他端点**

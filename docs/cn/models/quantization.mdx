@@ -1,15 +1,15 @@
 ---
 title: "量化"
-description: "各后端支持的量化格式，以及在骁龙 NPU 上的推荐选择。"
+description: "各运行时支持的量化格式，以及在骁龙 NPU 上的推荐选择。"
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-量化的选择取决于使用的后端。
+量化的选择取决于使用的运行时。
 
 ## **llama.cpp**
 
-llama.cpp 支持 GGML 全量化范围。运行 `geniex pull` 拉取 GGUF 模型时，运行时会提示你选择：
+llama.cpp 支持 GGML 全量化范围。运行 `geniex pull` 拉取 GGUF 模型时，CLI 会提示你选择：
 
 ```powershell
 Choose a precision version to download
@@ -23,7 +23,7 @@ Choose a precision version to download
 | **`Q4_0`** *(骁龙上推荐)* | llama.cpp 在 Hexagon NPU 上的最佳支持。多数模型的默认值。 |
 | `Q8_0` | 质量更好，磁盘与显存约为 2 倍。落到 GPU/CPU。 |
 | `F16` | 参考精度。主要用于评估——在 NPU 上较大且较慢。 |
-| `Q4_K_M`、`Q5_K_M` 等 | 混合精度 K-quants。在 GPU/CPU 上运行；未针对 Hexagon 后端优化。 |
+| `Q4_K_M`、`Q5_K_M` 等 | 混合精度 K-quants。在 GPU/CPU 上运行；未针对 Hexagon NPU 优化。 |
 
 <Tip>若希望模型落到 Hexagon NPU，请坚持使用 `Q4_0`。其他量化也可运行，但通常会落到 GPU 或 CPU。</Tip>
 

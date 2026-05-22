@@ -5,18 +5,32 @@ description: "Add the GenieX Android SDK to your Gradle project from Maven Centr
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-This page walks you through adding the GenieX SDK to an Android Studio project. After this, your app can pull weights from Hugging Face / Qualcomm AI Hub and run them on the Hexagon NPU, Adreno GPU, or CPU — all in Kotlin.
+Add the GenieX SDK to an Android Studio project so your app can pull weights from Hugging Face / Qualcomm AI Hub and run them on the Hexagon NPU, Adreno GPU, or CPU compute units — all in Kotlin.
+
+## **Try the sample app first**
+
+See GenieX running on Android before you write any code.
+
+<Card title="Download geniex-demo.apk" icon="download" href="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-demo.apk">
+  Install on your phone, launch **GenieX Demo**, then **Download → Load → Chat**.
+</Card>
+
+To install: tap the `.apk` in your **Files** app and allow *Install unknown apps* if prompted.
+
+Pick a model from the dropdown and choose NPU, GPU, or CPU on load. Tap the image button for VLMs. Stay on Wi-Fi for the first download.
+
+Source code lives at [`examples/android/`](https://github.com/qcom-ai-hub/geniex/tree/main/examples/android) — open it in Android Studio and hit **Run ▶**. No phone? See [Testing without a physical device](/en/resources/faq#how-do-i-test-the-android-demo-without-a-physical-device).
 
 ## **Prerequisites**
 
-- **Android Studio** (Hedgehog or newer).
-- **`minSdk = 27`** (Android 8.1) or higher in your app module.
-- A test device with **Snapdragon 8 Elite** (`SM8750`) or **Snapdragon 8 Elite Gen 5** (`SM8850`) — see [Supported devices](/en/get-started/devices). No phone? See [Testing without a physical device](/en/resources/faq#how-do-i-test-the-android-demo-without-a-physical-device).
+- **Android Studio** [Hedgehog (2023.1.1)](https://developer.android.com/studio/releases/past-releases/as-hedgehog-release-notes) or newer.
+- **`minSdk = 27`** (Android 8.1) in your app module.
+- A phone running **Snapdragon 8 Elite** (`SM8750`) or **Snapdragon 8 Elite Gen 5** (`SM8850`) — see [Supported platforms](/en/get-started/platforms).
 
 ## **Add the SDK to your app**
 
 <Steps>
-  <Step title="Make sure Maven Central is in your repositories">
+  <Step title="Enable Maven Central">
     In `settings.gradle.kts` (or your top-level `build.gradle.kts` for older projects):
 
     ```kotlin
@@ -38,37 +52,25 @@ This page walks you through adding the GenieX SDK to an Android Studio project. 
     }
     ```
 
-    The artifact ships the native `arm64-v8a` libraries — no NDK or CMake on your side.
+    The artifact ships native `arm64-v8a` libraries — no NDK or CMake on your side.
   </Step>
 
-  <Step title="Declare the INTERNET permission">
-    The SDK pulls model weights at runtime. Add to `AndroidManifest.xml`:
+  <Step title="Declare permissions">
+    The SDK pulls weights at runtime. In `AndroidManifest.xml`:
 
     ```xml
     <uses-permission android:name="android.permission.INTERNET" />
     ```
 
-    For VLMs that take images from the gallery, also declare `READ_EXTERNAL_STORAGE` (or scoped media permissions on Android 13+).
+    For VLMs that load images from the gallery, also declare `READ_EXTERNAL_STORAGE` (or scoped media permissions on Android 13+).
   </Step>
 
   <Step title="Sync Gradle">
-    Click **Sync Now** in Android Studio. You're ready to load a model.
+    Click **Sync Now** in Android Studio.
   </Step>
 </Steps>
 
-You can now jump to the [Quickstart](/en/run/android/quickstart) to download and run your first model.
-
-## **Try it first with the sample app**
-
-Want to see GenieX running on Android before you write any code?
-
-<Card title="Download geniex-demo.apk" icon="download" href="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-demo.apk">
-  Open it on your phone to install, then launch **GenieX Demo** and pick a model.
-</Card>
-
-Inside the app: pick a model from the dropdown, **Download → Load → Chat**. Choose NPU, GPU, or CPU on load; tap the image button for VLMs. Stay on Wi-Fi for the first download. No phone? See [Testing without a physical device](/en/resources/faq#how-do-i-test-the-android-demo-without-a-physical-device).
-
-Want to read or modify the source? It's at [`examples/android/`](https://github.com/qcom-ai-hub/geniex/tree/main/examples/android) — open it in Android Studio (not `bindings/android/` — that's the SDK itself) and hit **Run ▶**.
+Next, head to the [Quickstart](/en/run/android/quickstart) to download and run your first model.
 
 <br />
 

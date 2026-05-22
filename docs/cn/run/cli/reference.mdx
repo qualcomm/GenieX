@@ -64,10 +64,10 @@ geniex infer qualcomm/Qwen3-4B --think         # 展示推理步骤
 geniex infer qualcomm/Qwen3-4B --think=false   # 直接回复
 ```
 
-**设备选择** —— 选择运行后端（默认：`npu`）：
+**计算单元选择**（通过 `--device`）—— 选择运行模型的计算单元（默认：`npu`）：
 
 ```powershell
-# llama.cpp 模型支持所有后端
+# llama.cpp 模型支持所有计算单元
 geniex infer unsloth/Qwen3.5-0.8B-GGUF --device npu
 geniex infer unsloth/Qwen3.5-0.8B-GGUF --device gpu
 geniex infer unsloth/Qwen3.5-0.8B-GGUF --device cpu

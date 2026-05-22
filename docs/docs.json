@@ -51,8 +51,8 @@
             "pages": [
               "en/get-started/what-is-geniex",
               "en/get-started/quickstart",
-              "en/get-started/choose-backend",
-              "en/get-started/devices"
+              "en/get-started/choose-runtime",
+              "en/get-started/platforms"
             ]
           },
           {
@@ -124,8 +124,8 @@
             "pages": [
               "cn/get-started/what-is-geniex",
               "cn/get-started/quickstart",
-              "cn/get-started/choose-backend",
-              "cn/get-started/devices"
+              "cn/get-started/choose-runtime",
+              "cn/get-started/platforms"
             ]
           },
           {
