@@ -102,12 +102,19 @@ func (s *Store) List() ([]types.ModelManifest, error) {
 func (s *Store) Remove(name, quant string) error {
 	slog.Debug("Remove model", "model", name, "quant", quant)
 
+	dir := s.ModelfilePath(name, "")
+	if _, err := os.Stat(dir); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("model %s not found", name)
+		}
+		return err
+	}
+
 	if err := s.LockModel(name); err != nil {
 		return err
 	}
 	defer s.UnlockModel(name)
 
-	dir := s.ModelfilePath(name, "")
 	if quant == "" {
 		return os.RemoveAll(dir)
 	}
