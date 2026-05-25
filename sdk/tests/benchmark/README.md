@@ -93,10 +93,29 @@ Run `geniex_benchmark --help` for the full flag list.
 ## Matrix-style runs
 
 The matrix lives in [`tests/benchmark/_matrix.py`](../../../tests/benchmark/_matrix.py)
-on the Python side. The C binary handles one cell per process; loop
-externally to walk the matrix and write a per-cell JSON. Models must be
-pre-pulled (e.g. `geniex-py pull bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0`)
-before invoking this binary — the C side does not include a model puller.
+on the Python side. To get C-vs-Python comparable numbers, run the C
+binary in **matrix mode** so a single `geniex_init` covers the whole
+sweep — Hexagon FastRPC sessions and other plugin init costs are then
+amortised across cells exactly as the Python harness does:
+
+```bash
+cat > matrix.tsv <<EOF
+# cell_id<TAB>plugin<TAB>device<TAB>model_path[<TAB>tokenizer_path][<TAB>mmproj_path]
+Qwen3-0.6B-llama_cpp-cpu	llama_cpp	cpu	/data/local/tmp/.cache/geniex/models/bartowski/Qwen_Qwen3-0.6B-GGUF/Qwen_Qwen3-0.6B-Q4_0.gguf
+Qwen3-0.6B-llama_cpp-npu	llama_cpp	npu	/data/local/tmp/.cache/geniex/models/bartowski/Qwen_Qwen3-0.6B-GGUF/Qwen_Qwen3-0.6B-Q4_0.gguf
+Qwen3-4B-qairt-npu	qairt	npu	/data/local/tmp/.cache/geniex/models/qualcomm/Qwen3-4B-Instruct-2507
+EOF
+
+geniex_benchmark --matrix-file matrix.tsv --output-json-dir results/
+```
+
+For a one-cell-per-process invocation (cold-start each time, useful as
+the reference for a customer-facing single-call workload), pass
+`--plugin / --device / --model-path` directly without `--matrix-file`.
+
+Models must be pre-pulled (e.g. `geniex-py pull bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0`)
+before invoking this binary — the C side does not include a model
+puller.
 
 ## Why no doctest? Why no model manager dependency?
 

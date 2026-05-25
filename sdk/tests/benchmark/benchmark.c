@@ -63,6 +63,10 @@ typedef struct {
     const char* output_json;
     const char* output_md;
     const char* cell_id;
+
+    /* Matrix mode: one process, one geniex_init, many cells */
+    const char* matrix_file;
+    const char* output_json_dir;
 } options_t;
 
 typedef struct {
@@ -94,13 +98,24 @@ static void check(int32_t code, const char* what) {
 
 static void usage(const char* argv0) {
     fprintf(stderr,
-        "Usage: %s --plugin {llama_cpp|qairt} --device {cpu|gpu|npu|hybrid|auto} \\\n"
-        "                          --model-path <path> [options]\n"
+        "Usage:\n"
+        "  Single cell:\n"
+        "    %s --plugin {llama_cpp|qairt} --device {cpu|gpu|npu|hybrid|auto} \\\n"
+        "                              --model-path <path> [options]\n"
         "\n"
-        "Required:\n"
+        "  Matrix (one process, shared geniex_init/deinit):\n"
+        "    %s --matrix-file <path> [--output-json-dir <dir>] [shared options]\n"
+        "\n"
+        "Required (single-cell mode):\n"
         "  --plugin            llama_cpp | qairt\n"
         "  --device            cpu | gpu | npu | hybrid | auto (default auto)\n"
         "  --model-path        path to .gguf or qairt bundle dir\n"
+        "\n"
+        "Required (matrix mode):\n"
+        "  --matrix-file PATH  one cell per line, tab-separated:\n"
+        "                      cell_id<TAB>plugin<TAB>device<TAB>model_path"
+        "[<TAB>tokenizer_path][<TAB>mmproj_path]\n"
+        "                      lines starting with '#' are ignored\n"
         "\n"
         "Optional:\n"
         "  --tokenizer-path    explicit tokenizer file\n"
@@ -117,10 +132,12 @@ static void usage(const char* argv0) {
         "  --prompt-file PATH  read prompt from file\n"
         "  --n-ctx N           model n_ctx (0 = from model, default 0)\n"
         "  --n-threads N       generation threads (0 = SDK default)\n"
-        "  --output-json PATH  write per-cell JSON report\n"
-        "  --output-md   PATH  write per-cell Markdown row\n"
-        "  --cell-id ID        cell label used in reports (default plugin-device)\n"
+        "  --output-json PATH  (single-cell) write per-cell JSON report\n"
+        "  --output-md   PATH  (single-cell) write per-cell Markdown row\n"
+        "  --output-json-dir DIR  (matrix) write <DIR>/<cell_id>.json per cell\n"
+        "  --cell-id ID        (single-cell) cell label used in reports\n"
         "  --help / -h\n",
+        argv0,
         argv0);
 }
 
@@ -219,26 +236,28 @@ static const char* arg_value(int argc, char** argv, int* i, const char* flag) {
 }
 
 static void parse_args(int argc, char** argv, options_t* o) {
-    o->plugin         = NULL;
-    o->device         = "auto";
-    o->device_id      = NULL;
-    o->model_path     = NULL;
-    o->tokenizer_path = NULL;
-    o->mmproj_path    = NULL;
-    o->image_count    = 0;
-    o->audio_count    = 0;
-    o->max_new_tokens = 128;
-    o->temperature    = 0.0f;
-    o->seed           = 42;
-    o->warmup         = 1;
-    o->repeat         = 3;
-    o->prompt         = DEFAULT_PROMPT;
-    o->prompt_buf     = NULL;
-    o->n_ctx          = 0;
-    o->n_threads      = 0;
-    o->output_json    = NULL;
-    o->output_md      = NULL;
-    o->cell_id        = NULL;
+    o->plugin          = NULL;
+    o->device          = "auto";
+    o->device_id       = NULL;
+    o->model_path      = NULL;
+    o->tokenizer_path  = NULL;
+    o->mmproj_path     = NULL;
+    o->image_count     = 0;
+    o->audio_count     = 0;
+    o->max_new_tokens  = 128;
+    o->temperature     = 0.0f;
+    o->seed            = 42;
+    o->warmup          = 1;
+    o->repeat          = 3;
+    o->prompt          = DEFAULT_PROMPT;
+    o->prompt_buf      = NULL;
+    o->n_ctx           = 0;
+    o->n_threads       = 0;
+    o->output_json     = NULL;
+    o->output_md       = NULL;
+    o->cell_id         = NULL;
+    o->matrix_file     = NULL;
+    o->output_json_dir = NULL;
 
     for (int i = 1; i < argc; ++i) {
         const char* a = argv[i];
@@ -294,11 +313,25 @@ static void parse_args(int argc, char** argv, options_t* o) {
             o->output_md = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--cell-id") == 0) {
             o->cell_id = arg_value(argc, argv, &i, a);
+        } else if (strcmp(a, "--matrix-file") == 0) {
+            o->matrix_file = arg_value(argc, argv, &i, a);
+        } else if (strcmp(a, "--output-json-dir") == 0) {
+            o->output_json_dir = arg_value(argc, argv, &i, a);
         } else {
             fprintf(stderr, "ERROR: unknown arg %s\n", a);
             usage(argv[0]);
             exit(2);
         }
+    }
+
+    if (o->matrix_file) {
+        /* In matrix mode, --plugin/--device/--model-path come from each line of
+         * the matrix file, not from argv. */
+        if (o->repeat < 1) {
+            fprintf(stderr, "ERROR: --repeat must be >=1\n");
+            exit(2);
+        }
+        return;
     }
 
     if (!o->plugin) {
@@ -686,71 +719,166 @@ static void write_md_row(const options_t* o, const agg_t* a) {
 
 /* ----------------------------- main ----------------------------- */
 
-int main(int argc, char** argv) {
-    options_t o;
-    parse_args(argc, argv, &o);
-
-    /* If --model-path points at a directory (typical for QAIRT bundles or
-     * llama.cpp model dirs), resolve to a file inside it so the SDK's
-     * `parent_path()` correctly yields the model dir. */
-    char* anchored = resolve_local_anchor(o.model_path);
+/* Run one (plugin, device, model) cell using the already-`geniex_init`'d
+ * runtime. Returns 0 on success, non-zero on failure. The caller owns
+ * `geniex_init` / `geniex_deinit` so multiple cells in matrix mode share
+ * one plugin-init pass. */
+static int run_one_cell(options_t* o) {
+    char* anchored = resolve_local_anchor(o->model_path);
     if (anchored) {
         fprintf(stderr, "[info] resolved model dir to anchor: %s\n", anchored);
-        o.model_path = anchored;
+        o->model_path = anchored;
     }
 
-    check(geniex_init(), "geniex_init");
-
-    /* Device-alias resolution. ngl_default=-1 is the sentinel `auto.py` uses to
-     * distinguish "SDK forced a value" (cpu→0, hybrid→999) from "alias passed
-     * through". Treat -1 as "leave n_gpu_layers at its plugin default (0)". */
+    /* Device-alias resolution. ngl_default=-1 is the sentinel `auto.py` uses
+     * to distinguish "SDK forced a value" (cpu→0, hybrid→999) from "alias
+     * passed through". Treat -1 as "leave n_gpu_layers at its plugin default
+     * (0)". */
     geniex_ResolveDeviceInput rin;
     memset(&rin, 0, sizeof(rin));
-    rin.plugin_id   = o.plugin;
-    rin.mode        = o.device;
+    rin.plugin_id   = o->plugin;
+    rin.mode        = o->device;
     rin.ngl_default = -1;
     geniex_ResolveDeviceOutput rout;
     memset(&rout, 0, sizeof(rout));
-    check(geniex_resolve_device(&rin, &rout), "geniex_resolve_device");
+    int32_t rc = geniex_resolve_device(&rin, &rout);
+    if (rc != GENIEX_SUCCESS) {
+        fprintf(stderr, "ERROR: geniex_resolve_device: %s (%d)\n", geniex_get_error_message((geniex_ErrorCode)rc), rc);
+        if (anchored) free(anchored);
+        return 1;
+    }
     if (rout.warning) {
         fprintf(stderr, "[warn] %s\n", rout.warning);
     }
-    const char* device_id = o.device_id ? o.device_id : rout.device_id;
+    const char* device_id = o->device_id ? o->device_id : rout.device_id;
     int32_t     ngl       = (rout.ngl == -1) ? 0 : rout.ngl;
 
     /* The qairt plugin doesn't consume n_gpu_layers or n_ctx; force both to 0
      * to match `_build_model_config()` in bindings/python/geniex/auto.py:179. */
-    if (strcmp(o.plugin, "qairt") == 0) {
-        ngl     = 0;
-        o.n_ctx = 0;
+    if (strcmp(o->plugin, "qairt") == 0) {
+        ngl      = 0;
+        o->n_ctx = 0;
     }
 
-    run_result_t* runs = (run_result_t*)calloc((size_t)o.repeat, sizeof(run_result_t));
+    run_result_t* runs = (run_result_t*)calloc((size_t)o->repeat, sizeof(run_result_t));
     if (!runs) {
         fprintf(stderr, "ERROR: oom\n");
-        exit(1);
+        if (anchored) free(anchored);
+        if (rout.device_id) geniex_free(rout.device_id);
+        if (rout.warning) geniex_free(rout.warning);
+        return 1;
     }
 
-    bool is_vlm = (o.mmproj_path != NULL);
+    bool is_vlm = (o->mmproj_path != NULL);
     if (is_vlm) {
-        run_vlm(&o, device_id, ngl, runs);
+        run_vlm(o, device_id, ngl, runs);
     } else {
-        run_llm(&o, device_id, ngl, runs);
+        run_llm(o, device_id, ngl, runs);
     }
 
     agg_t a;
-    aggregate(runs, o.repeat, &a);
-    print_summary(&o, device_id, ngl, &a);
+    aggregate(runs, o->repeat, &a);
+    print_summary(o, device_id, ngl, &a);
 
-    if (o.output_json) write_json(&o, device_id, ngl, runs, &a);
-    if (o.output_md) write_md_row(&o, &a);
+    if (o->output_json) write_json(o, device_id, ngl, runs, &a);
+    if (o->output_md) write_md_row(o, &a);
 
     free(runs);
-    if (o.prompt_buf) free(o.prompt_buf);
     if (anchored) free(anchored);
     if (rout.device_id) geniex_free(rout.device_id);
     if (rout.warning) geniex_free(rout.warning);
-
-    check(geniex_deinit(), "geniex_deinit");
     return 0;
+}
+
+/* Strip trailing CR/LF/whitespace in place and return the input pointer. */
+static char* rstrip(char* s) {
+    size_t n = strlen(s);
+    while (n > 0 && (s[n - 1] == '\n' || s[n - 1] == '\r' || s[n - 1] == ' ' || s[n - 1] == '\t')) {
+        s[--n] = '\0';
+    }
+    return s;
+}
+
+/* Run every cell listed in `o->matrix_file` inside one geniex_init / deinit.
+ * Per-cell JSON goes to `<o->output_json_dir>/<cell_id>.json` when set.
+ * Returns the number of cells that errored (0 = all ok). */
+static int run_matrix(options_t* base) {
+    FILE* f = fopen(base->matrix_file, "r");
+    if (!f) {
+        fprintf(stderr, "ERROR: cannot open matrix file %s\n", base->matrix_file);
+        return 1;
+    }
+
+    int  errors  = 0;
+    int  line_no = 0;
+    char line[2048];
+    char json_path[1024];
+
+    while (fgets(line, sizeof(line), f) != NULL) {
+        line_no++;
+        rstrip(line);
+        if (line[0] == '\0' || line[0] == '#') continue;
+
+        /* Tab-separated: cell_id <TAB> plugin <TAB> device <TAB> model_path
+         *                [<TAB> tokenizer_path] [<TAB> mmproj_path] */
+        char* fields[6] = {NULL};
+        int   nf        = 0;
+        char* p         = line;
+        fields[nf++]    = p;
+        while (*p && nf < 6) {
+            if (*p == '\t') {
+                *p           = '\0';
+                fields[nf++] = p + 1;
+            }
+            p++;
+        }
+        if (nf < 4) {
+            fprintf(stderr, "ERROR: matrix line %d: need at least 4 tab-separated fields, got %d\n", line_no, nf);
+            errors++;
+            continue;
+        }
+
+        /* Build a per-cell options copy from `base`. */
+        options_t cell      = *base;
+        cell.cell_id        = fields[0];
+        cell.plugin         = fields[1];
+        cell.device         = fields[2];
+        cell.model_path     = fields[3];
+        cell.tokenizer_path = (nf >= 5 && fields[4][0] != '\0') ? fields[4] : NULL;
+        cell.mmproj_path    = (nf >= 6 && fields[5][0] != '\0') ? fields[5] : NULL;
+        cell.output_md      = NULL;
+
+        if (base->output_json_dir) {
+            snprintf(json_path, sizeof(json_path), "%s/%s.json", base->output_json_dir, cell.cell_id);
+            cell.output_json = json_path;
+        } else {
+            cell.output_json = NULL;
+        }
+
+        fprintf(stdout, "[run ] %s\n", cell.cell_id);
+        fflush(stdout);
+        if (run_one_cell(&cell) != 0) {
+            errors++;
+        }
+    }
+    fclose(f);
+    return errors;
+}
+
+int main(int argc, char** argv) {
+    options_t o;
+    parse_args(argc, argv, &o);
+
+    check(geniex_init(), "geniex_init");
+
+    int rc;
+    if (o.matrix_file) {
+        rc = run_matrix(&o);
+    } else {
+        rc = run_one_cell(&o);
+    }
+
+    if (o.prompt_buf) free(o.prompt_buf);
+    check(geniex_deinit(), "geniex_deinit");
+    return rc == 0 ? 0 : 1;
 }
