@@ -444,7 +444,12 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
             geniex_free(gout.full_text);
         }
         free(prompt);
-        check(geniex_llm_reset(llm), "geniex_llm_reset");
+        /* Intentionally NOT calling geniex_llm_reset() between runs — matching
+         * tests/benchmark/_runner.py:87-103 which leaves the KV cache intact.
+         * The `[warmup=i]` / `[run=i]` suffix on the prompt is what differs
+         * between runs and forces llama.cpp to actually run prefill instead
+         * of short-circuiting on identical input (which would make
+         * prompt_time = 0 and prefill_speed = +inf). */
     }
 
     check(geniex_llm_destroy(llm), "geniex_llm_destroy");
@@ -513,7 +518,7 @@ static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_
             geniex_free(gout.full_text);
         }
         free(prompt);
-        check(geniex_vlm_reset(vlm), "geniex_vlm_reset");
+        /* See LLM loop above for rationale: do NOT reset between runs. */
     }
 
     check(geniex_vlm_destroy(vlm), "geniex_vlm_destroy");
