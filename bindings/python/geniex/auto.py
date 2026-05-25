@@ -147,6 +147,15 @@ def _resolve_model_sources(
         # (e.g. VLM auto-detect). Not required for QAIRT to *load* — the plugin
         # reads metadata.json directly from the bundle.
         if model_name:
+            # Reject mismatched model_name early — the QAIRT plugin would
+            # otherwise fail at load with a generic "Invalid model format".
+            meta = _read_bundle_metadata(model_name_or_path)
+            bundle_id = (meta or {}).get('model_id')
+            if bundle_id and bundle_id != model_name:
+                raise ValueError(
+                    f"model_name '{model_name}' does not match bundle "
+                    f"'model_id={bundle_id}' in {model_name_or_path}"
+                )
             local_dir = model_name_or_path if os.path.isdir(model_name_or_path) else os.path.dirname(model_name_or_path)
             _mm.pull(model_name, hub='localfs', local_path=os.path.abspath(local_dir))
             paths = _mm.get_paths(model_name)
@@ -197,6 +206,17 @@ def _translate_quant_error(err: GeniexError, model_name_or_path: str, quant: str
     return ValueError(f'Could not resolve quant {quant!r} for {model_name_or_path!r}.')
 
 
+def _reject_gguf_on_qairt(model_path: str, plugin_id: str | None, device_map: str) -> None:
+    # QAIRT only consumes its own .bin shards + metadata.json bundles. A .gguf
+    # routed to QAIRT would otherwise fail deep in the plugin with a generic
+    # "Invalid model format" error.
+    if plugin_id == PLUGIN_QAIRT and model_path.lower().endswith('.gguf'):
+        raise ValueError(
+            f".gguf models are not supported by device_map='{device_map}' "
+            f"(QAIRT/NPU). Use device_map='auto' or 'hybrid' instead."
+        )
+
+
 def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **kwargs) -> geniex_ModelConfig:
     if plugin_id == PLUGIN_QAIRT:
         if n_gpu_layers != 0:
@@ -219,17 +239,24 @@ def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **
     return cfg
 
 
-def _qairt_bundle_is_vlm(model_path: str) -> bool | None:
-    # Peek at metadata.json in the bundle dir. Returns None when the file is
-    # missing/unreadable so the caller falls through to other signals.
+def _read_bundle_metadata(model_path: str) -> dict | None:
+    # Read metadata.json from a QAIRT bundle directory (or the dir holding a
+    # passed-in file). Returns None when the file is missing/unreadable so
+    # callers fall through to other signals.
     bundle_dir = model_path if os.path.isdir(model_path) else os.path.dirname(model_path)
     meta_path = os.path.join(bundle_dir, 'metadata.json')
     if not os.path.isfile(meta_path):
         return None
     try:
         with open(meta_path, encoding='utf-8') as f:
-            meta = json.load(f)
+            return json.load(f)
     except (OSError, ValueError):
+        return None
+
+
+def _qairt_bundle_is_vlm(model_path: str) -> bool | None:
+    meta = _read_bundle_metadata(model_path)
+    if meta is None:
         return None
     genie = meta.get('genie') or {}
     return bool(genie.get('supports_vision'))
@@ -264,6 +291,7 @@ def _create_vlm_handle(
     config: geniex_ModelConfig,
     license_id: str | None,
     license_key: str | None,
+    meta: dict | None = None,
 ) -> GeniexVLM:
     inp = geniex_VlmCreateInput(
         model_name=resolved_name.encode(),
@@ -286,7 +314,7 @@ def _create_vlm_handle(
     handle = c_void_p()
     lib = load_library()
     _check(lib.geniex_vlm_create(byref(inp), byref(handle)))
-    return GeniexVLM(handle)
+    return GeniexVLM(handle, meta=meta)
 
 
 class AutoModelForCausalLM:
@@ -333,9 +361,16 @@ class AutoModelForCausalLM:
         resolved_name = model_name or (paths.model_name if paths and paths.model_name else model_name_or_path)
         effective_device_map = _apply_plugin_hint(device_map, paths.plugin_id if paths else None)
         plugin_id, device_id, ngl_override = resolve_device_map(effective_device_map, resolved_name)
+        _reject_gguf_on_qairt(model_path, plugin_id, device_map)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
+        meta = {
+            'backend': plugin_id,
+            'device': device_id,
+            'quant': quant,
+            'model_path': model_path,
+        }
 
         resolved_mmproj = mmproj_path or _mmproj
         if _is_vlm(resolved_mmproj, model_name or model_name_or_path, model_path):
@@ -349,6 +384,7 @@ class AutoModelForCausalLM:
                 config,
                 license_id,
                 license_key,
+                meta=meta,
             )
 
         inp = geniex_LlmCreateInput(
@@ -371,7 +407,7 @@ class AutoModelForCausalLM:
         handle = c_void_p()
         lib = load_library()
         _check(lib.geniex_llm_create(byref(inp), byref(handle)))
-        return GeniexLLM(handle)
+        return GeniexLLM(handle, meta=meta)
 
 
 class AutoModelForVision2Seq:
@@ -413,9 +449,16 @@ class AutoModelForVision2Seq:
         resolved_name = model_name or (paths.model_name if paths and paths.model_name else model_name_or_path)
         effective_device_map = _apply_plugin_hint(device_map, paths.plugin_id if paths else None)
         plugin_id, device_id, ngl_override = resolve_device_map(effective_device_map, resolved_name)
+        _reject_gguf_on_qairt(model_path, plugin_id, device_map)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
+        meta = {
+            'backend': plugin_id,
+            'device': device_id,
+            'quant': quant,
+            'model_path': model_path,
+        }
 
         return _create_vlm_handle(
             resolved_name,
@@ -427,4 +470,5 @@ class AutoModelForVision2Seq:
             config,
             license_id,
             license_key,
+            meta=meta,
         )

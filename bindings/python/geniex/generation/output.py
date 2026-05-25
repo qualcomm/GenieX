@@ -42,6 +42,10 @@ class ProfileData:
     prefill_speed: float = 0.0
     decode_speed: float = 0.0
     stop_reason: str | None = None
+    backend: str | None = None
+    device: str | None = None
+    quant: str | None = None
+    model_path: str | None = None
 
     @classmethod
     def from_c(cls, c: geniex_ProfileData) -> 'ProfileData':
@@ -67,7 +71,11 @@ class ProfileData:
             f'generated_tokens={self.generated_tokens} tok, '
             f'prefill_speed={self.prefill_speed:.1f} tok/s, '
             f'decode_speed={self.decode_speed:.1f} tok/s, '
-            f'stop_reason={self.stop_reason})'
+            f'stop_reason={self.stop_reason}, '
+            f'backend={self.backend}, '
+            f'device={self.device}, '
+            f'quant={self.quant}, '
+            f'model_path={self.model_path})'
         )
 
 
