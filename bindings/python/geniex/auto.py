@@ -23,7 +23,7 @@ from ctypes import byref, c_void_p
 
 from . import _progress
 from . import model_manager as _mm
-from ._ffi._api import _check, ensure_init, get_plugin_list, load_library, resolve_device
+from ._ffi._api import GeniexError, _check, ensure_init, get_plugin_list, load_library, resolve_device
 from ._ffi._types import geniex_LlmCreateInput, geniex_ModelConfig, geniex_VlmCreateInput
 from .model_manager import ProgressCallback
 from .modeling import GeniexLLM, GeniexVLM
@@ -164,16 +164,37 @@ def _resolve_model_sources(
 
     printer = _progress.resolve(progress)
     try:
-        paths = _mm.ensure_cached(
-            model_name_or_path,
-            quant=quant,
-            hub='auto',
-            hf_token=hf_token,
-            on_progress=printer,
-        )
+        try:
+            paths = _mm.ensure_cached(
+                model_name_or_path,
+                quant=quant,
+                hub='auto',
+                hf_token=hf_token,
+                on_progress=printer,
+            )
+        except GeniexError as e:
+            translated = _translate_quant_error(e, model_name_or_path, quant)
+            if translated is not None:
+                raise translated from e
+            raise
     finally:
         _progress.finish(printer)
     return paths.model_path, paths.mmproj_path, paths.tokenizer_path, paths
+
+
+# Model-manager FFI returns -100000 (Unknown error) when manifest inference
+# rejects a requested quant — the Rust side already builds a richer
+# "available: [...]" message, but it's not surfaced through the C ABI yet.
+# Translate that catch-all into a focused ValueError when the caller
+# explicitly asked for a specific quant, so they can spot the typo without
+# inspecting model-manager logs. The detailed list is tracked under #737.
+GENIEX_ERROR_COMMON_UNKNOWN = -100000
+
+
+def _translate_quant_error(err: GeniexError, model_name_or_path: str, quant: str | None) -> ValueError | None:
+    if quant is None or err.code != GENIEX_ERROR_COMMON_UNKNOWN:
+        return None
+    return ValueError(f'Could not resolve quant {quant!r} for {model_name_or_path!r}.')
 
 
 def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **kwargs) -> geniex_ModelConfig:
