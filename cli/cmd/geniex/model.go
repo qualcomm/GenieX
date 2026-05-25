@@ -24,8 +24,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bytedance/sonic"
-
 	"github.com/charmbracelet/huh"
 	"github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -329,10 +327,7 @@ func pullModel(name string, quant string) error {
 			return nil
 		}
 
-		// deepcopy manifest
-		var omf types.ModelManifest
-		mfs, _ := sonic.Marshal(mf)
-		sonic.Unmarshal(mfs, &omf)
+		oldSize := mf.GetSize()
 
 		// choose quant to download
 		err := chooseQuantFiles(quant, mf)
@@ -342,8 +337,8 @@ func pullModel(name string, quant string) error {
 		}
 
 		// start download
-		pgCh, errCh := s.PullExtraQuant(context.TODO(), omf, *mf)
-		bar := render.NewProgressBar(mf.GetSize()-omf.GetSize(), "downloading")
+		pgCh, errCh := s.PullExtraQuant(context.TODO(), *mf)
+		bar := render.NewProgressBar(mf.GetSize()-oldSize, "downloading")
 		for pg := range pgCh {
 			bar.Set(pg.TotalDownloaded)
 		}
