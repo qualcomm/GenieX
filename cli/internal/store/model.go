@@ -286,7 +286,7 @@ func (s *Store) Pull(ctx context.Context, mf types.ModelManifest) (infoCh <-chan
 	return
 }
 
-func (s *Store) PullExtraQuant(ctx context.Context, omf, nmf types.ModelManifest) (infoCh <-chan types.DownloadInfo, errCh <-chan error) {
+func (s *Store) PullExtraQuant(ctx context.Context, nmf types.ModelManifest) (infoCh <-chan types.DownloadInfo, errCh <-chan error) {
 	infoC := make(chan types.DownloadInfo, 10)
 	infoCh = infoC
 	errC := make(chan error, 1)
@@ -302,17 +302,29 @@ func (s *Store) PullExtraQuant(ctx context.Context, omf, nmf types.ModelManifest
 		}
 		defer s.UnlockModel(nmf.Name)
 
+		// Re-read on-disk manifest under the lock so a concurrent Remove
+		// is reflected when computing the diff.
+		cur, err := s.readManifest(nmf.Name)
+		if err != nil {
+			errC <- fmt.Errorf("read manifest: %w", err)
+			return
+		}
+
 		// filter download file
 		var needs []model_hub.ModelFileInfo
 		for q, f := range nmf.ModelFile {
-			if f.Downloaded && !omf.ModelFile[q].Downloaded {
+			if f.Downloaded && !cur.ModelFile[q].Downloaded {
 				needs = append(needs, model_hub.ModelFileInfo{Name: f.Name, Size: f.Size})
 			}
 		}
 		for q, f := range nmf.ExtraFiles {
-			if f.Downloaded && !omf.ExtraFiles[q].Downloaded {
-				needs = append(needs, model_hub.ModelFileInfo{Name: f.Name, Size: f.Size})
+			if !f.Downloaded {
+				continue
 			}
+			if q < len(cur.ExtraFiles) && cur.ExtraFiles[q].Downloaded {
+				continue
+			}
+			needs = append(needs, model_hub.ModelFileInfo{Name: f.Name, Size: f.Size})
 		}
 
 		// check free disk space
@@ -326,8 +338,7 @@ func (s *Store) PullExtraQuant(ctx context.Context, omf, nmf types.ModelManifest
 		}
 
 		// Create model directory structure
-		err := os.MkdirAll(s.ModelfilePath(nmf.Name, ""), 0o770)
-		if err != nil {
+		if err := os.MkdirAll(s.ModelfilePath(nmf.Name, ""), 0o770); err != nil {
 			errC <- err
 			return
 		}
