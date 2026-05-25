@@ -341,7 +341,6 @@ func resolveDevice(manifest *types.ModelManifest) (deviceID string, nglOverride 
 	effectiveNgl, _ := resolveNglNctx(manifest)
 	deviceID, nglOverride, warning, err := geniex_sdk.ResolveDevice(manifest.PluginId, manifest.ModelName, device, effectiveNgl)
 	if err != nil {
-		fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 		return
 	}
 	if warning != "" {
