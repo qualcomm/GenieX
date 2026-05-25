@@ -88,6 +88,7 @@ func remove() *cobra.Command {
 
 	removeCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		s := store.Get()
+		var lastErr error
 		for _, arg := range args {
 			name, quant := model_hub.NormalizeModelName(arg)
 			label := name
@@ -96,11 +97,12 @@ func remove() *cobra.Command {
 			}
 			if err := s.Remove(name, quant); err != nil {
 				fmt.Println(render.GetTheme().Error.Sprintf("✘  Failed to remove %s: %s", label, err))
-				return err
+				lastErr = err
+				continue
 			}
 			fmt.Println(render.GetTheme().Success.Sprintf("✔  Removed %s", label))
 		}
-		return nil
+		return lastErr
 	}
 
 	return removeCmd
