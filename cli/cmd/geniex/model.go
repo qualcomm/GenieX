@@ -74,6 +74,8 @@ func pull() *cobra.Command {
 
 // Usage: geniex remove <model-name>[:<quant>]
 func remove() *cobra.Command {
+	var assumeYes bool
+
 	removeCmd := &cobra.Command{
 		GroupID: "model",
 		Use:     "remove <model-name>[:<precision>] [<model-name>[:<precision>] ...]",
@@ -83,8 +85,25 @@ func remove() *cobra.Command {
 	}
 
 	removeCmd.Args = cobra.MatchAll(cobra.MinimumNArgs(1), cobra.OnlyValidArgs)
+	removeCmd.Flags().BoolVarP(&assumeYes, "yes", "y", false, "Skip the confirmation prompt")
 
 	removeCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if !assumeYes {
+			title := fmt.Sprintf("Are you sure you want to delete %s?", args[0])
+			if len(args) > 1 {
+				title = fmt.Sprintf("Are you sure you want to delete %d models?\n  %s",
+					len(args), strings.Join(args, "\n  "))
+			}
+			var ok bool
+			if err := huh.NewConfirm().Title(title).Value(&ok).Run(); err != nil {
+				return err
+			}
+			if !ok {
+				fmt.Println(render.GetTheme().Info.Sprint("Aborted"))
+				return nil
+			}
+		}
+
 		s := store.Get()
 		var lastErr error
 		for _, arg := range args {
