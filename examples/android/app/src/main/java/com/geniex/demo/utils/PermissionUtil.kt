@@ -50,8 +50,8 @@ class PermissionUtil {
             }
             AlertDialog.Builder(activity)
                 .setMessage("Index files need MANAGE_EXTERNAL_STORAGE permission, please agree it.")
-                .setNegativeButton("cancel", onClickListener)
-                .setPositiveButton("sure", onClickListener)
+                .setNegativeButton("Cancel", onClickListener)
+                .setPositiveButton("OK", onClickListener)
                 .show()
         }
 

@@ -1279,8 +1279,8 @@ space ::= | " " | "\n" | "\r" | "\t"
                 }
             }
             val alertDialog = AlertDialog.Builder(this).setView(dialogBinding.root)
-                .setNegativeButton("cancel", dialogOnClickListener)
-                .setPositiveButton("sure", dialogOnClickListener)
+                .setNegativeButton("Cancel", dialogOnClickListener)
+                .setPositiveButton("OK", dialogOnClickListener)
                 .setCancelable(false)
                 .create()
             alertDialog.show()
