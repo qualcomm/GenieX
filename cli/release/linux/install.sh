@@ -33,6 +33,37 @@ ISSUE_URL="https://github.com/qcom-ai-hub/geniex/issues"
 VERSION=""
 PREFIX=""
 QUIET=0
+SKIP_CHECKS=0
+
+# Qualcomm user-space driver libs the runtime dlopens. Mirrors _QCOM_LIBS in
+# cli/release/linux/BUILD.bazel — keep both lists in sync.
+QCOM_LIBS="
+libOpenCL.so.1
+libOpenCL_adreno.so.1
+libCB.so.1
+libadreno_utils.so.1
+libgsl.so.1
+libllvm-qcom.so.1
+libllvm-qgl.so.1
+libllvm-glnext.so.1
+libpropertyvault.so.0.0.0
+libdmabufheap.so.0.0.0
+libcdsprpc.so.1.0.0
+"
+
+# System libs / tools required at runtime. Mirrors trixie.yaml's required
+# packages — ca-certificates, libatomic1, libglib2.0-0t64. We probe the
+# artifact each package installs, not the apt name (the host distro may not
+# be Debian). sox is an optional runtime dep (audio I/O) and not enforced.
+SYSTEM_DEPS="
+libatomic.so.1:libatomic1
+libglib-2.0.so.0:libglib2.0-0t64
+file:/etc/ssl/certs/ca-certificates.crt:ca-certificates
+"
+
+# Minimum qcom-adreno driver version (extracted from libgsl.so.1's debug
+# path). Bump when the SDK starts depending on a newer driver.
+MIN_QCOM_DRIVER="1.838.3"
 
 usage() {
     cat <<EOF
@@ -45,6 +76,7 @@ Options:
   --prefix DIR       Install to DIR (default: /usr/local/lib/geniex when root,
                      \${XDG_DATA_HOME:-\$HOME/.local/share}/geniex otherwise)
   -q, --quiet        Suppress non-error output
+  --skip-checks      Skip QCOM driver and system-library checks
   -h, --help         Show this help
 
 The CLI is symlinked into /usr/local/bin (root) or \$HOME/.local/bin (user).
@@ -96,6 +128,10 @@ while [ $# -gt 0 ]; do
             QUIET=1
             shift
             ;;
+        --skip-checks)
+            SKIP_CHECKS=1
+            shift
+            ;;
         -h|--help)
             usage
             exit 0
@@ -137,6 +173,122 @@ fi
 
 need_cmd tar
 need_cmd mktemp
+
+# Locate a shared library by SONAME. Prefers ldconfig's cache (covers distros
+# that don't install into /usr/lib by default), falls back to the standard
+# search dirs.
+find_lib() {
+    _name="$1"
+    if command -v ldconfig >/dev/null 2>&1; then
+        _path=$(ldconfig -p 2>/dev/null | awk -v n="$_name" '$1 == n { print $NF; exit }')
+        if [ -n "$_path" ] && [ -e "$_path" ]; then
+            printf '%s\n' "$_path"
+            return 0
+        fi
+    fi
+    for _dir in /usr/lib/aarch64-linux-gnu /usr/lib64 /usr/lib /lib/aarch64-linux-gnu /lib64 /lib; do
+        if [ -e "$_dir/$_name" ]; then
+            printf '%s\n' "$_dir/$_name"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Compare two dotted versions. Returns 0 iff $1 >= $2.
+version_ge() {
+    [ "$1" = "$2" ] && return 0
+    _lo=$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)
+    [ "$_lo" = "$2" ]
+}
+
+check_qcom_libs() {
+    _missing=""
+    for _lib in $QCOM_LIBS; do
+        if ! find_lib "$_lib" >/dev/null; then
+            _missing="${_missing} ${_lib}"
+        fi
+    done
+    if [ -n "$_missing" ]; then
+        err "missing Qualcomm driver libraries (expected on Snapdragon Linux):"
+        for _m in $_missing; do err "  - $_m"; done
+        err "install the Qualcomm graphics/compute driver package, or rerun with --skip-checks"
+        return 1
+    fi
+    return 0
+}
+
+check_qcom_driver_version() {
+    _gsl=$(find_lib libgsl.so.1) || return 0  # already reported by check_qcom_libs
+    if ! command -v strings >/dev/null 2>&1; then
+        say "Note: 'strings' not on PATH — skipping QCOM driver version check"
+        return 0
+    fi
+    # libgsl.so.1 embeds debug paths like /usr/src/debug/qcom-adreno/<ver>/...
+    _ver=$(strings -a "$_gsl" 2>/dev/null \
+        | sed -n 's,.*qcom-adreno/\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*,\1,p' \
+        | sort -V | tail -n1)
+    if [ -z "$_ver" ]; then
+        say "Note: could not detect QCOM driver version from $_gsl — continuing"
+        return 0
+    fi
+    if version_ge "$_ver" "$MIN_QCOM_DRIVER"; then
+        say "QCOM driver: $_ver (>= $MIN_QCOM_DRIVER)"
+        return 0
+    fi
+    err "QCOM driver $_ver is older than required $MIN_QCOM_DRIVER"
+    err "update the Qualcomm graphics/compute driver, or rerun with --skip-checks"
+    return 1
+}
+
+check_system_deps() {
+    _missing=""
+    # POSIX sh has no arrays; SYSTEM_DEPS entries are colon-separated specs:
+    #   <soname>:<pkg>            — shared library
+    #   file:<path>:<pkg>         — file must exist
+    #   bin:<cmd>:<pkg>           — command must be on PATH
+    _ifs="$IFS"
+    IFS='
+'
+    for _entry in $SYSTEM_DEPS; do
+        [ -z "$_entry" ] && continue
+        case "$_entry" in
+            file:*)
+                _path=$(printf '%s' "$_entry" | cut -d: -f2)
+                _pkg=$(printf '%s' "$_entry"  | cut -d: -f3)
+                [ -e "$_path" ] || _missing="${_missing} ${_pkg}(${_path})"
+                ;;
+            bin:*)
+                _cmd=$(printf '%s' "$_entry" | cut -d: -f2)
+                _pkg=$(printf '%s' "$_entry" | cut -d: -f3)
+                command -v "$_cmd" >/dev/null 2>&1 || _missing="${_missing} ${_pkg}(${_cmd})"
+                ;;
+            *)
+                _soname=$(printf '%s' "$_entry" | cut -d: -f1)
+                _pkg=$(printf '%s' "$_entry"    | cut -d: -f2)
+                find_lib "$_soname" >/dev/null || _missing="${_missing} ${_pkg}(${_soname})"
+                ;;
+        esac
+    done
+    IFS="$_ifs"
+    if [ -n "$_missing" ]; then
+        err "missing system dependencies:"
+        for _m in $_missing; do err "  - $_m"; done
+        err "install via your distro's package manager (Debian: apt-get install ca-certificates libatomic1 libglib2.0-0t64), or rerun with --skip-checks"
+        return 1
+    fi
+    return 0
+}
+
+if [ "$SKIP_CHECKS" -eq 1 ]; then
+    say "Skipping QCOM driver and system-library checks (--skip-checks)"
+else
+    say "Checking Qualcomm driver libraries"
+    check_qcom_libs        || exit 1
+    check_qcom_driver_version || exit 1
+    say "Checking system libraries"
+    check_system_deps      || exit 1
+fi
 
 DOWNLOADER=$(pick_cmd curl wget) || {
     err "need 'curl' or 'wget' on PATH"
