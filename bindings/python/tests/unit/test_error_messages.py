@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """Pure-Python unit coverage for the dogfood error-message and profile
-metadata fixes (issues #725, #726, #727, #736, #739).
+metadata fixes (issues #715, #725, #726, #727, #736, #739).
 
 These tests bypass the native SDK and exercise the helper functions
 directly so they collect and pass even when ``geniex/lib/`` is not staged.
@@ -26,6 +26,7 @@ import os
 
 import pytest
 
+from geniex._ffi import _api as _ffi_api
 from geniex.auto import (
     PLUGIN_LLAMA_CPP,
     PLUGIN_QAIRT,
@@ -127,6 +128,27 @@ def test_reject_gguf_on_llama_cpp_passes():
 def test_reject_qairt_bundle_passes():
     # QAIRT directory bundles (no .gguf suffix) must pass.
     _reject_gguf_on_qairt('/bundle/metadata.json', PLUGIN_QAIRT, 'npu')
+
+
+# ---------------------------------------------------------------------------
+# #715: get_plugin_list / get_device_list raise before init() instead of
+# silently returning [] (which made misuse look like "no plugins available").
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _runtime_uninitialized(monkeypatch):
+    monkeypatch.setattr(_ffi_api, '_initialized', False)
+
+
+def test_get_plugin_list_raises_before_init(_runtime_uninitialized):
+    with pytest.raises(RuntimeError, match=r'get_plugin_list\(\).*geniex\.init\(\)'):
+        _ffi_api.get_plugin_list()
+
+
+def test_get_device_list_raises_before_init(_runtime_uninitialized):
+    with pytest.raises(RuntimeError, match=r'get_device_list\(\).*geniex\.init\(\)'):
+        _ffi_api.get_device_list('llama_cpp')
 
 
 # ---------------------------------------------------------------------------
