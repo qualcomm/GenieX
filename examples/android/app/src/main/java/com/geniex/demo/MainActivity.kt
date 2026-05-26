@@ -1072,8 +1072,11 @@ space ::= | " " | "\n" | "\r" | "\t"
                             Log.d(TAG, "vlm chat template:${result.formattedText}")
                             val baseConfig =
                                 GenerationConfigSample().toGenerationConfig(grammarString)
+                            // Only inject the current turn's media: SDK tokenizes
+                            // incrementally, so re-passing history bitmaps breaks
+                            // mtmd_tokenize (markers/bitmaps mismatch).
                             val configWithMedia = vlmWrapper.injectMediaPathsToConfig(
-                                vlmChatList.toTypedArray(),
+                                arrayOf(sendMsg),
                                 baseConfig
                             )
 
@@ -1354,9 +1357,8 @@ space ::= | " " | "\n" | "\r" | "\t"
 
             is LlmStreamResult.Error -> {
                 runOnUiThread {
-                    val content =
-                        "your conversation is out of model’s context length, please start a new conversation or click clear button"
-                    messages.add(Message(content, MessageType.PROFILE))
+                    val reason = streamResult.throwable.message ?: streamResult.throwable.toString()
+                    messages.add(Message("Error: $reason", MessageType.PROFILE))
                     reloadRecycleView()
                 }
                 Log.d(TAG, "Error: $streamResult")
