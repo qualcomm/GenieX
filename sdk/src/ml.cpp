@@ -222,6 +222,12 @@ int32_t geniex_get_device_list(const geniex_GetDeviceListInput* input, geniex_Ge
             return GENIEX_ERROR_COMMON_UNKNOWN;
         }
         return GENIEX_SUCCESS;
+    } catch (const PluginNotFoundException&) {
+        GENIEX_LOG_ERROR("plugin not found: {}", input->plugin_id);
+        return GENIEX_ERROR_COMMON_PLUGIN_INVALID;
+    } catch (const PluginLoadException&) {
+        GENIEX_LOG_ERROR("plugin load error: {}", input->plugin_id);
+        return GENIEX_ERROR_COMMON_PLUGIN_LOAD;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("failed to get device list: {}", e.what());
         return GENIEX_ERROR_COMMON_UNKNOWN;
