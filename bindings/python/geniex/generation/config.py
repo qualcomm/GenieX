@@ -19,17 +19,20 @@ from dataclasses import dataclass, field
 
 @dataclass
 class GenerationConfig:
-    """Transformers-compatible generation parameters."""
+    """Transformers-compatible generation parameters.
+
+    Numeric sampler fields default to 0 (= defer to bundle/plugin default).
+    """
 
     max_new_tokens: int = 512
-    temperature: float = 0.7
-    top_p: float = 0.9
-    top_k: int = 40
+    temperature: float = 0.0
+    top_p: float = 0.0
+    top_k: int = 0
     min_p: float = 0.0
-    repetition_penalty: float = 1.1
+    repetition_penalty: float = 0.0
     presence_penalty: float = 0.0
     frequency_penalty: float = 0.0
-    seed: int = -1
+    seed: int = 0
     stop: list[str] = field(default_factory=list)
     grammar: str | None = None
     json_mode: bool = False
