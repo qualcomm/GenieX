@@ -127,7 +127,12 @@ class GeniexError(Exception):
 
 # Subset of geniex_ErrorCode values that callers may want to check against.
 # Keep aligned with sdk/include/geniex.h; expand on demand.
+GENIEX_ERROR_COMMON_PLUGIN_INVALID = -100302
 GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH = -200004
+
+
+def _unknown_plugin_message(plugin_id: str, available: list[str]) -> str:
+    return f"Unknown plugin: {plugin_id}. Available plugins: {', '.join(sorted(available))}."
 
 
 def _check(code: int) -> None:
@@ -332,6 +337,9 @@ def get_plugin_list() -> list[str]:
 def get_device_list(plugin_id: str) -> list[tuple[str, str]]:
     """Return ``[(device_id, device_name), ...]`` for ``plugin_id``."""
     _ensure_bound()
+    available = get_plugin_list()
+    if plugin_id not in available:
+        raise GeniexError(GENIEX_ERROR_COMMON_PLUGIN_INVALID, _unknown_plugin_message(plugin_id, available))
     lib = load_library()
     inp = geniex_GetDeviceListInput(plugin_id=plugin_id.encode())
     out = geniex_GetDeviceListOutput()
