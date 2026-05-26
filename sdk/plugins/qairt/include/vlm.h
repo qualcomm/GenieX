@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 
+#include "llm/llm_spec_loader.h"  // ParsedSamplerConfig
 #include "pipeline/vlm_pipeline.h"
 #include "plugin/IVlm.h"
 
@@ -16,6 +17,9 @@ class QairtVlm : public IVlm {
     // True iff a vision encoder shard was located at create time. Audio is not
     // wired into the QAIRT VLM pipeline yet, so always reported as unsupported.
     bool has_vision_encoder_ = false;
+
+    // Bundle's `dialog.sampler` defaults; parsed once at create_impl().
+    ParsedSamplerConfig bundle_sampler_;
 
     // Incremental history tracking.
     // history_size_         — messages already committed to the KV cache (advanced by generate()).

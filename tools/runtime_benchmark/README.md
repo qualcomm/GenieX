@@ -28,3 +28,18 @@ SCORE_WITH_CLAUDE.md           # how to do step 2
 
 `results/` already contains finished runs for `Qwen3-4B-Instruct-2507`
 and `Llama-v3.2-1B-Instruct` — useful as calibration references.
+
+## How to run genie-t2t-run locally
+
+```powershell
+$env:QAIRT_HOME = "C:\Qualcomm\AIStack\QAIRT\2.46.0.260424"
+$env:Path = "$env:QAIRT_HOME\bin\aarch64-windows-msvc;" + $env:Path
+$env:Path = "$env:QAIRT_HOME\lib\aarch64-windows-msvc;" + $env:Path
+
+# Please make sure the architecture matches that of the device
+# (v73 for X Elite, v81 for X2 Elite)
+$env:ADSP_LIBRARY_PATH = "$env:QAIRT_HOME\lib\hexagon-v73\unsigned"
+
+cd "C:\Users\yichqian\code\geniex-qairt-plugin\modelfiles\qwen2_5_vl_7b_instruct"
+genie-t2t-run.exe -c genie_config.json -p "<|im_start|>system\nYou are a helpful AI Assistant.<|im_end|><|im_start|>What is France's capital?\n<|im_end|>\n<|im_start|>assistant\n"
+```
