@@ -53,6 +53,7 @@ type ModelFileInfo struct {
 // ChoosePluginId returns llama_cpp for GGUF, qairt for a single genie .zip
 // or a layout containing genie_config.json, and errors otherwise.
 func ChoosePluginId(files []ModelFileInfo) (string, error) {
+	slog.Debug("choosing plugin", "files", files)
 	// gguf
 	for _, f := range files {
 		if strings.HasSuffix(strings.ToLower(f.Name), ".gguf") {

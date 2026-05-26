@@ -15,7 +15,7 @@ The Geniex AI Android SDK enables on-device AI inference for Android application
 
 ### Supported Hardware
 
-- **NPU**: Qualcomm Snapdragon 8 Gen 4 (optimized)
+- **NPU**: Qualcomm Snapdragon 8 Elite, 8 Elite Gen 5
 - **GPU**: Qualcomm Adreno GPU
 - **CPU**: ARM64-v8a
 - **RAM**: 4GB+ recommended
@@ -37,6 +37,6 @@ git clone https://github.com/GeniexAI/geniex-sdk/
 
 2. Open this folder `bindings/android` in Android Studio
 
-3. Follow the instructions in [Android SDK Doc](https://docs.geniex.ai/geniex-sdk-android/overview), download model (For example, [`OmniNeural-4B`](https://huggingface.co/GeniexAI/OmniNeural-4B)) and put it in App's assets folder (For example, `/data/data/com.geniex.demo/files/models/omni-neural-4b `).
+3. Follow the instructions in docs, download model, and put it in App's assets folder.
 
 4. Build and run the app

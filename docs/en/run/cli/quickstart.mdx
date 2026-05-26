@@ -9,11 +9,11 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 - The CLI installed — see [Install](/en/run/cli/install).
 - Interactive shell from container (Docker only) — see [Run interactively](/en/run/cli/install#run-interactively).
-- Familiarity with [backend choice](/en/get-started/choose-backend) — `qairt` for AI Hub bundles, `llama_cpp` for any GGUF.
+- Familiarity with [runtime choice](/en/get-started/choose-runtime) — `qairt` for AI Hub bundles, `llama_cpp` for any GGUF.
 
 ## **Run your first model**
 
-### **QAIRT plugin (AI Hub)**
+### **QAIRT runtime (AI Hub)**
 
 **Language model:**
 
@@ -27,7 +27,7 @@ geniex infer qualcomm/Qwen3-4B
 geniex infer qualcomm/Qwen2.5-VL-7B-Instruct
 ```
 
-### **llama.cpp plugin (GGUF)**
+### **llama.cpp runtime (GGUF)**
 
 Pick `Q4_0` when prompted — it has the best Hexagon NPU support.
 

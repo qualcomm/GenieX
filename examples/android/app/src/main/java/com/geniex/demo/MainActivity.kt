@@ -1072,8 +1072,11 @@ space ::= | " " | "\n" | "\r" | "\t"
                             Log.d(TAG, "vlm chat template:${result.formattedText}")
                             val baseConfig =
                                 GenerationConfigSample().toGenerationConfig(grammarString)
+                            // Only inject the current turn's media: SDK tokenizes
+                            // incrementally, so re-passing history bitmaps breaks
+                            // mtmd_tokenize (markers/bitmaps mismatch).
                             val configWithMedia = vlmWrapper.injectMediaPathsToConfig(
-                                vlmChatList.toTypedArray(),
+                                arrayOf(sendMsg),
                                 baseConfig
                             )
 
@@ -1262,7 +1265,7 @@ space ::= | " " | "\n" | "\r" | "\t"
                             }
                         }
                         ggufLlmDeviceId = DeviceIdValue.GPU.value
-                    } else if (checkedId == R.id.rb_npu && isGgufLlmModel) {
+                    } else if (checkedId == R.id.rb_npu) {
                         nGpuLayers = 999
                         ggufLlmDeviceId = DeviceIdValue.NPU.value
                     }
@@ -1279,8 +1282,8 @@ space ::= | " " | "\n" | "\r" | "\t"
                 }
             }
             val alertDialog = AlertDialog.Builder(this).setView(dialogBinding.root)
-                .setNegativeButton("cancel", dialogOnClickListener)
-                .setPositiveButton("sure", dialogOnClickListener)
+                .setNegativeButton("Cancel", dialogOnClickListener)
+                .setPositiveButton("OK", dialogOnClickListener)
                 .setCancelable(false)
                 .create()
             alertDialog.show()
@@ -1354,9 +1357,8 @@ space ::= | " " | "\n" | "\r" | "\t"
 
             is LlmStreamResult.Error -> {
                 runOnUiThread {
-                    val content =
-                        "your conversation is out of model’s context length, please start a new conversation or click clear button"
-                    messages.add(Message(content, MessageType.PROFILE))
+                    val reason = streamResult.throwable.message ?: streamResult.throwable.toString()
+                    messages.add(Message("Error: $reason", MessageType.PROFILE))
                     reloadRecycleView()
                 }
                 Log.d(TAG, "Error: $streamResult")

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <string>
 
 #include "llm/llm_spec_loader.h"  // ParsedSamplerConfig
 #include "pipeline/vlm_pipeline.h"
@@ -12,8 +11,7 @@ namespace geniex {
 class QairtVlm : public IVlm {
     std::unique_ptr<VLMPipeline> pipeline_;
 
-    std::string model_name_;
-    bool        enable_thinking_ = false;
+    bool enable_thinking_ = false;
     // True iff a vision encoder shard was located at create time. Audio is not
     // wired into the QAIRT VLM pipeline yet, so always reported as unsupported.
     bool has_vision_encoder_ = false;

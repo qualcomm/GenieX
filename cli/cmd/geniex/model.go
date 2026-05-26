@@ -24,8 +24,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bytedance/sonic"
-
 	"github.com/charmbracelet/huh"
 	"github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -76,6 +74,8 @@ func pull() *cobra.Command {
 
 // Usage: geniex remove <model-name>[:<quant>]
 func remove() *cobra.Command {
+	var assumeYes bool
+
 	removeCmd := &cobra.Command{
 		GroupID: "model",
 		Use:     "remove <model-name>[:<precision>] [<model-name>[:<precision>] ...]",
@@ -85,9 +85,27 @@ func remove() *cobra.Command {
 	}
 
 	removeCmd.Args = cobra.MatchAll(cobra.MinimumNArgs(1), cobra.OnlyValidArgs)
+	removeCmd.Flags().BoolVarP(&assumeYes, "yes", "y", false, "Skip the confirmation prompt")
 
 	removeCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if !assumeYes {
+			title := fmt.Sprintf("Are you sure you want to delete %s?", args[0])
+			if len(args) > 1 {
+				title = fmt.Sprintf("Are you sure you want to delete %d models?\n  %s",
+					len(args), strings.Join(args, "\n  "))
+			}
+			var ok bool
+			if err := huh.NewConfirm().Title(title).Value(&ok).Run(); err != nil {
+				return err
+			}
+			if !ok {
+				fmt.Println(render.GetTheme().Info.Sprint("Aborted"))
+				return nil
+			}
+		}
+
 		s := store.Get()
+		var lastErr error
 		for _, arg := range args {
 			name, quant := model_hub.NormalizeModelName(arg)
 			label := name
@@ -96,11 +114,12 @@ func remove() *cobra.Command {
 			}
 			if err := s.Remove(name, quant); err != nil {
 				fmt.Println(render.GetTheme().Error.Sprintf("✘  Failed to remove %s: %s", label, err))
-				return err
+				lastErr = err
+				continue
 			}
 			fmt.Println(render.GetTheme().Success.Sprintf("✔  Removed %s", label))
 		}
-		return nil
+		return lastErr
 	}
 
 	return removeCmd
@@ -311,7 +330,6 @@ func pullModel(name string, quant string) error {
 	files, hmf, err := model_hub.ModelInfo(context.TODO(), name)
 	spin.Stop()
 	if err != nil {
-		fmt.Println(render.GetTheme().Error.Sprintf("Get ModelInfo error: %s", err))
 		return err
 	}
 
@@ -329,21 +347,17 @@ func pullModel(name string, quant string) error {
 			return nil
 		}
 
-		// deepcopy manifest
-		var omf types.ModelManifest
-		mfs, _ := sonic.Marshal(mf)
-		sonic.Unmarshal(mfs, &omf)
+		oldSize := mf.GetSize()
 
 		// choose quant to download
 		err := chooseQuantFiles(quant, mf)
 		if err != nil {
-			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			return err
 		}
 
 		// start download
-		pgCh, errCh := s.PullExtraQuant(context.TODO(), omf, *mf)
-		bar := render.NewProgressBar(mf.GetSize()-omf.GetSize(), "downloading")
+		pgCh, errCh := s.PullExtraQuant(context.TODO(), *mf)
+		bar := render.NewProgressBar(mf.GetSize()-oldSize, "downloading")
 		for pg := range pgCh {
 			bar.Set(pg.TotalDownloaded)
 		}
@@ -351,7 +365,6 @@ func pullModel(name string, quant string) error {
 
 		for err := range errCh {
 			bar.Clear()
-			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			return err
 		}
 	} else {
@@ -373,7 +386,6 @@ func pullModel(name string, quant string) error {
 
 		err := chooseFiles(name, quant, files, &manifest)
 		if err != nil {
-			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			return err
 		}
 
@@ -404,7 +416,6 @@ func pullModel(name string, quant string) error {
 
 		for err := range errCh {
 			bar.Clear()
-			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			return err
 		}
 

@@ -29,7 +29,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="`--device cpu` or `--device gpu` errors with a QAIRT model">
-    QAIRT is NPU-only. Use `--device npu` (or omit the flag — `npu` is the default for QAIRT). To run on CPU/GPU, switch to a GGUF model on the [llama.cpp backend](/en/get-started/choose-backend#llamacpp).
+    QAIRT is NPU-only. Use `--device npu` (or omit the flag — `npu` is the default for QAIRT). To run on CPU/GPU, switch to a GGUF model on the [llama.cpp runtime](/en/get-started/choose-runtime#llamacpp).
   </Accordion>
 </AccordionGroup>
 
@@ -63,7 +63,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="QAIRT load fails with 'unknown model name'">
-    The model id returned by AI Hub must match an entry in the QAIRT plugin's registry (`qwen3_4b_instruct_2507`, `qwen2_5_vl_7b_instruct`, etc.). To add a new AI Hub model, register it on the C++ side first — see `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`.
+    The model id returned by AI Hub must match an entry in the QAIRT runtime's registry (`qwen3_4b_instruct_2507`, `qwen2_5_vl_7b_instruct`, etc.). To add a new AI Hub model, register it on the C++ side first — see `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`.
   </Accordion>
 
   <Accordion title="`nGpuLayers` or `nCtx` rejected on QAIRT">

@@ -14,6 +14,7 @@
 #endif
 
 #include "llm/llm_spec_loader.h"  // parseGenieSamplerConfig
+#include "dispatch.h"  // provided by geniex-qairt/models/
 #include "logging.h"
 #include "pipeline/chat_template.h"
 #include "pipeline/llm_pipeline.h"
@@ -41,11 +42,10 @@ constexpr const char* kDefaultSystemPrompt = "You are a helpful AI assistant.";
 QairtLlm::~QairtLlm() = default;
 
 int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
-    if (!input || !input->model_name || !input->model_path) {
+    if (!input || !input->model_path) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
-    model_name_      = input->model_name;
     enable_thinking_ = input->config.enable_thinking;
 
     // Reject llama.cpp-only parameters that have no meaning in the QAIRT plugin
@@ -57,16 +57,6 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
         GENIEX_LOG_ERROR("--nctx (n_ctx) is not supported by the qairt plugin");
         return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
     }
-
-    // Look up model in registry
-    auto& registry = llm_model_registry();
-    auto  it       = registry.find(model_name_);
-    if (it == registry.end()) {
-        GENIEX_LOG_ERROR("Unknown QAIRT model name: {}", model_name_);
-        return GENIEX_ERROR_COMMON_MODEL_INVALID;
-    }
-
-    const auto& entry = it->second;
 
     // Parse model_path to get model directory
     fs::path model_path(input->model_path);
@@ -114,17 +104,16 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     model_cfg.forecast_prefix_path =
         qairt::runtime::find_optional_file(model_dir, "forecast-prefix/kv-cache.primary.qnn-htp");
 
-    // Create LLMPipeline via the per-model factory (handles makeModel + chat template internally).
-    // Returns std::nullopt on QNN init failure, missing tokenizer, etc.
-    auto pipe = entry.make_pipeline(runtime_cfg, model_cfg);
+    // Create LLMPipeline via the model_id-driven dispatcher
+    auto pipe = makeLLMPipeline(runtime_cfg, model_cfg);
     if (!pipe) {
-        GENIEX_LOG_ERROR("Failed to create QAIRT LLM pipeline for model: {}", model_name_);
+        GENIEX_LOG_ERROR("Failed to create QAIRT LLM pipeline from bundle: {}", model_dir.string());
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
     pipeline_      = std::make_unique<LLMPipeline>(std::move(*pipe));
     is_first_turn_ = true;
 
-    GENIEX_LOG_DEBUG("QAIRT LLM created successfully: model={}", model_name_);
+    GENIEX_LOG_DEBUG("QAIRT LLM created successfully from bundle: {}", model_dir.string());
     return GENIEX_SUCCESS;
 }
 

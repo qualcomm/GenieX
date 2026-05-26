@@ -5,7 +5,7 @@ description: "Run a custom GGUF model from Hugging Face or load a self-converted
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-You can run any GGUF model on the llama.cpp backend, and load self-converted bundles on QAIRT.
+You can run any GGUF model on the llama.cpp runtime, and load self-converted bundles on QAIRT.
 
 ## **GGUF models from Hugging Face (llama.cpp)**
 
@@ -50,7 +50,7 @@ geniex pull local/$model --model-hub localfs `
 geniex infer local/$model
 ```
 
-<Note>This flow uses the QAIRT plugin, which is NPU-only. Pass `--device npu` or omit the flag.</Note>
+<Note>This flow uses the QAIRT runtime, which is NPU-only. Pass `--device npu` or omit the flag.</Note>
 
 ## **Custom models in Python**
 

@@ -4,16 +4,16 @@ Multi-platform AI inference runtime for Snapdragon / Hexagon — runs LLMs on NP
 
 > Status: pre-1.0, under active development. Public API and tags may change; see [notes/release.md](notes/release.md).
 
-## Backends
+## Runtimes & compute units
 
-| Backend       | Hardware       | Model format | Plugin enabled by                         |
-| ------------- | -------------- | ------------ | ----------------------------------------- |
-| Hexagon (HTP) | Snapdragon NPU | GGUF         | `llama_cpp` + `-DGGML_HEXAGON=ON`         |
-| OpenCL        | Adreno GPU     | GGUF         | `llama_cpp` + `-DGGML_OPENCL=ON`          |
-| QAIRT / QNN   | Snapdragon NPU | QAIRT `.bin` | `qairt` + `-DGENIEX_PLUGIN_QAIRT=ON`      |
-| CPU           | Any            | GGUF         | `llama_cpp` (default; disable both flags) |
+| Runtime / GGML backend | Compute unit   | Model format | Enabled by                                |
+| ---------------------- | -------------- | ------------ | ----------------------------------------- |
+| llama.cpp / Hexagon    | Snapdragon NPU | GGUF         | `llama_cpp` + `-DGGML_HEXAGON=ON`         |
+| llama.cpp / OpenCL     | Adreno GPU     | GGUF         | `llama_cpp` + `-DGGML_OPENCL=ON`          |
+| QAIRT / QNN            | Snapdragon NPU | QAIRT `.bin` | `qairt` + `-DGENIEX_PLUGIN_QAIRT=ON`      |
+| llama.cpp / CPU        | Any            | GGUF         | `llama_cpp` (default; disable both flags) |
 
-The `llama_cpp` and `qairt` plugins both target the NPU but through **separate user-space stacks** (ggml-hexagon DSP skels vs. Qualcomm QNN) that consume **different model formats**. They are not substitutes. QAIRT libs are bundled under `third-party/geniex-qairt/`; Hexagon and OpenCL SDKs are external installs.
+The `llama_cpp` and `qairt` runtimes both target the NPU but through **separate user-space stacks** (ggml-hexagon DSP skels vs. Qualcomm QNN) that consume **different model formats**. They are not substitutes. QAIRT libs are bundled under `third-party/geniex-qairt/`; Hexagon and OpenCL SDKs are external installs.
 
 ## Install
 
@@ -116,7 +116,7 @@ For contribution to this project, see docs below to build and test your changes.
 | File                               | Topic                                                                 |
 | ---------------------------------- | --------------------------------------------------------------------- |
 | [notes/build.md](notes/build.md)     | Build CLI, SDK, and Python bindings (Linux / Windows ARM64 / Android) |
-| [notes/run.md](notes/run.md)         | Backend selection, model pull, Windows self-signed HTP fallback       |
+| [notes/run.md](notes/run.md)         | Runtime / compute-unit selection, model pull, Windows self-signed HTP fallback |
 | [notes/release.md](notes/release.md) | SemVer tag procedure, channels, Hexagon HTP signing pipeline          |
 | [notes/AI.md](notes/AI.md)           | Claude Code integration (slash commands, skills)                      |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Commits, branches, PR format, FFI-update rule                         |

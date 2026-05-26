@@ -99,19 +99,17 @@ func (s *Store) cleanCorruptedDirectories() {
 
 	for _, models := range models {
 		slog.Info("Checking model directory", "name", models)
+		if err := s.LockModel(models); err != nil {
+			slog.Warn("Skipping cleanup of directory", "name", models, "err", err)
+			continue
+		}
 		if s.isCorruptedModelDirectory(models) {
-			if err := s.LockModel(models); err != nil {
-				slog.Warn("Skipping cleanup of directory", "name", models, "err", err)
-				continue
-			}
-
 			slog.Info("Cleaning corrupted model directory", "name", models)
 			if err := os.RemoveAll(s.ModelfilePath(models, "")); err != nil {
 				slog.Error("Failed to remove corrupted directory", "name", models, "err", err)
 			}
-
-			s.UnlockModel(models)
 		}
+		s.UnlockModel(models)
 	}
 }
 
@@ -130,6 +128,5 @@ func (s *Store) isCorruptedModelDirectory(name string) bool {
 			return false
 		}
 	}
-	slog.Info("Cleaning corrupted model directory", "name", name)
 	return true
 }

@@ -1,6 +1,6 @@
 ---
 title: "Local server"
-description: "Run an OpenAI-compatible HTTP API on localhost backed by Qualcomm hardware acceleration."
+description: "Run an OpenAI-compatible HTTP API on localhost backed by Snapdragon NPU/GPU/CPU acceleration."
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
@@ -128,7 +128,7 @@ print()
 ```
 
 <Note>
-Replace the `model` value with a model you have already pulled. The optional `:<precision>` suffix selects a quantization variant (e.g. `Q4_0`, `Q4_K_M`, `Q8_0`) — `Q4_0` is recommended for the llama.cpp Hexagon NPU backend. See [Quantization](/en/models/quantization).
+Replace the `model` value with a model you have already pulled. The optional `:<precision>` suffix selects a quantization variant (e.g. `Q4_0`, `Q4_K_M`, `Q8_0`) — `Q4_0` is recommended for llama.cpp on Hexagon NPU. See [Quantization](/en/models/quantization).
 </Note>
 
 ## **Other endpoints**
