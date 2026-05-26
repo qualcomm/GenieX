@@ -35,53 +35,42 @@ PREFIX=""
 QUIET=0
 SKIP_CHECKS=0
 
-# Qualcomm user-space driver libs. Mirrors _QCOM_LIBS (full SONAMEs the
-# driver package ships) and _QCOM_SHORT_ALIASES (unversioned aliases that
-# our shipped artifacts and the GPU driver's own dlopen chain look up by
-# short name) in cli/release/linux/BUILD.bazel — keep all three lists in
-# sync. We require both: the full SONAMEs prove the driver package is
-# installed, the aliases prove ld.so can resolve the names our binaries
-# actually link against (e.g. libggml-opencl.so NEEDs `libOpenCL.so`, not
-# `libOpenCL.so.1`).
+# Qualcomm driver libs: full SONAMEs (_QCOM_LIBS) + unversioned aliases
+# (_QCOM_SHORT_ALIASES) in cli/release/linux/BUILD.bazel. Both are required:
+# our binaries NEED short names (e.g. libggml-opencl.so → libOpenCL.so).
 QCOM_LIBS="
-libOpenCL.so.1
-libOpenCL_adreno.so.1
-libCB.so.1
-libadreno_utils.so.1
-libgsl.so.1
-libllvm-qcom.so.1
-libllvm-qgl.so.1
-libllvm-glnext.so.1
-libpropertyvault.so.0.0.0
-libdmabufheap.so.0.0.0
-libcdsprpc.so.1.0.0
-libOpenCL_adreno.so
 libCB.so
+libCB.so.1
+libOpenCL.so.1
+libOpenCL_adreno.so
+libOpenCL_adreno.so.1
 libadreno_utils.so
-libgsl.so
-libllvm-qcom.so
-libllvm-qgl.so
-libllvm-glnext.so
-libpropertyvault.so.0
-libdmabufheap.so.0
+libadreno_utils.so.1
 libcdsprpc.so
 libcdsprpc.so.1
+libcdsprpc.so.1.0.0
+libdmabufheap.so.0
+libdmabufheap.so.0.0.0
+libgsl.so
+libgsl.so.1
+libllvm-glnext.so
+libllvm-glnext.so.1
+libllvm-qcom.so
+libllvm-qcom.so.1
+libllvm-qgl.so
+libllvm-qgl.so.1
+libpropertyvault.so.0
+libpropertyvault.so.0.0.0
 "
 
-# System libs / tools required at runtime. Mirrors trixie.yaml's required
-# packages — ca-certificates, libatomic1, libglib2.0-0t64. We probe the
-# artifact each package installs, not the apt name (the host distro may not
-# be Debian). sox is an optional runtime dep (audio I/O) and not enforced.
+# Required system libs from trixie.yaml. ca-certificates is left to the
+# downloader's own error path; sox is optional (audio I/O).
 SYSTEM_DEPS="
 libatomic.so.1:libatomic1
 libglib-2.0.so.0:libglib2.0-0t64
-file:/etc/ssl/certs/ca-certificates.crt:ca-certificates
 "
 
-# Minimum qcom-adreno driver version. We extract it from libOpenCL.so.1
-# (the ICD loader is in our DT_NEEDED chain and embeds the driver's
-# /usr/src/debug/qcom-adreno/<ver>/ build path). Bump when the SDK starts
-# depending on a newer driver.
+# qcom-adreno version is embedded in the ICD loader's debug path.
 MIN_QCOM_DRIVER="1.838.3"
 QCOM_DRIVER_PROBE_LIB="libOpenCL.so.1"
 
@@ -194,9 +183,7 @@ fi
 need_cmd tar
 need_cmd mktemp
 
-# Locate a shared library by SONAME. Prefers ldconfig's cache (covers distros
-# that don't install into /usr/lib by default), falls back to the standard
-# search dirs.
+# Locate a shared library by SONAME via ldconfig, with a fallback scan.
 find_lib() {
     _name="$1"
     if command -v ldconfig >/dev/null 2>&1; then
@@ -239,12 +226,11 @@ check_qcom_libs() {
 }
 
 check_qcom_driver_version() {
-    _probe=$(find_lib "$QCOM_DRIVER_PROBE_LIB") || return 0  # already reported by check_qcom_libs
+    _probe=$(find_lib "$QCOM_DRIVER_PROBE_LIB") || return 0
     if ! command -v strings >/dev/null 2>&1; then
         say "Note: 'strings' not on PATH — skipping QCOM driver version check"
         return 0
     fi
-    # The driver libs embed debug paths like /usr/src/debug/qcom-adreno/<ver>/...
     _ver=$(strings -a "$_probe" 2>/dev/null \
         | sed -n 's,.*qcom-adreno/\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*,\1,p' \
         | sort -V | tail -n1)
@@ -263,38 +249,21 @@ check_qcom_driver_version() {
 
 check_system_deps() {
     _missing=""
-    # POSIX sh has no arrays; SYSTEM_DEPS entries are colon-separated specs:
-    #   <soname>:<pkg>            — shared library
-    #   file:<path>:<pkg>         — file must exist
-    #   bin:<cmd>:<pkg>           — command must be on PATH
+    # SYSTEM_DEPS entries are `<soname>:<pkg>`.
     _ifs="$IFS"
     IFS='
 '
     for _entry in $SYSTEM_DEPS; do
         [ -z "$_entry" ] && continue
-        case "$_entry" in
-            file:*)
-                _path=$(printf '%s' "$_entry" | cut -d: -f2)
-                _pkg=$(printf '%s' "$_entry"  | cut -d: -f3)
-                [ -e "$_path" ] || _missing="${_missing} ${_pkg}(${_path})"
-                ;;
-            bin:*)
-                _cmd=$(printf '%s' "$_entry" | cut -d: -f2)
-                _pkg=$(printf '%s' "$_entry" | cut -d: -f3)
-                command -v "$_cmd" >/dev/null 2>&1 || _missing="${_missing} ${_pkg}(${_cmd})"
-                ;;
-            *)
-                _soname=$(printf '%s' "$_entry" | cut -d: -f1)
-                _pkg=$(printf '%s' "$_entry"    | cut -d: -f2)
-                find_lib "$_soname" >/dev/null || _missing="${_missing} ${_pkg}(${_soname})"
-                ;;
-        esac
+        _soname=${_entry%%:*}
+        _pkg=${_entry#*:}
+        find_lib "$_soname" >/dev/null || _missing="${_missing} ${_pkg}(${_soname})"
     done
     IFS="$_ifs"
     if [ -n "$_missing" ]; then
         err "missing system dependencies:"
         for _m in $_missing; do err "  - $_m"; done
-        err "install via your distro's package manager (Debian: apt-get install ca-certificates libatomic1 libglib2.0-0t64), or rerun with --skip-checks"
+        err "install via your distro's package manager (Debian: apt-get install libatomic1 libglib2.0-0t64), or rerun with --skip-checks"
         return 1
     fi
     return 0
