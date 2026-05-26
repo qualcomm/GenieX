@@ -728,7 +728,11 @@ Note: You must use the campaign_investigation function whenever a customer asks 
                         Log.e(TAG, "pull failed rc=${event.code}: ${event.message}")
                         runOnUiThread {
                             llDownloading.visibility = View.GONE
-                            Toaster.showLong("Download failed: ${event.message}")
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Download failed. Please check your network connection and try again.",
+                                Toast.LENGTH_LONG
+                            ).show()
                         }
                     }
                 }
