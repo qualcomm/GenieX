@@ -341,7 +341,6 @@ Note: You must use the campaign_investigation function whenever a customer asks 
             btnAudioRecord.visibility = View.INVISIBLE
             if (isLoadVlmModel) {
                 btnAddImage.visibility = View.VISIBLE
-                btnAudioRecord.visibility = View.VISIBLE
             }
             if (isLoadCVModel) {
                 btnAddImage.visibility = View.VISIBLE
