@@ -262,3 +262,22 @@ def test_existing_image_path_passes(tmp_path):
     img = tmp_path / 'img.png'
     img.write_bytes(b'\x89PNG')
     _StubVLM._validate([str(img)], [], has_image=True, has_audio=False)
+
+
+# ---------------------------------------------------------------------------
+# #716: get_device_list message names the bad id + available plugins
+# ---------------------------------------------------------------------------
+
+
+def test_unknown_plugin_message_names_bad_id_and_lists_available():
+    from geniex._ffi._api import _unknown_plugin_message
+
+    msg = _unknown_plugin_message('wenwen_plugin', ['qairt', 'llama_cpp'])
+    assert 'Unknown plugin: wenwen_plugin' in msg
+    assert 'llama_cpp' in msg and 'qairt' in msg
+
+
+def test_unknown_plugin_message_sorts_available_for_stability():
+    from geniex._ffi._api import _unknown_plugin_message
+
+    assert _unknown_plugin_message('x', ['qairt', 'llama_cpp']) == _unknown_plugin_message('x', ['llama_cpp', 'qairt'])
