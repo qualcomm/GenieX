@@ -5,15 +5,10 @@ description: "在哪里获取模型、如何运行，以及哪些精度会落到
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-GenieX 通过两种运行时执行模型：
+模型可以从两个地方获取，分别对应 GenieX 的两种[运行时](/cn/get-started/platforms#geniex-运行时)：
 
-- **QAIRT** —— 面向骁龙 NPU 的预编译模型包。精选、最快路径，运行时无量化选择。
-- **llama.cpp** —— Hugging Face 上的任意 GGUF 模型。根据所选精度落到 NPU、GPU 或 CPU。
-
-模型可以从两个地方获取：
-
-- **[Qualcomm AI Hub](https://aihub.qualcomm.com/models/)** —— 经过验证的 QAIRT 模型包与精选 GGUF 模型。
-- **[Hugging Face](https://huggingface.co/models?library=gguf)** —— 任意 GGUF 模型，参见[运行 Hugging Face 上的 GGUF 模型](#运行-hugging-face-上的-gguf-模型)。
+- **[Qualcomm AI Hub](https://aihub.qualcomm.com/models/)** —— QAIRT 预编译模型包，以及面向 llama.cpp 的精选 GGUF 模型。
+- **[Hugging Face](https://huggingface.co/models?library=gguf)** —— llama.cpp 可运行的任意 GGUF 模型，详见[运行 Hugging Face 上的 GGUF 模型](#运行-hugging-face-上的-gguf-模型)。
 
 <Note>下方第一节列出了已验证的模型。AI Hub 网站上线后，该列表会移到网站；当前版本只是临时方便，让你无需离开文档即可复制 `geniex infer` 命令。</Note>
 
@@ -136,7 +131,7 @@ Choose a precision version to download
 
 ### QAIRT
 
-QAIRT 模型包在出厂时已**预量化**——运行时无量化选择。模型包针对特定骁龙芯片与目标精度编译；KV 缓存与上下文长度也已固化。如需不同精度，请从 [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) 获取另一个模型包。
+QAIRT 模型包在出厂时已**预量化**——运行时无量化选择。如需不同精度，请从 [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) 获取另一个模型包。其他模型包内固化的限制（上下文长度、KV 缓存、Android `nCtx`）参见 [QAIRT 运行时限制](/cn/get-started/platforms#运行时限制)。
 
 ## **在 Python 中使用自定义模型**
 

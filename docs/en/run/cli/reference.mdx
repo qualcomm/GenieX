@@ -17,34 +17,34 @@ geniex pull <model-name>
 
 The CLI guides you through setup:
 
-**. Quantization (llama.cpp only)**
+**. Precision (Quantization) (llama.cpp only)**
 
-For GGUF models the CLI prompts you to pick a quantization:
+For GGUF models the CLI prompts you to pick a precision:
 
 ```powershell
-Choose a quant version to download
+Choose a precision version to download
 > Q4_0       [1.2 GiB] (default)
   Q8_0       [2.0 GiB]
   F16        [3.8 GiB]
 ```
 
-<Tip>`Q4_0` has the best Hexagon NPU support. See [Quantization & device placement](/en/models/supported#quantization--device-placement).</Tip>
+<Tip>`Q4_0` has the best Hexagon NPU support. See [Precisions (Quantizations) & device placement](/en/models/supported#precisions-quantizations--device-placement).</Tip>
 
-QAIRT models are pre-quantized — no choice needed.
+Qualcomm AI Hub Models are pre-quantized — no choice needed.
 
 ### **`geniex infer` — LLM**
 
 Launch an interactive chat session with a language model.
 
 ```powershell
-geniex infer qualcomm/Qwen3-4B
+geniex infer ai-hub-models/Qwen3-4B
 ```
 
 **Thinking mode** — control whether the model shows reasoning before responding:
 
 ```powershell
-geniex infer qualcomm/Qwen3-4B --think         # show reasoning steps
-geniex infer qualcomm/Qwen3-4B --think=false   # respond directly
+geniex infer ai-hub-models/Qwen3-4B --think         # show reasoning steps
+geniex infer ai-hub-models/Qwen3-4B --think=false   # respond directly
 ```
 
 **Compute unit selection** (via `--device`) — pick which compute unit runs the model (default: `npu`):
@@ -55,11 +55,11 @@ geniex infer unsloth/Qwen3.5-0.8B-GGUF --device npu
 geniex infer unsloth/Qwen3.5-0.8B-GGUF --device gpu
 geniex infer unsloth/Qwen3.5-0.8B-GGUF --device cpu
 
-# QAIRT models only support NPU
-geniex infer qualcomm/Qwen3-4B --device npu
+# Qualcomm AI Hub Models only support NPU
+geniex infer ai-hub-models/Qwen3-4B --device npu
 ```
 
-<Warning>QAIRT models run on NPU only. Using `--device cpu` or `--device gpu` with a QAIRT model returns an error.</Warning>
+<Warning>Qualcomm AI Hub Models run on NPU only. Using `--device cpu` or `--device gpu` returns an error.</Warning>
 
 ### **`geniex infer` — VLM**
 

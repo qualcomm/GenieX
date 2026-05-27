@@ -5,29 +5,24 @@ description: "Where to find models, how to run them, and which precisions land o
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-GenieX runs models through two runtimes:
+There are two places to get models, matching GenieX's two [runtimes](/en/get-started/platforms#geniex-runtimes):
 
-- **QAIRT** — pre-compiled bundles for the Snapdragon NPU. Curated, fastest path, no quantization choice at runtime.
-- **llama.cpp** — any GGUF model from Hugging Face. Runs on NPU, GPU, or CPU depending on the precision you pick.
+- **[Qualcomm AI Hub](https://aihub.qualcomm.com/models/)** — pre-compiled bundles for Qualcomm AI Engine Direct, plus curated GGUF models for llama.cpp.
+- **[Hugging Face](https://huggingface.co/models?library=gguf)** — any GGUF model for llama.cpp. See [Run a GGUF model from Hugging Face](#run-a-gguf-model-from-hugging-face).
 
-There are two places to get models:
+<Note>This page lists tested models in the section directly below. The list will move to the Qualcomm AI Hub website when it goes live; this section is a temporary convenience so you can copy a `geniex infer` command without leaving the docs.</Note>
 
-- **[Qualcomm AI Hub](https://aihub.qualcomm.com/models/)** for tested QAIRT bundles and curated GGUF models.
-- **[Hugging Face](https://huggingface.co/models?library=gguf)** for any GGUF model — see [Run a GGUF model from Hugging Face](#run-a-gguf-model-from-hugging-face).
+## **Tested models** *(temporary — will move to Qualcomm AI Hub website)*
 
-<Note>This page lists tested models in the section directly below. The list will move to the AI Hub website when it goes live; this section is a temporary convenience so you can copy a `geniex infer` command without leaving the docs.</Note>
-
-## **Tested models** *(temporary — will move to AI Hub website)*
-
-### QAIRT (AI Hub bundles)
+### Qualcomm AI Hub Models (Qualcomm AI Engine Direct)
 
 Pre-compiled bundles from Qualcomm AI Hub. NPU-only.
 
 | Model ID | Source |
 |---|---|
-| `qualcomm/Qwen3-4B` | Qualcomm AI Hub |
-| `qualcomm/Qwen3-4B-Instruct-2507` | Qualcomm AI Hub |
-| `qualcomm/Qwen2.5-VL-7B-Instruct` | Qualcomm AI Hub |
+| `ai-hub-models/Qwen3-4B` | Qualcomm AI Hub |
+| `ai-hub-models/Qwen3-4B-Instruct-2507` | Qualcomm AI Hub |
+| `ai-hub-models/Qwen2.5-VL-7B-Instruct` | Qualcomm AI Hub |
 | `llama_v3_1_8b_instruct` | Self-converted (Hugging Face) |
 | `llama_v3_1_sea_lion_3_5_8b_r` | Self-converted (Hugging Face) |
 | `llama_v3_2_1b_instruct` | Self-converted (Hugging Face) |
@@ -58,17 +53,17 @@ Tested GGUF models that work well at `Q4_0` on Hexagon NPU.
 
 <Note>Multimodal support for `Qwen3.5` and `Gemma4` is coming soon — pick `llm` when prompted for now.</Note>
 
-## **Run an AI Hub bundle**
+## **Run a Qualcomm AI Hub Model**
 
-For a model in the `qualcomm/*` namespace, just `geniex infer` it:
+For a model in the `ai-hub-models/*` namespace, just `geniex infer` it:
 
 ```powershell windows
-geniex infer qualcomm/Qwen3-4B
+geniex infer ai-hub-models/Qwen3-4B
 ```
 
-### Self-converted QAIRT bundles
+### Self-converted Qualcomm AI Engine Direct bundles
 
-QAIRT bundles outside the `qualcomm/*` namespace need to be downloaded locally first, then pulled with `--model-hub localfs`.
+Bundles outside the `ai-hub-models/*` namespace need to be downloaded locally first, then pulled with `--model-hub localfs`.
 
 Make sure the [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/en/guides/cli) is installed, then on Windows ARM64:
 
@@ -89,7 +84,7 @@ geniex pull local/$model --model-hub localfs `
 geniex infer local/$model
 ```
 
-<Note>QAIRT is NPU-only. Pass `--device npu` or omit the flag.</Note>
+<Note>Qualcomm AI Engine Direct is NPU-only. Pass `--device npu` or omit the flag.</Note>
 
 ## **Run a GGUF model from Hugging Face**
 
@@ -108,9 +103,9 @@ geniex infer unsloth/Phi-4-mini-instruct-GGUF
 When prompted:
 
 - **Model type** — `vlm` for vision-language models (Qwen3-VL family), `llm` otherwise.
-- **Quantization** — `Q4_0` for best Hexagon NPU support. See [Quantization & device placement](#quantization--device-placement).
+- **Precision (Quantization)** — `Q4_0` for best Hexagon NPU support. See [Precisions (Quantizations) & device placement](#precisions-quantizations--device-placement).
 
-## **Quantization & device placement**
+## **Precisions (Quantizations) & device placement**
 
 Which precision you pick determines where the model runs.
 
@@ -125,7 +120,7 @@ Choose a precision version to download
   F16        [3.8 GiB]
 ```
 
-| Precision | Runs on | Notes |
+| Precision (Quantization) | Runs on | Notes |
 |---|---|---|
 | **`Q4_0`** *(default)* | **Hexagon NPU** | Best NPU support in llama.cpp. Recommended for most models. |
 | `Q8_0` | GPU / CPU | Better quality at ~2× the disk and memory cost. |
@@ -134,16 +129,16 @@ Choose a precision version to download
 
 <Tip>Stick with `Q4_0` if you want the model to land on the Hexagon NPU. Other precisions will work but typically run on GPU or CPU.</Tip>
 
-### QAIRT
+### Qualcomm AI Engine Direct
 
-QAIRT bundles come **pre-quantized** — there is no quantization choice at runtime. The bundle is compiled for a specific Snapdragon chipset and target precision; the KV cache and context length are also baked in. To use a different precision, get a different bundle from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/).
+Qualcomm AI Engine Direct bundles come **pre-quantized** — there is no precision choice at runtime. To use a different precision, get a different bundle from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/). For other bundle constraints (context length, KV cache, Android `nCtx`), see [Qualcomm AI Engine Direct runtime constraints](/en/get-started/platforms#runtime-constraints).
 
 ## **Custom models in Python**
 
 In Python, point `from_pretrained` at a local path:
 
 ```python
-# QAIRT bundle from a local directory
+# Qualcomm AI Engine Direct bundle from a local directory
 model = AutoModelForCausalLM.from_pretrained(
     r"C:\<your_path>\Qwen3-4B-Instruct-2507",
     model_name="qwen3_4b_instruct_2507",
