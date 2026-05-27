@@ -149,6 +149,7 @@ class MainActivity : FragmentActivity() {
 
     private val savedImageFiles = mutableListOf<File>()
     private val messages = arrayListOf<Message>()
+    private var loadingMessageIndex: Int = -1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -845,6 +846,8 @@ Note: You must use the campaign_investigation function whenever a customer asks 
                 reloadRecycleView()
             }
 
+            showLoadingIndicator()
+
             val supportFunctionCall = false
             var tools: String? = null
             var grammarString: String? = null
@@ -1150,6 +1153,7 @@ space ::= | " " | "\n" | "\r" | "\t"
 
                 clearImages()
                 } finally {
+                    removeLoadingIndicator()
                     isGenerating = false
                     refreshSendButtonState()
                 }
@@ -1341,6 +1345,7 @@ space ::= | " " | "\n" | "\r" | "\t"
     fun handleResult(sb: StringBuilder, streamResult: LlmStreamResult) {
         when (streamResult) {
             is LlmStreamResult.Token -> {
+                removeLoadingIndicator()
                 runOnUiThread {
                     sb.append(streamResult.text)
                     Message(sb.toString(), MessageType.ASSISTANT).let { lastMsg ->
@@ -1359,6 +1364,7 @@ space ::= | " " | "\n" | "\r" | "\t"
             }
 
             is LlmStreamResult.Completed -> {
+                removeLoadingIndicator()
                 if (isLoadVlmModel) {
                     vlmChatList.add(
                         VlmChatMessage(
@@ -1398,6 +1404,7 @@ space ::= | " " | "\n" | "\r" | "\t"
             }
 
             is LlmStreamResult.Error -> {
+                removeLoadingIndicator()
                 runOnUiThread {
                     val reason = streamResult.throwable.message ?: streamResult.throwable.toString()
                     messages.add(Message("Error: $reason", MessageType.PROFILE))
@@ -1670,6 +1677,30 @@ space ::= | " " | "\n" | "\r" | "\t"
     private fun reloadRecycleView() {
         adapter.notifyDataSetChanged()
         binding.rvChat.scrollToPosition(messages.size - 1)
+    }
+
+    private fun showLoadingIndicator() {
+        runOnUiThread {
+            if (loadingMessageIndex >= 0) return@runOnUiThread
+            messages.add(Message("", MessageType.LOADING))
+            loadingMessageIndex = messages.size - 1
+            reloadRecycleView()
+        }
+    }
+
+    private fun removeLoadingIndicator() {
+        runOnUiThread {
+            val idx = loadingMessageIndex
+            if (idx < 0 || idx >= messages.size) {
+                loadingMessageIndex = -1
+                return@runOnUiThread
+            }
+            if (messages[idx].type == MessageType.LOADING) {
+                messages.removeAt(idx)
+                adapter.notifyItemRemoved(idx)
+            }
+            loadingMessageIndex = -1
+        }
     }
 
     companion object {
