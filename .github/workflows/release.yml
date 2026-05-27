@@ -346,6 +346,11 @@ jobs:
           fetch-depth: 1
           submodules: false
 
+      # Pin so the manifest scripts below don't rely on the runner image's `python` alias.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
       - uses: actions/download-artifact@v8
         with:
           name: release-assets

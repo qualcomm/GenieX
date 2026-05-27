@@ -29,7 +29,7 @@ permissions:
   packages: read
 
 concurrency:
-  group: pr-check-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 # Draft PRs run lint only; ready_for_review triggers the full graph.

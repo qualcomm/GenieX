@@ -43,7 +43,7 @@ jobs:
     # `needs` skipped (workflow_call path) is treated as failed by the
     # default conditional; force the job to run as long as build-sdk
     # didn't actually fail.
-    if: ${{ !cancelled() && (needs.build-sdk.result == 'success' || needs.build-sdk.result == 'skipped') }}
+    if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
     runs-on: windows-arm64
     timeout-minutes: 45
 
