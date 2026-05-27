@@ -63,7 +63,7 @@ func pull() *cobra.Command {
 
 	pullCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		name, quant := model_hub.NormalizeModelName(args[0])
-		return pullModel(name, quant)
+		return pullModel(cmd.Context(), name, quant)
 	}
 
 	return pullCmd
@@ -265,7 +265,7 @@ func setTypeCmd() *cobra.Command {
 	}
 }
 
-func pullModel(name string, quant string) error {
+func pullModel(ctx context.Context, name string, quant string) error {
 	slog.Debug("pullModel", "name", name, "quant", quant)
 
 	s := store.Get()
@@ -299,14 +299,14 @@ func pullModel(name string, quant string) error {
 	// interactive device picker, which can't share the terminal with a
 	// spinner. Skip when the explicit hub doesn't need it.
 	if _, ok := aihub.IsAIHubName(name); ok {
-		if err := chipsetEnsure(context.TODO(), s); err != nil {
+		if err := chipsetEnsure(ctx, s); err != nil {
 			return err
 		}
 	}
 
 	spin := render.NewSpinner("download manifest from: " + name)
 	spin.Start()
-	files, hmf, err := model_hub.ModelInfo(context.TODO(), name)
+	files, hmf, err := model_hub.ModelInfo(ctx, name)
 	spin.Stop()
 	if err != nil {
 		return err
@@ -335,7 +335,7 @@ func pullModel(name string, quant string) error {
 		}
 
 		// start download
-		pgCh, errCh := s.PullExtraQuant(context.TODO(), *mf)
+		pgCh, errCh := s.PullExtraQuant(ctx, *mf)
 		bar := render.NewProgressBar(mf.GetSize()-oldSize, "downloading")
 		for pg := range pgCh {
 			bar.Set(pg.TotalDownloaded)
@@ -386,7 +386,7 @@ func pullModel(name string, quant string) error {
 		}
 
 		// start download
-		pgCh, errCh := s.Pull(context.TODO(), manifest)
+		pgCh, errCh := s.Pull(ctx, manifest)
 		bar := render.NewProgressBar(manifest.GetSize(), "downloading")
 		for pg := range pgCh {
 			bar.Set(pg.TotalDownloaded)

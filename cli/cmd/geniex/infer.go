@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -133,7 +134,7 @@ func infer() *cobra.Command {
 		s := store.Get()
 
 		name, quant := model_hub.NormalizeModelName(args[0])
-		manifest, err := ensureModelAvailable(s, name, quant)
+		manifest, err := ensureModelAvailable(cmd.Context(), s, name, quant)
 		if err != nil {
 			return err
 		}
@@ -173,11 +174,11 @@ func infer() *cobra.Command {
 	return inferCmd
 }
 
-func ensureModelAvailable(s *store.Store, name string, quant string) (*types.ModelManifest, error) {
+func ensureModelAvailable(ctx context.Context, s *store.Store, name string, quant string) (*types.ModelManifest, error) {
 	manifest, err := s.GetManifest(name)
 	if errors.Is(err, os.ErrNotExist) {
 		fmt.Println(render.GetTheme().Info.Sprintf("Model is not currently cached, downloading..."))
-		if err := pullModel(name, quant); err != nil {
+		if err := pullModel(ctx, name, quant); err != nil {
 			return nil, fmt.Errorf("download model failed: %w", err)
 		}
 		manifest, err = s.GetManifest(name)
