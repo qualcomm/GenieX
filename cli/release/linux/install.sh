@@ -73,6 +73,36 @@ pick_cmd() {
     return 1
 }
 
+# Resolve a host library by its bare SONAME and symlink it into $PREFIX.
+# libQnnHtpV73Stub.so links against libcdsprpc.so (bare, no version suffix)
+# with RPATH $ORIGIN only, so a bare-name symlink in $PREFIX is needed.
+resolve_host_lib() {
+    _bare="$1"
+    _dest="$PREFIX/$_bare"
+    [ -e "$_dest" ] && return 0
+
+    # Try ldconfig cache first (handles multiarch and non-standard prefixes).
+    _real=$(ldconfig -p 2>/dev/null \
+        | awk -v n="$_bare" '$1 ~ "^"n"\\." { sub(/.*=> /, ""); print; exit }')
+
+    # Fallback: scan common locations for any versioned file matching the bare name.
+    if [ -z "$_real" ]; then
+        for _d in /usr/lib/aarch64-linux-gnu /usr/lib /lib/aarch64-linux-gnu /lib; do
+            _f=$(find "$_d" -maxdepth 1 -name "${_bare}.*" 2>/dev/null \
+                | sort -V | tail -n1)
+            [ -n "$_f" ] && { _real="$_f"; break; }
+        done
+    fi
+
+    if [ -n "$_real" ] && [ -e "$_real" ]; then
+        ln -sf "$_real" "$_dest"
+        say "  linked $_bare -> $_real"
+    else
+        say "Warning: $_bare not found on this system."
+        say "  NPU inference may fail. Install qcom-fastrpc1 and re-run this installer."
+    fi
+}
+
 while [ $# -gt 0 ]; do
     case "$1" in
         --version)
@@ -246,6 +276,12 @@ if ! mv "$tmp/extract" "$PREFIX"; then
     exit 1
 fi
 rm -rf "${PREFIX}.old"
+
+# Symlink bare-name fastrpc libs into the prefix so the bundled QNN HTP stub
+# can find them via the LD_LIBRARY_PATH the launcher sets
+say "Linking host NPU libraries"
+resolve_host_lib libcdsprpc.so
+resolve_host_lib libadsprpc.so
 
 # Launcher wrapper instead of a bare symlink: the binary is built without
 # an $ORIGIN rpath, so it can't find sibling libgeniex.so / plugins unless

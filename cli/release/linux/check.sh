@@ -144,6 +144,21 @@ check_required_libs() {
     return 0
 }
 
+check_npu_bare_libs() {
+    _failed=0
+    for _bare in libcdsprpc.so libadsprpc.so; do
+        # ldconfig -p covers LD_LIBRARY_PATH-resolved paths and all dirs in
+        # /etc/ld.so.conf, which is more complete than find_lib's static list.
+        _found=$(ldconfig -p 2>/dev/null | awk -v n="$_bare" '$1 == n { print; exit }')
+        [ -z "$_found" ] && _found=$(find_lib "$_bare" 2>/dev/null || true)
+        if [ -z "$_found" ]; then
+            err "$_bare not found — re-run the geniex installer to create the symlink"
+            _failed=1
+        fi
+    done
+    return "$_failed"
+}
+
 check_driver_versions() {
     if ! command -v strings >/dev/null 2>&1; then
         say "Note: 'strings' not on PATH — skipping driver version checks"
@@ -184,6 +199,7 @@ check_driver_versions() {
 
 say "Checking required libraries"
 check_required_libs   || exit 1
+check_npu_bare_libs   || exit 1
 check_driver_versions || exit 1
 say "All checks passed."
 
