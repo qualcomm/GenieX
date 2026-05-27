@@ -251,20 +251,12 @@ func loadStopSequences() ([]string, error) {
 	return stopSequences, nil
 }
 
-// resolveNglNctx returns the effective (ngl, nctx) values to pass to the SDK.
-// For llama_cpp, flags that were not explicitly set by the user resolve to
-// their well-known defaults (999 / 4096). If the user explicitly passed a
-// value (including 0), that value is always respected.
-// For all other plugins, unset flags stay at 0 ("not set") so the plugin's
-// param-guard is not tripped by the flag default.
-//
-// TODO: This Changed()-based workaround exists because the C ABI currently has
-// no way to return a dynamic detail string alongside an error code. Once
-// geniex_get_last_error_detail() is added to the C API, the plugin can log the
-// exact flag name and this CLI-side guard (and the 0-default trick) can be
-// removed in favour of simply forwarding the raw flag values and letting the
-// plugin report the problem with full context.
-func resolveNglNctx(manifest *types.ModelManifest) (resolvedNgl, resolvedNctx int32) {
+// resolveModelParams resolves --device / --ngl / --nctx into the
+// (device_id, ngl, nctx) triple the SDK expects. For llama_cpp, unset
+// --ngl / --nctx fall back to 999 / 4096; other plugins keep 0 so their
+// param-guard isn't tripped by the flag default. Device alias mapping
+// is delegated to geniex_resolve_device (sdk/src/device.cpp).
+func resolveModelParams(manifest *types.ModelManifest) (deviceID string, resolvedNgl, resolvedNctx int32, err error) {
 	resolvedNgl, resolvedNctx = ngl, nctx
 	if manifest.PluginId == geniex_sdk.PluginLlamaCpp {
 		if !llmFlags.Changed("ngl") {
@@ -274,17 +266,8 @@ func resolveNglNctx(manifest *types.ModelManifest) (resolvedNgl, resolvedNctx in
 			resolvedNctx = 4096
 		}
 	}
-	return
-}
 
-// resolveDevice maps the --device flag to (device_id, n_gpu_layers) via
-// the SDK's geniex_resolve_device (see sdk/src/device.cpp). An empty
-// --device picks the plugin's preferred default (hybrid for llama.cpp,
-// npu for qairt — with model-specific overrides, e.g. gpt-oss on
-// llama_cpp defaults to npu).
-func resolveDevice(manifest *types.ModelManifest) (deviceID string, nglOverride int32, err error) {
-	effectiveNgl, _ := resolveNglNctx(manifest)
-	deviceID, nglOverride, warning, err := geniex_sdk.ResolveDevice(manifest.PluginId, manifest.ModelName, device, effectiveNgl)
+	deviceID, resolvedNgl, warning, err := geniex_sdk.ResolveDevice(manifest.PluginId, manifest.ModelName, device, resolvedNgl)
 	if err != nil {
 		return
 	}
@@ -316,11 +299,10 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 	s := store.Get()
 	modelfile := s.ModelfilePath(manifest.Name, manifest.ModelFile[quant].Name)
 
-	deviceID, nglResolved, err := resolveDevice(manifest)
+	deviceID, nglResolved, nctxResolved, err := resolveModelParams(manifest)
 	if err != nil {
 		return err
 	}
-	_, nctxResolved := resolveNglNctx(manifest)
 
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
@@ -484,11 +466,10 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 	if manifest.MMProjFile.Name != "" {
 		mmprojfile = s.ModelfilePath(manifest.Name, manifest.MMProjFile.Name)
 	}
-	deviceID, nglResolved, err := resolveDevice(manifest)
+	deviceID, nglResolved, nctxResolved, err := resolveModelParams(manifest)
 	if err != nil {
 		return err
 	}
-	_, nctxResolved := resolveNglNctx(manifest)
 
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
