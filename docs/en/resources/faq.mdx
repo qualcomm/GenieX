@@ -33,7 +33,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     - **llama.cpp** — runs any GGUF model, supports NPU/GPU/CPU compute units. Best for trying community models.
     - **QAIRT** — runs pre-compiled AI Hub bundles, NPU only. Typically the fastest path when your model is on AI Hub.
 
-    See [Choose your runtime](/en/get-started/choose-runtime).
+    See [Platforms & runtimes](/en/get-started/platforms#2-pick-a-runtime).
   </Accordion>
 
   <Accordion title="Which runtime is the default?">
@@ -45,7 +45,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="Which quantization should I pick?">
-    For llama.cpp on Snapdragon NPU: **`Q4_0`**. It has the best Hexagon NPU support. QAIRT bundles are pre-quantized — no choice. See [Quantization](/en/models/quantization).
+    For llama.cpp on Snapdragon NPU: **`Q4_0`**. It has the best Hexagon NPU support. QAIRT bundles are pre-quantized — no choice. See [Quantization & device placement](/en/models/supported#quantization--device-placement).
   </Accordion>
 </AccordionGroup>
 
@@ -53,13 +53,13 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="Can I run any model from Hugging Face?">
-    Any **GGUF** model on the llama.cpp runtime. See [Bring your own model](/en/models/bring-your-own).
+    Any **GGUF** model on the llama.cpp runtime. See [Run a GGUF model from Hugging Face](/en/models/supported#run-a-gguf-model-from-hugging-face).
 
     QAIRT requires a pre-compiled AI Hub bundle — adding a new one means registering it on the C++ side first.
   </Accordion>
 
   <Accordion title="Where's the supported models list?">
-    [Supported models](/en/models/supported) — split by runtime (QAIRT, llama.cpp).
+    [Models](/en/models/supported) — split by runtime (QAIRT, llama.cpp).
   </Accordion>
 </AccordionGroup>
 
