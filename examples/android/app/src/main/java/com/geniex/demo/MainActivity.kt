@@ -22,6 +22,7 @@ import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.widget.AdapterView
 import android.widget.Button
+import androidx.core.widget.doAfterTextChanged
 import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
@@ -141,6 +142,7 @@ class MainActivity : FragmentActivity() {
     private var isLoadAsrModel = false
 
     private var enableThinking = false
+    private var isGenerating = false
 
     private var wavRecorder: WavRecorder? = null
     private var audioFile: File? = null
@@ -212,6 +214,8 @@ class MainActivity : FragmentActivity() {
         btnAudioDone = findViewById(R.id.btn_audio_done)
 
         btnSend = findViewById(R.id.btn_send)
+        btnSend.isEnabled = false
+        etInput.doAfterTextChanged { refreshSendButtonState() }
         btnClearHistory = findViewById(R.id.btn_clear_history)
         scrollImages = findViewById(R.id.scroll_images)
         topScrollContainer = findViewById(R.id.ll_images_container)
@@ -341,7 +345,6 @@ Note: You must use the campaign_investigation function whenever a customer asks 
             btnAudioRecord.visibility = View.INVISIBLE
             if (isLoadVlmModel) {
                 btnAddImage.visibility = View.VISIBLE
-                btnAudioRecord.visibility = View.VISIBLE
             }
             if (isLoadCVModel) {
                 btnAddImage.visibility = View.VISIBLE
@@ -358,6 +361,7 @@ Note: You must use the campaign_investigation function whenever a customer asks 
             } else {
                 btnStop.visibility = View.VISIBLE
             }
+            refreshSendButtonState()
         }
     }
 
@@ -376,6 +380,20 @@ Note: You must use the campaign_investigation function whenever a customer asks 
     private fun hasLoadedModel(): Boolean {
         return isLoadLlmModel || isLoadVlmModel || isLoadEmbedderModel ||
                 isLoadRerankerModel || isLoadCVModel || isLoadAsrModel
+    }
+
+    /**
+     * Send is enabled only when (a) a model is loaded, (b) no inference
+     * is in flight, and (c) there is something to send — text, an
+     * attached image, or audio. CV/ASR can be invoked without text but
+     * require an image/audio, so attachments alone count as input.
+     */
+    private fun refreshSendButtonState() {
+        runOnUiThread {
+            val hasText = etInput.text?.isNotBlank() == true
+            val hasAttachment = savedImageFiles.isNotEmpty() || audioFile != null
+            btnSend.isEnabled = hasLoadedModel() && !isGenerating && (hasText || hasAttachment)
+        }
     }
 
     /**
@@ -710,7 +728,11 @@ Note: You must use the campaign_investigation function whenever a customer asks 
                         Log.e(TAG, "pull failed rc=${event.code}: ${event.message}")
                         runOnUiThread {
                             llDownloading.visibility = View.GONE
-                            Toaster.showLong("Download failed: ${event.message}")
+                            Toast.makeText(
+                                this@MainActivity,
+                                "Download failed. Please check your network connection and try again.",
+                                Toast.LENGTH_LONG
+                            ).show()
                         }
                     }
                 }
@@ -800,6 +822,12 @@ Note: You must use the campaign_investigation function whenever a customer asks 
                     .show()
                 return@setOnClickListener
             }
+            // Guard against re-entry: a second click while a previous
+            // generate() is still running would race on the native handle
+            // and crash the app.
+            if (isGenerating) return@setOnClickListener
+            isGenerating = true
+            refreshSendButtonState()
 
             if (savedImageFiles.isNotEmpty()) {
                 messages.add(Message("", MessageType.IMAGES, savedImageFiles.map { it }))
@@ -837,10 +865,13 @@ space ::= | " " | "\n" | "\r" | "\t"
 
             if (!hasLoadedModel()) {
                 Toast.makeText(this@MainActivity, "model not loaded", Toast.LENGTH_SHORT).show()
+                isGenerating = false
+                refreshSendButtonState()
                 return@setOnClickListener
             }
 
             modelScope.launch {
+                try {
                 val selectModelData = modelList.first { it.id == selectModelId }
                 val isNpu = ModelManagerWrapper.getPaths(selectModelData.modelName)?.plugin_id == "qairt"
                 Log.d(TAG, "isNpu: $isNpu")
@@ -1118,6 +1149,10 @@ space ::= | " " | "\n" | "\r" | "\t"
                 }
 
                 clearImages()
+                } finally {
+                    isGenerating = false
+                    refreshSendButtonState()
+                }
             }
 
         }
@@ -1133,12 +1168,18 @@ space ::= | " " | "\n" | "\r" | "\t"
             // Unload model and cleanup
             val handleUnloadResult = fun(result: Int) {
                 resetLoadState()
+                chatList.clear()
+                vlmChatList.clear()
                 runOnUiThread {
                     vTip.visibility = View.GONE
                     btnUnloadModel.visibility = View.GONE
                     btnStop.visibility = View.GONE
                     btnAddImage.visibility = View.INVISIBLE
                     btnAudioRecord.visibility = View.INVISIBLE
+                    messages.clear()
+                    audioFile = null
+                    clearImages()
+                    reloadRecycleView()
                     Toast.makeText(
                         this@MainActivity, if (result == 0) {
                             "unload success"
@@ -1146,6 +1187,7 @@ space ::= | " " | "\n" | "\r" | "\t"
                             "unload failed and error code: $result"
                         }, Toast.LENGTH_SHORT
                     ).show()
+                    refreshSendButtonState()
                 }
             }
             modelScope.launch {
@@ -1581,6 +1623,7 @@ space ::= | " " | "\n" | "\r" | "\t"
     }
 
     private fun refreshTopScrollContainer() {
+        refreshSendButtonState()
         runOnUiThread {
             topScrollContainer.removeAllViews()
             if (savedImageFiles.isEmpty() && audioFile == null) {
