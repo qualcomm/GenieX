@@ -68,18 +68,20 @@ inline void apply_sampler_config(
     }
 
     // Zero-sentinel on cfg: 0 means "defer to lower tiers".
-    out.seed               = pick_uint(static_cast<uint32_t>(cfg->seed), bundle.seed, kDefaults.seed);
-    out.top_k              = pick_int(cfg->top_k, bundle.top_k, kDefaults.top_k);
-    out.top_p              = pick_float(cfg->top_p, bundle.top_p, kDefaults.top_p);
-    out.min_p              = (cfg->min_p != 0.0f) ? cfg->min_p : kDefaults.min_p;
-    out.repetition_penalty = pick_float(cfg->repetition_penalty, bundle.repetition_penalty, kDefaults.repetition_penalty);
-    out.presence_penalty   = pick_float(cfg->presence_penalty, bundle.presence_penalty, kDefaults.presence_penalty);
-    out.frequency_penalty  = pick_float(cfg->frequency_penalty, bundle.frequency_penalty, kDefaults.frequency_penalty);
+    out.seed  = pick_uint(static_cast<uint32_t>(cfg->seed), bundle.seed, kDefaults.seed);
+    out.top_k = pick_int(cfg->top_k, bundle.top_k, kDefaults.top_k);
+    out.top_p = pick_float(cfg->top_p, bundle.top_p, kDefaults.top_p);
+    out.min_p = (cfg->min_p != 0.0f) ? cfg->min_p : kDefaults.min_p;
+    out.repetition_penalty =
+        pick_float(cfg->repetition_penalty, bundle.repetition_penalty, kDefaults.repetition_penalty);
+    out.presence_penalty  = pick_float(cfg->presence_penalty, bundle.presence_penalty, kDefaults.presence_penalty);
+    out.frequency_penalty = pick_float(cfg->frequency_penalty, bundle.frequency_penalty, kDefaults.frequency_penalty);
     if (bundle.penalty_last_n) out.penalty_last_n = *bundle.penalty_last_n;
 
     // Temperature is special: 0 means "defer", a NEGATIVE value is the
     // greedy/argmax sentinel, positive is the literal temp.
-    out.temperature = (cfg->temperature == 0.0f) ? bundle.temperature.value_or(kDefaults.temperature) : cfg->temperature;
+    out.temperature =
+        (cfg->temperature == 0.0f) ? bundle.temperature.value_or(kDefaults.temperature) : cfg->temperature;
 
     // Grammar — string takes priority over path (matches llama_cpp plugin).
     if (cfg->grammar_string && cfg->grammar_string[0] != '\0') {

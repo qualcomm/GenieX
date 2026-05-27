@@ -15,9 +15,9 @@
 #define portable_strdup strdup
 #endif
 
+#include "dispatch.h"             // provided by geniex-qairt/models/
 #include "geniex-proc/types.h"    // ChatMessage, MMContent, Role::, Modality::
 #include "llm/llm_spec_loader.h"  // parseGenieSamplerConfig
-#include "dispatch.h"           // provided by geniex-qairt/models/
 #include "logging.h"
 #include "pipeline/vlm_pipeline.h"
 #include "qnn_runtime_utils.h"

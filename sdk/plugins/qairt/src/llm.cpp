@@ -13,8 +13,8 @@
 #define portable_strdup strdup
 #endif
 
+#include "dispatch.h"             // provided by geniex-qairt/models/
 #include "llm/llm_spec_loader.h"  // parseGenieSamplerConfig
-#include "dispatch.h"  // provided by geniex-qairt/models/
 #include "logging.h"
 #include "pipeline/chat_template.h"
 #include "pipeline/llm_pipeline.h"
