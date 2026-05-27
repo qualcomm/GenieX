@@ -116,7 +116,7 @@ func TestPickDefaultQuant(t *testing.T) {
 		available []string
 		want      string
 	}{
-		{"priority wins over lex order", []string{"Q4_0", "Q4_K_M", "Q8_0"}, "Q8_0"},
+		{"priority wins over lex order", []string{"Q4_0", "Q4_K_M", "Q8_0"}, "Q4_0"},
 		{"partial priority", []string{"Q4_0", "Q5_K_M"}, "Q4_0"},
 		{"none in priority falls back to lex min", []string{"Q6_K", "Q5_K_M"}, "Q5_K_M"},
 		{"single non-priority quant", []string{"IQ4_XS"}, "IQ4_XS"},

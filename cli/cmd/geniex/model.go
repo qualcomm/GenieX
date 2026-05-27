@@ -490,25 +490,19 @@ func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, r
 			}
 
 		} else {
-			// choose quant
-			var file string
-
-			// sort key by quant
+			// pick default via PickDefaultQuant so pull and load agree.
 			ggufNames := make([]string, 0, len(ggufs))
+			quants := make([]string, 0, len(ggufs))
 			for k := range ggufs {
 				ggufNames = append(ggufNames, k)
-
-				if file == "" {
+				quants = append(quants, getQuant(k))
+			}
+			defaultQuant := model_hub.PickDefaultQuant(quants)
+			var file string
+			for _, k := range ggufNames {
+				if getQuant(k) == defaultQuant {
 					file = k
-					continue
-				}
-
-				// prefer Q4_0, Q4_K_M, Q8_0
-				kq := getQuant(k)
-				fq := getQuant(file)
-				sortKey := []string{"Q8_0", "Q4_K_M", "Q4_0"}
-				if slices.Index(sortKey, kq) > slices.Index(sortKey, fq) {
-					file = k
+					break
 				}
 			}
 			sort.Slice(ggufNames, func(i, j int) bool {
