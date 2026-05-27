@@ -98,9 +98,10 @@ func (d *HuggingFace) ModelInfo(ctx context.Context, name string) ([]ModelFileIn
 	if d.hfToken != "" {
 		req.SetHeader("Authorization", "Bearer "+d.hfToken)
 	}
-	resp, err := req.Get(fmt.Sprintf("%s/api/models/%s", HF_ENDPOINT, name))
+	url := fmt.Sprintf("%s/api/models/%s", HF_ENDPOINT, name)
+	resp, err := req.Get(url)
 	if err != nil {
-		return nil, err
+		return nil, wrapTransport(url, err)
 	}
 
 	if err := sonic.UnmarshalString(resp.String(), &info); err != nil {
@@ -121,12 +122,13 @@ func (d *HuggingFace) ModelInfo(ctx context.Context, name string) ([]ModelFileIn
 			}
 			req.SetHeader("Accept-Encoding", "identity")
 
-			resp, err := req.SetContext(gctx).Head(fmt.Sprintf("%s/%s/resolve/main/%s", HF_ENDPOINT, name, info.Siblings[i].RFileName))
+			fileURL := fmt.Sprintf("%s/%s/resolve/main/%s", HF_ENDPOINT, name, info.Siblings[i].RFileName)
+			resp, err := req.SetContext(gctx).Head(fileURL)
 			if err != nil {
-				return err
+				return wrapTransport(fileURL, err)
 			}
 			if resp.StatusCode() != http.StatusOK || resp.RawResponse.ContentLength < 0 {
-				return fmt.Errorf("Get file [%s] info error: %s", info.Siblings[i].RFileName, resp.Status())
+				return fmt.Errorf("%w: HEAD %s: %s", ErrUnreachable, fileURL, resp.Status())
 			}
 
 			resLock.Lock()

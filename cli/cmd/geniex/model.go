@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -62,11 +63,7 @@ func pull() *cobra.Command {
 
 	pullCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		name, quant := model_hub.NormalizeModelName(args[0])
-		if err := pullModel(name, quant); err != nil {
-			fmt.Println(render.GetTheme().Error.Sprintf("✘  Failed to pull model: %s", err))
-			return err
-		}
-		return nil
+		return pullModel(name, quant)
 	}
 
 	return pullCmd
@@ -105,7 +102,7 @@ func remove() *cobra.Command {
 		}
 
 		s := store.Get()
-		var lastErr error
+		var errs []error
 		for _, arg := range args {
 			name, quant := model_hub.NormalizeModelName(arg)
 			label := name
@@ -113,13 +110,12 @@ func remove() *cobra.Command {
 				label = name + ":" + quant
 			}
 			if err := s.Remove(name, quant); err != nil {
-				fmt.Println(render.GetTheme().Error.Sprintf("✘  Failed to remove %s: %s", label, err))
-				lastErr = err
+				errs = append(errs, fmt.Errorf("remove %s: %w", label, err))
 				continue
 			}
 			fmt.Println(render.GetTheme().Success.Sprintf("✔  Removed %s", label))
 		}
-		return lastErr
+		return errors.Join(errs...)
 	}
 
 	return removeCmd
@@ -158,10 +154,9 @@ func list() *cobra.Command {
 
 	listCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		s := store.Get()
-		models, e := s.List()
-		if e != nil {
-			fmt.Println(render.GetTheme().Error.Sprint(e))
-			return e
+		models, err := s.List()
+		if err != nil {
+			return err
 		}
 
 		// Create formatted table output
@@ -239,33 +234,23 @@ func setTypeCmd() *cobra.Command {
 			}
 			return s
 		}(),
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			name, _ := model_hub.NormalizeModelName(args[0])
 
 			// Verify the model is present before prompting for a type.
 			if _, err := store.Get().GetManifest(name); err != nil {
-				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Model %q not found: %s", name, err))
-				return
+				return fmt.Errorf("model %q not found: %w", name, err)
 			}
 
 			var mt types.ModelType
 			if len(args) == 2 {
 				mt = types.ModelType(strings.ToLower(args[1]))
-				valid := false
-				for _, t := range types.AllModelTypes {
-					if mt == t {
-						valid = true
-						break
-					}
-				}
-				if !valid {
+				if !slices.Contains(types.AllModelTypes, mt) {
 					validStrs := make([]string, len(types.AllModelTypes))
 					for i, t := range types.AllModelTypes {
 						validStrs[i] = string(t)
 					}
-					fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf(
-						"Unknown model type %q (valid: %s)", args[1], strings.Join(validStrs, ", ")))
-					return
+					return fmt.Errorf("unknown model type %q (valid: %s)", args[1], strings.Join(validStrs, ", "))
 				}
 			} else {
 				if err := huh.NewSelect[types.ModelType]().
@@ -273,15 +258,15 @@ func setTypeCmd() *cobra.Command {
 					Options(huh.NewOptions(types.AllModelTypes...)...).
 					Value(&mt).
 					Run(); err != nil {
-					return
+					return err
 				}
 			}
 
 			if err := store.Get().SetModelType(name, mt); err != nil {
-				fmt.Fprintln(os.Stderr, render.GetTheme().Error.Sprintf("Failed to update model type: %s", err))
-				return
+				return fmt.Errorf("failed to update model type: %w", err)
 			}
 			fmt.Println(render.GetTheme().Success.Sprintf("✔  %s → %s", name, mt))
+			return nil
 		},
 	}
 }

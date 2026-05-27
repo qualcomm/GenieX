@@ -56,10 +56,8 @@ func update() *cobra.Command {
 		Use:     "update",
 		Short:   "update geniex",
 		Long:    "Update geniex to the latest version",
-		Run: func(cmd *cobra.Command, args []string) {
-			if err := runUpdate(cmd, args); err != nil {
-				fmt.Println(render.GetTheme().Error.Sprintf("Update failed: %s", err))
-			}
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runUpdate(cmd, args)
 		},
 	}
 }

@@ -44,8 +44,9 @@ func RootCmd() *cobra.Command {
 	cobra.EnableCommandSorting = false
 
 	rootCmd := &cobra.Command{
-		Use:          "geniex",
-		SilenceUsage: true,
+		Use:           "geniex",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			cmd.SilenceErrors = true
 
@@ -131,6 +132,7 @@ func main() {
 	applyHelpStyle(cmd)
 	cmd.SetErr(render.NewStyledWriter(os.Stderr, render.GetTheme().Error))
 	if err := cmd.Execute(); err != nil {
+		common.PrintError(err)
 		os.Exit(1)
 	}
 }

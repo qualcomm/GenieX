@@ -135,24 +135,18 @@ func infer() *cobra.Command {
 		name, quant := model_hub.NormalizeModelName(args[0])
 		manifest, err := ensureModelAvailable(s, name, quant)
 		if err != nil {
-			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			return err
 		}
 
 		if quant != "" {
 			if fileinfo, exist := manifest.ModelFile[quant]; !exist {
-				err = fmt.Errorf("precision %s not found", quant)
-				fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
-				return err
+				return fmt.Errorf("%w: %s not found in manifest", common.ErrPrecisionNotFound, quant)
 			} else if !fileinfo.Downloaded {
-				err = fmt.Errorf("precision %s not downloaded", quant)
-				fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
-				return err
+				return fmt.Errorf("%w: %s not downloaded", common.ErrPrecisionNotFound, quant)
 			}
 		} else {
 			sq, err := selectQuant(manifest)
 			if err != nil {
-				fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 				return err
 			}
 			quant = sq
@@ -167,61 +161,12 @@ func infer() *cobra.Command {
 			err = inferVLM(manifest, quant)
 		default:
 			geniex_sdk.DeInit()
-			err = fmt.Errorf("unsupported model type: %s", manifest.ModelType)
-			fmt.Println(render.GetTheme().Error.Sprint(err))
-			return err
+			return fmt.Errorf("unsupported model type: %s", manifest.ModelType)
 		}
 
 		geniex_sdk.DeInit()
-
-		switch err {
-		case nil:
-			return nil
-		case geniex_sdk.ErrCommonParamNotSupported:
-			// TODO: Once the C API exposes geniex_get_last_error_detail() (a thread-local
-			// detail string set by the plugin before returning an error code), the specific
-			// unsupported flag name will be available here and this generic message can be
-			// replaced with the detail string from the C API. At that point the resolved
-			// flag name and plugin name should be surfaced directly from the plugin log,
-			// and the CLI-level resolveNglNctx / Changed() workaround can be removed.
-			fmt.Println(render.GetTheme().Error.Sprintf(`
-⚠️ A flag you passed is not supported by the %s plugin.
-
-👉 Run 'geniex infer -h' to see which flags are plugin-specific.`, manifest.PluginId))
-		case geniex_sdk.ErrCommonNotSupport:
-			fmt.Println(render.GetTheme().Error.Sprint(`
-⚠️ Oops. This model type is not supported yet.
-
-👉 Try these:
-- Check back later for updates.
-- See help in our discord or slack.`))
-		case geniex_sdk.ErrCommonModelLoad:
-			fmt.Println(render.GetTheme().Error.Sprint(`
-⚠️ Oops. Model failed to load.
-
-👉 Try these:
-- Redownload the model.
-- Verify your system meets the model's requirements.
-- Check your NPU / GPU driver version and update it if it's out of date.
-- See help in our discord or slack.`))
-		case geniex_sdk.ErrCommonPluginLoad:
-			fmt.Println(render.GetTheme().Error.Sprint(`
-⚠️ Oops. Plugin failed to load.
-
-👉 Try these:
-- Ensure all plugin dependencies are correct.
-- See help in our discord or slack.`))
-		case geniex_sdk.ErrCommonPluginInvalid:
-			fmt.Println(render.GetTheme().Error.Sprint(`
-⚠️ Oops. Plugin is invalid.
-
-👉 Try these:
-- This model may not be compatible with your system. Try another model.
-- See help in our discord or slack.`))
-		case geniex_sdk.ErrLlmTokenizationContextLength:
-			fmt.Println(render.GetTheme().Info.Sprintf("Context length exceeded, please start a new conversation"))
-		default:
-			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
+		if errors.Is(err, geniex_sdk.ErrCommonParamNotSupported) {
+			err = fmt.Errorf("plugin %s: %w", manifest.PluginId, err)
 		}
 		return err
 	}
@@ -233,7 +178,7 @@ func ensureModelAvailable(s *store.Store, name string, quant string) (*types.Mod
 	if errors.Is(err, os.ErrNotExist) {
 		fmt.Println(render.GetTheme().Info.Sprintf("Model is not currently cached, downloading..."))
 		if err := pullModel(name, quant); err != nil {
-			return nil, fmt.Errorf("download model failed: %s", err)
+			return nil, fmt.Errorf("download model failed: %w", err)
 		}
 		manifest, err = s.GetManifest(name)
 	}
