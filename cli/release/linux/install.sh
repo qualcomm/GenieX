@@ -33,30 +33,6 @@ ISSUE_URL="https://github.com/qcom-ai-hub/geniex/issues"
 VERSION=""
 PREFIX=""
 QUIET=0
-SKIP_CHECKS=0
-
-# QCOM driver SONAMEs (_QCOM_LIBS in BUILD.bazel) + trixie.yaml runtime libs.
-REQUIRED_LIBS="
-libCB.so.1
-libOpenCL.so.1
-libOpenCL_adreno.so.1
-libadreno_utils.so.1
-libatomic.so.1
-libcdsprpc.so.1.0.0
-libdmabufheap.so.0.0.0
-libglib-2.0.so.0
-libgsl.so.1
-libllvm-glnext.so.1
-libllvm-qcom.so.1
-libllvm-qgl.so.1
-libpropertyvault.so.0.0.0
-"
-
-# Driver probes: `<label>:<lib>:<debug-path-prefix>:<min-ver>`.
-DRIVER_PROBES="
-GPU (Adreno):libOpenCL.so.1:qcom-adreno:1.838.3
-NPU (FastRPC):libcdsprpc.so.1.0.0:fastrpc:15.0
-"
 
 usage() {
     cat <<EOF
@@ -69,10 +45,10 @@ Options:
   --prefix DIR       Install to DIR (default: /usr/local/lib/geniex when root,
                      \${XDG_DATA_HOME:-\$HOME/.local/share}/geniex otherwise)
   -q, --quiet        Suppress non-error output
-  --skip-checks      Skip QCOM driver and system-library checks
   -h, --help         Show this help
 
 The CLI is symlinked into /usr/local/bin (root) or \$HOME/.local/bin (user).
+Run check.sh separately to verify QCOM driver and system-library prerequisites.
 EOF
 }
 
@@ -121,10 +97,6 @@ while [ $# -gt 0 ]; do
             QUIET=1
             shift
             ;;
-        --skip-checks)
-            SKIP_CHECKS=1
-            shift
-            ;;
         -h|--help)
             usage
             exit 0
@@ -166,92 +138,6 @@ fi
 
 need_cmd tar
 need_cmd mktemp
-
-# Locate a shared library by SONAME via ldconfig, with a fallback scan.
-find_lib() {
-    _name="$1"
-    if command -v ldconfig >/dev/null 2>&1; then
-        _path=$(ldconfig -p 2>/dev/null | awk -v n="$_name" '$1 == n { print $NF; exit }')
-        if [ -n "$_path" ] && [ -e "$_path" ]; then
-            printf '%s\n' "$_path"
-            return 0
-        fi
-    fi
-    for _dir in /usr/lib/aarch64-linux-gnu /usr/lib64 /usr/lib /lib/aarch64-linux-gnu /lib64 /lib; do
-        if [ -e "$_dir/$_name" ]; then
-            printf '%s\n' "$_dir/$_name"
-            return 0
-        fi
-    done
-    return 1
-}
-
-# Compare two dotted versions. Returns 0 iff $1 >= $2.
-version_ge() {
-    [ "$1" = "$2" ] && return 0
-    _lo=$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)
-    [ "$_lo" = "$2" ]
-}
-
-check_required_libs() {
-    _missing=""
-    for _lib in $REQUIRED_LIBS; do
-        find_lib "$_lib" >/dev/null || _missing="${_missing} ${_lib}"
-    done
-    if [ -n "$_missing" ]; then
-        err "missing required shared libraries:"
-        for _m in $_missing; do err "  - $_m"; done
-        err "install the Qualcomm driver package and Debian: libatomic1 libglib2.0-0t64, or rerun with --skip-checks"
-        return 1
-    fi
-    return 0
-}
-
-check_driver_versions() {
-    if ! command -v strings >/dev/null 2>&1; then
-        say "Note: 'strings' not on PATH — skipping driver version checks"
-        return 0
-    fi
-    _ifs="$IFS"
-    IFS='
-'
-    _failed=0
-    for _entry in $DRIVER_PROBES; do
-        [ -z "$_entry" ] && continue
-        _label=$(printf '%s' "$_entry" | cut -d: -f1)
-        _lib=$(printf   '%s' "$_entry" | cut -d: -f2)
-        _prefix=$(printf '%s' "$_entry" | cut -d: -f3)
-        _min=$(printf    '%s' "$_entry" | cut -d: -f4)
-        _path=$(find_lib "$_lib") || continue
-        _ver=$(strings -a "$_path" 2>/dev/null \
-            | sed -n "s#.*${_prefix}/\([0-9][0-9]*\(\.[0-9][0-9]*\)\{1,2\}\).*#\1#p" \
-            | sort -V | tail -n1)
-        if [ -z "$_ver" ]; then
-            say "Note: could not detect $_label driver version from $_path — continuing"
-            continue
-        fi
-        if version_ge "$_ver" "$_min"; then
-            say "$_label driver: $_ver (>= $_min)"
-        else
-            err "$_label driver $_ver is older than required $_min ($_path)"
-            _failed=1
-        fi
-    done
-    IFS="$_ifs"
-    if [ "$_failed" -eq 1 ]; then
-        err "update the Qualcomm driver packages, or rerun with --skip-checks"
-        return 1
-    fi
-    return 0
-}
-
-if [ "$SKIP_CHECKS" -eq 1 ]; then
-    say "Skipping driver and library checks (--skip-checks)"
-else
-    say "Checking required libraries"
-    check_required_libs   || exit 1
-    check_driver_versions || exit 1
-fi
 
 DOWNLOADER=$(pick_cmd curl wget) || {
     err "need 'curl' or 'wget' on PATH"
