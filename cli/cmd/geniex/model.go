@@ -159,43 +159,37 @@ func list() *cobra.Command {
 			return err
 		}
 
-		// Create formatted table output
+		// hides QuantNA in non-verbose so non-quantized models render empty.
+		joinQuants := func(m types.ModelManifest) string {
+			quants := make([]string, 0, len(m.ModelFile))
+			for q, f := range m.ModelFile {
+				if !f.Downloaded {
+					continue
+				}
+				if !verbose && q == types.QuantNA {
+					continue
+				}
+				quants = append(quants, q)
+			}
+			slices.Sort(quants)
+			return strings.Join(quants, ",")
+		}
+
 		tw := table.NewWriter()
 		tw.SetOutputMirror(os.Stdout)
 		tw.SetStyle(table.StyleLight)
 		if verbose {
 			tw.AppendHeader(table.Row{"NAME", "SIZE", "PLUGIN", "TYPE", "PRECISIONS"})
-			for _, model := range models {
-				tw.AppendRow(table.Row{
-					model.Name,
-					humanize.IBytes(uint64(model.GetSize())),
-					model.PluginId,
-					model.ModelType,
-					strings.Join(func() []string {
-						quants := make([]string, 0)
-						for q := range model.ModelFile {
-							if model.ModelFile[q].Downloaded {
-								quants = append(quants, q)
-							}
-						}
-						slices.Sort(quants)
-						return quants
-					}(), ","),
-				})
-			}
 		} else {
 			tw.AppendHeader(table.Row{"NAME", "SIZE", "PRECISIONS"})
-			for _, model := range models {
-				tw.AppendRow(table.Row{model.Name, humanize.IBytes(uint64(model.GetSize())), strings.Join(func() []string {
-					quants := make([]string, 0)
-					for q := range model.ModelFile {
-						if model.ModelFile[q].Downloaded && q != types.QuantNA {
-							quants = append(quants, q)
-						}
-					}
-					slices.Sort(quants)
-					return quants
-				}(), ",")})
+		}
+		for _, model := range models {
+			size := humanize.IBytes(uint64(model.GetSize()))
+			quants := joinQuants(model)
+			if verbose {
+				tw.AppendRow(table.Row{model.Name, size, model.PluginId, model.ModelType, quants})
+			} else {
+				tw.AppendRow(table.Row{model.Name, size, quants})
 			}
 		}
 		tw.Render()
@@ -688,3 +682,4 @@ func sumSize(files []model_hub.ModelFileInfo) int64 {
 	}
 	return size
 }
+
