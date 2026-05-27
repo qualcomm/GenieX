@@ -9,22 +9,22 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 - The CLI installed — see [Install](/en/run/cli/install).
 - Interactive shell from container (Docker only) — see [Run interactively](/en/run/cli/install#run-interactively).
-- Familiarity with [runtime choice](/en/get-started/platforms#2-pick-a-runtime) — `qairt` for AI Hub bundles, `llama_cpp` for any GGUF.
+- Familiarity with [runtime choice](/en/get-started/platforms#geniex-runtimes) — `qairt` (Qualcomm AI Engine Direct) for Qualcomm AI Hub Models, `llama_cpp` for any GGUF.
 
 ## **Run your first model**
 
-### **QAIRT runtime (AI Hub)**
+### **Qualcomm AI Engine Direct runtime (Qualcomm AI Hub)**
 
 **Language model:**
 
 ```powershell windows
-geniex infer qualcomm/Qwen3-4B
+geniex infer ai-hub-models/Qwen3-4B
 ```
 
 **Multimodal model:**
 
 ```powershell windows
-geniex infer qualcomm/Qwen2.5-VL-7B-Instruct
+geniex infer ai-hub-models/Qwen2.5-VL-7B-Instruct
 ```
 
 ### **llama.cpp runtime (GGUF)**
@@ -45,7 +45,7 @@ geniex infer Qwen/Qwen3-VL-2B-Instruct-GGUF
 
 When prompted:
 - **Model type** — `vlm` for vision-language models, `llm` for text-only models. For `Qwen3.5` and `Gemma4`, pick `llm` for now (multimodal support coming soon).
-- **Quantization** — `Q4_0` for best Hexagon NPU performance.
+- **Precision (Quantization)** — `Q4_0` for best Hexagon NPU performance.
 
 <Tip>To try other GGUF models, copy any compatible GGUF path from Hugging Face and substitute it into the command above. See [Run a GGUF model from Hugging Face](/en/models/supported#run-a-gguf-model-from-hugging-face).</Tip>
 
