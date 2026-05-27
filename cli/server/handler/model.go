@@ -27,6 +27,7 @@ import (
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 func ListModels(c *gin.Context) {
@@ -45,7 +46,7 @@ func ListModels(c *gin.Context) {
 				continue
 			}
 			id := m.Name
-			if q != "N/A" {
+			if q != types.QuantNA {
 				id += ":" + q
 			}
 			res = append(res, openai.Model{
@@ -102,7 +103,7 @@ func RetrieveModel(c *gin.Context) {
 	_ = sonic.Unmarshal(ms, &res)
 	model := openai.Model{}
 	model.ID = name
-	if quant != "N/A" {
+	if quant != types.QuantNA {
 		model.ID += ":" + quant
 	}
 	model.OwnedBy = strings.Split(manifest.Name, "/")[0]

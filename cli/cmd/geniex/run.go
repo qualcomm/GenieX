@@ -73,8 +73,9 @@ func run() *cobra.Command {
 			// option.WithRequestTimeout(time.Second*15),
 		)
 
+		ctx := cmd.Context()
 		// check
-		modelInfo, err := client.Models.Get(context.TODO(), name)
+		modelInfo, err := client.Models.Get(ctx, name)
 		if err != nil {
 			return tagServerError(err)
 		}
@@ -84,7 +85,7 @@ func run() *cobra.Command {
 
 		switch manifest.ModelType {
 		case types.ModelTypeLLM, types.ModelTypeVLM:
-			return runCompletions(manifest, quant)
+			return runCompletions(ctx, manifest, quant)
 		default:
 			return fmt.Errorf("unsupported model type: %s", manifest.ModelType)
 		}
@@ -92,7 +93,7 @@ func run() *cobra.Command {
 	return runCmd
 }
 
-func runCompletions(manifest types.ModelManifest, quant string) error {
+func runCompletions(ctx context.Context, manifest types.ModelManifest, quant string) error {
 	name := manifest.Name
 	if quant != "" {
 		name = name + ":" + quant
@@ -108,7 +109,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 	if systemPrompt != "" {
 		warmUpRequest.Messages = append(warmUpRequest.Messages, openai.SystemMessage(systemPrompt))
 	}
-	_, err := client.Chat.Completions.New(context.TODO(),
+	_, err := client.Chat.Completions.New(ctx,
 		warmUpRequest,
 		option.WithJSONSet("ngl", ngl),
 		option.WithJSONSet("nctx", nctx),
@@ -162,7 +163,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 
 			start := time.Now()
 			acc := openai.ChatCompletionAccumulator{}
-			stream := client.Chat.Completions.NewStreaming(context.Background(), openai.ChatCompletionNewParams{
+			stream := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
 				Messages:            history,
 				Model:               name,
 				StreamOptions:       openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Opt(true)},
@@ -234,7 +235,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 		repl := common.Repl{
 			Reset: func() error {
 				history = nil
-				_, err := client.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
+				_, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 					Messages: nil,
 					Model:    name,
 				})

@@ -216,7 +216,7 @@ func applyQairtMetadata(outputDir string, mf *types.ModelManifest) {
 		}
 	}
 
-	quant := "N/A"
+	quant := types.QuantNA
 	if p := strings.ToUpper(meta.Precision); p != "" {
 		quant = p
 	}

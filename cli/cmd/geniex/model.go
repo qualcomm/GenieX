@@ -63,7 +63,7 @@ func pull() *cobra.Command {
 
 	pullCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		name, quant := model_hub.NormalizeModelName(args[0])
-		return pullModel(name, quant)
+		return pullModel(cmd.Context(), name, quant)
 	}
 
 	return pullCmd
@@ -159,43 +159,37 @@ func list() *cobra.Command {
 			return err
 		}
 
-		// Create formatted table output
+		// hides QuantNA in non-verbose so non-quantized models render empty.
+		joinQuants := func(m types.ModelManifest) string {
+			quants := make([]string, 0, len(m.ModelFile))
+			for q, f := range m.ModelFile {
+				if !f.Downloaded {
+					continue
+				}
+				if !verbose && q == types.QuantNA {
+					continue
+				}
+				quants = append(quants, q)
+			}
+			slices.Sort(quants)
+			return strings.Join(quants, ",")
+		}
+
 		tw := table.NewWriter()
 		tw.SetOutputMirror(os.Stdout)
 		tw.SetStyle(table.StyleLight)
 		if verbose {
 			tw.AppendHeader(table.Row{"NAME", "SIZE", "PLUGIN", "TYPE", "PRECISIONS"})
-			for _, model := range models {
-				tw.AppendRow(table.Row{
-					model.Name,
-					humanize.IBytes(uint64(model.GetSize())),
-					model.PluginId,
-					model.ModelType,
-					strings.Join(func() []string {
-						quants := make([]string, 0)
-						for q := range model.ModelFile {
-							if model.ModelFile[q].Downloaded {
-								quants = append(quants, q)
-							}
-						}
-						slices.Sort(quants)
-						return quants
-					}(), ","),
-				})
-			}
 		} else {
 			tw.AppendHeader(table.Row{"NAME", "SIZE", "PRECISIONS"})
-			for _, model := range models {
-				tw.AppendRow(table.Row{model.Name, humanize.IBytes(uint64(model.GetSize())), strings.Join(func() []string {
-					quants := make([]string, 0)
-					for q := range model.ModelFile {
-						if model.ModelFile[q].Downloaded && q != "N/A" {
-							quants = append(quants, q)
-						}
-					}
-					slices.Sort(quants)
-					return quants
-				}(), ",")})
+		}
+		for _, model := range models {
+			size := humanize.IBytes(uint64(model.GetSize()))
+			quants := joinQuants(model)
+			if verbose {
+				tw.AppendRow(table.Row{model.Name, size, model.PluginId, model.ModelType, quants})
+			} else {
+				tw.AppendRow(table.Row{model.Name, size, quants})
 			}
 		}
 		tw.Render()
@@ -271,7 +265,7 @@ func setTypeCmd() *cobra.Command {
 	}
 }
 
-func pullModel(name string, quant string) error {
+func pullModel(ctx context.Context, name string, quant string) error {
 	slog.Debug("pullModel", "name", name, "quant", quant)
 
 	s := store.Get()
@@ -305,14 +299,14 @@ func pullModel(name string, quant string) error {
 	// interactive device picker, which can't share the terminal with a
 	// spinner. Skip when the explicit hub doesn't need it.
 	if _, ok := aihub.IsAIHubName(name); ok {
-		if err := chipsetEnsure(context.TODO(), s); err != nil {
+		if err := chipsetEnsure(ctx, s); err != nil {
 			return err
 		}
 	}
 
 	spin := render.NewSpinner("download manifest from: " + name)
 	spin.Start()
-	files, hmf, err := model_hub.ModelInfo(context.TODO(), name)
+	files, hmf, err := model_hub.ModelInfo(ctx, name)
 	spin.Stop()
 	if err != nil {
 		return err
@@ -341,7 +335,7 @@ func pullModel(name string, quant string) error {
 		}
 
 		// start download
-		pgCh, errCh := s.PullExtraQuant(context.TODO(), *mf)
+		pgCh, errCh := s.PullExtraQuant(ctx, *mf)
 		bar := render.NewProgressBar(mf.GetSize()-oldSize, "downloading")
 		for pg := range pgCh {
 			bar.Set(pg.TotalDownloaded)
@@ -392,7 +386,7 @@ func pullModel(name string, quant string) error {
 		}
 
 		// start download
-		pgCh, errCh := s.Pull(context.TODO(), manifest)
+		pgCh, errCh := s.Pull(ctx, manifest)
 		bar := render.NewProgressBar(manifest.GetSize(), "downloading")
 		for pg := range pgCh {
 			bar.Set(pg.TotalDownloaded)
@@ -437,7 +431,7 @@ var quantRegix = regexp.MustCompile(`(` + strings.Join([]string{
 func getQuant(name string) string {
 	quant := strings.ToUpper(quantRegix.FindString(name))
 	if quant == "" {
-		quant = "N/A"
+		quant = types.QuantNA
 	}
 	return quant
 }
@@ -496,25 +490,19 @@ func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, r
 			}
 
 		} else {
-			// choose quant
-			var file string
-
-			// sort key by quant
+			// pick default via PickDefaultQuant so pull and load agree.
 			ggufNames := make([]string, 0, len(ggufs))
+			quants := make([]string, 0, len(ggufs))
 			for k := range ggufs {
 				ggufNames = append(ggufNames, k)
-
-				if file == "" {
+				quants = append(quants, getQuant(k))
+			}
+			defaultQuant := model_hub.PickDefaultQuant(quants)
+			var file string
+			for _, k := range ggufNames {
+				if getQuant(k) == defaultQuant {
 					file = k
-					continue
-				}
-
-				// prefer Q4_0, Q4_K_M, Q8_0
-				kq := getQuant(k)
-				fq := getQuant(file)
-				sortKey := []string{"Q8_0", "Q4_K_M", "Q4_0"}
-				if slices.Index(sortKey, kq) > slices.Index(sortKey, fq) {
-					file = k
+					break
 				}
 			}
 			sort.Slice(ggufNames, func(i, j int) bool {
@@ -599,7 +587,7 @@ func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, r
 		if len(files) == 1 {
 			// single file (typically the AI Hub .zip)
 			mainFile := files[0]
-			res.ModelFile["N/A"] = types.ModelFileInfo{
+			res.ModelFile[types.QuantNA] = types.ModelFileInfo{
 				Name:       mainFile.Name,
 				Downloaded: true,
 				Size:       mainFile.Size,
@@ -688,3 +676,4 @@ func sumSize(files []model_hub.ModelFileInfo) int64 {
 	}
 	return size
 }
+

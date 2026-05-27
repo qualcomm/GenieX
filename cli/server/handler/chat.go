@@ -41,6 +41,8 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/server/utils"
 )
 
+// =============== request types ===============
+
 type ChatCompletionNewParams openai.ChatCompletionNewParams
 
 type ChatCompletionRequest struct {
@@ -91,6 +93,8 @@ func isWarmupRequest(param ChatCompletionRequest) bool {
 	r := param.Messages[0].GetRole()
 	return r != nil && *r == "system"
 }
+
+// =============== handlers ===============
 
 func ChatCompletions(c *gin.Context) {
 	param := defaultChatCompletionRequest()
@@ -216,17 +220,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		types.ModelParam{NCtx: param.NCtx, NGpuLayers: param.Ngl},
 		c.GetHeader("GenieX-KeepCache") != "true",
 	)
-	if errors.Is(err, os.ErrNotExist) {
-		c.JSON(http.StatusNotFound, map[string]any{"error": "model not found"})
-		return
-	} else if errors.Is(err, geniex_sdk.ErrCommonParamNotSupported) {
-		c.JSON(http.StatusBadRequest, map[string]any{
-			"error": fmt.Sprintf("a parameter in the request is not supported by the %s plugin", pluginId),
-			"code":  geniex_sdk.SDKErrorCode(err),
-		})
-		return
-	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
+	if writeKeepAliveError(c, err, pluginId) {
 		return
 	}
 	if isWarmupRequest(param) {
@@ -246,7 +240,6 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 	}
 
 	if param.Stream {
-		// Streaming response mode
 		stopGen := false
 		dataCh := make(chan string)
 
@@ -276,96 +269,13 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 			close(dataCh)
 		}()
 
+		wait := func() error { resWg.Wait(); return err }
+		usage := func() openai.CompletionUsage { return profile2Usage(res.ProfileData) }
+		includeUsage := param.StreamOptions.IncludeUsage.Value
 		if !parseTool {
-			c.Stream(func(w io.Writer) bool {
-				r, ok := <-dataCh
-				if ok {
-					chunk := openai.ChatCompletionChunk{}
-					chunk.Choices = append(chunk.Choices, openai.ChatCompletionChunkChoice{
-						Delta: openai.ChatCompletionChunkChoiceDelta{
-							Content: r,
-							Role:    string(openai.MessageRoleAssistant),
-						},
-					})
-
-					c.SSEvent("", chunk)
-					return true
-				}
-
-				resWg.Wait()
-
-				if err != nil {
-					c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
-					return false
-				}
-
-				if param.StreamOptions.IncludeUsage.Value {
-					c.SSEvent("", openai.ChatCompletionChunk{
-						Choices: []openai.ChatCompletionChunkChoice{},
-						Usage:   profile2Usage(res.ProfileData),
-					})
-				}
-				c.SSEvent("", "[DONE]")
-
-				return false
-			})
+			streamPlainText(c, dataCh, wait, includeUsage, usage)
 		} else {
-			buffer := strings.Builder{}
-			c.Stream(func(w io.Writer) bool {
-				r, ok := <-dataCh
-				if ok {
-					buffer.WriteString(r)
-					return true
-				}
-
-				resWg.Wait()
-
-				if err != nil {
-					slog.Error("Generation error", "error", err)
-					c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
-					return false
-				}
-
-				toolCall, err := parseToolCalls(buffer.String())
-				if err != nil {
-					slog.Warn("Tool call parse error, fallback to text", "error", err)
-
-					chunk := openai.ChatCompletionChunk{}
-					chunk.Choices = append(chunk.Choices, openai.ChatCompletionChunkChoice{
-						Delta: openai.ChatCompletionChunkChoiceDelta{
-							Content: buffer.String(),
-							Role:    string(openai.MessageRoleAssistant),
-						},
-					})
-
-					c.SSEvent("", chunk)
-					return false
-				}
-
-				c.SSEvent("", openai.ChatCompletionChunk{
-					Choices: []openai.ChatCompletionChunkChoice{{
-						Delta: openai.ChatCompletionChunkChoiceDelta{
-							ToolCalls: []openai.ChatCompletionChunkChoiceDeltaToolCall{{
-								ID: fmt.Sprintf("call_%d", rand.Uint32()),
-								Function: openai.ChatCompletionChunkChoiceDeltaToolCallFunction{
-									Name:      toolCall.Name,
-									Arguments: toolCall.Arguments,
-								},
-							}},
-						},
-					}},
-				})
-
-				if param.StreamOptions.IncludeUsage.Value {
-					c.SSEvent("", openai.ChatCompletionChunk{
-						Choices: []openai.ChatCompletionChunkChoice{},
-						Usage:   profile2Usage(res.ProfileData),
-					})
-				}
-				c.SSEvent("", "[DONE]")
-
-				return false
-			})
+			streamToolCall(c, dataCh, wait, includeUsage, usage)
 		}
 
 		stopGen = true
@@ -373,15 +283,13 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		}
 
 	} else {
-		// Blocking response mode
 		genOut, err := p.Generate(geniex_sdk.LlmGenerateInput{
 			PromptUTF8: formatted.FormattedText,
 			Config: &geniex_sdk.GenerationConfig{
 				MaxTokens:     int32(param.MaxCompletionTokens.Value),
 				SamplerConfig: samplerConfig,
 			},
-		},
-		)
+		})
 		if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
 			writeContextLengthExceeded(c, genOut.FullText, genOut.ProfileData)
 			return
@@ -390,35 +298,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
-
-		if parseTool {
-			toolCall, err := parseToolCalls(genOut.FullText)
-			if err == nil {
-				choice := openai.ChatCompletionChoice{}
-				choice.FinishReason = "tool_calls"
-				choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
-				choice.Message.ToolCalls = []openai.ChatCompletionMessageToolCallUnion{{Function: toolCall}}
-				res := openai.ChatCompletion{
-					ID:      fmt.Sprintf("call_%d", rand.Uint32()),
-					Choices: []openai.ChatCompletionChoice{choice},
-					Usage:   profile2Usage(genOut.ProfileData),
-				}
-				c.JSON(http.StatusOK, res)
-				return
-			}
-			slog.Warn("Tool call parse error, fallback to text", "error", err)
-		}
-
-		choice := openai.ChatCompletionChoice{}
-		choice.FinishReason = mapFinishReason(genOut.ProfileData.StopReason)
-		choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
-		choice.Message.Content = genOut.FullText
-		res := openai.ChatCompletion{
-			Choices: []openai.ChatCompletionChoice{choice},
-			Usage:   profile2Usage(genOut.ProfileData),
-		}
-		c.JSON(http.StatusOK, res)
-		return
+		writeBlockingResponse(c, genOut.FullText, genOut.ProfileData, parseTool)
 	}
 }
 
@@ -561,17 +441,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		types.ModelParam{NCtx: param.NCtx, NGpuLayers: param.Ngl},
 		c.GetHeader("GenieX-KeepCache") != "true",
 	)
-	if errors.Is(err, os.ErrNotExist) {
-		c.JSON(http.StatusNotFound, map[string]any{"error": "model not found"})
-		return
-	} else if errors.Is(err, geniex_sdk.ErrCommonParamNotSupported) {
-		c.JSON(http.StatusBadRequest, map[string]any{
-			"error": fmt.Sprintf("a parameter in the request is not supported by the %s plugin", pluginId),
-			"code":  geniex_sdk.SDKErrorCode(err),
-		})
-		return
-	} else if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
+	if writeKeepAliveError(c, err, pluginId) {
 		return
 	}
 	if isWarmupRequest(param) {
@@ -601,7 +471,6 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 	}
 
 	if param.Stream {
-		// Streaming response mode
 		stopGen := false
 		dataCh := make(chan string)
 
@@ -635,96 +504,13 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 			close(dataCh)
 		}()
 
+		wait := func() error { resWg.Wait(); return err }
+		usage := func() openai.CompletionUsage { return profile2Usage(res.ProfileData) }
+		includeUsage := param.StreamOptions.IncludeUsage.Value
 		if !parseTool {
-			c.Stream(func(w io.Writer) bool {
-				r, ok := <-dataCh
-				if ok {
-					chunk := openai.ChatCompletionChunk{}
-					chunk.Choices = append(chunk.Choices, openai.ChatCompletionChunkChoice{
-						Delta: openai.ChatCompletionChunkChoiceDelta{
-							Content: r,
-							Role:    string(openai.MessageRoleAssistant),
-						},
-					})
-
-					c.SSEvent("", chunk)
-					return true
-				}
-
-				resWg.Wait()
-
-				if err != nil {
-					c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
-					return false
-				}
-
-				if param.StreamOptions.IncludeUsage.Value {
-					c.SSEvent("", openai.ChatCompletionChunk{
-						Choices: []openai.ChatCompletionChunkChoice{},
-						Usage:   profile2Usage(res.ProfileData),
-					})
-				}
-				c.SSEvent("", "[DONE]")
-
-				return false
-			})
+			streamPlainText(c, dataCh, wait, includeUsage, usage)
 		} else {
-			buffer := strings.Builder{}
-			c.Stream(func(w io.Writer) bool {
-				r, ok := <-dataCh
-				if ok {
-					buffer.WriteString(r)
-					return true
-				}
-
-				resWg.Wait()
-
-				if err != nil {
-					slog.Error("Generation error", "error", err)
-					c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
-					return false
-				}
-
-				toolCall, err := parseToolCalls(buffer.String())
-				if err != nil {
-					slog.Warn("Tool call parse error, fallback to text", "error", err)
-
-					chunk := openai.ChatCompletionChunk{}
-					chunk.Choices = append(chunk.Choices, openai.ChatCompletionChunkChoice{
-						Delta: openai.ChatCompletionChunkChoiceDelta{
-							Content: buffer.String(),
-							Role:    string(openai.MessageRoleAssistant),
-						},
-					})
-
-					c.SSEvent("", chunk)
-					return false
-				}
-
-				c.SSEvent("", openai.ChatCompletionChunk{
-					Choices: []openai.ChatCompletionChunkChoice{{
-						Delta: openai.ChatCompletionChunkChoiceDelta{
-							ToolCalls: []openai.ChatCompletionChunkChoiceDeltaToolCall{{
-								ID: fmt.Sprintf("call_%d", rand.Uint32()),
-								Function: openai.ChatCompletionChunkChoiceDeltaToolCallFunction{
-									Name:      toolCall.Name,
-									Arguments: toolCall.Arguments,
-								},
-							}},
-						},
-					}},
-				})
-
-				if param.StreamOptions.IncludeUsage.Value {
-					c.SSEvent("", openai.ChatCompletionChunk{
-						Choices: []openai.ChatCompletionChunkChoice{},
-						Usage:   profile2Usage(res.ProfileData),
-					})
-				}
-				c.SSEvent("", "[DONE]")
-
-				return false
-			})
+			streamToolCall(c, dataCh, wait, includeUsage, usage)
 		}
 
 		stopGen = true
@@ -732,7 +518,6 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		}
 
 	} else {
-		// Blocking response mode
 		genOut, err := p.Generate(geniex_sdk.VlmGenerateInput{
 			PromptUTF8: formatted.FormattedText,
 			Config: &geniex_sdk.GenerationConfig{
@@ -742,8 +527,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 				AudioPaths:     audios,
 				ImageMaxLength: param.ImageMaxLength,
 			},
-		},
-		)
+		})
 		if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) && genOut != nil {
 			writeContextLengthExceeded(c, genOut.FullText, genOut.ProfileData)
 			return
@@ -752,51 +536,62 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
-
-		if parseTool {
-			toolCall, err := parseToolCalls(genOut.FullText)
-			if err == nil {
-				choice := openai.ChatCompletionChoice{}
-				choice.FinishReason = "tool_calls"
-				choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
-				choice.Message.ToolCalls = []openai.ChatCompletionMessageToolCallUnion{{Function: toolCall}}
-				res := openai.ChatCompletion{
-					ID:      fmt.Sprintf("call_%d", rand.Uint32()),
-					Choices: []openai.ChatCompletionChoice{choice},
-					Usage:   profile2Usage(genOut.ProfileData),
-				}
-				c.JSON(http.StatusOK, res)
-				return
-			}
-			slog.Warn("Tool call parse error, fallback to text", "error", err)
-		}
-
-		choice := openai.ChatCompletionChoice{}
-		choice.FinishReason = mapFinishReason(genOut.ProfileData.StopReason)
-		choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
-		choice.Message.Content = genOut.FullText
-		res := openai.ChatCompletion{
-			Choices: []openai.ChatCompletionChoice{choice},
-			Usage:   profile2Usage(genOut.ProfileData),
-		}
-		c.JSON(http.StatusOK, res)
-		return
+		writeBlockingResponse(c, genOut.FullText, genOut.ProfileData, parseTool)
 	}
 }
 
-func profile2Usage(p geniex_sdk.ProfileData) openai.CompletionUsage {
-	return openai.CompletionUsage{
-		CompletionTokens: p.GeneratedTokens,
-		PromptTokens:     p.PromptTokens,
-		TotalTokens:      p.TotalTokens(),
+// =============== request-side helpers ===============
+
+func parseSamplerConfig(param ChatCompletionRequest) *geniex_sdk.SamplerConfig {
+	return &geniex_sdk.SamplerConfig{
+		Temperature:       float32(param.Temperature.Value),
+		TopP:              float32(param.TopP.Value),
+		TopK:              param.TopK,
+		MinP:              param.MinP,
+		RepetitionPenalty: param.RepetitionPenalty,
+		PresencePenalty:   float32(param.PresencePenalty.Value),
+		FrequencyPenalty:  float32(param.FrequencyPenalty.Value),
+		Seed:              int32(param.Seed.Value),
+		EnableJson:        param.EnableJson,
 	}
 }
 
-// writeContextLengthExceeded mirrors OpenAI's HTTP 400 + error body for the
-// context-length-exceeded case, but additionally surfaces the partial generation
-// as `choices` so clients that look there can recover the truncated output.
-// `fullText` and `profile` come from the regular SDK output struct (which the
-// C plugin populates even on the error path).
+func parseTools(param ChatCompletionRequest) (bool, string, error) {
+	if len(param.Tools) == 0 {
+		return false, "", nil
+	}
+	tools, err := sonic.MarshalString(param.Tools)
+	return true, tools, err
+}
+
+// =============== response-side helpers ===============
+
+// writeKeepAliveError maps a KeepAliveGet error to its HTTP response;
+// returns true when handled (caller should return).
+func writeKeepAliveError(c *gin.Context, err error, pluginId string) bool {
+	if err == nil {
+		return false
+	}
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		c.JSON(http.StatusNotFound, map[string]any{"error": "model not found"})
+	case errors.Is(err, geniex_sdk.ErrCommonParamNotSupported):
+		c.JSON(http.StatusBadRequest, map[string]any{
+			"error": fmt.Sprintf("a parameter in the request is not supported by the %s plugin", pluginId),
+			"code":  geniex_sdk.SDKErrorCode(err),
+		})
+	default:
+		c.JSON(http.StatusInternalServerError, map[string]any{
+			"error": err.Error(),
+			"code":  geniex_sdk.SDKErrorCode(err),
+		})
+	}
+	return true
+}
+
+// writeContextLengthExceeded mirrors OpenAI's HTTP 400 body but also surfaces
+// the partial generation under `choices` so clients can still recover the
+// truncated output. The SDK populates fullText / profile even on this error.
 func writeContextLengthExceeded(c *gin.Context, fullText string, profile geniex_sdk.ProfileData) {
 	choice := openai.ChatCompletionChoice{}
 	choice.FinishReason = "length"
@@ -814,6 +609,133 @@ func writeContextLengthExceeded(c *gin.Context, fullText string, profile geniex_
 	})
 }
 
+// writeBlockingResponse emits a non-streaming completion: tool-call response
+// when parseTool matches, content response otherwise (or on parse failure).
+func writeBlockingResponse(c *gin.Context, fullText string, profile geniex_sdk.ProfileData, parseTool bool) {
+	if parseTool {
+		toolCall, err := parseToolCalls(fullText)
+		if err == nil {
+			choice := openai.ChatCompletionChoice{}
+			choice.FinishReason = "tool_calls"
+			choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
+			choice.Message.ToolCalls = []openai.ChatCompletionMessageToolCallUnion{{Function: toolCall}}
+			c.JSON(http.StatusOK, openai.ChatCompletion{
+				ID:      fmt.Sprintf("call_%d", rand.Uint32()),
+				Choices: []openai.ChatCompletionChoice{choice},
+				Usage:   profile2Usage(profile),
+			})
+			return
+		}
+		slog.Warn("Tool call parse error, fallback to text", "error", err)
+	}
+
+	choice := openai.ChatCompletionChoice{}
+	choice.FinishReason = mapFinishReason(profile.StopReason)
+	choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
+	choice.Message.Content = fullText
+	c.JSON(http.StatusOK, openai.ChatCompletion{
+		Choices: []openai.ChatCompletionChoice{choice},
+		Usage:   profile2Usage(profile),
+	})
+}
+
+// streamUsage is read once dataCh closes; it lets callers hide whether their
+// generate result is a value or pointer.
+type streamUsage func() openai.CompletionUsage
+
+// streamPlainText drains dataCh as content chunks, then emits optional usage
+// and [DONE].
+func streamPlainText(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, usage streamUsage) {
+	c.Stream(func(w io.Writer) bool {
+		r, ok := <-dataCh
+		if ok {
+			chunk := openai.ChatCompletionChunk{}
+			chunk.Choices = append(chunk.Choices, openai.ChatCompletionChunkChoice{
+				Delta: openai.ChatCompletionChunkChoiceDelta{
+					Content: r,
+					Role:    string(openai.MessageRoleAssistant),
+				},
+			})
+			c.SSEvent("", chunk)
+			return true
+		}
+		if err := wait(); err != nil {
+			c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
+			return false
+		}
+		if includeUsage {
+			c.SSEvent("", openai.ChatCompletionChunk{
+				Choices: []openai.ChatCompletionChunkChoice{},
+				Usage:   usage(),
+			})
+		}
+		c.SSEvent("", "[DONE]")
+		return false
+	})
+}
+
+// streamToolCall buffers the stream and emits a tool-call chunk once dataCh
+// closes; falls back to a content chunk when parsing fails.
+func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, usage streamUsage) {
+	buffer := strings.Builder{}
+	c.Stream(func(w io.Writer) bool {
+		r, ok := <-dataCh
+		if ok {
+			buffer.WriteString(r)
+			return true
+		}
+		if err := wait(); err != nil {
+			slog.Error("Generation error", "error", err)
+			c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
+			return false
+		}
+		toolCall, err := parseToolCalls(buffer.String())
+		if err != nil {
+			slog.Warn("Tool call parse error, fallback to text", "error", err)
+			chunk := openai.ChatCompletionChunk{}
+			chunk.Choices = append(chunk.Choices, openai.ChatCompletionChunkChoice{
+				Delta: openai.ChatCompletionChunkChoiceDelta{
+					Content: buffer.String(),
+					Role:    string(openai.MessageRoleAssistant),
+				},
+			})
+			c.SSEvent("", chunk)
+			return false
+		}
+		c.SSEvent("", openai.ChatCompletionChunk{
+			Choices: []openai.ChatCompletionChunkChoice{{
+				Delta: openai.ChatCompletionChunkChoiceDelta{
+					ToolCalls: []openai.ChatCompletionChunkChoiceDeltaToolCall{{
+						ID: fmt.Sprintf("call_%d", rand.Uint32()),
+						Function: openai.ChatCompletionChunkChoiceDeltaToolCallFunction{
+							Name:      toolCall.Name,
+							Arguments: toolCall.Arguments,
+						},
+					}},
+				},
+			}},
+		})
+		if includeUsage {
+			c.SSEvent("", openai.ChatCompletionChunk{
+				Choices: []openai.ChatCompletionChunkChoice{},
+				Usage:   usage(),
+			})
+		}
+		c.SSEvent("", "[DONE]")
+		return false
+	})
+}
+
+// =============== shared mappers ===============
+
+func profile2Usage(p geniex_sdk.ProfileData) openai.CompletionUsage {
+	return openai.CompletionUsage{
+		CompletionTokens: p.GeneratedTokens,
+		PromptTokens:     p.PromptTokens,
+		TotalTokens:      p.TotalTokens(),
+	}
+}
+
 // mapFinishReason translates the SDK's stop_reason values into the OpenAI
 // finish_reason vocabulary.
 func mapFinishReason(stopReason string) string {
@@ -829,30 +751,7 @@ func mapFinishReason(stopReason string) string {
 	}
 }
 
-func parseSamplerConfig(param ChatCompletionRequest) *geniex_sdk.SamplerConfig {
-	// parse sampling parameters
-	samplerConfig := &geniex_sdk.SamplerConfig{
-		Temperature:       float32(param.Temperature.Value),
-		TopP:              float32(param.TopP.Value),
-		TopK:              param.TopK,
-		MinP:              param.MinP,
-		RepetitionPenalty: param.RepetitionPenalty,
-		PresencePenalty:   float32(param.PresencePenalty.Value),
-		FrequencyPenalty:  float32(param.FrequencyPenalty.Value),
-		Seed:              int32(param.Seed.Value),
-		EnableJson:        param.EnableJson,
-	}
-	return samplerConfig
-}
-
-func parseTools(param ChatCompletionRequest) (bool, string, error) {
-	if len(param.Tools) == 0 {
-		return false, "", nil
-	}
-
-	tools, err := sonic.MarshalString(param.Tools)
-	return true, tools, err
-}
+// =============== tool-call parsing ===============
 
 var toolCallRegex = regexp.MustCompile(`<tool_call>([\s\S]+)<\/tool_call>` + "|" + "```json([\\s\\S]+)```")
 
