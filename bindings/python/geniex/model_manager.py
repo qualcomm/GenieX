@@ -278,9 +278,6 @@ def get_type(model_name: str) -> str:
         return 'llm'
     if t.value == GENIEX_MODEL_TYPE_VLM:
         return 'vlm'
-    # Don't synthesise a GeniexError code — those are reserved for the SDK's
-    # -100xxx range. A bogus enum from the C side is a Python-side contract
-    # break, so a plain ValueError is the right shape for callers.
     raise ValueError(f'Unknown model type: {t.value}')
 
 

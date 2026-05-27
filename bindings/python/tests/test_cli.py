@@ -37,8 +37,6 @@ def test_cli_imports_only_public_surface():
     # Strip the module docstring before scanning imports.
     without_docstring = re.sub(r'"""[\s\S]*?"""', '', src, count=1)
     assert '_ffi' not in without_docstring, 'cli.py must not import from geniex._ffi'
-    # Catch the broader case too: any `from geniex.<mod> import _<name>` is
-    # reaching past a public surface we own.
     leaked = [m.group(0) for m in re.finditer(r'from\s+geniex\.\w+\s+import\s+_\w+', without_docstring)]
     assert not leaked, f'cli.py must not import private symbols: {leaked}'
     # Only two legitimate ctypes mentions are allowed: none at all in cli.

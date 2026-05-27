@@ -48,15 +48,12 @@ _mm = geniex.model_manager
 
 
 def _force_utf8_streams() -> None:
-    # When stdout/stderr is a pipe on Windows the default codec is cp1252 and
-    # model tokens outside Latin-1 (UTF-8 continuation bytes, emoji, replacement
-    # chars) crash the print. Force UTF-8 whenever the stream supports it so
-    # callers piping through `tee`, pytest capture, etc. get clean output.
+    # Windows pipes default to cp1252; non-Latin-1 model tokens crash the print without UTF-8.
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, 'reconfigure'):
             try:
                 stream.reconfigure(encoding='utf-8', errors='replace')
-            except Exception:  # noqa: BLE001 — best-effort
+            except Exception:  # noqa: BLE001
                 pass
 
 
@@ -349,8 +346,6 @@ def _cmd_chat(args: argparse.Namespace) -> int:
     elapsed = time.monotonic() - t0
     is_vlm = isinstance(model, GeniexVLM)
     model_type = 'vlm' if is_vlm else 'llm'
-    # `from_pretrained` already resolved the plugin/device and stashed them
-    # on the handle — read those instead of re-running the resolver here.
     meta = getattr(model, '_meta', None) or {}
     plugin_id = meta.get('backend')
     device_id = meta.get('device')

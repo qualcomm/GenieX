@@ -169,7 +169,7 @@ def _resolve_model_sources(
         cached = _mm.get_paths(key)
         return cached.model_path, cached.mmproj_path, cached.tokenizer_path, cached
     except (GeniexError, FileNotFoundError, OSError):
-        pass  # cache miss — fall through to the hub fetch path
+        pass
 
     printer = _progress.resolve(progress)
     try:
@@ -217,17 +217,13 @@ def _reject_gguf_on_qairt(model_path: str, plugin_id: str | None, device_map: st
         )
 
 
-# AutoModelFor*.from_pretrained() ships these defaults; the factory adopting
-# the llama.cpp-shaped values isn't a user override, so we coerce silently.
+# AutoModelFor*.from_pretrained factory defaults; not user overrides, so coerce silently.
 _QAIRT_SILENT_NGL = 999
 _QAIRT_SILENT_NCTX = 0
 
 
 def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **kwargs) -> geniex_ModelConfig:
     if plugin_id == PLUGIN_QAIRT:
-        # Mirror the alias-coercion warning in resolve_device_map so a caller
-        # who passes a real override (n_gpu_layers=64, n_ctx=4096) sees that
-        # QAIRT dropped it. The factory defaults pass through silently.
         if n_gpu_layers not in (0, _QAIRT_SILENT_NGL):
             _logger.warning('qairt plugin does not consume n_gpu_layers=%d; forcing 0', n_gpu_layers)
         n_gpu_layers = 0
