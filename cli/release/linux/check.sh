@@ -106,10 +106,18 @@ esac
 # Locate a shared library by SONAME under /usr/lib. Docker bind-mounts host
 # /usr/lib onto /opt/qcom-lib, so /usr/lib is the only directory we expect
 # QCOM libs to live in across both bare-metal and container installs.
+# On Debian/Ubuntu multiarch systems, libraries live in an arch-specific
+# subdirectory (e.g. /usr/lib/aarch64-linux-gnu/), so check that too.
 find_lib() {
     _name="$1"
     if [ -e "/usr/lib/$_name" ]; then
         printf '%s\n' "/usr/lib/$_name"
+        return 0
+    fi
+    # Multiarch subdirectory (e.g. aarch64-linux-gnu)
+    _multiarch=$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || true)
+    if [ -n "$_multiarch" ] && [ -e "/usr/lib/${_multiarch}/${_name}" ]; then
+        printf '%s\n' "/usr/lib/${_multiarch}/${_name}"
         return 0
     fi
     return 1
