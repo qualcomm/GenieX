@@ -140,9 +140,9 @@ func infer() *cobra.Command {
 
 		if quant != "" {
 			if fileinfo, exist := manifest.ModelFile[quant]; !exist {
-				return fmt.Errorf("precision %s not found", quant)
+				return fmt.Errorf("%w: %s not found in manifest", common.ErrPrecisionNotFound, quant)
 			} else if !fileinfo.Downloaded {
-				return fmt.Errorf("precision %s not downloaded", quant)
+				return fmt.Errorf("%w: %s not downloaded", common.ErrPrecisionNotFound, quant)
 			}
 		} else {
 			sq, err := selectQuant(manifest)
@@ -178,7 +178,7 @@ func ensureModelAvailable(s *store.Store, name string, quant string) (*types.Mod
 	if errors.Is(err, os.ErrNotExist) {
 		fmt.Println(render.GetTheme().Info.Sprintf("Model is not currently cached, downloading..."))
 		if err := pullModel(name, quant); err != nil {
-			return nil, fmt.Errorf("download model failed: %s", err)
+			return nil, fmt.Errorf("download model failed: %w", err)
 		}
 		manifest, err = s.GetManifest(name)
 	}

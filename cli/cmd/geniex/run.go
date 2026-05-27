@@ -16,7 +16,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -31,6 +33,21 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
+
+// tagServerError wraps transport-layer dial errors as ErrServerUnreachable
+// so PrintError can render the "is geniex serve running?" hint. HTTP-level
+// errors (4xx/5xx) flow through untouched — they already carry the server's
+// own message.
+func tagServerError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var ne *net.OpError
+	if errors.As(err, &ne) {
+		return fmt.Errorf("%w: %v", common.ErrServerUnreachable, err)
+	}
+	return err
+}
 
 var client openai.Client
 
@@ -63,7 +80,7 @@ func run() *cobra.Command {
 		// check
 		modelInfo, err := client.Models.Get(context.TODO(), name)
 		if err != nil {
-			return err
+			return tagServerError(err)
 		}
 
 		var manifest types.ModelManifest
@@ -103,7 +120,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 	spin.Stop()
 
 	if err != nil {
-		return err
+		return tagServerError(err)
 	}
 
 	// repl
@@ -204,7 +221,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 			profileData.DecodingSpeed = float64(profileData.GeneratedTokens) / float64(end.Sub(firstToken).Seconds())
 
 			if stream.Err() != nil {
-				return "", profileData, stream.Err()
+				return "", profileData, tagServerError(stream.Err())
 			}
 
 			if len(acc.Choices) > 0 {

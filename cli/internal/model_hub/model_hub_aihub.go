@@ -80,11 +80,11 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 	chipset := h.chipsetGetter()
 	manifest, err := h.client.LoadManifest(ctx)
 	if err != nil {
-		return nil, err
+		return nil, TranslateAIHubError(err)
 	}
 	model, err := h.client.LookupModelByDisplayName(repo)
 	if err != nil {
-		return nil, err
+		return nil, TranslateAIHubError(err)
 	}
 	if _, rerr := aihub.RuntimeForDomain(model.GetDomain()); rerr != nil {
 		return nil, rerr
@@ -92,11 +92,11 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 
 	plat, err := h.client.LoadPlatform(ctx, manifest)
 	if err != nil {
-		return nil, err
+		return nil, TranslateAIHubError(err)
 	}
 	ra, err := h.client.LoadReleaseAssets(ctx, manifest, model.GetId())
 	if err != nil {
-		return nil, err
+		return nil, TranslateAIHubError(err)
 	}
 	candidates, err := aihub.MatchAll(ra, plat, model.GetDomain(), chipset)
 	if err != nil {
@@ -106,7 +106,7 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 
 	zipSize, err := aihub.HeadContentLength(ctx, asset.GetDownloadUrl())
 	if err != nil {
-		return nil, fmt.Errorf("HEAD %s: %w", asset.GetDownloadUrl(), err)
+		return nil, TranslateAIHubError(err)
 	}
 
 	zipURL := asset.GetDownloadUrl()

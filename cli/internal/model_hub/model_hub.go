@@ -379,9 +379,11 @@ func code2error(client *resty.Client, response *resty.Response) error {
 	switch response.StatusCode() {
 	case http.StatusOK:
 		return nil
-	case http.StatusNotFound, http.StatusUnauthorized:
-		return fmt.Errorf("model not found, please check the model name or auth token")
+	case http.StatusNotFound:
+		return fmt.Errorf("%w: %s", ErrModelNotFound, response.Request.URL)
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return fmt.Errorf("%w: %s", ErrAuthRequired, response.Request.URL)
 	default:
-		return fmt.Errorf("HTTPError: %s", response.Status())
+		return fmt.Errorf("%w: %s", ErrUnreachable, response.Status())
 	}
 }

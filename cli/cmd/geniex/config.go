@@ -25,6 +25,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
@@ -178,7 +179,7 @@ func loadPlatform(ctx context.Context) (*qaihm.PlatformInfo, error) {
 	plat, err := client.LoadPlatformDirect(ctx)
 	spin.Stop()
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch device list: %w", err)
+		return nil, fmt.Errorf("failed to fetch device list: %w", model_hub.TranslateAIHubError(err))
 	}
 	return plat, nil
 }
