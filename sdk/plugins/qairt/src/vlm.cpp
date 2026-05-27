@@ -15,8 +15,9 @@
 #define portable_strdup strdup
 #endif
 
-#include "dispatch.h"           // provided by geniex-qairt/models/
-#include "geniex-proc/types.h"  // ChatMessage, MMContent, Role::, Modality::
+#include "dispatch.h"             // provided by geniex-qairt/models/
+#include "geniex-proc/types.h"    // ChatMessage, MMContent, Role::, Modality::
+#include "llm/llm_spec_loader.h"  // parseGenieSamplerConfig
 #include "logging.h"
 #include "pipeline/vlm_pipeline.h"
 #include "qnn_runtime_utils.h"
@@ -55,6 +56,8 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
     // Derive model directory from the model_path
     fs::path model_path(input->model_path);
     fs::path model_dir = model_path.parent_path();
+
+    bundle_sampler_ = parseGenieSamplerConfig(model_dir);
 
     QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(model_dir);
 
@@ -253,7 +256,7 @@ int32_t QairtVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     GenerationConfig gen_cfg{};
     if (input->config) {
         gen_cfg.max_tokens = input->config->max_tokens > 0 ? input->config->max_tokens : 512;
-        qairt::apply_sampler_config(input->config->sampler_config, gen_cfg);
+        qairt::apply_sampler_config(input->config->sampler_config, gen_cfg, bundle_sampler_);
     }
     gen_cfg.thinking_mode = enable_thinking_;
 

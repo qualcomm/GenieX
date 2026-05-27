@@ -8,57 +8,80 @@
 
 #include <cstdint>
 #include <fstream>
+#include <optional>
 #include <sstream>
 
-#include "geniex-proc/types.h"  // for GENIEX_DEFAULT_SEED
 #include "geniex.h"
+#include "llm/llm_spec_loader.h"  // ParsedSamplerConfig
 #include "logging.h"
 #include "types.h"  // geniex::GenerationConfig
 
 namespace geniex::qairt {
 
-// QAIRT-recommended sampling defaults.
+// Plugin-level fallback when neither the user nor the bundle's `dialog.sampler`
+// block specifies a value.
 struct DefaultSamplerParams {
-    uint32_t seed               = GENIEX_DEFAULT_SEED;  // random per process
+    uint32_t seed               = 42;
     int32_t  top_k              = 40;
     float    top_p              = 0.95f;
-    float    min_p              = 0.05f;
+    float    min_p              = 0.0f;
     float    temperature        = 0.8f;
     float    repetition_penalty = 1.0f;
     float    presence_penalty   = 0.0f;
     float    frequency_penalty  = 0.0f;
 };
 
-inline void apply_sampler_config(const geniex_SamplerConfig* cfg, GenerationConfig& out) {
+inline void apply_sampler_config(
+    const geniex_SamplerConfig* cfg, GenerationConfig& out, const ParsedSamplerConfig& bundle = {}) {
     constexpr DefaultSamplerParams kDefaults{};
+
+    auto pick_uint = [](uint32_t user_val, const std::optional<uint32_t>& bundle_val, uint32_t fallback) {
+        if (user_val != 0) return user_val;
+        if (bundle_val) return *bundle_val;
+        return fallback;
+    };
+    auto pick_int = [](int32_t user_val, const std::optional<int32_t>& bundle_val, int32_t fallback) {
+        if (user_val != 0) return user_val;
+        if (bundle_val) return *bundle_val;
+        return fallback;
+    };
+    auto pick_float = [](float user_val, const std::optional<float>& bundle_val, float fallback) {
+        if (user_val != 0.0f) return user_val;
+        if (bundle_val) return *bundle_val;
+        return fallback;
+    };
 
     out.enable_sampling = true;
 
     if (!cfg) {
-        // No config → apply all defaults wholesale.
-        out.seed               = kDefaults.seed;
-        out.top_k              = kDefaults.top_k;
-        out.top_p              = kDefaults.top_p;
-        out.min_p              = kDefaults.min_p;
-        out.temperature        = kDefaults.temperature;
-        out.repetition_penalty = kDefaults.repetition_penalty;
-        out.presence_penalty   = kDefaults.presence_penalty;
-        out.frequency_penalty  = kDefaults.frequency_penalty;
+        // No user config → bundle wins where present, otherwise plugin defaults.
+        out.seed               = bundle.seed.value_or(kDefaults.seed);
+        out.top_k              = bundle.top_k.value_or(kDefaults.top_k);
+        out.top_p              = bundle.top_p.value_or(kDefaults.top_p);
+        out.min_p              = kDefaults.min_p;  // genie has no min_p; bundle never carries it
+        out.temperature        = bundle.temperature.value_or(kDefaults.temperature);
+        out.repetition_penalty = bundle.repetition_penalty.value_or(kDefaults.repetition_penalty);
+        out.presence_penalty   = bundle.presence_penalty.value_or(kDefaults.presence_penalty);
+        out.frequency_penalty  = bundle.frequency_penalty.value_or(kDefaults.frequency_penalty);
+        if (bundle.penalty_last_n) out.penalty_last_n = *bundle.penalty_last_n;
         return;
     }
 
-    // Zero-sentinel: every default-initialised (== 0) field maps to the QAIRT default
-    out.seed               = (cfg->seed != 0) ? static_cast<uint32_t>(cfg->seed) : kDefaults.seed;
-    out.top_k              = (cfg->top_k != 0) ? cfg->top_k : kDefaults.top_k;
-    out.top_p              = (cfg->top_p != 0.0f) ? cfg->top_p : kDefaults.top_p;
-    out.min_p              = (cfg->min_p != 0.0f) ? cfg->min_p : kDefaults.min_p;
-    out.repetition_penalty = (cfg->repetition_penalty != 0.0f) ? cfg->repetition_penalty : kDefaults.repetition_penalty;
-    out.presence_penalty   = (cfg->presence_penalty != 0.0f) ? cfg->presence_penalty : kDefaults.presence_penalty;
-    out.frequency_penalty  = (cfg->frequency_penalty != 0.0f) ? cfg->frequency_penalty : kDefaults.frequency_penalty;
+    // Zero-sentinel on cfg: 0 means "defer to lower tiers".
+    out.seed  = pick_uint(static_cast<uint32_t>(cfg->seed), bundle.seed, kDefaults.seed);
+    out.top_k = pick_int(cfg->top_k, bundle.top_k, kDefaults.top_k);
+    out.top_p = pick_float(cfg->top_p, bundle.top_p, kDefaults.top_p);
+    out.min_p = (cfg->min_p != 0.0f) ? cfg->min_p : kDefaults.min_p;
+    out.repetition_penalty =
+        pick_float(cfg->repetition_penalty, bundle.repetition_penalty, kDefaults.repetition_penalty);
+    out.presence_penalty  = pick_float(cfg->presence_penalty, bundle.presence_penalty, kDefaults.presence_penalty);
+    out.frequency_penalty = pick_float(cfg->frequency_penalty, bundle.frequency_penalty, kDefaults.frequency_penalty);
+    if (bundle.penalty_last_n) out.penalty_last_n = *bundle.penalty_last_n;
 
-    // Temperature is special: 0 means "use default", a NEGATIVE value is the
+    // Temperature is special: 0 means "defer", a NEGATIVE value is the
     // greedy/argmax sentinel, positive is the literal temp.
-    out.temperature = (cfg->temperature == 0.0f) ? kDefaults.temperature : cfg->temperature;
+    out.temperature =
+        (cfg->temperature == 0.0f) ? bundle.temperature.value_or(kDefaults.temperature) : cfg->temperature;
 
     // Grammar — string takes priority over path (matches llama_cpp plugin).
     if (cfg->grammar_string && cfg->grammar_string[0] != '\0') {
