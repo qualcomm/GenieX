@@ -24,102 +24,6 @@ import (
 	"unsafe"
 )
 
-/* ========================================================================== */
-/*                              Utilities					  				 */
-/* ========================================================================== */
-
-func mlFree(ptr unsafe.Pointer) {
-	C.geniex_free(ptr)
-}
-
-func sliceToCCharArray(slice []string) (**C.char, C.int32_t) {
-	if len(slice) == 0 {
-		return nil, 0
-	}
-	count := C.size_t(len(slice))
-	raw := C.malloc(C.size_t(count) * C.size_t(unsafe.Sizeof(uintptr(0))))
-	if raw == nil {
-		panic("C.malloc failed")
-	}
-
-	cArray := unsafe.Slice((**C.char)(raw), len(slice))
-	for i, s := range slice {
-		cArray[i] = C.CString(s)
-	}
-	return (**C.char)(raw), C.int32_t(count)
-}
-
-func cCharArrayToSlice(ptr **C.char, count C.int32_t) []string {
-	if ptr == nil || count == 0 {
-		return nil
-	}
-	arr := unsafe.Slice(ptr, int(count))
-	out := make([]string, count)
-	for i, cstr := range arr {
-		out[i] = C.GoString(cstr)
-	}
-	return out
-}
-
-// free the C char array in Go side allocated
-func freeCCharArray(ptr **C.char, count C.int32_t) {
-	if ptr == nil || count == 0 {
-		return
-	}
-	arr := unsafe.Slice(ptr, int(count))
-	for _, p := range arr {
-		C.free(unsafe.Pointer(p))
-	}
-	C.free(unsafe.Pointer(ptr))
-}
-
-func mlFreeCCharArray(ptr **C.char, count C.int32_t) {
-	if ptr == nil || count == 0 {
-		return
-	}
-	arr := unsafe.Slice(ptr, int(count))
-	for _, p := range arr {
-		mlFree(unsafe.Pointer(p))
-	}
-	mlFree(unsafe.Pointer(ptr))
-}
-
-/* ========================================================================== */
-/*                              Callbacks								  */
-/* ========================================================================== */
-
-// TODO: use this to manage callbacks
-// type CallbackManager struct {
-// 	mu      sync.RWMutex
-// 	callbacks map[unsafe.Pointer]OnTokenCallback
-// }
-
-type OnTokenCallback func(token string) bool
-
-var onToken OnTokenCallback = nil
-
-//export go_generate_stream_on_token
-func go_generate_stream_on_token(token *C.char, _ *C.void) C.bool {
-	if onToken == nil {
-		return C.bool(true)
-	}
-	return C.bool(onToken(C.GoString(token)))
-}
-
-var onASRTranscription ASRTranscriptionCallback = nil
-
-//export go_asr_stream_on_transcription
-func go_asr_stream_on_transcription(text *C.char, _ *C.void) {
-	if onASRTranscription == nil {
-		return
-	}
-	onASRTranscription(C.GoString(text), nil)
-}
-
-/* ========================================================================== */
-/*                              Common Types & Utilities					  */
-/* ========================================================================== */
-
 type ProfileData struct {
 	TTFT            int64
 	PromptTime      int64
@@ -156,9 +60,6 @@ func newProfileDataFromCPtr(c C.geniex_ProfileData) ProfileData {
 	}
 }
 
-/* ========================================================================== */
-/*                              LANGUAGE MODELS (LLM) */
-/* ========================================================================== */
 type SamplerConfig struct {
 	Temperature       float32
 	TopP              float32
@@ -171,45 +72,33 @@ type SamplerConfig struct {
 	GrammarPath       string
 	GrammarString     string
 	EnableJson        bool
-
-	C *C.geniex_SamplerConfig
 }
 
 func (sc SamplerConfig) toCPtr() *C.geniex_SamplerConfig {
-	// Allocate C structure
-	cPtr := (*C.geniex_SamplerConfig)(C.malloc(C.sizeof_geniex_SamplerConfig))
-	*cPtr = C.geniex_SamplerConfig{}
-
-	cPtr.temperature = C.float(sc.Temperature)
-	cPtr.top_p = C.float(sc.TopP)
-	cPtr.top_k = C.int32_t(sc.TopK)
-	cPtr.min_p = C.float(sc.MinP)
-	cPtr.repetition_penalty = C.float(sc.RepetitionPenalty)
-	cPtr.presence_penalty = C.float(sc.PresencePenalty)
-	cPtr.frequency_penalty = C.float(sc.FrequencyPenalty)
-	cPtr.seed = C.int32_t(sc.Seed)
-	cPtr.enable_json = C.bool(sc.EnableJson)
-
-	if sc.GrammarPath != "" {
-		cPtr.grammar_path = C.CString(sc.GrammarPath)
+	cPtr := (*C.geniex_SamplerConfig)(cMalloc(C.sizeof_geniex_SamplerConfig))
+	*cPtr = C.geniex_SamplerConfig{
+		temperature:        C.float(sc.Temperature),
+		top_p:              C.float(sc.TopP),
+		top_k:              C.int32_t(sc.TopK),
+		min_p:              C.float(sc.MinP),
+		repetition_penalty: C.float(sc.RepetitionPenalty),
+		presence_penalty:   C.float(sc.PresencePenalty),
+		frequency_penalty:  C.float(sc.FrequencyPenalty),
+		seed:               C.int32_t(sc.Seed),
+		grammar_path:       cStringIfSet(sc.GrammarPath),
+		grammar_string:     cStringIfSet(sc.GrammarString),
+		enable_json:        C.bool(sc.EnableJson),
 	}
-	if sc.GrammarString != "" {
-		cPtr.grammar_string = C.CString(sc.GrammarString)
-	}
-
 	return cPtr
 }
 
 func freeSamplerConfig(cPtr *C.geniex_SamplerConfig) {
-	if cPtr != nil {
-		if cPtr.grammar_path != nil {
-			C.free(unsafe.Pointer(cPtr.grammar_path))
-		}
-		if cPtr.grammar_string != nil {
-			C.free(unsafe.Pointer(cPtr.grammar_string))
-		}
-		C.free(unsafe.Pointer(cPtr))
+	if cPtr == nil {
+		return
 	}
+	cFreeIfSet(unsafe.Pointer(cPtr.grammar_path))
+	cFreeIfSet(unsafe.Pointer(cPtr.grammar_string))
+	C.free(unsafe.Pointer(cPtr))
 }
 
 type GenerationConfig struct {
@@ -223,33 +112,29 @@ type GenerationConfig struct {
 }
 
 func (gc GenerationConfig) toCPtr() *C.geniex_GenerationConfig {
-	// Allocate C structure
-	cPtr := (*C.geniex_GenerationConfig)(C.malloc(C.sizeof_geniex_GenerationConfig))
-	*cPtr = C.geniex_GenerationConfig{}
+	cPtr := (*C.geniex_GenerationConfig)(cMalloc(C.sizeof_geniex_GenerationConfig))
+	*cPtr = C.geniex_GenerationConfig{
+		max_tokens:       C.int32_t(gc.MaxTokens),
+		n_past:           C.int32_t(gc.NPast),
+		image_max_length: C.int32_t(gc.ImageMaxLength),
+	}
 
-	cPtr.max_tokens = C.int32_t(gc.MaxTokens)
-	cPtr.n_past = C.int32_t(gc.NPast)
-	cPtr.image_max_length = C.int32_t(gc.ImageMaxLength)
 	if len(gc.Stop) > 0 {
 		cPtr.stop, cPtr.stop_count = sliceToCCharArray(gc.Stop)
 	}
-
 	if len(gc.ImagePaths) > 0 {
-		imagePaths, imageCount := sliceToCCharArray(gc.ImagePaths)
-		cPtr.image_paths = (*C.geniex_Path)(imagePaths)
-		cPtr.image_count = C.int32_t(imageCount)
+		paths, count := sliceToCCharArray(gc.ImagePaths)
+		cPtr.image_paths = (*C.geniex_Path)(unsafe.Pointer(paths))
+		cPtr.image_count = count
 	}
-
 	if len(gc.AudioPaths) > 0 {
-		audioPaths, audioCount := sliceToCCharArray(gc.AudioPaths)
-		cPtr.audio_paths = (*C.geniex_Path)(audioPaths)
-		cPtr.audio_count = C.int32_t(audioCount)
+		paths, count := sliceToCCharArray(gc.AudioPaths)
+		cPtr.audio_paths = (*C.geniex_Path)(unsafe.Pointer(paths))
+		cPtr.audio_count = count
 	}
-
 	if gc.SamplerConfig != nil {
 		cPtr.sampler_config = gc.SamplerConfig.toCPtr()
 	}
-
 	return cPtr
 }
 
@@ -257,14 +142,11 @@ func freeGenerationConfig(ptr *C.geniex_GenerationConfig) {
 	if ptr == nil {
 		return
 	}
-
 	freeCCharArray(ptr.stop, ptr.stop_count)
 	freeCCharArray((**C.char)(unsafe.Pointer(ptr.image_paths)), ptr.image_count)
 	freeCCharArray((**C.char)(unsafe.Pointer(ptr.audio_paths)), ptr.audio_count)
-
-	if ptr.sampler_config != nil {
-		freeSamplerConfig(ptr.sampler_config)
-	}
+	freeSamplerConfig(ptr.sampler_config)
+	C.free(unsafe.Pointer(ptr))
 }
 
 type ModelConfig struct {
@@ -277,4 +159,28 @@ type ModelConfig struct {
 	NGpuLayers          int32
 	ChatTemplatePath    string
 	ChatTemplateContent string
+}
+
+// fillC writes mc into an embedded C struct; pair with freeCModelConfig to
+// release the heap-allocated string fields.
+func (mc ModelConfig) fillC(out *C.geniex_ModelConfig) {
+	*out = C.geniex_ModelConfig{
+		n_ctx:                 C.int32_t(mc.NCtx),
+		n_threads:             C.int32_t(mc.NThreads),
+		n_threads_batch:       C.int32_t(mc.NThreadsBatch),
+		n_batch:               C.int32_t(mc.NBatch),
+		n_ubatch:              C.int32_t(mc.NUbatch),
+		n_seq_max:             C.int32_t(mc.NSeqMax),
+		n_gpu_layers:          C.int32_t(mc.NGpuLayers),
+		chat_template_path:    cStringIfSet(mc.ChatTemplatePath),
+		chat_template_content: cStringIfSet(mc.ChatTemplateContent),
+	}
+}
+
+func freeCModelConfig(c *C.geniex_ModelConfig) {
+	if c == nil {
+		return
+	}
+	cFreeIfSet(unsafe.Pointer(c.chat_template_path))
+	cFreeIfSet(unsafe.Pointer(c.chat_template_content))
 }

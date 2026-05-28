@@ -25,14 +25,6 @@ __declspec(dllexport) void go_log_wrap(geniex_LogLevel level, char *msg);
 #else
 extern void go_log_wrap(geniex_LogLevel level, char *msg);
 #endif
-
-static void set_token(const char* token) {
-#if defined(_WIN32)
-	_putenv_s("GENIEX_TOKEN", token);
-#else
-	setenv("GENIEX_TOKEN", token, 1);
-#endif
-}
 */
 import "C"
 
@@ -40,19 +32,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"unsafe"
 )
 
-// bridgeLogEnabled controls whether SDK logs are forwarded to Go's slog.
-// Defaults to true so SDK logs surface through the normal Go logger unless
-// an embedder explicitly opts out.
 var bridgeLogEnabled = true
 
 type SDKError int32
 
 func (s SDKError) Error() string {
-	return fmt.Sprintf("SDKError(%s)", C.GoString(C.geniex_get_error_message(C.geniex_ErrorCode(s))))
+	return fmt.Sprintf("SDKError(%s)",
+		C.GoString(C.geniex_get_error_message(C.geniex_ErrorCode(s))))
 }
 
 func SDKErrorCode(err error) int32 {
@@ -72,81 +61,78 @@ var (
 	ErrLlmTokenizationContextLength = SDKError(C.GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH)
 )
 
-// Init initializes the GenieX-CLI by calling the underlying C library initialization
-// This must be called before using any other SDK functions
+// Init must be called before any other SDK function.
 func Init() {
 	slog.Debug("[ML] Init", "bridgeLogEnabled", bridgeLogEnabled)
 	if bridgeLogEnabled {
 		C.geniex_set_log((C.geniex_log_callback)(C.go_log_wrap))
 	}
-	C.set_token(C.CString(os.Getenv("GENIEX_TOKEN"))) // sync token to C env
 	C.geniex_init()
 }
 
-// DeInit cleans up resources allocated by the GenieX-CLI
-// This should be called when the SDK is no longer needed
 func DeInit() {
 	C.geniex_deinit()
 }
 
-// Get SDK Version
 func Version() string {
 	return C.GoString(C.geniex_version())
 }
 
-// GetPluginVersion returns the version string the plugin reports for itself
-// (e.g. QAIRT runtime version, llama.cpp build commit). Returns the empty
-// string when the plugin is not registered.
+// GetPluginVersion returns the version the plugin reports for itself (QAIRT
+// runtime version, llama.cpp build commit, …). Empty string if not registered.
 func GetPluginVersion(pluginID string) string {
 	cID := C.CString(pluginID)
 	defer C.free(unsafe.Pointer(cID))
 	return C.GoString(C.geniex_get_plugin_version(cID))
 }
 
-type PluginListOutput struct {
+type GetPluginListOutput struct {
 	PluginIDs []string
 }
 
-func newPluginListOutputFromCPtr(c *C.geniex_GetPluginListOutput) PluginListOutput {
-	return PluginListOutput{
+func newGetPluginListOutputFromCPtr(c *C.geniex_GetPluginListOutput) GetPluginListOutput {
+	if c == nil {
+		return GetPluginListOutput{}
+	}
+	return GetPluginListOutput{
 		PluginIDs: cCharArrayToSlice((**C.char)(unsafe.Pointer(c.plugin_ids)), c.plugin_count),
 	}
 }
 
-func GetPluginList() (*PluginListOutput, error) {
-	var cOutput C.geniex_GetPluginListOutput
+func freeGetPluginListOutput(c *C.geniex_GetPluginListOutput) {
+	if c == nil {
+		return
+	}
+	mlFreeCCharArray((**C.char)(unsafe.Pointer(c.plugin_ids)), c.plugin_count)
+}
 
+func GetPluginList() (*GetPluginListOutput, error) {
+	var cOutput C.geniex_GetPluginListOutput
 	res := C.geniex_get_plugin_list(&cOutput)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
+	defer freeGetPluginListOutput(&cOutput)
 
-	output := newPluginListOutputFromCPtr(&cOutput)
-
-	if cOutput.plugin_ids != nil {
-		mlFreeCCharArray((**C.char)(unsafe.Pointer(cOutput.plugin_ids)), cOutput.plugin_count)
-	}
-
+	output := newGetPluginListOutputFromCPtr(&cOutput)
 	return &output, nil
 }
 
-type DeviceListInput struct {
+type GetDeviceListInput struct {
 	PluginID string
 }
 
-func (di DeviceListInput) toCPtr() *C.geniex_GetDeviceListInput {
-	cPtr := (*C.geniex_GetDeviceListInput)(C.malloc(C.sizeof_geniex_GetDeviceListInput))
-	cPtr.plugin_id = C.CString(di.PluginID)
+func (gdli GetDeviceListInput) toCPtr() *C.geniex_GetDeviceListInput {
+	cPtr := (*C.geniex_GetDeviceListInput)(cMalloc(C.sizeof_geniex_GetDeviceListInput))
+	*cPtr = C.geniex_GetDeviceListInput{plugin_id: cStringIfSet(gdli.PluginID)}
 	return cPtr
 }
 
-func freeDeviceListInput(cPtr *C.geniex_GetDeviceListInput) {
+func freeGetDeviceListInput(cPtr *C.geniex_GetDeviceListInput) {
 	if cPtr == nil {
 		return
 	}
-	if cPtr.plugin_id != nil {
-		C.free(unsafe.Pointer(cPtr.plugin_id))
-	}
+	cFreeIfSet(unsafe.Pointer(cPtr.plugin_id))
 	C.free(unsafe.Pointer(cPtr))
 }
 
@@ -155,72 +141,72 @@ type Device struct {
 	Name string
 }
 
-type DeviceListOutput struct {
+type GetDeviceListOutput struct {
 	Devices []Device
 }
 
-func freeDeviceListOutput(c *C.geniex_GetDeviceListOutput) {
+func newGetDeviceListOutputFromCPtr(c *C.geniex_GetDeviceListOutput) GetDeviceListOutput {
+	if c == nil {
+		return GetDeviceListOutput{}
+	}
+	count := int(c.device_count)
+	devices := make([]Device, count)
+	if count > 0 {
+		ids := unsafe.Slice(c.device_ids, count)
+		names := unsafe.Slice(c.device_names, count)
+		for i := range devices {
+			devices[i] = Device{
+				ID:   C.GoString(ids[i]),
+				Name: C.GoString(names[i]),
+			}
+		}
+	}
+	return GetDeviceListOutput{Devices: devices}
+}
+
+func freeGetDeviceListOutput(c *C.geniex_GetDeviceListOutput) {
 	if c == nil {
 		return
 	}
-	mlFree(unsafe.Pointer(c.device_ids))
-	mlFree(unsafe.Pointer(c.device_names))
-}
-
-func newDeviceListOutputFromCPtr(c *C.geniex_GetDeviceListOutput) DeviceListOutput {
-	devices := make([]Device, c.device_count)
-
-	deviceIDs := unsafe.Slice(c.device_ids, int(c.device_count))
-	deviceNames := unsafe.Slice(c.device_names, int(c.device_count))
-	for i := range devices {
-		devices[i] = Device{
-			ID:   C.GoString(deviceIDs[i]),
-			Name: C.GoString(deviceNames[i]),
-		}
+	if c.device_ids != nil {
+		mlFree(unsafe.Pointer(c.device_ids))
 	}
-
-	return DeviceListOutput{
-		Devices: devices,
+	if c.device_names != nil {
+		mlFree(unsafe.Pointer(c.device_names))
 	}
 }
 
-func GetDeviceList(input DeviceListInput) (*DeviceListOutput, error) {
+func GetDeviceList(input GetDeviceListInput) (*GetDeviceListOutput, error) {
 	cInput := input.toCPtr()
-	defer freeDeviceListInput(cInput)
+	defer freeGetDeviceListInput(cInput)
 
 	var cOutput C.geniex_GetDeviceListOutput
-	defer freeDeviceListOutput(&cOutput)
-
 	res := C.geniex_get_device_list(cInput, &cOutput)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
+	defer freeGetDeviceListOutput(&cOutput)
 
-	output := newDeviceListOutputFromCPtr(&cOutput)
-
+	output := newGetDeviceListOutputFromCPtr(&cOutput)
 	return &output, nil
 }
 
-// go_log_wrap is exported to C and handles log messages from the C library
-// It converts C strings to Go strings and prints them to stdout
-//
 //export go_log_wrap
 func go_log_wrap(level C.geniex_LogLevel, msg *C.char) {
-	msgStr := C.GoString(msg)
+	msgStr := "[ML] " + C.GoString(msg)
 	switch level {
 	case C.GENIEX_LOG_LEVEL_INFO:
-		slog.Info("[ML] " + msgStr)
+		slog.Info(msgStr)
 	case C.GENIEX_LOG_LEVEL_WARN:
-		slog.Warn("[ML] " + msgStr)
+		slog.Warn(msgStr)
 	case C.GENIEX_LOG_LEVEL_ERROR:
-		slog.Error("[ML] " + msgStr)
+		slog.Error(msgStr)
 	default:
-		slog.Debug("[ML] " + msgStr)
+		slog.Debug(msgStr)
 	}
 }
 
-// EnableBridgeLog enables or disables forwarding SDK logs to Go's slog.
-// Must be called before Init() to take effect.
+// EnableBridgeLog toggles SDK→slog forwarding. Must be set before Init.
 func EnableBridgeLog(enable bool) {
 	bridgeLogEnabled = enable
 }

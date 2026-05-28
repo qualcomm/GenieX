@@ -21,12 +21,13 @@ package geniex_sdk
 extern bool go_generate_stream_on_token(char*, void*);
 */
 import "C"
+
 import (
 	"log/slog"
+	"runtime/cgo"
 	"unsafe"
 )
 
-// VlmCreateInput represents input parameters for creating a VLM instance
 type VlmCreateInput struct {
 	ModelName     string
 	ModelPath     string
@@ -38,78 +39,31 @@ type VlmCreateInput struct {
 }
 
 func (vci VlmCreateInput) toCPtr() *C.geniex_VlmCreateInput {
-	cPtr := (*C.geniex_VlmCreateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_VlmCreateInput{}))))
-	*cPtr = C.geniex_VlmCreateInput{}
-
-	if vci.ModelName != "" {
-		cPtr.model_name = C.CString(vci.ModelName)
+	cPtr := (*C.geniex_VlmCreateInput)(cMalloc(C.sizeof_geniex_VlmCreateInput))
+	*cPtr = C.geniex_VlmCreateInput{
+		model_name:     cStringIfSet(vci.ModelName),
+		model_path:     cStringIfSet(vci.ModelPath),
+		mmproj_path:    cStringIfSet(vci.MmprojPath),
+		tokenizer_path: cStringIfSet(vci.TokenizerPath),
+		plugin_id:      cStringIfSet(vci.PluginID),
+		device_id:      cStringIfSet(vci.DeviceID),
 	}
-	if vci.ModelPath != "" {
-		cPtr.model_path = C.CString(vci.ModelPath)
-	}
-	if vci.MmprojPath != "" {
-		cPtr.mmproj_path = C.CString(vci.MmprojPath)
-	}
-	if vci.TokenizerPath != "" {
-		cPtr.tokenizer_path = C.CString(vci.TokenizerPath)
-	}
-	if vci.PluginID != "" {
-		cPtr.plugin_id = C.CString(vci.PluginID)
-	}
-	if vci.DeviceID != "" {
-		cPtr.device_id = C.CString(vci.DeviceID)
-	}
-
-	// Directly assign the ModelConfig to the C structure because it's not a pointer
-	cPtr.config = C.geniex_ModelConfig{
-		n_ctx:           C.int32_t(vci.Config.NCtx),
-		n_threads:       C.int32_t(vci.Config.NThreads),
-		n_threads_batch: C.int32_t(vci.Config.NThreadsBatch),
-		n_batch:         C.int32_t(vci.Config.NBatch),
-		n_ubatch:        C.int32_t(vci.Config.NUbatch),
-		n_seq_max:       C.int32_t(vci.Config.NSeqMax),
-		n_gpu_layers:    C.int32_t(vci.Config.NGpuLayers),
-	}
-	if vci.Config.ChatTemplatePath != "" {
-		cPtr.config.chat_template_path = C.CString(vci.Config.ChatTemplatePath)
-	}
-	if vci.Config.ChatTemplateContent != "" {
-		cPtr.config.chat_template_content = C.CString(vci.Config.ChatTemplateContent)
-	}
-
+	vci.Config.fillC(&cPtr.config)
 	return cPtr
 }
 
 func freeVlmCreateInput(cPtr *C.geniex_VlmCreateInput) {
-	if cPtr != nil {
-		// Free string fields
-		if cPtr.model_path != nil {
-			C.free(unsafe.Pointer(cPtr.model_path))
-		}
-		if cPtr.mmproj_path != nil {
-			C.free(unsafe.Pointer(cPtr.mmproj_path))
-		}
-		if cPtr.tokenizer_path != nil {
-			C.free(unsafe.Pointer(cPtr.tokenizer_path))
-		}
-		if cPtr.plugin_id != nil {
-			C.free(unsafe.Pointer(cPtr.plugin_id))
-		}
-		if cPtr.device_id != nil {
-			C.free(unsafe.Pointer(cPtr.device_id))
-		}
-
-		// Free nested ModelConfig string fields
-		if cPtr.config.chat_template_path != nil {
-			C.free(unsafe.Pointer(cPtr.config.chat_template_path))
-		}
-		if cPtr.config.chat_template_content != nil {
-			C.free(unsafe.Pointer(cPtr.config.chat_template_content))
-		}
-
-		// Free the main structure
-		C.free(unsafe.Pointer(cPtr))
+	if cPtr == nil {
+		return
 	}
+	cFreeIfSet(unsafe.Pointer(cPtr.model_name))
+	cFreeIfSet(unsafe.Pointer(cPtr.model_path))
+	cFreeIfSet(unsafe.Pointer(cPtr.mmproj_path))
+	cFreeIfSet(unsafe.Pointer(cPtr.tokenizer_path))
+	cFreeIfSet(unsafe.Pointer(cPtr.plugin_id))
+	cFreeIfSet(unsafe.Pointer(cPtr.device_id))
+	freeCModelConfig(&cPtr.config)
+	C.free(unsafe.Pointer(cPtr))
 }
 
 type VlmContentType string
@@ -120,7 +74,6 @@ const (
 	VlmContentTypeAudio VlmContentType = "audio"
 )
 
-// VlmContent represents a content item in a VLM message
 type VlmContent struct {
 	Type VlmContentType
 	Text string
@@ -128,45 +81,31 @@ type VlmContent struct {
 
 type vlmContents []VlmContent
 
-func (vcs vlmContents) toCPtr() (*C.geniex_VlmContent, C.int32_t) {
+func (vcs vlmContents) toCPtr() (*C.geniex_VlmContent, C.int64_t) {
 	if len(vcs) == 0 {
 		return nil, 0
 	}
-
 	count := len(vcs)
-	raw := C.malloc(C.size_t(count * C.sizeof_geniex_VlmContent))
+	raw := cMalloc(C.size_t(count) * C.sizeof_geniex_VlmContent)
 	cContents := unsafe.Slice((*C.geniex_VlmContent)(raw), count)
-
 	for i, vc := range vcs {
-		// Initialize all fields to prevent garbage memory
-		cContents[i]._type = nil
-		cContents[i].text = nil
-
-		if vc.Type != "" {
-			cContents[i]._type = C.CString(string(vc.Type))
+		cContents[i] = C.geniex_VlmContent{
+			_type: cStringIfSet(string(vc.Type)),
+			text:  cStringIfSet(vc.Text),
 		}
-		// Always allocate text field, even for empty strings to prevent garbage memory
-		cContents[i].text = C.CString(vc.Text)
 	}
-
-	return (*C.geniex_VlmContent)(raw), C.int32_t(count)
+	return (*C.geniex_VlmContent)(raw), C.int64_t(count)
 }
 
 func freeVlmContents(cPtr *C.geniex_VlmContent, count C.int64_t) {
 	if cPtr == nil || count == 0 {
 		return
 	}
-
 	cContents := unsafe.Slice(cPtr, int(count))
-	for i := range count {
-		if cContents[i]._type != nil {
-			C.free(unsafe.Pointer(cContents[i]._type))
-		}
-		if cContents[i].text != nil {
-			C.free(unsafe.Pointer(cContents[i].text))
-		}
+	for i := range cContents {
+		cFreeIfSet(unsafe.Pointer(cContents[i]._type))
+		cFreeIfSet(unsafe.Pointer(cContents[i].text))
 	}
-
 	C.free(unsafe.Pointer(cPtr))
 }
 
@@ -178,7 +117,6 @@ const (
 	VlmRoleSystem    VlmRole = "system"
 )
 
-// VlmChatMessage represents a chat message in VLM
 type VlmChatMessage struct {
 	Role     VlmRole
 	Contents []VlmContent
@@ -190,22 +128,17 @@ func (vcms vlmChatMessages) toCPtr() (*C.geniex_VlmChatMessage, C.int32_t) {
 	if len(vcms) == 0 {
 		return nil, 0
 	}
-
 	count := len(vcms)
-	raw := C.malloc(C.size_t(count * C.sizeof_geniex_VlmChatMessage))
+	raw := cMalloc(C.size_t(count) * C.sizeof_geniex_VlmChatMessage)
 	cMessages := unsafe.Slice((*C.geniex_VlmChatMessage)(raw), count)
-
 	for i, vcm := range vcms {
-		if vcm.Role != "" {
-			cMessages[i].role = C.CString(string(vcm.Role))
-		}
-		if len(vcm.Contents) > 0 {
-			contents, contentCount := vlmContents(vcm.Contents).toCPtr()
-			cMessages[i].contents = contents
-			cMessages[i].content_count = C.int64_t(contentCount)
+		contents, contentCount := vlmContents(vcm.Contents).toCPtr()
+		cMessages[i] = C.geniex_VlmChatMessage{
+			role:          cStringIfSet(string(vcm.Role)),
+			contents:      contents,
+			content_count: contentCount,
 		}
 	}
-
 	return (*C.geniex_VlmChatMessage)(raw), C.int32_t(count)
 }
 
@@ -213,21 +146,14 @@ func freeVlmChatMessages(cPtr *C.geniex_VlmChatMessage, count C.int32_t) {
 	if cPtr == nil || count == 0 {
 		return
 	}
-
 	cMessages := unsafe.Slice(cPtr, int(count))
-	for i := range count {
-		if cMessages[i].role != nil {
-			C.free(unsafe.Pointer(cMessages[i].role))
-		}
-		if cMessages[i].contents != nil {
-			freeVlmContents(cMessages[i].contents, cMessages[i].content_count)
-		}
+	for i := range cMessages {
+		cFreeIfSet(unsafe.Pointer(cMessages[i].role))
+		freeVlmContents(cMessages[i].contents, cMessages[i].content_count)
 	}
-
 	C.free(unsafe.Pointer(cPtr))
 }
 
-// VlmApplyChatTemplateInput represents input for applying VLM chat template
 type VlmApplyChatTemplateInput struct {
 	Messages    []VlmChatMessage
 	Tools       string
@@ -235,21 +161,12 @@ type VlmApplyChatTemplateInput struct {
 }
 
 func (vati VlmApplyChatTemplateInput) toCPtr() *C.geniex_VlmApplyChatTemplateInput {
-	cPtr := (*C.geniex_VlmApplyChatTemplateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_VlmApplyChatTemplateInput{}))))
-	*cPtr = C.geniex_VlmApplyChatTemplateInput{}
-
-	if len(vati.Messages) > 0 {
-		cMessages, messageCount := vlmChatMessages(vati.Messages).toCPtr()
-		cPtr.messages = cMessages
-		cPtr.message_count = C.int32_t(messageCount)
+	cPtr := (*C.geniex_VlmApplyChatTemplateInput)(cMalloc(C.sizeof_geniex_VlmApplyChatTemplateInput))
+	*cPtr = C.geniex_VlmApplyChatTemplateInput{
+		tools:           cStringIfSet(vati.Tools),
+		enable_thinking: C.bool(vati.EnableThink),
 	}
-
-	if vati.Tools != "" {
-		cPtr.tools = C.CString(vati.Tools)
-	}
-
-	cPtr.enable_thinking = C.bool(vati.EnableThink)
-
+	cPtr.messages, cPtr.message_count = vlmChatMessages(vati.Messages).toCPtr()
 	return cPtr
 }
 
@@ -257,43 +174,29 @@ func freeVlmApplyChatTemplateInput(cPtr *C.geniex_VlmApplyChatTemplateInput) {
 	if cPtr == nil {
 		return
 	}
-
 	freeVlmChatMessages(cPtr.messages, cPtr.message_count)
-	if cPtr.tools != nil {
-		C.free(unsafe.Pointer(cPtr.tools))
-	}
+	cFreeIfSet(unsafe.Pointer(cPtr.tools))
 	C.free(unsafe.Pointer(cPtr))
 }
 
-// VlmApplyChatTemplateOutput represents output from applying VLM chat template
 type VlmApplyChatTemplateOutput struct {
 	FormattedText string
 }
 
 func newVlmApplyChatTemplateOutputFromCPtr(c *C.geniex_VlmApplyChatTemplateOutput) VlmApplyChatTemplateOutput {
-	output := VlmApplyChatTemplateOutput{}
-
 	if c == nil {
-		return output
+		return VlmApplyChatTemplateOutput{}
 	}
-
-	if c.formatted_text != nil {
-		output.FormattedText = C.GoString(c.formatted_text)
-	}
-
-	return output
+	return VlmApplyChatTemplateOutput{FormattedText: C.GoString(c.formatted_text)}
 }
 
 func freeVlmApplyChatTemplateOutput(cPtr *C.geniex_VlmApplyChatTemplateOutput) {
 	if cPtr == nil {
 		return
 	}
-	if cPtr.formatted_text != nil {
-		mlFree(unsafe.Pointer(cPtr.formatted_text))
-	}
+	mlFree(unsafe.Pointer(cPtr.formatted_text))
 }
 
-// VlmGenerateInput represents input for VLM text generation
 type VlmGenerateInput struct {
 	PromptUTF8 string
 	Config     *GenerationConfig
@@ -301,72 +204,51 @@ type VlmGenerateInput struct {
 }
 
 func (vgi VlmGenerateInput) toCPtr() *C.geniex_VlmGenerateInput {
-	cPtr := (*C.geniex_VlmGenerateInput)(C.malloc(C.size_t(unsafe.Sizeof(C.geniex_VlmGenerateInput{}))))
-	*cPtr = C.geniex_VlmGenerateInput{}
-
-	cPtr.prompt_utf8 = C.CString(vgi.PromptUTF8)
+	cPtr := (*C.geniex_VlmGenerateInput)(cMalloc(C.sizeof_geniex_VlmGenerateInput))
+	*cPtr = C.geniex_VlmGenerateInput{
+		prompt_utf8: cStringIfSet(vgi.PromptUTF8),
+	}
 	if vgi.Config != nil {
 		cPtr.config = vgi.Config.toCPtr()
-	} else {
-		cPtr.config = nil
 	}
-
-	// Note: on_token and user_data should be set by the caller
-	cPtr.on_token = nil
-	cPtr.user_data = nil
-
 	return cPtr
 }
 
 func freeVlmGenerateInput(cPtr *C.geniex_VlmGenerateInput) {
-	if cPtr != nil {
-		if cPtr.prompt_utf8 != nil {
-			C.free(unsafe.Pointer(cPtr.prompt_utf8))
-		}
-
-		if cPtr.config != nil {
-			freeGenerationConfig(cPtr.config)
-		}
-
-		C.free(unsafe.Pointer(cPtr))
+	if cPtr == nil {
+		return
 	}
+	cFreeIfSet(unsafe.Pointer(cPtr.prompt_utf8))
+	freeGenerationConfig(cPtr.config)
+	C.free(unsafe.Pointer(cPtr))
 }
 
-// VlmGenerateOutput represents output from VLM text generation
 type VlmGenerateOutput struct {
 	FullText    string
 	ProfileData ProfileData
 }
 
 func newVlmGenerateOutputFromCPtr(c *C.geniex_VlmGenerateOutput) VlmGenerateOutput {
-	output := VlmGenerateOutput{}
-
 	if c == nil {
-		return output
+		return VlmGenerateOutput{}
 	}
-
-	if c.full_text != nil {
-		output.FullText = C.GoString(c.full_text)
+	return VlmGenerateOutput{
+		FullText:    C.GoString(c.full_text),
+		ProfileData: newProfileDataFromCPtr(c.profile_data),
 	}
-	output.ProfileData = newProfileDataFromCPtr(c.profile_data)
-	return output
 }
 
 func freeVlmGenerateOutput(ptr *C.geniex_VlmGenerateOutput) {
 	if ptr == nil {
 		return
 	}
-	if ptr.full_text != nil {
-		mlFree(unsafe.Pointer(ptr.full_text))
-	}
+	mlFree(unsafe.Pointer(ptr.full_text))
 }
 
-// VLM represents a VLM instance
 type VLM struct {
 	ptr *C.geniex_VLM
 }
 
-// NewVLM creates a new VLM instance
 func NewVLM(input VlmCreateInput) (*VLM, error) {
 	slog.Debug("NewVLM called", "input", input)
 
@@ -378,18 +260,14 @@ func NewVLM(input VlmCreateInput) (*VLM, error) {
 	if res < 0 {
 		return nil, SDKError(res)
 	}
-
 	return &VLM{ptr: cHandle}, nil
 }
 
-// Destroy destroys the VLM instance and frees associated resources
 func (v *VLM) Destroy() error {
 	slog.Debug("Destroy called", "ptr", v.ptr)
-
 	if v.ptr == nil {
 		return nil
 	}
-
 	res := C.geniex_vlm_destroy(v.ptr)
 	if res < 0 {
 		return SDKError(res)
@@ -398,19 +276,17 @@ func (v *VLM) Destroy() error {
 	return nil
 }
 
-// VlmCapabilities reports which input modalities the loaded model's mmproj supports.
 type VlmCapabilities struct {
 	SupportsVision bool
 	SupportsAudio  bool
 }
 
-// Capabilities queries which input modalities (image / audio) the underlying mmproj supports.
-// Plugins without modality probes return both flags as false.
+// Capabilities reports the mmproj's supported modalities. Plugins without a
+// modality probe (e.g. QAIRT) return both flags false.
 func (v *VLM) Capabilities() (VlmCapabilities, error) {
 	if v.ptr == nil {
 		return VlmCapabilities{}, SDKError(C.GENIEX_ERROR_COMMON_INVALID_INPUT)
 	}
-
 	var cOut C.geniex_VlmCapabilities
 	res := C.geniex_vlm_get_capabilities(v.ptr, &cOut)
 	if res < 0 {
@@ -422,14 +298,11 @@ func (v *VLM) Capabilities() (VlmCapabilities, error) {
 	}, nil
 }
 
-// Reset resets the VLM internal state (clear KV cache, reset sampling)
 func (v *VLM) Reset() error {
 	slog.Debug("Reset called", "ptr", v.ptr)
-
 	if v.ptr == nil {
 		return SDKError(C.GENIEX_ERROR_COMMON_INVALID_INPUT)
 	}
-
 	res := C.geniex_vlm_reset(v.ptr)
 	if res < 0 {
 		return SDKError(res)
@@ -437,44 +310,42 @@ func (v *VLM) Reset() error {
 	return nil
 }
 
-// ApplyChatTemplate applies chat template to messages
 func (v *VLM) ApplyChatTemplate(input VlmApplyChatTemplateInput) (*VlmApplyChatTemplateOutput, error) {
 	slog.Debug("ApplyChatTemplate called", "input", input)
 
-	cinput := input.toCPtr()
-	defer freeVlmApplyChatTemplateInput(cinput)
+	cInput := input.toCPtr()
+	defer freeVlmApplyChatTemplateInput(cInput)
 
 	var cOutput C.geniex_VlmApplyChatTemplateOutput
 	defer freeVlmApplyChatTemplateOutput(&cOutput)
 
-	res := C.geniex_vlm_apply_chat_template(v.ptr, cinput, &cOutput)
+	res := C.geniex_vlm_apply_chat_template(v.ptr, cInput, &cOutput)
 	if res < 0 {
 		return nil, SDKError(res)
 	}
-
 	output := newVlmApplyChatTemplateOutputFromCPtr(&cOutput)
-
 	return &output, nil
 }
 
-// Generate generates text with streaming token callback
 func (v *VLM) Generate(input VlmGenerateInput) (*VlmGenerateOutput, error) {
-	slog.Debug("Generate called", "input", input, "config", input.Config, "sampler", input.Config.SamplerConfig)
+	slog.Debug("Generate called", "promptLen", len(input.PromptUTF8))
 
 	cInput := input.toCPtr()
 	defer freeVlmGenerateInput(cInput)
 
-	// set the callback
-	onToken = input.OnToken
-	defer func() {
-		onToken = nil // reset to default
-	}()
-	cInput.on_token = C.geniex_token_callback(C.go_generate_stream_on_token)
+	if input.OnToken != nil {
+		h := cgo.NewHandle(input.OnToken)
+		defer h.Delete()
+		cInput.on_token = C.geniex_token_callback(C.go_generate_stream_on_token)
+		cInput.user_data = handleToUserData(h)
+	}
 
 	var cOutput C.geniex_VlmGenerateOutput
 	defer freeVlmGenerateOutput(&cOutput)
 
 	res := C.geniex_vlm_generate(v.ptr, cInput, &cOutput)
+	// On context-length errors the SDK still populates whatever was generated
+	// before the cutoff; surface that to the caller alongside the error.
 	if res < 0 && res != C.GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH {
 		return nil, SDKError(res)
 	}
@@ -482,6 +353,5 @@ func (v *VLM) Generate(input VlmGenerateInput) (*VlmGenerateOutput, error) {
 	if res < 0 {
 		return &output, SDKError(res)
 	}
-
 	return &output, nil
 }
