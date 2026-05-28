@@ -17,7 +17,7 @@ GenieX Python SDK 的设计与 Hugging Face `transformers` 一致——通过 `A
 from geniex import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
-    "qualcomm/Qwen3-4B-Instruct",
+    "ai-hub-models/Qwen3-4B-Instruct",
     device_map="auto",
 )
 ```
@@ -52,7 +52,7 @@ model = AutoModelForCausalLM.from_pretrained(
 ```python
 from geniex import AutoModelForVision2Seq
 
-model = AutoModelForVision2Seq.from_pretrained("qualcomm/Qwen2.5-7B-Instruct", device_map="qairt")
+model = AutoModelForVision2Seq.from_pretrained("ai-hub-models/Qwen2.5-7B-Instruct", device_map="qairt")
 ```
 
 ### `from_pretrained()`
