@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "store",
@@ -19,4 +19,10 @@ go_library(
         "@com_github_gofrs_flock//:flock",
         "@com_github_shirou_gopsutil//disk",
     ],
+)
+
+go_test(
+    name = "store_test",
+    srcs = ["package_test.go"],
+    embed = [":store"],
 )

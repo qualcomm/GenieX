@@ -9,6 +9,7 @@ venv/
 CLAUDE.local.md
 
 bazel-*
+coverage-html/
 
 # Local CMake user presets (machine-specific, not for version control)
 CMakeUserPresets.json
