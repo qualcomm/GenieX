@@ -96,7 +96,7 @@ data class ModelPullInput(
 
 ```kotlin
 enum class HubSource(val value: Int) {
-    AUTO(0),          // routes by prefix (e.g. qualcomm/* → AIHUB)
+    AUTO(0),          // routes by prefix (e.g. ai-hub-models/* → AIHUB)
     HUGGINGFACE(1),
     MODELSCOPE(2),
     AIHUB(3),
@@ -336,8 +336,8 @@ Pre-compiled models from Qualcomm AI Hub. NPU-only, pinned to a specific chipset
 ```kotlin
 ModelManagerWrapper.pullFlow(
     ModelPullInput(
-        model_name = "qualcomm/Qwen2.5-VL-7B-Instruct",
-        hub        = HubSource.AUTO,     // AUTO routes `qualcomm/*` to AI Hub
+        model_name = "ai-hub-models/Qwen2.5-VL-7B-Instruct",
+        hub        = HubSource.AUTO,     // AUTO routes `ai-hub-models/*` to AI Hub
         chipset    = "SM8750",           // REQUIRED on Android
     )
 ).collect { event ->
@@ -353,13 +353,13 @@ ModelManagerWrapper.pullFlow(
 
 | Modality | Hub repo |
 |---|---|
-| LLM | `qualcomm/Qwen3-4B-Instruct-2507` |
-| VLM | `qualcomm/Qwen2.5-VL-7B-Instruct` |
+| LLM | `ai-hub-models/Qwen3-4B-Instruct-2507` |
+| VLM | `ai-hub-models/Qwen2.5-VL-7B-Instruct` |
 
 ### LLM
 
 ```kotlin
-val paths = ModelManagerWrapper.getPaths("qualcomm/Qwen3-4B-Instruct-2507")
+val paths = ModelManagerWrapper.getPaths("ai-hub-models/Qwen3-4B-Instruct-2507")
     ?: error("Model not downloaded")
 
 LlmWrapper.builder()
@@ -396,7 +396,7 @@ QAIRT rejects `nGpuLayers != 0` and `nCtx != 0` with `PARAM_NOT_SUPPORTED` — t
 ### VLM
 
 ```kotlin
-val paths = ModelManagerWrapper.getPaths("qualcomm/Qwen2.5-VL-7B-Instruct")
+val paths = ModelManagerWrapper.getPaths("ai-hub-models/Qwen2.5-VL-7B-Instruct")
     ?: error("Model not downloaded")
 
 VlmWrapper.builder()

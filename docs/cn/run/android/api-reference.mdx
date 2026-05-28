@@ -96,7 +96,7 @@ data class ModelPullInput(
 
 ```kotlin
 enum class HubSource(val value: Int) {
-    AUTO(0),          // 按前缀路由（例如 qualcomm/* → AIHUB）
+    AUTO(0),          // 按前缀路由（例如 ai-hub-models/* → AIHUB）
     HUGGINGFACE(1),
     MODELSCOPE(2),
     AIHUB(3),
@@ -336,8 +336,8 @@ vlmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
 ```kotlin
 ModelManagerWrapper.pullFlow(
     ModelPullInput(
-        model_name = "qualcomm/Qwen2.5-VL-7B-Instruct",
-        hub        = HubSource.AUTO,     // AUTO 把 `qualcomm/*` 路由到 AI Hub
+        model_name = "ai-hub-models/Qwen2.5-VL-7B-Instruct",
+        hub        = HubSource.AUTO,     // AUTO 把 `ai-hub-models/*` 路由到 AI Hub
         chipset    = "SM8750",           // Android 上必填
     )
 ).collect { event ->
@@ -353,13 +353,13 @@ ModelManagerWrapper.pullFlow(
 
 | 模态 | Hub 仓库 |
 |---|---|
-| LLM | `qualcomm/Qwen3-4B-Instruct-2507` |
-| VLM | `qualcomm/Qwen2.5-VL-7B-Instruct` |
+| LLM | `ai-hub-models/Qwen3-4B-Instruct-2507` |
+| VLM | `ai-hub-models/Qwen2.5-VL-7B-Instruct` |
 
 ### LLM
 
 ```kotlin
-val paths = ModelManagerWrapper.getPaths("qualcomm/Qwen3-4B-Instruct-2507")
+val paths = ModelManagerWrapper.getPaths("ai-hub-models/Qwen3-4B-Instruct-2507")
     ?: error("Model not downloaded")
 
 LlmWrapper.builder()
@@ -396,7 +396,7 @@ QAIRT 会以 `PARAM_NOT_SUPPORTED` 拒绝 `nGpuLayers != 0` 与 `nCtx != 0`—�
 ### VLM
 
 ```kotlin
-val paths = ModelManagerWrapper.getPaths("qualcomm/Qwen2.5-VL-7B-Instruct")
+val paths = ModelManagerWrapper.getPaths("ai-hub-models/Qwen2.5-VL-7B-Instruct")
     ?: error("Model not downloaded")
 
 VlmWrapper.builder()

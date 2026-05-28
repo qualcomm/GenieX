@@ -123,8 +123,8 @@ QAIRT bundles are pre-compiled per chipset and only run on the NPU. You **must**
 ```kotlin
 ModelManagerWrapper.pullFlow(
     ModelPullInput(
-        model_name = "qualcomm/Qwen3-4B-Instruct-2507",
-        hub        = HubSource.AUTO,   // routes qualcomm/* to AI Hub
+        model_name = "ai-hub-models/Qwen3-4B-Instruct-2507",
+        hub        = HubSource.AUTO,   // routes ai-hub-models/* to AI Hub
         chipset    = "SM8750",         // SM8750 = 8 Elite, SM8850 = 8 Elite Gen 5
     )
 ).collect { /* … */ }
