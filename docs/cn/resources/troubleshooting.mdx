@@ -45,6 +45,71 @@ geniex pull qualcomm/Qwen3-4B-Instruct-2507
 
 NPU 访问必须带 `--privileged` 标志，并挂载 `/usr/lib`。详见 [CLI 安装（Docker）](/cn/run/cli/install)。
 
+## Linux
+
+### `docker pull ghcr.io/...` 报权限错误 / 未授权
+
+需要同时满足两点：
+
+1. **GHCR 登录。** 使用具备 `read:packages` 权限的 GitHub Personal Access Token (classic)：
+
+   ```bash bash
+   export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxx
+   docker login ghcr.io -u <your-github-username> -p "$GITHUB_TOKEN"
+   ```
+
+   出现 `Login Succeeded` 即成功。
+
+2. **加入 docker 用户组。** 若 `docker pull` 返回 `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`，说明当前用户不在 `docker` 组：
+
+   ```bash bash
+   sudo usermod -aG docker $USER
+   newgrp docker        # 在当前 shell 中应用新组
+   ```
+
+   然后重新执行拉取。
+
+### `geniex` install.sh 报缺少共享库
+
+在全新的 Ubuntu 24.04 ARM64 主机（例如 IQ9075 EVK）上，`install.sh` 会检查 `libCB.so.1`、`libOpenCL_adreno.so.1`、`libcdsprpc.so.1.0.0`、`libgsl.so.1`、`libllvm-*.so.1`、`libpropertyvault.so.0.0.0`、`libdmabufheap.so.0.0.0`，以及 Debian 的 `libatomic1` / `libglib2.0-0`。分两步安装。
+
+**1. 标准 APT 包**
+
+满足 `geniex` 安装器报告的 `libatomic1` 与 `libglib2.0-0` 依赖，并提供通用 OpenCL ICD loader：
+
+```bash bash
+sudo apt update
+sudo apt install -y \
+  libatomic1 \
+  libglib2.0-0 \
+  ocl-icd-libopencl1
+```
+
+<Note>`ocl-icd-libopencl1` 会在下一步被 `qcom-adreno1` 替换。</Note>
+
+**2. 高通驱动包（来自 `ubuntu-qcom-iot` PPA）**
+
+提供 `geniex` 所需的高通专有库：
+
+| 缺少的库 | 由谁提供 |
+| --- | --- |
+| `libOpenCL_adreno.so.1`、`libCB.so.1`、`libadreno_utils.so.1`、`libgsl.so.1`、`libllvm-*.so.1` | `qcom-adreno1` |
+| `libdmabufheap.so.0.0.0` | `qcom-libdmabufheap` *（`qcom-adreno1` 自动依赖）* |
+| `libpropertyvault.so.0.0.0` | `qcom-property-vault` *（`qcom-adreno1` 自动依赖）* |
+| `libcdsprpc.so.1.0.0` | `qcom-fastrpc1` |
+
+```bash bash
+sudo apt-get install -y qcom-adreno1 qcom-fastrpc1
+```
+
+PPA（`ppa:ubuntu-qcom-iot/qcom-ppa`）在 IQ9075 EVK Ubuntu 镜像中已预配置。`qcom-adreno1` 会自动拉入 `qcom-libdmabufheap` 与 `qcom-property-vault`。
+
+完成后重新运行 `install.sh`，"Linking host NPU libraries" 步骤即可成功。
+
+### 容器内可加载模型但推理报 `Failed to create device: 14001`
+
+容器无法访问 NPU。确认 `docker run` 带 `--privileged` 与 `/usr/lib` 挂载，并且宿主已安装高通驱动包（`qcom-adreno1`、`qcom-fastrpc1`）——参见上面的"缺少共享库"条目。
+
 ## Android
 
 ### 模型可加载，但生成自我重复或无输出

@@ -51,6 +51,73 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 </AccordionGroup>
 
+## **Linux**
+
+<AccordionGroup>
+  <Accordion title="`docker pull ghcr.io/...` fails with permission / unauthorized">
+    Two separate things have to be right:
+
+    1. **GHCR login.** Use a GitHub Personal Access Token (classic) with at least `read:packages`, then:
+
+       ```bash bash
+       export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxx
+       docker login ghcr.io -u <your-github-username> -p "$GITHUB_TOKEN"
+       ```
+
+       You should see `Login Succeeded`.
+
+    2. **Docker group membership.** If `docker pull` returns `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, your user isn't in the `docker` group:
+
+       ```bash bash
+       sudo usermod -aG docker $USER
+       newgrp docker        # apply the new group in the current shell
+       ```
+
+       Then retry the pull.
+  </Accordion>
+
+  <Accordion title="`geniex` install.sh reports missing shared libraries">
+    On a fresh Ubuntu 24.04 ARM64 host (e.g. IQ9075 EVK), `install.sh` checks for libraries like `libCB.so.1`, `libOpenCL_adreno.so.1`, `libcdsprpc.so.1.0.0`, `libgsl.so.1`, `libllvm-*.so.1`, `libpropertyvault.so.0.0.0`, `libdmabufheap.so.0.0.0`, plus Debian's `libatomic1` / `libglib2.0-0`. Install them in two steps.
+
+    **1. Standard APT packages**
+
+    Addresses the `libatomic1` and `libglib2.0-0` requirements reported by the `geniex` installer, and provides a generic OpenCL ICD loader:
+
+    ```bash bash
+    sudo apt update
+    sudo apt install -y \
+      libatomic1 \
+      libglib2.0-0 \
+      ocl-icd-libopencl1
+    ```
+
+    <Note>`ocl-icd-libopencl1` is replaced by `qcom-adreno1` in the next step.</Note>
+
+    **2. Qualcomm driver packages (via `ubuntu-qcom-iot` PPA)**
+
+    Provides the Qualcomm-proprietary libraries required by `geniex`:
+
+    | Missing library | Provided by |
+    | --- | --- |
+    | `libOpenCL_adreno.so.1`, `libCB.so.1`, `libadreno_utils.so.1`, `libgsl.so.1`, `libllvm-*.so.1` | `qcom-adreno1` |
+    | `libdmabufheap.so.0.0.0` | `qcom-libdmabufheap` *(auto-dep of `qcom-adreno1`)* |
+    | `libpropertyvault.so.0.0.0` | `qcom-property-vault` *(auto-dep of `qcom-adreno1`)* |
+    | `libcdsprpc.so.1.0.0` | `qcom-fastrpc1` |
+
+    ```bash bash
+    sudo apt-get install -y qcom-adreno1 qcom-fastrpc1
+    ```
+
+    The PPA (`ppa:ubuntu-qcom-iot/qcom-ppa`) is pre-configured on the IQ9075 EVK Ubuntu image. `qcom-adreno1` automatically pulls in `qcom-libdmabufheap` and `qcom-property-vault`.
+
+    After this, re-run `install.sh` and the "Linking host NPU libraries" step should succeed.
+  </Accordion>
+
+  <Accordion title="Container loads model but inference fails with `Failed to create device: 14001`">
+    The container can't reach the NPU. Make sure your `docker run` includes `--privileged` and the `/usr/lib` mount, and that the host's Qualcomm driver packages (`qcom-adreno1`, `qcom-fastrpc1`) are installed — see the missing-libraries entry above.
+  </Accordion>
+</AccordionGroup>
+
 ## **Android**
 
 <AccordionGroup>
