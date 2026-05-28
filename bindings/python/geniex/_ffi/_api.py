@@ -117,11 +117,11 @@ def install_log_callback() -> None:
         _logger.setLevel(_LEVEL_STR_TO_PY[requested])
 
 
-class GeniexError(Exception):
+class GenieXError(Exception):
     """Raised when a geniex C call returns a negative error code."""
 
     def __init__(self, code: int, message: str):
-        super().__init__(f'GeniexError({code}): {message}')
+        super().__init__(f'GenieXError({code}): {message}')
         self.code = code
 
 
@@ -140,7 +140,7 @@ def _check(code: int) -> None:
         lib = load_library()
         msg_bytes = lib.geniex_get_error_message(c_int32(code))
         msg = msg_bytes.decode() if msg_bytes else 'unknown error'
-        raise GeniexError(code, msg)
+        raise GenieXError(code, msg)
 
 
 def _bind_all() -> None:
@@ -356,7 +356,7 @@ def get_device_list(plugin_id: str) -> list[tuple[str, str]]:
     _ensure_bound()
     available = get_plugin_list()
     if plugin_id not in available:
-        raise GeniexError(GENIEX_ERROR_COMMON_PLUGIN_INVALID, _unknown_plugin_message(plugin_id, available))
+        raise GenieXError(GENIEX_ERROR_COMMON_PLUGIN_INVALID, _unknown_plugin_message(plugin_id, available))
     lib = load_library()
     inp = geniex_GetDeviceListInput(plugin_id=plugin_id.encode())
     out = geniex_GetDeviceListOutput()
@@ -378,7 +378,7 @@ def resolve_device(
     """Raw SDK device-alias resolver. Prefer :func:`geniex.resolve_device_map`.
 
     Returns ``(device_id, ngl, warning)``; ``device_id`` / ``warning`` may
-    be ``None``. Raises :class:`GeniexError` for unknown aliases.
+    be ``None``. Raises :class:`GenieXError` for unknown aliases.
     """
     _ensure_bound()
     lib = load_library()

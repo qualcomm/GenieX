@@ -12,7 +12,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 
 
-class GeniexSdk private constructor() {
+class GenieXSdk private constructor() {
 
     interface InitCallback {
         fun onSuccess()
@@ -33,7 +33,7 @@ class GeniexSdk private constructor() {
     private var modelManagerInited = false
 
     /**
-     * @param callback Use for Checking the context environment of GeniexSdk.When an exception occurs,
+     * @param callback Use for Checking the context environment of GenieXSdk.When an exception occurs,
      * the [InitCallback.onFailure] will be invoked.
      */
     fun init(context: Context, callback: InitCallback? = null) {
@@ -176,7 +176,7 @@ class GeniexSdk private constructor() {
     }
 
     companion object {
-        private const val TAG = "GeniexSdk"
+        private const val TAG = "GenieXSdk"
         internal const val KEY_QNN_HTP_PATH = "GENIEX_QNN_HTP_PATH"
         private val HTP_ASSET_DIRS = listOf("htp-files", "htp-files-v81", "htp-files-v85")
         const val PLUGIN_ID_QAIRT = "qairt"
@@ -189,10 +189,10 @@ class GeniexSdk private constructor() {
         }
 
         @Volatile
-        private var instance: GeniexSdk? = null
+        private var instance: GenieXSdk? = null
 
         fun getInstance() = instance ?: synchronized(this) {
-            instance ?: GeniexSdk().also { instance = it }
+            instance ?: GenieXSdk().also { instance = it }
         }
     }
 }

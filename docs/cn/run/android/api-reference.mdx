@@ -52,7 +52,7 @@ QAIRT 仅支持 NPU。对 QAIRT 模型传 `"cpu"` 或 `"gpu"` 仅记录告警并
 
 ```kotlin
 // 初始化（幂等——可在每个 Activity.onCreate 中安全调用）。
-GeniexSdk.getInstance().init(context)
+GenieXSdk.getInstance().init(context)
 
 // 流式拉取并报告进度。
 ModelManagerWrapper.pullFlow(

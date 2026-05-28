@@ -21,7 +21,7 @@ pub const GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE: i32 = -100015;
 /// C-compatible per-file progress entry. Must mirror `geniex_FileProgress`
 /// in geniex_model.h.
 #[repr(C)]
-pub struct GeniexFileProgress {
+pub struct GenieXFileProgress {
     pub file_name: *const c_char,
     pub downloaded_bytes: i64,
     pub total_bytes: i64,

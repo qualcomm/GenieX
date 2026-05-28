@@ -15,7 +15,7 @@
 using namespace jniutils;
 using namespace geniex_android_sdk;
 
-// Route SDK log messages to Android logcat under the "GeniexSdk" tag.
+// Route SDK log messages to Android logcat under the "GenieXSdk" tag.
 static void android_sdk_log_to_logcat(geniex_LogLevel level, const char* msg) {
     int prio;
     switch (level) {
@@ -59,7 +59,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
 
 using namespace jniutils;
 
-extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_GeniexSdk_registerPlugin(
+extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_GenieXSdk_registerPlugin(
     JNIEnv* env, jobject thiz, jstring plugin_lib_path) {
     // Get the native library path from the application context
     std::string plugin_lib_path_str = jstring2str(env, plugin_lib_path);
@@ -74,7 +74,7 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_GeniexSdk_registerPlugin(
     return geniex_register_plugin((geniex_plugin_id_func)plugin_id_func, (geniex_create_plugin_func)create_plugin_func);
 }
 
-extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_GeniexSdk_getPluginVersion(
+extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_GenieXSdk_getPluginVersion(
     JNIEnv* env, jobject thiz, jstring plugin_id) {
     std::string id     = jstring2str(env, plugin_id);
     const char* result = geniex_get_plugin_version(id.c_str());

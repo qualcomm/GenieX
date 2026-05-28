@@ -21,7 +21,7 @@ if(WIN32)
     add_compile_definitions(WIN32_LEAN_AND_MEAN NOMINMAX)
 endif()
 
-set(GENIEX_VERSION "v0.0.0" CACHE STRING "Geniex library version")
+set(GENIEX_VERSION "v0.0.0" CACHE STRING "GenieX library version")
 
 # ===============================================================================
 # Build Options

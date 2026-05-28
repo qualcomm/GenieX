@@ -75,7 +75,7 @@ local path to a `.gguf` file or a pre-downloaded directory.
 
 ### VLM
 
-`AutoModelForCausalLM` auto-detects multimodal models and returns a `GeniexVLM`:
+`AutoModelForCausalLM` auto-detects multimodal models and returns a `GenieXVLM`:
 
 ```python
 from geniex import AutoModelForCausalLM

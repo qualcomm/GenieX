@@ -7,22 +7,22 @@ use crate::types::*;
 
 /// C-compatible model type enum (mirrors `geniex_ModelType` in geniex_model.h).
 #[repr(C)]
-pub enum GeniexModelType {
+pub enum GenieXModelType {
     Llm = 0,
     Vlm = 1,
 }
 
-fn to_ffi_type(t: ModelType) -> GeniexModelType {
+fn to_ffi_type(t: ModelType) -> GenieXModelType {
     match t {
-        ModelType::Llm => GeniexModelType::Llm,
-        ModelType::Vlm => GeniexModelType::Vlm,
+        ModelType::Llm => GenieXModelType::Llm,
+        ModelType::Vlm => GenieXModelType::Vlm,
     }
 }
 
 /* ---- geniex_ModelPaths ---- */
 
 #[repr(C)]
-pub struct GeniexModelPaths {
+pub struct GenieXModelPaths {
     pub model_path: *mut c_char,
     pub mmproj_path: *mut c_char,
     pub tokenizer_path: *mut c_char,
@@ -32,7 +32,7 @@ pub struct GeniexModelPaths {
     pub device_id: *mut c_char,
 }
 
-impl GeniexModelPaths {
+impl GenieXModelPaths {
     fn null() -> Self {
         Self {
             model_path: std::ptr::null_mut(),
@@ -49,7 +49,7 @@ impl GeniexModelPaths {
 #[no_mangle]
 pub extern "C" fn geniex_model_get_paths(
     model_name: *const c_char,
-    out_paths: *mut GeniexModelPaths,
+    out_paths: *mut GenieXModelPaths,
 ) -> i32 {
     ffi_guard(|| {
         if out_paths.is_null() {
@@ -94,7 +94,7 @@ pub extern "C" fn geniex_model_get_paths(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn geniex_model_paths_free(paths: *mut GeniexModelPaths) {
+pub unsafe extern "C" fn geniex_model_paths_free(paths: *mut GenieXModelPaths) {
     if paths.is_null() {
         return;
     }
@@ -106,19 +106,19 @@ pub unsafe extern "C" fn geniex_model_paths_free(paths: *mut GeniexModelPaths) {
     free_cptr(p.model_name);
     free_cptr(p.plugin_id);
     free_cptr(p.device_id);
-    *paths = GeniexModelPaths::null();
+    *paths = GenieXModelPaths::null();
 }
 
 /* ---- geniex_model_list ---- */
 
 #[repr(C)]
-pub struct GeniexModelListOutput {
+pub struct GenieXModelListOutput {
     pub names: *mut *mut c_char,
     pub count: i32,
 }
 
 #[no_mangle]
-pub extern "C" fn geniex_model_list(output: *mut GeniexModelListOutput) -> i32 {
+pub extern "C" fn geniex_model_list(output: *mut GenieXModelListOutput) -> i32 {
     ffi_guard(|| {
         if output.is_null() {
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
@@ -151,7 +151,7 @@ pub extern "C" fn geniex_model_list(output: *mut GeniexModelListOutput) -> i32 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn geniex_model_list_free(output: *mut GeniexModelListOutput) {
+pub unsafe extern "C" fn geniex_model_list_free(output: *mut GenieXModelListOutput) {
     if output.is_null() {
         return;
     }
@@ -217,7 +217,7 @@ pub extern "C" fn geniex_model_clean(removed_count: *mut i32) -> i32 {
 #[no_mangle]
 pub extern "C" fn geniex_model_get_type(
     model_name: *const c_char,
-    out_type: *mut GeniexModelType,
+    out_type: *mut GenieXModelType,
 ) -> i32 {
     ffi_guard(|| {
         if out_type.is_null() {

@@ -18,13 +18,13 @@ import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .modeling import GeniexLLM, GeniexVLM
+    from .modeling import GenieXLLM, GenieXVLM
 
 
 class ModelTokenizer:
     """Transformers-compatible facade for ``apply_chat_template`` on a loaded model."""
 
-    def __init__(self, model: 'GeniexLLM | GeniexVLM') -> None:
+    def __init__(self, model: 'GenieXLLM | GenieXVLM') -> None:
         self._model = model
 
     def apply_chat_template(
@@ -40,7 +40,7 @@ class ModelTokenizer:
 
         ``tokenize=True`` is rejected — the C runtime handles tokenisation
         internally, so callers should pass the returned string straight to
-        :meth:`GeniexLLM.generate`. ``tools`` accepts a list of dicts or a
+        :meth:`GenieXLLM.generate`. ``tools`` accepts a list of dicts or a
         pre-serialised JSON string.
         """
         if tokenize:

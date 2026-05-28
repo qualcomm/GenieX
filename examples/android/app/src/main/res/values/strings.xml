@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">GeniexDemo</string>
+    <string name="app_name">GenieXDemo</string>
     <string name="blank_index_tip">Please import files before starting your search.</string>
     <string name="hello_blank_fragment">Hello blank fragment</string>
 </resources>

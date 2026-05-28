@@ -13,7 +13,7 @@ use crate::types::*;
 /// `include/geniex_model.h`.
 #[repr(C)]
 #[allow(dead_code)]
-pub enum GeniexHubSource {
+pub enum GenieXHubSource {
     Auto = 0,
     HuggingFace = 1,
     ModelScope = 2,
@@ -24,15 +24,15 @@ pub enum GeniexHubSource {
     LocalFs = 127,
 }
 
-/// Progress callback: invoked with an array of per-file `GeniexFileProgress`
+/// Progress callback: invoked with an array of per-file `GenieXFileProgress`
 /// entries; return `false` to cancel. The pointer is only valid during the
 /// call — callbacks must not retain it.
-pub type GeniexDownloadProgressCb =
-    Option<unsafe extern "C" fn(*const GeniexFileProgress, i32, *mut c_void) -> bool>;
+pub type GenieXDownloadProgressCb =
+    Option<unsafe extern "C" fn(*const GenieXFileProgress, i32, *mut c_void) -> bool>;
 
 #[repr(C)]
-pub struct GeniexModelPullInput {
-    /// Must equal `size_of::<GeniexModelPullInput>()`. See the C header
+pub struct GenieXModelPullInput {
+    /// Must equal `size_of::<GenieXModelPullInput>()`. See the C header
     /// doc on `geniex_ModelPullInput.struct_size` — this is the ABI
     /// version gate: callers compiled against an older header won't
     /// match any recognized size and are rejected before any field is
@@ -40,7 +40,7 @@ pub struct GeniexModelPullInput {
     pub struct_size: u32,
     pub model_name: *const c_char,
     pub quant: *const c_char,
-    pub hub: GeniexHubSource,
+    pub hub: GenieXHubSource,
     pub local_path: *const c_char,
     /// HuggingFace bearer token (NULL = fall back to GENIEX_HFTOKEN env,
     /// then anonymous). Only meaningful when `hub == GENIEX_HUB_HUGGINGFACE`.
@@ -57,7 +57,7 @@ pub struct GeniexModelPullInput {
     /// `model_name` still names the on-disk directory ("org/repo"
     /// shape), mirroring the Go CLI's `storedName` / `displayName` split.
     pub display_name: *const c_char,
-    pub on_progress: GeniexDownloadProgressCb,
+    pub on_progress: GenieXDownloadProgressCb,
     pub user_data: *mut c_void,
 }
 
@@ -65,10 +65,10 @@ pub struct GeniexModelPullInput {
 /// is the current layout; if we add fields in a forward-compatible
 /// way, append the *previous* size here so older callers still work.
 /// A caller that passes a size not in this list is rejected up front.
-const ACCEPTED_PULL_INPUT_SIZES: &[u32] = &[std::mem::size_of::<GeniexModelPullInput>() as u32];
+const ACCEPTED_PULL_INPUT_SIZES: &[u32] = &[std::mem::size_of::<GenieXModelPullInput>() as u32];
 
 #[no_mangle]
-pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
+pub extern "C" fn geniex_model_pull(input: *const GenieXModelPullInput) -> i32 {
     ffi_guard(|| {
         if input.is_null() {
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
@@ -114,7 +114,7 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
             .filter(|s| !s.is_empty());
 
         let intent = match inp.hub {
-            GeniexHubSource::Auto => {
+            GenieXHubSource::Auto => {
                 // "qualcomm/*" and "qai-hub-models/*" names, plus bare
                 // names (which canonicalize_model_name above rewrote to
                 // "qualcomm/<name>"), route to AI Hub without the caller
@@ -133,18 +133,18 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
                     }
                 }
             }
-            GeniexHubSource::HuggingFace => PullIntent::HuggingFace {
+            GenieXHubSource::HuggingFace => PullIntent::HuggingFace {
                 repo: model_name.clone(),
                 token: hf_token,
             },
-            GeniexHubSource::LocalFs => {
+            GenieXHubSource::LocalFs => {
                 let path = match unsafe { cstr_to_str(inp.local_path) } {
                     Some(s) => PathBuf::from(s),
                     None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
                 };
                 PullIntent::LocalFs { source_dir: path }
             }
-            GeniexHubSource::AiHub => {
+            GenieXHubSource::AiHub => {
                 // chipset NULL or empty → SDK auto-detects (currently
                 // Windows-on-Snapdragon only). Non-empty: caller override.
                 // display_name mirrors the Auto branch: explicit value
@@ -172,7 +172,7 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
         // Build a Rust closure that re-marshals Rust FileProgress → C array
         // and invokes the caller's function pointer.
         struct CCallback {
-            cb: unsafe extern "C" fn(*const GeniexFileProgress, i32, *mut c_void) -> bool,
+            cb: unsafe extern "C" fn(*const GenieXFileProgress, i32, *mut c_void) -> bool,
             user_data: *mut c_void,
         }
         unsafe impl Send for CCallback {}
@@ -191,10 +191,10 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
                         .iter()
                         .map(|f| std::ffi::CString::new(f.file_name.as_bytes()).unwrap_or_default())
                         .collect();
-                    let ffi_entries: Vec<GeniexFileProgress> = files
+                    let ffi_entries: Vec<GenieXFileProgress> = files
                         .iter()
                         .zip(cstrings.iter())
-                        .map(|(f, cs)| GeniexFileProgress {
+                        .map(|(f, cs)| GenieXFileProgress {
                             file_name: cs.as_ptr(),
                             downloaded_bytes: f.downloaded_bytes,
                             total_bytes: f.total_bytes,

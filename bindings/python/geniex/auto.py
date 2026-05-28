@@ -23,10 +23,10 @@ from ctypes import byref, c_void_p
 
 from . import _progress
 from . import model_manager as _mm
-from ._ffi._api import GeniexError, _check, ensure_init, get_plugin_list, load_library, resolve_device
+from ._ffi._api import GenieXError, _check, ensure_init, get_plugin_list, load_library, resolve_device
 from ._ffi._types import geniex_LlmCreateInput, geniex_ModelConfig, geniex_VlmCreateInput
 from .model_manager import ProgressCallback
-from .modeling import GeniexLLM, GeniexVLM
+from .modeling import GenieXLLM, GenieXVLM
 
 _logger = logging.getLogger('geniex')
 
@@ -168,7 +168,7 @@ def _resolve_model_sources(
     try:
         cached = _mm.get_paths(key)
         return cached.model_path, cached.mmproj_path, cached.tokenizer_path, cached
-    except (GeniexError, FileNotFoundError, OSError):
+    except (GenieXError, FileNotFoundError, OSError):
         pass
 
     printer = _progress.resolve(progress)
@@ -181,7 +181,7 @@ def _resolve_model_sources(
                 hf_token=hf_token,
                 on_progress=printer,
             )
-        except GeniexError as e:
+        except GenieXError as e:
             translated = _translate_quant_error(e, model_name_or_path, quant)
             if translated is not None:
                 raise translated from e
@@ -200,7 +200,7 @@ def _resolve_model_sources(
 GENIEX_ERROR_COMMON_UNKNOWN = -100000
 
 
-def _translate_quant_error(err: GeniexError, model_name_or_path: str, quant: str | None) -> ValueError | None:
+def _translate_quant_error(err: GenieXError, model_name_or_path: str, quant: str | None) -> ValueError | None:
     if quant is None or err.code != GENIEX_ERROR_COMMON_UNKNOWN:
         return None
     return ValueError(f'Could not resolve quant {quant!r} for {model_name_or_path!r}.')
@@ -297,7 +297,7 @@ def _create_vlm_handle(
     license_id: str | None,
     license_key: str | None,
     meta: dict | None = None,
-) -> GeniexVLM:
+) -> GenieXVLM:
     inp = geniex_VlmCreateInput(
         model_name=resolved_name.encode(),
         model_path=model_path.encode(),
@@ -319,7 +319,7 @@ def _create_vlm_handle(
     handle = c_void_p()
     lib = load_library()
     _check(lib.geniex_vlm_create(byref(inp), byref(handle)))
-    return GeniexVLM(handle, meta=meta)
+    return GenieXVLM(handle, meta=meta)
 
 
 class AutoModelForCausalLM:
@@ -342,7 +342,7 @@ class AutoModelForCausalLM:
         hf_token: str | None = None,
         progress: ProgressCallback | bool | None = None,
         **kwargs,
-    ) -> GeniexLLM | GeniexVLM:
+    ) -> GenieXLLM | GenieXVLM:
         """Load a causal LM or VLM by HF repo id, alias, or local path.
 
         ``model_name`` is **optional**. The QAIRT plugin no longer needs it —
@@ -353,7 +353,7 @@ class AutoModelForCausalLM:
         llama_cpp device-default override.
 
         When the model is detected as multimodal (e.g. phi4_multimodal,
-        qwen3.5-vl, gemma4), a :class:`GeniexVLM` is returned instead.
+        qwen3.5-vl, gemma4), a :class:`GenieXVLM` is returned instead.
         """
         ensure_init()
         model_path, _mmproj, _tok, paths = _resolve_model_sources(
@@ -412,7 +412,7 @@ class AutoModelForCausalLM:
         handle = c_void_p()
         lib = load_library()
         _check(lib.geniex_llm_create(byref(inp), byref(handle)))
-        return GeniexLLM(handle, meta=meta)
+        return GenieXLLM(handle, meta=meta)
 
 
 class AutoModelForVision2Seq:
@@ -435,7 +435,7 @@ class AutoModelForVision2Seq:
         hf_token: str | None = None,
         progress: ProgressCallback | bool | None = None,
         **kwargs,
-    ) -> GeniexVLM:
+    ) -> GenieXVLM:
         """Load a VLM by HF repo id, alias, or local path.
 
         See :class:`AutoModelForCausalLM.from_pretrained` for shared parameters.

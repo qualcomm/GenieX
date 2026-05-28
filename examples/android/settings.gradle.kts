@@ -20,7 +20,7 @@ dependencyResolutionManagement {
         mavenCentral()
         maven { url = uri("https://jitpack.io") } // Added JitPack for AndroidAutoSize
 //        maven {
-//            url = uri("https://raw.githubusercontent.com/GeniexAI/core/main")
+//            url = uri("https://raw.githubusercontent.com/GenieXAI/core/main")
 //        }
         flatDir {
             dirs("app/libs")
@@ -28,7 +28,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "GeniexDemo"
+rootProject.name = "GenieXDemo"
 
 include(":transform")
 include(":app")

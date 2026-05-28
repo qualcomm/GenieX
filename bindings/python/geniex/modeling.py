@@ -113,7 +113,7 @@ def _apply_meta(profile: ProfileData, meta: dict | None) -> ProfileData:
     return profile
 
 
-class GeniexLLM:
+class GenieXLLM:
     """LLM handle returned by :meth:`AutoModelForCausalLM.from_pretrained`."""
 
     def __init__(self, handle: c_void_p, meta: dict | None = None) -> None:
@@ -281,7 +281,7 @@ class GeniexLLM:
             lib.geniex_llm_destroy(self._handle)
             self._handle = None  # type: ignore[assignment]
 
-    def __enter__(self) -> 'GeniexLLM':
+    def __enter__(self) -> 'GenieXLLM':
         return self
 
     def __exit__(self, *_) -> None:
@@ -340,7 +340,7 @@ def _build_vlm_messages(messages: list[dict]):
     return arr, count, _content_refs
 
 
-class GeniexVLM:
+class GenieXVLM:
     """VLM handle returned by :meth:`AutoModelForVision2Seq.from_pretrained`."""
 
     def __init__(self, handle: c_void_p, meta: dict | None = None) -> None:
@@ -516,7 +516,7 @@ class GeniexVLM:
             lib.geniex_vlm_destroy(self._handle)
             self._handle = None  # type: ignore[assignment]
 
-    def __enter__(self) -> 'GeniexVLM':
+    def __enter__(self) -> 'GenieXVLM':
         return self
 
     def __exit__(self, *_) -> None:

@@ -52,7 +52,7 @@ Models are pulled on-device through the bundled Rust model manager. Do **not** m
 
 ```kotlin
 // Init (idempotent — safe to call on every Activity.onCreate).
-GeniexSdk.getInstance().init(context)
+GenieXSdk.getInstance().init(context)
 
 // Pull with streaming progress.
 ModelManagerWrapper.pullFlow(

@@ -91,13 +91,13 @@ Each AI capability (LLM, VLM, ASR, CV, Embedder, Reranker) follows this pattern:
 - **Build Script:** `../../../build_android.sh`
 - **CMake Entry:** `app/src/main/cpp/CMakeLists.txt`
 - **Output:**
-  - `libnpu_jni.so` (JNI bridge wrapper loaded by GeniexSdk.kt)
+  - `libnpu_jni.so` (JNI bridge wrapper loaded by GenieXSdk.kt)
   - `libgeniex_bridge.so` (core ML library linked by JNI wrapper)
   - Plugin libraries: `libgeniex_plugin.so` (NPU backend for NPU acceleration)
 
 ### Library Loading
 
-- **GeniexSdk.kt:** Initializes SDK and loads native libraries
+- **GenieXSdk.kt:** Initializes SDK and loads native libraries
   ```kotlin
   init {
       System.loadLibrary("npu_jni")  // Loads Layer 2 JNI bridge
@@ -108,7 +108,7 @@ Each AI capability (LLM, VLM, ASR, CV, Embedder, Reranker) follows this pattern:
 
 - **NPU Backend:** Provides NPU acceleration for Qualcomm Snapdragon (using QNN library internally)
 - **Path:** `../../../build-android/out/npu/`
-- **Registration:** `GeniexSdk.init()` calls `registerPlugin()` to dynamically load plugin libraries
+- **Registration:** `GenieXSdk.init()` calls `registerPlugin()` to dynamically load plugin libraries
 
 ## Directory Structure
 
@@ -140,7 +140,7 @@ bindings/android/
 │   │       ├── VlmWrapper.kt
 │   │       ├── EmbedderWrapper.kt
 │   │       ├── RerankerWrapper.kt
-│   │       ├── GeniexSdk.kt            # SDK entry point
+│   │       ├── GenieXSdk.kt            # SDK entry point
 │   │       └── bean/                 # Data classes
 │   └── build.gradle.kts              # Build configuration
 └── README.md                         # This file
@@ -176,10 +176,10 @@ TODO: update the GitHub-based Android artifact publishing instructions for Genie
 
 ## Logging
 
-SDK logs are routed to `logcat` under the tag `GeniexSdk` at the corresponding
+SDK logs are routed to `logcat` under the tag `GenieXSdk` at the corresponding
 Android priority (`VERBOSE`/`DEBUG`/`INFO`/`WARN`/`ERROR`). Filter from your
 app via the standard logcat tooling:
 
 ```bash
-adb logcat -s GeniexSdk
+adb logcat -s GenieXSdk
 ```

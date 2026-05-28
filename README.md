@@ -1,4 +1,4 @@
-# Geniex
+# GenieX
 
 Multi-platform AI inference runtime for Snapdragon / Hexagon — runs LLMs on NPU, GPU, or CPU through a pluggable C SDK with Go (CLI), Python, and Java (Android) bindings.
 
