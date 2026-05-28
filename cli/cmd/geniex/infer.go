@@ -268,12 +268,19 @@ func resolveModelParams(manifest *types.ModelManifest) (deviceID string, resolve
 		}
 	}
 
-	deviceID, resolvedNgl, warning, err := geniex_sdk.ResolveDevice(manifest.PluginId, manifest.ModelName, device, resolvedNgl)
+	resolved, err := geniex_sdk.ResolveDevice(geniex_sdk.ResolveDeviceInput{
+		PluginID:   manifest.PluginId,
+		ModelName:  manifest.ModelName,
+		Mode:       device,
+		NglDefault: resolvedNgl,
+	})
 	if err != nil {
 		return
 	}
-	if warning != "" {
-		fmt.Println(render.GetTheme().Warning.Sprintf("Warning: %s", warning))
+	deviceID = resolved.DeviceID
+	resolvedNgl = resolved.Ngl
+	if resolved.Warning != "" {
+		fmt.Println(render.GetTheme().Warning.Sprintf("Warning: %s", resolved.Warning))
 	}
 	return
 }
@@ -327,7 +334,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 
 	var history []geniex_sdk.LlmChatMessage
 	if systemPrompt != "" {
-		history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleSystem, Content: systemPrompt})
+		history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LlmRoleSystem, Content: systemPrompt})
 	}
 
 	// Check if using token ID input mode
@@ -351,7 +358,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 		Verbose:  verbose,
 		TestMode: testMode,
 		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
-			var res geniex_sdk.LlmGenerateOutput
+			var res *geniex_sdk.LlmGenerateOutput
 			var err error
 
 			if len(tokenIDs) > 0 {
@@ -376,7 +383,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 				tokenIDs = nil
 			} else {
 				// Normal text prompt mode with chat template
-				history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleUser, Content: prompt})
+				history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LlmRoleUser, Content: prompt})
 
 				templateOutput, err := p.ApplyChatTemplate(geniex_sdk.LlmApplyChatTemplateInput{
 					Messages:            history,
@@ -399,14 +406,14 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 
 				if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
 					res.ProfileData.StopReason = "context_length"
-					history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleAssistant, Content: res.FullText})
+					history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LlmRoleAssistant, Content: res.FullText})
 					return res.FullText, res.ProfileData, common.ErrContextLengthExceeded
 				}
 				if err != nil {
 					return "", geniex_sdk.ProfileData{}, err
 				}
 
-				history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleAssistant, Content: res.FullText})
+				history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LlmRoleAssistant, Content: res.FullText})
 			}
 
 			return res.FullText, res.ProfileData, nil

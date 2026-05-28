@@ -139,7 +139,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
 			for _, tc := range toolCalls {
 				messages = append(messages, geniex_sdk.LlmChatMessage{
-					Role: geniex_sdk.LLMRole(*msg.GetRole()),
+					Role: geniex_sdk.LlmRole(*msg.GetRole()),
 					Content: fmt.Sprintf(`<tool_call>{"name":"%s","arguments":"%s"}</tool_call>`,
 						tc.GetFunction().Name, tc.GetFunction().Arguments),
 				})
@@ -149,7 +149,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 
 		if toolResp := msg.GetToolCallID(); toolResp != nil {
 			messages = append(messages, geniex_sdk.LlmChatMessage{
-				Role:    geniex_sdk.LLMRole(*msg.GetRole()),
+				Role:    geniex_sdk.LlmRole(*msg.GetRole()),
 				Content: *msg.GetContent().AsAny().(*string),
 			})
 			continue
@@ -158,14 +158,14 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		switch content := msg.GetContent().AsAny().(type) {
 		case *string:
 			messages = append(messages, geniex_sdk.LlmChatMessage{
-				Role:    geniex_sdk.LLMRole(*msg.GetRole()),
+				Role:    geniex_sdk.LlmRole(*msg.GetRole()),
 				Content: *content,
 			})
 
 		case *[]openai.ChatCompletionContentPartTextParam:
 			for _, ct := range *content {
 				messages = append(messages, geniex_sdk.LlmChatMessage{
-					Role:    geniex_sdk.LLMRole(*msg.GetRole()),
+					Role:    geniex_sdk.LlmRole(*msg.GetRole()),
 					Content: ct.Text,
 				})
 			}
@@ -174,7 +174,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 				switch *ct.GetType() {
 				case "text":
 					messages = append(messages, geniex_sdk.LlmChatMessage{
-						Role:    geniex_sdk.LLMRole(*msg.GetRole()),
+						Role:    geniex_sdk.LlmRole(*msg.GetRole()),
 						Content: *ct.GetText(),
 					})
 				default:
@@ -188,7 +188,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 				switch *ct.GetType() {
 				case "text":
 					messages = append(messages, geniex_sdk.LlmChatMessage{
-						Role:    geniex_sdk.LLMRole(*msg.GetRole()),
+						Role:    geniex_sdk.LlmRole(*msg.GetRole()),
 						Content: *ct.GetText(),
 					})
 				default:
@@ -244,7 +244,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		dataCh := make(chan string)
 
 		var (
-			res   geniex_sdk.LlmGenerateOutput
+			res   *geniex_sdk.LlmGenerateOutput
 			err   error
 			resWg sync.WaitGroup
 		)

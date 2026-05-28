@@ -10,6 +10,7 @@ go_library(
     srcs = [
         "common.go",
         "device.go",
+        "helpers.go",
         "llm.go",
         "ml.go",
         "vlm.go",

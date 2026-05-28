@@ -42,57 +42,87 @@ const (
 	PluginQairt    = "qairt"
 )
 
-// ResolveDevice calls into the SDK's `geniex_resolve_device` to map a
-// (pluginID, modelName, mode) triple onto the concrete (device_id,
-// n_gpu_layers) pair the plugins expect. See the C API doc for alias
-// semantics — the SDK is the single source of truth.
-//
-// `modelName` may be empty if the caller doesn't know it; it's only
-// consulted for model-specific default overrides (e.g. llama_cpp
-// gpt-oss models default to `npu` instead of `hybrid`).
-//
-// A non-nil `err` means the mode was a non-empty unknown alias; the
-// SDK returned GENIEX_ERROR_COMMON_INVALID_DEVICE. `warning` is
-// non-empty when the alias was coerced (e.g. qairt ↦ NPU regardless
-// of user input).
-func ResolveDevice(pluginID, modelName, mode string, nglDefault int32) (deviceID string, ngl int32, warning string, err error) {
-	cPlugin := C.CString(pluginID)
-	defer C.free(unsafe.Pointer(cPlugin))
+type ResolveDeviceInput struct {
+	PluginID   string
+	ModelName  string
+	Mode       string
+	NglDefault int32
+}
 
-	var cModel *C.char
-	if modelName != "" {
-		cModel = C.CString(modelName)
-		defer C.free(unsafe.Pointer(cModel))
+func (rdi ResolveDeviceInput) toCPtr() *C.geniex_ResolveDeviceInput {
+	cPtr := (*C.geniex_ResolveDeviceInput)(cMalloc(C.sizeof_geniex_ResolveDeviceInput))
+	*cPtr = C.geniex_ResolveDeviceInput{
+		plugin_id:   cStringIfSet(rdi.PluginID),
+		model_name:  cStringIfSet(rdi.ModelName),
+		mode:        cStringIfSet(rdi.Mode),
+		ngl_default: C.int32_t(rdi.NglDefault),
 	}
-	var cMode *C.char
-	if mode != "" {
-		cMode = C.CString(mode)
-		defer C.free(unsafe.Pointer(cMode))
-	}
+	return cPtr
+}
 
-	input := C.geniex_ResolveDeviceInput{
-		plugin_id:   cPlugin,
-		model_name:  cModel,
-		mode:        cMode,
-		ngl_default: C.int32_t(nglDefault),
+func freeResolveDeviceInput(cPtr *C.geniex_ResolveDeviceInput) {
+	if cPtr == nil {
+		return
 	}
-	var output C.geniex_ResolveDeviceOutput
-	rc := C.geniex_resolve_device(&input, &output)
-	if rc != C.GENIEX_SUCCESS {
-		if rc == C.GENIEX_ERROR_COMMON_INVALID_DEVICE {
-			return "", nglDefault, "", fmt.Errorf("invalid device %q, must be one of: cpu, gpu, npu, hybrid", mode)
+	cFreeIfSet(unsafe.Pointer(cPtr.plugin_id))
+	cFreeIfSet(unsafe.Pointer(cPtr.model_name))
+	cFreeIfSet(unsafe.Pointer(cPtr.mode))
+	C.free(unsafe.Pointer(cPtr))
+}
+
+type ResolveDeviceOutput struct {
+	DeviceID string
+	Ngl      int32
+	Warning  string
+}
+
+func newResolveDeviceOutputFromCPtr(c *C.geniex_ResolveDeviceOutput) ResolveDeviceOutput {
+	if c == nil {
+		return ResolveDeviceOutput{}
+	}
+	return ResolveDeviceOutput{
+		DeviceID: C.GoString(c.device_id),
+		Ngl:      int32(c.ngl),
+		Warning:  C.GoString(c.warning),
+	}
+}
+
+func freeResolveDeviceOutput(c *C.geniex_ResolveDeviceOutput) {
+	if c == nil {
+		return
+	}
+	if c.device_id != nil {
+		mlFree(unsafe.Pointer(c.device_id))
+	}
+	if c.warning != nil {
+		mlFree(unsafe.Pointer(c.warning))
+	}
+}
+
+// ResolveDevice maps a (PluginID, ModelName, Mode) triple onto the concrete
+// (DeviceID, Ngl) pair the plugins expect. See `geniex_resolve_device` in
+// the C API for alias semantics — the SDK is the single source of truth.
+//
+// ModelName may be empty if the caller doesn't know it; it's only consulted
+// for model-specific default overrides (e.g. llama_cpp gpt-oss → npu).
+//
+// A non-nil error means Mode was a non-empty unknown alias; the SDK returned
+// GENIEX_ERROR_COMMON_INVALID_DEVICE. Warning is non-empty when the alias
+// was coerced (e.g. qairt ↦ NPU regardless of user input).
+func ResolveDevice(input ResolveDeviceInput) (*ResolveDeviceOutput, error) {
+	cInput := input.toCPtr()
+	defer freeResolveDeviceInput(cInput)
+
+	var cOutput C.geniex_ResolveDeviceOutput
+	res := C.geniex_resolve_device(cInput, &cOutput)
+	if res != C.GENIEX_SUCCESS {
+		if res == C.GENIEX_ERROR_COMMON_INVALID_DEVICE {
+			return nil, fmt.Errorf("invalid device %q, must be one of: cpu, gpu, npu, hybrid", input.Mode)
 		}
-		return "", nglDefault, "", SDKError(rc)
+		return nil, SDKError(res)
 	}
+	defer freeResolveDeviceOutput(&cOutput)
 
-	if output.device_id != nil {
-		deviceID = C.GoString(output.device_id)
-		C.geniex_free(unsafe.Pointer(output.device_id))
-	}
-	if output.warning != nil {
-		warning = C.GoString(output.warning)
-		C.geniex_free(unsafe.Pointer(output.warning))
-	}
-	ngl = int32(output.ngl)
-	return
+	output := newResolveDeviceOutputFromCPtr(&cOutput)
+	return &output, nil
 }
