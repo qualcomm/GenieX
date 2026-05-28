@@ -16,9 +16,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -33,6 +33,17 @@ import (
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
+
+// tagServerError tags transport-layer dial errors as ErrServerUnreachable
+// so PrintError can render the "is geniex serve running?" hint. HTTP-level
+// errors (4xx/5xx) flow through untouched.
+func tagServerError(err error) error {
+	var ne *net.OpError
+	if errors.As(err, &ne) {
+		return fmt.Errorf("%w: %v", common.ErrServerUnreachable, err)
+	}
+	return err
+}
 
 var client openai.Client
 
@@ -62,19 +73,11 @@ func run() *cobra.Command {
 			// option.WithRequestTimeout(time.Second*15),
 		)
 
+		ctx := cmd.Context()
 		// check
-		modelInfo, err := client.Models.Get(context.TODO(), name)
+		modelInfo, err := client.Models.Get(ctx, name)
 		if err != nil {
-			if _, ok := err.(net.Error); ok {
-				fmt.Println(render.GetTheme().Error.Sprintf("Is server running? Please check your network. \n\t%s", err))
-				return err
-			}
-			if e, ok := err.(*openai.Error); ok && e.StatusCode == http.StatusNotFound {
-				fmt.Println(render.GetTheme().Error.Sprintf("Model or precision not found: %s, Please download first", name))
-				return err
-			}
-			fmt.Println(render.GetTheme().Error.Sprintf("get model error: %s", err.Error()))
-			return err
+			return tagServerError(err)
 		}
 
 		var manifest types.ModelManifest
@@ -82,23 +85,15 @@ func run() *cobra.Command {
 
 		switch manifest.ModelType {
 		case types.ModelTypeLLM, types.ModelTypeVLM:
-			err = runCompletions(manifest, quant)
+			return runCompletions(ctx, manifest, quant)
 		default:
-			err = fmt.Errorf("unsupported model type: %s", manifest.ModelType)
-			fmt.Println(render.GetTheme().Error.Sprint(err))
-			return err
+			return fmt.Errorf("unsupported model type: %s", manifest.ModelType)
 		}
-
-		if err != nil {
-			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
-			return err
-		}
-		return nil
 	}
 	return runCmd
 }
 
-func runCompletions(manifest types.ModelManifest, quant string) error {
+func runCompletions(ctx context.Context, manifest types.ModelManifest, quant string) error {
 	name := manifest.Name
 	if quant != "" {
 		name = name + ":" + quant
@@ -114,7 +109,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 	if systemPrompt != "" {
 		warmUpRequest.Messages = append(warmUpRequest.Messages, openai.SystemMessage(systemPrompt))
 	}
-	_, err := client.Chat.Completions.New(context.TODO(),
+	_, err := client.Chat.Completions.New(ctx,
 		warmUpRequest,
 		option.WithJSONSet("ngl", ngl),
 		option.WithJSONSet("nctx", nctx),
@@ -122,7 +117,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 	spin.Stop()
 
 	if err != nil {
-		return err
+		return tagServerError(err)
 	}
 
 	// repl
@@ -168,7 +163,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 
 			start := time.Now()
 			acc := openai.ChatCompletionAccumulator{}
-			stream := client.Chat.Completions.NewStreaming(context.Background(), openai.ChatCompletionNewParams{
+			stream := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
 				Messages:            history,
 				Model:               name,
 				StreamOptions:       openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Opt(true)},
@@ -223,7 +218,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 			profileData.DecodingSpeed = float64(profileData.GeneratedTokens) / float64(end.Sub(firstToken).Seconds())
 
 			if stream.Err() != nil {
-				return "", profileData, stream.Err()
+				return "", profileData, tagServerError(stream.Err())
 			}
 
 			if len(acc.Choices) > 0 {
@@ -240,7 +235,7 @@ func runCompletions(manifest types.ModelManifest, quant string) error {
 		repl := common.Repl{
 			Reset: func() error {
 				history = nil
-				_, err := client.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
+				_, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 					Messages: nil,
 					Model:    name,
 				})

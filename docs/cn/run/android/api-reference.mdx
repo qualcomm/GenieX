@@ -1,21 +1,21 @@
 ---
 title: "API 参考"
-description: "GenieX Android SDK —— 插件/设备选择、模型管理与 LLM/VLM 推理 API。"
+description: "GenieX Android SDK —— 运行时 / 计算单元选择、模型管理与 LLM/VLM 推理 API。"
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-## **插件与设备选择**
+## **运行时与计算单元选择**
 
-### 插件
+### 运行时
 
-通过 `plugin_id` 选择推理后端：
+通过 `plugin_id` 选择推理运行时：
 
 ```kotlin
 val plugin_id: String?   // "llama_cpp" | "qairt" | null
 ```
 
-| `plugin_id`   | 后端                              | 模型格式                 | 设备                            |
+| `plugin_id`   | 运行时                            | 模型格式                 | 计算单元                        |
 |---------------|-----------------------------------|--------------------------|---------------------------------|
 | `"llama_cpp"` | llama.cpp + GGML Hexagon 后端     | GGUF                     | CPU / Adreno GPU / Hexagon NPU |
 | `"qairt"`     | 高通 AI Runtime                    | AI Hub 预编译 bin        | 仅 Hexagon NPU                  |
@@ -23,9 +23,9 @@ val plugin_id: String?   // "llama_cpp" | "qairt" | null
 
 常量定义见 [`PluginIdValue`](https://github.com/qcom-ai-hub/geniex/blob/main/bindings/android/app/src/main/java/com/geniex/sdk/bean/InputPluginBase.kt)（`LLAMA_CPP`、`QAIRT`）。
 
-### 设备
+### 计算单元
 
-转发给原生 SDK `geniex_resolve_device` 的硬件别名。
+转发给原生 SDK `geniex_resolve_device` 的计算单元别名。
 
 ```kotlin
 val device_id: String?   // "cpu" | "gpu" | "npu" | null
@@ -33,7 +33,7 @@ val device_id: String?   // "cpu" | "gpu" | "npu" | null
 
 | 别名    | 行为                                                                |
 |---------|---------------------------------------------------------------------|
-| `null`  | 插件默认值——`llama_cpp` 与 `qairt` 均为 `npu`。                   |
+| `null`  | 运行时默认值——`llama_cpp` 与 `qairt` 均为 `npu`。                 |
 | `"npu"` | Hexagon NPU 加速。骁龙上推荐。                                       |
 | `"gpu"` | 通过 OpenCL 使用 Adreno GPU（仅 `llama_cpp`）。                      |
 | `"cpu"` | 纯 CPU。强制 `nGpuLayers = 0`。                                     |
@@ -235,7 +235,7 @@ sealed class LlmStreamResult {
 
 ## **llama.cpp（GGUF 模型）**
 
-可在 CPU、Adreno GPU 或 Hexagon NPU 上运行任意 GGUF 模型，设备由 `device_id` 控制。
+可在 CPU、Adreno GPU 或 Hexagon NPU 上运行任意 GGUF 模型，计算单元由 `device_id` 控制。
 
 ### LLM
 
@@ -270,13 +270,13 @@ llmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
 }
 ```
 
-#### 设备变体
+#### 计算单元变体
 
 | 目标 | `device_id` | 备注 |
 |---|---|---|
 | 骁龙 NPU（推荐） | `"npu"` 或 `null` | Hexagon NPU 加速。 |
 | Adreno GPU（OpenCL） | `"gpu"` | 设 `nGpuLayers = 999` 全层卸载。 |
-| 纯 CPU | `"cpu"` | 兼容任意 ARM64 设备。 |
+| 纯 CPU | `"cpu"` | 兼容任意 ARM64 芯片。 |
 
 ### VLM
 
@@ -329,7 +329,7 @@ vlmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
 
 ## **QAIRT（AI Hub NPU 模型）**
 
-来自 Qualcomm AI Hub 的预编译模型。仅 NPU，绑定指定芯片组（`SM8750` = 骁龙 8 至尊版，`SM8850` = 骁龙 8 至尊版 Gen 5）。
+来自 Qualcomm AI Hub 的预编译模型。仅 NPU，绑定指定芯片（`SM8750` = 骁龙 8 至尊版，`SM8850` = 骁龙 8 至尊版 Gen 5）。
 
 ### 下载 AI Hub 模型
 

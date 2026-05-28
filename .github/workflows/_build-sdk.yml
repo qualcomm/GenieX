@@ -94,6 +94,24 @@ jobs:
           key: cargo-sdk-${{ matrix.platform }}-${{ hashFiles('sdk/model-manager/Cargo.lock', 'sdk/model-manager/**/Cargo.toml') }}
           restore-keys: cargo-sdk-${{ matrix.platform }}-
 
+      # Toolchain identifier baked into the cmake-build cache key so a
+      # runner-image / container-image bump (MSVC patch, clang/apt layer)
+      # mints a fresh entry instead of reusing PCH/objects compiled
+      # against the old toolchain.
+      - name: Compute toolchain tag for cache key
+        id: tc
+        shell: bash
+        env:
+          CONTAINER_IMAGE: ${{ matrix.container_image }}
+        run: |
+          set -eu
+          case "${{ matrix.platform }}" in
+            windows-arm64) tag="winarm64-img-${ImageVersion:-unknown}" ;;
+            *)             tag="container-${CONTAINER_IMAGE##*:}" ;;
+          esac
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+          echo "Toolchain tag for cache: $tag"
+
       # Cache the CMake build tree so ninja deps, ExternalProject stamps,
       # and link products survive across runs. hashFiles covers the
       # configure-time inputs; a change there mints a new entry, while
@@ -102,8 +120,22 @@ jobs:
         uses: actions/cache@v5
         with:
           path: sdk/build-${{ matrix.preset }}
-          key: cmake-build-${{ matrix.platform }}-${{ hashFiles('sdk/CMakeLists.txt', 'sdk/**/CMakeLists.txt', 'sdk/CMakePresets.json', 'sdk/cmake/**', 'sdk/patches/**', '.gitmodules') }}-${{ github.sha }}
-          restore-keys: cmake-build-${{ matrix.platform }}-
+          key: cmake-build-${{ matrix.platform }}-${{ steps.tc.outputs.tag }}-${{ hashFiles('sdk/CMakeLists.txt', 'sdk/**/CMakeLists.txt', 'sdk/CMakePresets.json', 'sdk/cmake/**', 'sdk/patches/**', '.gitmodules', 'third-party/**/CMakeLists.txt', 'third-party/**/*.cmake', 'third-party/**/cmake/**') }}-${{ github.sha }}
+          restore-keys: cmake-build-${{ matrix.platform }}-${{ steps.tc.outputs.tag }}-${{ hashFiles('sdk/CMakeLists.txt', 'sdk/**/CMakeLists.txt', 'sdk/CMakePresets.json', 'sdk/cmake/**', 'sdk/patches/**', '.gitmodules', 'third-party/**/CMakeLists.txt', 'third-party/**/*.cmake', 'third-party/**/cmake/**') }}-
+
+      # Restored cmake-build-* dirs carry FetchContent populate stamps
+      # that point at source paths actions/checkout (clean: true) just
+      # wiped from submodules — most notably sentencepiece's in-tree
+      # third_party/abseil-cpp clone. Drop those stamps so cmake
+      # re-populates instead of verifying a now-missing .git.
+      - name: Purge stale FetchContent populate stamps
+        shell: bash
+        run: |
+          set -eu
+          dir="sdk/build-${{ matrix.preset }}"
+          if [ -d "$dir" ]; then
+            find "$dir" -type d -name "*-subbuild" -prune -print -exec rm -rf {} +
+          fi
 
       # Linux/Android ccache lives in the toolchain container; host just
       # owns the dir so actions/cache can persist it.

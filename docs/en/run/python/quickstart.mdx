@@ -8,7 +8,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 ## **Prerequisites**
 
 - The Python SDK installed — see [Install](/en/run/python/install).
-- Familiarity with [backend choice](/en/get-started/choose-backend) — `qairt` for AI Hub bundles, `llama_cpp` for any GGUF.
+- Familiarity with [runtime choice](/en/get-started/choose-runtime) — `qairt` for AI Hub bundles, `llama_cpp` for any GGUF.
 
 The SDK follows the same design as Hugging Face `transformers` — load with `AutoModelForCausalLM.from_pretrained()`, then call `.generate()`.
 
@@ -17,11 +17,11 @@ The SDK follows the same design as Hugging Face `transformers` — load with `Au
 ```python
 from geniex import AutoModelForCausalLM
 
-# GGUF model example (llama.cpp backend)
+# GGUF model example (llama.cpp runtime)
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B-GGUF",     # HF repo id of a GGUF model, or a local .gguf path
     device_map="auto",          # "auto" | "cpu" | "gpu" | "npu" | "hybrid"
-                                # | "<plugin>" | "<plugin>:<device>"
+                                # | "<runtime>" | "<runtime>:<compute-unit>"
                                 # auto -> hybrid for llama_cpp, npu for qairt
 )
 

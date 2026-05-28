@@ -48,7 +48,7 @@
     "id": "Phi-4-mini-instruct-GGUF",
     "displayName": "Phi-4-mini-instruct (GGUF)",
     "modelName": "unsloth/Phi-4-mini-instruct-GGUF",
-    "quant": "Q4_0",
+    "quant": "Q4_K_M",
     "hub": "HUGGINGFACE",
     "type": "chat",
     "pluginIds": 7
@@ -85,6 +85,15 @@
     "id": "Qwen3-VL-2B-Instruct-GGUF",
     "displayName": "Qwen3-VL-2B-Instruct (GGUF)",
     "modelName": "unsloth/Qwen3-VL-2B-Instruct-GGUF",
+    "quant": "Q4_0",
+    "hub": "HUGGINGFACE",
+    "type": "vlm",
+    "pluginIds": 7
+  },
+  {
+    "id": "Qwen2.5-VL-7B-Instruct-GGUF",
+    "displayName": "Qwen2.5-VL-7B-Instruct (GGUF)",
+    "modelName": "unsloth/Qwen2.5-VL-7B-Instruct-GGUF",
     "quant": "Q4_0",
     "hub": "HUGGINGFACE",
     "type": "vlm",

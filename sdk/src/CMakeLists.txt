@@ -71,7 +71,7 @@ if(GENIEX_MODEL_MANAGER)
     install(FILES "${CMAKE_SOURCE_DIR}/model-manager/include/geniex_model.h"
         DESTINATION include)
 
-    if(GENIEX_TEST)
+    if(GENIEX_BENCHMARK)
         add_executable(test_model_manager
             "${CMAKE_SOURCE_DIR}/model-manager/tests/test_model_manager.c"
         )

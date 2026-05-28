@@ -108,7 +108,7 @@ func defaultColorTheme() *Theme {
 		theme.Warning = color.Style{color.FgYellow}
 		theme.Error = color.Style{color.FgRed}
 
-		theme.Reference = color.Style{color.OpFuzzy, color.FgDarkGray}
+		theme.Reference = color.Style{color.OpFuzzy, color.FgWhite}
 		theme.Heading = color.Style{color.FgCyan, color.Bold}
 		theme.Command = color.Style{color.FgGreen}
 		theme.Flag = color.Style{color.FgYellow}
@@ -124,14 +124,11 @@ func defaultColorTheme() *Theme {
 	if color.Support256Color() {
 		slog.Debug("apply 256 color")
 		theme.Quant = color.S256(31)
-		//theme.AddFiles = color.S256(7)
-		//theme.ModelOutput = color.S256(15)
 		theme.Profile = color.S256(44)
 	}
 	if color.SupportTrueColor() {
 		slog.Debug("apply true color")
 		theme.Quant = color.NewRGBStyle(color.RGB(0, 135, 175))
-		//theme.AddFiles = color.NewRGBStyle(color.RGB(192, 192, 192))
 		theme.Profile = color.NewRGBStyle(color.RGB(0, 215, 215))
 	}
 	return theme

@@ -33,8 +33,3 @@ rootProject.name = "GeniexDemo"
 include(":transform")
 include(":app")
 
-// Consume the Android bindings library module directly from this repo
-// (replaces the previous ai.geniex:core Maven dependency).
-include(":geniex-bindings")
-project(":geniex-bindings").projectDir = file("../../bindings/android/app")
-

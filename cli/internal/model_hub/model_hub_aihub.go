@@ -22,6 +22,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -79,11 +80,11 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 	chipset := h.chipsetGetter()
 	manifest, err := h.client.LoadManifest(ctx)
 	if err != nil {
-		return nil, err
+		return nil, TranslateAIHubError(err)
 	}
 	model, err := h.client.LookupModelByDisplayName(repo)
 	if err != nil {
-		return nil, err
+		return nil, TranslateAIHubError(err)
 	}
 	if _, rerr := aihub.RuntimeForDomain(model.GetDomain()); rerr != nil {
 		return nil, rerr
@@ -91,11 +92,11 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 
 	plat, err := h.client.LoadPlatform(ctx, manifest)
 	if err != nil {
-		return nil, err
+		return nil, TranslateAIHubError(err)
 	}
 	ra, err := h.client.LoadReleaseAssets(ctx, manifest, model.GetId())
 	if err != nil {
-		return nil, err
+		return nil, TranslateAIHubError(err)
 	}
 	candidates, err := aihub.MatchAll(ra, plat, model.GetDomain(), chipset)
 	if err != nil {
@@ -105,13 +106,17 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 
 	zipSize, err := aihub.HeadContentLength(ctx, asset.GetDownloadUrl())
 	if err != nil {
-		return nil, fmt.Errorf("HEAD %s: %w", asset.GetDownloadUrl(), err)
+		return nil, TranslateAIHubError(err)
 	}
 
-	zipBasename := repo + ".zip"
+	zipURL := asset.GetDownloadUrl()
+	zipBasename := path.Base(zipURL)
+	if path.Ext(zipBasename) != ".zip" {
+		return nil, fmt.Errorf("expected zip file from AI Hub, got %q", zipBasename)
+	}
 	h.mu.Lock()
 	h.resolved[name] = resolvedAsset{
-		zipURL:      asset.GetDownloadUrl(),
+		zipURL:      zipURL,
 		zipSize:     zipSize,
 		zipBasename: zipBasename,
 	}
@@ -119,7 +124,7 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 
 	slog.Info("aihub: resolved asset",
 		"name", name, "chipset", asset.GetChipset(),
-		"url", asset.GetDownloadUrl(), "size", zipSize)
+		"url", zipURL, "size", zipSize)
 
 	return []ModelFileInfo{{Name: zipBasename, Size: zipSize}}, nil
 }
@@ -211,7 +216,7 @@ func applyQairtMetadata(outputDir string, mf *types.ModelManifest) {
 		}
 	}
 
-	quant := "N/A"
+	quant := types.QuantNA
 	if p := strings.ToUpper(meta.Precision); p != "" {
 		quant = p
 	}

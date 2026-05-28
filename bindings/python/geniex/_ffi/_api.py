@@ -127,7 +127,12 @@ class GeniexError(Exception):
 
 # Subset of geniex_ErrorCode values that callers may want to check against.
 # Keep aligned with sdk/include/geniex.h; expand on demand.
+GENIEX_ERROR_COMMON_PLUGIN_INVALID = -100302
 GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH = -200004
+
+
+def _unknown_plugin_message(plugin_id: str, available: list[str]) -> str:
+    return f"Unknown plugin: {plugin_id}. Available plugins: {', '.join(sorted(available))}."
 
 
 def _check(code: int) -> None:
@@ -304,6 +309,13 @@ def ensure_init() -> None:
         init()
 
 
+def _require_init(func_name: str) -> None:
+    # Plugin/device queries silently returned empty before init (#715).
+    # Surface the missing init step explicitly instead.
+    if not _initialized:
+        raise RuntimeError(f'geniex.{func_name}() requires the runtime to be initialized. Call geniex.init() first.')
+
+
 def _encode(s: str | None) -> bytes | None:
     return s.encode() if s else None
 
@@ -318,7 +330,13 @@ def _str_list_to_c(strings: list[str]):
 
 
 def get_plugin_list() -> list[str]:
-    """Return the plugin ids registered with libgeniex."""
+    """Return the plugin ids registered with libgeniex.
+
+    Raises :class:`RuntimeError` if :func:`init` has not been called — the
+    plugin registry is populated by ``geniex_init`` and would otherwise
+    silently return ``[]``.
+    """
+    _require_init('get_plugin_list')
     _ensure_bound()
     lib = load_library()
     out = geniex_GetPluginListOutput()
@@ -330,8 +348,15 @@ def get_plugin_list() -> list[str]:
 
 
 def get_device_list(plugin_id: str) -> list[tuple[str, str]]:
-    """Return ``[(device_id, device_name), ...]`` for ``plugin_id``."""
+    """Return ``[(device_id, device_name), ...]`` for ``plugin_id``.
+
+    Raises :class:`RuntimeError` if :func:`init` has not been called.
+    """
+    _require_init('get_device_list')
     _ensure_bound()
+    available = get_plugin_list()
+    if plugin_id not in available:
+        raise GeniexError(GENIEX_ERROR_COMMON_PLUGIN_INVALID, _unknown_plugin_message(plugin_id, available))
     lib = load_library()
     inp = geniex_GetDeviceListInput(plugin_id=plugin_id.encode())
     out = geniex_GetDeviceListOutput()

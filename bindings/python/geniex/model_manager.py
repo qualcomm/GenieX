@@ -278,7 +278,7 @@ def get_type(model_name: str) -> str:
         return 'llm'
     if t.value == GENIEX_MODEL_TYPE_VLM:
         return 'vlm'
-    raise GeniexError(-1, f'Unknown model type: {t.value}')
+    raise ValueError(f'Unknown model type: {t.value}')
 
 
 def resolve_alias(alias: str) -> str:

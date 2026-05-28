@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -133,26 +134,20 @@ func infer() *cobra.Command {
 		s := store.Get()
 
 		name, quant := model_hub.NormalizeModelName(args[0])
-		manifest, err := ensureModelAvailable(s, name, quant)
+		manifest, err := ensureModelAvailable(cmd.Context(), s, name, quant)
 		if err != nil {
-			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 			return err
 		}
 
 		if quant != "" {
 			if fileinfo, exist := manifest.ModelFile[quant]; !exist {
-				err = fmt.Errorf("precision %s not found", quant)
-				fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
-				return err
+				return fmt.Errorf("%w: %s not found in manifest", common.ErrPrecisionNotFound, quant)
 			} else if !fileinfo.Downloaded {
-				err = fmt.Errorf("precision %s not downloaded", quant)
-				fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
-				return err
+				return fmt.Errorf("%w: %s not downloaded", common.ErrPrecisionNotFound, quant)
 			}
 		} else {
 			sq, err := selectQuant(manifest)
 			if err != nil {
-				fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 				return err
 			}
 			quant = sq
@@ -167,73 +162,24 @@ func infer() *cobra.Command {
 			err = inferVLM(manifest, quant)
 		default:
 			geniex_sdk.DeInit()
-			err = fmt.Errorf("unsupported model type: %s", manifest.ModelType)
-			fmt.Println(render.GetTheme().Error.Sprint(err))
-			return err
+			return fmt.Errorf("unsupported model type: %s", manifest.ModelType)
 		}
 
 		geniex_sdk.DeInit()
-
-		switch err {
-		case nil:
-			return nil
-		case geniex_sdk.ErrCommonParamNotSupported:
-			// TODO: Once the C API exposes geniex_get_last_error_detail() (a thread-local
-			// detail string set by the plugin before returning an error code), the specific
-			// unsupported flag name will be available here and this generic message can be
-			// replaced with the detail string from the C API. At that point the resolved
-			// flag name and plugin name should be surfaced directly from the plugin log,
-			// and the CLI-level resolveNglNctx / Changed() workaround can be removed.
-			fmt.Println(render.GetTheme().Error.Sprintf(`
-⚠️ A flag you passed is not supported by the %s plugin.
-
-👉 Run 'geniex infer -h' to see which flags are plugin-specific.`, manifest.PluginId))
-		case geniex_sdk.ErrCommonNotSupport:
-			fmt.Println(render.GetTheme().Error.Sprint(`
-⚠️ Oops. This model type is not supported yet.
-
-👉 Try these:
-- Check back later for updates.
-- See help in our discord or slack.`))
-		case geniex_sdk.ErrCommonModelLoad:
-			fmt.Println(render.GetTheme().Error.Sprint(`
-⚠️ Oops. Model failed to load.
-
-👉 Try these:
-- Redownload the model.
-- Verify your system meets the model's requirements.
-- Check your NPU / GPU driver version and update it if it's out of date.
-- See help in our discord or slack.`))
-		case geniex_sdk.ErrCommonPluginLoad:
-			fmt.Println(render.GetTheme().Error.Sprint(`
-⚠️ Oops. Plugin failed to load.
-
-👉 Try these:
-- Ensure all plugin dependencies are correct.
-- See help in our discord or slack.`))
-		case geniex_sdk.ErrCommonPluginInvalid:
-			fmt.Println(render.GetTheme().Error.Sprint(`
-⚠️ Oops. Plugin is invalid.
-
-👉 Try these:
-- This model may not be compatible with your system. Try another model.
-- See help in our discord or slack.`))
-		case geniex_sdk.ErrLlmTokenizationContextLength:
-			fmt.Println(render.GetTheme().Info.Sprintf("Context length exceeded, please start a new conversation"))
-		default:
-			fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
+		if errors.Is(err, geniex_sdk.ErrCommonParamNotSupported) {
+			err = fmt.Errorf("plugin %s: %w", manifest.PluginId, err)
 		}
 		return err
 	}
 	return inferCmd
 }
 
-func ensureModelAvailable(s *store.Store, name string, quant string) (*types.ModelManifest, error) {
+func ensureModelAvailable(ctx context.Context, s *store.Store, name string, quant string) (*types.ModelManifest, error) {
 	manifest, err := s.GetManifest(name)
 	if errors.Is(err, os.ErrNotExist) {
 		fmt.Println(render.GetTheme().Info.Sprintf("Model is not currently cached, downloading..."))
-		if err := pullModel(name, quant); err != nil {
-			return nil, fmt.Errorf("download model failed: %s", err)
+		if err := pullModel(ctx, name, quant); err != nil {
+			return nil, fmt.Errorf("download model failed: %w", err)
 		}
 		manifest, err = s.GetManifest(name)
 	}
@@ -306,20 +252,12 @@ func loadStopSequences() ([]string, error) {
 	return stopSequences, nil
 }
 
-// resolveNglNctx returns the effective (ngl, nctx) values to pass to the SDK.
-// For llama_cpp, flags that were not explicitly set by the user resolve to
-// their well-known defaults (999 / 4096). If the user explicitly passed a
-// value (including 0), that value is always respected.
-// For all other plugins, unset flags stay at 0 ("not set") so the plugin's
-// param-guard is not tripped by the flag default.
-//
-// TODO: This Changed()-based workaround exists because the C ABI currently has
-// no way to return a dynamic detail string alongside an error code. Once
-// geniex_get_last_error_detail() is added to the C API, the plugin can log the
-// exact flag name and this CLI-side guard (and the 0-default trick) can be
-// removed in favour of simply forwarding the raw flag values and letting the
-// plugin report the problem with full context.
-func resolveNglNctx(manifest *types.ModelManifest) (resolvedNgl, resolvedNctx int32) {
+// resolveModelParams resolves --device / --ngl / --nctx into the
+// (device_id, ngl, nctx) triple the SDK expects. For llama_cpp, unset
+// --ngl / --nctx fall back to 999 / 4096; other plugins keep 0 so their
+// param-guard isn't tripped by the flag default. Device alias mapping
+// is delegated to geniex_resolve_device (sdk/src/device.cpp).
+func resolveModelParams(manifest *types.ModelManifest) (deviceID string, resolvedNgl, resolvedNctx int32, err error) {
 	resolvedNgl, resolvedNctx = ngl, nctx
 	if manifest.PluginId == geniex_sdk.PluginLlamaCpp {
 		if !llmFlags.Changed("ngl") {
@@ -329,19 +267,9 @@ func resolveNglNctx(manifest *types.ModelManifest) (resolvedNgl, resolvedNctx in
 			resolvedNctx = 4096
 		}
 	}
-	return
-}
 
-// resolveDevice maps the --device flag to (device_id, n_gpu_layers) via
-// the SDK's geniex_resolve_device (see sdk/src/device.cpp). An empty
-// --device picks the plugin's preferred default (hybrid for llama.cpp,
-// npu for qairt — with model-specific overrides, e.g. gpt-oss on
-// llama_cpp defaults to npu).
-func resolveDevice(manifest *types.ModelManifest) (deviceID string, nglOverride int32, err error) {
-	effectiveNgl, _ := resolveNglNctx(manifest)
-	deviceID, nglOverride, warning, err := geniex_sdk.ResolveDevice(manifest.PluginId, manifest.ModelName, device, effectiveNgl)
+	deviceID, resolvedNgl, warning, err := geniex_sdk.ResolveDevice(manifest.PluginId, manifest.ModelName, device, resolvedNgl)
 	if err != nil {
-		fmt.Println(render.GetTheme().Error.Sprintf("Error: %s", err))
 		return
 	}
 	if warning != "" {
@@ -372,11 +300,10 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 	s := store.Get()
 	modelfile := s.ModelfilePath(manifest.Name, manifest.ModelFile[quant].Name)
 
-	deviceID, nglResolved, err := resolveDevice(manifest)
+	deviceID, nglResolved, nctxResolved, err := resolveModelParams(manifest)
 	if err != nil {
 		return err
 	}
-	_, nctxResolved := resolveNglNctx(manifest)
 
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
@@ -540,11 +467,10 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 	if manifest.MMProjFile.Name != "" {
 		mmprojfile = s.ModelfilePath(manifest.Name, manifest.MMProjFile.Name)
 	}
-	deviceID, nglResolved, err := resolveDevice(manifest)
+	deviceID, nglResolved, nctxResolved, err := resolveModelParams(manifest)
 	if err != nil {
 		return err
 	}
-	_, nctxResolved := resolveNglNctx(manifest)
 
 	spin := render.NewSpinner("loading model...")
 	spin.Start()

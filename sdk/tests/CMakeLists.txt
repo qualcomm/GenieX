@@ -1,3 +1,3 @@
-if (GENIEX_TEST)
-    add_subdirectory(./src)
+if(GENIEX_BENCHMARK)
+    add_subdirectory(./benchmark)
 endif()

@@ -11,7 +11,7 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向 Dragonwing IoT 等
   <Tab title="Windows ARM64">
     ### **前置条件**
 
-    - 骁龙 X 系列设备（X Elite 或 X2 Elite）。详见[支持的设备](/cn/get-started/devices)。
+    - 骁龙 X 系列芯片（X Elite 或 X2 Elite）。详见[支持的平台](/cn/get-started/platforms)。
     - PowerShell 或任意 Windows ARM64 上可用的 shell。
 
     ### **下载**
@@ -45,7 +45,7 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向 Dragonwing IoT 等
     ### **前置条件**
 
     - Linux ARM64 主机。
-    - 高通 IoT 设备——详见[支持的设备](/cn/get-started/devices#iot-linux-arm64)。
+    - 高通 IoT 芯片——详见[支持的平台](/cn/get-started/platforms#iot-linux-arm64)。
 
     ### **安装**
 
@@ -53,36 +53,56 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向 Dragonwing IoT 等
     curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
     ```
 
-    脚本会下载最新稳定版本、校验 SHA256 并原子化安装，全程**无需 `sudo`**：
-
-    - **root**（EVK / 容器）→ 二进制位于 `/usr/local/lib/geniex/`，启动器位于 `/usr/local/bin/geniex`。
-    - **非 root** → 二进制位于 `${XDG_DATA_HOME:-~/.local/share}/geniex/`，启动器位于 `~/.local/bin/geniex`。
-
-    常用参数（写在 `sh -s --` 后）：
-
-    ```bash bash
-    # 锁定指定版本
-    curl -fsSL .../install.sh | sh -s -- --version v0.1.8
-
-    # 自定义安装路径
-    curl -fsSL .../install.sh | sh -s -- --prefix /opt/geniex
-    ```
-
-    ### **加入 PATH**
-
-    如果启动器目录不在 `PATH` 中，安装脚本会打印需要追加的命令行——一般为：
+    脚本会下载最新稳定版本、校验 SHA256，并无需 `sudo` 完成安装。若启动器目录尚未加入 `PATH`，安装脚本会在末尾输出需要追加的 export 行——例如：
 
     ```bash bash
     echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc   # 或 ~/.zshrc / ~/.profile
     ```
 
-    打开新 shell 或 `source` 上述文件。
+    打开新 shell 或 `source` 该文件以使更改生效。
 
     ### **验证**
 
     ```bash bash
     geniex --help
     ```
+
+    若找不到 `geniex`，请打开新 shell 后重试——或复制安装脚本末尾打印的 `PATH` export 行。
+
+    ### **高级选项**
+
+    <AccordionGroup>
+      <Accordion title="安装路径">
+        脚本根据当前用户自动选择安装位置：
+
+        - **root**（EVK / 容器）→ 二进制位于 `/usr/local/lib/geniex/`，启动器位于 `/usr/local/bin/geniex`。
+        - **非 root** → 二进制位于 `${XDG_DATA_HOME:-~/.local/share}/geniex/`，启动器位于 `~/.local/bin/geniex`。
+
+        脚本下载最新稳定版本，校验 SHA256，并原子化安装。
+      </Accordion>
+
+      <Accordion title="锁定版本或自定义安装路径">
+        在 `sh -s --` 后传入参数：
+
+        ```bash bash
+        # 锁定指定版本
+        curl -fsSL .../install.sh | sh -s -- --version v0.1.8
+
+        # 自定义安装路径
+        curl -fsSL .../install.sh | sh -s -- --prefix /opt/geniex
+        ```
+      </Accordion>
+
+      <Accordion title="手动加入 PATH">
+        若启动器目录不在 `PATH` 中，将安装脚本打印的行添加进去——一般为：
+
+        ```bash bash
+        echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc   # 或 ~/.zshrc / ~/.profile
+        ```
+
+        打开新 shell 或 `source` 该文件。
+      </Accordion>
+    </AccordionGroup>
 
   </Tab>
 
@@ -92,7 +112,7 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向 Dragonwing IoT 等
     ### **前置条件**
 
     - 安装了 Docker 的 Linux ARM64 主机。
-    - 高通 IoT 设备——详见[支持的设备](/cn/get-started/devices#iot-linux-arm64)。
+    - 高通 IoT 芯片——详见[支持的平台](/cn/get-started/platforms#iot-linux-arm64)。
     - 拥有 GHCR 读权限的 GitHub Personal Access Token (PAT)。
 
     ### **拉取镜像**

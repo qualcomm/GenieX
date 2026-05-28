@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import os
 from ctypes import POINTER, byref, c_char_p, c_void_p, cast, pointer, string_at
 
 from ._ffi._api import GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH, _check, _str_list_to_c, load_library
@@ -103,11 +104,21 @@ def _build_gen_config(
     return cfg, stop_arr, img_arr, aud_arr
 
 
+def _apply_meta(profile: ProfileData, meta: dict | None) -> ProfileData:
+    if meta:
+        profile.backend = meta.get('backend')
+        profile.device = meta.get('device')
+        profile.quant = meta.get('quant')
+        profile.model_path = meta.get('model_path')
+    return profile
+
+
 class GeniexLLM:
     """LLM handle returned by :meth:`AutoModelForCausalLM.from_pretrained`."""
 
-    def __init__(self, handle: c_void_p) -> None:
+    def __init__(self, handle: c_void_p, meta: dict | None = None) -> None:
         self._handle = handle
+        self._meta = meta
         self.tokenizer = ModelTokenizer(self)
 
     def _apply_chat_template(
@@ -148,14 +159,15 @@ class GeniexLLM:
         prompt: str,
         *,
         max_new_tokens: int = 512,
-        temperature: float = 0.7,
-        top_p: float = 0.9,
-        top_k: int = 40,
+        # 0 = defer to bundle/plugin default. Pass non-zero to override.
+        temperature: float = 0.0,
+        top_p: float = 0.0,
+        top_k: int = 0,
         min_p: float = 0.0,
-        repetition_penalty: float = 1.1,
+        repetition_penalty: float = 0.0,
         presence_penalty: float = 0.0,
         frequency_penalty: float = 0.0,
-        seed: int = -1,
+        seed: int = 0,
         stop: list[str] | None = None,
         grammar: str | None = None,
         json_mode: bool = False,
@@ -203,7 +215,7 @@ class GeniexLLM:
         out = geniex_LlmGenerateOutput()
         rc = lib.geniex_llm_generate(self._handle, byref(inp), byref(out))
         full = string_at(out.full_text).decode() if out.full_text else ''
-        profile = ProfileData.from_c(out.profile_data)
+        profile = _apply_meta(ProfileData.from_c(out.profile_data), self._meta)
         if out.full_text:
             lib.geniex_free(out.full_text)
         if rc == GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH:
@@ -231,7 +243,7 @@ class GeniexLLM:
             out = geniex_LlmGenerateOutput()
             rc = lib.geniex_llm_generate(self._handle, byref(inp), byref(out))
             full = string_at(out.full_text).decode() if out.full_text else ''
-            profile = ProfileData.from_c(out.profile_data)
+            profile = _apply_meta(ProfileData.from_c(out.profile_data), self._meta)
             if out.full_text:
                 lib.geniex_free(out.full_text)
             if rc == GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH:
@@ -282,6 +294,19 @@ class GeniexLLM:
             pass
 
 
+def _messages_have_modality(messages: list[dict], modality: str) -> bool:
+    # True if any message's content list contains a block with the given
+    # ``type`` (e.g. 'image' / 'audio'). Plain string content trivially
+    # holds none.
+    for msg in messages:
+        content = msg.get('content')
+        if isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict) and item.get('type') == modality:
+                    return True
+    return False
+
+
 def _build_vlm_messages(messages: list[dict]):
     count = len(messages)
     MsgArray = geniex_VlmChatMessage * count
@@ -318,8 +343,15 @@ def _build_vlm_messages(messages: list[dict]):
 class GeniexVLM:
     """VLM handle returned by :meth:`AutoModelForVision2Seq.from_pretrained`."""
 
-    def __init__(self, handle: c_void_p) -> None:
+    def __init__(self, handle: c_void_p, meta: dict | None = None) -> None:
         self._handle = handle
+        self._meta = meta
+        # Track whether the most recent apply_chat_template saw any
+        # multimodal content blocks — used by generate() to detect callers
+        # who built a messages payload with image/audio refs but forgot to
+        # pass images=[...] / audios=[...].
+        self._last_template_has_image = False
+        self._last_template_has_audio = False
         self.tokenizer = ModelTokenizer(self)
 
     def _apply_chat_template(
@@ -330,6 +362,8 @@ class GeniexVLM:
         tools: str | None,
     ) -> str:
         lib = load_library()
+        self._last_template_has_image = _messages_have_modality(messages, 'image')
+        self._last_template_has_audio = _messages_have_modality(messages, 'audio')
         c_msgs, count, _refs = _build_vlm_messages(messages)
         inp = geniex_VlmApplyChatTemplateInput(
             messages=c_msgs,
@@ -349,14 +383,15 @@ class GeniexVLM:
         prompt: str,
         *,
         max_new_tokens: int = 512,
-        temperature: float = 0.7,
-        top_p: float = 0.9,
-        top_k: int = 40,
+        # 0 = defer to bundle/plugin default. Pass non-zero to override.
+        temperature: float = 0.0,
+        top_p: float = 0.0,
+        top_k: int = 0,
         min_p: float = 0.0,
-        repetition_penalty: float = 1.1,
+        repetition_penalty: float = 0.0,
         presence_penalty: float = 0.0,
         frequency_penalty: float = 0.0,
-        seed: int = -1,
+        seed: int = 0,
         stop: list[str] | None = None,
         grammar: str | None = None,
         json_mode: bool = False,
@@ -373,6 +408,22 @@ class GeniexVLM:
         stop = stop or []
         images = images or []
         audios = audios or []
+        if not images and self._last_template_has_image:
+            raise ValueError(
+                'messages reference image content but generate(images=[...]) '
+                'is empty. Pass image paths via images=[...].'
+            )
+        if not audios and self._last_template_has_audio:
+            raise ValueError(
+                'messages reference audio content but generate(audios=[...]) '
+                'is empty. Pass audio paths via audios=[...].'
+            )
+        for path in images:
+            if not os.path.isfile(path):
+                raise FileNotFoundError(f'Image file not found: {path}')
+        for path in audios:
+            if not os.path.isfile(path):
+                raise FileNotFoundError(f'Audio file not found: {path}')
         sampler = _build_sampler(
             temperature,
             top_p,
@@ -407,7 +458,7 @@ class GeniexVLM:
         out = geniex_VlmGenerateOutput()
         rc = lib.geniex_vlm_generate(self._handle, byref(inp), byref(out))
         full = string_at(out.full_text).decode() if out.full_text else ''
-        profile = ProfileData.from_c(out.profile_data)
+        profile = _apply_meta(ProfileData.from_c(out.profile_data), self._meta)
         if out.full_text:
             lib.geniex_free(out.full_text)
         if rc == GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH:
@@ -431,7 +482,7 @@ class GeniexVLM:
             out = geniex_VlmGenerateOutput()
             rc = lib.geniex_vlm_generate(self._handle, byref(inp), byref(out))
             full = string_at(out.full_text).decode() if out.full_text else ''
-            profile = ProfileData.from_c(out.profile_data)
+            profile = _apply_meta(ProfileData.from_c(out.profile_data), self._meta)
             if out.full_text:
                 lib.geniex_free(out.full_text)
             if rc == GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH:

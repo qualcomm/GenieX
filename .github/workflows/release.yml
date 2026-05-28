@@ -32,11 +32,32 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_SHA: ${{ github.sha }}
           TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
         run: |
           set -euo pipefail
           semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?$'
           [[ "${TAG}" =~ $semver ]] || { echo "::error::Invalid SemVer 2.0 tag: ${TAG}"; exit 1; }
+
+          # workflow_dispatch runs against GITHUB_SHA = the ref the workflow
+          # was launched from. If that's not the tag's commit, downstream
+          # _build-* jobs will check out the wrong source and stamp it as
+          # ${TAG} — which we cannot move (tags are immutable).
+          if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+            ref_obj=$(gh api "repos/${GH_REPO}/git/ref/tags/${TAG}" 2>/dev/null) \
+              || { echo "::error::Tag ${TAG} not found on origin"; exit 1; }
+            tag_sha=$(jq -r '.object.sha' <<<"${ref_obj}")
+            tag_type=$(jq -r '.object.type' <<<"${ref_obj}")
+            if [[ "${tag_type}" == "tag" ]]; then
+              tag_sha=$(gh api "repos/${GH_REPO}/git/tags/${tag_sha}" --jq '.object.sha')
+            fi
+            if [[ "${tag_sha}" != "${GITHUB_SHA}" ]]; then
+              echo "::error::Dispatch ref ${GITHUB_SHA} != tag ${TAG} (${tag_sha}). Re-run from the tag ref: Actions → Release → Run workflow → Use workflow from → Tags → ${TAG}."
+              exit 1
+            fi
+          fi
+
           # Stable tags are immutable once they've shipped assets; prereleases
           # (hyphen-bearing) may be re-cut. An existing stable release with no
           # assets is a placeholder (e.g. created empty via the UI before the
@@ -345,6 +366,11 @@ jobs:
         with:
           fetch-depth: 1
           submodules: false
+
+      # Pin so the manifest scripts below don't rely on the runner image's `python` alias.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
 
       - uses: actions/download-artifact@v8
         with:

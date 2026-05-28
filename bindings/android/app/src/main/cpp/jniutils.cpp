@@ -404,15 +404,16 @@ geniex_LlmCreateInput extract_llm_create_input(JNIEnv* env, jobject inputObj) {
     jfieldID fid;
     jstring  jstr;
 
-    // === model_name ===
-    LOGi("[JNI] [extract] locating field 'model_path' (Ljava/lang/String;)");
+    // === model_name (optional — QAIRT plugin reads metadata.json, only
+    //     llama_cpp's gpt-oss device-default override consults it) ===
+    LOGi("[JNI] [extract] locating field 'model_name' (Ljava/lang/String;)");
     fid = env->GetFieldID(cls, "model_name", "Ljava/lang/String;");
     if (checkAndLogJniException(env, "GetFieldID(model_name)") || !fid) {
-        LOGe("[JNI] [extract] field 'model_name' not found");
+        LOGi("[JNI] [extract] field 'model_name' not present (Kotlin property)");
     } else {
         jstr = (jstring)env->GetObjectField(inputObj, fid);
         if (checkAndLogJniException(env, "GetObjectField(model_name)") || !jstr) {
-            LOGe("[JNI] [extract] 'model_name' is null");
+            LOGi("[JNI] [extract] model_name = (null)");
         } else {
             std::string s  = jstring2str(env, jstr);
             out.model_name = hold_c_str(s);

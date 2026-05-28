@@ -40,24 +40,22 @@ from geniex import (
     get_plugin_list,
     get_plugin_version,
     init,
-    resolve_device_map,
     set_log_level,
     version,
 )
-from geniex.auto import _apply_plugin_hint
 
 _mm = geniex.model_manager
 
-# When stdout/stderr is a pipe on Windows the default codec is cp1252 and
-# model tokens outside Latin-1 (UTF-8 continuation bytes, emoji, replacement
-# chars) crash the print. Force UTF-8 whenever the stream supports it so
-# callers piping through `tee`, pytest capture, etc. get clean output.
-for _stream in (sys.stdout, sys.stderr):
-    if hasattr(_stream, 'reconfigure'):
-        try:
-            _stream.reconfigure(encoding='utf-8', errors='replace')
-        except Exception:  # noqa: BLE001 — best-effort
-            pass
+
+def _force_utf8_streams() -> None:
+    # Windows pipes default to cp1252; non-Latin-1 model tokens crash the print without UTF-8.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            try:
+                stream.reconfigure(encoding='utf-8', errors='replace')
+            except Exception:  # noqa: BLE001
+                pass
+
 
 # Matches bare media paths in the user prompt (absolute, relative, or
 # Windows drive-qualified). Mirrors the regex used by the Go CLI so
@@ -348,11 +346,9 @@ def _cmd_chat(args: argparse.Namespace) -> int:
     elapsed = time.monotonic() - t0
     is_vlm = isinstance(model, GeniexVLM)
     model_type = 'vlm' if is_vlm else 'llm'
-    try:
-        manifest_plugin = _mm.get_paths(args.model).plugin_id
-    except GeniexError:
-        manifest_plugin = None
-    plugin_id, device_id, _ngl = resolve_device_map(_apply_plugin_hint(args.device, manifest_plugin), args.model)
+    meta = getattr(model, '_meta', None) or {}
+    plugin_id = meta.get('backend')
+    device_id = meta.get('device')
     where = f'{plugin_id}:{device_id}' if plugin_id and device_id else (plugin_id or args.device)
     print(f'{_DIM}done ({model_type}, {elapsed:.1f}s, {where}){_RESET}')
 
@@ -594,6 +590,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_streams()
     parser = _build_parser()
     args = parser.parse_args(argv)
     level = _resolve_log_level(args)

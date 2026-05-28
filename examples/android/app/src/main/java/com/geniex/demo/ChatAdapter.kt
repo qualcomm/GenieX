@@ -32,7 +32,8 @@ enum class MessageType(val value: Int) {
     ASSISTANT(1),
     PROFILE(2),
     IMAGES(3),
-    ASSISTANT_IMAGES(4);
+    ASSISTANT_IMAGES(4),
+    LOADING(5);
 
     companion object {
         fun from(value: Int): MessageType =
@@ -61,6 +62,9 @@ class ChatAdapter(private val messages: List<Message>) :
                     parent,
                     false
                 )
+            )
+            MessageType.LOADING -> LoadingViewHolder(
+                inflater.inflate(R.layout.item_loading_message, parent, false)
             )
 
             else -> ProfileViewHolder(inflater.inflate(R.layout.item_profile_message, parent, false))
@@ -114,6 +118,8 @@ class ChatAdapter(private val messages: List<Message>) :
             return (dp * context.resources.displayMetrics.density).toInt()
         }
     }
+
+    class LoadingViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView)
 
     class ImagesViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
         private val imageContainer: LinearLayout = itemView.findViewById(R.id.image_container)

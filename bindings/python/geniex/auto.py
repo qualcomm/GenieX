@@ -16,13 +16,14 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from ctypes import byref, c_void_p
 
 from . import _progress
 from . import model_manager as _mm
-from ._ffi._api import _check, ensure_init, get_plugin_list, load_library, resolve_device
+from ._ffi._api import GeniexError, _check, ensure_init, get_plugin_list, load_library, resolve_device
 from ._ffi._types import geniex_LlmCreateInput, geniex_ModelConfig, geniex_VlmCreateInput
 from .model_manager import ProgressCallback
 from .modeling import GeniexLLM, GeniexVLM
@@ -140,7 +141,21 @@ def _resolve_model_sources(
     model_name: str | None = None,
 ) -> tuple[str, str | None, str | None, _mm.ModelPaths | None]:
     if os.path.exists(model_name_or_path):
+        # Optional: when the caller passes both a local path and `model_name=`,
+        # register the bundle in the cache via the localfs hub so subsequent
+        # `_mm.get_paths(model_name)` / `_mm.get_type(model_name)` lookups work
+        # (e.g. VLM auto-detect). Not required for QAIRT to *load* — the plugin
+        # reads metadata.json directly from the bundle.
         if model_name:
+            # Reject mismatched model_name early — the QAIRT plugin would
+            # otherwise fail at load with a generic "Invalid model format".
+            meta = _read_bundle_metadata(model_name_or_path)
+            bundle_id = (meta or {}).get('model_id')
+            if bundle_id and bundle_id != model_name:
+                raise ValueError(
+                    f"model_name '{model_name}' does not match bundle "
+                    f"'model_id={bundle_id}' in {model_name_or_path}"
+                )
             local_dir = model_name_or_path if os.path.isdir(model_name_or_path) else os.path.dirname(model_name_or_path)
             _mm.pull(model_name, hub='localfs', local_path=os.path.abspath(local_dir))
             paths = _mm.get_paths(model_name)
@@ -153,30 +168,67 @@ def _resolve_model_sources(
     try:
         cached = _mm.get_paths(key)
         return cached.model_path, cached.mmproj_path, cached.tokenizer_path, cached
-    except Exception:  # noqa: BLE001 — any failure = cache miss, fall through
+    except (GeniexError, FileNotFoundError, OSError):
         pass
 
     printer = _progress.resolve(progress)
     try:
-        paths = _mm.ensure_cached(
-            model_name_or_path,
-            quant=quant,
-            hub='auto',
-            hf_token=hf_token,
-            on_progress=printer,
-        )
+        try:
+            paths = _mm.ensure_cached(
+                model_name_or_path,
+                quant=quant,
+                hub='auto',
+                hf_token=hf_token,
+                on_progress=printer,
+            )
+        except GeniexError as e:
+            translated = _translate_quant_error(e, model_name_or_path, quant)
+            if translated is not None:
+                raise translated from e
+            raise
     finally:
         _progress.finish(printer)
     return paths.model_path, paths.mmproj_path, paths.tokenizer_path, paths
 
 
+# Model-manager FFI returns -100000 (Unknown error) when manifest inference
+# rejects a requested quant — the Rust side already builds a richer
+# "available: [...]" message, but it's not surfaced through the C ABI yet.
+# Translate that catch-all into a focused ValueError when the caller
+# explicitly asked for a specific quant, so they can spot the typo without
+# inspecting model-manager logs. The detailed list is tracked under #737.
+GENIEX_ERROR_COMMON_UNKNOWN = -100000
+
+
+def _translate_quant_error(err: GeniexError, model_name_or_path: str, quant: str | None) -> ValueError | None:
+    if quant is None or err.code != GENIEX_ERROR_COMMON_UNKNOWN:
+        return None
+    return ValueError(f'Could not resolve quant {quant!r} for {model_name_or_path!r}.')
+
+
+def _reject_gguf_on_qairt(model_path: str, plugin_id: str | None, device_map: str) -> None:
+    # QAIRT only consumes its own .bin shards + metadata.json bundles. A .gguf
+    # routed to QAIRT would otherwise fail deep in the plugin with a generic
+    # "Invalid model format" error.
+    if plugin_id == PLUGIN_QAIRT and model_path.lower().endswith('.gguf'):
+        raise ValueError(
+            f".gguf models are not supported by device_map='{device_map}' "
+            f"(QAIRT/NPU). Use device_map='auto' or 'hybrid' instead."
+        )
+
+
+# AutoModelFor*.from_pretrained factory defaults; not user overrides, so coerce silently.
+_QAIRT_SILENT_NGL = 999
+_QAIRT_SILENT_NCTX = 0
+
+
 def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **kwargs) -> geniex_ModelConfig:
     if plugin_id == PLUGIN_QAIRT:
-        if n_gpu_layers != 0:
-            _logger.debug('qairt plugin does not consume n_gpu_layers; forcing 0')
-            n_gpu_layers = 0
-        if n_ctx != 0:
-            _logger.debug('qairt plugin does not consume n_ctx; forcing 0')
+        if n_gpu_layers not in (0, _QAIRT_SILENT_NGL):
+            _logger.warning('qairt plugin does not consume n_gpu_layers=%d; forcing 0', n_gpu_layers)
+        n_gpu_layers = 0
+        if n_ctx != _QAIRT_SILENT_NCTX:
+            _logger.warning('qairt plugin does not consume n_ctx=%d; forcing 0', n_ctx)
             n_ctx = 0
     cfg = geniex_ModelConfig(n_ctx=n_ctx, n_gpu_layers=n_gpu_layers)
     _int_fields = {'n_threads', 'n_threads_batch', 'n_batch', 'n_ubatch', 'n_seq_max', 'max_tokens'}
@@ -192,14 +244,44 @@ def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **
     return cfg
 
 
-def _is_vlm(mmproj_path: str | None, model_name: str) -> bool:
+def _read_bundle_metadata(model_path: str) -> dict | None:
+    # Read metadata.json from a QAIRT bundle directory (or the dir holding a
+    # passed-in file). Returns None when the file is missing/unreadable so
+    # callers fall through to other signals.
+    bundle_dir = model_path if os.path.isdir(model_path) else os.path.dirname(model_path)
+    meta_path = os.path.join(bundle_dir, 'metadata.json')
+    if not os.path.isfile(meta_path):
+        return None
+    try:
+        with open(meta_path, encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def _qairt_bundle_is_vlm(model_path: str) -> bool | None:
+    meta = _read_bundle_metadata(model_path)
+    if meta is None:
+        return None
+    genie = meta.get('genie') or {}
+    return bool(genie.get('supports_vision'))
+
+
+def _is_vlm(mmproj_path: str | None, cache_key: str, model_path: str | None = None) -> bool:
     # mmproj_path is the llama_cpp signal (multimodal projector file).
-    # QAIRT VLMs bundle the vision encoder into the QNN binary, so they have
-    # no mmproj — fall back to the cached manifest's ModelType.
+    # QAIRT VLMs bundle the vision encoder into the QNN binary and have no
+    # mmproj. For raw local QAIRT bundles we read metadata.json directly so
+    # `from_pretrained("/path/to/qairt_vlm_bundle")` routes to VLM without
+    # requiring a prior `geniex pull`. Cached models fall through to the
+    # manifest's ModelType.
     if mmproj_path is not None:
         return True
+    if model_path:
+        from_meta = _qairt_bundle_is_vlm(model_path)
+        if from_meta is not None:
+            return from_meta
     try:
-        return _mm.get_type(model_name) == 'vlm'
+        return _mm.get_type(cache_key) == 'vlm'
     except Exception:  # noqa: BLE001 — uncached / unknown → treat as LLM
         return False
 
@@ -214,6 +296,7 @@ def _create_vlm_handle(
     config: geniex_ModelConfig,
     license_id: str | None,
     license_key: str | None,
+    meta: dict | None = None,
 ) -> GeniexVLM:
     inp = geniex_VlmCreateInput(
         model_name=resolved_name.encode(),
@@ -236,7 +319,7 @@ def _create_vlm_handle(
     handle = c_void_p()
     lib = load_library()
     _check(lib.geniex_vlm_create(byref(inp), byref(handle)))
-    return GeniexVLM(handle)
+    return GeniexVLM(handle, meta=meta)
 
 
 class AutoModelForCausalLM:
@@ -262,6 +345,13 @@ class AutoModelForCausalLM:
     ) -> GeniexLLM | GeniexVLM:
         """Load a causal LM or VLM by HF repo id, alias, or local path.
 
+        ``model_name`` is **optional**. The QAIRT plugin no longer needs it —
+        it dispatches by reading ``metadata.json`` from the bundle. Pass it
+        only if you want to register a local-path bundle in the geniex cache
+        (so it shows up in ``geniex list`` and survives across runs), or to
+        provide a hint to ``geniex_resolve_device`` for the gpt-oss
+        llama_cpp device-default override.
+
         When the model is detected as multimodal (e.g. phi4_multimodal,
         qwen3.5-vl, gemma4), a :class:`GeniexVLM` is returned instead.
         """
@@ -273,17 +363,22 @@ class AutoModelForCausalLM:
             progress,
             model_name,
         )
-        resolved_name = model_name or (
-            paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
-        )
+        resolved_name = model_name or (paths.model_name if paths and paths.model_name else model_name_or_path)
         effective_device_map = _apply_plugin_hint(device_map, paths.plugin_id if paths else None)
         plugin_id, device_id, ngl_override = resolve_device_map(effective_device_map, resolved_name)
+        _reject_gguf_on_qairt(model_path, plugin_id, device_map)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
+        meta = {
+            'backend': plugin_id,
+            'device': device_id,
+            'quant': quant,
+            'model_path': model_path,
+        }
 
         resolved_mmproj = mmproj_path or _mmproj
-        if _is_vlm(resolved_mmproj, model_name_or_path):
+        if _is_vlm(resolved_mmproj, model_name or model_name_or_path, model_path):
             return _create_vlm_handle(
                 resolved_name,
                 model_path,
@@ -294,6 +389,7 @@ class AutoModelForCausalLM:
                 config,
                 license_id,
                 license_key,
+                meta=meta,
             )
 
         inp = geniex_LlmCreateInput(
@@ -316,7 +412,7 @@ class AutoModelForCausalLM:
         handle = c_void_p()
         lib = load_library()
         _check(lib.geniex_llm_create(byref(inp), byref(handle)))
-        return GeniexLLM(handle)
+        return GeniexLLM(handle, meta=meta)
 
 
 class AutoModelForVision2Seq:
@@ -343,7 +439,9 @@ class AutoModelForVision2Seq:
         """Load a VLM by HF repo id, alias, or local path.
 
         See :class:`AutoModelForCausalLM.from_pretrained` for shared parameters.
-        ``mmproj_path`` is an optional override for the multimodal projector file.
+        ``model_name`` is optional — the QAIRT plugin reads metadata.json from
+        the bundle directly. ``mmproj_path`` is an optional override for the
+        multimodal projector file.
         """
         ensure_init()
         model_path, _mmproj, _tok, paths = _resolve_model_sources(
@@ -353,14 +451,19 @@ class AutoModelForVision2Seq:
             progress,
             model_name,
         )
-        resolved_name = model_name or (
-            paths.model_name if paths and paths.plugin_id == PLUGIN_QAIRT else model_name_or_path
-        )
+        resolved_name = model_name or (paths.model_name if paths and paths.model_name else model_name_or_path)
         effective_device_map = _apply_plugin_hint(device_map, paths.plugin_id if paths else None)
         plugin_id, device_id, ngl_override = resolve_device_map(effective_device_map, resolved_name)
+        _reject_gguf_on_qairt(model_path, plugin_id, device_map)
         if ngl_override is not None:
             n_gpu_layers = ngl_override
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
+        meta = {
+            'backend': plugin_id,
+            'device': device_id,
+            'quant': quant,
+            'model_path': model_path,
+        }
 
         return _create_vlm_handle(
             resolved_name,
@@ -372,4 +475,5 @@ class AutoModelForVision2Seq:
             config,
             license_id,
             license_key,
+            meta=meta,
         )

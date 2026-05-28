@@ -1,6 +1,6 @@
 ---
 title: "FAQ"
-description: "Common questions about GenieX, its backends, and supported devices."
+description: "Common questions about GenieX, its runtimes, and supported chipsets."
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
@@ -9,7 +9,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="What is GenieX?">
-    A multi-platform AI inference runtime built for Qualcomm Snapdragon. GenieX runs frontier LLMs and VLMs on-device — Hexagon NPU, Adreno GPU, or CPU — across Windows ARM64, Android, and Linux ARM64. See [What is GenieX](/en/get-started/what-is-geniex).
+    A multi-platform AI inference SDK built for Qualcomm Snapdragon. GenieX runs frontier LLMs and VLMs on-device — Hexagon NPU, Adreno GPU, or CPU compute units — across Windows ARM64, Android, and Linux ARM64. See [What is GenieX](/en/get-started/what-is-geniex).
   </Accordion>
 
   <Accordion title="Which interface should I use?">
@@ -22,22 +22,22 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="Where do I see what hardware GenieX supports?">
-    [Supported devices](/en/get-started/devices) — Snapdragon X for compute, 8 Elite for mobile, Dragonwing IQ9 / QCS for IoT.
+    [Supported platforms](/en/get-started/platforms) — Snapdragon X on Windows ARM64, 8 Elite on Android, QCS series on Linux ARM64.
   </Accordion>
 </AccordionGroup>
 
-## **Backends**
+## **Runtimes**
 
 <AccordionGroup>
   <Accordion title="What's the difference between llama.cpp and QAIRT?">
-    - **llama.cpp** — runs any GGUF model, supports NPU/GPU/CPU. Best for trying community models.
+    - **llama.cpp** — runs any GGUF model, supports NPU/GPU/CPU compute units. Best for trying community models.
     - **QAIRT** — runs pre-compiled AI Hub bundles, NPU only. Typically the fastest path when your model is on AI Hub.
 
-    See [Choose your backend](/en/get-started/choose-backend).
+    See [Choose your runtime](/en/get-started/choose-runtime).
   </Accordion>
 
-  <Accordion title="Which backend is the default?">
-    If you don't pass a device:
+  <Accordion title="Which runtime is the default?">
+    If you don't pass a compute unit:
     - `llama_cpp` defaults to `hybrid` (HTP + CPU per-tensor scheduler — the fast path on Snapdragon).
     - `qairt` defaults to `npu`.
 
@@ -45,7 +45,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="Which quantization should I pick?">
-    For llama.cpp on Snapdragon NPU: **`Q4_0`**. It has the best Hexagon backend support. QAIRT bundles are pre-quantized — no choice. See [Quantization](/en/models/quantization).
+    For llama.cpp on Snapdragon NPU: **`Q4_0`**. It has the best Hexagon NPU support. QAIRT bundles are pre-quantized — no choice. See [Quantization](/en/models/quantization).
   </Accordion>
 </AccordionGroup>
 
@@ -53,25 +53,25 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="Can I run any model from Hugging Face?">
-    Any **GGUF** model on the llama.cpp backend. See [Bring your own model](/en/models/bring-your-own).
+    Any **GGUF** model on the llama.cpp runtime. See [Bring your own model](/en/models/bring-your-own).
 
     QAIRT requires a pre-compiled AI Hub bundle — adding a new one means registering it on the C++ side first.
   </Accordion>
 
   <Accordion title="Where's the supported models list?">
-    [Supported models](/en/models/supported) — split by backend (QAIRT, llama.cpp).
+    [Supported models](/en/models/supported) — split by runtime (QAIRT, llama.cpp).
   </Accordion>
 </AccordionGroup>
 
-## **Hardware & devices**
+## **Chipsets & devices**
 
 <AccordionGroup>
   <Accordion title="Do I need a Snapdragon device?">
-    Yes. GenieX targets Qualcomm Snapdragon platforms — Hexagon NPU, Adreno GPU, and Snapdragon ARM CPUs. There's no x86 or non-Snapdragon ARM build. If you don't have hardware on hand, use [Qualcomm Developer Cloud / Device Cloud](/en/get-started/devices).
+    Yes. GenieX targets Qualcomm Snapdragon chipsets — Hexagon NPU, Adreno GPU, and Snapdragon ARM CPU compute units. There's no x86 or non-Snapdragon ARM build. If you don't have a device on hand, use [Qualcomm Developer Cloud / Device Cloud](/en/get-started/platforms).
   </Accordion>
 
   <Accordion title="My QAIRT model says NPU is required — can I run it on CPU?">
-    No. QAIRT is NPU-only by design. `cpu` and `gpu` aliases are coerced to NPU with a warning. Use the llama.cpp backend (with a GGUF) if you need CPU/GPU fallback.
+    No. QAIRT is NPU-only by design. `cpu` and `gpu` aliases are coerced to NPU with a warning. Use the llama.cpp runtime (with a GGUF) if you need CPU/GPU fallback.
   </Accordion>
 </AccordionGroup>
 
@@ -79,7 +79,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="Do I need my own QDC device?">
-    No. You can request access to Qualcomm Device Cloud for remote testing on Snapdragon hardware. See [Supported devices](/en/get-started/devices) for details.
+    No. Sign in to [Qualcomm Developer Cloud](https://qdc.qualcomm.com/), pick a Snapdragon device, and start an Interactive Session — that's the whole flow. See [Supported platforms](/en/get-started/platforms) for which chipsets are covered.
   </Accordion>
 
   <Accordion title="How do I connect to a QDC device over SSH?">

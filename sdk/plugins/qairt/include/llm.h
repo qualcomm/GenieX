@@ -1,8 +1,8 @@
 #pragma once
 
 #include <memory>
-#include <string>
 
+#include "llm/llm_spec_loader.h"  // ParsedSamplerConfig
 #include "pipeline/llm_pipeline.h"
 #include "plugin/ILlm.h"
 
@@ -10,8 +10,10 @@ namespace geniex {
 
 class QairtLlm : public ILlm {
     std::unique_ptr<LLMPipeline> pipeline_;
-    std::string                  model_name_;
     bool                         enable_thinking_ = false;
+
+    // Bundle's `dialog.sampler` defaults; parsed once at create_impl().
+    ParsedSamplerConfig bundle_sampler_;
 
     bool is_first_turn_ = true;
 

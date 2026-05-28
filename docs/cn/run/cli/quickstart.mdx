@@ -9,11 +9,11 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 - 已安装 CLI——详见[安装](/cn/run/cli/install)。
 - 容器内交互式 shell（仅 Docker）——详见[交互式运行](/cn/run/cli/install#交互式运行)。
-- 了解[后端选择](/cn/get-started/choose-backend)——`qairt` 用于 AI Hub 模型包，`llama_cpp` 用于任意 GGUF。
+- 了解[运行时选择](/cn/get-started/choose-runtime)——`qairt` 用于 AI Hub 模型包，`llama_cpp` 用于任意 GGUF。
 
 ## **运行你的第一个模型**
 
-### **QAIRT 插件（AI Hub）**
+### **QAIRT 运行时（AI Hub）**
 
 **语言模型：**
 
@@ -27,7 +27,7 @@ geniex infer qualcomm/Qwen3-4B
 geniex infer qualcomm/Qwen2.5-VL-7B-Instruct
 ```
 
-### **llama.cpp 插件（GGUF）**
+### **llama.cpp 运行时（GGUF）**
 
 系统提示量化时请选择 `Q4_0`——它在 Hexagon NPU 上支持最佳。
 

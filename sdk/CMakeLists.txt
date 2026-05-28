@@ -29,14 +29,14 @@ set(GENIEX_VERSION "v0.0.0" CACHE STRING "Geniex library version")
 
 option(GENIEX_PLUGIN_LLAMA_CPP  "Enable llama.cpp backend"       ON)
 option(GENIEX_PLUGIN_QAIRT      "Enable QAIRT backend"           ON)
-option(GENIEX_TEST              "Enable unit tests"              OFF)
+option(GENIEX_BENCHMARK         "Build benchmark example"        OFF)
 option(GENIEX_MODEL_MANAGER     "Enable model manager"           ON)
 
 message(STATUS "=============== Options ===============")
 message(STATUS "GENIEX_VERSION:          ${GENIEX_VERSION}")
 message(STATUS "GENIEX_PLUGIN_LLAMA_CPP: ${GENIEX_PLUGIN_LLAMA_CPP}")
 message(STATUS "GENIEX_PLUGIN_QAIRT:     ${GENIEX_PLUGIN_QAIRT}")
-message(STATUS "GENIEX_TEST:             ${GENIEX_TEST}")
+message(STATUS "GENIEX_BENCHMARK:        ${GENIEX_BENCHMARK}")
 message(STATUS "GENIEX_MODEL_MANAGER:    ${GENIEX_MODEL_MANAGER}")
 message(STATUS "=======================================")
 

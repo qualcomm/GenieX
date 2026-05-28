@@ -11,7 +11,7 @@ The CLI ships as a native Windows ARM64 executable, and as a Linux ARM64 Docker 
   <Tab title="Windows ARM64">
     ### **Prerequisites**
 
-    - Snapdragon X-series device (X Elite or X2 Elite). See [Supported devices](/en/get-started/devices).
+    - Snapdragon X-series chipset (X Elite or X2 Elite). See [Supported platforms](/en/get-started/platforms).
     - PowerShell or any shell available on Windows ARM64.
 
     ### **Download**
@@ -45,7 +45,7 @@ The CLI ships as a native Windows ARM64 executable, and as a Linux ARM64 Docker 
     ### **Prerequisites**
 
     - Linux ARM64 host.
-    - Qualcomm IoT device — see [Supported devices](/en/get-started/devices#iot-linux-arm64).
+    - Qualcomm IoT chipset — see [Supported platforms](/en/get-started/platforms).
 
     ### **Install**
 
@@ -53,36 +53,56 @@ The CLI ships as a native Windows ARM64 executable, and as a Linux ARM64 Docker 
     curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
     ```
 
-    The script downloads the latest stable release, verifies its SHA256, and installs atomically. It runs without `sudo`:
-
-    - **Root** (EVK / container) → binary in `/usr/local/lib/geniex/`, launcher at `/usr/local/bin/geniex`.
-    - **Non-root** → binary in `${XDG_DATA_HOME:-~/.local/share}/geniex/`, launcher at `~/.local/bin/geniex`.
-
-    Common flags (pass after `sh -s --`):
-
-    ```bash bash
-    # Pin a specific version
-    curl -fsSL .../install.sh | sh -s -- --version v0.1.8
-
-    # Custom install prefix
-    curl -fsSL .../install.sh | sh -s -- --prefix /opt/geniex
-    ```
-
-    ### **Add to PATH**
-
-    If the launcher directory isn't on your `PATH`, the installer prints the exact line to add — typically:
+    The script downloads the latest stable release, verifies its SHA256, and installs without `sudo`. If the launcher directory isn't already on your `PATH`, it prints the exact export line to append — for example:
 
     ```bash bash
     echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc   # or ~/.zshrc / ~/.profile
     ```
 
-    Open a new shell or `source` that file.
+    Open a new shell or `source` that file to pick up the change.
 
     ### **Verify**
 
     ```bash bash
     geniex --help
     ```
+
+    If `geniex` isn't found, open a new shell — or follow the `PATH` line the installer printed at the end of its output.
+
+    ### **Advanced**
+
+    <AccordionGroup>
+      <Accordion title="Install locations">
+        The script runs without `sudo` and picks a location based on who you are:
+
+        - **Root** (EVK / container) → binary in `/usr/local/lib/geniex/`, launcher at `/usr/local/bin/geniex`.
+        - **Non-root** → binary in `${XDG_DATA_HOME:-~/.local/share}/geniex/`, launcher at `~/.local/bin/geniex`.
+
+        It downloads the latest stable release, verifies its SHA256, and installs atomically.
+      </Accordion>
+
+      <Accordion title="Pin a version or use a custom prefix">
+        Pass flags after `sh -s --`:
+
+        ```bash bash
+        # Pin a specific version
+        curl -fsSL .../install.sh | sh -s -- --version v0.1.8
+
+        # Custom install prefix
+        curl -fsSL .../install.sh | sh -s -- --prefix /opt/geniex
+        ```
+      </Accordion>
+
+      <Accordion title="Add to PATH manually">
+        If the launcher directory isn't on your `PATH`, add the line the installer printed — typically:
+
+        ```bash bash
+        echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc   # or ~/.zshrc / ~/.profile
+        ```
+
+        Open a new shell or `source` that file.
+      </Accordion>
+    </AccordionGroup>
 
   </Tab>
 

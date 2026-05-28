@@ -10,12 +10,12 @@ This page walks through running your first model from a Kotlin app, then swappin
 ## **Prerequisites**
 
 - The SDK added to your Gradle project — see [Install](/en/run/android/install).
-- A device with **Snapdragon 8 Elite** or **Snapdragon 8 Elite Gen 5**.
+- A phone running **Snapdragon 8 Elite** or **Snapdragon 8 Elite Gen 5**.
 - `INTERNET` permission in your `AndroidManifest.xml` (the SDK pulls weights from Hugging Face / Qualcomm AI Hub on first use).
 
 ## **Run your first model**
 
-The flow is the same regardless of model: **init the SDK → pull weights → load → generate**. Below is a minimal end-to-end example using `unsloth/Qwen3-0.6B-GGUF` — a small Qwen3 0.6B chat model that runs on any supported device.
+The flow is the same regardless of model: **init the SDK → pull weights → load → generate**. Below is a minimal end-to-end example using `unsloth/Qwen3-0.6B-GGUF` — a small Qwen3 0.6B chat model that runs on any supported chipset.
 
 <Steps>
   <Step title="Init the SDK">
@@ -97,9 +97,9 @@ The flow is the same regardless of model: **init the SDK → pull weights → lo
 
 ## **Switching models**
 
-Swapping models is mostly a matter of changing the `model_name` and the `plugin_id`. There are two backends:
+Swapping models is mostly a matter of changing the `model_name` and the `plugin_id`. There are two runtimes:
 
-- **`llama_cpp`** — runs any GGUF model. Supports NPU / GPU / CPU via `device_id`.
+- **`llama_cpp`** — runs any GGUF model. Supports NPU / GPU / CPU compute units via `device_id`.
 - **`qairt`** — runs Qualcomm AI Hub bundles. NPU-only, requires an explicit `chipset` on Android.
 
 ### Another GGUF model (llama.cpp)
@@ -132,15 +132,15 @@ ModelManagerWrapper.pullFlow(
 
 Then switch `plugin_id = "qairt"` in `LlmCreateInput`. See the supported AI Hub repos in the [API reference](/en/run/android/api-reference#supported-models).
 
-### Switching device (NPU / GPU / CPU)
+### Switching compute unit (NPU / GPU / CPU)
 
 For `llama_cpp` only — set `device_id` on `LlmCreateInput`:
 
-| `device_id`        | Backend                                    |
+| `device_id`        | Compute unit                               |
 |--------------------|--------------------------------------------|
 | `null` or `"npu"`  | Hexagon NPU (recommended on Snapdragon).   |
 | `"gpu"`            | Adreno GPU via OpenCL.                     |
-| `"cpu"`            | Pure CPU. Works on any ARM64 device.       |
+| `"cpu"`            | Pure CPU. Works on any ARM64 chipset.      |
 
 QAIRT ignores this — `cpu`/`gpu` are coerced to NPU with a warning.
 
@@ -150,7 +150,7 @@ The [sample app](https://github.com/qcom-ai-hub/geniex/tree/main/examples/androi
 
 - **Model picker UI** — the dropdown is driven by `examples/android/app/src/main/assets/model_list.json`. Each entry pins a `model_name`, `hub`, and (for QAIRT) a `chipset`. Edit this file to add new models without touching code.
 - **Resumable downloads with progress** — the `Progress` events from `pullFlow` carry per-file byte counts; the sample wires them straight into a `LinearProgressIndicator`.
-- **Plugin-aware device picker** — when the selected model is QAIRT, the picker hides GPU/CPU options. See `LoadDialog.kt`.
+- **Runtime-aware compute-unit picker** — when the selected model is QAIRT, the picker hides GPU/CPU options. See `LoadDialog.kt`.
 - **VLM image picker** — for VLMs, the sample passes the absolute file path into `VlmContent("image", path)`. Don't pass content URIs — the native side reads the file directly.
 
 Open `examples/android/` in Android Studio (not `bindings/android/` — that's the SDK source) and hit **Run ▶**.
@@ -159,9 +159,9 @@ Open `examples/android/` in Android Studio (not `bindings/android/` — that's t
 
 <CardGroup cols={2}>
   <Card title="API reference" href="/en/run/android/api-reference" icon="book">
-    Wrapper classes, plugin/device selection, and data structures.
+    Wrapper classes, runtime / compute-unit selection, and data structures.
   </Card>
-  <Card title="Backends" href="/en/get-started/choose-backend" icon="route">
+  <Card title="Runtimes" href="/en/get-started/choose-runtime" icon="route">
     When to pick llama.cpp vs QAIRT.
   </Card>
 </CardGroup>

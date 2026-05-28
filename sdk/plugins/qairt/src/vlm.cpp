@@ -15,13 +15,14 @@
 #define portable_strdup strdup
 #endif
 
-#include "geniex-proc/types.h"  // ChatMessage, MMContent, Role::, Modality::
+#include "dispatch.h"             // provided by geniex-qairt/models/
+#include "geniex-proc/types.h"    // ChatMessage, MMContent, Role::, Modality::
+#include "llm/llm_spec_loader.h"  // parseGenieSamplerConfig
 #include "logging.h"
 #include "pipeline/vlm_pipeline.h"
 #include "qnn_runtime_utils.h"
 #include "sampler_config_utils.h"
 #include "types.h"
-#include "vlm_model_registry.h"  // vlm_model_registry()
 
 namespace fs = std::filesystem;
 
@@ -36,11 +37,10 @@ constexpr const char* kDefaultSystemPrompt = "You are a helpful AI assistant.";
 QairtVlm::~QairtVlm() = default;
 
 int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
-    if (!input || !input->model_name || !input->model_path) {
+    if (!input || !input->model_path) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
-    model_name_      = input->model_name;
     enable_thinking_ = input->config.enable_thinking;
 
     // Reject llama.cpp-only parameters that have no meaning in the QAIRT plugin
@@ -53,17 +53,11 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
     }
 
-    // Look up model in VLM registry
-    auto& registry = vlm_model_registry();
-    auto  it       = registry.find(model_name_);
-    if (it == registry.end()) {
-        GENIEX_LOG_ERROR("Unknown QAIRT VLM model name: {}", model_name_);
-        return GENIEX_ERROR_COMMON_MODEL_INVALID;
-    }
-
     // Derive model directory from the model_path
     fs::path model_path(input->model_path);
     fs::path model_dir = model_path.parent_path();
+
+    bundle_sampler_ = parseGenieSamplerConfig(model_dir);
 
     QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(model_dir);
 
@@ -122,7 +116,7 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
         vision_cfg.model_paths = {resolved_vision_bin};
     }
     if (vision_cfg.model_paths.empty()) {
-        GENIEX_LOG_WARN("No vision encoder found for VLM model '{}' — text-only mode", model_name_);
+        GENIEX_LOG_WARN("No vision encoder found in {} — text-only mode", model_dir.string());
     }
     has_vision_encoder_        = !vision_cfg.model_paths.empty();
     vision_cfg.htp_config_path = llm_cfg.htp_config_path;
@@ -132,14 +126,16 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
     vlm_cfg.llm_config    = std::move(llm_cfg);
     vlm_cfg.vision_config = std::move(vision_cfg);
 
-    auto pipe = it->second.make_pipeline(runtime_cfg, vlm_cfg);
+    // Dispatcher reads metadata.json `model_id` from the bundle and routes to
+    // the matching VLM family factory (currently qwen2_5_vl_*).
+    auto pipe = makeVLMPipeline(runtime_cfg, vlm_cfg);
     if (!pipe) {
-        GENIEX_LOG_ERROR("Failed to create QAIRT VLM pipeline for model: {}", model_name_);
+        GENIEX_LOG_ERROR("Failed to create QAIRT VLM pipeline from bundle: {}", model_dir.string());
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
     pipeline_ = std::make_unique<VLMPipeline>(std::move(*pipe));
 
-    GENIEX_LOG_DEBUG("QAIRT VLM created successfully: model={}", model_name_);
+    GENIEX_LOG_DEBUG("QAIRT VLM created successfully from bundle: {}", model_dir.string());
     return GENIEX_SUCCESS;
 }
 
@@ -260,7 +256,7 @@ int32_t QairtVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     GenerationConfig gen_cfg{};
     if (input->config) {
         gen_cfg.max_tokens = input->config->max_tokens > 0 ? input->config->max_tokens : 512;
-        qairt::apply_sampler_config(input->config->sampler_config, gen_cfg);
+        qairt::apply_sampler_config(input->config->sampler_config, gen_cfg, bundle_sampler_);
     }
     gen_cfg.thinking_mode = enable_thinking_;
 

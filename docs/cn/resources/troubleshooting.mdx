@@ -27,7 +27,7 @@ Set-Alias geniex (where.exe geniex)
 
 ### `--device cpu` 或 `--device gpu` 在 QAIRT 模型上报错
 
-QAIRT 仅支持 NPU。请使用 `--device npu`（或省略——QAIRT 默认即 `npu`）。如需 CPU/GPU，改用 [llama.cpp 后端](/cn/get-started/choose-backend#llamacpp)的 GGUF 模型。
+QAIRT 仅支持 NPU。请使用 `--device npu`（或省略——QAIRT 默认即 `npu`）。如需 CPU/GPU，改用 [llama.cpp 运行时](/cn/get-started/choose-runtime#llamacpp)的 GGUF 模型。
 
 ## 服务器
 
@@ -57,7 +57,7 @@ Android 上 AI Hub 拉取必须显式传 `chipset`——自动识别仅在骁龙
 
 ### QAIRT 加载报 "unknown model name"
 
-AI Hub 返回的 model id 必须匹配 QAIRT 插件注册表中的条目（`qwen3_4b_instruct_2507`、`qwen2_5_vl_7b_instruct` 等）。新增 AI Hub 模型需先在 C++ 侧注册——见 `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`。
+AI Hub 返回的 model id 必须匹配 QAIRT 运行时注册表中的条目（`qwen3_4b_instruct_2507`、`qwen2_5_vl_7b_instruct` 等）。新增 AI Hub 模型需先在 C++ 侧注册——见 `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`。
 
 ### QAIRT 拒绝 `nGpuLayers` 或 `nCtx`
 

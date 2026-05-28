@@ -30,6 +30,9 @@ var AllModelTypes = []ModelType{
 	ModelTypeVLM,
 }
 
+// QuantNA is the ModelFile key for models without quantization variants.
+const QuantNA = "N/A"
+
 type ModelFileInfo struct {
 	Name       string
 	Downloaded bool

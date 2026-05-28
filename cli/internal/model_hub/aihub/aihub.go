@@ -172,12 +172,24 @@ func (c *Client) fetchJSON(ctx context.Context, url string) ([]byte, error) {
 	slog.Debug("aihub: fetching", "url", url)
 	resp, err := c.http.R().SetContext(ctx).Get(url)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GET %s: %w", url, err)
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("http %d from %s", resp.StatusCode(), url)
+		return nil, &HTTPError{URL: url, Status: resp.StatusCode()}
 	}
 	return resp.Bytes(), nil
+}
+
+// HTTPError carries a non-2xx response from the AI Hub endpoint. The
+// model_hub package translates it into one of its hub sentinels based on
+// Status (see model_hub.TranslateAIHubError).
+type HTTPError struct {
+	URL    string
+	Status int
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("aihub: http %d from %s", e.Status, e.URL)
 }
 
 // aiHubOrgs are HF-style orgs that route to the AI Hub pull path.
@@ -206,12 +218,12 @@ func HeadContentLength(ctx context.Context, url string) (int64, error) {
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("HEAD %s: %w", url, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("HEAD %s: %s", url, resp.Status)
+		return 0, &HTTPError{URL: url, Status: resp.StatusCode}
 	}
 	if resp.ContentLength <= 0 {
 		return 0, fmt.Errorf("HEAD %s: missing Content-Length", url)

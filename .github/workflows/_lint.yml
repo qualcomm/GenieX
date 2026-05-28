@@ -24,7 +24,7 @@ jobs:
         uses: ./.github/actions/changed-files
         with:
           include: '\.(cpp|hpp|c|h|cc|cxx|hxx)$'
-          exclude: '^sdk/build/|^sdk/include/external/|^third-party/|^sdk/plugins/qnn/libs/|^sdk/tests/include/(doctest\.h|utf8(\.h|/))'
+          exclude: '^sdk/build/|^sdk/include/external/|^third-party/|^sdk/plugins/qnn/libs/'
 
       - name: Check C/C++ formatting
         if: steps.files.outputs.any == 'true'
