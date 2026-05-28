@@ -39,6 +39,24 @@ jobs:
           name: sdk-android-arm64
           path: sdk/pkg-geniex
 
+      # Resolve the SDK from the AAR just built in this run (uploaded by
+      # _build-android-aar.yml), not from Maven Central. Otherwise a release
+      # that bumps the example's geniex-android pin to a version not yet
+      # published would fail dependency resolution. flatDir matches by artifact
+      # name, so the file must be named geniex-android.aar.
+      - name: Download freshly built AAR
+        uses: actions/download-artifact@v8
+        with:
+          name: android-aar
+          path: examples/android/local-aar
+      - name: Stage AAR for flatDir resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="examples/android/local-aar/geniex-android-aar.aar"
+          [ -f "$src" ] || { echo "::error::AAR artifact not found at $src"; exit 1; }
+          mv "$src" "examples/android/local-aar/geniex-android.aar"
+
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
@@ -77,7 +95,7 @@ jobs:
       # and avoids the release-only minification pass.
       - name: Assemble demo APK
         working-directory: examples/android
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: ./gradlew --no-daemon :app:assembleDebug -PgeniexAarDir="$GITHUB_WORKSPACE/examples/android/local-aar"
 
       - name: Collect APK
         id: apk

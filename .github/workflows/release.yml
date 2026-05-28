@@ -94,7 +94,7 @@ jobs:
 
   build-android-apk:
     name: build-android-apk
-    needs: [build-sdk]
+    needs: [build-sdk, build-android-aar]
     uses: ./.github/workflows/_build-android-apk.yml
     secrets: inherit
     with:
