@@ -5,7 +5,7 @@ the workflow. The collection half (`RUN_ON_QDC.md`) ran the prompt
 suite on a QDC device and produced two paired files:
 
 ```
-results/<slug>.csv               # 12-column raw results
+results/<slug>.csv               # raw results (answers, perf, errors)
 results/<slug>.answers.json      # [{id, category, prompt, genie_answer, geniex_answer}, ...]
 ```
 
@@ -79,8 +79,8 @@ yourself to decide whether it's closer to "strange content" (7) or
    make divergences understandable later.
 3. **Merge into the final CSV.** Read `results/<slug>.csv`, fill in
    the `genie_score`, `geniex_score`, and `note` columns from your
-   scoring JSON, and write back the same 12-column CSV. Then derive
-   the **7-column scored CSV** the user actually wants:
+   scoring JSON, and write back the full CSV (same columns it came with).
+   Then derive the **7-column scored CSV** the user actually wants:
    ```
    id, prompt, genie_answer, geniex_answer, genie_score, geniex_score, note
    ```
@@ -113,10 +113,12 @@ for r in rows:
     r['note'] = s['note']
     g += s['genie_score']; x += s['geniex_score']
 
-# Rewrite full 12-col with scores filled in.
+# Rewrite the full CSV with scores filled in (same columns the collection
+# script emits — perf metrics preserved, no timing columns).
 full_cols = ['id','category','prompt','genie_answer','geniex_answer',
              'genie_score','geniex_score','note',
-             'genie_seconds','geniex_seconds','genie_error','geniex_error']
+             'genie_ttft_ms','geniex_ttft_ms','genie_tps','geniex_tps',
+             'genie_error','geniex_error']
 with open(csv_path, 'w', encoding='utf-8', newline='') as f:
     w = csv.DictWriter(f, fieldnames=full_cols); w.writeheader()
     for r in rows: w.writerow({k: r.get(k, '') for k in full_cols})

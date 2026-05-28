@@ -15,11 +15,9 @@ session can be entirely non-interactive once kicked off.
    **in-process** via this package's API — the `geniex` CLI is **not**
    required (not for inference, and not for pulling models; see step 4).
 
-```powershell
-
-pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex==0.2.1rc2
-
-```
+   ```powershell
+   pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex==0.2.1rc2
+   ```
 
 2. QAIRT SDK installed; `genie-t2t-run` on `PATH`
    (sanity check: `genie-t2t-run --help`).
@@ -28,13 +26,13 @@ pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.o
 4. The model you want to benchmark cached in geniex. Pull it via the Python
    API (same cache the script reads from) — no CLI needed:
    - For Hugging Face / AI Hub models:
-     ```bash
+     ```powershell
      python -c "from geniex import model_manager; model_manager.pull('qualcomm/Qwen3-4B-Instruct-2507')"
      ```
    - For a model file tree on disk (e.g., the `geniex-qairt-plugin`
      `modelfiles/...` directory): drop a `geniex.json` manifest into the
      folder, then pull from the local filesystem hub:
-     ```bash
+     ```powershell
      python -c "from geniex import model_manager; model_manager.pull('<name>', hub='localfs', local_path=r'<path>')"
      ```
      See `geniex-template.json` at the repo root for the manifest shape.
@@ -125,7 +123,7 @@ once everything is done.
 After a successful run, only two files are needed for scoring:
 
 ```
-results/<slug>.csv               # full row data (incl. timing, perf, errors)
+results/<slug>.csv               # full row data (answers, perf, errors)
 results/<slug>.answers.json      # 5-field-per-row payload the scoring agent reads
 ```
 
@@ -144,13 +142,17 @@ Besides answers, the CSV records two perf metrics per runtime, per prompt:
 - **geniex** values come straight from the API's `ProfileData` (`ttft`,
   `decode_speed`).
 - **genie** values come from the JSON file genie-t2t-run writes via
-  `--profile <file>`. The script passes a fresh temp file per prompt and
-  reads the `GenieDialog_query` event's `time-to-first-token` (→ ms) and
-  `token-generation-rate` (toks/sec). If the profile file is missing or
-  malformed the cells are left blank rather than guessed.
+  `--profile <file>`. The script points it at a fresh temp file per prompt
+  (in a throwaway temp dir, since genie-t2t-run refuses to overwrite an
+  existing profile path) and reads the `GenieDialog_query` event's
+  `time-to-first-token` (→ ms) and `token-generation-rate` (toks/sec). If the
+  profile file is missing or malformed the cells are left blank rather than
+  guessed.
 
-These are wall-clock-independent (the `*_seconds` columns still record total
-per-prompt wall time, which for genie includes process startup).
+Both are reported by the runtimes themselves, so they isolate model
+performance from per-prompt overhead (e.g. genie's process startup). The live
+console output prints each prompt's wall time for progress, but that is no
+longer written to the CSV.
 
 ## Troubleshooting
 
@@ -163,20 +165,19 @@ per-prompt wall time, which for genie includes process startup).
   pointing at the directory that contains `genie_config.json` and the
   `*.bin` shards.
 - **`ImportError` / `the geniex Python package is not importable`** — the
-  CLI is installed but the Python package isn't on this interpreter's
-  `sys.path`. Install it (`pip install geniex`) into the same Python you're
-  running the script with.
+  `geniex` package isn't on this interpreter's `sys.path`. Install it (see
+  prerequisite 1) into the same Python you run the script with — check with
+  `python -c "import geniex"`.
 - **`SDKError(Invalid input parameters or handle)`** from geniex — the
-  cached context binaries were built with a different QAIRT version than
-  the geniex CLI is linked against. `genie-t2t-run` is more lenient
-  about version skew, so this typically shows up as geniex-only failures.
-  Pull a fresher build of the model, or run on a QDC image with a
-  matching QAIRT.
+  cached context binaries were built with a different QAIRT version than the
+  `geniex` package is linked against. `genie-t2t-run` is more lenient about
+  version skew, so this typically shows up as geniex-only failures. Pull a
+  fresher build of the model, or run on a QDC image with a matching QAIRT.
 - **Garbled output starting with `<|im_start|>` or `<|begin_of_text|>`** —
   the chat template detection failed. The script keys off the
   `dialog.context.bos-token` field of `genie_config.json` (128000 → llama3,
   anything else → qwen). If a new model family ships, add it to
   `TEMPLATES` / `detect_template` at the top of the script.
-- **UnicodeEncodeError on Windows** — the `PYTHONIOENCODING=utf-8` env
-  var on the example commands is load-bearing; without it Python's
-  default cp1252 stdout will choke on emoji/CJK in model output.
+- **UnicodeEncodeError on Windows** — the `$env:PYTHONIOENCODING="utf-8"`
+  line on the example commands is load-bearing; without it Python's default
+  cp1252 stdout will choke on emoji/CJK in model output.

@@ -1,11 +1,15 @@
 # tools/runtime_benchmark
 
-Compares answer quality between two runtimes on the same model:
+Compares answer **quality** and **performance** (TTFT, decode tok/s) between
+two runtimes on the same model:
 
 - `geniex` — this project's runtime, driven in-process through its Python
   API (`AutoModelForCausalLM`), so the model is loaded once and reused.
 - `genie-t2t-run` — Qualcomm QAIRT SDK reference runner (still a subprocess;
   it has no Python API).
+
+Same model, same prompts, same chat template — so quality differences reflect
+the runtime, not the inputs.
 
 ## Workflow
 
@@ -31,7 +35,11 @@ SCORE_WITH_CLAUDE.md           # how to do step 2
 `results/` already contains finished runs for `Qwen3-4B-Instruct-2507`
 and `Llama-v3.2-1B-Instruct` — useful as calibration references.
 
-## How to run genie-t2t-run locally
+## Running genie-t2t-run by hand
+
+The benchmark drives `genie-t2t-run` for you. To invoke it directly — e.g. to
+sanity-check the QAIRT install or inspect a `--profile` file — set up the
+environment and run it from the model directory:
 
 ```powershell
 $env:QAIRT_HOME = "C:\Qualcomm\AIStack\QAIRT\2.45.0.260326"
