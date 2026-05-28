@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "readline",
@@ -22,4 +22,10 @@ go_library(
         ],
         "//conditions:default": [],
     }),
+)
+
+go_test(
+    name = "readline_test",
+    srcs = ["package_test.go"],
+    embed = [":readline"],
 )
