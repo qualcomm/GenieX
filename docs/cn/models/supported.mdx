@@ -131,7 +131,16 @@ Choose a precision version to download
 
 ### QAIRT
 
-QAIRT 模型包在出厂时已**预量化**——运行时无量化选择。如需不同精度，请从 [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) 获取另一个模型包。其他模型包内固化的限制（上下文长度、KV 缓存、Android `nCtx`）参见 [QAIRT 运行时限制](/cn/get-started/platforms#运行时限制)。
+QAIRT 模型包在出厂时已**静态预量化**——运行时无量化选择。如需不同精度，请从 [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) 获取另一个模型包。
+
+| 精度 | 落点 | 备注 |
+|---|---|---|
+| **`w4a16`** *(最常见)* | **Hexagon NPU** | 权重 int4，激活 int16。端侧 LLM 在模型大小与精度间的最佳平衡。 |
+| `w4` | **Hexagon NPU** | 权重 int4，激活浮点。精度略优于 w4a16，但计算开销更大。 |
+
+<Tip>Qualcomm AI Hub 上的预编译模型包多数使用 `w4a16`。量化级别在编译时即固化——请根据质量/性能目标选择对应的模型包。</Tip>
+
+其他模型包内固化的限制（上下文长度、KV 缓存、Android `nCtx`）参见 [QAIRT 运行时限制](/cn/get-started/platforms#运行时限制)。
 
 ## **在 Python 中使用自定义模型**
 

@@ -131,7 +131,16 @@ Choose a precision version to download
 
 ### Qualcomm AI Engine Direct
 
-Qualcomm AI Engine Direct bundles come **pre-quantized** — there is no precision choice at runtime. To use a different precision, get a different bundle from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/). For other bundle constraints (context length, KV cache, Android `nCtx`), see [Qualcomm AI Engine Direct runtime constraints](/en/get-started/platforms#runtime-constraints).
+Qualcomm AI Engine Direct bundles are **statically pre-quantized** — there is no precision choice at runtime. To use a different precision, get a different bundle from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/).
+
+| Precision (Quantization) | Runs on | Notes |
+|---|---|---|
+| **`w4a16`** *(most common)* | **Hexagon NPU** | Weights int4, activations int16. Best balance of size and accuracy for on-device LLMs. |
+| `w4` | **Hexagon NPU** | Weights int4, activations float. Slightly higher accuracy than w4a16 at the cost of more compute. |
+
+<Tip>Most pre-built bundles on Qualcomm AI Hub use `w4a16`. The quantization level is baked into the bundle at compile time — pick the bundle that matches your quality/performance target.</Tip>
+
+For other bundle constraints (context length, KV cache, Android `nCtx`), see [Qualcomm AI Engine Direct runtime constraints](/en/get-started/platforms#runtime-constraints).
 
 ## **Custom models in Python**
 
