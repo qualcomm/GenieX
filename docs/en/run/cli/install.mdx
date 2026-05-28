@@ -53,6 +53,10 @@ The CLI ships as a native Windows ARM64 executable, and as a Linux ARM64 Docker 
     curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
     ```
 
+    <Note>
+      If the script reports missing shared libraries (`libCB.so.1`, `libOpenCL_adreno.so.1`, `libcdsprpc.so.1.0.0`, etc.), install the Qualcomm driver packages first — see [Troubleshooting → Linux](/en/resources/troubleshooting#linux).
+    </Note>
+
     The script downloads the latest stable release, verifies its SHA256, and installs without `sudo`. If the launcher directory isn't already on your `PATH`, it prints the exact export line to append — for example:
 
     ```bash bash

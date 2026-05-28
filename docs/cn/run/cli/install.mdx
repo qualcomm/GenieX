@@ -53,6 +53,10 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向 Dragonwing IoT 等
     curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
     ```
 
+    <Note>
+      若脚本提示缺少共享库（`libCB.so.1`、`libOpenCL_adreno.so.1`、`libcdsprpc.so.1.0.0` 等），请先安装高通驱动包——参见[故障排查 → Linux](/cn/resources/troubleshooting#linux)。
+    </Note>
+
     脚本会下载最新稳定版本、校验 SHA256，并无需 `sudo` 完成安装。若启动器目录尚未加入 `PATH`，安装脚本会在末尾输出需要追加的 export 行——例如：
 
     ```bash bash
@@ -125,6 +129,10 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向 Dragonwing IoT 等
 
     docker pull ghcr.io/qcom-ai-hub/geniex-cli:latest
     ```
+
+    <Note>
+      若 `docker login` 失败或 `docker pull` 返回 `permission denied ... /var/run/docker.sock`，参见[故障排查 → Linux](/cn/resources/troubleshooting#linux) 了解 PAT 权限与 `docker` 组的修复方法。
+    </Note>
 
     ### **交互式运行**
 
