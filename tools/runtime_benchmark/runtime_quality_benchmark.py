@@ -1,6 +1,16 @@
 """Run a prompt suite through both `geniex` and `genie-t2t-run` for the same
 genie-formatted model, then write the answers to a CSV ready for scoring.
 
+The geniex side runs **in-process** via the `geniex` Python API: the model is
+loaded once (`AutoModelForCausalLM.from_pretrained`) and reused across every
+prompt — KV cache reset between prompts — which is both faster and closer to
+how the runtime is actually embedded than re-spawning the `geniex infer` CLI
+per prompt. Each prompt goes through the model's own chat template
+(`apply_chat_template`) before `generate`, mirroring exactly what the Go CLI
+`infer` command does. The genie side still shells out to `genie-t2t-run`
+(which has no Python API and does no chat templating, so it gets a
+hand-built formatted prompt).
+
 Usage (minimal — runs the bundled prompt suite, writes results into ./results/):
     python runtime_quality_benchmark.py --geniex-model qualcomm/Qwen3-4B-Instruct-2507
 
@@ -8,6 +18,7 @@ Usage (full):
     python runtime_quality_benchmark.py \
         --prompts testing_prompts.md \
         --geniex-model qualcomm/Qwen3-4B-Instruct-2507 \
+        --device-map auto \
         --genie-config-dir <model-dir-with-genie_config.json> \
         --out results/qwen3_4b.csv
 
@@ -18,15 +29,21 @@ from the geniex model name (slashes → underscores) under ./results/.
 The script does NOT score answers — scoring is a separate pass (see
 SCORE_WITH_CLAUDE.md). Once the run finishes, the script also writes a
 companion <out>.answers.json that the scoring agent consumes.
+
+Requires the `geniex` Python package to be importable (pip install geniex);
+the bundled CLI installs it, so anywhere `geniex infer` runs this does too.
 """
 from __future__ import annotations
 
 import argparse
 import csv
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -77,20 +94,27 @@ def load_prompts(path: Path) -> list[Prompt]:
 # Chat templates
 # ---------------------------------------------------------------------------
 
-# Both runtimes need a fully-formatted prompt (genie-t2t-run does no chat
-# templating; geniex's `infer` doesn't wrap the prompt either when given
-# `-p` directly). We detect the model family from genie_config.json's
-# bos-token to pick a template.
+# System prompt shared by both runtimes. Matches the QAIRT plugin's
+# kDefaultSystemPrompt (sdk/plugins/qairt/src/llm.cpp) so the geniex side
+# (which applies the model's real chat template) and the genie side (which
+# uses the hardcoded template below) see the same system message.
+SYSTEM_PROMPT = "You are a helpful AI assistant."
+
+# Only genie-t2t-run needs a hand-built prompt: it does NO chat templating and
+# takes a fully-formatted string. The geniex side does NOT use these — it
+# calls the model's own chat template via apply_chat_template (see
+# run_geniex), exactly like the Go CLI `infer` command. We detect the model
+# family from genie_config.json's bos-token to pick the genie template.
 
 TEMPLATES = {
     "qwen": (
-        "<|im_start|>system\nYou are a helpful AI assistant<|im_end|>\n"
+        f"<|im_start|>system\n{SYSTEM_PROMPT}<|im_end|>\n"
         "<|im_start|>user\n{prompt}<|im_end|>\n"
         "<|im_start|>assistant\n"
     ),
     "llama3": (
         "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
-        "You are a helpful AI assistant<|eot_id|>"
+        f"{SYSTEM_PROMPT}<|eot_id|>"
         "<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|>"
         "<|start_header_id|>assistant<|end_header_id|>\n\n"
     ),
@@ -116,42 +140,6 @@ def strip_ansi(text: str) -> str:
     return ANSI_RE.sub("", text)
 
 
-def clean_geniex(text: str) -> str:
-    text = strip_ansi(text)
-    # Drop spinner-like "loading model..." / "encoding..." status lines and
-    # the trailing "— X tok/s — N tok — Y s first token —" timing line.
-    kept = []
-    for line in text.splitlines():
-        s = line.strip()
-        if "loading model..." in s or "encoding..." in s:
-            continue
-        if "tok/s" in s and "first token" in s:
-            continue
-        # Drop the "> <prompt-echo>" line geniex prints before its output.
-        if s.startswith(">"):
-            continue
-        kept.append(line)
-    body = "\n".join(kept).strip()
-
-    # geniex `infer -p <formatted_prompt>` echoes the *whole* chat-templated
-    # prompt back into the output (the model sees it, generates "assistant"
-    # content, but the harness prints prompt+completion as one stream). Peel
-    # off everything through the last assistant header so we keep just the
-    # generated answer.
-    markers = [
-        "<|start_header_id|>assistant<|end_header_id|>",  # llama 3
-        "<|im_start|>assistant",                          # qwen
-    ]
-    for m in markers:
-        idx = body.rfind(m)
-        if idx != -1:
-            body = body[idx + len(m):]
-            break
-    # Strip stop-token leftovers and leading whitespace/newlines.
-    body = body.replace("<|eot_id|>", "").replace("<|im_end|>", "")
-    return body.strip()
-
-
 def clean_genie(text: str) -> str:
     """Extract the assistant response from genie-t2t-run output.
 
@@ -169,6 +157,51 @@ def clean_genie(text: str) -> str:
     return text.strip()
 
 
+# genie-t2t-run writes profiling data to the file given by `--profile FILE` as
+# JSON (artifact_type "GENIE_PROFILE"). The per-query metrics live in the
+# `GenieDialog_query` event of the `dialog` component:
+#
+#   "time-to-first-token":  {"value": 155464, "unit": "us"}
+#   "token-generation-rate":{"value": 13.07,  "unit": "toks/sec"}
+#
+# We read those two fields and normalise TTFT to milliseconds.
+
+
+def _us_value_to_ms(field: dict | None) -> float | None:
+    """Convert a {'value': N, 'unit': 'us'|'ms'|'s'} profile field to ms."""
+    if not isinstance(field, dict) or "value" not in field:
+        return None
+    value = float(field["value"])
+    unit = str(field.get("unit", "us")).lower()
+    if unit == "us":
+        return value / 1000.0
+    if unit == "s":
+        return value * 1000.0
+    return value  # already ms (or unknown — leave as-is)
+
+
+def parse_genie_profile(profile_path: Path) -> tuple[float | None, float | None]:
+    """Return ``(ttft_ms, tps)`` from a genie-t2t-run --profile JSON file.
+
+    Scans every component's events for a `GenieDialog_query` and pulls
+    `time-to-first-token` (→ ms) and `token-generation-rate` (toks/sec).
+    Returns ``None`` for any field the file doesn't carry, so a missing or
+    malformed profile degrades gracefully instead of aborting the run."""
+    try:
+        data = json.loads(profile_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None, None
+    for component in data.get("components", []):
+        for event in component.get("events", []):
+            if event.get("type") != "GenieDialog_query":
+                continue
+            ttft_ms = _us_value_to_ms(event.get("time-to-first-token"))
+            rate = event.get("token-generation-rate")
+            tps = float(rate["value"]) if isinstance(rate, dict) and "value" in rate else None
+            return ttft_ms, tps
+    return None, None
+
+
 # ---------------------------------------------------------------------------
 # Runners
 # ---------------------------------------------------------------------------
@@ -178,40 +211,90 @@ class RunResult:
     answer: str
     seconds: float
     error: str | None = None
+    # Time-to-first-token in milliseconds and decode throughput in tokens/sec.
+    # None when the runtime didn't report them (e.g. on error/timeout).
+    ttft_ms: float | None = None
+    tps: float | None = None
 
 
-def run_geniex(model: str, formatted_prompt: str, max_tokens: int, timeout: int) -> RunResult:
+def _csv_num(v: float | None) -> str:
+    """Format a metric for the CSV cell ('' when unavailable)."""
+    return f"{v:.2f}" if v is not None else ""
+
+
+def _fmt_ms(v: float | None) -> str:
+    return f"{v:6.0f}ms" if v is not None else "    -  "
+
+
+def _fmt_tps(v: float | None) -> str:
+    return f"{v:5.1f}t/s" if v is not None else "    -   "
+
+
+def load_geniex_model(model: str, device_map: str):
+    """Load the geniex model once via the Python API. Returns the model handle
+    (``GeniexLLM``) to reuse across prompts. Importing geniex is deferred to
+    here so `--help` and prompt-parsing work without the package installed."""
+    try:
+        from geniex import AutoModelForCausalLM
+    except ImportError as e:
+        raise SystemExit(
+            "ERROR: the `geniex` Python package is not importable "
+            f"({e}). Install it (pip install geniex) and retry."
+        ) from e
+    return AutoModelForCausalLM.from_pretrained(model, device_map=device_map)
+
+
+def run_geniex(model_handle, prompt_text: str, max_tokens: int) -> RunResult:
+    """Generate one answer in-process, mirroring the Go CLI `infer` path:
+    build a [system, user] chat history, run it through the model's *own*
+    chat template (apply_chat_template), then generate from the formatted
+    text. This is important — for QAIRT, apply_chat_template also stages the
+    system prompt / first-turn KV prefix in the plugin, so feeding a
+    pre-formatted string straight to generate() would bypass that and use a
+    template that may not match the model's real one.
+
+    KV cache is reset before each call so prompts don't bleed into one
+    another (QAIRT reset() also re-arms first-turn system-prompt staging)."""
     start = time.time()
     try:
-        cp = subprocess.run(
+        model_handle.reset()
+        formatted = model_handle.tokenizer.apply_chat_template(
             [
-                "geniex",
-                "infer",
-                model,
-                "-p",
-                formatted_prompt,
-                "--max-tokens",
-                str(max_tokens),
-                "--skip-update",
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt_text},
             ],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            encoding="utf-8",
-            errors="replace",
+            add_generation_prompt=True,
         )
-    except subprocess.TimeoutExpired:
-        return RunResult(answer="", seconds=time.time() - start, error="timeout")
-    out = (cp.stdout or "") + (cp.stderr or "")
-    cleaned = clean_geniex(out)
-    err = None
-    if cp.returncode != 0 and not cleaned:
-        err = f"exit {cp.returncode}: {out[-200:].strip()}"
-    return RunResult(answer=cleaned, seconds=time.time() - start, error=err)
+        out = model_handle.generate(formatted, max_new_tokens=max_tokens)
+    except Exception as e:  # noqa: BLE001 — record per-prompt failures, keep going
+        return RunResult(answer="", seconds=time.time() - start, error=str(e)[-200:])
+    # GenerateOutput splits reasoning (<think>…</think>) from the answer and
+    # trims stop tokens, so no banner/echo cleaning is needed. genie-t2t-run
+    # returns the model's full raw output, so re-attach the thinking block to
+    # keep the two answer columns comparable for scoring.
+    answer = out.text or ""
+    if out.thinking:
+        answer = f"<think>{out.thinking}</think>\n{answer}"
+    # ProfileData.ttft is microseconds; decode_speed is tokens/sec.
+    prof = out.profile
+    ttft_ms = prof.ttft / 1000.0 if prof and prof.ttft else None
+    tps = prof.decode_speed if prof and prof.decode_speed else None
+    return RunResult(
+        answer=answer.strip(),
+        seconds=time.time() - start,
+        ttft_ms=ttft_ms,
+        tps=tps,
+    )
 
 
 def run_genie(config_dir: Path, formatted_prompt: str, timeout: int) -> RunResult:
     start = time.time()
+    # genie-t2t-run writes its profiling JSON to the path given via --profile,
+    # but it *refuses to overwrite* an existing file. So we make a fresh temp
+    # DIRECTORY per call and point --profile at a not-yet-created file inside
+    # it (absolute path, so it's unaffected by the cwd=config_dir we run from).
+    profile_dir = Path(tempfile.mkdtemp(prefix="genie_profile_"))
+    profile_path = profile_dir / "profile.log"
     # genie-t2t-run resolves ctx-bins / tokenizer relative to cwd, so we
     # must invoke it from the model directory.
     try:
@@ -222,6 +305,8 @@ def run_genie(config_dir: Path, formatted_prompt: str, timeout: int) -> RunResul
                 "genie_config.json",
                 "-p",
                 formatted_prompt,
+                "--profile",
+                str(profile_path),
             ],
             capture_output=True,
             text=True,
@@ -231,13 +316,22 @@ def run_genie(config_dir: Path, formatted_prompt: str, timeout: int) -> RunResul
             errors="replace",
         )
     except subprocess.TimeoutExpired:
+        shutil.rmtree(profile_dir, ignore_errors=True)
         return RunResult(answer="", seconds=time.time() - start, error="timeout")
     out = (cp.stdout or "") + (cp.stderr or "")
     cleaned = clean_genie(out)
     err = None
     if cp.returncode != 0 and not cleaned:
         err = f"exit {cp.returncode}: {out[-200:].strip()}"
-    return RunResult(answer=cleaned, seconds=time.time() - start, error=err)
+    ttft_ms, tps = parse_genie_profile(profile_path)
+    shutil.rmtree(profile_dir, ignore_errors=True)
+    return RunResult(
+        answer=cleaned,
+        seconds=time.time() - start,
+        error=err,
+        ttft_ms=ttft_ms,
+        tps=tps,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -265,8 +359,6 @@ def find_genie_config_dir(geniex_model: str) -> Path | None:
     home = Path.home()
     candidates.append(home / ".cache" / "geniex" / "models" / geniex_model)
     # GENIEX_DATADIR override.
-    import os
-
     env = os.environ.get("GENIEX_DATADIR")
     if env:
         candidates.append(Path(env) / "models" / geniex_model)
@@ -299,6 +391,14 @@ def main() -> int:
         "(default: auto-discover under ~/.cache/geniex/models/<geniex-model>)",
     )
     p.add_argument(
+        "--device-map",
+        default="auto",
+        help="device_map passed to geniex's AutoModelForCausalLM "
+        "(auto / cpu / gpu / npu / hybrid / <plugin>:<device>; default: auto). "
+        "For a cached QAIRT bundle, 'auto' resolves to qairt:NPU via the "
+        "manifest's plugin_id; pass 'npu' to be explicit.",
+    )
+    p.add_argument(
         "--out",
         type=Path,
         default=None,
@@ -308,13 +408,15 @@ def main() -> int:
         "--max-tokens",
         type=int,
         default=512,
-        help="Cap on tokens generated per prompt (geniex side; genie side honors EOS via chat template)",
+        help="Cap on tokens generated per prompt (geniex side, via max_new_tokens; "
+        "genie side honors EOS via chat template)",
     )
     p.add_argument(
         "--timeout",
         type=int,
         default=600,
-        help="Per-prompt timeout in seconds for each runtime",
+        help="Per-prompt timeout in seconds for the genie-t2t-run subprocess "
+        "(the in-process geniex side has no subprocess timeout)",
     )
     p.add_argument(
         "--limit",
@@ -384,8 +486,10 @@ def main() -> int:
         "genie_score",
         "geniex_score",
         "note",
-        "genie_seconds",
-        "geniex_seconds",
+        "genie_ttft_ms",
+        "geniex_ttft_ms",
+        "genie_tps",
+        "geniex_tps",
         "genie_error",
         "geniex_error",
     ]
@@ -397,36 +501,60 @@ def main() -> int:
             for r in rows:
                 w.writerow({k: r.get(k, "") for k in fieldnames})
 
-    for prompt in prompts:
-        if prompt.id in done_ids:
-            continue
-        formatted = template.format(prompt=prompt.text)
-        print(f"\n[{prompt.id:03d}] ({prompt.category}) {prompt.text[:80]}", flush=True)
+    # Load the geniex model once (skip if every remaining prompt is already
+    # done on a --resume run).
+    pending = [pr for pr in prompts if pr.id not in done_ids]
+    model_handle = None
+    if pending:
+        print(f"Loading geniex model {args.geniex_model} (device_map={args.device_map})...", flush=True)
+        model_handle = load_geniex_model(args.geniex_model, args.device_map)
 
-        gx = run_geniex(args.geniex_model, formatted, args.max_tokens, args.timeout)
-        print(f"  geniex: {gx.seconds:5.1f}s  err={gx.error or '-'}", flush=True)
-        gn = run_genie(args.genie_config_dir, formatted, args.timeout)
-        print(f"  genie : {gn.seconds:5.1f}s  err={gn.error or '-'}", flush=True)
+    try:
+        for prompt in prompts:
+            if prompt.id in done_ids:
+                continue
+            # genie-t2t-run needs the hand-built formatted string; geniex
+            # applies the model's own template internally from the raw text.
+            genie_formatted = template.format(prompt=prompt.text)
+            print(f"\n[{prompt.id:03d}] ({prompt.category}) {prompt.text[:80]}", flush=True)
 
-        rows.append(
-            {
-                "id": prompt.id,
-                "category": prompt.category,
-                "prompt": prompt.text,
-                "genie_answer": gn.answer,
-                "geniex_answer": gx.answer,
-                "genie_score": "",
-                "geniex_score": "",
-                "note": "",
-                "genie_seconds": f"{gn.seconds:.2f}",
-                "geniex_seconds": f"{gx.seconds:.2f}",
-                "genie_error": gn.error or "",
-                "geniex_error": gx.error or "",
-            }
-        )
-        # Persist after every prompt — long runs are expensive to lose.
-        rows.sort(key=lambda r: int(r["id"]))
-        write_all()
+            gx = run_geniex(model_handle, prompt.text, args.max_tokens)
+            print(
+                f"  geniex: {gx.seconds:5.1f}s  ttft={_fmt_ms(gx.ttft_ms)}  "
+                f"tps={_fmt_tps(gx.tps)}  err={gx.error or '-'}",
+                flush=True,
+            )
+            gn = run_genie(args.genie_config_dir, genie_formatted, args.timeout)
+            print(
+                f"  genie : {gn.seconds:5.1f}s  ttft={_fmt_ms(gn.ttft_ms)}  "
+                f"tps={_fmt_tps(gn.tps)}  err={gn.error or '-'}",
+                flush=True,
+            )
+
+            rows.append(
+                {
+                    "id": prompt.id,
+                    "category": prompt.category,
+                    "prompt": prompt.text,
+                    "genie_answer": gn.answer,
+                    "geniex_answer": gx.answer,
+                    "genie_score": "",
+                    "geniex_score": "",
+                    "note": "",
+                    "genie_ttft_ms": _csv_num(gn.ttft_ms),
+                    "geniex_ttft_ms": _csv_num(gx.ttft_ms),
+                    "genie_tps": _csv_num(gn.tps),
+                    "geniex_tps": _csv_num(gx.tps),
+                    "genie_error": gn.error or "",
+                    "geniex_error": gx.error or "",
+                }
+            )
+            # Persist after every prompt — long runs are expensive to lose.
+            rows.sort(key=lambda r: int(r["id"]))
+            write_all()
+    finally:
+        if model_handle is not None:
+            model_handle.close()
 
     # Companion JSON: minimal payload the scoring agent reads. Same basename
     # as the CSV, with `.answers.json` appended so `<slug>.csv` /

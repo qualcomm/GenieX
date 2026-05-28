@@ -2,8 +2,10 @@
 
 Compares answer quality between two runtimes on the same model:
 
-- `geniex` — this project's CLI.
-- `genie-t2t-run` — Qualcomm QAIRT SDK reference runner.
+- `geniex` — this project's runtime, driven in-process through its Python
+  API (`AutoModelForCausalLM`), so the model is loaded once and reused.
+- `genie-t2t-run` — Qualcomm QAIRT SDK reference runner (still a subprocess;
+  it has no Python API).
 
 ## Workflow
 
@@ -41,5 +43,9 @@ $env:Path = "$env:QAIRT_HOME\lib\aarch64-windows-msvc;" + $env:Path
 $env:ADSP_LIBRARY_PATH = "$env:QAIRT_HOME\lib\hexagon-v73\unsigned"
 
 cd "C:\Users\yichqian\code\geniex-qairt-plugin\modelfiles\qwen2_5_vl_7b_instruct"
-genie-t2t-run.exe -c genie_config.json -p "<|im_start|>system\nYou are a helpful AI Assistant.<|im_end|><|im_start|>What is France's capital?\n<|im_end|>\n<|im_start|>assistant\n"
+genie-t2t-run.exe -c genie_config.json -p "<|im_start|>system\nYou are a helpful AI Assistant.<|im_end|><|im_start|>What is France's capital?\n<|im_end|>\n<|im_start|>assistant\n" --profile profile.log
 ```
+
+`--profile <file>` writes a `GENIE_PROFILE` JSON file with per-query KPIs
+(`time-to-first-token`, `token-generation-rate`, etc.). The benchmark uses
+this to record genie's TTFT / TPS; see [RUN_ON_QDC.md](RUN_ON_QDC.md).
