@@ -33,8 +33,6 @@ Flags for `bazelisk build` and `bazelisk run`:
 
 Development targets:
 
-- `bazelisk run //cli:gen` — generate development files (protobuf Go bindings).
-- `bazelisk run //cli:clean` — clean generated files.
 - `bazelisk run //cli/release/linux:docker` — build and load the Docker image for the Linux release.
 
 Package release artifacts:

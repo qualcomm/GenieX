@@ -22,7 +22,6 @@ go_library(
         "//cli/internal/downloader",
         "//cli/internal/model_hub",
         "//cli/internal/model_hub/aihub",
-        "//cli/internal/qaihm",
         "//cli/internal/record",
         "//cli/internal/render",
         "//cli/internal/sochost",
