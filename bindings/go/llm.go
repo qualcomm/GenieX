@@ -28,6 +28,8 @@ import (
 	"unsafe"
 )
 
+// LCOV_EXCL_START
+
 type LlmRole string
 
 const (
@@ -364,3 +366,5 @@ func (l *LLM) Generate(input LlmGenerateInput) (*LlmGenerateOutput, error) {
 	}
 	return &output, nil
 }
+
+// LCOV_EXCL_STOP

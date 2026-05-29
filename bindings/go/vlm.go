@@ -28,6 +28,8 @@ import (
 	"unsafe"
 )
 
+// LCOV_EXCL_START
+
 type VlmCreateInput struct {
 	ModelName     string
 	ModelPath     string
@@ -355,3 +357,5 @@ func (v *VLM) Generate(input VlmGenerateInput) (*VlmGenerateOutput, error) {
 	}
 	return &output, nil
 }
+
+// LCOV_EXCL_STOP

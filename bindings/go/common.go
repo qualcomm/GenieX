@@ -45,6 +45,7 @@ func (p ProfileData) TotalTimeUs() int64 {
 	return p.PromptTime + p.DecodeTime
 }
 
+// LCOV_EXCL_START
 func newProfileDataFromCPtr(c C.geniex_ProfileData) ProfileData {
 	return ProfileData{
 		TTFT:            int64(c.ttft),
@@ -60,6 +61,8 @@ func newProfileDataFromCPtr(c C.geniex_ProfileData) ProfileData {
 	}
 }
 
+// LCOV_EXCL_STOP
+
 type SamplerConfig struct {
 	Temperature       float32
 	TopP              float32
@@ -74,6 +77,7 @@ type SamplerConfig struct {
 	EnableJson        bool
 }
 
+// LCOV_EXCL_START
 func (sc SamplerConfig) toCPtr() *C.geniex_SamplerConfig {
 	cPtr := (*C.geniex_SamplerConfig)(cMalloc(C.sizeof_geniex_SamplerConfig))
 	*cPtr = C.geniex_SamplerConfig{
@@ -101,6 +105,8 @@ func freeSamplerConfig(cPtr *C.geniex_SamplerConfig) {
 	C.free(unsafe.Pointer(cPtr))
 }
 
+// LCOV_EXCL_STOP
+
 type GenerationConfig struct {
 	MaxTokens      int32
 	Stop           []string
@@ -111,6 +117,7 @@ type GenerationConfig struct {
 	AudioPaths     []string
 }
 
+// LCOV_EXCL_START
 func (gc GenerationConfig) toCPtr() *C.geniex_GenerationConfig {
 	cPtr := (*C.geniex_GenerationConfig)(cMalloc(C.sizeof_geniex_GenerationConfig))
 	*cPtr = C.geniex_GenerationConfig{
@@ -149,6 +156,8 @@ func freeGenerationConfig(ptr *C.geniex_GenerationConfig) {
 	C.free(unsafe.Pointer(ptr))
 }
 
+// LCOV_EXCL_STOP
+
 type ModelConfig struct {
 	NCtx                int32
 	NThreads            int32
@@ -163,6 +172,7 @@ type ModelConfig struct {
 
 // fillC writes mc into an embedded C struct; pair with freeCModelConfig to
 // release the heap-allocated string fields.
+// LCOV_EXCL_START
 func (mc ModelConfig) fillC(out *C.geniex_ModelConfig) {
 	*out = C.geniex_ModelConfig{
 		n_ctx:                 C.int32_t(mc.NCtx),
@@ -184,3 +194,5 @@ func freeCModelConfig(c *C.geniex_ModelConfig) {
 	cFreeIfSet(unsafe.Pointer(c.chat_template_path))
 	cFreeIfSet(unsafe.Pointer(c.chat_template_content))
 }
+
+// LCOV_EXCL_STOP

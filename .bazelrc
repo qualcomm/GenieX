@@ -6,6 +6,7 @@ build --keep_going
 build --verbose_failures
 build --disk_cache=~/.cache/bazel-disk
 test --test_output=errors
+test --build_tests_only
 run --color=yes
 
 # quick alias

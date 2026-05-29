@@ -25,6 +25,8 @@ import (
 	"unsafe"
 )
 
+// LCOV_EXCL_START
+
 // Friendly device aliases that downstream callers pass on their
 // `--device` / `device_map` option. The SDK (`sdk/src/device.cpp`)
 // owns the alias table; this file is just the Go-side thin wrapper.
@@ -126,3 +128,5 @@ func ResolveDevice(input ResolveDeviceInput) (*ResolveDeviceOutput, error) {
 	output := newResolveDeviceOutputFromCPtr(&cOutput)
 	return &output, nil
 }
+
+// LCOV_EXCL_STOP

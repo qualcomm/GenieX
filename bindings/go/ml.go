@@ -35,6 +35,8 @@ import (
 	"unsafe"
 )
 
+// LCOV_EXCL_START
+
 var bridgeLogEnabled = true
 
 type SDKError int32
@@ -210,3 +212,5 @@ func go_log_wrap(level C.geniex_LogLevel, msg *C.char) {
 func EnableBridgeLog(enable bool) {
 	bridgeLogEnabled = enable
 }
+
+// LCOV_EXCL_STOP

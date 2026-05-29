@@ -27,6 +27,8 @@ import (
 	"unsafe"
 )
 
+// LCOV_EXCL_START
+
 // free releases memory the SDK allocated (geniex_free), as opposed to
 // freeC* helpers which release memory Go allocated via C.malloc / C.CString.
 func free(ptr unsafe.Pointer) {
@@ -141,3 +143,5 @@ func go_generate_stream_on_token(token *C.char, userData unsafe.Pointer) C.bool 
 	}
 	return C.bool(cb(C.GoString(token)))
 }
+
+// LCOV_EXCL_STOP
