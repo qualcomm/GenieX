@@ -85,9 +85,15 @@ func colorNameAndAliases(c *cobra.Command) string {
 func flagGroupedUsage(c *cobra.Command) error {
 	w := c.OutOrStdout()
 	h := render.GetTheme().Heading
+	t := render.GetTheme()
 	fmt.Fprint(w, h.Sprint("Usage:"))
 	if c.Runnable() {
 		fmt.Fprintf(w, "\n  %s", colorUseLine(c))
+		if c.HasAvailableSubCommands() {
+			fmt.Fprintf(w, " %s", t.Command.Sprint("[command]"))
+		}
+	} else if c.HasAvailableSubCommands() {
+		fmt.Fprintf(w, "\n  %s %s", t.Command.Sprint(c.CommandPath()), t.Command.Sprint("[command]"))
 	}
 	if len(c.Aliases) > 0 {
 		fmt.Fprintf(w, "\n\n%s\n", h.Sprint("Aliases:"))
@@ -121,7 +127,7 @@ func applyHelpStyle(cmd *cobra.Command) {
 }
 
 const usageTemplate = `{{"Usage:" | heading}}{{if .Runnable}}
-  {{. | colorUseLine}}{{end}}{{if .HasAvailableSubCommands}}
+  {{. | colorUseLine}}{{if .HasAvailableSubCommands}} {{"[command]" | colorPlaceholder}}{{end}}{{else if .HasAvailableSubCommands}}
   {{.CommandPath | colorCmd}} {{"[command]" | colorPlaceholder}}{{end}}{{if gt (len .Aliases) 0}}
 
 {{"Aliases:" | heading}}
