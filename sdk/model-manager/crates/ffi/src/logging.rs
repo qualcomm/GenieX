@@ -16,7 +16,7 @@ use std::os::raw::{c_char, c_int};
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub enum GeniexLogLevel {
+pub enum GenieXLogLevel {
     Trace = 0,
     Debug = 1,
     Info = 2,
@@ -30,7 +30,7 @@ extern "C" {
     fn geniex_model_log_emit(level: c_int, msg: *const c_char);
 }
 
-pub fn log(level: GeniexLogLevel, msg: &str) {
+pub fn log(level: GenieXLogLevel, msg: &str) {
     unsafe {
         if let Ok(cmsg) = CString::new(msg) {
             geniex_model_log_emit(level as c_int, cmsg.as_ptr());
@@ -41,26 +41,26 @@ pub fn log(level: GeniexLogLevel, msg: &str) {
 #[inline]
 #[allow(dead_code)]
 pub fn trace(msg: &str) {
-    log(GeniexLogLevel::Trace, msg);
+    log(GenieXLogLevel::Trace, msg);
 }
 
 #[inline]
 #[allow(dead_code)]
 pub fn debug(msg: &str) {
-    log(GeniexLogLevel::Debug, msg);
+    log(GenieXLogLevel::Debug, msg);
 }
 
 #[inline]
 pub fn info(msg: &str) {
-    log(GeniexLogLevel::Info, msg);
+    log(GenieXLogLevel::Info, msg);
 }
 
 #[inline]
 pub fn warn(msg: &str) {
-    log(GeniexLogLevel::Warn, msg);
+    log(GenieXLogLevel::Warn, msg);
 }
 
 #[inline]
 pub fn error(msg: &str) {
-    log(GeniexLogLevel::Error, msg);
+    log(GenieXLogLevel::Error, msg);
 }

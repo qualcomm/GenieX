@@ -106,7 +106,7 @@ def cleanup_model(geniex_session) -> Iterator[list[str]]:
         for n in names:
             try:
                 _mm.remove(n)
-            except geniex.GeniexError:
+            except geniex.GenieXError:
                 pass
 
 
@@ -187,7 +187,7 @@ def test_pull_rejects_unknown_local_layout(tmp_path, geniex_session):
     (src / 'README.md').write_text('hi')
     name = _unique_name('unknown')
 
-    with pytest.raises(geniex.GeniexError):
+    with pytest.raises(geniex.GenieXError):
         _mm.pull(name, hub='localfs', local_path=str(src))
 
 
@@ -198,11 +198,11 @@ def test_pull_rejects_safetensors_only_dir_with_clear_error(tmp_path, geniex_ses
     (src / 'model.safetensors').write_bytes(b'\x00\x00')
     name = _unique_name('safetensors')
 
-    with pytest.raises(geniex.GeniexError):
+    with pytest.raises(geniex.GenieXError):
         _mm.pull(name, hub='localfs', local_path=str(src))
 
 
 def test_pull_localfs_requires_local_path(geniex_session):
     name = _unique_name('no-path')
-    with pytest.raises(geniex.GeniexError):
+    with pytest.raises(geniex.GenieXError):
         _mm.pull(name, hub='localfs')

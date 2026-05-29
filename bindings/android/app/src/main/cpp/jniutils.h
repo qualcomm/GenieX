@@ -12,10 +12,6 @@ geniex_GenerationConfig extract_generation_config(JNIEnv* env, jobject configObj
 
 geniex_SamplerConfig extract_sampler_config(JNIEnv* env, jobject configObj);
 
-geniex_EmbeddingConfig extract_embedding_config(JNIEnv* env, jobject configObj);
-
-geniex_RerankConfig extract_rerank_config(JNIEnv* env, jobject configObj);
-
 geniex_ModelConfig extract_model_config(JNIEnv* env, jobject configObj);
 
 //    std::vector<geniex_ChatMessage> extract_chat_messages(JNIEnv* env, jobjectArray jmessages,
@@ -59,10 +55,6 @@ std::vector<int32_t> jintArray2vec(JNIEnv* env, jintArray arr);
 geniex_LlmCreateInput extract_llm_create_input(JNIEnv* env, jobject inputObj);
 
 geniex_VlmCreateInput extract_vlm_create_input(JNIEnv* env, jobject inputObj);
-
-geniex_EmbedderCreateInput extract_embedder_create_input(JNIEnv* env, jobject inputObj);
-
-geniex_RerankerCreateInput extract_reranker_create_input(JNIEnv* env, jobject inputObj);
 
 void                               clear_jni_cstr_pool();
 std::vector<geniex_LlmChatMessage> extract_llm_chat_messages(

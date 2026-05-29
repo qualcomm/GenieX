@@ -1,13 +1,6 @@
 #pragma once
 
-#include "IAsr.h"
-#include "ICv.h"
-#include "IDiarize.h"
-#include "IEmbedding.h"
-#include "IImageGen.h"
 #include "ILlm.h"
-#include "IReranker.h"
-#include "ITts.h"
 #include "IVlm.h"
 #include "geniex.h"
 #include "logging.h"
@@ -28,15 +21,8 @@ class Plugin {
         output->device_count = 0;
         return GENIEX_SUCCESS;
     }
-    virtual ILlm*       create_llm() { return nullptr; }
-    virtual IVlm*       create_vlm() { return nullptr; }
-    virtual IEmbedding* create_embedding() { return nullptr; }
-    virtual IReranker*  create_reranker() { return nullptr; }
-    virtual IAsr*       create_asr() { return nullptr; }
-    virtual ITts*       create_tts() { return nullptr; }
-    virtual ICv*        create_cv() { return nullptr; }
-    virtual IImageGen*  create_image_gen() { return nullptr; }
-    virtual IDiarize*   create_diarize() { return nullptr; }
+    virtual ILlm* create_llm() { return nullptr; }
+    virtual IVlm* create_vlm() { return nullptr; }
 };
 
 }  // namespace geniex

@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+load("//scripts:cgo_test.bzl", "go_cgo_test")
 
 go_library(
     name = "geniex_lib",
@@ -22,7 +23,6 @@ go_library(
         "//cli/internal/downloader",
         "//cli/internal/model_hub",
         "//cli/internal/model_hub/aihub",
-        "//cli/internal/qaihm",
         "//cli/internal/record",
         "//cli/internal/render",
         "//cli/internal/sochost",
@@ -43,12 +43,11 @@ go_library(
     ],
 )
 
-go_test(
+go_cgo_test(
     name = "geniex_test",
     srcs = [
         "model_test.go",
         "update_test.go",
-        "version_test.go",
     ],
     embed = [":geniex_lib"],
     gotags = [
@@ -57,6 +56,7 @@ go_test(
     ],
     deps = [
         "//cli/internal/model_hub",
+        "//cli/internal/testutil",
         "//cli/internal/types",
     ],
 )

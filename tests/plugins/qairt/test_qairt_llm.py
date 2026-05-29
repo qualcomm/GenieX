@@ -30,7 +30,7 @@ def test_generate_blocking(qairt_llm_paths, device_map):
         QAIRT_LLM_MODEL,
         device_map=device_map,
     ) as llm:
-        assert isinstance(llm, geniex.GeniexLLM)
+        assert isinstance(llm, geniex.GenieXLLM)
         out = llm.generate('Say hi.', max_new_tokens=16, temperature=0.0, seed=42)
         assert isinstance(out, geniex.GenerateOutput)
         assert out.text

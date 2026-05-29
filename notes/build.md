@@ -20,6 +20,8 @@ bazelisk run //cli -- infer Qwen/Qwen3-0.6B-GGUF
 
 ## CLI build options
 
+### Flags
+
 Flags for `bazelisk build` and `bazelisk run`:
 
 | Flag                                    | Meaning                                                                                                     |
@@ -27,10 +29,10 @@ Flags for `bazelisk build` and `bazelisk run`:
 | `--//sdk:sdk_type={local,s3,bazel}`     | SDK source. `local` (default) links against `sdk/pkg-geniex`; `s3` and `bazel` are WIP.                     |
 | `--config={linux_arm64,windows_arm64}`  | Cross-compile to the target platform (Go toolchain + CGO + `oci_image` base). `sdk/pkg-geniex/` must match. |
 
+### Development and release targets
+
 Development targets:
 
-- `bazelisk run //cli:gen` — generate development files (protobuf Go bindings).
-- `bazelisk run //cli:clean` — clean generated files.
 - `bazelisk run //cli/release/linux:docker` — build and load the Docker image for the Linux release.
 
 Package release artifacts:
@@ -42,6 +44,16 @@ Package release artifacts:
 | `bazelisk build //cli/release/linux`   | `bazel-bin/cli/release/linux/geniex-cli-docker.tar`  |
 
 Generated executable (for manual invocation): `bazel-bin/cli/cmd/geniex/geniex_/`, with runtime files under `geniex.runfiles/_main`.
+
+### Test coverage
+
+Use `bazelisk coverage` instead of `bazelisk test`:
+
+```bash
+bazelisk coverage //... --combined_report=lcov
+```
+
+Bazel's default `--instrumentation_filter` only covers packages that own a test target, so every Go package ships at least a placeholder `package_test.go` to keep itself in the denominator. Combined lcov lands at `bazel-out/_coverage/_coverage_report.dat`. Render it with `genhtml bazel-out/_coverage/_coverage_report.dat -o coverage-html` (gitignored), or summarize on the CLI with `lcov --list <report>`.
 
 ## Python bindings
 

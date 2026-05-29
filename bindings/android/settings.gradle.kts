@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "GeniexSdk"
+rootProject.name = "GenieXSdk"
 include(":app")
  

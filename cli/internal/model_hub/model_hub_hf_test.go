@@ -16,12 +16,11 @@ package model_hub
 
 import (
 	"context"
-	"io"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/qcom-it-nexa-ai/geniex/cli/internal/testutil"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
@@ -72,18 +71,20 @@ func TestHFMaxConcurrency_WarnsWithoutToken(t *testing.T) {
 
 	hfTokenWarnOnce = sync.Once{}
 	h := NewHuggingFace()
-	out := captureStdout(t, func() {
+	out, _, _ := testutil.CaptureOutput(t, func() error {
 		if got := h.MaxConcurrency(); got != 1 {
 			t.Fatalf("expected concurrency 1 without token, got %d", got)
 		}
+		return nil
 	})
 
 	if !strings.Contains(out, "Cannot find a HuggingFace token") {
 		t.Fatalf("expected missing-token warning, got %q", out)
 	}
 
-	out2 := captureStdout(t, func() {
+	out2, _, _ := testutil.CaptureOutput(t, func() error {
 		h.MaxConcurrency()
+		return nil
 	})
 	if out2 != "" {
 		t.Fatalf("expected warning to be emitted once, got %q", out2)
@@ -96,35 +97,14 @@ func TestHFMaxConcurrency_NoWarningWithToken(t *testing.T) {
 
 	hfTokenWarnOnce = sync.Once{}
 	h := NewHuggingFace()
-	out := captureStdout(t, func() {
+	out, _, _ := testutil.CaptureOutput(t, func() error {
 		if got := h.MaxConcurrency(); got != 8 {
 			t.Fatalf("expected concurrency 8 with token, got %d", got)
 		}
+		return nil
 	})
 
 	if out != "" {
 		t.Fatalf("expected no warning with token, got %q", out)
 	}
-}
-
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-
-	orig := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe error: %v", err)
-	}
-
-	os.Stdout = w
-	defer func() { os.Stdout = orig }()
-	fn()
-	_ = w.Close()
-
-	buf, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("read stdout error: %v", err)
-	}
-	_ = r.Close()
-	return string(buf)
 }

@@ -86,7 +86,7 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 	if err != nil {
 		return nil, TranslateAIHubError(err)
 	}
-	if _, rerr := aihub.RuntimeForDomain(model.GetDomain()); rerr != nil {
+	if _, rerr := aihub.RuntimeForDomain(model.Domain); rerr != nil {
 		return nil, rerr
 	}
 
@@ -94,22 +94,22 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 	if err != nil {
 		return nil, TranslateAIHubError(err)
 	}
-	ra, err := h.client.LoadReleaseAssets(ctx, manifest, model.GetId())
+	ra, err := h.client.LoadReleaseAssets(ctx, manifest, model.ID)
 	if err != nil {
 		return nil, TranslateAIHubError(err)
 	}
-	candidates, err := aihub.MatchAll(ra, plat, model.GetDomain(), chipset)
+	candidates, err := aihub.MatchAll(ra, plat, model.Domain, chipset)
 	if err != nil {
 		return nil, h.formatMatchError(err, name, chipset)
 	}
 	asset := candidates[0] // TODO: ask user when len(candidates) > 1
 
-	zipSize, err := aihub.HeadContentLength(ctx, asset.GetDownloadUrl())
+	zipSize, err := aihub.HeadContentLength(ctx, asset.DownloadURL)
 	if err != nil {
 		return nil, TranslateAIHubError(err)
 	}
 
-	zipURL := asset.GetDownloadUrl()
+	zipURL := asset.DownloadURL
 	zipBasename := path.Base(zipURL)
 	if path.Ext(zipBasename) != ".zip" {
 		return nil, fmt.Errorf("expected zip file from AI Hub, got %q", zipBasename)
@@ -123,7 +123,7 @@ func (h *AIHub) ModelInfo(ctx context.Context, name string) ([]ModelFileInfo, er
 	h.mu.Unlock()
 
 	slog.Info("aihub: resolved asset",
-		"name", name, "chipset", asset.GetChipset(),
+		"name", name, "chipset", asset.Chipset,
 		"url", zipURL, "size", zipSize)
 
 	return []ModelFileInfo{{Name: zipBasename, Size: zipSize}}, nil
@@ -184,9 +184,7 @@ func extractQairtZip(zipPath, outputDir string, mf *types.ModelManifest) error {
 	return nil
 }
 
-// qairtMetaJSON: subset of qaihm.ModelMetadata. Hand-rolled because real
-// metadata.json uses lowercase enum strings ("genie", "w4a16") that
-// protojson rejects.
+// qairtMetaJSON: subset of the AI Hub model metadata schema we care about.
 type qairtMetaJSON struct {
 	ModelID   string `json:"model_id"`
 	Precision string `json:"precision"`

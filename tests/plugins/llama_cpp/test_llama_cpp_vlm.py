@@ -24,7 +24,7 @@ from _models import LLAMA_CPP_VLM_MODEL
 pytestmark = pytest.mark.vlm
 
 
-def _vlm_prompt(vlm: geniex.GeniexVLM, image_path: str, text: str) -> str:
+def _vlm_prompt(vlm: geniex.GenieXVLM, image_path: str, text: str) -> str:
     return vlm.tokenizer.apply_chat_template(
         [
             {
@@ -46,7 +46,7 @@ def test_generate_with_image(llama_cpp_vlm_paths, test_image, device_map):
         LLAMA_CPP_VLM_MODEL,
         device_map=device_map,
     ) as vlm:
-        assert isinstance(vlm, geniex.GeniexVLM)
+        assert isinstance(vlm, geniex.GenieXVLM)
         prompt = _vlm_prompt(vlm, test_image, 'Describe this image.')
         out = vlm.generate(
             prompt,

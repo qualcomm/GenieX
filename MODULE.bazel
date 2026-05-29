@@ -10,16 +10,6 @@ bazel_dep(name = "rules_pkg", version = "1.2.0")
 innosetup_repo = use_repo_rule("//cli/release/windows:iscc.bzl", "innosetup_repository")
 innosetup_repo(name = "innosetup")
 
-# protobuf, with windows arm64 patch
-bazel_dep(name = "protobuf", version = "33.4", repo_name = "com_google_protobuf")
-prebuilt_protoc = use_repo_rule("//scripts:prebuilt_protoc.bzl", "prebuilt_protoc")
-prebuilt_protoc(
-    name = "prebuilt_protoc_windows_arm64",
-    cpu = "arm64",
-    os = "windows",
-)
-register_toolchains("@prebuilt_protoc_windows_arm64//:prebuilt_toolchain")
-
 # oci
 bazel_dep(name = "rules_oci", version = "2.3.0")
 bazel_dep(name = "rules_distroless", version = "0.8.0")
@@ -93,7 +83,6 @@ use_repo(
     "com_github_spf13_viper",
     "com_github_valyala_fasthttp",
     "dev_resty_v3",
-    "org_golang_google_protobuf",
     "org_golang_x_image",
     "org_golang_x_mod",
     "org_golang_x_sync",

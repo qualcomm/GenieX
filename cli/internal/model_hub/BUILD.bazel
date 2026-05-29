@@ -32,6 +32,7 @@ go_test(
     ],
     embed = [":model_hub"],
     deps = [
+        "//cli/internal/testutil",
         "//cli/internal/types",
         "@com_github_lmittmann_tint//:tint",
     ],

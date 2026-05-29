@@ -71,59 +71,6 @@ const char* geniex_get_error_message(const geniex_ErrorCode error_code) {
         case GENIEX_ERROR_VLM_GENERATION_FAILED:
             return "Multimodal generation failed";
 
-            /* ===== Embedding ERRORS (202xxx) ===== */
-        case GENIEX_ERROR_EMBEDDING_GENERATION:
-            return "Embedding generation failed";
-        case GENIEX_ERROR_EMBEDDING_DIMENSION:
-            return "Invalid embedding dimension";
-
-            /* ===== Reranking ERRORS (203xxx) ===== */
-        case GENIEX_ERROR_RERANK_FAILED:
-            return "Reranking failed";
-        case GENIEX_ERROR_RERANK_INPUT:
-            return "Invalid reranking input";
-
-            /* ===== Image Generation ERRORS (204xxx) ===== */
-        case GENIEX_ERROR_IMAGEGEN_GENERATION:
-            return "Image generation failed";
-        case GENIEX_ERROR_IMAGEGEN_PROMPT:
-            return "Invalid image prompt";
-        case GENIEX_ERROR_IMAGEGEN_DIMENSION:
-            return "Invalid image dimensions";
-
-            /* ===== ASR ERRORS (205xxx) ===== */
-
-        case GENIEX_ERROR_ASR_TRANSCRIPTION:
-            return "ASR transcription failed";
-        case GENIEX_ERROR_ASR_AUDIO_FORMAT:
-            return "Unsupported ASR audio format";
-        case GENIEX_ERROR_ASR_LANGUAGE:
-            return "Unsupported ASR language";
-
-            /* ===== TTS ERRORS (206xxx) ===== */
-        case GENIEX_ERROR_TTS_SYNTHESIS:
-            return "TTS synthesis failed";
-        case GENIEX_ERROR_TTS_VOICE:
-            return "TTS voice not found";
-        case GENIEX_ERROR_TTS_AUDIO_FORMAT:
-            return "TTS audio format error";
-
-            /* ===== CV ERRORS (207xxx) ===== */
-        case GENIEX_ERROR_CV_OCR_DETECTION:
-            return "OCR text detection failed";
-        case GENIEX_ERROR_CV_OCR_RECOGNITION:
-            return "OCR text recognition failed";
-
-            /* ===== Diarization ERRORS (208xxx) ===== */
-        case GENIEX_ERROR_DIARIZE_AUDIO_LOAD:
-            return "Audio loading failed";
-        case GENIEX_ERROR_DIARIZE_SEGMENTATION:
-            return "Segmentation model execution failed";
-        case GENIEX_ERROR_DIARIZE_EMBEDDING:
-            return "Embedding extraction failed";
-        case GENIEX_ERROR_DIARIZE_CLUSTERING:
-            return "Speaker clustering failed";
-
         default:
             return "Unknown error code";
     }

@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "middleware",
@@ -13,4 +13,10 @@ go_library(
         "//cli/internal/config",
         "@com_github_gin_gonic_gin//:gin",
     ],
+)
+
+go_test(
+    name = "middleware_test",
+    srcs = ["package_test.go"],
+    embed = [":middleware"],
 )

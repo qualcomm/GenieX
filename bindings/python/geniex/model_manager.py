@@ -20,7 +20,7 @@ from ctypes import byref, c_char_p, c_int32, sizeof
 from dataclasses import dataclass
 from typing import Callable
 
-from ._ffi._api import GeniexError, _check, _ensure_bound
+from ._ffi._api import GenieXError, _check, _ensure_bound
 from ._ffi._lib import load_library
 from ._ffi._types import (
     GENIEX_HUB_AIHUB,
@@ -143,7 +143,7 @@ def _maybe_resolve_alias(model_name: str, quant: str | None) -> tuple[str, str |
 
     try:
         resolved = resolve_alias(name_part)
-    except GeniexError:
+    except GenieXError:
         return name_part, quant
 
     if ':' in resolved:
@@ -313,7 +313,7 @@ def ensure_cached(
 
     try:
         full_name = resolve_alias(name_part)
-    except GeniexError:
+    except GenieXError:
         full_name = name_part
 
     pull(

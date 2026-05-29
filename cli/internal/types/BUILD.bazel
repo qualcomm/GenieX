@@ -1,11 +1,18 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "types",
     srcs = [
         "model.go",
-        "utils.go",
     ],
     importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/types",
     visibility = ["//cli:__subpackages__"],
+)
+
+go_test(
+    name = "types_test",
+    srcs = [
+        "model_test.go",
+    ],
+    embed = [":types"],
 )

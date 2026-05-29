@@ -12,14 +12,12 @@
 
 #include "build_config.h"
 #include "common.h"
-#include "embedding.h"
 #include "ggml-backend.h"
 #include "llama.h"
 #include "llm.h"
 #include "logging.h"
 #include "mtmd-helper.h"
 #include "plugin/Plugin.h"
-#include "rerank.h"
 #include "vlm.h"
 
 namespace {
@@ -146,10 +144,6 @@ class LlamaPlugin : public Plugin {
     ILlm* create_llm() override { return new geniex::LlamaLlm; }
 
     IVlm* create_vlm() override { return new geniex::LlamaVlm; }
-
-    IEmbedding* create_embedding() override { return new geniex::LlamaCppEmbedding; }
-
-    IReranker* create_reranker() override { return new geniex::LlamaCppReranker; }
 };
 
 }  // namespace geniex
