@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -73,7 +74,6 @@ class ModelTokenizer:
         if enable_thinking is None:
             enable_thinking = True
         elif enable_thinking is False and not supports_thinking:
-            import warnings
             warnings.warn(
                 'enable_thinking=False on a non-thinking model injects an empty '
                 '<think></think> block that can derail generation. Forcing True.',
