@@ -13,25 +13,25 @@ pluginManagement {
         gradlePluginPortal()
     }
 }
-// CI override: when -PgeniexAarDir=<dir> is passed, resolve
-// com.qualcomm.qti:geniex-android from a locally-built AAR (named
-// geniex-android.aar) in that directory instead of Maven Central. Lets
-// release/PR CI build the demo against the exact AAR being shipped, before it
-// is published to Maven Central — without that, a release that bumps the pin
-// to an as-yet-unpublished version would fail to resolve. Real users never set
-// this property and pull the published version from Maven Central as usual.
-val geniexAarDir: String? = startParameter.projectProperties["geniexAarDir"]
+// CI override: when GENIEX_AAR_REPO names a local Maven repository, resolve
+// com.qualcomm.qti:geniex-android from there instead of Maven Central. CI
+// populates it from the AAR built in the same run (see _build-android-apk.yml),
+// so release/PR builds exercise the exact artifact being shipped *before* it is
+// published to Maven Central — otherwise a release that bumps the example's pin
+// to an as-yet-unpublished version fails dependency resolution. It must be a
+// real Maven repo (POM with `aar` packaging), not flatDir: AGP's variant-aware
+// resolution needs that metadata to accept a versioned coordinate as an AAR.
+// Real users never set this and pull the published version from Maven Central.
+val geniexAarRepo: String? = System.getenv("GENIEX_AAR_REPO")
 
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        if (geniexAarDir != null) {
+        if (geniexAarRepo != null) {
             // Scoped to the one module so this repo is never consulted for any
-            // other dependency (no flat-dir resolution noise). flatDir carries
-            // no metadata, but the published geniex-android POM declares no
-            // dependencies either, so the resulting classpath is identical.
-            flatDir {
-                dirs(geniexAarDir)
+            // other dependency.
+            maven {
+                url = uri(geniexAarRepo)
                 content { includeModule("com.qualcomm.qti", "geniex-android") }
             }
         }
