@@ -121,6 +121,18 @@ class GeniexLLM:
         self._meta = meta
         self.tokenizer = ModelTokenizer(self)
 
+    @property
+    def supports_thinking(self) -> bool:
+        """Whether the loaded model has a thinking mode (parsed once at load
+        time from the model's own chat template). Drives the default value of
+        ``apply_chat_template(enable_thinking=...)``. Falls back to ``True``
+        when the bundle ships no on-disk ``tokenizer_config.json`` (e.g. GGUF
+        models embed the template inside the file)."""
+        if self._meta is None:
+            return True
+        detected = self._meta.get('supports_thinking')
+        return True if detected is None else bool(detected)
+
     def _apply_chat_template(
         self,
         messages: list[dict],
@@ -353,6 +365,14 @@ class GeniexVLM:
         self._last_template_has_image = False
         self._last_template_has_audio = False
         self.tokenizer = ModelTokenizer(self)
+
+    @property
+    def supports_thinking(self) -> bool:
+        """See :attr:`GeniexLLM.supports_thinking`."""
+        if self._meta is None:
+            return True
+        detected = self._meta.get('supports_thinking')
+        return True if detected is None else bool(detected)
 
     def _apply_chat_template(
         self,

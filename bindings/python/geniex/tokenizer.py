@@ -33,7 +33,7 @@ class ModelTokenizer:
         *,
         tokenize: bool = False,
         add_generation_prompt: bool = True,
-        enable_thinking: bool = False,
+        enable_thinking: bool | None = None,
         tools: list[dict] | str | None = None,
     ) -> str:
         """Format chat ``messages`` using the loaded model's chat template.
@@ -42,6 +42,12 @@ class ModelTokenizer:
         internally, so callers should pass the returned string straight to
         :meth:`GeniexLLM.generate`. ``tools`` accepts a list of dicts or a
         pre-serialised JSON string.
+
+        ``enable_thinking`` defaults to whatever the loaded model supports
+        (auto-detected from its chat template at load time and exposed as
+        :attr:`GeniexLLM.supports_thinking`). Pass ``True``/``False``
+        explicitly to override — passing ``True`` to a non-thinking instruct
+        model can derail generation.
         """
         if tokenize:
             raise ValueError(
@@ -52,6 +58,9 @@ class ModelTokenizer:
         tools_str: str | None = None
         if tools is not None:
             tools_str = tools if isinstance(tools, str) else json.dumps(tools)
+
+        if enable_thinking is None:
+            enable_thinking = self._model.supports_thinking
 
         return self._model._apply_chat_template(
             messages=messages,

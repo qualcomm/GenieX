@@ -267,6 +267,35 @@ def _qairt_bundle_is_vlm(model_path: str) -> bool | None:
     return bool(genie.get('supports_vision'))
 
 
+def _detect_supports_thinking(model_path: str | None, tokenizer_path: str | None) -> bool | None:
+    # Inspect the model's own Jinja chat template (tokenizer_config.json's
+    # `chat_template` field). A template that branches on `enable_thinking`
+    # or emits literal `<think>` tags is the authoritative signal that the
+    # model has a thinking mode. Returns None when the file isn't on disk
+    # (e.g. GGUF bundles embed the template inside the file) so callers can
+    # fall back to a default.
+    candidates: list[str] = []
+    if tokenizer_path:
+        # tokenizer_path points at tokenizer.json; its sibling is the config.
+        candidates.append(os.path.join(os.path.dirname(tokenizer_path), 'tokenizer_config.json'))
+    if model_path:
+        bundle_dir = model_path if os.path.isdir(model_path) else os.path.dirname(model_path)
+        candidates.append(os.path.join(bundle_dir, 'tokenizer_config.json'))
+    for path in candidates:
+        if not path or not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding='utf-8') as f:
+                tc = json.load(f)
+        except (OSError, ValueError):
+            continue
+        template = tc.get('chat_template')
+        if not isinstance(template, str):
+            return None
+        return ('enable_thinking' in template) or ('<think>' in template)
+    return None
+
+
 def _is_vlm(mmproj_path: str | None, cache_key: str, model_path: str | None = None) -> bool:
     # mmproj_path is the llama_cpp signal (multimodal projector file).
     # QAIRT VLMs bundle the vision encoder into the QNN binary and have no
@@ -370,11 +399,13 @@ class AutoModelForCausalLM:
         if ngl_override is not None:
             n_gpu_layers = ngl_override
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
+        resolved_tok_path = tokenizer_path or _tok
         meta = {
             'backend': plugin_id,
             'device': device_id,
             'quant': quant,
             'model_path': model_path,
+            'supports_thinking': _detect_supports_thinking(model_path, resolved_tok_path),
         }
 
         resolved_mmproj = mmproj_path or _mmproj
@@ -397,9 +428,8 @@ class AutoModelForCausalLM:
             model_path=model_path.encode(),
             config=config,
         )
-        resolved_tokenizer = tokenizer_path or _tok
-        if resolved_tokenizer:
-            inp.tokenizer_path = resolved_tokenizer.encode()
+        if resolved_tok_path:
+            inp.tokenizer_path = resolved_tok_path.encode()
         if plugin_id:
             inp.plugin_id = plugin_id.encode()
         if device_id:
@@ -458,18 +488,20 @@ class AutoModelForVision2Seq:
         if ngl_override is not None:
             n_gpu_layers = ngl_override
         config = _build_model_config(plugin_id, n_ctx, n_gpu_layers, **kwargs)
+        resolved_tok_path = tokenizer_path or _tok
         meta = {
             'backend': plugin_id,
             'device': device_id,
             'quant': quant,
             'model_path': model_path,
+            'supports_thinking': _detect_supports_thinking(model_path, resolved_tok_path),
         }
 
         return _create_vlm_handle(
             resolved_name,
             model_path,
             mmproj_path or _mmproj,
-            tokenizer_path or _tok,
+            resolved_tok_path,
             plugin_id,
             device_id,
             config,
