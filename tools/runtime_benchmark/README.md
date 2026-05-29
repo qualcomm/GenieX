@@ -11,6 +11,15 @@ two runtimes on the same model:
 Same model, same prompts, same chat template — so quality differences reflect
 the runtime, not the inputs.
 
+> **Requires `geniex >= 0.2.3rc3`.** Earlier wheels defaulted
+> `apply_chat_template(enable_thinking=False)`, which injects an empty
+> `<think>\n\n</think>\n\n` block on non-thinking models (e.g.
+> Qwen3-Instruct-2507) and produces nonsense answers ("riddle / Фропт"
+> instead of describing gravity, etc.). 0.2.3rc3 auto-detects
+> `model.supports_thinking` from the model's chat template and skips the
+> suppression block when the model has no thinking mode. See
+> [RUN_ON_QDC.md § Prerequisites](RUN_ON_QDC.md#prerequisites-on-the-qdc-machine).
+
 ## Workflow
 
 The benchmark splits across two machines:

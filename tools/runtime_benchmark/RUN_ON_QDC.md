@@ -16,8 +16,16 @@ session can be entirely non-interactive once kicked off.
    required (not for inference, and not for pulling models; see step 4).
 
    ```powershell
-   pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex==0.2.1rc2
+   pip install -U -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex==0.2.3rc3
    ```
+
+   `>= 0.2.3rc3` is required: earlier wheels defaulted
+   `apply_chat_template` to `enable_thinking=False`, which injects an
+   empty `<think>\n\n</think>\n\n` block on non-thinking models (e.g.
+   Qwen3-Instruct-2507) and derails generation. The benchmark relies on
+   the corrected default — the auto-detection of `model.supports_thinking`
+   from the model's own chat template — to feed both runtimes the same
+   chat-formatted prompt.
 
 2. QAIRT SDK installed; `genie-t2t-run` on `PATH`
    (sanity check: `genie-t2t-run --help`).
