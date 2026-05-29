@@ -94,9 +94,12 @@ def test_cli_version_prints_three_lines(geniex_session):
 
 
 def test_cli_verbose_emits_sdk_logs(geniex_session):
-    # -v sets level to info; the SDK emits at least one INFO line during
-    # plugin enumeration, which the bridge routes to the geniex logger.
-    r = _run_cli(['-v', 'devices'])
+    # -v sets level to info; the model-manager emits an INFO line on first
+    # init ("geniex model manager initialized") which the bridge routes to
+    # the geniex Python logger. `ls` is the cheapest subcommand that touches
+    # the model manager; `devices` only enumerates plugins and emits no
+    # INFO records, so we use `ls` here for a deterministic signal.
+    r = _run_cli(['-v', 'ls'])
     assert r.returncode == 0, r.stderr
     assert 'geniex' in r.stderr  # bridge logger name appears in records
 
