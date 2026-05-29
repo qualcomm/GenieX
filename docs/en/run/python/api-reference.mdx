@@ -171,7 +171,7 @@ prompt = model.tokenizer.apply_chat_template(
 | `messages` | `list[dict]` | *required* | List of message dicts with `"role"` and `"content"` keys. |
 | `tokenize` | `bool` | `False` | Must be `False` — standalone tokenization is not supported. |
 | `add_generation_prompt` | `bool` | `True` | Whether to append the generation prompt suffix. |
-| `enable_thinking` | `bool \| None` | `None` | Enable thinking mode. `None` (default) auto-resolves to the loaded model's capability (parsed from its chat template at load time and exposed as `model.supports_thinking`). Pass `True`/`False` to override. |
+| `enable_thinking` | `bool \| None` | `None` | Enable thinking mode. `None` (default) and `True` both let a thinking-capable model think (and are no-ops on non-thinking models). `False` asks a thinking-capable model to skip its thinking turn — forced to `True` with a warning on non-thinking models, where the suppression block is OOD. Capability is auto-detected and exposed as `model.supports_thinking`. |
 | `tools` | `list[dict] \| str \| None` | `None` | Tool definitions as a list of dicts or pre-serialised JSON string. |
 
 **Returns:** `str` — formatted prompt ready for `model.generate()`.

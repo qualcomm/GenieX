@@ -187,7 +187,7 @@ def _run_turn(
         history,
         tokenize=False,
         add_generation_prompt=True,
-        enable_thinking=model.supports_thinking,
+        enable_thinking=True,
     )
 
     reply_parts: list[str] = []

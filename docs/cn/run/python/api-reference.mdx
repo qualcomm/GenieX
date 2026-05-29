@@ -171,7 +171,7 @@ prompt = model.tokenizer.apply_chat_template(
 | `messages` | `list[dict]` | *必填* | 包含 `"role"` 与 `"content"` 的消息字典列表。 |
 | `tokenize` | `bool` | `False` | 必须为 `False`——不支持独立的 tokenize。 |
 | `add_generation_prompt` | `bool` | `True` | 是否追加生成提示后缀。 |
-| `enable_thinking` | `bool \| None` | `None` | 启用思考模式。`None`（默认）会自动解析为模型自身的能力（加载时从模型的 chat template 中解析，可通过 `model.supports_thinking` 读取）。传 `True`/`False` 可显式覆盖。 |
+| `enable_thinking` | `bool \| None` | `None` | 启用思考模式。`None`（默认）和 `True` 都会让支持思考的模型进入思考模式（对非思考模型为 no-op）。`False` 用于让支持思考的模型跳过思考轮；对非思考模型会被强制改为 `True` 并发出警告（其抑制块超出训练分布）。能力通过 `model.supports_thinking` 自动检测并暴露。 |
 | `tools` | `list[dict] \| str \| None` | `None` | 工具定义，可为字典列表或预序列化的 JSON 字符串。 |
 
 **返回：** `str` —— 可直接传给 `model.generate()` 的格式化 prompt。

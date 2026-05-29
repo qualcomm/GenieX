@@ -43,11 +43,21 @@ class ModelTokenizer:
         :meth:`GeniexLLM.generate`. ``tools`` accepts a list of dicts or a
         pre-serialised JSON string.
 
-        ``enable_thinking`` defaults to whatever the loaded model supports
-        (auto-detected from its chat template at load time and exposed as
-        :attr:`GeniexLLM.supports_thinking`). Pass ``True``/``False``
-        explicitly to override — passing ``True`` to a non-thinking instruct
-        model can derail generation.
+        ``enable_thinking`` semantics:
+
+        * ``None`` (default) — auto-resolve. For thinking-capable models we
+          enable thinking; for non-thinking models we still pass ``True`` so
+          the underlying ChatML template skips the empty
+          ``<think>\\n\\n</think>\\n\\n`` suppression block (that block is
+          only meaningful for *thinking* models being asked to skip a turn,
+          and on non-thinking instruct models it derails generation).
+        * ``True`` — same as auto-resolve.
+        * ``False`` — explicitly ask a thinking-capable model to skip its
+          thinking turn. Forced to ``True`` (with a warning) on non-thinking
+          models, where the suppression block is OOD.
+
+        See :attr:`GeniexLLM.supports_thinking` for how the capability is
+        detected.
         """
         if tokenize:
             raise ValueError(
@@ -59,8 +69,17 @@ class ModelTokenizer:
         if tools is not None:
             tools_str = tools if isinstance(tools, str) else json.dumps(tools)
 
+        supports_thinking = self._model.supports_thinking
         if enable_thinking is None:
-            enable_thinking = self._model.supports_thinking
+            enable_thinking = True
+        elif enable_thinking is False and not supports_thinking:
+            import warnings
+            warnings.warn(
+                'enable_thinking=False on a non-thinking model injects an empty '
+                '<think></think> block that can derail generation. Forcing True.',
+                stacklevel=2,
+            )
+            enable_thinking = True
 
         return self._model._apply_chat_template(
             messages=messages,
