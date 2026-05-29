@@ -1,15 +1,16 @@
 name: Test
 
-# Pytest harness for the SDK end-to-end suite under tests/. Phase 1 runs
-# only the model-free API subset and the llama_cpp CPU subset on
-# windows-arm64. The matrix is markered so a future self-hosted
-# Snapdragon runner can drop in by filtering on `-m snapdragon` (and
-# providing AI Hub credentials for the qairt cells).
+# Test harness wrapping every PR-blocking test surface that needs a
+# built SDK artifact:
+#   - pytest-windows-arm64: SDK end-to-end suite under tests/, API +
+#     llama_cpp CPU subsets (markered for future Snapdragon runners).
+#   - go-test-linux-arm64: `bazel test //cli/... //bindings/go/...`
+#     against the linux-arm64 SDK artifact.
 #
 # Triggered as a child of pr-check.yml so the SDK only builds once per
-# PR — pr-check's build-sdk uploads the artifact this workflow consumes.
+# PR — pr-check's build-sdk uploads the artifacts each job consumes.
 # Independent workflow_dispatch is also supported for "just rerun
-# pytest" scenarios; that path builds its own SDK on demand.
+# tests" scenarios; that path builds its own SDK on demand.
 
 on:
   workflow_call:
@@ -150,4 +151,106 @@ jobs:
               fi
               echo
             done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  go-test-linux-arm64:
+    name: go-test-linux-arm64
+    needs: [build-sdk]
+    # Same trick as pytest-windows-arm64: when invoked via workflow_call,
+    # build-sdk is `skipped`, which the default conditional treats as
+    # failure. Allow skipped, block only on real failure.
+    if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
+    runs-on: linux-arm64
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: false
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Download SDK artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: sdk-linux-arm64
+          path: sdk/pkg-geniex/
+
+      # Separate cache namespace from _build-cli.yml's `bazel-cli-` so a
+      # build-cache regression can't poison the test job (and vice
+      # versa). Hash inputs include both cli and bindings/go BUILD files
+      # since both trees feed the test command.
+      - name: Restore Bazel disk cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/bazel-disk
+          key: bazel-go-test-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'cli/**/BUILD.bazel', 'bindings/go/**/BUILD.bazel', 'cli/**/*.bzl') }}
+          restore-keys: |
+            bazel-go-test-${{ runner.os }}-
+
+      # SDK is cross-compiled in a ubuntu:24.04 toolchain container
+      # (GLIBC_2.39 / GLIBCXX_3.4.32). The linux-arm64 runner host is
+      # older, so libgeniex.so links fine but dlopen at test runtime
+      # fails with `version not found`. Match the SDK's libc by running
+      # bazel test inside ubuntu:24.04 too. Pattern mirrors
+      # _build-sdk.yml's docker-run step (HOST_UID/GID chown so
+      # actions/cache and the runner can read what root wrote).
+      #
+      # Targets exclude //cli/release/... — that subtree depends on
+      # InnoSetup (Windows installer) and the docker tarball, neither of
+      # which is testable here and the InnoSetup repo rule fails the
+      # loading phase on Linux. Negative patterns must follow the `--`
+      # end-of-options marker.
+      - name: Run Go tests (ubuntu:24.04 container)
+        shell: bash
+        run: |
+          set -euo pipefail
+          uid="$(id -u)"
+          gid="$(id -g)"
+          mkdir -p "$HOME/.cache/bazel-disk"
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -v "$HOME/.cache/bazel-disk:/root/.cache/bazel-disk" \
+            -w /workspace \
+            -e DEBIAN_FRONTEND=noninteractive \
+            -e HOST_UID="$uid" \
+            -e HOST_GID="$gid" \
+            ubuntu:24.04 \
+            bash -euxo pipefail -c '
+              apt-get update -qq
+              apt-get install -y --no-install-recommends \
+                ca-certificates curl unzip gcc g++ git python3 >/dev/null
+              curl -fsSL -o /usr/local/bin/bazelisk \
+                https://github.com/bazelbuild/bazelisk/releases/download/v1.22.1/bazelisk-linux-arm64
+              chmod +x /usr/local/bin/bazelisk
+              ln -sf /usr/local/bin/bazelisk /usr/local/bin/bazel
+              git config --global --add safe.directory "*"
+              status=0
+              bazelisk test \
+                --//sdk:sdk_type=local \
+                --disk_cache=/root/.cache/bazel-disk \
+                --test_output=errors \
+                --test_summary=terse \
+                -- //cli/... //bindings/go/... -//cli/release/... \
+                2>&1 | tee .bazel-test.log || status=$?
+              chown -R "$HOST_UID:$HOST_GID" /workspace /root/.cache/bazel-disk || true
+              exit "$status"
+            '
+
+      - name: Publish step summary
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## go test results"
+            echo
+            if [ -f .bazel-test.log ]; then
+              echo '```'
+              grep -E "PASSED|FAILED|TIMEOUT|FLAKY|Executed [0-9]+ out of" .bazel-test.log || echo "(no results captured)"
+              echo '```'
+            else
+              echo "(log missing)"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
