@@ -61,4 +61,6 @@ jobs:
     secrets: inherit
     with:
       language: sdk
+      # Linux disabled until the llama_cpp plugin can load without OpenCL.
+      platforms: '["windows-arm64"]'
       gate_on_changed_files: false

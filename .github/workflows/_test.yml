@@ -22,6 +22,11 @@ on:
         description: "Test language: go | python | sdk"
         required: true
         type: string
+      platforms:
+        description: "JSON array of platforms to run on. Defaults to both."
+        required: false
+        type: string
+        default: '["linux-arm64", "windows-arm64"]'
       gate_on_changed_files:
         description: "Skip the cell when no files match the language's path filter."
         required: false
@@ -38,9 +43,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [linux-arm64, windows-arm64]
+        platform: ${{ fromJSON(inputs.platforms) }}
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 45
+    env:
+      # Surface SDK-side trace logs to stderr in every cell so a failed
+      # assertion has the maximum signal available without a re-run.
+      GENIEX_LOG: trace
 
     steps:
       - name: Configure Windows Git
@@ -126,6 +135,7 @@ jobs:
             -e DEBIAN_FRONTEND=noninteractive \
             -e HOST_UID="$uid" \
             -e HOST_GID="$gid" \
+            -e GENIEX_LOG="$GENIEX_LOG" \
             ubuntu:24.04 \
             bash -euxo pipefail -c '
               apt-get update -qq
@@ -226,6 +236,7 @@ jobs:
             -e HOST_GID="$gid" \
             -e PYTHONPATH=/workspace/bindings/python \
             -e GENIEX_LIB_PATH=/workspace/sdk/pkg-geniex/lib \
+            -e GENIEX_LOG="$GENIEX_LOG" \
             ubuntu:24.04 \
             bash -euxo pipefail -c '
               apt-get update -qq
@@ -259,6 +270,7 @@ jobs:
             -e HOST_GID="$gid" \
             -e PYTHONPATH=/workspace/bindings/python \
             -e GENIEX_LIB_PATH=/workspace/sdk/pkg-geniex/lib \
+            -e GENIEX_LOG="$GENIEX_LOG" \
             ubuntu:24.04 \
             bash -euxo pipefail -c '
               apt-get update -qq

@@ -117,4 +117,8 @@ jobs:
     secrets: inherit
     with:
       language: sdk
+      # Linux currently can't run the llama_cpp plugin tests (libOpenCL.so.1
+      # missing in the ubuntu:24.04 toolchain image). Re-enable linux-arm64
+      # once the plugin can dlopen without an OpenCL ICD on the host.
+      platforms: '["windows-arm64"]'
       gate_on_changed_files: true
