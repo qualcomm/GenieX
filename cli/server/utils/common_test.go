@@ -49,7 +49,7 @@ func TestSaveURIToTempFile_WebP(t *testing.T) {
 	tmpWebP.Close()
 
 	// Test conversion via file path
-	resultPath, err := SaveURIToTempFile("file://" + tmpWebP.Name())
+	resultPath, err := SaveURIToTempFile(tmpWebP.Name())
 	if err != nil {
 		t.Fatalf("SaveURIToTempFile failed: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestSaveURIToTempFile_PNG(t *testing.T) {
 	tmpPNG.Close()
 
 	// Test that PNG is saved without conversion
-	resultPath, err := SaveURIToTempFile("file://" + tmpPNG.Name())
+	resultPath, err := SaveURIToTempFile(tmpPNG.Name())
 	if err != nil {
 		t.Fatalf("SaveURIToTempFile failed for PNG: %v", err)
 	}
