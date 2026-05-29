@@ -89,9 +89,32 @@ jobs:
     with:
       push: false
 
-  test:
-    name: test
+  go-test:
+    name: go-test
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    uses: ./.github/workflows/test.yml
+    uses: ./.github/workflows/_test.yml
     secrets: inherit
+    with:
+      language: go
+      gate_on_changed_files: true
+
+  python-pytest:
+    name: python-pytest
+    needs: [build-sdk]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_test.yml
+    secrets: inherit
+    with:
+      language: python
+      gate_on_changed_files: true
+
+  sdk-pytest:
+    name: sdk-pytest
+    needs: [build-sdk]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_test.yml
+    secrets: inherit
+    with:
+      language: sdk
+      gate_on_changed_files: true
