@@ -79,6 +79,7 @@ pkg_tar(
 dedup_tar(
     name = "apt_layer",
     tars = ["@trixie"],
+    target_compatible_with = ["@platforms//os:linux"],
 )
 
 genrule(
@@ -86,12 +87,14 @@ genrule(
     srcs = [":apt_layer"],
     outs = ["ca-certificates.crt"],
     cmd = "tar -xOf $(location :apt_layer) --wildcards './usr/share/ca-certificates/mozilla/*.crt' > $@",
+    target_compatible_with = ["@platforms//os:linux"],
 )
 
 pkg_tar(
     name = "_ca_bundle_layer",
     srcs = [":_ca_bundle"],
     package_dir = "/etc/ssl/certs",
+    target_compatible_with = ["@platforms//os:linux"],
 )
 
 oci_image(
@@ -108,6 +111,7 @@ oci_image(
         "org.opencontainers.image.description": "GenieX-CLI for running multi models",
         "org.opencontainers.image.vendor": "GenieX",
     },
+    target_compatible_with = ["@platforms//os:linux"],
     tars = [
         ":apt_layer",
         ":_ca_bundle_layer",
@@ -121,12 +125,14 @@ genrule(
     name = "_repo_tags",
     outs = ["repo_tags.txt"],
     cmd = "echo ghcr.io/qcom-ai-hub/geniex-cli:latest > $@ && echo ghcr.io/qcom-ai-hub/geniex-cli:$(VERSION) >> $@",
+    target_compatible_with = ["@platforms//os:linux"],
 )
 
 oci_load(
     name = "docker",
     image = ":image",
     repo_tags = ":_repo_tags",
+    target_compatible_with = ["@platforms//os:linux"],
 )
 
 # export tarball
@@ -135,6 +141,7 @@ filegroup(
     name = "_docker_tarball",
     srcs = [":docker"],
     output_group = "tarball",
+    target_compatible_with = ["@platforms//os:linux"],
 )
 
 copy_file(
@@ -142,9 +149,11 @@ copy_file(
     src = ":_docker_tarball",
     out = "geniex-cli-docker.tar",
     allow_symlink = True,
+    target_compatible_with = ["@platforms//os:linux"],
 )
 
 alias(
     name = "linux",
     actual = ":docker_tarball",
+    target_compatible_with = ["@platforms//os:linux"],
 )
