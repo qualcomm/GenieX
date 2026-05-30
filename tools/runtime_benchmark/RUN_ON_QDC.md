@@ -110,6 +110,40 @@ per prompt; the prompt suite has 100 prompts.
 | `--timeout`           | 600                                        | Per-prompt timeout in seconds for the `genie-t2t-run` subprocess.      |
 | `--limit N`           | 0 (all)                                    | Run only the first N prompts — handy for smoke tests.                  |
 | `--resume`            | off                                        | Skip prompts whose `id` already appears in `--out`. Use to continue.   |
+| `--skip-genie`        | off                                        | Skip the genie-t2t-run pass; only run geniex. Default `--out` becomes `results/<slug>_geniex_only.csv`. See "Geniex-only re-runs" below. |
+
+## Geniex-only re-runs
+
+When **only geniex has changed** (the model on disk and `genie-t2t-run`
+binary are the same as last time), there's no point re-running the
+genie side: for a given (model, prompt, chat template), `genie-t2t-run`
+is deterministic, so its answers will be byte-identical to the prior
+full run. Pass `--skip-genie` to drop the genie pass entirely:
+
+```powershell
+$env:PYTHONIOENCODING="utf-8"
+python runtime_quality_benchmark.py --geniex-model qualcomm/Qwen3-4B-Instruct-2507 --skip-genie
+```
+
+Behavior changes vs. a full run:
+
+- **No `genie-t2t-run` subprocess is spawned.** Roughly halves wall-clock.
+- **Default `--out` switches** to `results/<slug>_geniex_only.csv` so the
+  prior full-run CSV (`results/<slug>.csv`) is left untouched.
+- **The `genie_*` columns** in the new CSV (`genie_answer`,
+  `genie_ttft_ms`, `genie_tps`, `genie_error`) are written **empty** —
+  the scoring agent backfills them from the prior `<slug>.csv` at score
+  time.
+- **The companion `<slug>_geniex_only.answers.json`** carries a
+  `{"meta": {"skip_genie": true, ...}, "rows": [...]}` wrapper instead
+  of the bare list a full run produces, so downstream tooling can tell
+  the two shapes apart.
+
+When you hand the results to the scoring agent, give it both the new
+`<slug>_geniex_only.answers.json` and the prior full run's
+`<slug>.answers.json`. The agent scores `geniex_answer` from the new
+file and `genie_answer` from the prior file (matched by `id`); see
+[SCORE_WITH_CLAUDE.md § Shape B](SCORE_WITH_CLAUDE.md#shape-b--geniex-only-re-run-paired-with-a-prior-full-run).
 
 ## Resumption
 
