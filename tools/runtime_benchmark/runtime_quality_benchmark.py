@@ -22,6 +22,17 @@ Usage (full):
         --genie-config-dir <model-dir-with-genie_config.json> \
         --out results/qwen3_4b.csv
 
+Usage (geniex-only re-run, when only the geniex code changed):
+    python runtime_quality_benchmark.py \
+        --geniex-model qualcomm/Qwen3-4B-Instruct-2507 \
+        --skip-genie
+
+`--skip-genie` skips the genie-t2t-run pass entirely — useful when geniex
+has changed but the model under test hasn't, since genie's answers for the
+same model are deterministic across runs. The geniex-only output is written
+to results/<slug>_geniex_only.csv by default to avoid clobbering a prior
+full run; pair the two CSVs at scoring time (see SCORE_WITH_CLAUDE.md).
+
 If --genie-config-dir is omitted, the script asks `geniex list` /
 `geniex model` for the cached path. If --out is omitted, the path is derived
 from the geniex model name (slashes → underscores) under ./results/.
@@ -429,8 +440,22 @@ def main() -> int:
         action="store_true",
         help="Skip prompts whose id already appears in --out",
     )
+    p.add_argument(
+        "--skip-genie",
+        action="store_true",
+        help="Skip the genie-t2t-run pass entirely (only run geniex). Use this "
+        "when only geniex code changed — genie's answers for the same model "
+        "are deterministic and were captured in a previous full run. The "
+        "genie_* columns in the output CSV are left blank, and the default "
+        "output path becomes <slug>_geniex_only.csv so it doesn't clobber "
+        "the prior full run. Pair the new file with the prior full run when "
+        "scoring (see SCORE_WITH_CLAUDE.md).",
+    )
     args = p.parse_args()
 
+    # genie_config.json is still needed for the geniex side (we read its bos
+    # token to pick the chat template label, even though geniex itself uses
+    # the model's own tokenizer template). Skipping genie does not skip this.
     if args.genie_config_dir is None:
         found = find_genie_config_dir(args.geniex_model)
         if found is None:
@@ -446,10 +471,14 @@ def main() -> int:
     if args.out is None:
         slug = slugify_model(args.geniex_model)
         DEFAULT_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-        args.out = DEFAULT_RESULTS_DIR / f"{slug}.csv"
+        suffix = "_geniex_only.csv" if args.skip_genie else ".csv"
+        args.out = DEFAULT_RESULTS_DIR / f"{slug}{suffix}"
         print(f"Auto-derived output path: {args.out}", flush=True)
     else:
         args.out.parent.mkdir(parents=True, exist_ok=True)
+
+    if args.skip_genie:
+        print("--skip-genie: genie-t2t-run pass disabled; only geniex will run.", flush=True)
 
     prompts = load_prompts(args.prompts)
     if args.limit:
@@ -524,12 +553,16 @@ def main() -> int:
                 f"tps={_fmt_tps(gx.tps)}  err={gx.error or '-'}",
                 flush=True,
             )
-            gn = run_genie(args.genie_config_dir, genie_formatted, args.timeout)
-            print(
-                f"  genie : {gn.seconds:5.1f}s  ttft={_fmt_ms(gn.ttft_ms)}  "
-                f"tps={_fmt_tps(gn.tps)}  err={gn.error or '-'}",
-                flush=True,
-            )
+            if args.skip_genie:
+                gn = RunResult(answer="", seconds=0.0)
+                print("  genie : skipped (--skip-genie)", flush=True)
+            else:
+                gn = run_genie(args.genie_config_dir, genie_formatted, args.timeout)
+                print(
+                    f"  genie : {gn.seconds:5.1f}s  ttft={_fmt_ms(gn.ttft_ms)}  "
+                    f"tps={_fmt_tps(gn.tps)}  err={gn.error or '-'}",
+                    flush=True,
+                )
 
             rows.append(
                 {
@@ -559,10 +592,8 @@ def main() -> int:
     # Companion JSON: minimal payload the scoring agent reads. Same basename
     # as the CSV, with `.answers.json` appended so `<slug>.csv` /
     # `<slug>.answers.json` stay paired.
-    answers_path = args.out.with_suffix("").with_suffix(".answers.json")
-    if str(answers_path) == str(args.out):
-        answers_path = args.out.parent / (args.out.stem + ".answers.json")
-    answers = [
+    answers_path = args.out.parent / (args.out.stem + ".answers.json")
+    rows_payload = [
         {
             "id": int(r["id"]),
             "category": r.get("category", ""),
@@ -572,8 +603,24 @@ def main() -> int:
         }
         for r in rows
     ]
+    # Wrap with a meta block so downstream tooling (SCORE_WITH_CLAUDE.md) can
+    # tell a geniex-only run apart from a full run without diffing every row.
+    # Keep backward compat: a top-level list (the legacy shape) is still
+    # readable by the scoring agent — the meta block is purely additive.
+    answers_payload: list[dict] | dict
+    if args.skip_genie:
+        answers_payload = {
+            "meta": {
+                "model": args.geniex_model,
+                "runtimes": ["geniex"],
+                "skip_genie": True,
+            },
+            "rows": rows_payload,
+        }
+    else:
+        answers_payload = rows_payload
     answers_path.write_text(
-        json.dumps(answers, ensure_ascii=False, indent=2),
+        json.dumps(answers_payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 

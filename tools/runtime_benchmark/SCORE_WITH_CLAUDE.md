@@ -15,6 +15,11 @@ will hand off downstream.
 
 ## Inputs
 
+There are two shapes of input the user may hand you. The first is the
+default; the second comes up after a geniex-only re-run.
+
+### Shape A — single full run (the common case)
+
 1. `results/<slug>.answers.json` — the only file you need to read for
    scoring decisions. It contains all 100 prompts and both runtimes'
    answers.
@@ -22,6 +27,41 @@ will hand off downstream.
 3. `results/<slug>.csv` — the full row data. You will overwrite the
    `genie_score`, `geniex_score`, and `note` columns when you're done,
    but everything else (timing, errors) stays intact.
+
+### Shape B — geniex-only re-run paired with a prior full run
+
+When the user changed only geniex code and re-ran with `--skip-genie`,
+they will hand you **two** answers files instead of one:
+
+- `results/<slug>_geniex_only.answers.json` — the **new** run. Has the
+  fresh `geniex_answer` values; `genie_answer` is empty on every row
+  (skipped). The file's top-level shape is `{"meta": {...}, "rows": [...]}`
+  with `meta.skip_genie == true` — read `meta.rows` for the answers.
+- `results/<slug>.answers.json` — the **prior** full run. Has the
+  authoritative `genie_answer` values for the same model. (genie's
+  output is deterministic for a given model + prompt + template, so
+  re-running it would not change the answer — that's why `--skip-genie`
+  exists.)
+
+The user will tell you which file is which when they ask for scoring;
+if they hand you a `_geniex_only.answers.json` without a partner, ask
+them for the prior full run before scoring.
+
+For Shape B you score each runtime from a different file:
+
+| column to score   | source file                                  | source field     |
+| ----------------- | -------------------------------------------- | ---------------- |
+| `geniex_score`    | `<slug>_geniex_only.answers.json` (new)      | `geniex_answer`  |
+| `genie_score`     | `<slug>.answers.json` (prior full run)       | `genie_answer`   |
+
+The prompts and ids in both files come from the same `testing_prompts.md`,
+so they line up by `id`. If a row exists in one file but not the other,
+flag it and skip — don't guess.
+
+The scored CSV you emit for Shape B is `results/<slug>_geniex_only_scored.csv`
+(7 columns, same shape as Shape A's deliverable). Do **not** touch
+`<slug>_scored.csv` from the prior run — leave that file alone as the
+scoring record for the prior geniex build.
 
 ## Rubric
 
@@ -61,7 +101,7 @@ yourself to decide whether it's closer to "strange content" (7) or
   signal you're trying to surface. Score each runtime independently —
   don't try to keep totals balanced.
 
-## Workflow
+## Workflow (Shape A — single full run)
 
 1. **Load the answers JSON.** Use the Read tool. The JSON may be too
    big for a single read; if so, split into chunks of ~5 prompts each
@@ -136,6 +176,112 @@ print(f'wrote {out_path}')
 "
 ```
 
+## Workflow (Shape B — geniex-only re-run + prior full run)
+
+The flow is the same as Shape A, except step 1 reads two answers
+files and merges them by `id` into one in-memory list of rows; step 3
+writes the geniex-only CSV (`<slug>_geniex_only.csv`) and the
+geniex-only scored deliverable (`<slug>_geniex_only_scored.csv`),
+leaving the prior full-run files untouched.
+
+1. **Load both answers files** and merge by `id`.
+
+   ```python
+   PYTHONIOENCODING=utf-8 python -c "
+   import json
+   new = json.load(open('results/<slug>_geniex_only.answers.json', encoding='utf-8'))
+   prior = json.load(open('results/<slug>.answers.json', encoding='utf-8'))
+   # New file uses the {meta, rows} shape; prior is the legacy top-level list.
+   new_rows = new['rows'] if isinstance(new, dict) else new
+   prior_rows = prior['rows'] if isinstance(prior, dict) else prior
+   prior_by_id = {r['id']: r for r in prior_rows}
+   merged = []
+   for r in new_rows:
+       p = prior_by_id.get(r['id'])
+       if p is None:
+           print(f'skip id={r[\"id\"]}: no prior row'); continue
+       merged.append({
+           'id': r['id'],
+           'category': r.get('category', p.get('category', '')),
+           'prompt': r['prompt'],
+           'genie_answer': p['genie_answer'],
+           'geniex_answer': r['geniex_answer'],
+       })
+   json.dump(merged, open('results/<slug>_geniex_only.merged.json', 'w', encoding='utf-8'),
+             ensure_ascii=False, indent=2)
+   print(f'merged {len(merged)} rows')
+   "
+   ```
+
+   Read `<slug>_geniex_only.merged.json` for scoring decisions. (Or
+   merge in-memory — the helper file is just here for transparency.)
+
+2. **Score every prompt.** Same rubric, same `_scoring.json` shape as
+   Shape A. Write to `results/<slug>_geniex_only_scoring.json`.
+
+3. **Merge into the geniex-only CSV.** The collection script wrote
+   `results/<slug>_geniex_only.csv` with empty `genie_*` columns. Pull
+   the genie answer + genie perf metrics from the prior `<slug>.csv`
+   (same id) so the geniex-only CSV is self-contained for scoring,
+   then fill in `genie_score`, `geniex_score`, and `note`. Finally
+   emit the 7-column deliverable
+   `results/<slug>_geniex_only_scored.csv`.
+
+   ```python
+   PYTHONIOENCODING=utf-8 python -c "
+   import csv, json, sys
+   sys.stdout.reconfigure(encoding='utf-8')
+
+   slug = '<slug>'
+   new_csv  = f'results/{slug}_geniex_only.csv'
+   prior_csv = f'results/{slug}.csv'
+   score_path = f'results/{slug}_geniex_only_scoring.json'
+   out_path = f'results/{slug}_geniex_only_scored.csv'
+
+   rows = list(csv.DictReader(open(new_csv, encoding='utf-8')))
+   prior_by_id = {r['id']: r for r in csv.DictReader(open(prior_csv, encoding='utf-8'))}
+   scoring = {s['id']: s for s in json.load(open(score_path, encoding='utf-8'))}
+
+   g, x = 0, 0
+   for r in rows:
+       p = prior_by_id.get(r['id'], {})
+       # Backfill genie_* columns from the prior full run so the file is
+       # self-contained for downstream review.
+       for col in ('genie_answer','genie_ttft_ms','genie_tps','genie_error'):
+           if not r.get(col): r[col] = p.get(col, '')
+       s = scoring[int(r['id'])]
+       r['genie_score'] = s['genie_score']
+       r['geniex_score'] = s['geniex_score']
+       r['note'] = s['note']
+       g += s['genie_score']; x += s['geniex_score']
+
+   full_cols = ['id','category','prompt','genie_answer','geniex_answer',
+                'genie_score','geniex_score','note',
+                'genie_ttft_ms','geniex_ttft_ms','genie_tps','geniex_tps',
+                'genie_error','geniex_error']
+   with open(new_csv, 'w', encoding='utf-8', newline='') as f:
+       w = csv.DictWriter(f, fieldnames=full_cols); w.writeheader()
+       for r in rows: w.writerow({k: r.get(k, '') for k in full_cols})
+
+   short_cols = ['id','prompt','genie_answer','geniex_answer',
+                 'genie_score','geniex_score','note']
+   with open(out_path, 'w', encoding='utf-8', newline='') as f:
+       w = csv.DictWriter(f, fieldnames=short_cols); w.writeheader()
+       for r in rows: w.writerow({k: r.get(k, '') for k in short_cols})
+
+   print(f'genie  {g}/1000 avg {g/100:.2f} (from prior run)')
+   print(f'geniex {x}/1000 avg {x/100:.2f} (this run)')
+   print(f'wrote {out_path}')
+   "
+   ```
+
+4. **Report totals.** Same as Shape A, plus call out the comparison:
+   how `geniex_score` shifted versus the prior `<slug>_scored.csv`
+   (per-prompt deltas of interest, total delta). The genie totals
+   should match the prior run's genie totals exactly (same answers,
+   same rubric); if they don't, you scored something differently from
+   last time — note the disagreements.
+
 ## Where prior runs live
 
 The `results/` directory already contains scored runs you can use as
@@ -160,3 +306,6 @@ to repeat the same prompt+answer and you want to keep notes consistent.
   that's a runtime artifact, not a model failure.
 - **Don't delete or rewrite the `.answers.json`** after scoring. Keep
   it as the immutable input record.
+- **Don't overwrite a prior scored CSV.** Shape B writes to
+  `<slug>_geniex_only_scored.csv` so the prior `<slug>_scored.csv`
+  stays as the historical record for the previous geniex build.

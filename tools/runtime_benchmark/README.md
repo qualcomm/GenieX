@@ -30,6 +30,17 @@ The benchmark splits across two machines:
    against the rubric, emit the final CSV. See
    [SCORE_WITH_CLAUDE.md](SCORE_WITH_CLAUDE.md).
 
+When **only geniex code has changed** (model unchanged), pass
+`--skip-genie` on step 1 to skip the genie-t2t-run pass — genie's
+answers for a given model are deterministic, so you can reuse the
+genie answers from the prior full run. The script writes the new
+geniex-only results to `results/<slug>_geniex_only.csv`, and the
+scoring agent merges them with the prior `<slug>.answers.json` to
+produce a fresh scored CSV. See
+[RUN_ON_QDC.md § Geniex-only re-runs](RUN_ON_QDC.md#geniex-only-re-runs)
+and
+[SCORE_WITH_CLAUDE.md § Shape B](SCORE_WITH_CLAUDE.md#shape-b--geniex-only-re-run-paired-with-a-prior-full-run).
+
 ## Files
 
 ```
