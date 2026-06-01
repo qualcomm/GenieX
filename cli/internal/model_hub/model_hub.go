@@ -332,7 +332,8 @@ func PickDefaultQuant(available []string) string {
 }
 
 // NormalizeModelName splits "<name>[:<quant>]" and applies shortcuts:
-// bare name → "qualcomm/<name>", HF URL → repo path.
+// bare name → "qualcomm/<name>", "ai-hub-models/<repo>" alias →
+// "qualcomm/<repo>", HF URL → repo path.
 func NormalizeModelName(name string) (string, string) {
 	parts := strings.SplitN(name, ":", 2)
 	name = parts[0]
@@ -346,6 +347,9 @@ func NormalizeModelName(name string) (string, string) {
 	}
 	if !strings.Contains(name, "/") {
 		return "qualcomm/" + name, quant
+	}
+	if strings.HasPrefix(name, "ai-hub-models/") {
+		return "qualcomm/" + strings.TrimPrefix(name, "ai-hub-models/"), quant
 	}
 	if strings.HasPrefix(name, HF_ENDPOINT) {
 		return strings.TrimPrefix(name, HF_ENDPOINT+"/"), quant
