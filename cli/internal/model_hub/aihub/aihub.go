@@ -192,7 +192,7 @@ func (e *HTTPError) Error() string {
 }
 
 // aiHubOrgs are HF-style orgs that route to the AI Hub pull path.
-var aiHubOrgs = []string{"qualcomm", "ai-hub-models"}
+var aiHubOrgs = []string{"qualcomm"}
 
 // IsAIHubName reports whether name belongs to an AI Hub org and returns
 // the repo portion (e.g. "qualcomm/Qwen3-4B" → "Qwen3-4B", true).
