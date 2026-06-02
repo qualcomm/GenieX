@@ -3,6 +3,7 @@
 #include <optional>
 #include <vector>
 
+#include "common.h"        // common_params_sampling
 #include "geniex.h"        // geniex_ModelConfig
 #include "ggml-backend.h"  // ggml_backend_dev_t
 #include "llama.h"         // llama_model_params, llama_context_params
@@ -21,6 +22,11 @@ geniex_ModelConfig build_model_config(const geniex_ModelConfig& config, int32_t 
 // tensor-buffer overrides stay at the call site.
 llama_model_params   build_model_params(const geniex_ModelConfig& config);
 llama_context_params build_context_params(const geniex_ModelConfig& config);
+
+// Map a caller's sampler config onto common_params_sampling, each unset (0/0.0)
+// field taking the plugin default. A null cfg yields pure defaults. Grammar
+// comes from grammar_string when set, otherwise it is read from grammar_path.
+common_params_sampling build_sampling_params(const geniex_SamplerConfig* cfg);
 
 // Parse a comma-separated device-id list (e.g. "HTP0,HTP1"), resolving each name against the
 // ggml registry. Returns the resolved devices followed by a trailing nullptr, suitable for

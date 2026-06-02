@@ -1,5 +1,8 @@
 #include "params.h"
 
+#include <cstring>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <thread>
 
@@ -60,6 +63,38 @@ llama_context_params build_context_params(const geniex_ModelConfig& config) {
         cpar.kv_unified,
         cpar.no_perf);
     return cpar;
+}
+
+common_params_sampling build_sampling_params(const geniex_SamplerConfig* cfg) {
+    common_params_sampling s;
+    if (!cfg) return s;  // null cfg -> upstream defaults
+
+    s.seed            = (cfg->seed != 0) ? cfg->seed : LLAMA_DEFAULT_SEED;
+    s.top_k           = (cfg->top_k != 0) ? cfg->top_k : 40;
+    s.top_p           = (cfg->top_p != 0.0f) ? cfg->top_p : 0.95f;
+    s.min_p           = (cfg->min_p != 0.0f) ? cfg->min_p : 0.05f;
+    s.temp            = (cfg->temperature != 0.0f) ? cfg->temperature : 0.8f;
+    s.penalty_repeat  = (cfg->repetition_penalty != 0.0f) ? cfg->repetition_penalty : 1.0f;
+    s.penalty_present = (cfg->presence_penalty != 0.0f) ? cfg->presence_penalty : 0.0f;
+    s.penalty_freq    = (cfg->frequency_penalty != 0.0f) ? cfg->frequency_penalty : 0.0f;
+
+    // Grammar: prefer an inline string, otherwise read it from the grammar file.
+    if (cfg->grammar_string && strlen(cfg->grammar_string) > 0) {
+        s.grammar = common_grammar(COMMON_GRAMMAR_TYPE_USER, cfg->grammar_string);
+        GENIEX_LOG_DEBUG("Applied grammar string: {}", cfg->grammar_string);
+    } else if (cfg->grammar_path && strlen(cfg->grammar_path) > 0) {
+        std::ifstream file(cfg->grammar_path);
+        if (file.is_open()) {
+            std::stringstream buffer;
+            buffer << file.rdbuf();
+            s.grammar = common_grammar(COMMON_GRAMMAR_TYPE_USER, buffer.str());
+            GENIEX_LOG_DEBUG("Applied grammar from file: {}", cfg->grammar_path);
+        } else {
+            GENIEX_LOG_ERROR("Failed to read grammar file: {}", cfg->grammar_path);
+        }
+    }
+
+    return s;
 }
 
 std::optional<std::vector<ggml_backend_dev_t>> resolve_devices(const char* device_id) {
