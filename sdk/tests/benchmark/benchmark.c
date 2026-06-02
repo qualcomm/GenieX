@@ -691,7 +691,13 @@ static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_
             geniex_free(gout.full_text);
         }
         geniex_free(prompt);
-        /* See LLM loop above for rationale: do NOT reset between runs. */
+        /* Unlike the LLM loop, VLM must reset between runs: the image is
+         * attached to the first message and consumed into the KV cache, so a
+         * second run with the same history re-sends an already-processed
+         * prompt and generates nothing (prompt_tokens=0, immediate eos). */
+        if (i + 1 < total) {
+            check(geniex_vlm_reset(vlm), "geniex_vlm_reset");
+        }
     }
 
     check(geniex_vlm_destroy(vlm), "geniex_vlm_destroy");
