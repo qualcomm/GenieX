@@ -2,6 +2,7 @@
 
 #include <atomic>
 
+#include "ggml-backend.h"
 #include "logging.h"
 
 namespace geniex::htp {

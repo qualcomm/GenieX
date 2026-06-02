@@ -5,6 +5,7 @@
 #include "mtmd.h"
 #include "plugin/IVlm.h"
 #include "sampling.h"
+#include "threadpool.h"
 
 // Forward declarations for llama.cpp types
 struct llama_context;
@@ -18,6 +19,7 @@ class LlamaVlm : public IVlm {
     llama_context*  ctx        = nullptr;
     common_sampler* sampler    = nullptr;
     mtmd_context*   ctx_vision = nullptr;
+    Threadpools     pools_;
 
     // mmproj-reported modality support; both false when no mmproj is loaded.
     bool supports_vision = false;
