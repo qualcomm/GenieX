@@ -462,28 +462,51 @@ static char* build_run_prompt(const char* base_prompt, int idx, bool warmup) {
     return out;
 }
 
-/* The llama_cpp mtmd path requires the prompt to carry one media marker per
- * image/audio (mtmd_tokenize matches markers to bitmaps). Prepend them, as
- * mtmd-cli.cpp does. QAIRT consumes image paths directly and needs no marker.
- * Returns a freshly-allocated prompt; callers free it. */
-static char* prepend_media_markers(char* prompt, int n_media) {
-    static const char* const MARKER = "<__media__>";
-    if (n_media <= 0) return prompt;
-    size_t mlen = strlen(MARKER);
-    size_t cap  = strlen(prompt) + (size_t)n_media * mlen + 1;
-    char*  out  = (char*)malloc(cap);
-    if (!out) {
-        fprintf(stderr, "ERROR: oom\n");
-        exit(1);
+/* Build a VLM prompt by running the bundle's chat template over a single user
+ * message holding the text plus one image/audio content part per media file.
+ * Both plugins need this: QAIRT's genie pipeline relies on the template's
+ * vision tokens to place the image, and llama_cpp's apply_chat_template emits
+ * the mtmd media marker. Returns heap text the caller frees with geniex_free,
+ * or NULL on failure. */
+static char* build_vlm_prompt(geniex_VLM* vlm, const options_t* o, const char* base_prompt) {
+    geniex_VlmContent contents[1 + 2 * MAX_PATHS];
+    int32_t           nc = 0;
+    contents[nc].type    = "text";
+    contents[nc].text    = base_prompt;
+    nc++;
+    for (int32_t i = 0; i < o->image_count; ++i) {
+        contents[nc].type = "image";
+        contents[nc].text = o->image_paths[i];
+        nc++;
     }
-    size_t off = 0;
-    for (int i = 0; i < n_media; ++i) {
-        memcpy(out + off, MARKER, mlen);
-        off += mlen;
+    for (int32_t i = 0; i < o->audio_count; ++i) {
+        contents[nc].type = "audio";
+        contents[nc].text = o->audio_paths[i];
+        nc++;
     }
-    strcpy(out + off, prompt);
-    free(prompt);
-    return out;
+
+    geniex_VlmChatMessage msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.role          = "user";
+    msg.contents      = contents;
+    msg.content_count = nc;
+
+    geniex_VlmApplyChatTemplateInput  tin;
+    geniex_VlmApplyChatTemplateOutput tout;
+    memset(&tin, 0, sizeof(tin));
+    memset(&tout, 0, sizeof(tout));
+    tin.messages      = &msg;
+    tin.message_count = 1;
+
+    int32_t rc = geniex_vlm_apply_chat_template(vlm, &tin, &tout);
+    if (rc != GENIEX_SUCCESS) {
+        fprintf(stderr,
+            "ERROR: geniex_vlm_apply_chat_template: %s (%d)\n",
+            geniex_get_error_message((geniex_ErrorCode)rc),
+            rc);
+        return NULL;
+    }
+    return tout.formatted_text;
 }
 
 /* ----------------------------- LLM run loop ----------------------------- */
@@ -616,11 +639,14 @@ static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_
     for (int32_t i = 0; i < total; ++i) {
         bool    is_warmup = (i < o->warmup);
         int32_t run_idx   = is_warmup ? i : (i - o->warmup);
-        char*   prompt    = build_run_prompt(o->prompt, run_idx, is_warmup);
-        /* llama_cpp's mtmd tokenizer needs an explicit marker per media item;
-         * QAIRT takes the image paths directly and rejects stray markers. */
-        if (strcmp(o->plugin, "llama_cpp") == 0) {
-            prompt = prepend_media_markers(prompt, o->image_count + o->audio_count);
+        char*   base      = build_run_prompt(o->prompt, run_idx, is_warmup);
+        /* VLM generate() takes a fully-templated prompt; run base text + media
+         * through the bundle's chat template so the image tokens land right. */
+        char* prompt = build_vlm_prompt(vlm, o, base);
+        free(base);
+        if (!prompt) {
+            geniex_vlm_destroy(vlm);
+            exit(1);
         }
 
         geniex_VlmGenerateInput  gin;
@@ -635,7 +661,7 @@ static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_
         if (rc != GENIEX_SUCCESS) {
             const char* msg = geniex_get_error_message((geniex_ErrorCode)rc);
             fprintf(stderr, "ERROR: geniex_vlm_generate run %d failed: %s (%d)\n", run_idx, msg ? msg : "?", rc);
-            free(prompt);
+            geniex_free(prompt);
             geniex_vlm_destroy(vlm);
             exit(1);
         }
@@ -658,7 +684,7 @@ static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_
         if (gout.full_text) {
             geniex_free(gout.full_text);
         }
-        free(prompt);
+        geniex_free(prompt);
         /* See LLM loop above for rationale: do NOT reset between runs. */
     }
 

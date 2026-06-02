@@ -79,7 +79,8 @@ geniex_benchmark \
   --model-path /path/to/qualcomm/Qwen3-4B-Instruct-2507/
 
 # VLM, llama_cpp — pass the model gguf + its mmproj (switches to VLM mode)
-# and one or more --image. The mtmd marker is inserted automatically.
+# and one or more --image. The prompt is run through the model's chat template
+# (which places the image tokens) before generation.
 geniex_benchmark \
   --plugin llama_cpp --device hybrid \
   --model-path /path/to/SmolVLM-500M-Instruct-Q8_0.gguf \
