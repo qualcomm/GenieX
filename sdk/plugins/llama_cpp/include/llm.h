@@ -6,16 +6,15 @@
 #include "llama.h"
 #include "plugin/ILlm.h"
 #include "sampling.h"
+#include "threadpool.h"
 
 namespace geniex {
 
 class LlamaLlm : public ILlm {
-    llama_model*     model                       = nullptr;
-    llama_context*   ctx                         = nullptr;
-    common_sampler*  sampler                     = nullptr;
-    ggml_threadpool* threadpool                  = nullptr;
-    ggml_threadpool* threadpool_batch            = nullptr;
-    void (*threadpool_free_fn)(ggml_threadpool*) = nullptr;
+    llama_model*               model   = nullptr;
+    llama_context*             ctx     = nullptr;
+    common_sampler*            sampler = nullptr;
+    Threadpools                pools_;
     std::optional<std::string> chat_template_str = std::nullopt;
 
     int                      n_past_global = 0;
@@ -45,8 +44,6 @@ class LlamaLlm : public ILlm {
     virtual int32_t generate(const geniex_LlmGenerateInput*, geniex_LlmGenerateOutput*) override;
 
    private:
-    geniex_ModelConfig model_config_default(void);
-
     void reset_sampler();
     void set_sampler(const geniex_SamplerConfig* cfg);
 };

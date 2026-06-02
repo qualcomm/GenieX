@@ -4,10 +4,11 @@
 #include <exception>
 #include <filesystem>
 #include <string_view>
-#include <vector>
 
 #if defined(_WIN32)
 #include <windows.h>
+
+#include <vector>
 #endif
 
 #include "build_config.h"
@@ -17,7 +18,6 @@
 #include "llm.h"
 #include "logging.h"
 #include "mtmd-helper.h"
-#include "plugin/Plugin.h"
 #include "vlm.h"
 
 namespace {
@@ -102,12 +102,6 @@ class LlamaPlugin : public Plugin {
             GENIEX_LOG_DEBUG("Loading GGML backend from path: {}", path);
             ggml_backend_load_all_from_path(path.c_str());
         }
-
-        // #ifdef __ANDROID__
-        // Harcoding to use 4 hexagon devices for Hexagon to make GPT-OSS work
-        //         setenv("GGML_HEXAGON_NDEV", "4", 1);
-        //         GENIEX_LOG_DEBUG("Set GGML_HEXAGON_NDEV=4 for Hexagon backend");
-        // #endif  // __ANDROID__
 
         llama_backend_init();
     }

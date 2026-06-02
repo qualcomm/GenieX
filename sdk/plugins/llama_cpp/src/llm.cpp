@@ -4,16 +4,14 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <sstream>
-#include <thread>
 #include <vector>
 
 #include "chat.h"
 #include "common.h"
 #include "ggml-backend.h"
-#include "ggml.h"
-#include "gguf.h"
 #include "htp_session.h"
 #include "logging.h"
+#include "params.h"
 #include "profiler.h"
 
 namespace geniex {
@@ -22,18 +20,11 @@ LlamaLlm::~LlamaLlm() {
     if (sampler) common_sampler_free(sampler);
     if (ctx) llama_free(ctx);
     if (model) llama_model_free(model);
-
-    // Free threadpools
-    if (threadpool) this->threadpool_free_fn(threadpool);
-    if (threadpool_batch) this->threadpool_free_fn(threadpool_batch);
+    // pools_ frees its threadpools in its own destructor, after ctx is freed.
 }
 
 int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
-    if (!input) {
-        return GENIEX_ERROR_COMMON_INVALID_INPUT;
-    }
-
-    if (!input->model_path) {
+    if (!input || !input->model_path) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
@@ -44,82 +35,49 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     // session. No-op when HTP is unused or sessions are already live.
     htp::reacquire_before_load();
 
-    ggml_backend_dev_t device_array[9] = {nullptr};
-    auto               mpar            = llama_model_default_params();
-    mpar.use_mmap                      = false;
-    mpar.use_mlock                     = false;
+    const Device             device = classify_device(input->device_id, input->config.n_gpu_layers);
+    const geniex_ModelConfig config = build_model_config(input->config, /*n_ctx_default=*/4096, device);
 
-    mpar.n_gpu_layers = input->config.n_gpu_layers;
+    llama_model_params mpar = build_model_params(config);
 
     // Check if model path contains "gpt" and "oss" (case insensitive)
-    std::string model_path_lower(input->model_path);
-    std::transform(model_path_lower.begin(), model_path_lower.end(), model_path_lower.begin(), ::tolower);
-    bool is_gpt_oss_model =
-        (model_path_lower.find("gpt") != std::string::npos) && (model_path_lower.find("oss") != std::string::npos);
+    {
+        std::string model_path_lower(input->model_path);
+        std::transform(model_path_lower.begin(), model_path_lower.end(), model_path_lower.begin(), ::tolower);
+        bool is_gpt_oss_model =
+            (model_path_lower.find("gpt") != std::string::npos) && (model_path_lower.find("oss") != std::string::npos);
 
-    // Set special token output behavior based on model type
-    this->allow_special_tokens = is_gpt_oss_model;
+        // Set special token output behavior based on model type
+        this->allow_special_tokens = is_gpt_oss_model;
 
-    // Initialize instance-level tensor buffer override array for MoE expert
-    // tensors Force specific MoE expert tensors to run on CPU instead of HTP NPU
-    // These patterns match: blk.{layer}.ffn_{gate|up|down}_exps.{weight|bias}
-    // Only apply this override for GPT OSS models, because mxfp4 data type is not
-    // supported in GGML Hexagon
-    if (is_gpt_oss_model) {
-        // Regex pattern to match all MoE expert tensors
-        // This includes: ffn_gate_exps, ffn_up_exps, ffn_down_exps (both .weight
-        // and .bias)
-        this->tensor_overrides[0]  = {"\\.ffn_(up|down|gate)_exps\\.(weight|bias)", ggml_backend_cpu_buffer_type()};
-        this->tensor_overrides[1]  = {nullptr, nullptr};  // Null terminator
-        mpar.tensor_buft_overrides = this->tensor_overrides;
-        GENIEX_LOG_INFO(
-            "GPT OSS model detected - MoE expert tensors "
-            "(ffn_*_exps.weight/bias) will be forced to CPU");
-    } else {
-        mpar.tensor_buft_overrides = nullptr;
-    }
-
-    if (input->device_id) {
-        // Parse comma-separated device list (e.g., "HTP0,HTP1,HTP2,HTP3")
-        std::string                     device_str(input->device_id);
-        std::vector<ggml_backend_dev_t> devices;
-
-        size_t start = 0;
-        size_t end   = 0;
-        while ((end = device_str.find(',', start)) != std::string::npos) {
-            std::string dev_name = device_str.substr(start, end - start);
-            auto*       dev      = ggml_backend_dev_by_name(dev_name.c_str());
-            if (dev) {
-                devices.push_back(dev);
-                GENIEX_LOG_INFO("Found device: {}", dev_name);
-            } else {
-                GENIEX_LOG_WARN("Device '{}' not found, skipping", dev_name);
-            }
-            start = end + 1;
-        }
-        // Handle last (or only) device name
-        std::string last_dev = device_str.substr(start);
-        if (!last_dev.empty()) {
-            auto* dev = ggml_backend_dev_by_name(last_dev.c_str());
-            if (dev) {
-                devices.push_back(dev);
-                GENIEX_LOG_INFO("Found device: {}", last_dev);
-            } else {
-                GENIEX_LOG_WARN("Device '{}' not found, skipping", last_dev);
-            }
-        }
-
-        if (!devices.empty()) {
-            for (size_t i = 0; i < devices.size() && i < 8; ++i) {
-                device_array[i] = devices[i];
-            }
-            mpar.devices = device_array;
-            GENIEX_LOG_INFO("Using {} device(s): {}", devices.size(), input->device_id);
+        // Initialize instance-level tensor buffer override array for MoE expert
+        // tensors Force specific MoE expert tensors to run on CPU instead of HTP NPU
+        // These patterns match: blk.{layer}.ffn_{gate|up|down}_exps.{weight|bias}
+        // Only apply this override for GPT OSS models, because mxfp4 data type is not
+        // supported in GGML Hexagon
+        if (is_gpt_oss_model) {
+            // Regex pattern to match all MoE expert tensors
+            // This includes: ffn_gate_exps, ffn_up_exps, ffn_down_exps (both .weight
+            // and .bias)
+            this->tensor_overrides[0]  = {"\\.ffn_(up|down|gate)_exps\\.(weight|bias)", ggml_backend_cpu_buffer_type()};
+            this->tensor_overrides[1]  = {nullptr, nullptr};  // Null terminator
+            mpar.tensor_buft_overrides = this->tensor_overrides;
+            GENIEX_LOG_INFO(
+                "GPT OSS model detected - MoE expert tensors "
+                "(ffn_*_exps.weight/bias) will be forced to CPU");
         } else {
-            GENIEX_LOG_ERROR("No valid devices found in '{}'", input->device_id);
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+            mpar.tensor_buft_overrides = nullptr;
         }
     }
+
+    auto selection = resolve_devices(input->device_id);
+    if (!selection) {
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    }
+    if (!selection->empty()) {
+        mpar.devices = selection->data();
+    }
+
     // The HTP backend opens FastRPC channels at registry construction time
     // (ggml_hexagon_registry), not per-instance. Those channels live until we
     // explicitly call release_sessions, so we mark the guard whenever HTP is
@@ -134,83 +92,19 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 
-    auto config = input->config;
-
-    // TODO: move this to default llama_paramas func
-    auto default_config  = model_config_default();
-    auto cpar            = llama_context_default_params();
-    cpar.n_ctx           = config.n_ctx > 0 ? config.n_ctx : default_config.n_ctx;
-    cpar.n_batch         = config.n_batch > 0 ? config.n_batch : default_config.n_batch;
-    cpar.n_ubatch        = config.n_ubatch > 0 ? config.n_ubatch : default_config.n_ubatch;
-    cpar.n_seq_max       = config.n_seq_max > 0 ? config.n_seq_max : default_config.n_seq_max;
-    cpar.n_threads       = config.n_threads > 0 ? config.n_threads : default_config.n_threads;
-    cpar.n_threads_batch = config.n_threads_batch > 0 ? config.n_threads_batch : default_config.n_threads_batch;
-
-    cpar.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-    cpar.swa_full        = false;
-    cpar.kv_unified      = false;
-    cpar.no_perf         = false;  // enable performance counters
-
-    // NOTE: temporarily disabled — the device-id-substring-triggered KV quant +
-    // flash-attn toggle was hurting HTP duty cycle vs. upstream llama-cli with
-    // the same --device HTP0 -ngl 999. Restore (or make config-driven) once
-    // investigated. See notes/run.md.
-    //
-    // std::string device_id_str(input->device_id ? input->device_id : "");
-    // if (device_id_str.find("HTP0") != std::string::npos) {
-    //     cpar.type_k          = GGML_TYPE_Q8_0;
-    //     cpar.type_v          = GGML_TYPE_Q8_0;
-    //     cpar.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-    // };
+    llama_context_params cpar = build_context_params(config, device);
 
     this->ctx = llama_init_from_model(this->model, cpar);
     if (!this->ctx) {
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 
-    // Create and attach threadpools for better performance
-    auto* cpu_dev = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
-    if (!cpu_dev) {
-        GENIEX_LOG_ERROR("No CPU backend found");
-        return GENIEX_ERROR_COMMON_MODEL_LOAD;
+    ggml_threadpool_params tpp_main  = build_threadpool_params(cpar.n_threads, device);
+    ggml_threadpool_params tpp_batch = build_threadpool_params(cpar.n_threads_batch, device);
+    int32_t                tp_ret    = create_and_attach_threadpools(this->pools_, this->ctx, tpp_main, tpp_batch);
+    if (tp_ret != GENIEX_SUCCESS) {
+        return tp_ret;
     }
-
-    auto* reg = ggml_backend_dev_backend_reg(cpu_dev);
-    auto* ggml_threadpool_new_fn =
-        (decltype(ggml_threadpool_new)*)ggml_backend_reg_get_proc_address(reg, "ggml_threadpool_new");
-    auto* ggml_threadpool_free_fn =
-        (decltype(ggml_threadpool_free)*)ggml_backend_reg_get_proc_address(reg, "ggml_threadpool_free");
-
-    if (!ggml_threadpool_new_fn || !ggml_threadpool_free_fn) {
-        GENIEX_LOG_ERROR("Failed to get threadpool functions");
-        return GENIEX_ERROR_COMMON_MODEL_LOAD;
-    }
-    this->threadpool_free_fn = ggml_threadpool_free_fn;
-
-    // Create threadpool parameters matching main.cpp
-    struct ggml_threadpool_params tpp_batch = ggml_threadpool_params_default(cpar.n_threads_batch);
-    struct ggml_threadpool_params tpp       = ggml_threadpool_params_default(cpar.n_threads);
-
-    // Create batch threadpool if different from main threadpool
-    if (cpar.n_threads_batch != cpar.n_threads) {
-        this->threadpool_batch = ggml_threadpool_new_fn(&tpp_batch);
-        if (!this->threadpool_batch) {
-            GENIEX_LOG_ERROR("Batch threadpool create failed: n_threads {}", tpp_batch.n_threads);
-            return GENIEX_ERROR_COMMON_MODEL_LOAD;
-        }
-        // Start the non-batch threadpool in the paused state
-        tpp.paused = true;
-    }
-
-    // Create main threadpool
-    this->threadpool = ggml_threadpool_new_fn(&tpp);
-    if (!this->threadpool) {
-        GENIEX_LOG_ERROR("Threadpool create failed: n_threads {}", tpp.n_threads);
-        return GENIEX_ERROR_COMMON_MODEL_LOAD;
-    }
-
-    // Attach threadpools to context
-    llama_attach_threadpool(this->ctx, this->threadpool, this->threadpool_batch);
 
     // Load chat template if path is provided
     if (config.chat_template_content) {
@@ -564,71 +458,16 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
 // Private
 namespace geniex {
-geniex_ModelConfig LlamaLlm::model_config_default(void) {
-    auto cfg            = geniex_ModelConfig{};
-    cfg.n_ctx           = 4096;
-    cfg.n_threads       = static_cast<int32_t>(std::thread::hardware_concurrency()) / 2;
-    cfg.n_threads_batch = static_cast<int32_t>(std::thread::hardware_concurrency()) / 2;
-    cfg.n_batch         = 256;
-    cfg.n_ubatch        = 512;
-    cfg.n_seq_max       = 1;
-    return cfg;
-}
 
-void LlamaLlm::reset_sampler() {
-    if (this->sampler) {
-        common_sampler_free(this->sampler);
-        this->sampler = nullptr;
-    }
-    common_params_sampling s;
-    this->sampler = common_sampler_init(this->model, s);
-}
+void LlamaLlm::reset_sampler() { this->set_sampler(nullptr); }
 
 void LlamaLlm::set_sampler(const geniex_SamplerConfig* cfg) {
     if (this->sampler) {
         common_sampler_free(this->sampler);
         this->sampler = nullptr;
     }
-
-    // Convert geniex_SamplerConfig to common_params_sampling
-    common_params_sampling s;
-
-    if (cfg) {
-        // Apply sampling parameters from the config, using defaults for 0/0.0
-        // values This matches the pattern from the obsolete ml-llm.cpp
-        // implementation
-        s.seed            = (cfg->seed != 0) ? cfg->seed : LLAMA_DEFAULT_SEED;
-        s.top_k           = (cfg->top_k != 0) ? cfg->top_k : 40;
-        s.top_p           = (cfg->top_p != 0.0f) ? cfg->top_p : 0.95f;
-        s.min_p           = (cfg->min_p != 0.0f) ? cfg->min_p : 0.05f;
-        s.temp            = (cfg->temperature != 0.0f) ? cfg->temperature : 0.8f;
-        s.penalty_repeat  = (cfg->repetition_penalty != 0.0f) ? cfg->repetition_penalty : 1.0f;
-        s.penalty_present = (cfg->presence_penalty != 0.0f) ? cfg->presence_penalty : 0.0f;
-        s.penalty_freq    = (cfg->frequency_penalty != 0.0f) ? cfg->frequency_penalty : 0.0f;
-
-        // Handle grammar configuration - prioritize grammar_string over
-        // grammar_path
-        if (cfg->grammar_string && strlen(cfg->grammar_string) > 0) {
-            s.grammar = common_grammar(COMMON_GRAMMAR_TYPE_USER, cfg->grammar_string);
-            GENIEX_LOG_DEBUG("Applied grammar string: {}", cfg->grammar_string);
-        } else if (cfg->grammar_path && strlen(cfg->grammar_path) > 0) {
-            // Read grammar from file
-            std::ifstream file(cfg->grammar_path);
-            if (file.is_open()) {
-                std::stringstream buffer;
-                buffer << file.rdbuf();
-                s.grammar = common_grammar(COMMON_GRAMMAR_TYPE_USER, buffer.str());
-                file.close();
-                GENIEX_LOG_DEBUG("Applied grammar from file: {}", cfg->grammar_path);
-            } else {
-                GENIEX_LOG_ERROR("Failed to read grammar file: {}", cfg->grammar_path);
-            }
-        }
-    }
-    // Note: if cfg is null, s will use default values from common_params_sampling
-    // constructor
-
-    this->sampler = common_sampler_init(this->model, s);
+    common_params_sampling s = build_sampling_params(cfg);
+    this->sampler            = common_sampler_init(this->model, s);
 }
 
 }  // namespace geniex

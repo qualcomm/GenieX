@@ -332,8 +332,14 @@ func PickDefaultQuant(available []string) string {
 }
 
 // NormalizeModelName splits "<name>[:<quant>]" and applies shortcuts:
-// bare name → "qualcomm/<name>", HF URL → repo path.
+// bare name → "qualcomm/<name>"; the "ai-hub-models/" and "qualcomm/" org
+// prefixes (matched case-insensitively) → canonical "qualcomm/<repo>";
+// HF URL → repo path.
 func NormalizeModelName(name string) (string, string) {
+	// A full HF URL carries a scheme colon; strip the endpoint prefix before
+	// the quant split so it isn't mistaken for a "<name>:<quant>" separator.
+	name = strings.TrimPrefix(name, HF_ENDPOINT+"/")
+
 	parts := strings.SplitN(name, ":", 2)
 	name = parts[0]
 	quant := ""
@@ -347,8 +353,10 @@ func NormalizeModelName(name string) (string, string) {
 	if !strings.Contains(name, "/") {
 		return "qualcomm/" + name, quant
 	}
-	if strings.HasPrefix(name, HF_ENDPOINT) {
-		return strings.TrimPrefix(name, HF_ENDPOINT+"/"), quant
+	// Canonicalize the known org prefixes (case-insensitive) to "qualcomm/".
+	if org, repo, ok := strings.Cut(name, "/"); ok &&
+		(strings.EqualFold(org, "ai-hub-models") || strings.EqualFold(org, "qualcomm")) {
+		return "qualcomm/" + repo, quant
 	}
 	return name, quant
 }

@@ -95,6 +95,7 @@ The SDK's default log handler is a no-op in release builds (`sdk/src/ml.cpp:36-6
 - **Python:** set `GENIEX_LOG=INFO`. The Python binding installs a `geniex_set_log` callback that routes SDK messages (`Found device: HTP0`, `Using N device(s)`, etc.) to stderr. If you see `Found device: …` lines you're on the **pinned-`HTP0` path** (the `npu` alias); absence = hybrid path.
 - **Windows:** Task Manager's NPU graph. Hybrid lights it up; pinned-`HTP0` pegs the CPU (host thread busy-waits HTP the whole inference).
 - **Signature:** on Snapdragon X1E80100 + a 1.7B Q8_0 model, hybrid gives prefill ≳ 80 tok/s and TTFT ≲ 250 ms; pinned-`HTP0` gives prefill ≲ 65 tok/s and TTFT ≳ 340 ms. Prefill and TTFT separate the two paths more cleanly than decode.
+- **Threadpool:** any offloaded path (all aliases except `cpu`) logs `threadpool tuned for offload: 6 threads pinned to cores [2, 8), strict, poll=1000` — the SDK mirrors upstream's fixed `-t 6 --cpu-mask 0xfc` (`sdk/plugins/llama_cpp/src/threadpool.cpp`); pass `n_threads` in `geniex_ModelConfig` to override. Absent on `--device cpu`.
 
 If you see `Device '…' not found, skipping`, the runtime loaded but the GGML backend DLL did not — verify test-signing is still on (for HTP) or that `ggml-opencl.dll` is present in `sdk/pkg-geniex/lib/llama_cpp/`.
 
