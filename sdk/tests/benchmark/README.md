@@ -5,48 +5,100 @@ runs one `(plugin, device, model)` cell (warmup + repeated measured runs)
 and prints / writes TTFT, prefill_tps, decode_tps, gen_tokens.
 
 The harness mirrors [`tests/benchmark/_runner.py`](../../../tests/benchmark/_runner.py)
-exactly so C and Python report comparable numbers off the same SDK.
+exactly so C and Python report comparable numbers off the same SDK. It runs
+from a **local model path** (a geniex bundle dir, or a `.gguf` file / its
+folder) on Windows, Android, and Linux — the same binary feeds the scorecard.
 
 ## Build
 
-Gated on the `GENIEX_BENCHMARK` cmake option. The standard presets in
-`sdk/CMakePresets.json` enable it via the `debug` inheritance.
+Gated on the `GENIEX_BENCHMARK` cmake option, which the snapdragon presets in
+[`sdk/CMakePresets.json`](../../CMakePresets.json) enable for both `debug` and
+`release`. The recipes below match [`notes/build.md`](../../../notes/build.md).
 
-```bash
-# Linux host (x86_64)
-cmake --preset arm64-linux-snapdragon-debug -B build-linux .
-cmake --build build-linux -j --target geniex_benchmark
-cmake --install build-linux --prefix pkg-geniex
-# → pkg-geniex/bin/geniex_benchmark
+### Windows ARM64 (Snapdragon)
+
+> [!NOTE]
+> The Hexagon toolchain has a 250-character path limit. Shorten the source
+> path with `subst` before building if the repo lives under a long path:
+> `subst G: C:\path\to\geniex; cd G:\sdk`
+
+```powershell
+cd sdk
+cmake --preset arm64-windows-snapdragon-release -B build
+cmake --build build -j --target geniex_benchmark
+# → build\tests\benchmark\geniex_benchmark.exe
+cmake --install build --prefix pkg-geniex   # optional → pkg-geniex\bin\geniex_benchmark.exe
 ```
 
-For Android, build inside the toolchain container per
+### Linux (cross-compile from x86_64)
+
+Build inside the Snapdragon Linux toolchain container per
 [`notes/build.md`](../../../notes/build.md):
 
 ```bash
-docker run --rm \
-  --volume $(pwd):/workspace \
-  --workdir /workspace/sdk \
+docker run --rm -u $(id -u):$(id -g) \
+  --volume $(pwd):/workspace --workdir /workspace/sdk \
+  --platform linux/amd64 \
+  ghcr.io/qcom-ai-hub/geniex-toolchain-linux:v0.0.2 \
+  bash -c 'cmake --preset arm64-linux-snapdragon-release -B build-linux . \
+    && cmake --build build-linux -j --target geniex_benchmark \
+    && cmake --install build-linux --prefix pkg-geniex'
+# → pkg-geniex/bin/geniex_benchmark
+```
+
+### Android (cross-compile from Linux)
+
+```bash
+docker run --rm -u $(id -u):$(id -g) \
+  --volume $(pwd):/workspace --workdir /workspace/sdk \
   --platform linux/amd64 \
   ghcr.io/qcom-ai-hub/geniex-toolchain-android:v0.0.1 \
-  bash -c 'cmake --preset arm64-android-snapdragon-debug -B build-android . \
+  bash -c 'cmake --preset arm64-android-snapdragon-release -B build-android . \
     && cmake --build build-android -j --target geniex_benchmark \
     && cmake --install build-android --prefix pkg-geniex'
+# → pkg-geniex/bin/geniex_benchmark
 ```
 
 ## Run
 
+The binary loads `geniex.dll` / `libgeniex.so` and the per-plugin backends the
+same way the Python binding does — from the installed `pkg-geniex/lib` (and
+`lib/llama_cpp`) layout. On Windows run it from the build/install tree so the
+DLLs resolve; on Android/Linux export `LD_LIBRARY_PATH=./lib:./lib/llama_cpp`
+and `GENIEX_PLUGIN_PATH=./lib` (see [`notes/run.md`](../../../notes/run.md)).
+
 ```bash
+# LLM, llama_cpp — point --model-path at a .gguf file
 geniex_benchmark \
-  --plugin llama_cpp \
-  --device cpu \
+  --plugin llama_cpp --device hybrid \
   --model-path /path/to/Qwen3-0.6B-Q4_0.gguf
 
-# QAIRT — the bundle dir is the "model path"
+# LLM, QAIRT — the bundle dir is the "model path"
 geniex_benchmark \
-  --plugin qairt \
-  --device npu \
+  --plugin qairt --device npu \
   --model-path /path/to/qualcomm/Qwen3-4B-Instruct-2507/
+
+# VLM, llama_cpp — pass the model gguf + its mmproj (switches to VLM mode)
+# and one or more --image. The prompt is run through the model's chat template
+# (which places the image tokens) before generation.
+geniex_benchmark \
+  --plugin llama_cpp --device hybrid \
+  --model-path /path/to/SmolVLM-500M-Instruct-Q8_0.gguf \
+  --mmproj-path /path/to/mmproj-SmolVLM-500M-Instruct-f16.gguf \
+  --image /path/to/sample.jpg
+
+# VLM, QAIRT — the vision encoder is baked into the bundle (no mmproj), so
+# pass --vlm to force VLM mode plus one or more --image
+geniex_benchmark \
+  --plugin qairt --device npu --vlm \
+  --model-path /path/to/qualcomm/Qwen2.5-VL-7B-Instruct/ \
+  --image /path/to/sample.jpg
+
+# GPU (llama_cpp) — the gpu alias selects GPUOpenCL but offloads no layers by
+# default; pass a high --ngl to actually run on the Adreno GPU
+geniex_benchmark \
+  --plugin llama_cpp --device gpu --ngl 999 \
+  --model-path /path/to/Qwen3-4B-Q4_K_M.gguf
 
 # Customise: prompt, sample count, output files
 geniex_benchmark \
@@ -56,6 +108,13 @@ geniex_benchmark \
   --max-new-tokens 128 --temperature 0.0 --seed 42 \
   --output-json results/qwen3-1.7b-hybrid.json \
   --cell-id Qwen3-1.7B-llama_cpp-hybrid
+```
+
+On Windows the same invocations work with `.exe` and backslash paths, e.g.:
+
+```powershell
+build\tests\benchmark\geniex_benchmark.exe --plugin qairt --device npu `
+  --model-path $env:USERPROFILE\.cache\geniex\models\qualcomm\Qwen3-4B-Instruct-2507
 ```
 
 Run `geniex_benchmark --help` for the full flag list.
