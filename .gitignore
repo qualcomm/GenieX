@@ -2,6 +2,7 @@
 venv/
 .vscode
 .ccache
+.cache/
 
 # Claude Code: track shared config, ignore per-user overrides.
 .claude/settings.local.json
