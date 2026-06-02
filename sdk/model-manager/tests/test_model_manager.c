@@ -21,6 +21,11 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#ifdef _WIN32
+#include <direct.h>
+#define mkdir(path, mode) _mkdir(path)
+#endif
+
 #include "geniex.h"
 #include "geniex_model.h"
 
