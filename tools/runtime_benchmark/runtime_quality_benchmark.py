@@ -173,8 +173,11 @@ def clean_genie(text: str) -> str:
 #
 #   "time-to-first-token":  {"value": 155464, "unit": "us"}
 #   "token-generation-rate":{"value": 13.07,  "unit": "toks/sec"}
+#   "num-tokens-generated": {"value": 96}             (when present)
 #
-# We read those two fields and normalise TTFT to milliseconds.
+# We read those, normalise TTFT to milliseconds, and (when the token count is
+# available) derive a decode-only TPS that can be compared apples-to-apples
+# with the geniex side, which reports decode-only TPS by construction.
 
 
 def _us_value_to_ms(field: dict | None) -> float | None:
@@ -190,26 +193,85 @@ def _us_value_to_ms(field: dict | None) -> float | None:
     return value  # already ms (or unknown — leave as-is)
 
 
-def parse_genie_profile(profile_path: Path) -> tuple[float | None, float | None]:
-    """Return ``(ttft_ms, tps)`` from a genie-t2t-run --profile JSON file.
+def _value_to_int(field: dict | None) -> int | None:
+    if not isinstance(field, dict) or "value" not in field:
+        return None
+    try:
+        return int(field["value"])
+    except (TypeError, ValueError):
+        return None
 
-    Scans every component's events for a `GenieDialog_query` and pulls
-    `time-to-first-token` (→ ms) and `token-generation-rate` (toks/sec).
-    Returns ``None`` for any field the file doesn't carry, so a missing or
-    malformed profile degrades gracefully instead of aborting the run."""
+
+@dataclass
+class GenieProfile:
+    ttft_ms: float | None = None
+    # Genie's reported rate. Empirically this is decode/decode-time on a
+    # warm path but can include some constant cost on short answers — we
+    # surface it as-is and compute a derived decode-only TPS alongside.
+    tps_reported: float | None = None
+    generated_tokens: int | None = None
+    # Wall-clock total time for the GenieDialog_query event, when the
+    # profile carries it. Used to back out decode time = total - ttft.
+    total_ms: float | None = None
+
+
+def parse_genie_profile(profile_path: Path) -> GenieProfile:
+    """Read the GenieDialog_query event from a genie-t2t-run --profile JSON.
+
+    Pulls TTFT (→ ms), token-generation-rate (as Genie reports it),
+    num-tokens-generated, and (if the event carries a duration field) total
+    wall time. Missing fields stay ``None`` so a partial profile degrades
+    gracefully instead of aborting the run."""
+    out = GenieProfile()
     try:
         data = json.loads(profile_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return None, None
+        return out
     for component in data.get("components", []):
         for event in component.get("events", []):
             if event.get("type") != "GenieDialog_query":
                 continue
-            ttft_ms = _us_value_to_ms(event.get("time-to-first-token"))
+            out.ttft_ms = _us_value_to_ms(event.get("time-to-first-token"))
             rate = event.get("token-generation-rate")
-            tps = float(rate["value"]) if isinstance(rate, dict) and "value" in rate else None
-            return ttft_ms, tps
-    return None, None
+            if isinstance(rate, dict) and "value" in rate:
+                out.tps_reported = float(rate["value"])
+            out.generated_tokens = _value_to_int(event.get("num-tokens-generated"))
+            # The event itself usually carries a duration via either
+            # "duration"/"total-time"/"value" — try a few common names.
+            for key in ("duration", "total-time", "value"):
+                ms = _us_value_to_ms(event.get(key)) if isinstance(event.get(key), dict) else None
+                if ms is not None:
+                    out.total_ms = ms
+                    break
+            return out
+    return out
+
+
+def derive_tps(generated_tokens: int | None, ttft_ms: float | None,
+               total_ms: float | None, decode_ms: float | None) -> tuple[float | None, float | None]:
+    """Return (tps_decode_only, tps_with_ttft).
+
+    tps_decode_only = (N - 1) / decode_ms — matches geniex's native metric.
+    tps_with_ttft   = N / (ttft + decode_ms) — matches what genie-t2t-run's
+    `token-generation-rate` reports on short answers.
+
+    Either is None when the inputs needed to compute it aren't available."""
+    n = generated_tokens or 0
+    if decode_ms is None and total_ms is not None and ttft_ms is not None:
+        decode_ms = max(total_ms - ttft_ms, 0.0)
+    decode_only = None
+    if n > 1 and decode_ms and decode_ms > 0:
+        decode_only = (n - 1) / (decode_ms / 1000.0)
+    with_ttft = None
+    if n > 0:
+        denom_ms = None
+        if ttft_ms is not None and decode_ms is not None:
+            denom_ms = ttft_ms + decode_ms
+        elif total_ms is not None:
+            denom_ms = total_ms
+        if denom_ms and denom_ms > 0:
+            with_ttft = n / (denom_ms / 1000.0)
+    return decode_only, with_ttft
 
 
 # ---------------------------------------------------------------------------
@@ -224,12 +286,25 @@ class RunResult:
     # Time-to-first-token in milliseconds and decode throughput in tokens/sec.
     # None when the runtime didn't report them (e.g. on error/timeout).
     ttft_ms: float | None = None
+    # tps == tps_decode (kept for backward compat with existing CSVs).
     tps: float | None = None
+    # Decode-only throughput: (N - 1) / decode_time. Matches what the
+    # geniex pipeline reports natively.
+    tps_decode: float | None = None
+    # Throughput with TTFT included: N / (ttft + decode_time). Matches what
+    # `genie-t2t-run` surfaces in its profile JSON.
+    tps_with_ttft: float | None = None
+    generated_tokens: int | None = None
+    decode_ms: float | None = None
 
 
 def _csv_num(v: float | None) -> str:
     """Format a metric for the CSV cell ('' when unavailable)."""
     return f"{v:.2f}" if v is not None else ""
+
+
+def _csv_int(v: int | None) -> str:
+    return str(v) if v is not None else ""
 
 
 def _fmt_ms(v: float | None) -> str:
@@ -315,15 +390,26 @@ def run_geniex(
     prof = payload.get("Profile") or {}
     ttft_us = prof.get("TTFT") or prof.get("ttft")
     ttft_ms = float(ttft_us) / 1000.0 if ttft_us else None
-    tps = prof.get("DecodingSpeed") or prof.get("decoding_speed") or prof.get("decode_speed")
-    tps = float(tps) if tps else None
+    tps_decode = prof.get("DecodingSpeed") or prof.get("decoding_speed") or prof.get("decode_speed")
+    tps_decode = float(tps_decode) if tps_decode else None
+    decode_us = prof.get("DecodeTime") or prof.get("decode_time")
+    decode_ms = float(decode_us) / 1000.0 if decode_us else None
+    gen_tok = prof.get("GeneratedTokens") or prof.get("generated_tokens")
+    gen_tok = int(gen_tok) if gen_tok else None
+
+    # Derive a TTFT-included TPS to match Genie's `token-generation-rate`.
+    _, tps_with_ttft = derive_tps(gen_tok, ttft_ms, None, decode_ms)
 
     return RunResult(
         answer=answer,
         seconds=time.time() - start,
         error=err,
         ttft_ms=ttft_ms,
-        tps=tps,
+        tps=tps_decode,
+        tps_decode=tps_decode,
+        tps_with_ttft=tps_with_ttft,
+        generated_tokens=gen_tok,
+        decode_ms=decode_ms,
     )
 
 
@@ -344,6 +430,37 @@ def _parse_geniex_test_mode(stderr: str) -> dict | None:
         if isinstance(obj, dict) and ("Output" in obj or "Profile" in obj):
             return obj
     return None
+
+
+# Cached per-config-dir tokenizer for backfilling Genie's generated-token
+# count when the profile JSON omits it. Loaded lazily so the benchmark
+# still runs (with `genie_tps_decode` empty, just like before) on hosts
+# without the `tokenizers` package installed.
+_TOKENIZER_CACHE: dict[Path, object | None] = {}
+
+
+def _load_tokenizer(config_dir: Path) -> object | None:
+    if config_dir in _TOKENIZER_CACHE:
+        return _TOKENIZER_CACHE[config_dir]
+    tok_path = config_dir / "tokenizer.json"
+    tok: object | None = None
+    if tok_path.is_file():
+        try:
+            from tokenizers import Tokenizer  # type: ignore[import-not-found]
+            tok = Tokenizer.from_file(str(tok_path))
+        except Exception:
+            tok = None
+    _TOKENIZER_CACHE[config_dir] = tok
+    return tok
+
+
+def _count_tokens(tokenizer: object | None, text: str) -> int | None:
+    if tokenizer is None or not text:
+        return None
+    try:
+        return len(tokenizer.encode(text).ids)  # type: ignore[attr-defined]
+    except Exception:
+        return None
 
 
 def run_genie(config_dir: Path, formatted_prompt: str, timeout: int) -> RunResult:
@@ -382,14 +499,42 @@ def run_genie(config_dir: Path, formatted_prompt: str, timeout: int) -> RunResul
     err = None
     if cp.returncode != 0 and not cleaned:
         err = f"exit {cp.returncode}: {out[-200:].strip()}"
-    ttft_ms, tps = parse_genie_profile(profile_path)
+    gp = parse_genie_profile(profile_path)
     shutil.rmtree(profile_dir, ignore_errors=True)
+
+    # If genie-t2t-run's profile didn't carry `num-tokens-generated`
+    # (depends on QAIRT version), fall back to tokenising the recorded
+    # answer with the model's own tokenizer.json — same approach as
+    # derive_matched_tps.py, so live and retroactive numbers agree.
+    gen_tok = gp.generated_tokens
+    if gen_tok is None and cleaned:
+        gen_tok = _count_tokens(_load_tokenizer(config_dir), cleaned)
+
+    # Genie's `token-generation-rate` is what we'll treat as `tps_with_ttft`
+    # (it's the per-event total-time / token count). We then derive a
+    # decode-only number when num-tokens-generated + (total_ms or
+    # tps_reported) give us enough to back out decode time.
+    decode_ms = None
+    if gp.total_ms is not None and gp.ttft_ms is not None:
+        decode_ms = max(gp.total_ms - gp.ttft_ms, 0.0)
+    elif gp.tps_reported and gen_tok and gp.ttft_ms is not None:
+        # Genie's rate ≈ tokens / total_ms. Solve for decode_ms so we can
+        # report decode-only TPS.
+        total_ms = (gen_tok / gp.tps_reported) * 1000.0
+        decode_ms = max(total_ms - gp.ttft_ms, 0.0)
+    tps_decode, tps_with_ttft = derive_tps(gen_tok, gp.ttft_ms, gp.total_ms, decode_ms)
+    if tps_with_ttft is None:
+        tps_with_ttft = gp.tps_reported  # fall back to whatever Genie said
     return RunResult(
         answer=cleaned,
         seconds=time.time() - start,
         error=err,
-        ttft_ms=ttft_ms,
-        tps=tps,
+        ttft_ms=gp.ttft_ms,
+        tps=tps_decode if tps_decode is not None else gp.tps_reported,
+        tps_decode=tps_decode,
+        tps_with_ttft=tps_with_ttft,
+        generated_tokens=gen_tok,
+        decode_ms=decode_ms,
     )
 
 
@@ -573,8 +718,21 @@ def main() -> int:
         "note",
         "genie_ttft_ms",
         "geniex_ttft_ms",
+        # `*_tps` is the legacy column (decode-only on the geniex side, the
+        # genie-reported rate on the genie side). Kept so existing scoring
+        # tooling and historical CSVs still load. The two columns below are
+        # the apples-to-apples pair: decode-only on both sides, and total
+        # (TTFT + decode) on both sides.
         "genie_tps",
         "geniex_tps",
+        "genie_tps_decode",
+        "geniex_tps_decode",
+        "genie_tps_with_ttft",
+        "geniex_tps_with_ttft",
+        "genie_generated_tokens",
+        "geniex_generated_tokens",
+        "genie_decode_ms",
+        "geniex_decode_ms",
         "genie_error",
         "geniex_error",
     ]
@@ -614,7 +772,9 @@ def main() -> int:
         )
         print(
             f"  geniex: {gx.seconds:5.1f}s  ttft={_fmt_ms(gx.ttft_ms)}  "
-            f"tps={_fmt_tps(gx.tps)}  err={gx.error or '-'}",
+            f"tps={_fmt_tps(gx.tps_decode)} (decode) "
+            f"{_fmt_tps(gx.tps_with_ttft)} (w/ttft)  "
+            f"err={gx.error or '-'}",
             flush=True,
         )
         if args.skip_genie:
@@ -624,7 +784,9 @@ def main() -> int:
             gn = run_genie(args.genie_config_dir, genie_formatted, args.timeout)
             print(
                 f"  genie : {gn.seconds:5.1f}s  ttft={_fmt_ms(gn.ttft_ms)}  "
-                f"tps={_fmt_tps(gn.tps)}  err={gn.error or '-'}",
+                f"tps={_fmt_tps(gn.tps_decode)} (decode) "
+                f"{_fmt_tps(gn.tps_with_ttft)} (w/ttft)  "
+                f"err={gn.error or '-'}",
                 flush=True,
             )
 
@@ -642,6 +804,14 @@ def main() -> int:
                 "geniex_ttft_ms": _csv_num(gx.ttft_ms),
                 "genie_tps": _csv_num(gn.tps),
                 "geniex_tps": _csv_num(gx.tps),
+                "genie_tps_decode": _csv_num(gn.tps_decode),
+                "geniex_tps_decode": _csv_num(gx.tps_decode),
+                "genie_tps_with_ttft": _csv_num(gn.tps_with_ttft),
+                "geniex_tps_with_ttft": _csv_num(gx.tps_with_ttft),
+                "genie_generated_tokens": _csv_int(gn.generated_tokens),
+                "geniex_generated_tokens": _csv_int(gx.generated_tokens),
+                "genie_decode_ms": _csv_num(gn.decode_ms),
+                "geniex_decode_ms": _csv_num(gx.decode_ms),
                 "genie_error": gn.error or "",
                 "geniex_error": gx.error or "",
             }
