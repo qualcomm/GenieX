@@ -19,7 +19,6 @@
  * not depend on the model-manager surface.
  */
 
-#include <dirent.h>
 #include <geniex.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -27,9 +26,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <sys/stat.h>
 #include <time.h>
+
+#ifdef _WIN32
+#include <windows.h>
+/* The MSVC CRT ships struct stat / stat() but not the POSIX type macros. */
+#ifndef S_ISDIR
+#define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
+#endif
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+#endif
+#else
+#include <dirent.h>
+#endif
 
 /* Default prompt mirrors tests/benchmark/_runner.py:28-31 verbatim. */
 static const char* const DEFAULT_PROMPT =
@@ -46,6 +57,7 @@ typedef struct {
     const char* model_path;
     const char* tokenizer_path;
     const char* mmproj_path;
+    bool        force_vlm; /* run VLM path even without an mmproj (QAIRT bundles) */
     const char* image_paths[MAX_PATHS];
     int32_t     image_count;
     const char* audio_paths[MAX_PATHS];
@@ -121,6 +133,7 @@ static void usage(const char* argv0) {
         "Optional:\n"
         "  --tokenizer-path    explicit tokenizer file\n"
         "  --mmproj-path       multimodal projector — switches to VLM mode\n"
+        "  --vlm               force VLM mode without an mmproj (QAIRT bundles)\n"
         "  --image PATH        image input (VLM); may be passed multiple times\n"
         "  --audio PATH        audio input (VLM); may be passed multiple times\n"
         "  --device-id ID      override resolved device id (e.g. HTP0, GPUOpenCL)\n"
@@ -171,9 +184,39 @@ static char* resolve_local_anchor(const char* path) {
     }
 
     /* Fallback: pick the lexicographically first regular file. */
+    char* best = NULL;
+#ifdef _WIN32
+    char pattern[1024];
+    snprintf(pattern, sizeof(pattern), "%s\\*", path);
+    WIN32_FIND_DATAA ffd;
+    HANDLE           h = FindFirstFileA(pattern, &ffd);
+    if (h == INVALID_HANDLE_VALUE) return NULL;
+    do {
+        const char* name = ffd.cFileName;
+        if (name[0] == '.') continue;
+        size_t need = plen + 1 + strlen(name) + 1;
+        char*  cand = (char*)malloc(need);
+        if (!cand) {
+            free(best);
+            FindClose(h);
+            return NULL;
+        }
+        snprintf(cand, need, "%s/%s", path, name);
+        if (stat(cand, &st) == 0 && S_ISREG(st.st_mode)) {
+            if (!best || strcmp(cand, best) < 0) {
+                free(best);
+                best = cand;
+            } else {
+                free(cand);
+            }
+        } else {
+            free(cand);
+        }
+    } while (FindNextFileA(h, &ffd));
+    FindClose(h);
+#else
     DIR* d = opendir(path);
     if (!d) return NULL;
-    char*          best = NULL;
     struct dirent* e;
     while ((e = readdir(d)) != NULL) {
         if (e->d_name[0] == '.') continue;
@@ -197,6 +240,7 @@ static char* resolve_local_anchor(const char* path) {
         }
     }
     closedir(d);
+#endif
     return best;
 }
 
@@ -248,6 +292,7 @@ static void parse_args(int argc, char** argv, options_t* o) {
     o->model_path      = NULL;
     o->tokenizer_path  = NULL;
     o->mmproj_path     = NULL;
+    o->force_vlm       = false;
     o->image_count     = 0;
     o->audio_count     = 0;
     o->max_new_tokens  = 128;
@@ -282,6 +327,8 @@ static void parse_args(int argc, char** argv, options_t* o) {
             o->tokenizer_path = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--mmproj-path") == 0) {
             o->mmproj_path = arg_value(argc, argv, &i, a);
+        } else if (strcmp(a, "--vlm") == 0) {
+            o->force_vlm = true;
         } else if (strcmp(a, "--image") == 0) {
             if (o->image_count >= MAX_PATHS) {
                 fprintf(stderr, "ERROR: too many --image\n");
@@ -358,12 +405,22 @@ static void parse_args(int argc, char** argv, options_t* o) {
 
 static void busy_wait_us(int us) {
     if (us <= 0) return;
+#ifdef _WIN32
+    LARGE_INTEGER freq, t0, t1;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&t0);
+    LONGLONG target_ticks = (LONGLONG)us * freq.QuadPart / 1000000LL;
+    do {
+        QueryPerformanceCounter(&t1);
+    } while ((t1.QuadPart - t0.QuadPart) < target_ticks);
+#else
     struct timespec t0, t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
     long target_ns = (long)us * 1000L;
     do {
         clock_gettime(CLOCK_MONOTONIC, &t1);
     } while (((t1.tv_sec - t0.tv_sec) * 1000000000L + (t1.tv_nsec - t0.tv_nsec)) < target_ns);
+#endif
 }
 
 /* Streaming callback. By default a no-op (the C consumer's expected pattern).
@@ -402,6 +459,30 @@ static char* build_run_prompt(const char* base_prompt, int idx, bool warmup) {
         exit(1);
     }
     snprintf(out, cap, "%s\n[%s=%d]", base_prompt, warmup ? "warmup" : "run", idx);
+    return out;
+}
+
+/* The llama_cpp mtmd path requires the prompt to carry one media marker per
+ * image/audio (mtmd_tokenize matches markers to bitmaps). Prepend them, as
+ * mtmd-cli.cpp does. QAIRT consumes image paths directly and needs no marker.
+ * Returns a freshly-allocated prompt; callers free it. */
+static char* prepend_media_markers(char* prompt, int n_media) {
+    static const char* const MARKER = "<__media__>";
+    if (n_media <= 0) return prompt;
+    size_t mlen = strlen(MARKER);
+    size_t cap  = strlen(prompt) + (size_t)n_media * mlen + 1;
+    char*  out  = (char*)malloc(cap);
+    if (!out) {
+        fprintf(stderr, "ERROR: oom\n");
+        exit(1);
+    }
+    size_t off = 0;
+    for (int i = 0; i < n_media; ++i) {
+        memcpy(out + off, MARKER, mlen);
+        off += mlen;
+    }
+    strcpy(out + off, prompt);
+    free(prompt);
     return out;
 }
 
@@ -536,6 +617,11 @@ static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_
         bool    is_warmup = (i < o->warmup);
         int32_t run_idx   = is_warmup ? i : (i - o->warmup);
         char*   prompt    = build_run_prompt(o->prompt, run_idx, is_warmup);
+        /* llama_cpp's mtmd tokenizer needs an explicit marker per media item;
+         * QAIRT takes the image paths directly and rejects stray markers. */
+        if (strcmp(o->plugin, "llama_cpp") == 0) {
+            prompt = prepend_media_markers(prompt, o->image_count + o->audio_count);
+        }
 
         geniex_VlmGenerateInput  gin;
         geniex_VlmGenerateOutput gout;
@@ -630,11 +716,43 @@ static void print_summary(const options_t* o, const char* device_id, int32_t ngl
         a->gen_tokens_med);
 }
 
-/* JSON helpers: tiny, no escaping for fields we don't expose to user. */
+/* Write a JSON string literal, escaping the characters JSON forbids raw.
+ * Needed for paths: Windows model paths carry backslashes that would
+ * otherwise emit invalid escape sequences (e.g. "C:\Users"). */
+static void json_write_quoted(FILE* f, const char* v) {
+    fputc('"', f);
+    for (const unsigned char* p = (const unsigned char*)v; *p; ++p) {
+        switch (*p) {
+            case '"':
+                fputs("\\\"", f);
+                break;
+            case '\\':
+                fputs("\\\\", f);
+                break;
+            case '\n':
+                fputs("\\n", f);
+                break;
+            case '\r':
+                fputs("\\r", f);
+                break;
+            case '\t':
+                fputs("\\t", f);
+                break;
+            default:
+                if (*p < 0x20)
+                    fprintf(f, "\\u%04x", *p);
+                else
+                    fputc((int)*p, f);
+        }
+    }
+    fputc('"', f);
+}
+
+/* JSON helpers: tiny. String values are escaped via json_write_quoted. */
 static void json_field_str(FILE* f, const char* k, const char* v, bool last) {
     fprintf(f, "    \"%s\": ", k);
     if (v)
-        fprintf(f, "\"%s\"", v);
+        json_write_quoted(f, v);
     else
         fprintf(f, "null");
     fprintf(f, last ? "\n" : ",\n");
@@ -791,7 +909,7 @@ static int run_one_cell(options_t* o) {
         return 1;
     }
 
-    bool is_vlm = (o->mmproj_path != NULL);
+    bool is_vlm = (o->mmproj_path != NULL) || o->force_vlm;
     if (is_vlm) {
         run_vlm(o, device_id, ngl, runs);
     } else {
