@@ -72,6 +72,7 @@ typedef struct {
     char*       prompt_buf; /* allocated when --prompt-file is used */
     int32_t     n_ctx;
     int32_t     n_threads;
+    int32_t     ngl_override; /* -1 = use resolved alias default; >=0 overrides */
 
     const char* output_json;
     const char* output_md;
@@ -146,6 +147,8 @@ static void usage(const char* argv0) {
         "  --prompt-file PATH  read prompt from file\n"
         "  --n-ctx N           model n_ctx (0 = from model, default 0)\n"
         "  --n-threads N       generation threads (0 = SDK default)\n"
+        "  --ngl N             llama_cpp layers to offload; overrides the device\n"
+        "                      alias default (needed for a real gpu run)\n"
         "  --output-json PATH  (single-cell) write per-cell JSON report\n"
         "  --output-md   PATH  (single-cell) write per-cell Markdown row\n"
         "  --output-json-dir DIR  (matrix) write <DIR>/<cell_id>.json per cell\n"
@@ -304,6 +307,7 @@ static void parse_args(int argc, char** argv, options_t* o) {
     o->prompt_buf      = NULL;
     o->n_ctx           = 0;
     o->n_threads       = 0;
+    o->ngl_override    = -1;
     o->output_json     = NULL;
     o->output_md       = NULL;
     o->cell_id         = NULL;
@@ -360,6 +364,8 @@ static void parse_args(int argc, char** argv, options_t* o) {
             o->n_ctx = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--n-threads") == 0) {
             o->n_threads = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--ngl") == 0) {
+            o->ngl_override = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--output-json") == 0) {
             o->output_json = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--output-md") == 0) {
@@ -918,6 +924,11 @@ static int run_one_cell(options_t* o) {
     }
     const char* device_id = o->device_id ? o->device_id : rout.device_id;
     int32_t     ngl       = (rout.ngl == -1) ? 0 : rout.ngl;
+    /* --ngl overrides the alias default. The gpu alias resolves device_id but
+     * no ngl, so a high --ngl is what actually offloads layers to the GPU. */
+    if (o->ngl_override >= 0) {
+        ngl = o->ngl_override;
+    }
 
     /* The qairt plugin doesn't consume n_gpu_layers or n_ctx; force both to 0
      * to match `_build_model_config()` in bindings/python/geniex/auto.py:179. */
