@@ -94,6 +94,12 @@ geniex_benchmark \
   --model-path /path/to/qualcomm/Qwen2.5-VL-7B-Instruct/ \
   --image /path/to/sample.jpg
 
+# GPU (llama_cpp) — the gpu alias selects GPUOpenCL but offloads no layers by
+# default; pass a high --ngl to actually run on the Adreno GPU
+geniex_benchmark \
+  --plugin llama_cpp --device gpu --ngl 999 \
+  --model-path /path/to/Qwen3-4B-Q4_K_M.gguf
+
 # Customise: prompt, sample count, output files
 geniex_benchmark \
   --plugin llama_cpp --device hybrid \
