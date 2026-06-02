@@ -458,60 +458,15 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 // Private
 namespace geniex {
 
-void LlamaLlm::reset_sampler() {
-    if (this->sampler) {
-        common_sampler_free(this->sampler);
-        this->sampler = nullptr;
-    }
-    common_params_sampling s;
-    this->sampler = common_sampler_init(this->model, s);
-}
+void LlamaLlm::reset_sampler() { this->set_sampler(nullptr); }
 
 void LlamaLlm::set_sampler(const geniex_SamplerConfig* cfg) {
     if (this->sampler) {
         common_sampler_free(this->sampler);
         this->sampler = nullptr;
     }
-
-    // Convert geniex_SamplerConfig to common_params_sampling
-    common_params_sampling s;
-
-    if (cfg) {
-        // Apply sampling parameters from the config, using defaults for 0/0.0
-        // values This matches the pattern from the obsolete ml-llm.cpp
-        // implementation
-        s.seed            = (cfg->seed != 0) ? cfg->seed : LLAMA_DEFAULT_SEED;
-        s.top_k           = (cfg->top_k != 0) ? cfg->top_k : 40;
-        s.top_p           = (cfg->top_p != 0.0f) ? cfg->top_p : 0.95f;
-        s.min_p           = (cfg->min_p != 0.0f) ? cfg->min_p : 0.05f;
-        s.temp            = (cfg->temperature != 0.0f) ? cfg->temperature : 0.8f;
-        s.penalty_repeat  = (cfg->repetition_penalty != 0.0f) ? cfg->repetition_penalty : 1.0f;
-        s.penalty_present = (cfg->presence_penalty != 0.0f) ? cfg->presence_penalty : 0.0f;
-        s.penalty_freq    = (cfg->frequency_penalty != 0.0f) ? cfg->frequency_penalty : 0.0f;
-
-        // Handle grammar configuration - prioritize grammar_string over
-        // grammar_path
-        if (cfg->grammar_string && strlen(cfg->grammar_string) > 0) {
-            s.grammar = common_grammar(COMMON_GRAMMAR_TYPE_USER, cfg->grammar_string);
-            GENIEX_LOG_DEBUG("Applied grammar string: {}", cfg->grammar_string);
-        } else if (cfg->grammar_path && strlen(cfg->grammar_path) > 0) {
-            // Read grammar from file
-            std::ifstream file(cfg->grammar_path);
-            if (file.is_open()) {
-                std::stringstream buffer;
-                buffer << file.rdbuf();
-                s.grammar = common_grammar(COMMON_GRAMMAR_TYPE_USER, buffer.str());
-                file.close();
-                GENIEX_LOG_DEBUG("Applied grammar from file: {}", cfg->grammar_path);
-            } else {
-                GENIEX_LOG_ERROR("Failed to read grammar file: {}", cfg->grammar_path);
-            }
-        }
-    }
-    // Note: if cfg is null, s will use default values from common_params_sampling
-    // constructor
-
-    this->sampler = common_sampler_init(this->model, s);
+    common_params_sampling s = build_sampling_params(cfg);
+    this->sampler            = common_sampler_init(this->model, s);
 }
 
 }  // namespace geniex

@@ -189,6 +189,8 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     geniex_GenerationConfig cfg = input->config ? *input->config : geniex_GenerationConfig{};
     if (cfg.max_tokens <= 0) cfg.max_tokens = 512;
 
+    this->set_sampler(cfg.sampler_config);
+
     // Prepare multimodal input: collect bitmaps for images and audio
     std::vector<mtmd_bitmap*> bitmaps;
     int                       n_media = 0;
@@ -460,16 +462,15 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
 
 namespace geniex {
 
-void LlamaVlm::reset_sampler() {
-    // Free existing sampler
+void LlamaVlm::reset_sampler() { this->set_sampler(nullptr); }
+
+void LlamaVlm::set_sampler(const geniex_SamplerConfig* cfg) {
     if (this->sampler) {
         common_sampler_free(this->sampler);
         this->sampler = nullptr;
     }
-
-    // Use default values from common_params_sampling (like ml-llm.cpp)
-    common_params_sampling s;
-    this->sampler = common_sampler_init(this->model, s);
+    common_params_sampling s = build_sampling_params(cfg);
+    this->sampler            = common_sampler_init(this->model, s);
 }
 
 bool LlamaVlm::vlm_message_to_common_chat_msg(const geniex_VlmChatMessage* input, common_chat_msg* output) {
