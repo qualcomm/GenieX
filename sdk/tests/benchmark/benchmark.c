@@ -69,7 +69,8 @@ typedef struct {
     int32_t     warmup;
     int32_t     repeat;
     const char* prompt;
-    char*       prompt_buf; /* allocated when --prompt-file is used */
+    char*       prompt_buf;   /* allocated when --prompt-file is used */
+    bool        prompt_as_is; /* true => pass prompt verbatim, no cache-busting suffix */
     int32_t     n_ctx;
     int32_t     n_threads;
     int32_t     ngl_override; /* -1 = use resolved alias default; >=0 overrides */
@@ -145,6 +146,12 @@ static void usage(const char* argv0) {
         "  --repeat N          default 3 (measured runs)\n"
         "  --prompt TEXT       inline prompt; default mirrors Python BENCH_PROMPT\n"
         "  --prompt-file PATH  read prompt from file\n"
+        "  --prompt-as-is      pass the prompt verbatim; do NOT append the\n"
+        "                      `[run=i]` / `[warmup=i]` cache-busting suffix.\n"
+        "                      Use this when the prompt is already-templated\n"
+        "                      chat content (e.g. a bundle's sample_prompt.txt\n"
+        "                      ending in `<|im_start|>assistant\\n`) where a\n"
+        "                      trailing suffix would corrupt the template.\n"
         "  --n-ctx N           model n_ctx (0 = from model, default 0)\n"
         "  --n-threads N       generation threads (0 = SDK default)\n"
         "  --ngl N             llama_cpp layers to offload; overrides the device\n"
@@ -305,6 +312,7 @@ static void parse_args(int argc, char** argv, options_t* o) {
     o->repeat          = 3;
     o->prompt          = DEFAULT_PROMPT;
     o->prompt_buf      = NULL;
+    o->prompt_as_is    = false;
     o->n_ctx           = 0;
     o->n_threads       = 0;
     o->ngl_override    = -1;
@@ -360,6 +368,8 @@ static void parse_args(int argc, char** argv, options_t* o) {
         } else if (strcmp(a, "--prompt-file") == 0) {
             o->prompt_buf = slurp(arg_value(argc, argv, &i, a));
             o->prompt     = o->prompt_buf;
+        } else if (strcmp(a, "--prompt-as-is") == 0) {
+            o->prompt_as_is = true;
         } else if (strcmp(a, "--n-ctx") == 0) {
             o->n_ctx = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--n-threads") == 0) {
@@ -456,8 +466,25 @@ static void summarize(const double* values, int n, double* median, double* lo, d
     free(tmp);
 }
 
-/* Build the per-run prompt the same way Python does (busts KV cache). */
-static char* build_run_prompt(const char* base_prompt, int idx, bool warmup) {
+/* Build the per-run prompt the same way Python does (busts KV cache).
+ * When `as_is` is true (set via --prompt-as-is), return the base prompt
+ * unchanged so the caller gets exactly the bytes they passed in -- needed
+ * when the prompt is a pre-templated chat-template payload (e.g. a bundle's
+ * sample_prompt.txt ending in `<|im_start|>assistant\n`), where a trailing
+ * suffix would land after the assistant marker and corrupt the template.
+ * Otherwise the suffix is appended; that is only useful when multiple
+ * generate() calls share a process and KV cache, to bust prefix-cache hits
+ * on identical inputs (which would zero out prompt_time / +inf prefill_tps). */
+static char* build_run_prompt(const char* base_prompt, int idx, bool warmup, bool as_is) {
+    if (as_is) {
+        char* out = (char*)malloc(strlen(base_prompt) + 1);
+        if (!out) {
+            fprintf(stderr, "ERROR: oom\n");
+            exit(1);
+        }
+        strcpy(out, base_prompt);
+        return out;
+    }
     size_t cap = strlen(base_prompt) + 32;
     char*  out = (char*)malloc(cap);
     if (!out) {
@@ -568,10 +595,11 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
     fill_gen_config(&gconfig, &sampler, o, /*with_media=*/false);
 
     int32_t total = o->warmup + o->repeat;
+    bool    as_is = o->prompt_as_is;
     for (int32_t i = 0; i < total; ++i) {
         bool    is_warmup = (i < o->warmup);
         int32_t run_idx   = is_warmup ? i : (i - o->warmup);
-        char*   prompt    = build_run_prompt(o->prompt, run_idx, is_warmup);
+        char*   prompt    = build_run_prompt(o->prompt, run_idx, is_warmup, as_is);
 
         geniex_LlmGenerateInput  gin;
         geniex_LlmGenerateOutput gout;
@@ -642,10 +670,11 @@ static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_
     fill_gen_config(&gconfig, &sampler, o, /*with_media=*/true);
 
     int32_t total = o->warmup + o->repeat;
+    bool    as_is = o->prompt_as_is;
     for (int32_t i = 0; i < total; ++i) {
         bool    is_warmup = (i < o->warmup);
         int32_t run_idx   = is_warmup ? i : (i - o->warmup);
-        char*   base      = build_run_prompt(o->prompt, run_idx, is_warmup);
+        char*   base      = build_run_prompt(o->prompt, run_idx, is_warmup, as_is);
         /* VLM generate() takes a fully-templated prompt; run base text + media
          * through the bundle's chat template so the image tokens land right. */
         char* prompt = build_vlm_prompt(vlm, o, base);
