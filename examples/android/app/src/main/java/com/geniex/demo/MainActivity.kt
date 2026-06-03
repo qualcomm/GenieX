@@ -360,7 +360,7 @@ Note: You must use the campaign_investigation function whenever a customer asks 
             // Manifest-written plugin_id wins when present; fall back to
             // the user's UI selection for GGUF models that skip the manifest.
             val pluginId = paths.plugin_id.ifEmpty { modelDataPluginId }
-            val resolvedDeviceId = deviceId ?: paths.device_id
+            val resolvedDeviceId = deviceId
             when (selectModelData.type) {
                 "chat", "llm" -> {
                     // QAIRT rejects non-zero n_ctx / n_gpu_layers (both fixed at compile
