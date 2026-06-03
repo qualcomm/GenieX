@@ -175,7 +175,7 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           if (-not $env:HEXAGON_HTP_CERT_PFX) {
-            throw "HEXAGON_HTP_CERT_PFX secret is empty — set it to the base64 of the HTP .pfx."
+            throw "HEXAGON_HTP_CERT_PFX secret is empty; set it to the base64 of the HTP .pfx."
           }
           $dst = "$env:RUNNER_TEMP\ggml-htp-v1.pfx"
           [IO.File]::WriteAllBytes($dst, [Convert]::FromBase64String($env:HEXAGON_HTP_CERT_PFX))
