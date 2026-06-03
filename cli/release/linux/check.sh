@@ -138,7 +138,9 @@ check_required_libs() {
     if [ -n "$_missing" ]; then
         err "missing required shared libraries:"
         for _m in $_missing; do err "  - $_m"; done
-        err "install the Qualcomm driver package and Debian: libatomic1 libglib2.0-0t64"
+        err "install missing system libraries (libatomic1, libglib2.0-0, ocl-icd-libopencl1)"
+        err "and Qualcomm driver packages (qcom-adreno1, qcom-fastrpc1)."
+        err "See the GenieX FAQ \"Linux ARM64 setup\" section for the exact apt commands."
         return 1
     fi
     return 0
@@ -152,7 +154,8 @@ check_npu_bare_libs() {
         _found=$(ldconfig -p 2>/dev/null | awk -v n="$_bare" '$1 == n { print; exit }')
         [ -z "$_found" ] && _found=$(find_lib "$_bare" 2>/dev/null || true)
         if [ -z "$_found" ]; then
-            err "$_bare not found — re-run the geniex installer to create the symlink"
+            err "$_bare not found — re-run the geniex installer to create the symlink,"
+            err "or install qcom-fastrpc1. See the GenieX FAQ \"Linux ARM64 setup\" section."
             _failed=1
         fi
     done
@@ -191,7 +194,8 @@ check_driver_versions() {
     done
     IFS="$_ifs"
     if [ "$_failed" -eq 1 ]; then
-        err "update the Qualcomm driver packages"
+        err "update the Qualcomm driver packages (qcom-adreno1, qcom-fastrpc1)."
+        err "See the GenieX FAQ \"Linux ARM64 setup\" section."
         return 1
     fi
     return 0

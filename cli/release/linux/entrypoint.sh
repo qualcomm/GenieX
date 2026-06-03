@@ -24,6 +24,8 @@ link_lib() {
         fi
     done
     echo "warning: $bare not found under /opt/qcom-lib; NPU/GPU may fail" >&2
+    echo "  install the Qualcomm driver packages on the host (qcom-adreno1, qcom-fastrpc1)." >&2
+    echo "  See the GenieX FAQ \"Linux ARM64 setup\" section." >&2
 }
 
 # fastrpc: bare-name links required by libQnnHtp*Stub.so's $ORIGIN rpath.
