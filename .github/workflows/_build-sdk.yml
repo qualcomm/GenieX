@@ -81,8 +81,13 @@ jobs:
 
       # Cargo target dir lives under the workspace so it's reachable both
       # from the Windows runner and from the Linux/Android container
-      # (mounted at /workspace). Key on Cargo.lock + Cargo.toml so cache
-      # invalidates only when the dependency graph actually changes.
+      # (mounted at /workspace). The key includes the Rust sources, not just
+      # Cargo.lock/Cargo.toml: actions/cache restores files with a uniform
+      # mtime, so cargo's mtime-based fingerprinting would otherwise reuse a
+      # stale libgeniex_model.a after a source-only change (e.g. a new FFI
+      # symbol), producing downstream undefined-reference link failures.
+      # No restore-keys — a source change forces a clean rebuild instead of a
+      # fuzzy restore that would re-trigger the staleness.
       - name: Restore cargo target
         uses: actions/cache@v5
         with:
@@ -91,8 +96,7 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: cargo-sdk-${{ matrix.platform }}-${{ hashFiles('sdk/model-manager/Cargo.lock', 'sdk/model-manager/**/Cargo.toml') }}
-          restore-keys: cargo-sdk-${{ matrix.platform }}-
+          key: cargo-sdk-${{ matrix.platform }}-${{ hashFiles('sdk/model-manager/Cargo.lock', 'sdk/model-manager/**/Cargo.toml', 'sdk/model-manager/crates/**/*.rs') }}
 
       # Toolchain identifier baked into the cmake-build cache key so a
       # runner-image / container-image bump (MSVC patch, clang/apt layer)

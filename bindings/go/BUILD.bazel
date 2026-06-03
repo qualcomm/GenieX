@@ -1,5 +1,11 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("//scripts:cgo_test.bzl", "go_cgo_test")
+
+# The cgo test is wired through the go_cgo_test macro (it needs the SDK cdeps to
+# resolve geniex_model.h); a plain gazelle-generated go_test for the same
+# sources would miss those cdeps and fail to compile. Keep gazelle out of this
+# file so it doesn't re-add one.
+# gazelle:ignore
 
 alias(
     name = "go",
@@ -14,6 +20,7 @@ go_library(
         "helpers.go",
         "llm.go",
         "ml.go",
+        "model_manager.go",
         "vlm.go",
     ],
     cdeps = ["//sdk"],

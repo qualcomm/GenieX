@@ -128,15 +128,11 @@ func configSetCmd() *cobra.Command {
 	}
 }
 
-// chipsetGet returns a closure that reads the cached chipset config key.
-// Returns "" when unset — callers must run chipsetEnsure first if they
-// need a real value. Kept passive so AIHub can hold it across a spinner
-// without triggering UI from inside the spinner.
-func chipsetGet(s *store.Store) func() string {
-	return func() string {
-		v, _, _ := s.ConfigGet(store.ConfigKeyDevice)
-		return v
-	}
+// chipsetGet reads the cached chipset config key, returning "" when unset —
+// callers must run chipsetEnsure first if they need a real value.
+func chipsetGet(s *store.Store) string {
+	v, _, _ := s.ConfigGet(store.ConfigKeyDevice)
+	return v
 }
 
 // chipsetEnsure makes sure a chipset is configured: cached value wins,

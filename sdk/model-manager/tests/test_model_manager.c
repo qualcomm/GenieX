@@ -136,16 +136,16 @@ static int test_localfs(const char* data_dir) {
     printf("      progress callback invoked %d time(s) ✓\n", progress_calls);
 
     /* 3. List */
-    geniex_ModelListOutput list = {0};
-    CHECK(geniex_model_list(&list));
+    geniex_ModelListDetailedOutput list = {0};
+    CHECK(geniex_model_list_detailed(&list));
     printf("      cached models: %d\n", list.count);
     if (list.count < 1) {
         fprintf(stderr, "FAIL  expected at least 1 cached model\n");
-        geniex_model_list_free(&list);
+        geniex_model_list_detailed_free(&list);
         return 1;
     }
-    printf("      [0] %s\n", list.names[0]);
-    geniex_model_list_free(&list);
+    printf("      [0] %s\n", list.models[0].name);
+    geniex_model_list_detailed_free(&list);
 
     /* 4. Get type */
     geniex_ModelType mtype;
@@ -182,15 +182,15 @@ static int test_localfs(const char* data_dir) {
     CHECK(geniex_model_remove("NexaAI/TestModel-GGUF"));
 
     /* 9. Verify gone */
-    geniex_ModelListOutput list2 = {0};
-    CHECK(geniex_model_list(&list2));
+    geniex_ModelListDetailedOutput list2 = {0};
+    CHECK(geniex_model_list_detailed(&list2));
     if (list2.count != 0) {
         fprintf(stderr, "FAIL  expected 0 models after remove, got %d\n", list2.count);
-        geniex_model_list_free(&list2);
+        geniex_model_list_detailed_free(&list2);
         return 1;
     }
     printf("      list after remove: 0 ✓\n");
-    geniex_model_list_free(&list2);
+    geniex_model_list_detailed_free(&list2);
 
     printf("=== LocalFS test PASSED ===\n");
     return 0;

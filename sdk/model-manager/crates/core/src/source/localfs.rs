@@ -212,11 +212,7 @@ impl LocalFsSource {
 
         let manifest = ModelManifest {
             name: self.model_name.clone(),
-            model_name: self
-                .hint
-                .model_name
-                .clone()
-                .unwrap_or_else(|| derive_model_name(&self.model_name)),
+            model_name: derive_model_name(&self.model_name),
             model_type,
             plugin_id: QAIRT_PLUGIN_ID.to_string(),
             precision: String::new(),
@@ -303,11 +299,7 @@ impl LocalFsSource {
 
         let manifest = ModelManifest {
             name: self.model_name.clone(),
-            model_name: self
-                .hint
-                .model_name
-                .clone()
-                .unwrap_or_else(|| derive_model_name(&self.model_name)),
+            model_name: derive_model_name(&self.model_name),
             model_type,
             plugin_id: QAIRT_PLUGIN_ID.to_string(),
             precision: String::new(),

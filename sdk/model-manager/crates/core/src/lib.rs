@@ -6,6 +6,7 @@ pub mod manifest_builder;
 pub mod mapping;
 pub mod paths;
 pub mod pull;
+pub mod query;
 pub mod resume;
 pub mod source;
 pub mod store;

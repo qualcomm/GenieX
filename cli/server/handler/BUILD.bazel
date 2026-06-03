@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("//scripts:cgo_test.bzl", "go_cgo_test")
 
 go_library(
@@ -11,8 +11,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//bindings/go:geniex_sdk_go",
-        "//cli/internal/model_hub",
-        "//cli/internal/store",
         "//cli/internal/types",
         "//cli/server/service",
         "//cli/server/utils",

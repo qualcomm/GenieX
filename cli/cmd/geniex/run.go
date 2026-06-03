@@ -21,7 +21,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/bytedance/sonic"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/spf13/cobra"
@@ -29,9 +28,7 @@ import (
 	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 // tagServerError tags transport-layer dial errors as ErrServerUnreachable
@@ -63,9 +60,10 @@ func run() *cobra.Command {
 	runCmd.SetUsageFunc(flagGroupedUsage)
 
 	runCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		name, quant := model_hub.NormalizeModelName(args[0])
+		name, quant := geniex_sdk.SplitNameQuant(args[0])
+		fullName := name
 		if quant != "" {
-			name = name + ":" + quant
+			fullName = name + ":" + quant
 		}
 
 		client = openai.NewClient(
@@ -74,30 +72,27 @@ func run() *cobra.Command {
 		)
 
 		ctx := cmd.Context()
-		// check
-		modelInfo, err := client.Models.Get(ctx, name)
-		if err != nil {
+		// check the server is reachable before opening the REPL
+		if _, err := client.Models.Get(ctx, fullName); err != nil {
 			return tagServerError(err)
 		}
 
-		var manifest types.ModelManifest
-		sonic.UnmarshalString(modelInfo.RawJSON(), &manifest)
+		modelType, err := geniex_sdk.ModelGetType(name)
+		if err != nil {
+			return err
+		}
 
-		switch manifest.ModelType {
-		case types.ModelTypeLLM, types.ModelTypeVLM:
-			return runCompletions(ctx, manifest, quant)
+		switch modelType {
+		case geniex_sdk.ModelTypeLLM, geniex_sdk.ModelTypeVLM:
+			return runCompletions(ctx, fullName, modelType)
 		default:
-			return fmt.Errorf("unsupported model type: %s", manifest.ModelType)
+			return fmt.Errorf("unsupported model type: %s", modelType)
 		}
 	}
 	return runCmd
 }
 
-func runCompletions(ctx context.Context, manifest types.ModelManifest, quant string) error {
-	name := manifest.Name
-	if quant != "" {
-		name = name + ":" + quant
-	}
+func runCompletions(ctx context.Context, name string, modelType geniex_sdk.ModelType) error {
 
 	// warm up
 	spin := render.NewSpinner("loading model...")
@@ -127,7 +122,7 @@ func runCompletions(ctx context.Context, manifest types.ModelManifest, quant str
 	}
 
 	processor := &common.Processor{
-		ParseFile: manifest.ModelType == types.ModelTypeVLM,
+		ParseFile: modelType == geniex_sdk.ModelTypeVLM,
 		Verbose:   verbose,
 		TestMode:  testMode,
 		Run: func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {

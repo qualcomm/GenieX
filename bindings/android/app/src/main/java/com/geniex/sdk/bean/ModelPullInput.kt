@@ -30,4 +30,10 @@ data class ModelPullInput(
     val chipset: String? = null,
     /** AI Hub `display_name`. Required when [hub] is [HubSource.AIHUB]. */
     val display_name: String? = null,
+    /**
+     * Optional model-type override written into the manifest during the
+     * pull. `null` auto-detects (the default); [ModelType.LLM] / [ModelType.VLM]
+     * force the stored type.
+     */
+    val model_type: ModelType? = null,
 )

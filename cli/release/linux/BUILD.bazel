@@ -35,16 +35,16 @@ pkg_tar(
 pkg_tar(
     name = "_geniex_entrypoint",
     srcs = ["entrypoint.sh"],
-    package_dir = "/opt/geniex",
     mode = "0755",
+    package_dir = "/opt/geniex",
 )
 
 # package image
 
 dedup_tar(
     name = "apt_layer",
-    tars = ["@trixie"],
     target_compatible_with = ["@platforms//os:linux"],
+    tars = ["@trixie"],
 )
 
 genrule(

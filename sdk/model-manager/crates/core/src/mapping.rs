@@ -28,6 +28,13 @@ const AI_HUB_ORGS: &[&str] = &["qualcomm", "ai-hub-models"];
 /// This is the single entry point callers should use before handing a
 /// name to `pull` / `get_paths` so the Store layout stays consistent.
 pub fn canonicalize_model_name(name: &str) -> String {
+    // A pasted HuggingFace URL ("https://huggingface.co/org/repo") carries a
+    // scheme + host the rest of the pipeline can't parse; strip it down to
+    // "org/repo" first.
+    let name = name
+        .strip_prefix("https://huggingface.co/")
+        .or_else(|| name.strip_prefix("http://huggingface.co/"))
+        .unwrap_or(name);
     match name.split_once('/') {
         None => format!("qualcomm/{name}"),
         Some((org, repo)) if org.eq_ignore_ascii_case("ai-hub-models") => {
@@ -147,6 +154,18 @@ mod tests {
         assert_eq!(
             canonicalize_model_name("ggml-org/Qwen3-1.7B-GGUF"),
             "ggml-org/Qwen3-1.7B-GGUF"
+        );
+    }
+
+    #[test]
+    fn canonicalize_strips_huggingface_url_prefix() {
+        assert_eq!(
+            canonicalize_model_name("https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF"),
+            "ggml-org/Qwen3-1.7B-GGUF"
+        );
+        assert_eq!(
+            canonicalize_model_name("http://huggingface.co/bartowski/Foo"),
+            "bartowski/Foo"
         );
     }
 

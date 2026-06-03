@@ -23,8 +23,6 @@ import (
 
 	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
@@ -107,44 +105,18 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 	keepAlive.Lock()
 	defer keepAlive.Unlock()
 
-	name, quant := model_hub.NormalizeModelName(name)
-	slog.Debug("KeepAliveGet", "name", name, "quant", quant, "param", param)
-
-	s := store.Get()
-
-	manifest, err := s.GetManifest(name)
+	// The SDK resolves bare names / aliases and picks the default precision
+	// when none is given; pass the request string through verbatim.
+	paths, err := geniex_sdk.ModelGetPaths(name)
 	if err != nil {
 		return nil, err
 	}
+	slog.Debug("KeepAliveGet", "name", name, "param", param, "model_path", paths.ModelPath)
 
-	var modelfile string
-	if quant != "" {
-		if fileinfo, exists := manifest.ModelFile[quant]; !exists {
-			return nil, fmt.Errorf("quantization %s not found for model %s", quant, name)
-		} else if !fileinfo.Downloaded {
-			return nil, fmt.Errorf("quantization %s not downloaded for model %s", quant, name)
-		} else {
-			modelfile = s.ModelfilePath(manifest.Name, fileinfo.Name)
-		}
-	} else {
-		// No quant requested: pick by model_hub.QuantPriority, with
-		// lexicographic min as the fallback for unrecognised quants.
-		quants := make([]string, 0, len(manifest.ModelFile))
-		for q, v := range manifest.ModelFile {
-			if v.Downloaded {
-				quants = append(quants, q)
-			}
-		}
-		if len(quants) == 0 {
-			return nil, fmt.Errorf("no downloaded quant for model %s", name)
-		}
-		quant = model_hub.PickDefaultQuant(quants)
-		slog.Debug("KeepAliveGet quant fallback", "quant", quant)
-		modelfile = s.ModelfilePath(manifest.Name, manifest.ModelFile[quant].Name)
-	}
+	modelfile := paths.ModelPath
 
 	// Check if model already exists in cache
-	model, ok := keepAlive.models[name+":"+quant]
+	model, ok := keepAlive.models[name]
 	if ok && reflect.DeepEqual(model.param, param) {
 		if reset {
 			if r, ok := model.model.(keepResetable); ok {
@@ -169,7 +141,7 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 	// TODO: Remove this resolution once the C API exposes geniex_get_last_error_detail()
 	// and the plugin can report the exact unsupported param name directly.
 	nctx, ngl := param.NCtx, param.NGpuLayers
-	if manifest.PluginId == geniex_sdk.PluginLlamaCpp {
+	if paths.PluginID == geniex_sdk.PluginLlamaCpp {
 		if nctx == 0 {
 			nctx = 4096
 		}
@@ -183,28 +155,24 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 	switch reflect.TypeFor[T]() {
 	case reflect.TypeFor[geniex_sdk.LLM]():
 		t, e = geniex_sdk.NewLLM(geniex_sdk.LlmCreateInput{
-			ModelName: manifest.ModelName,
+			ModelName: paths.ModelName,
 			ModelPath: modelfile,
 			Config: geniex_sdk.ModelConfig{
 				NCtx:       nctx,
 				NGpuLayers: ngl,
 			},
-			PluginID: manifest.PluginId,
+			PluginID: paths.PluginID,
 		})
 	case reflect.TypeFor[geniex_sdk.VLM]():
-		var mmproj string
-		if manifest.MMProjFile.Name != "" {
-			mmproj = s.ModelfilePath(manifest.Name, manifest.MMProjFile.Name)
-		}
 		t, e = geniex_sdk.NewVLM(geniex_sdk.VlmCreateInput{
-			ModelName:  manifest.ModelName,
+			ModelName:  paths.ModelName,
 			ModelPath:  modelfile,
-			MmprojPath: mmproj,
+			MmprojPath: paths.MmprojPath,
 			Config: geniex_sdk.ModelConfig{
 				NCtx:       nctx,
 				NGpuLayers: ngl,
 			},
-			PluginID: manifest.PluginId,
+			PluginID: paths.PluginID,
 		})
 	default:
 		return nil, fmt.Errorf("unsupported model type: %s", reflect.TypeFor[T]())
@@ -217,7 +185,7 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 		param:    param,
 		lastTime: time.Now(),
 	}
-	keepAlive.models[name+":"+quant] = model
+	keepAlive.models[name] = model
 
 	return model.model, nil
 }

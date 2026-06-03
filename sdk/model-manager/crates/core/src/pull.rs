@@ -121,6 +121,42 @@ pub async fn pull_with_source(
             let mut plan = source.plan().await?;
             plan.manifest.name = model_name_owned.clone();
 
+            // Merge with any existing manifest so pulling an extra quant keeps
+            // the quants already on disk instead of orphaning them. A
+            // quant-specific plan only carries the requested quant; fold in the
+            // model_file entries (and extra shards) the plan doesn't cover.
+            let final_path = dest_dir.join(MANIFEST_FILE);
+            if let Ok(data) = fs::read_to_string(&final_path) {
+                if let Ok(existing) = serde_json::from_str::<crate::manifest::ModelManifest>(&data)
+                {
+                    for (quant, info) in existing.model_file {
+                        plan.manifest.model_file.entry(quant).or_insert(info);
+                    }
+                    let known: std::collections::HashSet<&str> = plan
+                        .manifest
+                        .extra_files
+                        .iter()
+                        .map(|f| f.name.as_str())
+                        .collect::<std::collections::HashSet<_>>();
+                    let mut merged_extras: Vec<_> = existing
+                        .extra_files
+                        .into_iter()
+                        .filter(|f| !known.contains(f.name.as_str()))
+                        .collect();
+                    plan.manifest.extra_files.append(&mut merged_extras);
+
+                    // Preserve already-downloaded shared files the new quant's
+                    // plan didn't surface, so re-pulling a different quant of a
+                    // VLM doesn't orphan its mmproj / tokenizer.
+                    if plan.manifest.mmproj_file.name.is_empty() {
+                        plan.manifest.mmproj_file = existing.mmproj_file;
+                    }
+                    if plan.manifest.tokenizer_file.name.is_empty() {
+                        plan.manifest.tokenizer_file = existing.tokenizer_file;
+                    }
+                }
+            }
+
             let pending = resume::filter_pending(&plan.files, &dest_dir);
             if !pending.is_empty() {
                 let executor = Executor::new(transport.clone(), 4);
@@ -129,7 +165,6 @@ pub async fn pull_with_source(
 
             let staged = inflight_dir.join(MANIFEST_FILE);
             fs::write(&staged, serde_json::to_string(&plan.manifest)?)?;
-            let final_path = dest_dir.join(MANIFEST_FILE);
             fs::rename(&staged, &final_path)?;
 
             // Once the manifest is published, per-file markers are
@@ -162,7 +197,7 @@ pub fn pull_blocking(
     handle.block_on(pull(store, req))
 }
 
-fn build_source(
+pub(crate) fn build_source(
     req: &PullRequest,
     store: &Store,
     transport: Arc<dyn HttpTransport>,
