@@ -56,7 +56,7 @@ android {
 
 dependencies {
     // Geniex Android binding (published to Maven Central).
-    implementation 'com.qualcomm.qti:geniex-android:0.2.2'
+    implementation 'com.qualcomm.qti:geniex-android:0.2.3'
 
     // Kotlin
     implementation 'org.jetbrains.kotlin:kotlin-reflect:2.2.0'
