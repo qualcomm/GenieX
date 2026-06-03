@@ -111,7 +111,7 @@
   {
     "id": "Qwen3-4B-Instruct-2507",
     "displayName": "Qwen3-4B-Instruct-2507 (NPU)",
-    "modelName": "qualcomm/Qwen3-4B-Instruct-2507",
+    "modelName": "ai-hub-models/Qwen3-4B-Instruct-2507",
     "hub": "AUTO",
     "chipset": "SM8750",
     "type": "chat",
@@ -120,7 +120,7 @@
   {
     "id": "Qwen2.5-VL-7B-Instruct",
     "displayName": "Qwen2.5-VL-7B-Instruct (NPU)",
-    "modelName": "qualcomm/Qwen2.5-VL-7B-Instruct",
+    "modelName": "ai-hub-models/Qwen2.5-VL-7B-Instruct",
     "hub": "AUTO",
     "chipset": "SM8750",
     "type": "vlm",

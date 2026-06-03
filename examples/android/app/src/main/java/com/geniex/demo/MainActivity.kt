@@ -336,12 +336,13 @@ Note: You must use the campaign_investigation function whenever a customer asks 
     }
 
     /**
-     * Checks the Rust model manager's cache for [modelData]. The
-     * manager filters out `.inflight/` entries, so a cancelled download
-     * returns `false` here until it completes.
+     * Checks the Rust model manager's cache for [modelData]. Uses
+     * `getPaths`, which canonicalises the name (so `ai-hub-models/<repo>`
+     * and `qualcomm/<repo>` map to the same on-disk entry) and returns
+     * null while the pull is still in `.inflight/`.
      */
     private suspend fun isModelDownloaded(modelData: ModelData): Boolean {
-        return ModelManagerWrapper.list().contains(modelData.modelName)
+        return ModelManagerWrapper.getPaths(modelData.modelName) != null
     }
 
     private fun loadModel(
@@ -455,9 +456,13 @@ Note: You must use the campaign_investigation function whenever a customer asks 
         // AI Hub pulls route through chipset-matched assets. The Rust side
         // can auto-detect the host only on Windows-on-Snapdragon, so on
         // Android we must pass an explicit chipset for anything that ends
-        // up on the AI Hub path — whether hub is AIHUB or AUTO + qualcomm/*.
+        // up on the AI Hub path — whether hub is AIHUB or AUTO + ai-hub-models/*
+        // (or its canonical alias qualcomm/*).
+        val name = selectModelData.modelName
+        val isAiHubName = name.startsWith("ai-hub-models/", ignoreCase = true) ||
+            name.startsWith("qualcomm/", ignoreCase = true)
         val willUseAiHub = hub == HubSource.AIHUB ||
-            (hub == HubSource.AUTO && selectModelData.modelName.startsWith("qualcomm/"))
+            (hub == HubSource.AUTO && isAiHubName)
         if (willUseAiHub && selectModelData.chipset.isNullOrBlank()) {
             llDownloading.visibility = View.GONE
             Toaster.show("AI Hub models require a chipset. Update model_list.json.")
