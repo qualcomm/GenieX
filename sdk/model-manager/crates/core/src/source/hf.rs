@@ -58,7 +58,7 @@ impl HfSource {
 
     fn api_url(&self) -> Result<Url> {
         self.endpoint
-            .join(&format!("api/models/{}", self.repo))
+            .join(&format!("api/models/{}?blobs=true", self.repo))
             .map_err(|e| Error::Hub(format!("join api url for {}: {e}", self.repo)))
     }
 
@@ -110,7 +110,7 @@ impl ModelSource for HfSource {
             if s.rfilename == MANIFEST_FILE {
                 continue;
             }
-            file_sizes.insert(s.rfilename.clone(), s.size.map(|n| n as i64).unwrap_or(-1));
+            file_sizes.insert(s.rfilename.clone(), s.size.map(|n| n as i64).unwrap_or(0));
             file_names.push(s.rfilename);
         }
 

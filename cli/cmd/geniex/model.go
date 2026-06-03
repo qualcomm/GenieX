@@ -236,7 +236,12 @@ func printListTable(models []geniex_sdk.ModelDetail, verbose bool) {
 		tw.AppendHeader(table.Row{"NAME", "SIZE", "PRECISIONS"})
 	}
 	for _, model := range models {
-		size := humanize.IBytes(uint64(model.TotalSize))
+		var size string
+		if model.TotalSize > 0 {
+			size = humanize.IBytes(uint64(model.TotalSize))
+		} else {
+			size = "—"
+		}
 		quants := strings.Join(downloadedPrecisions(model, !verbose), ",")
 		if verbose {
 			tw.AppendRow(table.Row{model.Name, size, model.PluginID, model.ModelType, quants})
@@ -459,7 +464,13 @@ func choosePrecision(candidates []geniex_sdk.QuantCandidate) (string, error) {
 	var defaultQuant string
 	var options []huh.Option[string]
 	for _, c := range candidates {
-		label := fmt.Sprintf("%-10s [%7s]", c.Quant, humanize.IBytes(uint64(c.Size)))
+		var sz string
+		if c.Size > 0 {
+			sz = humanize.IBytes(uint64(c.Size))
+		} else {
+			sz = "—"
+		}
+		label := fmt.Sprintf("%-10s [%7s]", c.Quant, sz)
 		if c.IsDefault {
 			label += " (default)"
 			defaultQuant = c.Quant
