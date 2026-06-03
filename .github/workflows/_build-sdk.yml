@@ -170,11 +170,15 @@ jobs:
       - name: Configure HTP signing cert
         if: matrix.platform == 'windows-arm64'
         shell: powershell
+        env:
+          HEXAGON_HTP_CERT_PFX: ${{ secrets.HEXAGON_HTP_CERT_PFX }}
         run: |
           $ErrorActionPreference = "Stop"
-          $src = "$env:GITHUB_WORKSPACE\.github\certs\hexagon\ggml-htp-v1.pfx"
+          if (-not $env:HEXAGON_HTP_CERT_PFX) {
+            throw "HEXAGON_HTP_CERT_PFX secret is empty — set it to the base64 of the HTP .pfx."
+          }
           $dst = "$env:RUNNER_TEMP\ggml-htp-v1.pfx"
-          Copy-Item $src $dst -Force
+          [IO.File]::WriteAllBytes($dst, [Convert]::FromBase64String($env:HEXAGON_HTP_CERT_PFX))
           Add-Content -Path $env:GITHUB_ENV -Value "HEXAGON_HTP_CERT=$dst"
           Write-Host "HEXAGON_HTP_CERT=$dst"
 
