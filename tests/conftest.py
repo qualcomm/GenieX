@@ -117,7 +117,7 @@ def geniex_session():
 def llama_cpp_llm_paths(geniex_session):
     try:
         return _mm.ensure_cached(LLAMA_CPP_LLM_MODEL, quant=LLAMA_CPP_LLM_QUANT, hub='hf')
-    except geniex.GeniexError as e:
+    except geniex.GenieXError as e:
         pytest.skip(f'could not pull {LLAMA_CPP_LLM_MODEL}: {e}')
 
 
@@ -125,7 +125,7 @@ def llama_cpp_llm_paths(geniex_session):
 def llama_cpp_vlm_paths(geniex_session):
     try:
         return _mm.ensure_cached(LLAMA_CPP_VLM_MODEL, hub='hf')
-    except geniex.GeniexError as e:
+    except geniex.GenieXError as e:
         pytest.skip(f'could not pull {LLAMA_CPP_VLM_MODEL}: {e}')
 
 
@@ -133,7 +133,7 @@ def llama_cpp_vlm_paths(geniex_session):
 def qairt_llm_paths(geniex_session):
     try:
         return _mm.get_paths(QAIRT_LLM_MODEL)
-    except geniex.GeniexError as e:
+    except geniex.GenieXError as e:
         pytest.skip(f'QAIRT model {QAIRT_LLM_MODEL} not cached ({e}); run `geniex-py pull` first')
 
 
@@ -141,7 +141,7 @@ def qairt_llm_paths(geniex_session):
 def qairt_vlm_paths(geniex_session):
     try:
         return _mm.get_paths(QAIRT_VLM_MODEL)
-    except geniex.GeniexError as e:
+    except geniex.GenieXError as e:
         pytest.skip(f'QAIRT model {QAIRT_VLM_MODEL} not cached ({e}); run `geniex-py pull` first')
 
 

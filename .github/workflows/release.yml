@@ -94,7 +94,7 @@ jobs:
 
   build-android-apk:
     name: build-android-apk
-    needs: [build-sdk]
+    needs: [build-sdk, build-android-aar]
     uses: ./.github/workflows/_build-android-apk.yml
     secrets: inherit
     with:
@@ -610,7 +610,7 @@ jobs:
           <version>${VERSION}</version>
           <packaging>aar</packaging>
           <name>${ARTIFACT_ID}</name>
-          <description>Geniex Android AAR - multi-platform AI inference runtime (Snapdragon / Hexagon).</description>
+          <description>GenieX Android AAR - multi-platform AI inference runtime (Snapdragon / Hexagon).</description>
           <url>https://github.com/qcom-ai-hub/geniex</url>
           <licenses><license><name>Apache License, Version 2.0</name><url>https://www.apache.org/licenses/LICENSE-2.0.txt</url><distribution>repo</distribution></license></licenses>
           <developers><developer><id>qualcomm-aisw</id><name>Qualcomm AISW</name><organization>Qualcomm</organization><organizationUrl>https://www.qualcomm.com</organizationUrl></developer></developers>

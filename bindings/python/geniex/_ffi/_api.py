@@ -33,9 +33,10 @@ from ._types import (
     geniex_LlmCreateInput,
     geniex_LlmGenerateInput,
     geniex_LlmGenerateOutput,
-    geniex_ModelListOutput,
+    geniex_ModelListDetailedOutput,
     geniex_ModelPaths,
     geniex_ModelPullInput,
+    geniex_ModelQueryOutput,
     geniex_ResolveDeviceInput,
     geniex_ResolveDeviceOutput,
     geniex_VlmApplyChatTemplateInput,
@@ -117,11 +118,11 @@ def install_log_callback() -> None:
         _logger.setLevel(_LEVEL_STR_TO_PY[requested])
 
 
-class GeniexError(Exception):
+class GenieXError(Exception):
     """Raised when a geniex C call returns a negative error code."""
 
     def __init__(self, code: int, message: str):
-        super().__init__(f'GeniexError({code}): {message}')
+        super().__init__(f'GenieXError({code}): {message}')
         self.code = code
 
 
@@ -140,7 +141,7 @@ def _check(code: int) -> None:
         lib = load_library()
         msg_bytes = lib.geniex_get_error_message(c_int32(code))
         msg = msg_bytes.decode() if msg_bytes else 'unknown error'
-        raise GeniexError(code, msg)
+        raise GenieXError(code, msg)
 
 
 def _bind_all() -> None:
@@ -243,11 +244,8 @@ def _bind_all() -> None:
     lib.geniex_model_pull.argtypes = [POINTER(geniex_ModelPullInput)]
     lib.geniex_model_pull.restype = c_int32
 
-    lib.geniex_model_list.argtypes = [POINTER(geniex_ModelListOutput)]
-    lib.geniex_model_list.restype = c_int32
-
-    lib.geniex_model_list_free.argtypes = [POINTER(geniex_ModelListOutput)]
-    lib.geniex_model_list_free.restype = None
+    lib.geniex_model_last_error_message.argtypes = []
+    lib.geniex_model_last_error_message.restype = c_char_p
 
     lib.geniex_model_remove.argtypes = [c_char_p]
     lib.geniex_model_remove.restype = c_int32
@@ -263,6 +261,24 @@ def _bind_all() -> None:
 
     lib.geniex_model_get_type.argtypes = [c_char_p, POINTER(c_int32)]
     lib.geniex_model_get_type.restype = c_int32
+
+    lib.geniex_model_set_type.argtypes = [c_char_p, c_int32]
+    lib.geniex_model_set_type.restype = c_int32
+
+    lib.geniex_model_list_detailed.argtypes = [POINTER(geniex_ModelListDetailedOutput)]
+    lib.geniex_model_list_detailed.restype = c_int32
+
+    lib.geniex_model_list_detailed_free.argtypes = [POINTER(geniex_ModelListDetailedOutput)]
+    lib.geniex_model_list_detailed_free.restype = None
+
+    lib.geniex_model_query.argtypes = [
+        POINTER(geniex_ModelPullInput),
+        POINTER(geniex_ModelQueryOutput),
+    ]
+    lib.geniex_model_query.restype = c_int32
+
+    lib.geniex_model_query_free.argtypes = [POINTER(geniex_ModelQueryOutput)]
+    lib.geniex_model_query_free.restype = None
 
     lib.geniex_model_resolve_alias.argtypes = [c_char_p, POINTER(c_char_p)]
     lib.geniex_model_resolve_alias.restype = c_int32
@@ -356,7 +372,7 @@ def get_device_list(plugin_id: str) -> list[tuple[str, str]]:
     _ensure_bound()
     available = get_plugin_list()
     if plugin_id not in available:
-        raise GeniexError(GENIEX_ERROR_COMMON_PLUGIN_INVALID, _unknown_plugin_message(plugin_id, available))
+        raise GenieXError(GENIEX_ERROR_COMMON_PLUGIN_INVALID, _unknown_plugin_message(plugin_id, available))
     lib = load_library()
     inp = geniex_GetDeviceListInput(plugin_id=plugin_id.encode())
     out = geniex_GetDeviceListOutput()
@@ -378,7 +394,7 @@ def resolve_device(
     """Raw SDK device-alias resolver. Prefer :func:`geniex.resolve_device_map`.
 
     Returns ``(device_id, ngl, warning)``; ``device_id`` / ``warning`` may
-    be ``None``. Raises :class:`GeniexError` for unknown aliases.
+    be ``None``. Raises :class:`GenieXError` for unknown aliases.
     """
     _ensure_bound()
     lib = load_library()

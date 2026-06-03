@@ -52,7 +52,7 @@ def test_ensure_cached_idempotent(llama_cpp_paths):
 
 
 def test_resolve_alias_unknown_raises(geniex_session):
-    with pytest.raises(geniex.GeniexError):
+    with pytest.raises(geniex.GenieXError):
         _mm.resolve_alias('definitely-not-a-real-alias-xyz')
 
 

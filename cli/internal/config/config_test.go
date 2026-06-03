@@ -20,7 +20,7 @@ import (
 	"testing"
 )
 
-func TestResolveHFToken_GeniexPreferredOverHFToken(t *testing.T) {
+func TestResolveHFToken_GenieXPreferredOverHFToken(t *testing.T) {
 	t.Setenv("HF_TOKEN", "hf_token")
 
 	got := resolveHFToken("geniex_token")
@@ -29,7 +29,7 @@ func TestResolveHFToken_GeniexPreferredOverHFToken(t *testing.T) {
 	}
 }
 
-func TestResolveHFToken_UsesHFTokenWhenGeniexMissing(t *testing.T) {
+func TestResolveHFToken_UsesHFTokenWhenGenieXMissing(t *testing.T) {
 	t.Setenv("HF_TOKEN", "hf_token")
 
 	got := resolveHFToken("")
@@ -70,10 +70,10 @@ func TestResolveHFToken_EmptyWhenNoSourceAvailable(t *testing.T) {
 	}
 }
 
-// TestGet_GeniexHFTokenBeatsHFToken verifies the full precedence chain through
+// TestGet_GenieXHFTokenBeatsHFToken verifies the full precedence chain through
 // Get(): GENIEX_HFTOKEN (via viper) must beat HF_TOKEN. This guards against
 // viper config drift silently breaking the documented order.
-func TestGet_GeniexHFTokenBeatsHFToken(t *testing.T) {
+func TestGet_GenieXHFTokenBeatsHFToken(t *testing.T) {
 	t.Setenv("GENIEX_HFTOKEN", "geniex_value")
 	t.Setenv("HF_TOKEN", "hf_value")
 
@@ -82,9 +82,9 @@ func TestGet_GeniexHFTokenBeatsHFToken(t *testing.T) {
 	}
 }
 
-// TestGet_HFTokenUsedWhenGeniexUnset verifies that Get() falls back to
+// TestGet_HFTokenUsedWhenGenieXUnset verifies that Get() falls back to
 // HF_TOKEN when GENIEX_HFTOKEN is unset, exercising the env path through viper.
-func TestGet_HFTokenUsedWhenGeniexUnset(t *testing.T) {
+func TestGet_HFTokenUsedWhenGenieXUnset(t *testing.T) {
 	t.Setenv("GENIEX_HFTOKEN", "")
 	t.Setenv("HF_TOKEN", "hf_value")
 

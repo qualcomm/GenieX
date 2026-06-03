@@ -52,14 +52,14 @@ android {
 
 // Copy the prebuilt geniex libraries from sdk/pkg-geniex so they get packaged
 // into jniLibs (and therefore into the final APK of any consumer).
-val pkgGeniexDir = file("$projectDir/../../../sdk/pkg-geniex")
+val pkgGenieXDir = file("$projectDir/../../../sdk/pkg-geniex")
 val jniOutDir = file("$projectDir/src/main/jniLibs/arm64-v8a")
 
 val copyBridgeLibs = tasks.register<Copy>("copyBridgeLibs") {
-    require(pkgGeniexDir.exists()) {
-        "SDK package not found at ${pkgGeniexDir.absolutePath}"
+    require(pkgGenieXDir.exists()) {
+        "SDK package not found at ${pkgGenieXDir.absolutePath}"
     }
-    val libDir = File(pkgGeniexDir, "lib")
+    val libDir = File(pkgGenieXDir, "lib")
     from(libDir) { include("libgeniex.so") }
     from(File(libDir, "llama_cpp")) {
         include("*.so")

@@ -27,7 +27,6 @@ import (
 
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/sochost"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
@@ -129,15 +128,11 @@ func configSetCmd() *cobra.Command {
 	}
 }
 
-// chipsetGet returns a closure that reads the cached chipset config key.
-// Returns "" when unset — callers must run chipsetEnsure first if they
-// need a real value. Kept passive so AIHub can hold it across a spinner
-// without triggering UI from inside the spinner.
-func chipsetGet(s *store.Store) func() string {
-	return func() string {
-		v, _, _ := s.ConfigGet(store.ConfigKeyDevice)
-		return v
-	}
+// chipsetGet reads the cached chipset config key, returning "" when unset —
+// callers must run chipsetEnsure first if they need a real value.
+func chipsetGet(s *store.Store) string {
+	v, _, _ := s.ConfigGet(store.ConfigKeyDevice)
+	return v
 }
 
 // chipsetEnsure makes sure a chipset is configured: cached value wins,
@@ -170,7 +165,7 @@ func chipsetEnsure(ctx context.Context, s *store.Store) error {
 	return nil
 }
 
-func loadPlatform(ctx context.Context) (*qaihm.PlatformInfo, error) {
+func loadPlatform(ctx context.Context) (*aihub.PlatformInfo, error) {
 	client := aihub.NewClient()
 	defer client.Close()
 
@@ -194,25 +189,25 @@ func pickDevice(ctx context.Context) error {
 
 // pickDeviceFrom presents an interactive selector over plat's devices for the
 // host OS, persisting the chosen chipset under the "device" config key.
-func pickDeviceFrom(plat *qaihm.PlatformInfo) error {
-	var osType qaihm.OperatingSystemType
+func pickDeviceFrom(plat *aihub.PlatformInfo) error {
+	var osType aihub.OperatingSystemType
 	switch runtime.GOOS {
 	case "windows":
-		osType = qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_WINDOWS
+		osType = aihub.OSTypeWindows
 	case "linux":
-		osType = qaihm.OperatingSystemType_OPERATING_SYSTEM_TYPE_QC_LINUX
+		osType = aihub.OSTypeQCLinux
 	default:
 		return fmt.Errorf("unsupported operating system %q for AI Hub device selection", runtime.GOOS)
 	}
 
 	displayByChipset := map[string]string{}
 	var options []huh.Option[string]
-	for _, d := range plat.GetDevices() {
-		if d.GetOs().GetOstype() != osType || d.GetChipset() == "" {
+	for _, d := range plat.Devices {
+		if d.OS.OSType != osType || d.Chipset == "" {
 			continue
 		}
-		displayByChipset[d.GetChipset()] = d.GetName()
-		options = append(options, huh.NewOption(d.GetName(), d.GetChipset()))
+		displayByChipset[d.Chipset] = d.Name
+		options = append(options, huh.NewOption(d.Name, d.Chipset))
 	}
 	if len(options) == 0 {
 		return fmt.Errorf("no devices found for this operating system")

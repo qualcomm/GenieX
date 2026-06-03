@@ -41,7 +41,7 @@ object ModelManagerWrapper {
                 initialized = true
                 Result.success(Unit)
             } else {
-                Result.failure(GeniexModelError(rc, "geniex_model_init failed"))
+                Result.failure(GenieXModelError(rc, "geniex_model_init failed"))
             }
         }
     }
@@ -117,7 +117,7 @@ object ModelManagerWrapper {
         data class Error(val code: Int, val message: String) : PullEvent()
     }
 
-    class GeniexModelError(val code: Int, message: String) : RuntimeException("$message (rc=$code)")
+    class GenieXModelError(val code: Int, message: String) : RuntimeException("$message (rc=$code)")
 
     private const val GENIEX_SUCCESS = 0
     // From sdk/model-manager/crates/ffi/src/types.rs — keep in sync.

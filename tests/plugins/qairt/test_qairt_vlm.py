@@ -30,7 +30,7 @@ def test_generate_with_image(qairt_vlm_paths, test_image, device_map):
         QAIRT_VLM_MODEL,
         device_map=device_map,
     ) as vlm:
-        assert isinstance(vlm, geniex.GeniexVLM)
+        assert isinstance(vlm, geniex.GenieXVLM)
         prompt = vlm.tokenizer.apply_chat_template(
             [
                 {

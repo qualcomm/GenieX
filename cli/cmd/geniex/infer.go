@@ -26,18 +26,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/huh"
-	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/record"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 var (
@@ -131,79 +126,51 @@ func infer() *cobra.Command {
 	inferCmd.SetUsageFunc(flagGroupedUsage)
 
 	inferCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		s := store.Get()
+		name, quant := geniex_sdk.SplitNameQuant(args[0])
 
-		name, quant := model_hub.NormalizeModelName(args[0])
-		manifest, err := ensureModelAvailable(cmd.Context(), s, name, quant)
+		paths, err := ensureModelAvailable(cmd.Context(), name, quant)
 		if err != nil {
 			return err
 		}
 
-		if quant != "" {
-			if fileinfo, exist := manifest.ModelFile[quant]; !exist {
-				return fmt.Errorf("%w: %s not found in manifest", common.ErrPrecisionNotFound, quant)
-			} else if !fileinfo.Downloaded {
-				return fmt.Errorf("%w: %s not downloaded", common.ErrPrecisionNotFound, quant)
-			}
-		} else {
-			sq, err := selectQuant(manifest)
-			if err != nil {
-				return err
-			}
-			quant = sq
-		}
-
 		geniex_sdk.Init()
 
-		switch manifest.ModelType {
-		case types.ModelTypeLLM:
-			err = inferLLM(manifest, quant)
-		case types.ModelTypeVLM:
-			err = inferVLM(manifest, quant)
+		switch paths.ModelType {
+		case geniex_sdk.ModelTypeLLM:
+			err = inferLLM(paths)
+		case geniex_sdk.ModelTypeVLM:
+			err = inferVLM(paths)
 		default:
 			geniex_sdk.DeInit()
-			return fmt.Errorf("unsupported model type: %s", manifest.ModelType)
+			return fmt.Errorf("unsupported model type: %s", paths.ModelType)
 		}
 
 		geniex_sdk.DeInit()
 		if errors.Is(err, geniex_sdk.ErrCommonParamNotSupported) {
-			err = fmt.Errorf("plugin %s: %w", manifest.PluginId, err)
+			err = fmt.Errorf("plugin %s: %w", paths.PluginID, err)
 		}
 		return err
 	}
 	return inferCmd
 }
 
-func ensureModelAvailable(ctx context.Context, s *store.Store, name string, quant string) (*types.ModelManifest, error) {
-	manifest, err := s.GetManifest(name)
-	if errors.Is(err, os.ErrNotExist) {
+// ensureModelAvailable resolves a model's on-disk paths, pulling it first if
+// it isn't cached. The optional quant selects a specific precision; when empty
+// the SDK picks the default downloaded one.
+func ensureModelAvailable(ctx context.Context, name, quant string) (*geniex_sdk.ModelPaths, error) {
+	key := name
+	if quant != "" {
+		key = name + ":" + quant
+	}
+	paths, err := geniex_sdk.ModelGetPaths(key)
+	if geniex_sdk.IsModelNotFound(err) {
 		fmt.Println(render.GetTheme().Info.Sprintf("Model is not currently cached, downloading..."))
 		if err := pullModel(ctx, name, quant); err != nil {
 			return nil, fmt.Errorf("download model failed: %w", err)
 		}
-		manifest, err = s.GetManifest(name)
+		paths, err = geniex_sdk.ModelGetPaths(key)
 	}
-	return manifest, err
-}
-
-func selectQuant(manifest *types.ModelManifest) (string, error) {
-	var options []huh.Option[string]
-	for k, v := range manifest.ModelFile {
-		if v.Downloaded {
-			options = append(options, huh.NewOption(fmt.Sprintf("%-10s [%7s]", k, humanize.IBytes(uint64(v.Size))), k))
-		}
-	}
-	if len(options) == 0 {
-		return "", fmt.Errorf("no precision found")
-	}
-	if len(options) == 1 {
-		return options[0].Value, nil
-	}
-	var quant string
-	if err := huh.NewSelect[string]().Title("Select a precision from local folder").Options(options...).Value(&quant).Run(); err != nil {
-		return "", err
-	}
-	return quant, nil
+	return paths, err
 }
 
 func getPromptOrInput() (string, error) {
@@ -257,9 +224,9 @@ func loadStopSequences() ([]string, error) {
 // --ngl / --nctx fall back to 999 / 4096; other plugins keep 0 so their
 // param-guard isn't tripped by the flag default. Device alias mapping
 // is delegated to geniex_resolve_device (sdk/src/device.cpp).
-func resolveModelParams(manifest *types.ModelManifest) (deviceID string, resolvedNgl, resolvedNctx int32, err error) {
+func resolveModelParams(pluginID, modelName string) (deviceID string, resolvedNgl, resolvedNctx int32, err error) {
 	resolvedNgl, resolvedNctx = ngl, nctx
-	if manifest.PluginId == geniex_sdk.PluginLlamaCpp {
+	if pluginID == geniex_sdk.PluginLlamaCpp {
 		if !llmFlags.Changed("ngl") {
 			resolvedNgl = 999
 		}
@@ -268,17 +235,24 @@ func resolveModelParams(manifest *types.ModelManifest) (deviceID string, resolve
 		}
 	}
 
-	deviceID, resolvedNgl, warning, err := geniex_sdk.ResolveDevice(manifest.PluginId, manifest.ModelName, device, resolvedNgl)
+	resolved, err := geniex_sdk.ResolveDevice(geniex_sdk.ResolveDeviceInput{
+		PluginID:   pluginID,
+		ModelName:  modelName,
+		Mode:       device,
+		NglDefault: resolvedNgl,
+	})
 	if err != nil {
 		return
 	}
-	if warning != "" {
-		fmt.Println(render.GetTheme().Warning.Sprintf("Warning: %s", warning))
+	deviceID = resolved.DeviceID
+	resolvedNgl = resolved.Ngl
+	if resolved.Warning != "" {
+		fmt.Println(render.GetTheme().Warning.Sprintf("Warning: %s", resolved.Warning))
 	}
 	return
 }
 
-func inferLLM(manifest *types.ModelManifest, quant string) error {
+func inferLLM(paths *geniex_sdk.ModelPaths) error {
 	samplerConfig := &geniex_sdk.SamplerConfig{
 		Temperature:       temperature,
 		TopP:              topP,
@@ -297,10 +271,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 		return err
 	}
 
-	s := store.Get()
-	modelfile := s.ModelfilePath(manifest.Name, manifest.ModelFile[quant].Name)
-
-	deviceID, nglResolved, nctxResolved, err := resolveModelParams(manifest)
+	deviceID, nglResolved, nctxResolved, err := resolveModelParams(paths.PluginID, paths.ModelName)
 	if err != nil {
 		return err
 	}
@@ -309,9 +280,9 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 	spin.Start()
 
 	p, err := geniex_sdk.NewLLM(geniex_sdk.LlmCreateInput{
-		ModelName: manifest.ModelName,
-		ModelPath: modelfile,
-		PluginID:  manifest.PluginId,
+		ModelName: paths.ModelName,
+		ModelPath: paths.ModelPath,
+		PluginID:  paths.PluginID,
 		DeviceID:  deviceID,
 		Config: geniex_sdk.ModelConfig{
 			NCtx:       nctxResolved,
@@ -327,7 +298,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 
 	var history []geniex_sdk.LlmChatMessage
 	if systemPrompt != "" {
-		history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleSystem, Content: systemPrompt})
+		history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LlmRoleSystem, Content: systemPrompt})
 	}
 
 	// Check if using token ID input mode
@@ -351,7 +322,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 		Verbose:  verbose,
 		TestMode: testMode,
 		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
-			var res geniex_sdk.LlmGenerateOutput
+			var res *geniex_sdk.LlmGenerateOutput
 			var err error
 
 			if len(tokenIDs) > 0 {
@@ -376,7 +347,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 				tokenIDs = nil
 			} else {
 				// Normal text prompt mode with chat template
-				history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleUser, Content: prompt})
+				history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LlmRoleUser, Content: prompt})
 
 				templateOutput, err := p.ApplyChatTemplate(geniex_sdk.LlmApplyChatTemplateInput{
 					Messages:            history,
@@ -399,14 +370,14 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 
 				if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
 					res.ProfileData.StopReason = "context_length"
-					history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleAssistant, Content: res.FullText})
+					history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LlmRoleAssistant, Content: res.FullText})
 					return res.FullText, res.ProfileData, common.ErrContextLengthExceeded
 				}
 				if err != nil {
 					return "", geniex_sdk.ProfileData{}, err
 				}
 
-				history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LLMRoleAssistant, Content: res.FullText})
+				history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LlmRoleAssistant, Content: res.FullText})
 			}
 
 			return res.FullText, res.ProfileData, nil
@@ -442,7 +413,7 @@ func inferLLM(manifest *types.ModelManifest, quant string) error {
 	return processor.Process()
 }
 
-func inferVLM(manifest *types.ModelManifest, quant string) error {
+func inferVLM(paths *geniex_sdk.ModelPaths) error {
 	samplerConfig := &geniex_sdk.SamplerConfig{
 		Temperature:       temperature,
 		TopP:              topP,
@@ -461,13 +432,7 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 		return err
 	}
 
-	s := store.Get()
-	modelfile := s.ModelfilePath(manifest.Name, manifest.ModelFile[quant].Name)
-	var mmprojfile string
-	if manifest.MMProjFile.Name != "" {
-		mmprojfile = s.ModelfilePath(manifest.Name, manifest.MMProjFile.Name)
-	}
-	deviceID, nglResolved, nctxResolved, err := resolveModelParams(manifest)
+	deviceID, nglResolved, nctxResolved, err := resolveModelParams(paths.PluginID, paths.ModelName)
 	if err != nil {
 		return err
 	}
@@ -475,10 +440,10 @@ func inferVLM(manifest *types.ModelManifest, quant string) error {
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
 	p, err := geniex_sdk.NewVLM(geniex_sdk.VlmCreateInput{
-		ModelName:  manifest.ModelName,
-		ModelPath:  modelfile,
-		MmprojPath: mmprojfile,
-		PluginID:   manifest.PluginId,
+		ModelName:  paths.ModelName,
+		ModelPath:  paths.ModelPath,
+		MmprojPath: paths.MmprojPath,
+		PluginID:   paths.PluginID,
 		DeviceID:   deviceID,
 		Config: geniex_sdk.ModelConfig{
 			NCtx:       nctxResolved,

@@ -1,18 +1,21 @@
 name: Test
 
-# Pytest harness for the SDK end-to-end suite under tests/. Phase 1 runs
-# only the model-free API subset and the llama_cpp CPU subset on
-# windows-arm64. The matrix is markered so a future self-hosted
-# Snapdragon runner can drop in by filtering on `-m snapdragon` (and
-# providing AI Hub credentials for the qairt cells).
+# Top-level test entry point for tag pushes and manual reruns. Builds
+# the SDK on demand, then fans out to _test.yml for the three caller
+# jobs (go-test, python-pytest, sdk-pytest), each a 2-cell matrix over
+# linux-arm64 + windows-arm64 — six checks total.
 #
-# Triggered as a child of pr-check.yml so the SDK only builds once per
-# PR — pr-check's build-sdk uploads the artifact this workflow consumes.
-# Independent workflow_dispatch is also supported for "just rerun
-# pytest" scenarios; that path builds its own SDK on demand.
+# This workflow is independent of release.yml. Both fire on the same
+# tag push but as siblings: failures here surface as a red check on the
+# tag commit and never gate the publish-* jobs in release.yml.
+#
+# pr-check.yml does NOT call this file — it calls _test.yml directly so
+# the SDK build is shared with the rest of the PR graph.
 
 on:
-  workflow_call:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
       version_tag:
@@ -26,128 +29,38 @@ permissions:
   packages: read
 
 jobs:
-  # Only runs on workflow_dispatch — when invoked by pr-check via
-  # workflow_call, pr-check's own build-sdk job has already produced
-  # the artifact pytest consumes.
   build-sdk:
-    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/_build-sdk.yml
     secrets: inherit
     with:
       upload_artifact: true
-      version_tag: ${{ inputs.version_tag || '' }}
+      version_tag: ${{ inputs.version_tag || github.ref_name }}
 
-  pytest-windows-arm64:
-    name: pytest-windows-arm64
+  go-test:
     needs: [build-sdk]
-    # `needs` skipped (workflow_call path) is treated as failed by the
-    # default conditional; force the job to run as long as build-sdk
-    # didn't actually fail.
     if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
-    runs-on: windows-arm64
-    timeout-minutes: 45
+    uses: ./.github/workflows/_test.yml
+    secrets: inherit
+    with:
+      language: go
+      gate_on_changed_files: false
 
-    steps:
-      - name: Configure Windows Git
-        shell: cmd
-        run: |
-          echo C:\Program Files\Git\bin>>%GITHUB_PATH%
-          git config --global core.longpaths true
-          git config --global core.protectNTFS false
+  python-pytest:
+    needs: [build-sdk]
+    if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
+    uses: ./.github/workflows/_test.yml
+    secrets: inherit
+    with:
+      language: python
+      gate_on_changed_files: false
 
-      - name: Checkout source
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 1
-          token: ${{ secrets.GH_PAT }}
-
-      - name: Download SDK artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: sdk-windows-arm64
-          path: sdk/pkg-geniex
-
-      # actions/setup-python@v6 has no Python 3.10 ARM64 build on
-      # Windows; the runner's hosted Python (3.13 ARM64) is fine. Skip
-      # the wheel build entirely: drop bindings/python on PYTHONPATH and
-      # point GENIEX_LIB_PATH at the SDK artifact's lib/ tree, which
-      # short-circuits _ffi/_lib.py's auto-discovery.
-      - name: Install pytest and binding runtime deps
-        shell: bash
-        run: |
-          set -euo pipefail
-          python --version
-          python -m pip install --upgrade pip
-          # tqdm is the only runtime dep declared by bindings/python.
-          # We skip the package install (PEP 517 backend resolution
-          # fails on hosted Python 3.13 + pip 26.1) so install the dep
-          # directly here.
-          python -m pip install "pytest>=7.0" "tqdm>=4.65"
-
-      - name: Smoke-test the binding
-        shell: bash
-        env:
-          PYTHONPATH: ${{ github.workspace }}/bindings/python
-          GENIEX_LIB_PATH: ${{ github.workspace }}/sdk/pkg-geniex/lib
-        run: |
-          set -euo pipefail
-          python -c "import geniex; geniex.init(); print('plugins:', geniex.get_plugin_list()); geniex.deinit()"
-
-      # ~/.cache/geniex is only populated by the llama_cpp HF pull on
-      # first run; key the cache by the model identifiers in the suite
-      # so any future model bump invalidates cached blobs automatically.
-      - name: Cache HF GGUF blobs
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/geniex
-          key: geniex-models-llama_cpp-windows-arm64-v1-${{ hashFiles('tests/_models.py') }}
-          restore-keys: |
-            geniex-models-llama_cpp-windows-arm64-v1-
-
-      - name: Run pytest — API subset
-        id: pytest_api
-        shell: bash
-        env:
-          PYTHONPATH: ${{ github.workspace }}/bindings/python
-          GENIEX_LIB_PATH: ${{ github.workspace }}/sdk/pkg-geniex/lib
-        run: |
-          set -euo pipefail
-          python -m pytest tests -m api -v | tee .pytest-api.log
-
-      - name: Run pytest — llama_cpp CPU subset
-        id: pytest_cpu
-        shell: bash
-        env:
-          PYTHONPATH: ${{ github.workspace }}/bindings/python
-          GENIEX_LIB_PATH: ${{ github.workspace }}/sdk/pkg-geniex/lib
-        run: |
-          set -euo pipefail
-          python -m pytest tests -m "llama_cpp and device_cpu" -v | tee .pytest-cpu.log
-
-      # Render a per-case summary in the Checks "Summary" tab so reviewers
-      # can see PASSED/FAILED for every test without digging into raw logs.
-      - name: Publish step summary
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          {
-            echo "## pytest results"
-            echo
-            for label in api "llama_cpp / device_cpu"; do
-              case "$label" in
-                api) log=.pytest-api.log ;;
-                *)   log=.pytest-cpu.log ;;
-              esac
-              echo "### $label"
-              echo
-              if [ -f "$log" ]; then
-                echo '```'
-                grep -E "PASSED|FAILED|ERROR|SKIPPED|passed|failed" "$log" || echo "(no results captured)"
-                echo '```'
-              else
-                echo "(log missing)"
-              fi
-              echo
-            done
-          } >> "$GITHUB_STEP_SUMMARY"
+  sdk-pytest:
+    needs: [build-sdk]
+    if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
+    uses: ./.github/workflows/_test.yml
+    secrets: inherit
+    with:
+      language: sdk
+      # Linux disabled until the llama_cpp plugin can load without OpenCL.
+      platforms: '["windows-arm64"]'
+      gate_on_changed_files: false

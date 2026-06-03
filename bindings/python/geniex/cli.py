@@ -33,8 +33,8 @@ import time
 import geniex
 from geniex import (
     AutoModelForCausalLM,
-    GeniexError,
-    GeniexVLM,
+    GenieXError,
+    GenieXVLM,
     _progress,
     get_device_list,
     get_plugin_list,
@@ -187,7 +187,7 @@ def _run_turn(
         history,
         tokenize=False,
         add_generation_prompt=True,
-        enable_thinking=False,
+        enable_thinking=True,
     )
 
     reply_parts: list[str] = []
@@ -344,7 +344,7 @@ def _cmd_chat(args: argparse.Namespace) -> int:
         n_ctx=args.n_ctx,
     )
     elapsed = time.monotonic() - t0
-    is_vlm = isinstance(model, GeniexVLM)
+    is_vlm = isinstance(model, GenieXVLM)
     model_type = 'vlm' if is_vlm else 'llm'
     meta = getattr(model, '_meta', None) or {}
     plugin_id = meta.get('backend')
@@ -395,7 +395,7 @@ def _human_size(n: int) -> str:
 def _read_manifest(name: str) -> dict | None:
     try:
         paths = _mm.get_paths(name)
-    except GeniexError:
+    except GenieXError:
         return None
     try:
         with open(os.path.join(paths.model_dir, 'geniex.json')) as f:
@@ -447,7 +447,7 @@ def _cmd_ls(args: argparse.Namespace) -> int:
         try:
             paths = _mm.get_paths(name)
             model_dir = paths.model_dir
-        except GeniexError:
+        except GenieXError:
             model_dir = None
 
         size = 0
@@ -599,7 +599,7 @@ def main(argv: list[str] | None = None) -> int:
             init()
             _apply_log_level(level)
         return args.func(args)
-    except GeniexError as e:
+    except GenieXError as e:
         print(f'error: {e}', file=sys.stderr)
         return 1
 

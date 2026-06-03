@@ -10,10 +10,6 @@
 #include <unordered_map>
 
 #include "build_config.h"
-#include "plugin/ICv.h"
-#include "plugin/IEmbedding.h"
-#include "plugin/IImageGen.h"
-#include "plugin/ITts.h"
 #include "plugin/Plugin.h"
 
 namespace geniex {
@@ -89,20 +85,6 @@ class Registry {
             return plugin->create_llm();
         } else if constexpr (std::is_same_v<M, IVlm>) {
             return plugin->create_vlm();
-        } else if constexpr (std::is_same_v<M, IEmbedding>) {
-            return plugin->create_embedding();
-        } else if constexpr (std::is_same_v<M, IAsr>) {
-            return plugin->create_asr();
-        } else if constexpr (std::is_same_v<M, ITts>) {
-            return plugin->create_tts();
-        } else if constexpr (std::is_same_v<M, ICv>) {
-            return plugin->create_cv();
-        } else if constexpr (std::is_same_v<M, IReranker>) {
-            return plugin->create_reranker();
-        } else if constexpr (std::is_same_v<M, IImageGen>) {
-            return plugin->create_image_gen();
-        } else if constexpr (std::is_same_v<M, IDiarize>) {
-            return plugin->create_diarize();
         } else {
             throw std::runtime_error("Unsupported modality type");
         }

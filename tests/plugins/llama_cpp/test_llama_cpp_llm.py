@@ -31,7 +31,7 @@ def test_generate_blocking(llama_cpp_llm_paths, device_map):
         quant=LLAMA_CPP_LLM_QUANT,
         device_map=device_map,
     ) as llm:
-        assert isinstance(llm, geniex.GeniexLLM)
+        assert isinstance(llm, geniex.GenieXLLM)
         out = llm.generate('Say hi.', max_new_tokens=8, temperature=0.0, seed=42)
         assert isinstance(out, geniex.GenerateOutput)
         assert out.text

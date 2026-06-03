@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//scripts:cgo_test.bzl", "go_cgo_test")
 
 go_library(
     name = "handler",
@@ -10,8 +11,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//bindings/go:geniex_sdk_go",
-        "//cli/internal/model_hub",
-        "//cli/internal/store",
         "//cli/internal/types",
         "//cli/server/service",
         "//cli/server/utils",
@@ -22,4 +21,10 @@ go_library(
         "@com_github_openai_openai_go_v3//packages/param",
         "@com_github_openai_openai_go_v3//shared/constant",
     ],
+)
+
+go_cgo_test(
+    name = "handler_test",
+    srcs = ["package_test.go"],
+    embed = [":handler"],
 )

@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//scripts:cgo_test.bzl", "go_cgo_test")
 
 go_library(
     name = "server",
@@ -17,4 +18,10 @@ go_library(
         "//cli/server/service",
         "@com_github_gin_gonic_gin//:gin",
     ],
+)
+
+go_cgo_test(
+    name = "server_test",
+    srcs = ["package_test.go"],
+    embed = [":server"],
 )

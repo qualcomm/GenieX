@@ -2,6 +2,8 @@
 venv/
 .vscode
 .ccache
+.agents/
+.cache/
 
 # Claude Code: track shared config, ignore per-user overrides.
 .claude/settings.local.json
@@ -9,6 +11,7 @@ venv/
 CLAUDE.local.md
 
 bazel-*
+coverage-html/
 
 # Local CMake user presets (machine-specific, not for version control)
 CMakeUserPresets.json

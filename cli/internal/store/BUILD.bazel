@@ -1,22 +1,21 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "store",
     srcs = [
         "config.go",
-        "errors.go",
-        "lock.go",
         "manager.go",
-        "model.go",
     ],
     importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/store",
     visibility = ["//cli:__subpackages__"],
     deps = [
         "//cli/internal/config",
-        "//cli/internal/model_hub",
-        "//cli/internal/types",
         "@com_github_bytedance_sonic//:sonic",
-        "@com_github_gofrs_flock//:flock",
-        "@com_github_shirou_gopsutil//disk",
     ],
+)
+
+go_test(
+    name = "store_test",
+    srcs = ["package_test.go"],
+    embed = [":store"],
 )

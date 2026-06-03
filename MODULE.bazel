@@ -8,26 +8,20 @@ bazel_dep(name = "rules_pkg", version = "1.2.0")
 
 # innosetup
 innosetup_repo = use_repo_rule("//cli/release/windows:iscc.bzl", "innosetup_repository")
-innosetup_repo(name = "innosetup")
 
-# protobuf, with windows arm64 patch
-bazel_dep(name = "protobuf", version = "33.4", repo_name = "com_google_protobuf")
-prebuilt_protoc = use_repo_rule("//scripts:prebuilt_protoc.bzl", "prebuilt_protoc")
-prebuilt_protoc(
-    name = "prebuilt_protoc_windows_arm64",
-    cpu = "arm64",
-    os = "windows",
-)
-register_toolchains("@prebuilt_protoc_windows_arm64//:prebuilt_toolchain")
+innosetup_repo(name = "innosetup")
 
 # oci
 bazel_dep(name = "rules_oci", version = "2.3.0")
 bazel_dep(name = "rules_distroless", version = "0.8.0")
 bazel_dep(name = "aspect_bazel_lib", version = "2.21.1")
 bazel_dep(name = "tar.bzl", version = "0.7.0")
+
 tar_toolchains = use_extension("@tar.bzl//tar:extensions.bzl", "toolchains")
 use_repo(tar_toolchains, "bsd_tar_toolchains")
+
 register_toolchains("@bsd_tar_toolchains//:all")
+
 apt = use_extension("@rules_distroless//apt:extensions.bzl", "apt")
 apt.install(
     name = "trixie",
@@ -35,6 +29,7 @@ apt.install(
     manifest = "//cli/release/linux:trixie.yaml",
 )
 use_repo(apt, "trixie")
+
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 oci.pull(
     name = "debian",
@@ -59,8 +54,10 @@ bazel_dep(name = "rules_go", version = "0.60.0", repo_name = "io_bazel_rules_go"
 
 # hermetic cc toolchain
 bazel_dep(name = "hermetic_cc_toolchain", version = "4.1.0")
+
 toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolchains")
 use_repo(toolchains, "zig_sdk")
+
 register_toolchains(
     "@zig_sdk//toolchain:linux_amd64_gnu.2.28",
     "@zig_sdk//toolchain:linux_arm64_gnu.2.28",
@@ -70,6 +67,7 @@ register_toolchains(
 # go toolchain
 go_sdk = use_extension("@io_bazel_rules_go//go:extensions.bzl", "go_sdk")
 go_sdk.download(version = "1.25.9")
+
 go_deps = use_extension("@bazel_gazelle//:extensions.bzl", "go_deps")
 go_deps.from_file(go_mod = "//cli:go.mod")
 use_repo(
@@ -79,7 +77,6 @@ use_repo(
     "com_github_charmbracelet_huh_spinner",
     "com_github_dustin_go_humanize",
     "com_github_gin_gonic_gin",
-    "com_github_gofrs_flock",
     "com_github_gookit_color",
     "com_github_jedib0t_go_pretty_v6",
     "com_github_lmittmann_tint",
@@ -87,13 +84,11 @@ use_repo(
     "com_github_openai_openai_go_v3",
     "com_github_qcom_it_nexa_ai_geniex_bindings_go",
     "com_github_schollz_progressbar_v3",
-    "com_github_shirou_gopsutil",
     "com_github_spf13_cobra",
     "com_github_spf13_pflag",
     "com_github_spf13_viper",
     "com_github_valyala_fasthttp",
     "dev_resty_v3",
-    "org_golang_google_protobuf",
     "org_golang_x_image",
     "org_golang_x_mod",
     "org_golang_x_sync",

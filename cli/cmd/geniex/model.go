@@ -16,13 +16,13 @@ package main
 
 import (
 	"context"
-	"errors"
+	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
-	"regexp"
 	"slices"
-	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -30,11 +30,10 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 )
 
 var (
@@ -43,8 +42,29 @@ var (
 	modelType string
 )
 
+// resolveHub maps the --model-hub flag to a HubSource, defaulting to Auto.
+func resolveHub() (geniex_sdk.HubSource, error) {
+	if localPath != "" && modelHub == "" {
+		modelHub = "localfs"
+	}
+	switch strings.ToLower(modelHub) {
+	case "":
+		return geniex_sdk.HubAuto, nil
+	case "aihub":
+		return geniex_sdk.HubAIHub, nil
+	case "hf", "huggingface":
+		return geniex_sdk.HubHuggingFace, nil
+	case "local", "localfs":
+		if localPath == "" {
+			return 0, fmt.Errorf("local path is required for localfs model hub")
+		}
+		return geniex_sdk.HubLocalFS, nil
+	default:
+		return 0, fmt.Errorf("unknown model hub: %s", modelHub)
+	}
+}
+
 // pull creates a command to download and cache a model by name.
-// Usage: geniex pull <model-name>
 func pull() *cobra.Command {
 	pullCmd := &cobra.Command{
 		GroupID: "model",
@@ -62,14 +82,14 @@ func pull() *cobra.Command {
 	pullCmd.Flags().StringVarP(&modelType, "model-type", "", "", "specify model type to use: [llm|vlm]")
 
 	pullCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		name, quant := model_hub.NormalizeModelName(args[0])
+		name, quant := geniex_sdk.SplitNameQuant(args[0])
 		return pullModel(cmd.Context(), name, quant)
 	}
 
 	return pullCmd
 }
 
-// Usage: geniex remove <model-name>[:<quant>]
+// remove creates a command to delete cached models.
 func remove() *cobra.Command {
 	var assumeYes bool
 
@@ -101,28 +121,29 @@ func remove() *cobra.Command {
 			}
 		}
 
-		s := store.Get()
 		var errs []error
 		for _, arg := range args {
-			name, quant := model_hub.NormalizeModelName(arg)
-			label := name
+			name, quant := geniex_sdk.SplitNameQuant(arg)
+			key := name
 			if quant != "" {
-				label = name + ":" + quant
+				key = name + ":" + quant
 			}
-			if err := s.Remove(name, quant); err != nil {
-				errs = append(errs, fmt.Errorf("remove %s: %w", label, err))
+			if err := geniex_sdk.ModelRemove(key); err != nil {
+				errs = append(errs, fmt.Errorf("remove %s: %w", key, err))
 				continue
 			}
-			fmt.Println(render.GetTheme().Success.Sprintf("✔  Removed %s", label))
+			fmt.Println(render.GetTheme().Success.Sprintf("✔  Removed %s", key))
 		}
-		return errors.Join(errs...)
+		if len(errs) > 0 {
+			return errs[0]
+		}
+		return nil
 	}
 
 	return removeCmd
 }
 
-// clean creates a command to remove all cached models and free up storage.
-// Usage: geniex clean
+// clean creates a command to remove all cached models.
 func clean() *cobra.Command {
 	cleanCmd := &cobra.Command{
 		GroupID: "model",
@@ -131,77 +152,143 @@ func clean() *cobra.Command {
 		Long:    "Remove all cached models and free up storage. This will delete all model files from the local cache.",
 	}
 
-	cleanCmd.Run = func(cmd *cobra.Command, args []string) {
-		s := store.Get()
-		c := s.Clean()
+	cleanCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		c, err := geniex_sdk.ModelClean()
+		if err != nil {
+			return err
+		}
 		fmt.Println(render.GetTheme().Success.Sprintf("✔  Removed %d models", c))
+		return nil
 	}
 
 	return cleanCmd
 }
 
-// list creates a command to display all cached models in a formatted table.
-// Shows model names and their storage sizes.
-// Usage: geniex list
+// list creates a command to display all cached models.
 func list() *cobra.Command {
+	var format string
+
 	listCmd := &cobra.Command{
 		GroupID: "model",
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "List all cached models",
-		Long:    "Display all cached models in a formatted table, showing model names, types, and sizes.",
+		Long: "Display all cached models.\n" +
+			"Use --format json or --format csv for machine-readable output; both have a " +
+			"stable schema and --verbose only affects the table view.",
 	}
 
+	listCmd.Flags().StringVar(&format, "format", "table", "output format: table|json|csv")
+
 	listCmd.RunE = func(cmd *cobra.Command, args []string) error {
-		s := store.Get()
-		models, err := s.List()
+		switch format {
+		case "table", "json", "csv":
+		default:
+			return fmt.Errorf("invalid --format %q (valid: table, json, csv)", format)
+		}
+		models, err := geniex_sdk.ModelListDetailed()
 		if err != nil {
 			return err
 		}
-
-		// hides QuantNA in non-verbose so non-quantized models render empty.
-		joinQuants := func(m types.ModelManifest) string {
-			quants := make([]string, 0, len(m.ModelFile))
-			for q, f := range m.ModelFile {
-				if !f.Downloaded {
-					continue
-				}
-				if !verbose && q == types.QuantNA {
-					continue
-				}
-				quants = append(quants, q)
-			}
-			slices.Sort(quants)
-			return strings.Join(quants, ",")
+		switch format {
+		case "json":
+			return printListJSON(models)
+		case "csv":
+			return printListCSV(models)
 		}
-
-		tw := table.NewWriter()
-		tw.SetOutputMirror(os.Stdout)
-		tw.SetStyle(table.StyleLight)
-		if verbose {
-			tw.AppendHeader(table.Row{"NAME", "SIZE", "PLUGIN", "TYPE", "PRECISIONS"})
-		} else {
-			tw.AppendHeader(table.Row{"NAME", "SIZE", "PRECISIONS"})
-		}
-		for _, model := range models {
-			size := humanize.IBytes(uint64(model.GetSize()))
-			quants := joinQuants(model)
-			if verbose {
-				tw.AppendRow(table.Row{model.Name, size, model.PluginId, model.ModelType, quants})
-			} else {
-				tw.AppendRow(table.Row{model.Name, size, quants})
-			}
-		}
-		tw.Render()
+		printListTable(models, verbose)
 		return nil
 	}
 
 	return listCmd
 }
 
-// modelCmd builds the `geniex model` command tree:
-//
-// It is the home for all per-model management operations
+// listedModel is the stable schema for `geniex list --format json|csv`.
+type listedModel struct {
+	Name       string   `json:"name"`
+	Size       int64    `json:"size"`
+	Plugin     string   `json:"plugin"`
+	Type       string   `json:"type"`
+	Precisions []string `json:"precisions"`
+}
+
+// downloadedPrecisions returns the model's precisions, optionally hiding the
+// QuantNA placeholder used by non-quantized models (table view only).
+func downloadedPrecisions(m geniex_sdk.ModelDetail, hideQuantNA bool) []string {
+	quants := make([]string, 0, len(m.Precisions))
+	for _, q := range m.Precisions {
+		if hideQuantNA && q == geniex_sdk.QuantNA {
+			continue
+		}
+		quants = append(quants, q)
+	}
+	slices.Sort(quants)
+	return quants
+}
+
+func printListTable(models []geniex_sdk.ModelDetail, verbose bool) {
+	tw := table.NewWriter()
+	tw.SetOutputMirror(os.Stdout)
+	tw.SetStyle(table.StyleLight)
+	if verbose {
+		tw.AppendHeader(table.Row{"NAME", "SIZE", "PLUGIN", "TYPE", "PRECISIONS"})
+	} else {
+		tw.AppendHeader(table.Row{"NAME", "SIZE", "PRECISIONS"})
+	}
+	for _, model := range models {
+		size := humanize.IBytes(uint64(model.TotalSize))
+		quants := strings.Join(downloadedPrecisions(model, !verbose), ",")
+		if verbose {
+			tw.AppendRow(table.Row{model.Name, size, model.PluginID, model.ModelType, quants})
+		} else {
+			tw.AppendRow(table.Row{model.Name, size, quants})
+		}
+	}
+	tw.Render()
+}
+
+func toListedModels(models []geniex_sdk.ModelDetail) []listedModel {
+	out := make([]listedModel, 0, len(models))
+	for _, m := range models {
+		out = append(out, listedModel{
+			Name:       m.Name,
+			Size:       m.TotalSize,
+			Plugin:     m.PluginID,
+			Type:       m.ModelType.String(),
+			Precisions: downloadedPrecisions(m, false),
+		})
+	}
+	return out
+}
+
+func printListJSON(models []geniex_sdk.ModelDetail) error {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(toListedModels(models))
+}
+
+func printListCSV(models []geniex_sdk.ModelDetail) error {
+	w := csv.NewWriter(os.Stdout)
+	if err := w.Write([]string{"name", "size", "plugin", "type", "precisions"}); err != nil {
+		return err
+	}
+	for _, m := range toListedModels(models) {
+		row := []string{
+			m.Name,
+			strconv.FormatInt(m.Size, 10),
+			m.Plugin,
+			m.Type,
+			strings.Join(m.Precisions, ","),
+		}
+		if err := w.Write(row); err != nil {
+			return err
+		}
+	}
+	w.Flush()
+	return w.Error()
+}
+
+// modelCmd builds the `geniex model` command tree.
 func modelCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		GroupID: "model",
@@ -213,50 +300,48 @@ func modelCmd() *cobra.Command {
 	return cmd
 }
 
+// modelTypeNames are the accepted --model-type / set-type values.
+var modelTypeNames = []string{
+	geniex_sdk.ModelTypeLLM.String(),
+	geniex_sdk.ModelTypeVLM.String(),
+}
+
 // setTypeCmd builds the `geniex model set-type` subcommand.
-// It overwrites the ModelType field in an already-downloaded model's manifest.
 func setTypeCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "set-type <model-name> [llm|vlm]",
-		Short: "Override the model type for a cached model",
-		Long:  "Update the model type stored in a cached model's manifest.\n\nOmit the type argument to choose interactively.",
-		Args:  cobra.RangeArgs(1, 2),
-		ValidArgs: func() []string {
-			s := make([]string, len(types.AllModelTypes))
-			for i, t := range types.AllModelTypes {
-				s[i] = string(t)
-			}
-			return s
-		}(),
+		Use:       "set-type <model-name> [llm|vlm]",
+		Short:     "Override the model type for a cached model",
+		Long:      "Update the model type stored in a cached model's manifest.\n\nOmit the type argument to choose interactively.",
+		Args:      cobra.RangeArgs(1, 2),
+		ValidArgs: modelTypeNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			name, _ := model_hub.NormalizeModelName(args[0])
+			name, _ := geniex_sdk.SplitNameQuant(args[0])
 
 			// Verify the model is present before prompting for a type.
-			if _, err := store.Get().GetManifest(name); err != nil {
+			if _, err := geniex_sdk.ModelGetType(name); err != nil {
 				return fmt.Errorf("model %q not found: %w", name, err)
 			}
 
-			var mt types.ModelType
+			var mt geniex_sdk.ModelType
 			if len(args) == 2 {
-				mt = types.ModelType(strings.ToLower(args[1]))
-				if !slices.Contains(types.AllModelTypes, mt) {
-					validStrs := make([]string, len(types.AllModelTypes))
-					for i, t := range types.AllModelTypes {
-						validStrs[i] = string(t)
-					}
-					return fmt.Errorf("unknown model type %q (valid: %s)", args[1], strings.Join(validStrs, ", "))
+				parsed, ok := geniex_sdk.ParseModelType(args[1])
+				if !ok {
+					return fmt.Errorf("unknown model type %q (valid: %s)", args[1], strings.Join(modelTypeNames, ", "))
 				}
+				mt = parsed
 			} else {
-				if err := huh.NewSelect[types.ModelType]().
+				var choice string
+				if err := huh.NewSelect[string]().
 					Title("Choose Model Type").
-					Options(huh.NewOptions(types.AllModelTypes...)...).
-					Value(&mt).
+					Options(huh.NewOptions(modelTypeNames...)...).
+					Value(&choice).
 					Run(); err != nil {
 					return err
 				}
+				mt, _ = geniex_sdk.ParseModelType(choice)
 			}
 
-			if err := store.Get().SetModelType(name, mt); err != nil {
+			if err := geniex_sdk.ModelSetType(name, mt); err != nil {
 				return fmt.Errorf("failed to update model type: %w", err)
 			}
 			fmt.Println(render.GetTheme().Success.Sprintf("✔  %s → %s", name, mt))
@@ -268,412 +353,127 @@ func setTypeCmd() *cobra.Command {
 func pullModel(ctx context.Context, name string, quant string) error {
 	slog.Debug("pullModel", "name", name, "quant", quant)
 
-	s := store.Get()
-
-	mf, err := s.GetManifest(name)
-	if err != nil && !os.IsNotExist(err) { // model not exist is not an error, we will create it
-		return err
-	}
-
-	// specify model hub
-	if localPath != "" && modelHub == "" {
-		modelHub = "localfs"
-	}
-	if modelHub != "" {
-		switch strings.ToLower(modelHub) {
-		case "aihub":
-			model_hub.SetHub(model_hub.NewAIHub(chipsetGet(s)))
-		case "hf", "huggingface":
-			model_hub.SetHub(model_hub.NewHuggingFace())
-		case "local", "localfs":
-			if localPath == "" {
-				return fmt.Errorf("local path is required for localfs model hub")
-			}
-			model_hub.SetHub(model_hub.NewLocalFS(localPath))
-		default:
-			return fmt.Errorf("unknown model hub: %s", modelHub)
-		}
-	}
-
-	// Resolve chipset before the spinner — chipsetEnsure may pop an
-	// interactive device picker, which can't share the terminal with a
-	// spinner. Skip when the explicit hub doesn't need it.
-	if _, ok := aihub.IsAIHubName(name); ok {
-		if err := chipsetEnsure(ctx, s); err != nil {
-			return err
-		}
-	}
-
-	spin := render.NewSpinner("download manifest from: " + name)
-	spin.Start()
-	files, hmf, err := model_hub.ModelInfo(ctx, name)
-	spin.Stop()
+	hub, err := resolveHub()
 	if err != nil {
 		return err
 	}
 
-	if mf != nil {
-		// check all downloaded
-		downloaded := true
-		for _, f := range mf.ModelFile {
-			if !f.Downloaded {
-				downloaded = false
-				break
-			}
+	// AI Hub pulls need a chipset; resolve it before the spinner since the
+	// picker can't share the terminal with one.
+	var chipset string
+	if _, ok := aihub.IsAIHubName(name); ok || hub == geniex_sdk.HubAIHub {
+		s := store.Get()
+		if err := chipsetEnsure(ctx, s); err != nil {
+			return err
 		}
-		if downloaded {
-			fmt.Println(render.GetTheme().Info.Sprint("Already downloaded all precisions"))
-			return nil
+		chipset = chipsetGet(s)
+	}
+
+	in := geniex_sdk.ModelPullInput{
+		ModelName:   name,
+		Quant:       quant,
+		Hub:         hub,
+		LocalPath:   localPath,
+		Chipset:     chipset,
+		DisplayName: "",
+	}
+
+	// Validate --model-type early so we fail before downloading anything, and
+	// let the pull write it into the manifest in one shot (no set-type round-trip).
+	if modelType != "" {
+		mt, ok := geniex_sdk.ParseModelType(modelType)
+		if !ok {
+			return fmt.Errorf("unknown model type %q (valid: %s)", modelType, strings.Join(modelTypeNames, ", "))
 		}
+		in.ModelType = &mt
+	}
 
-		oldSize := mf.GetSize()
-
-		// choose quant to download
-		err := chooseQuantFiles(quant, mf)
+	// No precision requested: query the remote candidates and let the user
+	// pick (skipped for localfs, which has no remote listing).
+	if quant == "" && hub != geniex_sdk.HubLocalFS {
+		spin := render.NewSpinner("fetching available precisions from: " + name)
+		spin.Start()
+		q, err := geniex_sdk.ModelQuery(in)
+		spin.Stop()
 		if err != nil {
 			return err
 		}
-
-		// start download
-		pgCh, errCh := s.PullExtraQuant(ctx, *mf)
-		bar := render.NewProgressBar(mf.GetSize()-oldSize, "downloading")
-		for pg := range pgCh {
-			bar.Set(pg.TotalDownloaded)
-		}
-		bar.Exit()
-
-		for err := range errCh {
-			bar.Clear()
+		if chosen, err := choosePrecision(q.Candidates); err != nil {
 			return err
-		}
-	} else {
-		var manifest types.ModelManifest
-
-		if hmf != nil {
-			manifest.ModelName = hmf.ModelName
-			manifest.PluginId = hmf.PluginId
-			manifest.ModelType = hmf.ModelType
-		}
-
-		if manifest.PluginId == "" {
-			pid, err := model_hub.ChoosePluginId(files)
-			if err != nil {
-				return err
-			}
-			manifest.PluginId = pid
-		}
-
-		err := chooseFiles(name, quant, files, &manifest)
-		if err != nil {
-			return err
-		}
-
-		// --model-type flag overrides all auto-detection. Validate early so
-		// we fail before downloading anything.
-		if modelType != "" {
-			mt := types.ModelType(strings.ToLower(modelType))
-			if !slices.Contains(types.AllModelTypes, mt) {
-				return fmt.Errorf("unknown model type %q (valid: %s)", modelType,
-					strings.Join(func() []string {
-						s := make([]string, len(types.AllModelTypes))
-						for i, t := range types.AllModelTypes {
-							s[i] = string(t)
-						}
-						return s
-					}(), ", "))
-			}
-			manifest.ModelType = mt
-		}
-
-		// start download
-		pgCh, errCh := s.Pull(ctx, manifest)
-		bar := render.NewProgressBar(manifest.GetSize(), "downloading")
-		for pg := range pgCh {
-			bar.Set(pg.TotalDownloaded)
-		}
-		bar.Exit()
-
-		for err := range errCh {
-			bar.Clear()
-			return err
-		}
-
-		detectedType := manifest.ModelType
-		if updated, err := s.GetManifest(name); err == nil {
-			detectedType = updated.ModelType
-		}
-
-		if detectedType == "" {
-			fmt.Println(render.GetTheme().Warning.Sprintf(
-				"⚠  Could not detect model type; run:\n"+
-					"     geniex model set-type %s <llm|vlm>", name))
 		} else {
-			fmt.Println(render.GetTheme().Info.Sprintf("   Detected model type: %s", detectedType))
+			in.Quant = chosen
+			quant = chosen
 		}
 	}
 
-	fmt.Println(render.GetTheme().Success.Sprintf("✔  Download success"))
+	// Download with a progress bar driven by the SDK callback.
+	var bar *render.ProgressBar
+	in.OnProgress = func(files []geniex_sdk.FileProgress) bool {
+		var downloaded, total int64
+		for _, f := range files {
+			downloaded += f.DownloadedBytes
+			if f.TotalBytes > 0 {
+				total += f.TotalBytes
+			}
+		}
+		if bar == nil {
+			bar = render.NewProgressBar(total, "downloading")
+		}
+		bar.Set(downloaded)
+		return true
+	}
 
+	if err := geniex_sdk.ModelPull(in); err != nil {
+		if bar != nil {
+			bar.Clear()
+		}
+		return err
+	}
+	if bar != nil {
+		bar.Exit()
+	}
+
+	if t, err := geniex_sdk.ModelGetType(name); err == nil {
+		fmt.Println(render.GetTheme().Info.Sprintf("   Detected model type: %s", t))
+	} else {
+		fmt.Println(render.GetTheme().Warning.Sprintf(
+			"⚠  Could not detect model type; run:\n"+
+				"     geniex model set-type %s <llm|vlm>", name))
+	}
+
+	fmt.Println(render.GetTheme().Success.Sprint("✔  Download success"))
 	return nil
 }
 
-// =============== quant name parse ===============
-var quantRegix = regexp.MustCompile(`(` + strings.Join([]string{
-	"[fF][pP][0-9]+",                 // FP32, FP16, FP64
-	"[fF][0-9]+",                     // F64, F32, F16
-	"[iI][0-9]+",                     // I64, I32, I16, I8
-	"[qQ][0-9]+(_[A-Za-z0-9]+)*",     // Q8_0, Q8_1, Q8_K, Q6_K, Q5_0, Q5_1, Q5_K, Q4_0, Q4_1, Q4_K, Q3_K, Q2_K
-	"[iI][qQ][0-9]+(_[A-Za-z0-9]+)*", // IQ4_NL, IQ4_XS, IQ3_S, IQ3_XXS, IQ2_XXS, IQ2_S, IQ2_XS, IQ1_S, IQ1_M
-	"[bB][fF][0-9]+",                 // BF16
-	"[0-9]+[bB][iI][tT]",             // 1bit, 2bit, 3bit, 4bit, 16bit, 1BIT, 16Bit, etc.
-}, "|") + `)`)
-
-func getQuant(name string) string {
-	quant := strings.ToUpper(quantRegix.FindString(name))
-	if quant == "" {
-		quant = types.QuantNA
+// choosePrecision picks a precision from the remote candidates: the only one
+// when there's a single option, otherwise an interactive picker that defaults
+// to the SDK-recommended quant.
+func choosePrecision(candidates []geniex_sdk.QuantCandidate) (string, error) {
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("no precision available for this model")
 	}
-	return quant
+	if len(candidates) == 1 {
+		return candidates[0].Quant, nil
+	}
+
+	var defaultQuant string
+	var options []huh.Option[string]
+	for _, c := range candidates {
+		label := fmt.Sprintf("%-10s [%7s]", c.Quant, humanize.IBytes(uint64(c.Size)))
+		if c.IsDefault {
+			label += " (default)"
+			defaultQuant = c.Quant
+		}
+		options = append(options, huh.NewOption(label, c.Quant))
+	}
+
+	chosen := defaultQuant
+	if err := huh.NewSelect[string]().
+		Title("Choose a precision version to download").
+		Options(options...).
+		Value(&chosen).
+		Run(); err != nil {
+		return "", err
+	}
+	return chosen, nil
 }
-
-var partRegex = regexp.MustCompile(`-\d+-of-\d+\.gguf$`)
-
-func chooseFiles(name, specifiedQuant string, files []model_hub.ModelFileInfo, res *types.ModelManifest) (err error) {
-	if len(files) == 0 {
-		err = fmt.Errorf("repo is empty")
-		return
-	}
-
-	res.Name = name
-	res.ModelFile = make(map[string]types.ModelFileInfo)
-
-	// check gguf
-	var mmprojs []model_hub.ModelFileInfo
-	ggufs := make(map[string][]model_hub.ModelFileInfo) // key is gguf name without part
-	// qwen2.5-7b-instruct-q8_0-00003-of-00003.gguf original name is qwen2.5-7b-instruct-q8_0 *d-of-*d like this
-
-	for _, file := range files {
-		name := strings.ToLower(file.Name)
-		if strings.HasSuffix(name, ".gguf") {
-			if strings.HasPrefix(name, "mmproj") {
-				mmprojs = append(mmprojs, file)
-			} else {
-				name := partRegex.ReplaceAllString(file.Name, "")
-				ggufs[name] = append(ggufs[name], file)
-			}
-		}
-	}
-
-	// choose model file
-	if len(ggufs) > 0 {
-		// gguf models
-
-		if len(ggufs) == 1 {
-			// single quant
-			fileInfo := types.ModelFileInfo{}
-			for name, gguf := range ggufs {
-				fileInfo.Name = gguf[0].Name
-				fileInfo.Size = gguf[0].Size
-				fileInfo.Downloaded = true
-				res.ModelFile[getQuant(name)] = fileInfo
-				// other fragments
-				for _, file := range gguf[1:] {
-					res.ExtraFiles = append(res.ExtraFiles, types.ModelFileInfo{
-						Name:       file.Name,
-						Downloaded: true,
-						Size:       file.Size,
-					})
-				}
-			}
-			if specifiedQuant != "" && res.ModelFile[specifiedQuant].Name == "" {
-				return fmt.Errorf("Specified precision %s not found", specifiedQuant)
-			}
-
-		} else {
-			// pick default via PickDefaultQuant so pull and load agree.
-			ggufNames := make([]string, 0, len(ggufs))
-			quants := make([]string, 0, len(ggufs))
-			for k := range ggufs {
-				ggufNames = append(ggufNames, k)
-				quants = append(quants, getQuant(k))
-			}
-			defaultQuant := model_hub.PickDefaultQuant(quants)
-			var file string
-			for _, k := range ggufNames {
-				if getQuant(k) == defaultQuant {
-					file = k
-					break
-				}
-			}
-			sort.Slice(ggufNames, func(i, j int) bool {
-				return sumSize(ggufs[ggufNames[i]]) > sumSize(ggufs[ggufNames[j]])
-			})
-
-			if specifiedQuant != "" {
-				for _, ggufName := range ggufNames {
-					if getQuant(ggufName) == specifiedQuant {
-						file = ggufName
-						break
-					}
-				}
-				if getQuant(file) != specifiedQuant {
-					return fmt.Errorf("specified precision %s not found", specifiedQuant)
-				}
-			} else {
-				var options []huh.Option[string]
-				for _, ggufName := range ggufNames {
-					fmtStr := "%-10s [%7s]"
-					if ggufName == file {
-						fmtStr += " (default)"
-					}
-					options = append(options, huh.NewOption(
-						fmt.Sprintf(fmtStr, getQuant(ggufName), humanize.IBytes(uint64(sumSize(ggufs[ggufName])))),
-						ggufName,
-					))
-				}
-
-				if err = huh.NewSelect[string]().
-					Title("Choose a precision version to download").
-					Options(options...).
-					Value(&file).
-					Run(); err != nil {
-					return err
-				}
-			}
-
-			for k, gguf := range ggufs {
-				downloaded := k == file
-				// sort files by name
-				sort.Slice(gguf, func(i, j int) bool {
-					return gguf[i].Name < gguf[j].Name
-				})
-				res.ModelFile[getQuant(k)] = types.ModelFileInfo{
-					Name:       gguf[0].Name,
-					Downloaded: downloaded,
-					Size:       sumSize(ggufs[k]),
-				}
-				for _, file := range ggufs[k][1:] {
-					res.ExtraFiles = append(res.ExtraFiles, types.ModelFileInfo{
-						Name:       file.Name,
-						Downloaded: downloaded,
-						Size:       file.Size,
-					})
-				}
-			}
-		}
-
-		// detect mmproj: pick the biggest when multiple are present
-		var biggest model_hub.ModelFileInfo
-		for _, mmproj := range mmprojs {
-			if mmproj.Size > biggest.Size {
-				biggest = mmproj
-			}
-		}
-		if biggest.Name != "" {
-			res.MMProjFile = types.ModelFileInfo{
-				Name:       biggest.Name,
-				Size:       biggest.Size,
-				Downloaded: true,
-			}
-		}
-
-	} else {
-		// qairt models
-
-		if specifiedQuant != "" {
-			return fmt.Errorf("specified precision %s only supported in gguf model", specifiedQuant)
-		}
-
-		if len(files) == 1 {
-			// single file (typically the AI Hub .zip)
-			mainFile := files[0]
-			res.ModelFile[types.QuantNA] = types.ModelFileInfo{
-				Name:       mainFile.Name,
-				Downloaded: true,
-				Size:       mainFile.Size,
-			}
-		} else {
-			// folder structure
-			for _, f := range files {
-				res.ExtraFiles = append(res.ExtraFiles, types.ModelFileInfo{
-					Name:       f.Name,
-					Downloaded: true,
-					Size:       f.Size,
-				})
-			}
-		}
-	}
-
-	return
-}
-
-func chooseQuantFiles(specifiedQuant string, res *types.ModelManifest) error {
-	// sort key by quant
-	ggufQuants := make([]string, 0, len(res.ModelFile))
-	for k := range res.ModelFile {
-		ggufQuants = append(ggufQuants, k)
-	}
-	sort.Slice(ggufQuants, func(i, j int) bool {
-		return res.ModelFile[ggufQuants[i]].Size > res.ModelFile[ggufQuants[j]].Size
-	})
-
-	// choose quant
-	var quant string
-	if specifiedQuant != "" {
-		if fileinfo, ok := res.ModelFile[specifiedQuant]; !ok {
-			return fmt.Errorf("specified precision %s not found", specifiedQuant)
-		} else if fileinfo.Downloaded {
-			return fmt.Errorf("specified precision %s already downloaded", specifiedQuant)
-		}
-		quant = specifiedQuant
-	} else {
-		options := make([]huh.Option[string], 0, len(res.ModelFile))
-		for _, q := range ggufQuants {
-			m := res.ModelFile[q]
-			if m.Downloaded {
-				continue
-			}
-			options = append(options, huh.NewOption(
-				fmt.Sprintf("%-10s [%7s]", q, humanize.IBytes(uint64(m.Size))), q,
-			))
-		}
-
-		if err := huh.NewSelect[string]().
-			Title("Choose a precision version to download").
-			Options(options...).
-			Value(&quant).
-			Run(); err != nil {
-			return err
-		}
-	}
-
-	res.ModelFile[quant] = types.ModelFileInfo{
-		Name:       res.ModelFile[quant].Name,
-		Downloaded: true,
-		Size:       res.ModelFile[quant].Size,
-	}
-
-	// other fragments
-	file := res.ModelFile[quant].Name
-	ggufName := partRegex.ReplaceAllString(file, "")
-	for i, f := range res.ExtraFiles {
-		if ggufName == partRegex.ReplaceAllString(f.Name, "") {
-			res.ExtraFiles[i] = types.ModelFileInfo{
-				Name:       f.Name,
-				Downloaded: true,
-			}
-		}
-
-	}
-
-	return nil
-}
-
-func sumSize(files []model_hub.ModelFileInfo) int64 {
-	var size int64
-	for _, f := range files {
-		size += f.Size
-	}
-	return size
-}
-

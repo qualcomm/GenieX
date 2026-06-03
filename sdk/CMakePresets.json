@@ -11,8 +11,7 @@
       "hidden": true,
       "cacheVariables": {
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "GENIEX_BENCHMARK": "ON"
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
     },
     {
@@ -30,6 +29,7 @@
         "GGML_HEXAGON": "ON",
         "GGML_OPENCL": "ON",
         "GENIEX_PLUGIN_QAIRT": "ON",
+        "GENIEX_BENCHMARK": "ON",
         "CMAKE_PREFIX_PATH": "$env{OPENCL_SDK_ROOT}",
         "HEXAGON_SDK_ROOT": "$env{HEXAGON_SDK_ROOT}",
         "HEXAGON_TOOLS_ROOT": "$env{HEXAGON_TOOLS_ROOT}",

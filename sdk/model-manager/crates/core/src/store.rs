@@ -210,7 +210,18 @@ impl Store {
     }
 
     pub fn get_model_type(&self, name: &str) -> Result<ModelType> {
-        Ok(self.get_manifest(name)?.model_type)
+        let name = canonicalize_model_name(name);
+        Ok(self.get_manifest(&name)?.model_type)
+    }
+
+    pub fn set_model_type(&self, name: &str, model_type: ModelType) -> Result<()> {
+        let name = canonicalize_model_name(name);
+        validate_model_name(&name)?;
+        self.with_model_lock(&name, || {
+            let mut manifest = self.get_manifest(&name)?;
+            manifest.model_type = model_type;
+            self.write_manifest(&manifest)
+        })
     }
 
     /// Resolve a model name (with optional ":quant" suffix) to ModelPaths.
@@ -321,6 +332,24 @@ mod tests {
         store.write_manifest(&sample_manifest("Org/C")).unwrap();
         store.remove("Org/C").unwrap();
         assert!(!store.cfg.model_dir("Org/C").exists());
+    }
+
+    #[test]
+    fn set_model_type_roundtrips() {
+        let store = make_store();
+        store.write_manifest(&sample_manifest("Org/Typed")).unwrap();
+        assert_eq!(store.get_model_type("Org/Typed").unwrap(), ModelType::Llm);
+        store.set_model_type("Org/Typed", ModelType::Vlm).unwrap();
+        assert_eq!(store.get_model_type("Org/Typed").unwrap(), ModelType::Vlm);
+    }
+
+    #[test]
+    fn set_model_type_missing_model_errors() {
+        let store = make_store();
+        let err = store
+            .set_model_type("Org/Absent", ModelType::Vlm)
+            .unwrap_err();
+        assert!(matches!(err, Error::ModelNotFound(_)), "got {err:?}");
     }
 
     #[test]

@@ -54,7 +54,10 @@ cc_library(
         "@platforms//os:windows": ["pkg-geniex/lib/geniex.dll"],
         "@platforms//os:linux": ["pkg-geniex/lib/libgeniex.so"],
     }),
-    hdrs = ["pkg-geniex/include/geniex.h"],
+    hdrs = [
+        "pkg-geniex/include/geniex.h",
+        "pkg-geniex/include/geniex_model.h",
+    ],
     data = [":local_sdk_runtime"],
     includes = ["pkg-geniex/include"],
     linkopts = select({

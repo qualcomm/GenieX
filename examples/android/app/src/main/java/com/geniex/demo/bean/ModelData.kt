@@ -21,7 +21,7 @@ data class ModelData(
      * alias layer (`resolveAlias`) out of the demo for simplicity.
      */
     val modelName: String,
-    /** "chat" / "llm" / "vlm" / "embedder" / "reranker" / "cv" / "asr". */
+    /** "chat" / "llm" / "vlm". */
     val type: String? = null,
     /**
      * Bitmask of supported plugins (see [getSupportPluginIds]):

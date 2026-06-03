@@ -16,6 +16,7 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"runtime"
@@ -24,8 +25,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 )
@@ -50,10 +51,12 @@ func RootCmd() *cobra.Command {
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			cmd.SilenceErrors = true
 
-			// Register ModelHub
+			// Initialize the SDK model manager against the same data dir the
+			// store uses so both layers agree on the cache location.
 			s := store.Get()
-			model_hub.RegisterHub(model_hub.NewHuggingFace())
-			model_hub.RegisterHub(model_hub.NewAIHub(chipsetGet(s)))
+			if err := geniex_sdk.ModelInit(s.DataPath()); err != nil {
+				slog.Error("failed to initialize model manager", "err", err)
+			}
 
 			subCmd := cmd.CalledAs()
 			if !skipUpdate {

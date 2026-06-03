@@ -75,7 +75,7 @@ jobs:
 
   build-android-apk:
     name: build-android-apk
-    needs: [build-sdk]
+    needs: [build-sdk, build-android-aar]
     uses: ./.github/workflows/_build-android-apk.yml
     secrets: inherit
     with:
@@ -89,9 +89,36 @@ jobs:
     with:
       push: false
 
-  test:
-    name: test
+  go-test:
+    name: go-test
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    uses: ./.github/workflows/test.yml
+    uses: ./.github/workflows/_test.yml
     secrets: inherit
+    with:
+      language: go
+      gate_on_changed_files: true
+
+  python-pytest:
+    name: python-pytest
+    needs: [build-sdk]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_test.yml
+    secrets: inherit
+    with:
+      language: python
+      gate_on_changed_files: true
+
+  sdk-pytest:
+    name: sdk-pytest
+    needs: [build-sdk]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_test.yml
+    secrets: inherit
+    with:
+      language: sdk
+      # Linux currently can't run the llama_cpp plugin tests (libOpenCL.so.1
+      # missing in the ubuntu:24.04 toolchain image). Re-enable linux-arm64
+      # once the plugin can dlopen without an OpenCL ICD on the host.
+      platforms: '["windows-arm64"]'
+      gate_on_changed_files: true

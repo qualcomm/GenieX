@@ -15,25 +15,18 @@
 package handler
 
 import (
-	"errors"
 	"net/http"
-	"os"
 	"slices"
 	"strings"
 
-	"github.com/bytedance/sonic"
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v3"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 )
 
 func ListModels(c *gin.Context) {
-	s := store.Get()
-
-	models, err := s.List()
+	models, err := geniex_sdk.ModelListDetailed()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
@@ -41,12 +34,9 @@ func ListModels(c *gin.Context) {
 
 	res := make([]openai.Model, 0, len(models))
 	for _, m := range models {
-		for q, f := range m.ModelFile {
-			if !f.Downloaded {
-				continue
-			}
+		for _, q := range m.Precisions {
 			id := m.Name
-			if q != types.QuantNA {
+			if q != geniex_sdk.QuantNA {
 				id += ":" + q
 			}
 			res = append(res, openai.Model{
@@ -63,52 +53,40 @@ func ListModels(c *gin.Context) {
 }
 
 func RetrieveModel(c *gin.Context) {
-	name := strings.TrimPrefix(c.Param("model"), "/")
-	name, quant := model_hub.NormalizeModelName(name)
+	name, quant := geniex_sdk.SplitNameQuant(strings.TrimPrefix(c.Param("model"), "/"))
 
-	// check model exist
-	s := store.Get()
-	manifest, err := s.GetManifest(name)
+	models, err := geniex_sdk.ModelListDetailed()
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			c.JSON(http.StatusNotFound, nil)
-		} else {
-			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		}
+		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
-	// fill quant if not specified
-	if quant == "" {
-		quants := make([]string, 0, len(manifest.ModelFile))
-		for quant, v := range manifest.ModelFile {
-			if v.Downloaded {
-				quants = append(quants, quant)
-				break
-			}
-		}
-		slices.Sort(quants)
-		quant = quants[0]
+	idx := slices.IndexFunc(models, func(m geniex_sdk.ModelDetail) bool { return m.Name == name })
+	if idx < 0 {
+		c.JSON(http.StatusNotFound, nil)
+		return
 	}
+	m := models[idx]
 
-	// check quant exist
-	if _, ok := manifest.ModelFile[quant]; !ok {
+	if quant == "" {
+		precisions := slices.Clone(m.Precisions)
+		slices.Sort(precisions)
+		if len(precisions) == 0 {
+			c.JSON(http.StatusNotFound, nil)
+			return
+		}
+		quant = precisions[0]
+	} else if !slices.Contains(m.Precisions, quant) {
 		c.JSON(http.StatusNotFound, nil)
 		return
 	}
 
-	// compact with openai format
-	var res map[string]any
-	ms, _ := sonic.Marshal(manifest)
-	_ = sonic.Unmarshal(ms, &res)
-	model := openai.Model{}
-	model.ID = name
-	if quant != types.QuantNA {
-		model.ID += ":" + quant
+	id := name
+	if quant != geniex_sdk.QuantNA {
+		id += ":" + quant
 	}
-	model.OwnedBy = strings.Split(manifest.Name, "/")[0]
-	ms, _ = sonic.Marshal(model)
-	_ = sonic.Unmarshal(ms, &res)
-
-	c.JSON(http.StatusOK, res)
+	c.JSON(http.StatusOK, openai.Model{
+		ID:      id,
+		OwnedBy: strings.Split(m.Name, "/")[0],
+	})
 }

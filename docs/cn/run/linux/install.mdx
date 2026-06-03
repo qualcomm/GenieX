@@ -28,6 +28,10 @@ docker login ghcr.io -u <your-github-username> -p "$GITHUB_TOKEN"
 docker pull ghcr.io/qcom-ai-hub/geniex-cli:latest
 ```
 
+<Note>
+  若 `docker login` 失败或 `docker pull` 返回 `permission denied ... /var/run/docker.sock`，参见[故障排查 → Linux](/cn/resources/troubleshooting#linux) 了解 PAT 权限与 `docker` 组的修复方法。
+</Note>
+
 ### **交互式运行**
 
 进入容器内交互式 shell：

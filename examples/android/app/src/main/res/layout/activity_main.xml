@@ -193,18 +193,6 @@
                                 android:textColor="#1F1F1F"
                                 android:visibility="invisible" />
 
-                            <Button
-                                android:id="@+id/btn_voice"
-                                android:layout_width="0dp"
-                                android:layout_height="32dp"
-                                android:layout_weight="1"
-                                android:background="@drawable/btn_rounded_border"
-                                android:ellipsize="end"
-                                android:singleLine="true"
-                                android:text="Record"
-                                android:textAllCaps="false"
-                                android:textColor="#1F1F1F"
-                                android:visibility="invisible" />
                         </LinearLayout>
 
                         <LinearLayout
@@ -247,58 +235,6 @@
 
     </LinearLayout>
 
-    <!-- audio panel -->
-    <LinearLayout
-        android:id="@+id/bottom_panel"
-        android:layout_width="match_parent"
-        android:layout_height="110dp"
-        android:layout_alignParentBottom="true"
-        android:background="#FFFFFF"
-        android:orientation="vertical"
-        android:visibility="gone">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_margin="10dp"
-            android:gravity="center_horizontal"
-            android:text="Recording..." />
-
-        <LinearLayout
-            android:layout_width="wrap_content"
-            android:layout_height="44dp"
-            android:paddingTop="8dp">
-
-            <Button
-                android:id="@+id/btn_audio_cancel"
-                android:layout_width="0dp"
-                android:layout_height="32dp"
-                android:layout_marginLeft="16dp"
-                android:layout_weight="1"
-                android:background="@drawable/btn_rounded_border"
-                android:text="Cancel"
-                android:textAllCaps="false"
-                android:textColor="#1F1F1F" />
-
-            <View
-                android:id="@+id/view"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="2" />
-
-            <Button
-                android:id="@+id/btn_audio_done"
-                android:layout_width="0dp"
-                android:layout_height="32dp"
-                android:layout_marginRight="16dp"
-                android:layout_weight="1"
-                android:background="@drawable/btn_rounded_border"
-                android:text="Done"
-                android:textAllCaps="false"
-                android:textColor="#1F1F1F" />
-        </LinearLayout>
-
-    </LinearLayout>
     <!-- Download progress overlay -->
     <LinearLayout
         android:id="@+id/ll_downloading"

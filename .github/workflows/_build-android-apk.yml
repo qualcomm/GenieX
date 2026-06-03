@@ -39,6 +39,48 @@ jobs:
           name: sdk-android-arm64
           path: sdk/pkg-geniex
 
+      # Resolve the SDK from the AAR just built in this run (uploaded by
+      # _build-android-aar.yml), not from Maven Central. Otherwise a release
+      # that bumps the example's geniex-android pin to a version not yet
+      # published would fail dependency resolution. We install the AAR into a
+      # local Maven repo — with a generated POM declaring `aar` packaging — so
+      # AGP's variant-aware resolution treats it exactly like the Maven Central
+      # artifact. The install version must match the example's pinned version
+      # (the resolution key), so we read it back from app/build.gradle.kts.
+      - name: Download freshly built AAR
+        uses: actions/download-artifact@v8
+        with:
+          name: android-aar
+          path: examples/android/local-aar
+      - name: Install AAR into local Maven repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="examples/android/local-aar/geniex-android-aar.aar"
+          [ -f "$src" ] || { echo "::error::AAR artifact not found at $src"; exit 1; }
+
+          # Pull the version the example pins so the local artifact resolves.
+          version=$(sed -nE 's/.*com\.qualcomm\.qti:geniex-android:([^"]+)".*/\1/p' \
+            examples/android/app/build.gradle.kts | head -n1)
+          [ -n "$version" ] || { echo "::error::could not parse geniex-android version from app/build.gradle.kts"; exit 1; }
+          echo "Installing geniex-android:$version into local Maven repo"
+
+          repo="$GITHUB_WORKSPACE/examples/android/local-maven"
+          dir="$repo/com/qualcomm/qti/geniex-android/$version"
+          mkdir -p "$dir"
+          cp "$src" "$dir/geniex-android-$version.aar"
+          cat > "$dir/geniex-android-$version.pom" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <project xmlns="http://maven.apache.org/POM/4.0.0">
+            <modelVersion>4.0.0</modelVersion>
+            <groupId>com.qualcomm.qti</groupId>
+            <artifactId>geniex-android</artifactId>
+            <version>$version</version>
+            <packaging>aar</packaging>
+          </project>
+          EOF
+          echo "GENIEX_AAR_REPO=$repo" >> "$GITHUB_ENV"
+
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
@@ -75,6 +117,8 @@ jobs:
       # Debug variant — the example app's `test` keystore in the repo signs
       # both debug and release with the same demo key, so debug is sufficient
       # and avoids the release-only minification pass.
+      # GENIEX_AAR_REPO (exported above) routes the geniex-android dependency to
+      # the local Maven repo holding the AAR built in this run.
       - name: Assemble demo APK
         working-directory: examples/android
         run: ./gradlew --no-daemon :app:assembleDebug

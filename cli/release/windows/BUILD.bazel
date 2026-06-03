@@ -21,6 +21,7 @@ genrule(
         '"/DArtifactIss=%CD%\\$(RULEDIR)\\_artifact_iss.iss"',
         '"$(location geniex-cli-setup.iss)"',
     ]),
+    target_compatible_with = ["@platforms//os:windows"],
     tools = ["@innosetup//:iscc"],
 )
 

@@ -13,7 +13,7 @@ use crate::types::*;
 /// `include/geniex_model.h`.
 #[repr(C)]
 #[allow(dead_code)]
-pub enum GeniexHubSource {
+pub enum GenieXHubSource {
     Auto = 0,
     HuggingFace = 1,
     ModelScope = 2,
@@ -24,15 +24,15 @@ pub enum GeniexHubSource {
     LocalFs = 127,
 }
 
-/// Progress callback: invoked with an array of per-file `GeniexFileProgress`
+/// Progress callback: invoked with an array of per-file `GenieXFileProgress`
 /// entries; return `false` to cancel. The pointer is only valid during the
 /// call — callbacks must not retain it.
-pub type GeniexDownloadProgressCb =
-    Option<unsafe extern "C" fn(*const GeniexFileProgress, i32, *mut c_void) -> bool>;
+pub type GenieXDownloadProgressCb =
+    Option<unsafe extern "C" fn(*const GenieXFileProgress, i32, *mut c_void) -> bool>;
 
 #[repr(C)]
-pub struct GeniexModelPullInput {
-    /// Must equal `size_of::<GeniexModelPullInput>()`. See the C header
+pub struct GenieXModelPullInput {
+    /// Must equal `size_of::<GenieXModelPullInput>()`. See the C header
     /// doc on `geniex_ModelPullInput.struct_size` — this is the ABI
     /// version gate: callers compiled against an older header won't
     /// match any recognized size and are rejected before any field is
@@ -40,7 +40,7 @@ pub struct GeniexModelPullInput {
     pub struct_size: u32,
     pub model_name: *const c_char,
     pub quant: *const c_char,
-    pub hub: GeniexHubSource,
+    pub hub: GenieXHubSource,
     pub local_path: *const c_char,
     /// HuggingFace bearer token (NULL = fall back to GENIEX_HFTOKEN env,
     /// then anonymous). Only meaningful when `hub == GENIEX_HUB_HUGGINGFACE`.
@@ -57,122 +57,151 @@ pub struct GeniexModelPullInput {
     /// `model_name` still names the on-disk directory ("org/repo"
     /// shape), mirroring the Go CLI's `storedName` / `displayName` split.
     pub display_name: *const c_char,
-    pub on_progress: GeniexDownloadProgressCb,
+    pub on_progress: GenieXDownloadProgressCb,
     pub user_data: *mut c_void,
+    /// Optional model-type override (-1 = auto-detect, 0 = LLM, 1 = VLM).
+    /// Written into the manifest as the pull publishes, so callers that know
+    /// the type avoid a separate geniex_model_set_type round-trip.
+    pub model_type: i32,
 }
 
 /// Struct sizes the Rust FFI knows how to read. The only entry today
 /// is the current layout; if we add fields in a forward-compatible
 /// way, append the *previous* size here so older callers still work.
 /// A caller that passes a size not in this list is rejected up front.
-const ACCEPTED_PULL_INPUT_SIZES: &[u32] = &[std::mem::size_of::<GeniexModelPullInput>() as u32];
+const ACCEPTED_PULL_INPUT_SIZES: &[u32] = &[std::mem::size_of::<GenieXModelPullInput>() as u32];
+
+/// Route a hub selector + already-extracted parameters to a [`PullIntent`].
+/// Shared by `geniex_model_pull` and `geniex_model_query` so their hub
+/// resolution can't drift. `model_name` must already be canonicalised.
+/// Returns a negative error code when a required input is missing.
+pub(crate) fn build_pull_intent(
+    hub: &GenieXHubSource,
+    model_name: &str,
+    hf_token: Option<String>,
+    chipset: String,
+    explicit_display_name: Option<String>,
+    local_path: Option<PathBuf>,
+) -> Result<PullIntent, i32> {
+    let intent = match hub {
+        GenieXHubSource::Auto => {
+            // "qualcomm/*" and "qai-hub-models/*" names, plus bare names
+            // (which canonicalize_model_name rewrote to "qualcomm/<name>"),
+            // route to AI Hub without the caller setting hub=AIHUB. The
+            // derived display_name is the repo after the slash; callers may
+            // still override via explicit_display_name.
+            if let Some(repo) = aihub_display_name_from_repo(model_name) {
+                PullIntent::AiHub {
+                    display_name: explicit_display_name.unwrap_or_else(|| repo.to_string()),
+                    chipset,
+                }
+            } else {
+                PullIntent::HuggingFace {
+                    repo: model_name.to_string(),
+                    token: hf_token,
+                }
+            }
+        }
+        GenieXHubSource::HuggingFace => PullIntent::HuggingFace {
+            repo: model_name.to_string(),
+            token: hf_token,
+        },
+        GenieXHubSource::LocalFs => {
+            let path = local_path.ok_or(GENIEX_ERROR_COMMON_INVALID_INPUT)?;
+            PullIntent::LocalFs { source_dir: path }
+        }
+        GenieXHubSource::AiHub => {
+            // chipset NULL or empty → SDK auto-detects (currently
+            // Windows-on-Snapdragon only). display_name: explicit value
+            // wins; otherwise derive from any AI Hub org repo.
+            let display_name = explicit_display_name
+                .or_else(|| aihub_display_name_from_repo(model_name).map(str::to_string))
+                .ok_or(GENIEX_ERROR_COMMON_INVALID_INPUT)?;
+            PullIntent::AiHub {
+                display_name,
+                chipset,
+            }
+        }
+        // ModelScope / Volces remain placeholders — fall back to HuggingFace.
+        _ => PullIntent::HuggingFace {
+            repo: model_name.to_string(),
+            token: hf_token,
+        },
+    };
+    Ok(intent)
+}
+
+/// Validate the ABI gate and extract the canonical model name + PullIntent
+/// shared by `geniex_model_pull` and `geniex_model_query` (both take a
+/// `GenieXModelPullInput`; query just ignores the quant / callback / model_type
+/// fields). `fn_name` only labels the struct_size error message.
+///
+/// # Safety
+/// `input` must be non-null and point to a valid `GenieXModelPullInput`.
+pub(crate) unsafe fn extract_name_and_intent(
+    input: *const GenieXModelPullInput,
+    fn_name: &str,
+) -> Result<(String, PullIntent), i32> {
+    // ABI gate: read struct_size before any other field so a layout mismatch
+    // can't corrupt downstream reads.
+    let struct_size = std::ptr::read(&(*input).struct_size);
+    if !ACCEPTED_PULL_INPUT_SIZES.contains(&struct_size) {
+        crate::logging::error(&format!(
+            "{fn_name}: unsupported struct_size {struct_size}; expected one of \
+             {ACCEPTED_PULL_INPUT_SIZES:?} (recompile your binding against the \
+             current geniex_model.h)",
+        ));
+        return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
+    }
+
+    let inp = &*input;
+
+    let raw_model_name = cstr_to_str(inp.model_name).ok_or(GENIEX_ERROR_COMMON_INVALID_INPUT)?;
+    // Bare names (no '/') are treated as AI Hub model ids and stored under
+    // `qualcomm/<name>`; anything with '/' is passed through.
+    let model_name = canonicalize_model_name(raw_model_name);
+
+    // Explicit token wins; env var is the fallback; anonymous otherwise.
+    let hf_token = cstr_to_str(inp.hf_token)
+        .map(str::to_string)
+        .or_else(StoreConfig::hf_token_from_env);
+    // chipset / display_name are only meaningful for AI Hub; read up front so
+    // both the explicit-AiHub and Auto-→-AiHub paths share them.
+    let chipset = cstr_to_str(inp.chipset).unwrap_or("").to_string();
+    let explicit_display_name = cstr_to_str(inp.display_name)
+        .map(str::to_string)
+        .filter(|s| !s.is_empty());
+    let local_path = cstr_to_str(inp.local_path).map(PathBuf::from);
+
+    let intent = build_pull_intent(
+        &inp.hub,
+        &model_name,
+        hf_token,
+        chipset,
+        explicit_display_name,
+        local_path,
+    )?;
+    Ok((model_name, intent))
+}
 
 #[no_mangle]
-pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
+pub extern "C" fn geniex_model_pull(input: *const GenieXModelPullInput) -> i32 {
     ffi_guard(|| {
         if input.is_null() {
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
 
-        // ABI gate: `struct_size` has to be set to `sizeof(struct)` at
-        // the caller's compile time. It's read before we touch any other
-        // field, so an ABI mismatch can't corrupt downstream reads.
-        // See ACCEPTED_PULL_INPUT_SIZES doc.
-        let struct_size = unsafe { std::ptr::read(&(*input).struct_size) };
-        if !ACCEPTED_PULL_INPUT_SIZES.contains(&struct_size) {
-            crate::logging::error(&format!(
-                "geniex_model_pull: unsupported struct_size {}; expected one of {:?} \
-                 (recompile your binding against the current geniex_model.h)",
-                struct_size, ACCEPTED_PULL_INPUT_SIZES,
-            ));
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
-        }
-
+        let (model_name, intent) =
+            match unsafe { extract_name_and_intent(input, "geniex_model_pull") } {
+                Ok(v) => v,
+                Err(c) => return c,
+            };
         let inp = unsafe { &*input };
-
-        let raw_model_name = match unsafe { cstr_to_str(inp.model_name) } {
-            Some(s) => s.to_string(),
-            None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
-        };
-        // Bare names (no '/') are treated as AI Hub model ids and stored
-        // under `qualcomm/<name>`; anything with '/' is passed through.
-        let model_name = canonicalize_model_name(&raw_model_name);
-
-        // Explicit token wins; env var is the fallback; anonymous otherwise.
-        let hf_token = unsafe { cstr_to_str(inp.hf_token) }
-            .map(str::to_string)
-            .or_else(StoreConfig::hf_token_from_env);
-
-        // `chipset` / `display_name` are only meaningful for AI Hub but
-        // we read them once up front so both the explicit-AiHub branch
-        // and the Auto-→-AiHub auto-detect path can share the values.
-        let chipset = unsafe { cstr_to_str(inp.chipset) }
-            .unwrap_or("")
-            .to_string();
-        let explicit_display_name = unsafe { cstr_to_str(inp.display_name) }
-            .map(str::to_string)
-            .filter(|s| !s.is_empty());
-
-        let intent = match inp.hub {
-            GeniexHubSource::Auto => {
-                // "qualcomm/*" and "qai-hub-models/*" names, plus bare
-                // names (which canonicalize_model_name above rewrote to
-                // "qualcomm/<name>"), route to AI Hub without the caller
-                // setting hub=AIHUB. The derived display_name is the repo
-                // after the slash; callers may still override via
-                // inp.display_name.
-                if let Some(repo) = aihub_display_name_from_repo(&model_name) {
-                    PullIntent::AiHub {
-                        display_name: explicit_display_name.unwrap_or_else(|| repo.to_string()),
-                        chipset,
-                    }
-                } else {
-                    PullIntent::HuggingFace {
-                        repo: model_name.clone(),
-                        token: hf_token,
-                    }
-                }
-            }
-            GeniexHubSource::HuggingFace => PullIntent::HuggingFace {
-                repo: model_name.clone(),
-                token: hf_token,
-            },
-            GeniexHubSource::LocalFs => {
-                let path = match unsafe { cstr_to_str(inp.local_path) } {
-                    Some(s) => PathBuf::from(s),
-                    None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
-                };
-                PullIntent::LocalFs { source_dir: path }
-            }
-            GeniexHubSource::AiHub => {
-                // chipset NULL or empty → SDK auto-detects (currently
-                // Windows-on-Snapdragon only). Non-empty: caller override.
-                // display_name mirrors the Auto branch: explicit value
-                // wins; otherwise derive from any AI Hub org repo
-                // ("qualcomm/*" or "qai-hub-models/*"). Only reject when
-                // neither source yields a name.
-                let display_name = explicit_display_name
-                    .or_else(|| aihub_display_name_from_repo(&model_name).map(str::to_string));
-                let display_name = match display_name {
-                    Some(s) => s,
-                    None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
-                };
-                PullIntent::AiHub {
-                    display_name,
-                    chipset,
-                }
-            }
-            // ModelScope / Volces remain placeholders — fall back to HuggingFace.
-            _ => PullIntent::HuggingFace {
-                repo: model_name.clone(),
-                token: hf_token,
-            },
-        };
 
         // Build a Rust closure that re-marshals Rust FileProgress → C array
         // and invokes the caller's function pointer.
         struct CCallback {
-            cb: unsafe extern "C" fn(*const GeniexFileProgress, i32, *mut c_void) -> bool,
+            cb: unsafe extern "C" fn(*const GenieXFileProgress, i32, *mut c_void) -> bool,
             user_data: *mut c_void,
         }
         unsafe impl Send for CCallback {}
@@ -191,10 +220,10 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
                         .iter()
                         .map(|f| std::ffi::CString::new(f.file_name.as_bytes()).unwrap_or_default())
                         .collect();
-                    let ffi_entries: Vec<GeniexFileProgress> = files
+                    let ffi_entries: Vec<GenieXFileProgress> = files
                         .iter()
                         .zip(cstrings.iter())
-                        .map(|(f, cs)| GeniexFileProgress {
+                        .map(|(f, cs)| GenieXFileProgress {
                             file_name: cs.as_ptr(),
                             downloaded_bytes: f.downloaded_bytes,
                             total_bytes: f.total_bytes,
@@ -220,8 +249,16 @@ pub extern "C" fn geniex_model_pull(input: *const GeniexModelPullInput) -> i32 {
         // Thread `quant` into the manifest hint so `pull` only fetches
         // the requested quantization instead of every GGUF in the repo.
         let quant = unsafe { cstr_to_str(inp.quant) }.map(str::to_string);
+        // -1 (GENIEX_MODEL_TYPE_AUTO) leaves detection to the inferer; 0/1 force
+        // the type so the manifest is written correctly in one shot.
+        let model_type = match inp.model_type {
+            0 => Some(model_manager_core::manifest::ModelType::Llm),
+            1 => Some(model_manager_core::manifest::ModelType::Vlm),
+            _ => None,
+        };
         let hint = ManifestHint {
             quant,
+            model_type,
             ..ManifestHint::default()
         };
 

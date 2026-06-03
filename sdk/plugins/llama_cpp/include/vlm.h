@@ -5,6 +5,7 @@
 #include "mtmd.h"
 #include "plugin/IVlm.h"
 #include "sampling.h"
+#include "threadpool.h"
 
 // Forward declarations for llama.cpp types
 struct llama_context;
@@ -18,6 +19,7 @@ class LlamaVlm : public IVlm {
     llama_context*  ctx        = nullptr;
     common_sampler* sampler    = nullptr;
     mtmd_context*   ctx_vision = nullptr;
+    Threadpools     pools_;
 
     // mmproj-reported modality support; both false when no mmproj is loaded.
     bool supports_vision = false;
@@ -46,6 +48,7 @@ class LlamaVlm : public IVlm {
 
    private:
     void reset_sampler();
+    void set_sampler(const geniex_SamplerConfig* cfg);
     bool vlm_message_to_common_chat_msg(const geniex_VlmChatMessage* input, common_chat_msg* output);
 };
 

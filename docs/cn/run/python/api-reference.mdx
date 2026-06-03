@@ -11,13 +11,13 @@ GenieX Python SDK 的设计与 Hugging Face `transformers` 一致——通过 `A
 
 ## AutoModelForCausalLM
 
-加载因果语言模型的工厂——同时支持纯文本与多模态。文本模型返回 [`GeniexLLM`](#geniexllm)，识别为多模态时返回 [`GeniexVLM`](#geniexvlm)（如 `phi4_multimodal`、`qwen3.5-vl`、`gemma4`）。
+加载因果语言模型的工厂——同时支持纯文本与多模态。文本模型返回 [`GenieXLLM`](#geniexllm)，识别为多模态时返回 [`GenieXVLM`](#geniexvlm)（如 `phi4_multimodal`、`qwen3.5-vl`、`gemma4`）。
 
 ```python
 from geniex import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
-    "qualcomm/Qwen3-4B-Instruct",
+    "ai-hub-models/Qwen3-4B-Instruct",
     device_map="auto",
 )
 ```
@@ -41,18 +41,18 @@ model = AutoModelForCausalLM.from_pretrained(
 
 </Expandable>
 
-**返回：** [`GeniexLLM`](#geniexllm) 或 [`GeniexVLM`](#geniexvlm)（按模型自动判断）
+**返回：** [`GenieXLLM`](#geniexllm) 或 [`GenieXVLM`](#geniexvlm)（按模型自动判断）
 
 ---
 
 ## AutoModelForVision2Seq
 
-加载视觉语言/多模态模型的工厂。返回 [`GeniexVLM`](#geniexvlm) 实例。
+加载视觉语言/多模态模型的工厂。返回 [`GenieXVLM`](#geniexvlm) 实例。
 
 ```python
 from geniex import AutoModelForVision2Seq
 
-model = AutoModelForVision2Seq.from_pretrained("qualcomm/Qwen2.5-7B-Instruct", device_map="qairt")
+model = AutoModelForVision2Seq.from_pretrained("ai-hub-models/Qwen2.5-7B-Instruct", device_map="qairt")
 ```
 
 ### `from_pretrained()`
@@ -63,11 +63,11 @@ model = AutoModelForVision2Seq.from_pretrained("qualcomm/Qwen2.5-7B-Instruct", d
 |---|---|---|---|
 | `mmproj_path` | `str \| None` | `None` | 多模态投影文件路径。从 Hub 下载时自动解析。 |
 
-**返回：** [`GeniexVLM`](#geniexvlm)
+**返回：** [`GenieXVLM`](#geniexvlm)
 
 ---
 
-## GeniexLLM
+## GenieXLLM
 
 由 `AutoModelForCausalLM.from_pretrained()` 返回的纯文本模型实例。
 
@@ -125,13 +125,13 @@ with AutoModelForCausalLM.from_pretrained("qwen3") as model:
 
 ---
 
-## GeniexVLM
+## GenieXVLM
 
 由 `AutoModelForVision2Seq.from_pretrained()` 返回的视觉语言模型实例。
 
 ### `generate()`
 
-参数与 [`GeniexLLM.generate()`](#generate) 一致，新增：
+参数与 [`GenieXLLM.generate()`](#generate) 一致，新增：
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -147,7 +147,7 @@ print(output.text)
 
 ### `reset()` / `close()`
 
-同 [`GeniexLLM`](#geniexllm)。
+同 [`GenieXLLM`](#geniexllm)。
 
 ---
 
@@ -171,7 +171,7 @@ prompt = model.tokenizer.apply_chat_template(
 | `messages` | `list[dict]` | *必填* | 包含 `"role"` 与 `"content"` 的消息字典列表。 |
 | `tokenize` | `bool` | `False` | 必须为 `False`——不支持独立的 tokenize。 |
 | `add_generation_prompt` | `bool` | `True` | 是否追加生成提示后缀。 |
-| `enable_thinking` | `bool` | `False` | 启用思考模式（如 Qwen 推理模型）。 |
+| `enable_thinking` | `bool \| None` | `None` | 启用思考模式。`None`（默认）和 `True` 都会让支持思考的模型进入思考模式（对非思考模型为 no-op）。`False` 用于让支持思考的模型跳过思考轮；对非思考模型会被强制改为 `True` 并发出警告（其抑制块超出训练分布）。能力通过 `model.supports_thinking` 自动检测并暴露。 |
 | `tools` | `list[dict] \| str \| None` | `None` | 工具定义，可为字典列表或预序列化的 JSON 字符串。 |
 
 **返回：** `str` —— 可直接传给 `model.generate()` 的格式化 prompt。

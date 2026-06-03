@@ -170,6 +170,32 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 </AccordionGroup>
 
+## **Linux ARM64 setup**
+
+<AccordionGroup>
+  <Accordion title="check.sh reports missing libraries — what do I install?">
+    The pre-flight checker (`check.sh`) and the Docker entrypoint (`entrypoint.sh`) flag missing system libraries or Qualcomm drivers. On Ubuntu / Debian, install them with two `apt` commands:
+
+    **1. Base system libraries (from the standard Ubuntu repos):**
+
+    ```bash
+    sudo apt update
+    sudo apt install -y \
+      libatomic1 \
+      libglib2.0-0 \
+      ocl-icd-libopencl1
+    ```
+
+    **2. Qualcomm driver packages (Adreno GPU + FastRPC NPU bridge):**
+
+    ```bash
+    sudo apt-get install -y qcom-adreno1 qcom-fastrpc1
+    ```
+
+    The Qualcomm packages come from the vendor BSP / EVK repository — they aren't on stock Ubuntu mirrors. After installing, re-run `check.sh` to confirm; if `libcdsprpc.so` / `libadsprpc.so` symlinks are still missing, re-run the geniex installer (`install.sh`) to recreate them.
+  </Accordion>
+</AccordionGroup>
+
 <br />
 
 <Feedback/>

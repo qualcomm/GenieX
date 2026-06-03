@@ -14,7 +14,7 @@
 
 from . import model_manager
 from ._ffi._api import (
-    GeniexError,
+    GenieXError,
     deinit,
     get_device_list,
     get_plugin_list,
@@ -26,15 +26,15 @@ from ._ffi._api import (
 from ._version import __version__
 from .auto import AutoModelForCausalLM, AutoModelForVision2Seq, resolve_device_map
 from .generation import GenerateOutput, ProfileData, TextIteratorStreamer
-from .modeling import GeniexLLM, GeniexVLM
+from .modeling import GenieXLLM, GenieXVLM
 
 __all__ = [
     '__version__',
     'AutoModelForCausalLM',
     'AutoModelForVision2Seq',
-    'GeniexError',
-    'GeniexLLM',
-    'GeniexVLM',
+    'GenieXError',
+    'GenieXLLM',
+    'GenieXVLM',
     'GenerateOutput',
     'ProfileData',
     'TextIteratorStreamer',

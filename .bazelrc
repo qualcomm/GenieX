@@ -6,6 +6,7 @@ build --keep_going
 build --verbose_failures
 build --disk_cache=~/.cache/bazel-disk
 test --test_output=errors
+test --build_tests_only
 run --color=yes
 
 # quick alias
@@ -17,10 +18,6 @@ common --@rules_python//python/config_settings:bootstrap_impl=script
 common --enable_platform_specific_config
 build  --worker_sandboxing
 build  --experimental_output_directory_naming_scheme=diff_against_dynamic_baseline
-
-# protoc
-build  --experimental_proto_descriptor_sets_include_source_info
-build  --@com_google_protobuf//bazel/toolchains:prefer_prebuilt_protoc
 
 # windows
 startup --windows_enable_symlinks

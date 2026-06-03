@@ -8,13 +8,13 @@ Android bindings provide a Kotlin API for GenieX-Bridge using a JNI bridge patte
 ┌─────────────────────────────────────────────────────────┐
 │ Layer 4: Public API (Kotlin)                          │
 │ ModelWrapper.kt - Coroutine-based high-level API      │
-│ (LlmWrapper, VlmWrapper, EmbedderWrapper, etc.)       │
+│ (LlmWrapper, VlmWrapper)                              │
 └────────────────┬────────────────────────────────────────┘
                  │ calls
 ┌────────────────▼────────────────────────────────────────┐
 │ Layer 3: JNI Interface (Kotlin)                        │
 │ Model.kt - Declares external native methods           │
-│ (Llm, Vlm, Embedder, Asr, Cv, Reranker)              │
+│ (Llm, Vlm)                                            │
 └────────────────┬────────────────────────────────────────┘
                  │ JNI boundary
 ┌────────────────▼────────────────────────────────────────┐
@@ -32,7 +32,7 @@ Android bindings provide a Kotlin API for GenieX-Bridge using a JNI bridge patte
 
 ## Component Structure
 
-Each AI capability (LLM, VLM, ASR, CV, Embedder, Reranker) follows this pattern:
+Each AI capability (LLM, VLM) follows this pattern:
 
 ### **LLM (Large Language Model) Example:**
 
@@ -72,17 +72,13 @@ Each AI capability (LLM, VLM, ASR, CV, Embedder, Reranker) follows this pattern:
 - **Path:** `../../../build-android/out/libgeniex_bridge.so`
 - **API Header:** `../../../include/ml.h`
 - **Purpose:** C API providing ml*llm*\* functions
-- **Built from:** `../../../src/*.cpp` (asr.cpp, llm.cpp, vlm.cpp, etc.)
+- **Built from:** `../../../src/*.cpp` (llm.cpp, vlm.cpp, etc.)
 
 ### **Other Components** (Same 4-layer pattern):
 
-| Component              | Wrapper            | JNI Interface | JNI Bridge              | Core API       |
-| ---------------------- | ------------------ | ------------- | ----------------------- | -------------- |
-| **Vision-Language**    | VlmWrapper.kt      | Vlm.kt        | vlm_bridge_jni.cpp      | ml*vlm*\*      |
-| **Embeddings**         | EmbedderWrapper.kt | Embedder.kt   | embedder_bridge_jni.cpp | ml*embedder*\* |
-| **Reranking**          | RerankerWrapper.kt | Reranker.kt   | reranker_bridge_jni.cpp | ml*reranker*\* |
-| **Speech Recognition** | AsrWrapper.kt      | Asr.kt        | asr_bridge_jni.cpp      | ml*asr*\*      |
-| **Computer Vision**    | CvWrapper.kt       | Cv.kt         | cv_bridge_jni.cpp       | ml*cv*\*       |
+| Component           | Wrapper       | JNI Interface | JNI Bridge         | Core API  |
+| ------------------- | ------------- | ------------- | ------------------ | --------- |
+| **Vision-Language** | VlmWrapper.kt | Vlm.kt        | vlm_bridge_jni.cpp | ml*vlm*\* |
 
 ## Build System
 
@@ -91,13 +87,13 @@ Each AI capability (LLM, VLM, ASR, CV, Embedder, Reranker) follows this pattern:
 - **Build Script:** `../../../build_android.sh`
 - **CMake Entry:** `app/src/main/cpp/CMakeLists.txt`
 - **Output:**
-  - `libnpu_jni.so` (JNI bridge wrapper loaded by GeniexSdk.kt)
+  - `libnpu_jni.so` (JNI bridge wrapper loaded by GenieXSdk.kt)
   - `libgeniex_bridge.so` (core ML library linked by JNI wrapper)
   - Plugin libraries: `libgeniex_plugin.so` (NPU backend for NPU acceleration)
 
 ### Library Loading
 
-- **GeniexSdk.kt:** Initializes SDK and loads native libraries
+- **GenieXSdk.kt:** Initializes SDK and loads native libraries
   ```kotlin
   init {
       System.loadLibrary("npu_jni")  // Loads Layer 2 JNI bridge
@@ -108,7 +104,7 @@ Each AI capability (LLM, VLM, ASR, CV, Embedder, Reranker) follows this pattern:
 
 - **NPU Backend:** Provides NPU acceleration for Qualcomm Snapdragon (using QNN library internally)
 - **Path:** `../../../build-android/out/npu/`
-- **Registration:** `GeniexSdk.init()` calls `registerPlugin()` to dynamically load plugin libraries
+- **Registration:** `GenieXSdk.init()` calls `registerPlugin()` to dynamically load plugin libraries
 
 ## Directory Structure
 
@@ -119,10 +115,6 @@ bindings/android/
 │   │   ├── cpp/                      # Layer 2: JNI Bridge (C++)
 │   │   │   ├── llm_bridge_jni.cpp
 │   │   │   ├── vlm_bridge_jni.cpp
-│   │   │   ├── embedder_bridge_jni.cpp
-│   │   │   ├── reranker_bridge_jni.cpp
-│   │   │   ├── asr_bridge_jni.cpp
-│   │   │   ├── cv_bridge_jni.cpp
 │   │   │   ├── geniex_sdk.cpp          # SDK initialization & plugin registration
 │   │   │   ├── jniutils.cpp/.h       # JNI type conversion utilities
 │   │   │   ├── jni_cb.cpp/.h         # Callback handling for streaming
@@ -131,16 +123,10 @@ bindings/android/
 │   │   └── java/com/geniex/sdk/
 │   │       ├── jni/                  # Layer 3: JNI Interface (Kotlin)
 │   │       │   ├── Llm.kt
-│   │       │   ├── Vlm.kt
-│   │       │   ├── Embedder.kt
-│   │       │   ├── Reranker.kt
-│   │       │   ├── Asr.kt
-│   │       │   └── Cv.kt
+│   │       │   └── Vlm.kt
 │   │       ├── LlmWrapper.kt         # Layer 4: Public API
 │   │       ├── VlmWrapper.kt
-│   │       ├── EmbedderWrapper.kt
-│   │       ├── RerankerWrapper.kt
-│   │       ├── GeniexSdk.kt            # SDK entry point
+│   │       ├── GenieXSdk.kt            # SDK entry point
 │   │       └── bean/                 # Data classes
 │   └── build.gradle.kts              # Build configuration
 └── README.md                         # This file
@@ -176,10 +162,10 @@ TODO: update the GitHub-based Android artifact publishing instructions for Genie
 
 ## Logging
 
-SDK logs are routed to `logcat` under the tag `GeniexSdk` at the corresponding
+SDK logs are routed to `logcat` under the tag `GenieXSdk` at the corresponding
 Android priority (`VERBOSE`/`DEBUG`/`INFO`/`WARN`/`ERROR`). Filter from your
 app via the standard logcat tooling:
 
 ```bash
-adb logcat -s GeniexSdk
+adb logcat -s GenieXSdk
 ```

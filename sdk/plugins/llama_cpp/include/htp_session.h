@@ -1,7 +1,5 @@
 #pragma once
 
-#include "ggml-backend.h"
-
 namespace geniex {
 
 // HTP session lifecycle helpers shared by all llama.cpp plugin classes.
