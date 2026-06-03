@@ -1,101 +1,39 @@
-[![Qualcomm® AI Hub Apps](https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/quic-logo.jpg)](https://aihub.qualcomm.com)
+# GenieX Android SDK Demo App
 
-# Geniex Demo
+## Overview
 
-On-device AI chat application for Android on Snapdragon® powered by the
-[Geniex SDK](https://github.com/qualcomm/geniex). Runs Large Language Models
-(LLMs), Vision-Language Models (VLMs), embeddings, speech recognition, and
-reranking models on the Snapdragon® Neural Processing Unit (NPU), GPU, or CPU
-through a single pluggable runtime.
+The GenieX AI Android SDK enables on-device AI inference for Android applications with NPU acceleration. Run Large Language Models (LLMs), Vision-Language Models (VLMs) on Android devices with support for NPU, GPU, and CPU inference. This folder contains the demo app for the Android SDK.
 
-## Current limitations
+## Pick Your Path
 
-> [!IMPORTANT]
-> This app requires a **mobile** device with Snapdragon® 8 Gen 3 or newer and
-> Android API level 31 (Android 12) or newer. NPU acceleration on older
-> Snapdragon® chipsets falls back to CPU/GPU execution.
+- **Just want to try the demo?** Download the pre-built APK from the [Android install guide](https://refactored-happiness-4qyl9vn.pages.github.io/en/run/android/install/).
+- **Want to build the demo app locally?** Follow the [Build and Run](#build-and-run) steps below.
+- **Want to build your own Android app with the GenieX Java/Kotlin binding?** See the [Android quickstart](https://refactored-happiness-4qyl9vn.pages.github.io/en/run/android/quickstart/) for dependency setup and the [API reference](https://refactored-happiness-4qyl9vn.pages.github.io/en/run/android/api-reference/) for usage.
 
-We recommend using a device from [QDC](https://qdc.qualcomm.com/) for this
-demo. QDC devices have newer meta-builds and are validated for on-device LLM
-inference.
+## Device Compatibility
 
-## Demo
+### Supported Hardware
 
-<!-- TODO: replace with mp4/gif hosted on qaihub-public-assets S3 -->
+- **NPU**: Qualcomm Snapdragon 8 Elite or Snapdragon 8 Elite Gen 5
+- **GPU**: Qualcomm Adreno GPU
+- **CPU**: ARM64-v8a
+- **RAM**: 8GB+ recommended
+- **Storage**: 100MB - 10GB (varies by model)
 
-## Requirements
+### Minimum Requirements
 
-### Platform
+- Android API Level 27+ (Android 8.1 Oreo)
+- **Architecture**: ARM64-v8a
+- **Android SDK Version**: 27+
 
-- Snapdragon® 8 Gen 3, Snapdragon® 8 Elite, or newer
-- Or access to a Snapdragon® Android device on [QDC](https://qdc.qualcomm.com/)
-- The host computer can run Windows, Linux, or macOS.
+## Build and Run
 
-### Tools and SDK
+1. Clone the sdk project root repository
 
-1. Clone this repository.
-2. Download [Android Studio](https://developer.android.com/studio). **Version
-   2024.3.1 or newer** is required.
-3. The Geniex Android binding is consumed from Maven Central as
-   `com.qualcomm.qti:geniex-android:0.1.6` — no separate SDK download is
-   required. Gradle resolves it automatically on first sync.
+```bash
+git clone --recursive git@github.com:qcom-ai-hub/geniex.git
+```
 
-## Build App
+2. Open this folder `examples/android-new` in Android Studio
 
-1. Go to the Geniex Demo directory.
-
-   ```bash
-   cd <ai-hub-apps-repo-root>/apps/geniex_chat_android/
-   ```
-
-2. Download a model and place it under `src/main/assets/models/`. The demo
-   ships with `src/main/assets/model_list.json` describing the supported model
-   catalog (LLMs from Hugging Face in GGUF format, plus optional QAIRT `.bin`
-   bundles). For example, to use Qwen3-0.6B:
-
-   ```bash
-   mkdir -p src/main/assets/models/qwen3-0.6b
-   # Download Qwen3-0.6B-GGUF Q4_0 from Hugging Face into this directory.
-   ```
-
-3. Build the APK.
-
-   - Open this folder in Android Studio.
-   - Run Gradle sync.
-   - Build the `app` target: `Build` → `Build Bundle(s) / APK(s)` → `Build
-     APK(s)`.
-   - The APK is written to:
-
-     ```text
-     <ai-hub-apps-repo-root>/apps/geniex_chat_android/build/outputs/apk/{build_type}/
-     ```
-
-4. Run on an Android device.
-
-   We recommend using [QDC](https://qdc.qualcomm.com/) to run this app.
-
-   **Steps for running Geniex Demo on QDC**
-
-   1. Copy the APK to your QDC device (browser upload, file browser, or
-      `adb push` over SSH tunneling — see [QDC docs](https://qdc.qualcomm.com/)
-      for details).
-
-   2. Install the APK via `adb shell`:
-
-      ```bash
-      pm install -t /data/local/tmp/app-debug.apk
-      ```
-
-   3. Open the app from the QDC browser UI and start chatting.
-
-## License
-
-This app is released under the [BSD-3 License](../../../LICENSE) found at the
-root of this repository.
-
-The Geniex SDK dependency is released under its own license (Apache 2.0).
-Refer to the [Geniex repository](https://github.com/qualcomm/geniex) for
-details.
-
-All third-party libraries used by this app are BSD-3-compatible (Apache 2.0
-or MIT). Refer to each library's source repository for license details.
+3. Connect to your device, sync gradle, then build and run the app
