@@ -33,7 +33,7 @@ android {
 }
 
 dependencies {
-    compileOnly("com.qualcomm.qti:geniex-android:0.2.3")
+    compileOnly("com.qualcomm.qti:geniex-android:0.2.6")
     compileOnly(libs.androidx.core.ktx)
 //    implementation(libs.androidx.appcompat)
 //    implementation(libs.material)

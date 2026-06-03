@@ -68,7 +68,7 @@ android {
 
 dependencies {
 
-    implementation("com.qualcomm.qti:geniex-android:0.2.3")
+    implementation("com.qualcomm.qti:geniex-android:0.2.6")
     implementation(project(":transform"))
     implementation(kotlin("reflect"))
     implementation(libs.glide)
