@@ -91,12 +91,13 @@ typedef enum {
  * Free the entire struct with geniex_model_paths_free().
  */
 typedef struct {
-    char* model_path;     /**< Main model file (absolute path).          */
-    char* mmproj_path;    /**< Multimodal projection file. NULL if unused. */
-    char* tokenizer_path; /**< Tokenizer file. NULL if unused.            */
-    char* model_dir;      /**< Model directory (always set).              */
-    char* model_name;     /**< Architecture name, e.g. "qwen3-4b".       */
-    char* plugin_id;      /**< Plugin ID, e.g. "llama_cpp".               */
+    char*            model_path;     /**< Main model file (absolute path).          */
+    char*            mmproj_path;    /**< Multimodal projection file. NULL if unused. */
+    char*            tokenizer_path; /**< Tokenizer file. NULL if unused.            */
+    char*            model_dir;      /**< Model directory (always set).              */
+    char*            model_name;     /**< Architecture name, e.g. "qwen3-4b".       */
+    char*            plugin_id;      /**< Plugin ID, e.g. "llama_cpp".               */
+    geniex_ModelType model_type;     /**< LLM or VLM.                          */
 } geniex_ModelPaths;
 
 /**
@@ -301,20 +302,6 @@ GENIEX_API int32_t geniex_model_pull(const geniex_ModelPullInput* input);
  * ============================================================ */
 
 /**
- * @brief Parameters for geniex_model_query — a download-free subset of
- *        geniex_ModelPullInput.
- */
-typedef struct {
-    uint32_t         struct_size;  /**< MUST be sizeof(geniex_ModelQueryInput). */
-    const char*      model_name;   /**< "org/repo" or short alias.              */
-    geniex_HubSource hub;          /**< Use GENIEX_HUB_AUTO for auto-selection. */
-    geniex_Path      local_path;   /**< Required only for GENIEX_HUB_LOCALFS.   */
-    const char*      hf_token;     /**< HuggingFace bearer token. May be NULL.  */
-    const char*      chipset;      /**< AI Hub target chipset. May be NULL.     */
-    const char*      display_name; /**< AI Hub display_name. May be NULL.      */
-} geniex_ModelQueryInput;
-
-/**
  * @brief One quantization advertised by the source for a model.
  *
  * `quant` is heap-allocated; freed by geniex_model_query_free().
@@ -346,11 +333,14 @@ typedef struct {
  * advertised quants + sizes so callers can present a precision picker before
  * committing to geniex_model_pull.
  *
- * @param input  Query parameters. Must not be NULL.
+ * Reuses geniex_ModelPullInput; the quant, on_progress, user_data, and
+ * model_type fields are ignored.
+ *
+ * @param input  Pull-shaped parameters. Must not be NULL.
  * @param out    Populated on success. Call geniex_model_query_free() when done.
  * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
  */
-GENIEX_API int32_t geniex_model_query(const geniex_ModelQueryInput* input, geniex_ModelQueryOutput* out);
+GENIEX_API int32_t geniex_model_query(const geniex_ModelPullInput* input, geniex_ModelQueryOutput* out);
 
 /** Free all heap members of geniex_ModelQueryOutput and zero the struct. */
 GENIEX_API void geniex_model_query_free(geniex_ModelQueryOutput* out);

@@ -36,7 +36,6 @@ from ._types import (
     geniex_ModelListDetailedOutput,
     geniex_ModelPaths,
     geniex_ModelPullInput,
-    geniex_ModelQueryInput,
     geniex_ModelQueryOutput,
     geniex_ResolveDeviceInput,
     geniex_ResolveDeviceOutput,
@@ -273,7 +272,7 @@ def _bind_all() -> None:
     lib.geniex_model_list_detailed_free.restype = None
 
     lib.geniex_model_query.argtypes = [
-        POINTER(geniex_ModelQueryInput),
+        POINTER(geniex_ModelPullInput),
         POINTER(geniex_ModelQueryOutput),
     ]
     lib.geniex_model_query.restype = c_int32

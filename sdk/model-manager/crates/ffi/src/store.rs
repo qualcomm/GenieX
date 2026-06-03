@@ -29,6 +29,7 @@ pub struct GenieXModelPaths {
     pub model_dir: *mut c_char,
     pub model_name: *mut c_char,
     pub plugin_id: *mut c_char,
+    pub model_type: GenieXModelType,
 }
 
 impl GenieXModelPaths {
@@ -40,6 +41,7 @@ impl GenieXModelPaths {
             model_dir: std::ptr::null_mut(),
             model_name: std::ptr::null_mut(),
             plugin_id: std::ptr::null_mut(),
+            model_type: GenieXModelType::Llm,
         }
     }
 }
@@ -78,6 +80,7 @@ pub extern "C" fn geniex_model_get_paths(
                         .as_ref()
                         .map(|p| str_to_cptr(&p.to_string_lossy()))
                         .unwrap_or(std::ptr::null_mut());
+                    (*out_paths).model_type = to_ffi_type(paths.model_type);
                 }
                 GENIEX_SUCCESS
             }

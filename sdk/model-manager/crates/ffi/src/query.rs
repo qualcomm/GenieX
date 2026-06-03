@@ -1,31 +1,13 @@
 use std::os::raw::c_char;
-use std::path::PathBuf;
 
 use model_manager_core::manifest_builder::ManifestHint;
-use model_manager_core::mapping::canonicalize_model_name;
 use model_manager_core::pull::PullRequest;
 use model_manager_core::query::query_blocking;
 
 use crate::init::{get_store, runtime_handle};
-use crate::pull::{build_pull_intent, GenieXHubSource};
+use crate::pull::{extract_name_and_intent, GenieXModelPullInput};
 use crate::store::{to_ffi_type, GenieXModelType};
 use crate::types::*;
-
-/// Input for a plan-only query. Mirrors `geniex_ModelQueryInput` in
-/// geniex_model.h — a download-free subset of `geniex_ModelPullInput`
-/// (no quant hint, no progress callback).
-#[repr(C)]
-pub struct GenieXModelQueryInput {
-    pub struct_size: u32,
-    pub model_name: *const c_char,
-    pub hub: GenieXHubSource,
-    pub local_path: *const c_char,
-    pub hf_token: *const c_char,
-    pub chipset: *const c_char,
-    pub display_name: *const c_char,
-}
-
-const ACCEPTED_QUERY_INPUT_SIZES: &[u32] = &[std::mem::size_of::<GenieXModelQueryInput>() as u32];
 
 /// One advertised quantization. Mirrors `geniex_QuantCandidate`.
 #[repr(C)]
@@ -59,7 +41,7 @@ impl GenieXModelQueryOutput {
 
 #[no_mangle]
 pub extern "C" fn geniex_model_query(
-    input: *const GenieXModelQueryInput,
+    input: *const GenieXModelPullInput,
     out: *mut GenieXModelQueryOutput,
 ) -> i32 {
     ffi_guard(|| {
@@ -67,47 +49,13 @@ pub extern "C" fn geniex_model_query(
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
 
-        // ABI gate, read before any other field (see geniex_model_pull).
-        let struct_size = unsafe { std::ptr::read(&(*input).struct_size) };
-        if !ACCEPTED_QUERY_INPUT_SIZES.contains(&struct_size) {
-            crate::logging::error(&format!(
-                "geniex_model_query: unsupported struct_size {}; expected one of {:?} \
-                 (recompile your binding against the current geniex_model.h)",
-                struct_size, ACCEPTED_QUERY_INPUT_SIZES,
-            ));
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
-        }
-
-        let inp = unsafe { &*input };
-
-        let raw_model_name = match unsafe { cstr_to_str(inp.model_name) } {
-            Some(s) => s.to_string(),
-            None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
-        };
-        let model_name = canonicalize_model_name(&raw_model_name);
-
-        let hf_token = unsafe { cstr_to_str(inp.hf_token) }
-            .map(str::to_string)
-            .or_else(model_manager_core::config::StoreConfig::hf_token_from_env);
-        let chipset = unsafe { cstr_to_str(inp.chipset) }
-            .unwrap_or("")
-            .to_string();
-        let explicit_display_name = unsafe { cstr_to_str(inp.display_name) }
-            .map(str::to_string)
-            .filter(|s| !s.is_empty());
-        let local_path = unsafe { cstr_to_str(inp.local_path) }.map(PathBuf::from);
-
-        let intent = match build_pull_intent(
-            &inp.hub,
-            &model_name,
-            hf_token,
-            chipset,
-            explicit_display_name,
-            local_path,
-        ) {
-            Ok(i) => i,
-            Err(c) => return c,
-        };
+        // Query reuses the pull input struct; the quant / callback / model_type
+        // fields are simply ignored here.
+        let (model_name, intent) =
+            match unsafe { extract_name_and_intent(input, "geniex_model_query") } {
+                Ok(v) => v,
+                Err(c) => return c,
+            };
 
         let store = match get_store() {
             Ok(s) => s,

@@ -292,6 +292,7 @@ type ModelPaths struct {
 	ModelDir      string
 	ModelName     string
 	PluginID      string
+	ModelType     ModelType
 }
 
 // ModelGetPaths resolves "org/repo[:quant]" (or alias) to absolute on-disk paths.
@@ -310,6 +311,7 @@ func ModelGetPaths(name string) (*ModelPaths, error) {
 		ModelDir:      C.GoString(out.model_dir),
 		ModelName:     C.GoString(out.model_name),
 		PluginID:      C.GoString(out.plugin_id),
+		ModelType:     ModelType(out.model_type),
 	}, nil
 }
 
@@ -344,14 +346,17 @@ func ModelQuery(input ModelPullInput) (*ModelQueryResult, error) {
 		cFreeIfSet(unsafe.Pointer(cDisplayName))
 	}()
 
-	in := C.geniex_ModelQueryInput{
-		struct_size:  C.uint32_t(C.sizeof_geniex_ModelQueryInput),
+	// Query reuses the pull input struct; quant / progress / model_type are
+	// ignored by the SDK for a plan-only call.
+	in := C.geniex_ModelPullInput{
+		struct_size:  C.uint32_t(C.sizeof_geniex_ModelPullInput),
 		model_name:   cModelName,
 		hub:          C.geniex_HubSource(input.Hub),
 		local_path:   cLocalPath,
 		hf_token:     cHfToken,
 		chipset:      cChipset,
 		display_name: cDisplayName,
+		model_type:   C.int32_t(C.GENIEX_MODEL_TYPE_AUTO),
 	}
 
 	var out C.geniex_ModelQueryOutput

@@ -336,6 +336,7 @@ class geniex_ModelPaths(Structure):
         ('model_dir', c_char_p),
         ('model_name', c_char_p),
         ('plugin_id', c_char_p),
+        ('model_type', c_int32),
     ]
 
 
@@ -388,19 +389,6 @@ class geniex_ModelPullInput(Structure):
         ('on_progress', geniex_download_progress_cb),
         ('user_data', c_void_p),
         ('model_type', c_int32),
-    ]
-
-
-class geniex_ModelQueryInput(Structure):
-    _fields_ = [
-        # ABI version gate; see geniex_ModelPullInput.struct_size.
-        ('struct_size', c_uint32),
-        ('model_name', c_char_p),
-        ('hub', c_int32),
-        ('local_path', c_char_p),
-        ('hf_token', c_char_p),
-        ('chipset', c_char_p),
-        ('display_name', c_char_p),
     ]
 
 

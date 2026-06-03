@@ -131,6 +131,59 @@ pub(crate) fn build_pull_intent(
     Ok(intent)
 }
 
+/// Validate the ABI gate and extract the canonical model name + PullIntent
+/// shared by `geniex_model_pull` and `geniex_model_query` (both take a
+/// `GenieXModelPullInput`; query just ignores the quant / callback / model_type
+/// fields). `fn_name` only labels the struct_size error message.
+///
+/// # Safety
+/// `input` must be non-null and point to a valid `GenieXModelPullInput`.
+pub(crate) unsafe fn extract_name_and_intent(
+    input: *const GenieXModelPullInput,
+    fn_name: &str,
+) -> Result<(String, PullIntent), i32> {
+    // ABI gate: read struct_size before any other field so a layout mismatch
+    // can't corrupt downstream reads.
+    let struct_size = std::ptr::read(&(*input).struct_size);
+    if !ACCEPTED_PULL_INPUT_SIZES.contains(&struct_size) {
+        crate::logging::error(&format!(
+            "{fn_name}: unsupported struct_size {struct_size}; expected one of \
+             {ACCEPTED_PULL_INPUT_SIZES:?} (recompile your binding against the \
+             current geniex_model.h)",
+        ));
+        return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
+    }
+
+    let inp = &*input;
+
+    let raw_model_name = cstr_to_str(inp.model_name).ok_or(GENIEX_ERROR_COMMON_INVALID_INPUT)?;
+    // Bare names (no '/') are treated as AI Hub model ids and stored under
+    // `qualcomm/<name>`; anything with '/' is passed through.
+    let model_name = canonicalize_model_name(raw_model_name);
+
+    // Explicit token wins; env var is the fallback; anonymous otherwise.
+    let hf_token = cstr_to_str(inp.hf_token)
+        .map(str::to_string)
+        .or_else(StoreConfig::hf_token_from_env);
+    // chipset / display_name are only meaningful for AI Hub; read up front so
+    // both the explicit-AiHub and Auto-→-AiHub paths share them.
+    let chipset = cstr_to_str(inp.chipset).unwrap_or("").to_string();
+    let explicit_display_name = cstr_to_str(inp.display_name)
+        .map(str::to_string)
+        .filter(|s| !s.is_empty());
+    let local_path = cstr_to_str(inp.local_path).map(PathBuf::from);
+
+    let intent = build_pull_intent(
+        &inp.hub,
+        &model_name,
+        hf_token,
+        chipset,
+        explicit_display_name,
+        local_path,
+    )?;
+    Ok((model_name, intent))
+}
+
 #[no_mangle]
 pub extern "C" fn geniex_model_pull(input: *const GenieXModelPullInput) -> i32 {
     ffi_guard(|| {
@@ -138,57 +191,12 @@ pub extern "C" fn geniex_model_pull(input: *const GenieXModelPullInput) -> i32 {
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
 
-        // ABI gate: `struct_size` has to be set to `sizeof(struct)` at
-        // the caller's compile time. It's read before we touch any other
-        // field, so an ABI mismatch can't corrupt downstream reads.
-        // See ACCEPTED_PULL_INPUT_SIZES doc.
-        let struct_size = unsafe { std::ptr::read(&(*input).struct_size) };
-        if !ACCEPTED_PULL_INPUT_SIZES.contains(&struct_size) {
-            crate::logging::error(&format!(
-                "geniex_model_pull: unsupported struct_size {}; expected one of {:?} \
-                 (recompile your binding against the current geniex_model.h)",
-                struct_size, ACCEPTED_PULL_INPUT_SIZES,
-            ));
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
-        }
-
+        let (model_name, intent) =
+            match unsafe { extract_name_and_intent(input, "geniex_model_pull") } {
+                Ok(v) => v,
+                Err(c) => return c,
+            };
         let inp = unsafe { &*input };
-
-        let raw_model_name = match unsafe { cstr_to_str(inp.model_name) } {
-            Some(s) => s.to_string(),
-            None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
-        };
-        // Bare names (no '/') are treated as AI Hub model ids and stored
-        // under `qualcomm/<name>`; anything with '/' is passed through.
-        let model_name = canonicalize_model_name(&raw_model_name);
-
-        // Explicit token wins; env var is the fallback; anonymous otherwise.
-        let hf_token = unsafe { cstr_to_str(inp.hf_token) }
-            .map(str::to_string)
-            .or_else(StoreConfig::hf_token_from_env);
-
-        // `chipset` / `display_name` are only meaningful for AI Hub but
-        // we read them once up front so both the explicit-AiHub branch
-        // and the Auto-→-AiHub auto-detect path can share the values.
-        let chipset = unsafe { cstr_to_str(inp.chipset) }
-            .unwrap_or("")
-            .to_string();
-        let explicit_display_name = unsafe { cstr_to_str(inp.display_name) }
-            .map(str::to_string)
-            .filter(|s| !s.is_empty());
-
-        let local_path = unsafe { cstr_to_str(inp.local_path) }.map(PathBuf::from);
-        let intent = match build_pull_intent(
-            &inp.hub,
-            &model_name,
-            hf_token,
-            chipset,
-            explicit_display_name,
-            local_path,
-        ) {
-            Ok(i) => i,
-            Err(c) => return c,
-        };
 
         // Build a Rust closure that re-marshals Rust FileProgress → C array
         // and invokes the caller's function pointer.

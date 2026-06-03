@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::manifest::ModelManifest;
+use crate::manifest::{ModelManifest, ModelType};
 use crate::manifest_builder::QUANT_PRIORITY;
 use std::path::{Path, PathBuf};
 
@@ -12,6 +12,7 @@ pub struct ModelPaths {
     pub model_dir: PathBuf,
     pub model_name: String,
     pub plugin_id: String,
+    pub model_type: ModelType,
 }
 
 /// Resolve file paths from a manifest + local base directory + optional quant hint.
@@ -79,6 +80,7 @@ pub fn resolve_model_paths(
             model_dir,
             model_name: manifest.model_name.clone(),
             plugin_id: manifest.plugin_id.clone(),
+            model_type: manifest.model_type.clone(),
         },
     ))
 }

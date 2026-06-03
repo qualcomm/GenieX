@@ -33,7 +33,6 @@ from ._ffi._types import (
     geniex_ModelListDetailedOutput,
     geniex_ModelPaths,
     geniex_ModelPullInput,
-    geniex_ModelQueryInput,
     geniex_ModelQueryOutput,
 )
 
@@ -78,6 +77,7 @@ class ModelPaths:
     model_dir: str
     model_name: str
     plugin_id: str
+    model_type: str  # "llm" or "vlm"
     mmproj_path: str | None = None
     tokenizer_path: str | None = None
 
@@ -335,14 +335,18 @@ def query(
     lib = load_library()
 
     name, _ = _maybe_resolve_alias(model_name, None)
-    inp = geniex_ModelQueryInput(
-        struct_size=sizeof(geniex_ModelQueryInput),
+    inp = geniex_ModelPullInput(
+        struct_size=sizeof(geniex_ModelPullInput),
         model_name=name.encode(),
+        quant=None,
         hub=_resolve_hub(hub),
         local_path=local_path.encode() if local_path else None,
         hf_token=hf_token.encode() if hf_token else None,
         chipset=chipset.encode() if chipset else None,
         display_name=display_name.encode() if display_name else None,
+        on_progress=geniex_download_progress_cb(0),
+        user_data=None,
+        model_type=GENIEX_MODEL_TYPE_AUTO,
     )
     out = geniex_ModelQueryOutput()
     _check(lib.geniex_model_query(byref(inp), byref(out)))
@@ -395,6 +399,7 @@ def get_paths(model_name: str) -> ModelPaths:
             model_dir=out.model_dir.decode() if out.model_dir else '',
             model_name=out.model_name.decode() if out.model_name else '',
             plugin_id=out.plugin_id.decode() if out.plugin_id else '',
+            model_type=_type_str(out.model_type),
             mmproj_path=out.mmproj_path.decode() if out.mmproj_path else None,
             tokenizer_path=out.tokenizer_path.decode() if out.tokenizer_path else None,
         )

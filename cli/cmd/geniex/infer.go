@@ -133,21 +133,16 @@ func infer() *cobra.Command {
 			return err
 		}
 
-		modelType, err := geniex_sdk.ModelGetType(name)
-		if err != nil {
-			return err
-		}
-
 		geniex_sdk.Init()
 
-		switch modelType {
+		switch paths.ModelType {
 		case geniex_sdk.ModelTypeLLM:
 			err = inferLLM(paths)
 		case geniex_sdk.ModelTypeVLM:
 			err = inferVLM(paths)
 		default:
 			geniex_sdk.DeInit()
-			return fmt.Errorf("unsupported model type: %s", modelType)
+			return fmt.Errorf("unsupported model type: %s", paths.ModelType)
 		}
 
 		geniex_sdk.DeInit()

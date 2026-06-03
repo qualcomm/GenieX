@@ -135,12 +135,15 @@ bool progress_trampoline(const geniex_FileProgress* files, int32_t file_count, v
 jobject build_model_paths(JNIEnv* env, const geniex_ModelPaths& paths) {
     jclass cls = env->FindClass("com/geniex/sdk/bean/ModelPaths");
     if (!cls) return nullptr;
-    jmethodID ctor = env->GetMethodID(cls,
+    jclass    modelTypeCls = env->FindClass("com/geniex/sdk/bean/ModelType");
+    jmethodID fromValueMid = env->GetStaticMethodID(modelTypeCls, "fromValue", "(I)Lcom/geniex/sdk/bean/ModelType;");
+    jmethodID ctor         = env->GetMethodID(cls,
         "<init>",
         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
-        "Ljava/lang/String;Ljava/lang/String;)V");
+                "Lcom/geniex/sdk/bean/ModelType;Ljava/lang/String;Ljava/lang/String;)V");
     if (!ctor) {
         env->DeleteLocalRef(cls);
+        env->DeleteLocalRef(modelTypeCls);
         return nullptr;
     }
     auto    maybe      = [&](const char* s) -> jstring { return s ? env->NewStringUTF(s) : nullptr; };
@@ -148,17 +151,21 @@ jobject build_model_paths(JNIEnv* env, const geniex_ModelPaths& paths) {
     jstring jModelDir  = maybe(paths.model_dir);
     jstring jModelName = maybe(paths.model_name);
     jstring jPluginId  = maybe(paths.plugin_id);
+    jobject jModelType = env->CallStaticObjectMethod(modelTypeCls, fromValueMid, static_cast<jint>(paths.model_type));
     jstring jMmproj    = maybe(paths.mmproj_path);
     jstring jTokenizer = maybe(paths.tokenizer_path);
     // Constructor order matches ModelPaths.kt:
-    //   model_path, model_dir, model_name, plugin_id, mmproj_path?, tokenizer_path?
-    jobject obj = env->NewObject(cls, ctor, jModelPath, jModelDir, jModelName, jPluginId, jMmproj, jTokenizer);
+    //   model_path, model_dir, model_name, plugin_id, model_type, mmproj_path?, tokenizer_path?
+    jobject obj =
+        env->NewObject(cls, ctor, jModelPath, jModelDir, jModelName, jPluginId, jModelType, jMmproj, jTokenizer);
     if (jModelPath) env->DeleteLocalRef(jModelPath);
     if (jModelDir) env->DeleteLocalRef(jModelDir);
     if (jModelName) env->DeleteLocalRef(jModelName);
     if (jPluginId) env->DeleteLocalRef(jPluginId);
+    if (jModelType) env->DeleteLocalRef(jModelType);
     if (jMmproj) env->DeleteLocalRef(jMmproj);
     if (jTokenizer) env->DeleteLocalRef(jTokenizer);
+    env->DeleteLocalRef(modelTypeCls);
     env->DeleteLocalRef(cls);
     return obj;
 }
@@ -465,14 +472,15 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_ModelManager_query(
         return nullptr;
     }
 
-    geniex_ModelQueryInput in{};
-    in.struct_size  = sizeof(geniex_ModelQueryInput);
+    geniex_ModelPullInput in{};
+    in.struct_size  = sizeof(geniex_ModelPullInput);
     in.model_name   = modelName.c_str();
     in.hub          = static_cast<geniex_HubSource>(hubValue);
     in.local_path   = localPath.empty() ? nullptr : localPath.c_str();
     in.hf_token     = hfToken.empty() ? nullptr : hfToken.c_str();
     in.chipset      = chipset.empty() ? nullptr : chipset.c_str();
     in.display_name = displayName.empty() ? nullptr : displayName.c_str();
+    in.model_type   = GENIEX_MODEL_TYPE_AUTO;
 
     geniex_ModelQueryOutput out{};
     int32_t                 rc = geniex_model_query(&in, &out);
