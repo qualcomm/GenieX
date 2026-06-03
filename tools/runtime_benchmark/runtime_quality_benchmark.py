@@ -619,9 +619,11 @@ def main() -> int:
     p.add_argument(
         "--max-tokens",
         type=int,
-        default=512,
+        default=2048,
         help="Cap on tokens generated per prompt (geniex side, via max_new_tokens; "
-        "genie side honors EOS via chat template)",
+        "genie side has no equivalent flag and stops on EOS / context exhaustion). "
+        "Set high enough that the geniex side won't truncate before EOS — "
+        "otherwise the two sides aren't comparable on length.",
     )
     p.add_argument(
         "--timeout",
