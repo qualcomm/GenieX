@@ -1,0 +1,88 @@
+name: Scorecard
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      device:
+        description: "QDC chipset"
+        type: string
+        default: "QCS9075M"
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build-sdk:
+    uses: ./.github/workflows/_build-sdk.yml
+    secrets: inherit
+    with:
+      version_tag: ${{ github.event_name == 'push' && github.ref_name || '' }}
+      upload_artifact: true
+
+  load-models:
+    needs: [build-sdk]
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: set
+        run: echo "matrix=$(jq -c . sdk/tests/benchmark/qdc/scorecard-models.json)" >> "$GITHUB_OUTPUT"
+
+  scorecard:
+    needs: [build-sdk, load-models]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        model: ${{ fromJson(needs.load-models.outputs.matrix) }}
+    env:
+      QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
+      GENIEX_RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v8
+        with:
+          name: sdk-linux-arm64
+          path: pkg-geniex
+      - uses: ./.github/actions/install-qdc-sdk
+      - run: |
+          python sdk/tests/benchmark/qdc/run_qdc_jobs.py \
+            --pkg-dir pkg-geniex \
+            --device "${{ github.event.inputs.device || 'QCS9075M' }}" \
+            --model-name "${{ matrix.model.name }}" \
+            --cells-out "${{ matrix.model.name }}.json"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: scorecard-cells-${{ matrix.model.name }}
+          path: ${{ matrix.model.name }}.json
+          if-no-files-found: ignore
+
+  aggregate:
+    needs: [scorecard]
+    if: always()
+    runs-on: ubuntu-latest
+    env:
+      GENIEX_RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: scorecard-cells-*
+          path: cells
+      - run: |
+          python sdk/tests/benchmark/qdc/run_qdc_jobs.py \
+            --device "${{ github.event.inputs.device || 'QCS9075M' }}" \
+            --render-dir cells

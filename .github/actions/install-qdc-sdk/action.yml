@@ -1,0 +1,12 @@
+name: Install QDC SDK
+description: Download and install the Qualcomm Device Cloud SDK wheel.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        curl -fSL -o qdc_sdk.zip \
+          https://softwarecenter.qualcomm.com/api/download/software/tools/Qualcomm_Device_Cloud_SDK/All/0.2.3/qualcomm_device_cloud_sdk-0.2.3.zip
+        unzip -o qdc_sdk.zip -d qdc_sdk
+        pip install qdc_sdk/qualcomm_device_cloud_sdk-0.2.3-py3-none-any.whl
