@@ -42,6 +42,11 @@ message(STATUS "=======================================")
 # Rust Model Manager
 # ===============================================================================
 set(RUST_MM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/model-manager")
+# Place cargo's target dir inside the CMake build directory so a clean
+# build (`rm -rf build/` / `cmake --build --target clean`) wipes the
+# Rust artifacts too. Otherwise stale staticlibs in
+# model-manager/target/ silently survive clean builds.
+set(RUST_TARGET_ROOT "${CMAKE_CURRENT_BINARY_DIR}/cargo-target")
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(RUST_PROFILE "debug")
     set(RUST_BUILD_FLAG "")
@@ -65,45 +70,47 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Android")
     # API-versioned wrapper. Point CC/AR at the real names so Rust
     # build scripts can invoke clang without relying on the short form.
     set(RUST_CARGO_ENV
+        CARGO_TARGET_DIR=${RUST_TARGET_ROOT}
         CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${_ndk_bin}/aarch64-linux-android31-clang
         CC_aarch64_linux_android=${_ndk_bin}/aarch64-linux-android31-clang
         AR_aarch64_linux_android=${_ndk_bin}/llvm-ar)
     set(RUST_CARGO_TARGET_FLAGS --target aarch64-linux-android)
-    set(RUST_TARGET_DIR "${RUST_MM_DIR}/target/aarch64-linux-android/${RUST_PROFILE}")
+    set(RUST_TARGET_DIR "${RUST_TARGET_ROOT}/aarch64-linux-android/${RUST_PROFILE}")
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux"
        AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64"
        AND NOT CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "aarch64")
-    set(RUST_CARGO_ENV "")
+    set(RUST_CARGO_ENV CARGO_TARGET_DIR=${RUST_TARGET_ROOT})
     set(RUST_CARGO_TARGET_FLAGS --target aarch64-unknown-linux-gnu)
-    set(RUST_TARGET_DIR "${RUST_MM_DIR}/target/aarch64-unknown-linux-gnu/${RUST_PROFILE}")
+    set(RUST_TARGET_DIR "${RUST_TARGET_ROOT}/aarch64-unknown-linux-gnu/${RUST_PROFILE}")
 else()
-    set(RUST_CARGO_ENV "")
+    set(RUST_CARGO_ENV CARGO_TARGET_DIR=${RUST_TARGET_ROOT})
     set(RUST_CARGO_TARGET_FLAGS "")
-    set(RUST_TARGET_DIR "${RUST_MM_DIR}/target/${RUST_PROFILE}")
+    set(RUST_TARGET_DIR "${RUST_TARGET_ROOT}/${RUST_PROFILE}")
 endif()
 
 # cargo's static-library output file name is platform-dependent:
 # Windows produces `<crate>.lib`, everything else produces
 # `lib<crate>.a`. We export RUST_MODEL_LIB as the absolute path the
-# linker will consume, and use the same path as the custom-command
-# output so ninja can track it as a build artifact.
+# linker will consume.
 if(WIN32)
     set(RUST_MODEL_LIB "${RUST_TARGET_DIR}/geniex_model.lib")
 else()
     set(RUST_MODEL_LIB "${RUST_TARGET_DIR}/libgeniex_model.a")
 endif()
 
-add_custom_command(
-    OUTPUT "${RUST_MODEL_LIB}"
+# Always invoke cargo and let it decide whether to rebuild — CMake has
+# no visibility into the Rust source graph, so an OUTPUT-driven custom
+# command would skip cargo whenever libgeniex_model.a happens to exist,
+# even after the Rust sources change. cargo's own incremental check is
+# cheap and authoritative; if nothing changed it won't touch the .a.
+add_custom_target(model_manager_build ALL
+    BYPRODUCTS "${RUST_MODEL_LIB}"
     COMMAND ${CMAKE_COMMAND} -E env ${RUST_CARGO_ENV}
             cargo build ${RUST_BUILD_FLAG} ${RUST_CARGO_TARGET_FLAGS}
             --manifest-path "${RUST_MM_DIR}/Cargo.toml"
     WORKING_DIRECTORY "${RUST_MM_DIR}"
     COMMENT "Building model manager (${RUST_PROFILE})"
     VERBATIM
-)
-add_custom_target(model_manager_build
-    DEPENDS "${RUST_MODEL_LIB}"
 )
 
 enable_testing()
