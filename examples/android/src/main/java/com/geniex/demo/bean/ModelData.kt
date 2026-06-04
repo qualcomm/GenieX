@@ -28,10 +28,11 @@ data class ModelData(
     /** "chat" / "llm" / "vlm". */
     val type: String? = null,
     /**
-     * Bitmask of supported plugins (see [getSupportPluginIds]):
-     * 0b001=cpu, 0b010=gpu, 0b100=npu.
+     * Runtime that owns this model: `"llama_cpp"` (CPU/GPU/NPU via
+     * llama.cpp's per-tensor scheduler) or `"qairt"` (NPU-only AI Hub
+     * bundle). Drives the compute-unit picker — see [getSupportPluginIds].
      */
-    val pluginIds: Int? = 0,
+    val runtime: String? = null,
     /** Quantization hint passed to `geniex_model_pull`. */
     val quant: String? = null,
     /**
@@ -52,21 +53,13 @@ data class ModelData(
 }
 
 /**
- * Expands the [ModelData.pluginIds] bitmask into plugin ids the UI
- * shows in the plugin-picker dialog.
+ * Compute units offered in the picker dialog for this model. QAIRT is
+ * NPU-only; llama.cpp exposes all three.
  */
-fun ModelData.getSupportPluginIds(): ArrayList<String> {
-    val out = arrayListOf<String>()
-    val mask = pluginIds ?: 0
-    if (mask == 0) {
-        out.add("cpu")
-    } else {
-        if (mask and 0b100 == 0b100) out.add("npu")
-        if (mask and 0b010 == 0b010) out.add("gpu")
-        if (mask and 0b001 == 0b001) out.add("cpu")
-    }
-    return out
+fun ModelData.getSupportPluginIds(): ArrayList<String> = when (runtime) {
+    "qairt" -> arrayListOf("npu")
+    else -> arrayListOf("npu", "gpu", "cpu")
 }
 
-/** True when the model is NPU-first (bitmask has the npu bit set). */
-fun ModelData.isNpuModel(): Boolean = ((pluginIds ?: 0) and 0b100) == 0b100
+/** True when the model runs on the QAIRT NPU runtime. */
+fun ModelData.isNpuModel(): Boolean = runtime == "qairt"
