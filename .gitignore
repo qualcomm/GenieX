@@ -27,3 +27,6 @@ modelfiles/*
 # Benchmark output (timestamped JSON + Markdown per run).
 tests/benchmark/results/*.json
 tests/benchmark/results/*.md
+
+.gradle/
+*.log

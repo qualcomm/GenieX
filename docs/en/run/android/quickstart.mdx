@@ -148,7 +148,7 @@ QAIRT ignores this — `cpu`/`gpu` are coerced to NPU with a warning.
 
 The [sample app](https://github.com/qcom-ai-hub/geniex/tree/main/examples/android) at `examples/android/` is a fully wired chat client built on top of the snippets above. A few patterns worth borrowing when you build your own UI:
 
-- **Model picker UI** — the dropdown is driven by `examples/android/app/src/main/assets/model_list.json`. Each entry pins a `model_name`, `hub`, and (for QAIRT) a `chipset`. Edit this file to add new models without touching code.
+- **Model picker UI** — the dropdown is driven by `examples/android/src/main/assets/model_list.json`. Each entry pins a `model_name`, `hub`, and (for QAIRT) a `chipset`. Edit this file to add new models without touching code.
 - **Resumable downloads with progress** — the `Progress` events from `pullFlow` carry per-file byte counts; the sample wires them straight into a `LinearProgressIndicator`.
 - **Runtime-aware compute-unit picker** — when the selected model is QAIRT, the picker hides GPU/CPU options. See `LoadDialog.kt`.
 - **VLM image picker** — for VLMs, the sample passes the absolute file path into `VlmContent("image", path)`. Don't pass content URIs — the native side reads the file directly.

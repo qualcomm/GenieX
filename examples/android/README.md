@@ -14,7 +14,7 @@ The GenieX AI Android SDK enables on-device AI inference for Android application
 
 ### Supported Hardware
 
-- **NPU**: Qualcomm Snapdragon 8 Elite, 8 Elite Gen 5
+- **NPU**: Qualcomm Snapdragon 8 Elite or Snapdragon 8 Elite Gen 5
 - **GPU**: Qualcomm Adreno GPU
 - **CPU**: ARM64-v8a
 - **RAM**: 8GB+ recommended
