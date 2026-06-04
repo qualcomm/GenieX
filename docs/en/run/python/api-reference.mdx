@@ -28,14 +28,14 @@ model = AutoModelForCausalLM.from_pretrained(
 |---|---|---|---|
 | `model_name_or_path` | `str` | *required* | HuggingFace repo id, short alias (e.g. `"qwen3"`), or local path. |
 | `device_map` | `str` | `"auto"` | `"auto"` picks the first available runtime + compute unit. Also accepts `"<plugin_id>"` (runtime) or `"<plugin_id>:<device_id>"` (runtime + compute unit). |
-| `quant` | `str \| None` | `None` | Quantization variant (e.g. `"Q4_K_M"`). Filters files when downloading from Hub. |
+| `quant` | `str \| None` | `None` | Precision (quantization) variant (e.g. `"Q4_K_M"`). Filters files when downloading from Hub. |
 | `mmproj_path` | `str \| None` | `None` | Path to the multimodal projector file. Auto-resolved from Hub; pass explicitly to force VLM mode. |
 
 <Expandable title="Additional parameters">
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `model_name` | `str \| None` | `None` | Override the registry model name (e.g. `"granite4"` for QAIRT). |
+| `model_name` | `str \| None` | `None` | Override the registry model name (e.g. `"granite4"` for Qualcomm AI Engine Direct). |
 | `hf_token` | `str \| None` | `None` | HuggingFace bearer token for gated models. |
 | `max_tokens` | `int` | — | Maximum tokens for generation. |
 
@@ -263,7 +263,7 @@ print(f"model removed: {MODEL}")
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `model_name` | `str` | *required* | `org/repo` or a short alias. |
-| `quant` | `str \| None` | `None` | Quantization hint (e.g. `"Q4_K_M"`). |
+| `quant` | `str \| None` | `None` | Precision (quantization) hint (e.g. `"Q4_K_M"`). |
 | `hub` | `str` | `"auto"` | `"auto"` \| `"hf"` \| `"localfs"`. |
 | `local_path` | `str \| None` | `None` | Source directory (required when `hub="localfs"`). |
 | `hf_token` | `str \| None` | `None` | HuggingFace bearer token. |

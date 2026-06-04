@@ -100,7 +100,7 @@ The flow is the same regardless of model: **init the SDK → pull weights → lo
 Swapping models is mostly a matter of changing the `model_name` and the `plugin_id`. There are two runtimes:
 
 - **`llama_cpp`** — runs any GGUF model. Supports NPU / GPU / CPU compute units via `device_id`.
-- **`qairt`** — runs Qualcomm AI Hub bundles. NPU-only, requires an explicit `chipset` on Android.
+- **`qairt`** (Qualcomm AI Engine Direct) — runs Qualcomm AI Hub Models. NPU-only, requires an explicit `chipset` on Android.
 
 ### Another GGUF model (llama.cpp)
 
@@ -116,21 +116,21 @@ ModelPullInput(
 
 For VLMs, also pass `paths.mmproj_path` into `VlmCreateInput` — see [API reference → VLM](/en/run/android/api-reference#vlm).
 
-### A QAIRT model (AI Hub NPU)
+### A Qualcomm AI Hub Model (NPU via Qualcomm AI Engine Direct)
 
-QAIRT bundles are pre-compiled per chipset and only run on the NPU. You **must** pass `chipset` on Android:
+Qualcomm AI Hub Models are pre-compiled per chipset and only run on the NPU. You **must** pass `chipset` on Android:
 
 ```kotlin
 ModelManagerWrapper.pullFlow(
     ModelPullInput(
         model_name = "ai-hub-models/Qwen3-4B-Instruct-2507",
-        hub        = HubSource.AUTO,   // routes ai-hub-models/* to AI Hub
+        hub        = HubSource.AUTO,   // routes ai-hub-models/* to Qualcomm AI Hub
         chipset    = "SM8750",         // SM8750 = 8 Elite, SM8850 = 8 Elite Gen 5
     )
 ).collect { /* … */ }
 ```
 
-Then switch `plugin_id = "qairt"` in `LlmCreateInput`. See the supported AI Hub repos in the [API reference](/en/run/android/api-reference#supported-models).
+Then switch `plugin_id = "qairt"` in `LlmCreateInput`. See the supported Qualcomm AI Hub repos in the [API reference](/en/run/android/api-reference#supported-models).
 
 ### Switching compute unit (NPU / GPU / CPU)
 
@@ -142,15 +142,15 @@ For `llama_cpp` only — set `device_id` on `LlmCreateInput`:
 | `"gpu"`            | Adreno GPU via OpenCL.                     |
 | `"cpu"`            | Pure CPU. Works on any ARM64 chipset.      |
 
-QAIRT ignores this — `cpu`/`gpu` are coerced to NPU with a warning.
+Qualcomm AI Engine Direct ignores this — `cpu`/`gpu` are coerced to NPU with a warning.
 
 ## **Using the sample app**
 
 The [sample app](https://github.com/qcom-ai-hub/geniex/tree/main/examples/android) at `examples/android/` is a fully wired chat client built on top of the snippets above. A few patterns worth borrowing when you build your own UI:
 
-- **Model picker UI** — the dropdown is driven by `examples/android/src/main/assets/model_list.json`. Each entry pins a `model_name`, `hub`, and (for QAIRT) a `chipset`. Edit this file to add new models without touching code.
+- **Model picker UI** — the dropdown is driven by `examples/android/app/src/main/assets/model_list.json`. Each entry pins a `model_name`, `hub`, and (for Qualcomm AI Engine Direct) a `chipset`. Edit this file to add new models without touching code.
 - **Resumable downloads with progress** — the `Progress` events from `pullFlow` carry per-file byte counts; the sample wires them straight into a `LinearProgressIndicator`.
-- **Runtime-aware compute-unit picker** — when the selected model is QAIRT, the picker hides GPU/CPU options. See `LoadDialog.kt`.
+- **Runtime-aware compute-unit picker** — when the selected model uses Qualcomm AI Engine Direct, the picker hides GPU/CPU options. See `LoadDialog.kt`.
 - **VLM image picker** — for VLMs, the sample passes the absolute file path into `VlmContent("image", path)`. Don't pass content URIs — the native side reads the file directly.
 
 Open `examples/android/` in Android Studio (not `bindings/android/` — that's the SDK source) and hit **Run ▶**.
@@ -161,8 +161,8 @@ Open `examples/android/` in Android Studio (not `bindings/android/` — that's t
   <Card title="API reference" href="/en/run/android/api-reference" icon="book">
     Wrapper classes, runtime / compute-unit selection, and data structures.
   </Card>
-  <Card title="Runtimes" href="/en/get-started/choose-runtime" icon="route">
-    When to pick llama.cpp vs QAIRT.
+  <Card title="Platforms & runtimes" href="/en/get-started/platforms" icon="route">
+    Snapdragon platforms and when to pick llama.cpp vs Qualcomm AI Engine Direct.
   </Card>
 </CardGroup>
 

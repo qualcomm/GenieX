@@ -31,7 +31,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 - **llama.cpp** —— 运行任意 GGUF 模型，支持 NPU/GPU/CPU 计算单元。最适合试用社区模型。
 - **QAIRT** —— 运行 AI Hub 预编译模型包，仅 NPU。当模型在 AI Hub 可用时，通常是最快路径。
 
-详见[选择运行时](/cn/get-started/choose-runtime)。
+详见[平台与运行时](/cn/get-started/platforms#geniex-运行时)。
 
 ### 默认运行时是哪个？
 
@@ -43,19 +43,19 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ### 应该选哪种量化？
 
-llama.cpp 在骁龙 NPU 上请用 **`Q4_0`**——它在 Hexagon NPU 上支持最佳。QAIRT 模型已预量化——无需选择。详见[量化](/cn/models/quantization)。
+llama.cpp 在骁龙 NPU 上请用 **`Q4_0`**——它在 Hexagon NPU 上支持最佳。QAIRT 模型已预量化——无需选择。详见[量化与设备落点](/cn/models/supported#量化与设备落点)。
 
 ## 模型
 
 ### 能运行 Hugging Face 上任意模型吗？
 
-llama.cpp 运行时可执行任意 **GGUF** 模型。详见[自带模型](/cn/models/bring-your-own)。
+llama.cpp 运行时可执行任意 **GGUF** 模型。详见[运行 Hugging Face 上的 GGUF 模型](/cn/models/supported#运行-hugging-face-上的-gguf-模型)。
 
 QAIRT 需要预编译的 AI Hub 模型包——新增模型需先在 C++ 侧注册。
 
 ### 受支持模型列表在哪里？
 
-[支持的模型](/cn/models/supported) —— 按运行时拆分（QAIRT、llama.cpp）。
+[模型](/cn/models/supported) —— 按运行时拆分（QAIRT、llama.cpp）。
 
 ## 芯片与设备
 

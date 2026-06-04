@@ -18,7 +18,7 @@ val plugin_id: String?   // "llama_cpp" | "qairt" | null
 | `plugin_id`   | Runtime                          | Model format             | Compute units                  |
 |---------------|----------------------------------|--------------------------|--------------------------------|
 | `"llama_cpp"` | llama.cpp + GGML Hexagon backend | GGUF                     | CPU / Adreno GPU / Hexagon NPU |
-| `"qairt"`     | Qualcomm AI Runtime              | AI Hub pre-compiled bins | Hexagon NPU only               |
+| `"qairt"`     | Qualcomm® AI Engine Direct       | Qualcomm AI Hub pre-compiled bins | Hexagon NPU only      |
 | `null`        | SDK picks based on model paths   | —                        | —                              |
 
 Constants are exposed as [`PluginIdValue`](https://github.com/qcom-ai-hub/geniex/blob/main/bindings/android/app/src/main/java/com/geniex/sdk/bean/InputPluginBase.kt) (`LLAMA_CPP`, `QAIRT`).
@@ -39,7 +39,7 @@ val device_id: String?   // "cpu" | "gpu" | "npu" | null
 | `"cpu"` | Pure CPU. Forces `nGpuLayers = 0`.                                  |
 
 <Note>
-QAIRT only supports NPU. Passing `"cpu"` or `"gpu"` with a QAIRT model logs a warning and falls back to NPU — it won't error.
+Qualcomm AI Engine Direct only supports NPU. Passing `"cpu"` or `"gpu"` with a Qualcomm AI Hub Model logs a warning and falls back to NPU — it won't error.
 </Note>
 
 ---
@@ -83,11 +83,11 @@ ModelManagerWrapper.clean()            // wipe all cached models
 ```kotlin
 data class ModelPullInput(
     val model_name:   String,                     // "org/repo" or alias
-    val quant:        String? = null,             // e.g. "Q4_0", "Q4_K_M"
+    val quant:        String? = null,             // precision (quantization) e.g. "Q4_0", "Q4_K_M"
     val hub:          HubSource = HubSource.AUTO, // AUTO routes by model_name
     val local_path:   String? = null,             // only when hub == LOCALFS
     val hf_token:     String? = null,             // falls back to GENIEX_HFTOKEN env
-    val chipset:      String? = null,             // required for AI Hub on Android (e.g. "SM8750")
+    val chipset:      String? = null,             // required for Qualcomm AI Hub on Android (e.g. "SM8750")
     val display_name: String? = null,
 )
 ```
@@ -122,7 +122,7 @@ data class ModelPaths(
 ```
 
 <Note>
-AI Hub pulls on Android **require** an explicit `chipset`. The Rust side only auto-detects on Windows on Snapdragon. Use `"SM8750"` for Snapdragon 8 Elite or `"SM8850"` for Snapdragon 8 Elite Gen 5.
+Qualcomm AI Hub pulls on Android **require** an explicit `chipset`. The Rust side only auto-detects on Windows on Snapdragon. Use `"SM8750"` for Snapdragon 8 Elite or `"SM8850"` for Snapdragon 8 Elite Gen 5.
 </Note>
 
 ---
@@ -327,17 +327,17 @@ Always pass `t.formattedText` (the chat-templated prompt) into `generateStreamFl
 
 ---
 
-## **QAIRT (AI Hub NPU models)**
+## **Qualcomm® AI Hub Models (NPU via Qualcomm AI Engine Direct)**
 
 Pre-compiled models from Qualcomm AI Hub. NPU-only, pinned to a specific chipset (`SM8750` = Snapdragon 8 Elite, `SM8850` = Snapdragon 8 Elite Gen 5).
 
-### Downloading AI Hub models
+### Downloading Qualcomm AI Hub Models
 
 ```kotlin
 ModelManagerWrapper.pullFlow(
     ModelPullInput(
         model_name = "ai-hub-models/Qwen2.5-VL-7B-Instruct",
-        hub        = HubSource.AUTO,     // AUTO routes `ai-hub-models/*` to AI Hub
+        hub        = HubSource.AUTO,     // AUTO routes `ai-hub-models/*` to Qualcomm AI Hub
         chipset    = "SM8750",           // REQUIRED on Android
     )
 ).collect { event ->
@@ -369,7 +369,7 @@ LlmWrapper.builder()
             model_path = paths.model_path,
             config     = ModelConfig(max_tokens = 2048, enable_thinking = false),
             plugin_id  = "qairt",
-            device_id  = null,           // null → NPU (only option for QAIRT)
+            device_id  = null,           // null → NPU (only option for Qualcomm AI Engine Direct)
         )
     )
     .build()
@@ -390,7 +390,7 @@ llmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
 ```
 
 <Note>
-QAIRT rejects `nGpuLayers != 0` and `nCtx != 0` with `PARAM_NOT_SUPPORTED` — the KV cache and context length are fixed at compile time by the AI Hub bundle. Leave both at defaults and use `max_tokens` / `enable_thinking` only.
+Qualcomm AI Engine Direct rejects `nGpuLayers != 0` and `nCtx != 0` with `PARAM_NOT_SUPPORTED` — the KV cache and context length are fixed at compile time by the Qualcomm AI Hub bundle. Leave both at defaults and use `max_tokens` / `enable_thinking` only.
 </Note>
 
 ### VLM
@@ -435,7 +435,7 @@ vlmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
 ```
 
 <Note>
-Pass the **chat-templated** prompt (`t.formattedText`) to `generateStreamFlow`, never raw user text. QAIRT VLM treats its prompt as already-templated — raw text produces degenerate output.
+Pass the **chat-templated** prompt (`t.formattedText`) to `generateStreamFlow`, never raw user text. Qualcomm AI Engine Direct VLM treats its prompt as already-templated — raw text produces degenerate output.
 </Note>
 
 ---

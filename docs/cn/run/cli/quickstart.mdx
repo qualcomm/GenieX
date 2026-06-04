@@ -9,7 +9,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 - 已安装 CLI——详见[安装](/cn/run/cli/install)。
 - 容器内交互式 shell（仅 Docker）——详见[交互式运行](/cn/run/cli/install#交互式运行)。
-- 了解[运行时选择](/cn/get-started/choose-runtime)——`qairt` 用于 AI Hub 模型包，`llama_cpp` 用于任意 GGUF。
+- 了解[运行时选择](/cn/get-started/platforms#geniex-运行时)——`qairt` 用于 AI Hub 模型包，`llama_cpp` 用于任意 GGUF。
 
 ## **运行你的第一个模型**
 
@@ -47,7 +47,7 @@ geniex infer Qwen/Qwen3-VL-2B-Instruct-GGUF
 - **模型类型** —— 视觉语言模型选 `vlm`，纯文本模型选 `llm`。`Qwen3.5` 与 `Gemma4` 目前请选 `llm`（多模态支持即将推出）。
 - **量化** —— `Q4_0` 在 Hexagon NPU 上性能最佳。
 
-<Tip>如需尝试其他 GGUF 模型，从 Hugging Face 复制任意兼容 GGUF 路径替换上面的命令即可。详见[自带模型](/cn/models/bring-your-own)。</Tip>
+<Tip>如需尝试其他 GGUF 模型，从 Hugging Face 复制任意兼容 GGUF 路径替换上面的命令即可。详见[运行 Hugging Face 上的 GGUF 模型](/cn/models/supported#运行-hugging-face-上的-gguf-模型)。</Tip>
 
 ## **下一步**
 
