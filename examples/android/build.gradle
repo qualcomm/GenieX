@@ -5,7 +5,14 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.serialization' version '2.2.0'
 }
 
-// Load shared versions and utilities — must be before android {} and dependencies {}.
+// Default Android SDK / NDK versions. _shared/android/common.gradle (gitignored)
+// can override these when this folder is consumed via ai-hub-apps.
+ext {
+    ANDROID_NDK_VERSION = '29.0.14206865'
+    ANDROID_COMPILE_API = 35
+    ANDROID_MIN_API = 27
+    ANDROID_TARGET_API = 35
+}
 if (file('_shared/android/common.gradle').exists()) {
     apply from: '_shared/android/common.gradle'
 }

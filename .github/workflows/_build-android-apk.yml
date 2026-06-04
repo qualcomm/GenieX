@@ -23,10 +23,6 @@ jobs:
         with:
           fetch-depth: 1
           submodules: false
-          # examples/android tracks its gradle-wrapper.jar and app/libs/*.aar
-          # via Git LFS (see examples/android/.gitattributes). Without lfs:true
-          # those land as 130-byte pointer files and gradlew can't bootstrap.
-          lfs: true
 
       # Silences the default-branch hint gradle's internal git init prints.
       - name: Configure git
@@ -46,7 +42,7 @@ jobs:
       # local Maven repo — with a generated POM declaring `aar` packaging — so
       # AGP's variant-aware resolution treats it exactly like the Maven Central
       # artifact. The install version must match the example's pinned version
-      # (the resolution key), so we read it back from app/build.gradle.kts.
+      # (the resolution key), so we read it back from build.gradle.
       - name: Download freshly built AAR
         uses: actions/download-artifact@v8
         with:
@@ -60,9 +56,9 @@ jobs:
           [ -f "$src" ] || { echo "::error::AAR artifact not found at $src"; exit 1; }
 
           # Pull the version the example pins so the local artifact resolves.
-          version=$(sed -nE 's/.*com\.qualcomm\.qti:geniex-android:([^"]+)".*/\1/p' \
-            examples/android/app/build.gradle.kts | head -n1)
-          [ -n "$version" ] || { echo "::error::could not parse geniex-android version from app/build.gradle.kts"; exit 1; }
+          version=$(sed -nE "s/.*com\.qualcomm\.qti:geniex-android:([^'\"]+).*/\1/p" \
+            examples/android/build.gradle | head -n1)
+          [ -n "$version" ] || { echo "::error::could not parse geniex-android version from build.gradle"; exit 1; }
           echo "Installing geniex-android:$version into local Maven repo"
 
           repo="$GITHUB_WORKSPACE/examples/android/local-maven"
@@ -121,14 +117,14 @@ jobs:
       # the local Maven repo holding the AAR built in this run.
       - name: Assemble demo APK
         working-directory: examples/android
-        run: ./gradlew --no-daemon :app:assembleDebug
+        run: ./gradlew --no-daemon assembleDebug
 
       - name: Collect APK
         id: apk
         shell: bash
         run: |
           set -euo pipefail
-          src="examples/android/app/build/outputs/apk/debug/app-debug.apk"
+          src="examples/android/build/outputs/apk/debug/app-debug.apk"
           [ -f "$src" ] || { echo "::error::APK not found at $src"; exit 1; }
           mkdir -p dist-apk
           cp "$src" dist-apk/geniex-demo.apk

@@ -2,12 +2,16 @@
 .gradle/
 build/
 arm64-v8a/
-.DS_Store
+
+# Kotlin compiler
+.kotlin/
+
 # Local configuration file (sdk path, etc)
 local.properties
 
 # Log/OS Files
 *.log
+.DS_Store
 
 # Android Studio generated files and folders
 captures/
@@ -28,12 +32,16 @@ render.experimental.xml
 *.jks
 *.keystore
 
-# Google Services (e.g. APIs or Firebase)
-google-services.json
-
 # Android Profiling
 *.hprof
-app/libs/app-release.aar
-app/libs/app-debug.aar
-app/release/
-repo/
+
+# Local-only files for standalone build in this repo. The new repo will
+# replace _shared/ with a symlink to apps/_shared/, and these helpers are
+# no longer needed.
+/_shared/
+/_shared.README.md
+/local-aar-init.gradle
+
+# Local model lists (developer overrides)
+/src/main/assets/model_list_backup.json
+/src/main/assets/model_list_local.json

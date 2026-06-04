@@ -4,8 +4,8 @@
 
 **Goal:** produce an unpublished `geniex-android-0.2.4-SNAPSHOT.aar` (or any local
 artifact id) containing the `@JvmStatic` fix for `ModelType.fromValue`, then make
-it available to the demo APKs at `examples/android/` and `examples/android-new/`
-without waiting for the v0.2.4 Maven Central publish.
+it available to the demo APK at `examples/android/` without waiting for the
+v0.2.4 Maven Central publish.
 
 The local Windows host (where this work started) cannot do this:
 1. The Snapdragon Android toolchain image is `linux/amd64` only.
@@ -112,7 +112,7 @@ cat > "$LOCAL_REPO/geniex-android-0.2.4-local.pom" <<'POM'
 POM
 ```
 
-And the demo's Gradle init script (`examples/android-new/local-aar-init.gradle`,
+And the demo's Gradle init script (`examples/android/local-aar-init.gradle`,
 gitignored — already exists, see commit `4120f37`):
 
 ```groovy
@@ -129,13 +129,11 @@ beforeSettings { settings ->
 ```
 
 Bump the demo's pin from `0.2.3` to `0.2.4-local` in:
-- `examples/android-new/build.gradle:59`
-- `examples/android/app/build.gradle.kts:71`
-- `examples/android/transform/build.gradle.kts:36`
+- `examples/android/build.gradle:59`
 
 Then:
 ```powershell
-cd examples/android-new
+cd examples/android
 ./gradlew assembleDebug --init-script local-aar-init.gradle
 adb install -r build/outputs/apk/debug/app-debug.apk
 ```
