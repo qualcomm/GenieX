@@ -147,12 +147,22 @@ check_required_libs() {
 }
 
 check_npu_bare_libs() {
+    _geniex_prefixes="/usr/local/lib/geniex ${XDG_DATA_HOME:-$HOME/.local/share}/geniex"
+
     _failed=0
     for _bare in libcdsprpc.so libadsprpc.so; do
         # ldconfig -p covers LD_LIBRARY_PATH-resolved paths and all dirs in
         # /etc/ld.so.conf, which is more complete than find_lib's static list.
         _found=$(ldconfig -p 2>/dev/null | awk -v n="$_bare" '$1 == n { print; exit }')
         [ -z "$_found" ] && _found=$(find_lib "$_bare" 2>/dev/null || true)
+        if [ -z "$_found" ]; then
+            for _p in $_geniex_prefixes; do
+                if [ -e "$_p/$_bare" ]; then
+                    _found="$_p/$_bare"
+                    break
+                fi
+            done
+        fi
         if [ -z "$_found" ]; then
             err "$_bare not found — re-run the geniex installer to create the symlink,"
             err "or install qcom-fastrpc1. See the GenieX FAQ \"Linux ARM64 setup\" section."
