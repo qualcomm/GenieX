@@ -37,8 +37,6 @@ import (
 
 // LCOV_EXCL_START
 
-var bridgeLogEnabled = true
-
 type SDKError int32
 
 func (s SDKError) Error() string {
@@ -65,10 +63,6 @@ var (
 
 // Init must be called before any other SDK function.
 func Init() {
-	slog.Debug("[ML] Init", "bridgeLogEnabled", bridgeLogEnabled)
-	if bridgeLogEnabled {
-		C.geniex_set_log((C.geniex_log_callback)(C.go_log_wrap))
-	}
 	C.geniex_init()
 }
 
@@ -78,6 +72,14 @@ func DeInit() {
 
 func Version() string {
 	return C.GoString(C.geniex_version())
+}
+
+func SetLog(enable bool) {
+	if enable {
+		C.geniex_set_log((C.geniex_log_callback)(C.go_log_wrap))
+	} else {
+		C.geniex_set_log(nil)
+	}
 }
 
 // GetPluginVersion returns the version the plugin reports for itself (QAIRT
@@ -206,11 +208,6 @@ func go_log_wrap(level C.geniex_LogLevel, msg *C.char) {
 	default:
 		slog.Debug(msgStr)
 	}
-}
-
-// EnableBridgeLog toggles SDK→slog forwarding. Must be set before Init.
-func EnableBridgeLog(enable bool) {
-	bridgeLogEnabled = enable
 }
 
 // LCOV_EXCL_STOP
