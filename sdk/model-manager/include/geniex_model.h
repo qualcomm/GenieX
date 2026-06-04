@@ -56,6 +56,21 @@ GENIEX_API int32_t geniex_model_init(geniex_Path data_dir);
  */
 GENIEX_API int32_t geniex_model_deinit(void);
 
+/**
+ * @brief Human-readable message for the most recent failure on the calling
+ *        thread.
+ *
+ * Every geniex_model_* function that returns a negative error code also
+ * records a detailed message (e.g. "quantization 'Q2_K' not found for model
+ * 'org/repo'") that the int code alone can't convey. The message is
+ * thread-local and overwritten by the next failing call on that thread.
+ *
+ * @return A NUL-terminated, library-owned string (do NOT free) valid until the
+ *         next geniex_model_* call on this thread, or NULL if no error has been
+ *         recorded yet.
+ */
+GENIEX_API const char* geniex_model_last_error_message(void);
+
 /* ============================================================
  *  Model type
  * ============================================================ */
@@ -76,13 +91,13 @@ typedef enum {
  * Free the entire struct with geniex_model_paths_free().
  */
 typedef struct {
-    char* model_path;     /**< Main model file (absolute path).          */
-    char* mmproj_path;    /**< Multimodal projection file. NULL if unused. */
-    char* tokenizer_path; /**< Tokenizer file. NULL if unused.            */
-    char* model_dir;      /**< Model directory (always set).              */
-    char* model_name;     /**< Architecture name, e.g. "qwen3-4b".       */
-    char* plugin_id;      /**< Plugin ID, e.g. "llama_cpp".               */
-    char* device_id;      /**< Device ID. NULL means default device.      */
+    char*            model_path;     /**< Main model file (absolute path).          */
+    char*            mmproj_path;    /**< Multimodal projection file. NULL if unused. */
+    char*            tokenizer_path; /**< Tokenizer file. NULL if unused.            */
+    char*            model_dir;      /**< Model directory (always set).              */
+    char*            model_name;     /**< Architecture name, e.g. "qwen3-4b".       */
+    char*            plugin_id;      /**< Plugin ID, e.g. "llama_cpp".               */
+    geniex_ModelType model_type;     /**< LLM or VLM.                          */
 } geniex_ModelPaths;
 
 /**
@@ -102,20 +117,36 @@ GENIEX_API void geniex_model_paths_free(geniex_ModelPaths* paths);
  *  Local cache management
  * ============================================================ */
 
+/**
+ * @brief Detailed metadata for one cached model.
+ *
+ * All non-NULL char* fields (and the `precisions` array) are heap-allocated;
+ * free the enclosing output with geniex_model_list_detailed_free().
+ */
 typedef struct {
-    char**  names; /**< Heap-allocated array of "org/repo" strings. */
-    int32_t count;
-} geniex_ModelListOutput;
+    char*            name;       /**< "org/repo".                          */
+    char*            model_name; /**< Architecture name, e.g. "qwen3-4b". */
+    char*            plugin_id;  /**< Plugin ID, e.g. "llama_cpp".         */
+    geniex_ModelType model_type;
+    int64_t          total_size;      /**< Sum of downloaded file sizes (bytes). */
+    char**           precisions;      /**< Downloaded quant names.          */
+    int32_t          precision_count; /**< Length of `precisions`.          */
+} geniex_ModelDetail;
+
+typedef struct {
+    geniex_ModelDetail* models;
+    int32_t             count;
+} geniex_ModelListDetailedOutput;
 
 /**
- * @brief List all locally cached models.
- * @param output  Populated on success. Call geniex_model_list_free() when done.
+ * @brief List all locally cached models with full per-model metadata.
+ * @param output  Populated on success. Call geniex_model_list_detailed_free() when done.
  * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
  */
-GENIEX_API int32_t geniex_model_list(geniex_ModelListOutput* output);
+GENIEX_API int32_t geniex_model_list_detailed(geniex_ModelListDetailedOutput* output);
 
-/** Free the names array and zero the struct. */
-GENIEX_API void geniex_model_list_free(geniex_ModelListOutput* output);
+/** Free every model's strings + precisions array, then zero the struct. */
+GENIEX_API void geniex_model_list_detailed_free(geniex_ModelListDetailedOutput* output);
 
 /**
  * @brief Delete a cached model from disk.
@@ -138,6 +169,14 @@ GENIEX_API int32_t geniex_model_clean(int32_t* removed_count);
  * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
  */
 GENIEX_API int32_t geniex_model_get_type(const char* model_name, geniex_ModelType* out_type);
+
+/**
+ * @brief Override the model type stored in a cached model's manifest.
+ * @param model_name  "org/repo" format.
+ * @param type        New model type.
+ * @return GENIEX_SUCCESS, or GENIEX_ERROR_COMMON_FILE_NOT_FOUND if not cached.
+ */
+GENIEX_API int32_t geniex_model_set_type(const char* model_name, geniex_ModelType type);
 
 /* ============================================================
  *  Download
@@ -235,7 +274,17 @@ typedef struct {
     const char*                 display_name;
     geniex_download_progress_cb on_progress; /**< NULL to suppress progress reporting           */
     void*                       user_data;   /**< Forwarded to on_progress                      */
+    /**
+     * Optional model-type override written into the manifest as the pull
+     * publishes it, so a caller that already knows the type doesn't need a
+     * separate geniex_model_set_type() round-trip. Use -1 to auto-detect
+     * (the default); 0 = LLM, 1 = VLM (matching geniex_ModelType).
+     */
+    int32_t model_type;
 } geniex_ModelPullInput;
+
+/** Pass as geniex_ModelPullInput.model_type to keep auto-detection. */
+#define GENIEX_MODEL_TYPE_AUTO (-1)
 
 /**
  * @brief Download a model (blocking).
@@ -247,6 +296,54 @@ typedef struct {
  * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
  */
 GENIEX_API int32_t geniex_model_pull(const geniex_ModelPullInput* input);
+
+/* ============================================================
+ *  Query (plan without downloading)
+ * ============================================================ */
+
+/**
+ * @brief One quantization advertised by the source for a model.
+ *
+ * `quant` is heap-allocated; freed by geniex_model_query_free().
+ */
+typedef struct {
+    char*   quant;      /**< Quantization name, e.g. "Q4_K_M".            */
+    int64_t size;       /**< Size in bytes of the largest file for this quant. */
+    bool    is_default; /**< True for the quant the SDK would auto-select. */
+} geniex_QuantCandidate;
+
+/**
+ * @brief Result of geniex_model_query.
+ *
+ * All non-NULL char* fields and the `candidates` array are heap-allocated;
+ * free with geniex_model_query_free().
+ */
+typedef struct {
+    char*                  model_name; /**< Architecture name.            */
+    char*                  plugin_id;  /**< Plugin ID, e.g. "llama_cpp".  */
+    geniex_ModelType       model_type;
+    geniex_QuantCandidate* candidates;
+    int32_t                candidate_count;
+} geniex_ModelQueryOutput;
+
+/**
+ * @brief Resolve a model's remote candidate quantizations without downloading.
+ *
+ * Plans the model against its source (HF / AI Hub / LocalFS) and returns the
+ * advertised quants + sizes so callers can present a precision picker before
+ * committing to geniex_model_pull.
+ *
+ * Reuses geniex_ModelPullInput; the quant, on_progress, user_data, and
+ * model_type fields are ignored.
+ *
+ * @param input  Pull-shaped parameters. Must not be NULL.
+ * @param out    Populated on success. Call geniex_model_query_free() when done.
+ * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
+ */
+GENIEX_API int32_t geniex_model_query(const geniex_ModelPullInput* input, geniex_ModelQueryOutput* out);
+
+/** Free all heap members of geniex_ModelQueryOutput and zero the struct. */
+GENIEX_API void geniex_model_query_free(geniex_ModelQueryOutput* out);
 
 /* ============================================================
  *  Platform alias resolution

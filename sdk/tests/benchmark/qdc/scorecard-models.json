@@ -1,0 +1,50 @@
+[
+  {
+    "name": "Qwen3-0.6B",
+    "plugin": "llama_cpp",
+    "devices": ["cpu", "npu", "hybrid"],
+    "url": "https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_0.gguf"
+  },
+  {
+    "name": "Qwen3-1.7B",
+    "plugin": "llama_cpp",
+    "devices": ["cpu", "npu", "hybrid"],
+    "url": "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_0.gguf"
+  },
+  {
+    "name": "Qwen3-4B",
+    "plugin": "llama_cpp",
+    "devices": ["cpu", "npu", "hybrid"],
+    "url": "https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_0.gguf"
+  },
+  {
+    "name": "Llama-3.2-1B-Instruct",
+    "plugin": "llama_cpp",
+    "devices": ["cpu", "npu", "hybrid"],
+    "url": "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_0.gguf"
+  },
+  {
+    "name": "Llama-3.2-3B-Instruct",
+    "plugin": "llama_cpp",
+    "devices": ["cpu", "npu", "hybrid"],
+    "url": "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_0.gguf"
+  },
+  {
+    "name": "phi-4-mini-instruct",
+    "plugin": "llama_cpp",
+    "devices": ["cpu", "npu", "hybrid"],
+    "url": "https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF/resolve/main/microsoft_Phi-4-mini-instruct-Q4_0.gguf"
+  },
+  {
+    "name": "Qwen3-4B-qairt",
+    "plugin": "qairt",
+    "devices": ["npu"],
+    "bundle_url": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/qwen3_4b/releases/v0.52.0/qwen3_4b-genie-w4a16-qualcomm_qcs9075.zip"
+  },
+  {
+    "name": "Qwen3-4B-Instruct-2507-qairt",
+    "plugin": "qairt",
+    "devices": ["npu"],
+    "bundle_url": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/qwen3_4b_instruct_2507/releases/v0.52.0/qwen3_4b_instruct_2507-genie-w4a16-qualcomm_qcs9075.zip"
+  }
+]

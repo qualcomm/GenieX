@@ -7,45 +7,8 @@ Install Bazelisk:
 - Windows: `winget install --id Bazel.Bazelisk`
 - Linux: install `bazelisk` from your package manager
 
-Quick smoke test:
-
-```bash
-bazelisk run //cli -- infer Qwen/Qwen3-0.6B-GGUF
-```
-
-> `//cli` is a convenience alias for `//cli/cmd/geniex:geniex`. Both are used interchangeably in these docs.
-
 > [!IMPORTANT]
-> When running the CLI in local-SDK mode (the default), build and install the SDK bridge into `sdk/pkg-geniex/` **first** — Bazel expects `sdk/pkg-geniex/lib/geniex.dll` (Windows) or `sdk/pkg-geniex/lib/libgeniex.so` (Linux) to already exist. See [Build the SDK](#build-the-sdk) below.
-
-## CLI build options
-
-Flags for `bazelisk build` and `bazelisk run`:
-
-| Flag                                    | Meaning                                                                                                     |
-| --------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `--//sdk:sdk_type={local,s3,bazel}`     | SDK source. `local` (default) links against `sdk/pkg-geniex`; `s3` and `bazel` are WIP.                     |
-| `--config={linux_arm64,windows_arm64}`  | Cross-compile to the target platform (Go toolchain + CGO + `oci_image` base). `sdk/pkg-geniex/` must match. |
-
-Development targets:
-
-- `bazelisk run //cli:gen` — generate development files (protobuf Go bindings).
-- `bazelisk run //cli:clean` — clean generated files.
-- `bazelisk run //cli/release/linux:docker` — build and load the Docker image for the Linux release.
-
-Package release artifacts:
-
-| Target                                 | Output                                               |
-| -------------------------------------- | ---------------------------------------------------- |
-| `bazelisk build //cli:artifact`        | `bazel-bin/cli/artifact.zip`                         |
-| `bazelisk build //cli/release/windows` | `bazel-bin/cli/release/windows/geniex-cli-setup.exe` |
-| `bazelisk build //cli/release/linux`   | `bazel-bin/cli/release/linux/geniex-cli-docker.tar`  |
-
-Generated executable (for manual invocation): `bazel-bin/cli/cmd/geniex/geniex_/`, with runtime files under `geniex.runfiles/_main`.
-
-## Python bindings
-
-See [bindings/python/README.md](../bindings/python/README.md).
+> Build in this order. In local-SDK mode (the default) the CLI links against the SDK bridge at `sdk/pkg-geniex/` — Bazel expects `sdk/pkg-geniex/lib/geniex.dll` (Windows) or `sdk/pkg-geniex/lib/libgeniex.so` (Linux) to already exist. So build and install the SDK ([Build the SDK](#build-the-sdk)) **first**, then build the CLI ([Build and run the CLI](#build-and-run-the-cli)).
 
 ## Windows prerequisites
 
@@ -167,3 +130,52 @@ Build the Android app (requires Android SDK + Gradle on the host — installing 
 cd examples/android
 gradle build
 ```
+
+## Build and run the CLI
+
+With the SDK built and installed into `sdk/pkg-geniex/`, build and run the CLI. Quick smoke test:
+
+```bash
+bazelisk run //cli -- infer Qwen/Qwen3-0.6B-GGUF
+```
+
+> `//cli` is a convenience alias for `//cli/cmd/geniex:geniex`. Both are used interchangeably in these docs.
+
+### Flags
+
+Flags for `bazelisk build` and `bazelisk run`:
+
+| Flag                                    | Meaning                                                                                                     |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `--//sdk:sdk_type={local,s3,bazel}`     | SDK source. `local` (default) links against `sdk/pkg-geniex`; `s3` and `bazel` are WIP.                     |
+| `--config={linux_arm64,windows_arm64}`  | Cross-compile to the target platform (Go toolchain + CGO + `oci_image` base). `sdk/pkg-geniex/` must match. |
+
+### Development and release targets
+
+Development targets:
+
+- `bazelisk run //cli/release/linux:docker` — build and load the Docker image for the Linux release.
+
+Package release artifacts:
+
+| Target                                 | Output                                               |
+| -------------------------------------- | ---------------------------------------------------- |
+| `bazelisk build //cli:artifact`        | `bazel-bin/cli/artifact.zip`                         |
+| `bazelisk build //cli/release/windows` | `bazel-bin/cli/release/windows/geniex-cli-setup.exe` |
+| `bazelisk build //cli/release/linux`   | `bazel-bin/cli/release/linux/geniex-cli-docker.tar`  |
+
+Generated executable (for manual invocation): `bazel-bin/cli/cmd/geniex/geniex_/`, with runtime files under `geniex.runfiles/_main`.
+
+### Test coverage
+
+Use `bazelisk coverage` instead of `bazelisk test`:
+
+```bash
+bazelisk coverage //... --combined_report=lcov
+```
+
+Bazel's default `--instrumentation_filter` only covers packages that own a test target, so every Go package ships at least a placeholder `package_test.go` to keep itself in the denominator. Combined lcov lands at `bazel-out/_coverage/_coverage_report.dat`. Render it with `genhtml bazel-out/_coverage/_coverage_report.dat -o coverage-html` (gitignored), or summarize on the CLI with `lcov --list <report>`.
+
+## Python bindings
+
+See [bindings/python/README.md](../bindings/python/README.md).

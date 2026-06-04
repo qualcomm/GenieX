@@ -18,27 +18,27 @@ import (
 	"errors"
 	"testing"
 
-	"google.golang.org/protobuf/encoding/protojson"
-
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
+	"github.com/bytedance/sonic"
 )
 
-// Minimal samples pulled from the real AI Hub JSONs attached to the
-// feature discussion. We embed trimmed literals instead of reading files
-// to keep the test hermetic under Bazel sandboxing.
+// Verbatim slices of the real v0.53.1 AI Hub JSONs (manifest trimmed to
+// two model entries; platform trimmed to two chipsets). Captured from
+// https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/releases/v0.53.1/.
+// We embed literals instead of reading files to keep the test hermetic
+// under Bazel sandboxing.
 
 const sampleManifestJSON = `{
-  "version": "0.51.1.dev1",
-  "platform_url": "https://example.com/platform.json",
+  "version": "0.53.1",
+  "platform_url": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/releases/v0.53.1/platform.json",
   "models": [
     {
       "id": "qwen3_4b_instruct_2507",
       "display_name": "Qwen3-4B-Instruct-2507",
       "domain": "MODEL_DOMAIN_GENERATIVE_AI",
       "manifest_urls": {
-        "info": "https://example.com/qwen3/info.json",
-        "perf": "https://example.com/qwen3/perf.json",
-        "release_assets": "https://example.com/qwen3/release-assets.json"
+        "info": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/qwen3_4b_instruct_2507/releases/v0.53.1/info.json",
+        "perf": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/qwen3_4b_instruct_2507/releases/v0.53.1/perf.json",
+        "release_assets": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/qwen3_4b_instruct_2507/releases/v0.53.1/release-assets.json"
       }
     },
     {
@@ -46,116 +46,156 @@ const sampleManifestJSON = `{
       "display_name": "Baichuan2-7B",
       "domain": "MODEL_DOMAIN_GENERATIVE_AI",
       "manifest_urls": {
-        "info": "https://example.com/baichuan2/info.json",
-        "perf": "https://example.com/baichuan2/perf.json"
+        "info": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/baichuan2_7b/releases/v0.53.1/info.json",
+        "perf": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/baichuan2_7b/releases/v0.53.1/perf.json"
       }
     }
   ]
 }`
 
 const samplePlatformJSON = `{
-  "aihm_version": "0.51.1.dev1",
+  "aihm_version": "0.53.1",
   "chipsets": [
     {
-      "name": "qualcomm-snapdragon-x-elite",
-      "aliases": ["qualcomm-snapdragon-x-elite", "sc8380xp"],
-      "marketing_name": "Snapdragon X Elite",
-      "supports_fp16": true,
-      "htp_version": 73,
-      "soc_model": 60,
-      "reference_device": "Snapdragon X Elite CRD"
-    },
-    {
       "name": "qualcomm-snapdragon-8gen1",
-      "aliases": ["qualcomm-snapdragon-8gen1", "sm8450"],
-      "marketing_name": "Snapdragon 8 Gen 1 Mobile",
+      "aliases": [
+        "qualcomm-snapdragon-8gen1",
+        "sm8450"
+      ],
+      "marketing_name": "Snapdragon® 8 Gen 1 Mobile",
+      "world": "WEBSITE_WORLD_MOBILE",
       "supports_fp16": true,
       "htp_version": 69,
       "soc_model": 36,
       "reference_device": "Samsung Galaxy S22 Ultra 5G"
+    },
+    {
+      "name": "qualcomm-snapdragon-x-elite",
+      "aliases": [
+        "qualcomm-snapdragon-x-elite",
+        "sc8380xp"
+      ],
+      "marketing_name": "Snapdragon® X Elite",
+      "world": "WEBSITE_WORLD_COMPUTE",
+      "supports_fp16": true,
+      "htp_version": 73,
+      "soc_model": 60,
+      "reference_device": "Snapdragon X Elite CRD"
     }
   ]
 }`
 
 const sampleReleaseAssetsJSON = `{
-  "aihm_version": "0.51.1.dev1",
+  "aihm_version": "0.53.1",
   "model_id": "qwen3_4b_instruct_2507",
   "assets": [
     {
       "precision": "PRECISION_W4A16",
       "runtime": "RUNTIME_GENIE",
-      "chipset": "qualcomm-snapdragon-x-elite",
-      "download_url": "https://example.com/qwen3-x-elite.zip",
-      "tool_versions": {"qairt": "2.45.0"}
+      "chipset": "qualcomm-qcs8275",
+      "download_url": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/qwen3_4b_instruct_2507/releases/v0.53.1/qwen3_4b_instruct_2507-genie-w4a16-qualcomm_qcs8275.zip",
+      "tool_versions": {
+        "qairt": "2.45.0.260326154327"
+      }
+    },
+    {
+      "precision": "PRECISION_W4A16",
+      "runtime": "RUNTIME_GENIE",
+      "chipset": "qualcomm-qcs9075",
+      "download_url": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/qwen3_4b_instruct_2507/releases/v0.53.1/qwen3_4b_instruct_2507-genie-w4a16-qualcomm_qcs9075.zip",
+      "tool_versions": {
+        "qairt": "2.45.0.260326154327"
+      }
     },
     {
       "precision": "PRECISION_W4A16",
       "runtime": "RUNTIME_GENIE",
       "chipset": "qualcomm-snapdragon-8-elite",
-      "download_url": "https://example.com/qwen3-8-elite.zip"
+      "download_url": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/qwen3_4b_instruct_2507/releases/v0.53.1/qwen3_4b_instruct_2507-genie-w4a16-qualcomm_snapdragon_8_elite.zip",
+      "tool_versions": {
+        "qairt": "2.45.0.260326154327"
+      }
+    },
+    {
+      "precision": "PRECISION_W4A16",
+      "runtime": "RUNTIME_GENIE",
+      "chipset": "qualcomm-snapdragon-8-elite-gen5",
+      "download_url": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/qwen3_4b_instruct_2507/releases/v0.53.1/qwen3_4b_instruct_2507-genie-w4a16-qualcomm_snapdragon_8_elite_gen5.zip",
+      "tool_versions": {
+        "qairt": "2.45.0.260326154327"
+      }
+    },
+    {
+      "precision": "PRECISION_W4A16",
+      "runtime": "RUNTIME_GENIE",
+      "chipset": "qualcomm-snapdragon-x-elite",
+      "download_url": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/qwen3_4b_instruct_2507/releases/v0.53.1/qwen3_4b_instruct_2507-genie-w4a16-qualcomm_snapdragon_x_elite.zip",
+      "tool_versions": {
+        "qairt": "2.45.0.260326154327"
+      }
+    },
+    {
+      "precision": "PRECISION_W4A16",
+      "runtime": "RUNTIME_GENIE",
+      "chipset": "qualcomm-snapdragon-x2-elite",
+      "download_url": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/qwen3_4b_instruct_2507/releases/v0.53.1/qwen3_4b_instruct_2507-genie-w4a16-qualcomm_snapdragon_x2_elite.zip",
+      "tool_versions": {
+        "qairt": "2.45.0.260326154327"
+      }
     }
   ]
 }`
 
-func loadFixtures(t *testing.T) (*qaihm.PlatformInfo, *qaihm.ModelReleaseAssets) {
+func loadFixtures(t *testing.T) (*PlatformInfo, *ModelReleaseAssets) {
 	t.Helper()
-	var p qaihm.PlatformInfo
-	if err := protojson.Unmarshal([]byte(samplePlatformJSON), &p); err != nil {
+	var p PlatformInfo
+	if err := sonic.Unmarshal([]byte(samplePlatformJSON), &p); err != nil {
 		t.Fatalf("unmarshal platform: %v", err)
 	}
-	var ra qaihm.ModelReleaseAssets
-	if err := protojson.Unmarshal([]byte(sampleReleaseAssetsJSON), &ra); err != nil {
+	var ra ModelReleaseAssets
+	if err := sonic.Unmarshal([]byte(sampleReleaseAssetsJSON), &ra); err != nil {
 		t.Fatalf("unmarshal release assets: %v", err)
 	}
 	return &p, &ra
 }
 
 func TestUnmarshalManifest(t *testing.T) {
-	var m qaihm.ReleaseManifest
-	if err := protojson.Unmarshal([]byte(sampleManifestJSON), &m); err != nil {
+	var m ReleaseManifest
+	if err := sonic.Unmarshal([]byte(sampleManifestJSON), &m); err != nil {
 		t.Fatalf("unmarshal manifest: %v", err)
 	}
-	if m.GetVersion() != "0.51.1.dev1" {
-		t.Errorf("bad version: %s", m.GetVersion())
+	if len(m.Models) != 2 {
+		t.Fatalf("expected 2 models, got %d", len(m.Models))
 	}
-	if len(m.GetModels()) != 2 {
-		t.Fatalf("expected 2 models, got %d", len(m.GetModels()))
+	if m.Models[0].ID != "qwen3_4b_instruct_2507" {
+		t.Errorf("unexpected first model: %+v", m.Models[0])
 	}
-	if m.GetModels()[0].GetId() != "qwen3_4b_instruct_2507" {
-		t.Errorf("unexpected first model: %+v", m.GetModels()[0])
-	}
-	if m.GetModels()[0].GetManifestUrls().GetReleaseAssets() == "" {
+	if m.Models[0].ManifestUrls.ReleaseAssets == "" {
 		t.Errorf("qwen3 should have release_assets url")
 	}
-	if m.GetModels()[1].GetManifestUrls().GetReleaseAssets() != "" {
+	if m.Models[1].ManifestUrls.ReleaseAssets != "" {
 		t.Errorf("baichuan2 should NOT have release_assets url")
 	}
 }
 
 func TestUnmarshalPlatformAndReleaseAssets(t *testing.T) {
-	var p qaihm.PlatformInfo
-	if err := protojson.Unmarshal([]byte(samplePlatformJSON), &p); err != nil {
+	var p PlatformInfo
+	if err := sonic.Unmarshal([]byte(samplePlatformJSON), &p); err != nil {
 		t.Fatalf("unmarshal platform: %v", err)
 	}
-	if len(p.GetChipsets()) != 2 {
-		t.Fatalf("expected 2 chipsets, got %d", len(p.GetChipsets()))
-	}
-	if p.GetChipsets()[0].GetHtpVersion() != 73 {
-		t.Errorf("bad htp_version: %d", p.GetChipsets()[0].GetHtpVersion())
+	if len(p.Chipsets) != 2 {
+		t.Fatalf("expected 2 chipsets, got %d", len(p.Chipsets))
 	}
 
-	var ra qaihm.ModelReleaseAssets
-	if err := protojson.Unmarshal([]byte(sampleReleaseAssetsJSON), &ra); err != nil {
+	var ra ModelReleaseAssets
+	if err := sonic.Unmarshal([]byte(sampleReleaseAssetsJSON), &ra); err != nil {
 		t.Fatalf("unmarshal release assets: %v", err)
 	}
-	if ra.GetModelId() != "qwen3_4b_instruct_2507" {
-		t.Errorf("bad model_id: %s", ra.GetModelId())
+	if len(ra.Assets) != 6 {
+		t.Fatalf("expected 6 assets, got %d", len(ra.Assets))
 	}
-	if len(ra.GetAssets()) != 2 {
-		t.Fatalf("expected 2 assets, got %d", len(ra.GetAssets()))
-	}
-	if ra.GetAssets()[0].GetRuntime() != qaihm.Runtime_RUNTIME_GENIE {
-		t.Errorf("bad runtime: %s", ra.GetAssets()[0].GetRuntime())
+	if ra.Assets[0].Runtime != RuntimeGenie {
+		t.Errorf("bad runtime: %s", ra.Assets[0].Runtime)
 	}
 }
 
@@ -186,7 +226,7 @@ func TestResolveChipset(t *testing.T) {
 func TestMatchAll_HappyPath(t *testing.T) {
 	p, ra := loadFixtures(t)
 
-	cands, err := MatchAll(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI, "qualcomm-snapdragon-x-elite")
+	cands, err := MatchAll(ra, p, ModelDomainGenerativeAI, "qualcomm-snapdragon-x-elite")
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -194,13 +234,13 @@ func TestMatchAll_HappyPath(t *testing.T) {
 		t.Fatalf("expected 1 candidate, got %d", len(cands))
 	}
 	asset := cands[0]
-	if asset.GetChipset() != "qualcomm-snapdragon-x-elite" {
-		t.Errorf("wrong chipset: %s", asset.GetChipset())
+	if asset.Chipset != "qualcomm-snapdragon-x-elite" {
+		t.Errorf("wrong chipset: %s", asset.Chipset)
 	}
-	if asset.GetRuntime() != qaihm.Runtime_RUNTIME_GENIE {
-		t.Errorf("wrong runtime: %s", asset.GetRuntime())
+	if asset.Runtime != RuntimeGenie {
+		t.Errorf("wrong runtime: %s", asset.Runtime)
 	}
-	if asset.GetDownloadUrl() == "" {
+	if asset.DownloadURL == "" {
 		t.Errorf("missing download_url")
 	}
 }
@@ -208,7 +248,7 @@ func TestMatchAll_HappyPath(t *testing.T) {
 func TestMatchAll_ChipsetNotAvailable(t *testing.T) {
 	p, ra := loadFixtures(t)
 
-	_, err := MatchAll(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI, "qualcomm-snapdragon-8gen1")
+	_, err := MatchAll(ra, p, ModelDomainGenerativeAI, "qualcomm-snapdragon-8gen1")
 	if !errors.Is(err, ErrChipsetNotAvailable) {
 		t.Fatalf("expected ErrChipsetNotAvailable, got %v", err)
 	}
@@ -225,7 +265,7 @@ func TestMatchAll_ChipsetNotAvailable(t *testing.T) {
 func TestMatchAll_UnsupportedDomain(t *testing.T) {
 	p, ra := loadFixtures(t)
 
-	_, err := MatchAll(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_COMPUTER_VISION, "qualcomm-snapdragon-x-elite")
+	_, err := MatchAll(ra, p, ModelDomainComputerVision, "qualcomm-snapdragon-x-elite")
 	if !errors.Is(err, ErrUnsupportedDomain) {
 		t.Errorf("expected ErrUnsupportedDomain, got %v", err)
 	}
@@ -234,7 +274,7 @@ func TestMatchAll_UnsupportedDomain(t *testing.T) {
 func TestMatchAll_UnknownChipset(t *testing.T) {
 	p, ra := loadFixtures(t)
 
-	_, err := MatchAll(ra, p, qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI, "nvidia-a100")
+	_, err := MatchAll(ra, p, ModelDomainGenerativeAI, "nvidia-a100")
 	if !errors.Is(err, ErrUnknownChipset) {
 		t.Errorf("expected ErrUnknownChipset, got %v", err)
 	}

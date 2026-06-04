@@ -56,5 +56,5 @@ def geniex_session():
 def llama_cpp_paths(geniex_session):
     try:
         return _mm.ensure_cached(LLAMA_CPP_MODEL, quant=LLAMA_CPP_QUANT, hub='hf')
-    except geniex.GeniexError as e:
+    except geniex.GenieXError as e:
         pytest.skip(f'could not pull {LLAMA_CPP_MODEL}: {e}')

@@ -336,13 +336,25 @@ class geniex_ModelPaths(Structure):
         ('model_dir', c_char_p),
         ('model_name', c_char_p),
         ('plugin_id', c_char_p),
-        ('device_id', c_char_p),
+        ('model_type', c_int32),
     ]
 
 
-class geniex_ModelListOutput(Structure):
+class geniex_ModelDetail(Structure):
     _fields_ = [
-        ('names', POINTER(c_char_p)),
+        ('name', c_char_p),
+        ('model_name', c_char_p),
+        ('plugin_id', c_char_p),
+        ('model_type', c_int32),
+        ('total_size', c_int64),
+        ('precisions', POINTER(c_char_p)),
+        ('precision_count', c_int32),
+    ]
+
+
+class geniex_ModelListDetailedOutput(Structure):
+    _fields_ = [
+        ('models', POINTER(geniex_ModelDetail)),
         ('count', c_int32),
     ]
 
@@ -376,4 +388,23 @@ class geniex_ModelPullInput(Structure):
         ('display_name', c_char_p),
         ('on_progress', geniex_download_progress_cb),
         ('user_data', c_void_p),
+        ('model_type', c_int32),
+    ]
+
+
+class geniex_QuantCandidate(Structure):
+    _fields_ = [
+        ('quant', c_char_p),
+        ('size', c_int64),
+        ('is_default', c_bool),
+    ]
+
+
+class geniex_ModelQueryOutput(Structure):
+    _fields_ = [
+        ('model_name', c_char_p),
+        ('plugin_id', c_char_p),
+        ('model_type', c_int32),
+        ('candidates', POINTER(geniex_QuantCandidate)),
+        ('candidate_count', c_int32),
     ]

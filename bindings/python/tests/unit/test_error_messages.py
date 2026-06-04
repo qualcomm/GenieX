@@ -229,7 +229,7 @@ def test_messages_have_modality_audio():
 
 
 class _StubVLM:
-    """Minimal stand-in for GeniexVLM.generate that exercises only the
+    """Minimal stand-in for GenieXVLM.generate that exercises only the
     Python-side validation block before the C call."""
 
     def __init__(self, has_image=False, has_audio=False):
@@ -238,7 +238,7 @@ class _StubVLM:
 
     @staticmethod
     def _validate(images, audios, has_image, has_audio):
-        # Mirror the validation in GeniexVLM.generate so we can test it
+        # Mirror the validation in GenieXVLM.generate so we can test it
         # without spinning up the C runtime.
         if not images and has_image:
             raise ValueError(

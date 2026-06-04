@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/qaihm"
 )
 
 // Sentinel errors returned by MatchAll.
@@ -65,18 +63,18 @@ func (e *ChipsetNotAvailableError) Is(target error) bool {
 
 // RuntimeForDomain maps a ModelDomain to the runtime the CLI can run.
 // Returns ErrUnsupportedDomain for non-LLM/VLM domains.
-func RuntimeForDomain(domain qaihm.ModelDomain) (qaihm.Runtime, error) {
+func RuntimeForDomain(domain ModelDomain) (Runtime, error) {
 	switch domain {
-	case qaihm.ModelDomain_MODEL_DOMAIN_GENERATIVE_AI, qaihm.ModelDomain_MODEL_DOMAIN_MULTIMODAL:
-		return qaihm.Runtime_RUNTIME_GENIE, nil
+	case ModelDomainGenerativeAI, ModelDomainMultimodal:
+		return RuntimeGenie, nil
 	default:
-		return 0, fmt.Errorf("%w: %s", ErrUnsupportedDomain, domain)
+		return "", fmt.Errorf("%w: %s", ErrUnsupportedDomain, domain)
 	}
 }
 
 // ResolveChipset returns the canonical chipset name matching chipset
 // (case-insensitive, against name + aliases) or ErrUnknownChipset.
-func ResolveChipset(plat *qaihm.PlatformInfo, chipset string) (string, error) {
+func ResolveChipset(plat *PlatformInfo, chipset string) (string, error) {
 	if plat == nil {
 		return "", errors.New("aihub: nil platform")
 	}
@@ -85,13 +83,13 @@ func ResolveChipset(plat *qaihm.PlatformInfo, chipset string) (string, error) {
 	}
 
 	target := strings.ToLower(strings.TrimSpace(chipset))
-	for _, cs := range plat.GetChipsets() {
-		if strings.ToLower(cs.GetName()) == target {
-			return cs.GetName(), nil
+	for _, cs := range plat.Chipsets {
+		if strings.ToLower(cs.Name) == target {
+			return cs.Name, nil
 		}
-		for _, a := range cs.GetAliases() {
+		for _, a := range cs.Aliases {
 			if strings.ToLower(a) == target {
-				return cs.GetName(), nil
+				return cs.Name, nil
 			}
 		}
 	}
@@ -101,8 +99,8 @@ func ResolveChipset(plat *qaihm.PlatformInfo, chipset string) (string, error) {
 
 // MatchAll returns assets matching chipset+domain, sorted by precision.
 // Returns ChipsetNotAvailableError when no asset matches the chipset.
-func MatchAll(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qaihm.ModelDomain, chipset string) ([]*qaihm.ModelReleaseAssets_AssetDetails, error) {
-	if ra == nil || len(ra.GetAssets()) == 0 {
+func MatchAll(ra *ModelReleaseAssets, plat *PlatformInfo, domain ModelDomain, chipset string) ([]*AssetDetails, error) {
+	if ra == nil || len(ra.Assets) == 0 {
 		return nil, errors.New("aihub: empty release assets")
 	}
 
@@ -116,16 +114,17 @@ func MatchAll(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qai
 		return nil, err
 	}
 
-	avail := make([]Availability, 0, len(ra.GetAssets()))
-	var candidates []*qaihm.ModelReleaseAssets_AssetDetails
-	for _, a := range ra.GetAssets() {
+	avail := make([]Availability, 0, len(ra.Assets))
+	var candidates []*AssetDetails
+	for i := range ra.Assets {
+		a := &ra.Assets[i]
 		avail = append(avail, Availability{
-			Chipset: a.GetChipset(), Runtime: a.GetRuntime().String(), Precision: a.GetPrecision().String(),
+			Chipset: a.Chipset, Runtime: string(a.Runtime), Precision: string(a.Precision),
 		})
-		if a.GetChipset() != canonical {
+		if a.Chipset != canonical {
 			continue
 		}
-		if a.GetRuntime() != runtime {
+		if a.Runtime != runtime {
 			continue
 		}
 		candidates = append(candidates, a)
@@ -139,9 +138,8 @@ func MatchAll(ra *qaihm.ModelReleaseAssets, plat *qaihm.PlatformInfo, domain qai
 	}
 
 	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].GetPrecision() < candidates[j].GetPrecision()
+		return precisionRank[candidates[i].Precision] < precisionRank[candidates[j].Precision]
 	})
 
 	return candidates, nil
 }
-

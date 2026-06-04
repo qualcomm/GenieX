@@ -11,7 +11,7 @@ The GenieX Python SDK follows the same design patterns as Hugging Face `transfor
 
 ## AutoModelForCausalLM
 
-Factory for loading causal language models — both text-only and multimodal. Returns a [`GeniexLLM`](#geniexllm) for text-only models, or a [`GeniexVLM`](#geniexvlm) when a multimodal model is detected (e.g. `phi4_multimodal`, `qwen3.5-vl`, `gemma4`).
+Factory for loading causal language models — both text-only and multimodal. Returns a [`GenieXLLM`](#geniexllm) for text-only models, or a [`GenieXVLM`](#geniexvlm) when a multimodal model is detected (e.g. `phi4_multimodal`, `qwen3.5-vl`, `gemma4`).
 
 ```python
 from geniex import AutoModelForCausalLM
@@ -41,13 +41,13 @@ model = AutoModelForCausalLM.from_pretrained(
 
 </Expandable>
 
-**Returns:** [`GeniexLLM`](#geniexllm) or [`GeniexVLM`](#geniexvlm) (auto-detected based on the model)
+**Returns:** [`GenieXLLM`](#geniexllm) or [`GenieXVLM`](#geniexvlm) (auto-detected based on the model)
 
 ---
 
 ## AutoModelForVision2Seq
 
-Factory for loading vision-language / multimodal models. Returns a [`GeniexVLM`](#geniexvlm) instance.
+Factory for loading vision-language / multimodal models. Returns a [`GenieXVLM`](#geniexvlm) instance.
 
 ```python
 from geniex import AutoModelForVision2Seq
@@ -63,11 +63,11 @@ Accepts all the same parameters as [`AutoModelForCausalLM.from_pretrained()`](#f
 |---|---|---|---|
 | `mmproj_path` | `str \| None` | `None` | Path to the multimodal projector file. Auto-resolved when downloading from Hub. |
 
-**Returns:** [`GeniexVLM`](#geniexvlm)
+**Returns:** [`GenieXVLM`](#geniexvlm)
 
 ---
 
-## GeniexLLM
+## GenieXLLM
 
 Text-only language model instance returned by `AutoModelForCausalLM.from_pretrained()`.
 
@@ -125,13 +125,13 @@ with AutoModelForCausalLM.from_pretrained("qwen3") as model:
 
 ---
 
-## GeniexVLM
+## GenieXVLM
 
 Vision-language model instance returned by `AutoModelForVision2Seq.from_pretrained()`.
 
 ### `generate()`
 
-Same parameters as [`GeniexLLM.generate()`](#generate) plus:
+Same parameters as [`GenieXLLM.generate()`](#generate) plus:
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -147,7 +147,7 @@ print(output.text)
 
 ### `reset()` / `close()`
 
-Same as [`GeniexLLM`](#geniexllm).
+Same as [`GenieXLLM`](#geniexllm).
 
 ---
 
@@ -171,7 +171,7 @@ prompt = model.tokenizer.apply_chat_template(
 | `messages` | `list[dict]` | *required* | List of message dicts with `"role"` and `"content"` keys. |
 | `tokenize` | `bool` | `False` | Must be `False` — standalone tokenization is not supported. |
 | `add_generation_prompt` | `bool` | `True` | Whether to append the generation prompt suffix. |
-| `enable_thinking` | `bool` | `False` | Enable thinking mode (e.g. Qwen reasoning models). |
+| `enable_thinking` | `bool \| None` | `None` | Enable thinking mode. `None` (default) and `True` both let a thinking-capable model think (and are no-ops on non-thinking models). `False` asks a thinking-capable model to skip its thinking turn — forced to `True` with a warning on non-thinking models, where the suppression block is OOD. Capability is auto-detected and exposed as `model.supports_thinking`. |
 | `tools` | `list[dict] \| str \| None` | `None` | Tool definitions as a list of dicts or pre-serialised JSON string. |
 
 **Returns:** `str` — formatted prompt ready for `model.generate()`.

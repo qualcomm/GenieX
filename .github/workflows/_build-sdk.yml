@@ -81,8 +81,13 @@ jobs:
 
       # Cargo target dir lives under the workspace so it's reachable both
       # from the Windows runner and from the Linux/Android container
-      # (mounted at /workspace). Key on Cargo.lock + Cargo.toml so cache
-      # invalidates only when the dependency graph actually changes.
+      # (mounted at /workspace). The key includes the Rust sources, not just
+      # Cargo.lock/Cargo.toml: actions/cache restores files with a uniform
+      # mtime, so cargo's mtime-based fingerprinting would otherwise reuse a
+      # stale libgeniex_model.a after a source-only change (e.g. a new FFI
+      # symbol), producing downstream undefined-reference link failures.
+      # No restore-keys — a source change forces a clean rebuild instead of a
+      # fuzzy restore that would re-trigger the staleness.
       - name: Restore cargo target
         uses: actions/cache@v5
         with:
@@ -91,8 +96,7 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: cargo-sdk-${{ matrix.platform }}-${{ hashFiles('sdk/model-manager/Cargo.lock', 'sdk/model-manager/**/Cargo.toml') }}
-          restore-keys: cargo-sdk-${{ matrix.platform }}-
+          key: cargo-sdk-${{ matrix.platform }}-${{ hashFiles('sdk/model-manager/Cargo.lock', 'sdk/model-manager/**/Cargo.toml', 'sdk/model-manager/crates/**/*.rs') }}
 
       # Toolchain identifier baked into the cmake-build cache key so a
       # runner-image / container-image bump (MSVC patch, clang/apt layer)
@@ -170,11 +174,15 @@ jobs:
       - name: Configure HTP signing cert
         if: matrix.platform == 'windows-arm64'
         shell: powershell
+        env:
+          HEXAGON_HTP_CERT_PFX: ${{ secrets.HEXAGON_HTP_CERT_PFX }}
         run: |
           $ErrorActionPreference = "Stop"
-          $src = "$env:GITHUB_WORKSPACE\.github\certs\hexagon\ggml-htp-v1.pfx"
+          if (-not $env:HEXAGON_HTP_CERT_PFX) {
+            throw "HEXAGON_HTP_CERT_PFX secret is empty; set it to the base64 of the HTP .pfx."
+          }
           $dst = "$env:RUNNER_TEMP\ggml-htp-v1.pfx"
-          Copy-Item $src $dst -Force
+          [IO.File]::WriteAllBytes($dst, [Convert]::FromBase64String($env:HEXAGON_HTP_CERT_PFX))
           Add-Content -Path $env:GITHUB_ENV -Value "HEXAGON_HTP_CERT=$dst"
           Write-Host "HEXAGON_HTP_CERT=$dst"
 

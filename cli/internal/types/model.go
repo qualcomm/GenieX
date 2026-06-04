@@ -14,71 +14,9 @@
 
 package types
 
-// ManifestFileName is the name of the per-model manifest file written into
-// every model directory.
-const ManifestFileName = "geniex.json"
-
-type ModelType string
-
-const (
-	ModelTypeLLM ModelType = "llm"
-	ModelTypeVLM ModelType = "vlm"
-)
-
-var AllModelTypes = []ModelType{
-	ModelTypeLLM,
-	ModelTypeVLM,
-}
-
-// QuantNA is the ModelFile key for models without quantization variants.
-const QuantNA = "N/A"
-
-type ModelFileInfo struct {
-	Name       string
-	Downloaded bool
-	Size       int64
-}
-
-type ModelManifest struct {
-	Name      string // OrgName/RepoName
-	ModelName string // model arch name like "qwen3-4b", "yolov12", etc.
-	ModelType ModelType
-	PluginId  string
-
-	ModelFile  map[string]ModelFileInfo // quant -> modelfile
-	MMProjFile ModelFileInfo
-	ExtraFiles []ModelFileInfo
-}
-
-func (m ModelManifest) GetSize() int64 {
-	var count int64
-
-	for _, v := range m.ModelFile {
-		if v.Downloaded {
-			count += v.Size
-		}
-	}
-	if m.MMProjFile.Downloaded {
-		count += m.MMProjFile.Size
-	}
-	for _, v := range m.ExtraFiles {
-		if v.Downloaded {
-			count += v.Size
-		}
-	}
-
-	return count
-}
-
+// ModelParam holds the llama_cpp-only knobs (context size, GPU layers) the
+// keep-alive cache keys model instances on.
 type ModelParam struct {
 	NCtx       int32
 	NGpuLayers int32
-}
-
-type DownloadInfo struct {
-	// CurrentFileName   string
-	// CurrentDownloaded int64
-	// CurrentSize       int64
-	TotalDownloaded int64
-	TotalSize       int64
 }

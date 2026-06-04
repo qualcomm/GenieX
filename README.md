@@ -1,4 +1,4 @@
-# Geniex
+# GenieX
 
 Multi-platform AI inference runtime for Snapdragon / Hexagon — runs LLMs on NPU, GPU, or CPU through a pluggable C SDK with Go (CLI), Python, and Java (Android) bindings.
 
@@ -30,6 +30,9 @@ If the SDK name ends in `-selfsigned`, first follow [notes/run.md § Self-signed
 Install on a Snapdragon device (EVK, container, or any ARM64 Linux with a Qualcomm BSP):
 
 ```bash
+# Optional: verify QCOM driver and system-library prerequisites first.
+curl -fsSL https://raw.githubusercontent.com/qcom-ai-hub/geniex/main/cli/release/linux/check.sh | sh
+
 curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
 ```
 

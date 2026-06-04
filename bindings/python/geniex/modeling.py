@@ -113,13 +113,25 @@ def _apply_meta(profile: ProfileData, meta: dict | None) -> ProfileData:
     return profile
 
 
-class GeniexLLM:
+class GenieXLLM:
     """LLM handle returned by :meth:`AutoModelForCausalLM.from_pretrained`."""
 
     def __init__(self, handle: c_void_p, meta: dict | None = None) -> None:
         self._handle = handle
         self._meta = meta
         self.tokenizer = ModelTokenizer(self)
+
+    @property
+    def supports_thinking(self) -> bool:
+        """Whether the loaded model has a thinking mode (parsed once at load
+        time from the model's own chat template). Drives the default value of
+        ``apply_chat_template(enable_thinking=...)``. Falls back to ``True``
+        when the bundle ships no on-disk ``tokenizer_config.json`` (e.g. GGUF
+        models embed the template inside the file)."""
+        if self._meta is None:
+            return True
+        detected = self._meta.get('supports_thinking')
+        return True if detected is None else bool(detected)
 
     def _apply_chat_template(
         self,
@@ -281,7 +293,7 @@ class GeniexLLM:
             lib.geniex_llm_destroy(self._handle)
             self._handle = None  # type: ignore[assignment]
 
-    def __enter__(self) -> 'GeniexLLM':
+    def __enter__(self) -> 'GenieXLLM':
         return self
 
     def __exit__(self, *_) -> None:
@@ -340,7 +352,7 @@ def _build_vlm_messages(messages: list[dict]):
     return arr, count, _content_refs
 
 
-class GeniexVLM:
+class GenieXVLM:
     """VLM handle returned by :meth:`AutoModelForVision2Seq.from_pretrained`."""
 
     def __init__(self, handle: c_void_p, meta: dict | None = None) -> None:
@@ -353,6 +365,14 @@ class GeniexVLM:
         self._last_template_has_image = False
         self._last_template_has_audio = False
         self.tokenizer = ModelTokenizer(self)
+
+    @property
+    def supports_thinking(self) -> bool:
+        """See :attr:`GeniexLLM.supports_thinking`."""
+        if self._meta is None:
+            return True
+        detected = self._meta.get('supports_thinking')
+        return True if detected is None else bool(detected)
 
     def _apply_chat_template(
         self,
@@ -516,7 +536,7 @@ class GeniexVLM:
             lib.geniex_vlm_destroy(self._handle)
             self._handle = None  # type: ignore[assignment]
 
-    def __enter__(self) -> 'GeniexVLM':
+    def __enter__(self) -> 'GenieXVLM':
         return self
 
     def __exit__(self, *_) -> None:

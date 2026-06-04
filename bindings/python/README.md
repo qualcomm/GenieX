@@ -39,6 +39,13 @@ Supported platforms (the install-time fetcher auto-provisions the native SDK):
 
 Python 3.10+ required.
 
+> [!WARNING]
+> Do not install `llama-cpp-python` into the same environment. Both packages
+> embed their own llama.cpp shared libraries; loading both leads to symbol
+> conflicts — `DLL load failed` on Windows, segfaults, or wrong outputs.
+> Use a separate virtualenv, or uninstall `llama-cpp-python`
+> (`pip list | grep llama-cpp-python` to check).
+
 ## Library usage
 
 ```python
@@ -75,7 +82,7 @@ local path to a `.gguf` file or a pre-downloaded directory.
 
 ### VLM
 
-`AutoModelForCausalLM` auto-detects multimodal models and returns a `GeniexVLM`:
+`AutoModelForCausalLM` auto-detects multimodal models and returns a `GenieXVLM`:
 
 ```python
 from geniex import AutoModelForCausalLM

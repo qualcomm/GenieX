@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::manifest::ModelManifest;
+use crate::manifest::{ModelManifest, ModelType};
 use crate::manifest_builder::QUANT_PRIORITY;
 use std::path::{Path, PathBuf};
 
@@ -12,13 +12,7 @@ pub struct ModelPaths {
     pub model_dir: PathBuf,
     pub model_name: String,
     pub plugin_id: String,
-    /// Reserved for the plugin / inference layer to populate out-of-band
-    /// (e.g. from runtime detection). The manifest itself no longer
-    /// carries a device id — the model-manager has no opinion on where
-    /// the model should run. Currently always `None`; the field stays to
-    /// keep the FFI `geniex_ModelPaths` ABI stable for callers who read
-    /// it directly.
-    pub device_id: Option<String>,
+    pub model_type: ModelType,
 }
 
 /// Resolve file paths from a manifest + local base directory + optional quant hint.
@@ -86,8 +80,7 @@ pub fn resolve_model_paths(
             model_dir,
             model_name: manifest.model_name.clone(),
             plugin_id: manifest.plugin_id.clone(),
-            // Manifest no longer carries device_id — see ModelPaths doc.
-            device_id: None,
+            model_type: manifest.model_type.clone(),
         },
     ))
 }
@@ -113,8 +106,8 @@ mod tests {
 
     #[test]
     fn pick_default_quant_uses_priority() {
-        assert_eq!(pick_default_quant(&["Q4_0", "Q4_K_M", "Q8_0"]), "Q8_0");
-        assert_eq!(pick_default_quant(&["Q4_0", "Q4_K_M"]), "Q4_K_M");
+        assert_eq!(pick_default_quant(&["Q4_0", "Q4_K_M", "Q8_0"]), "Q4_0");
+        assert_eq!(pick_default_quant(&["Q4_K_M", "Q8_0"]), "Q4_K_M");
     }
 
     #[test]
@@ -160,10 +153,10 @@ mod tests {
     fn resolve_paths_no_quant_picks_priority() {
         let m = manifest_with(&[("Q4_0", true), ("Q4_K_M", true), ("Q8_0", true)]);
         let (q, paths) = resolve_model_paths(&m, &PathBuf::from("/cache"), None).unwrap();
-        assert_eq!(q, "Q8_0");
+        assert_eq!(q, "Q4_0");
         assert_eq!(
             paths.model_path,
-            PathBuf::from("/cache").join("model-Q8_0.gguf")
+            PathBuf::from("/cache").join("model-Q4_0.gguf")
         );
     }
 
@@ -176,7 +169,7 @@ mod tests {
 
     #[test]
     fn resolve_paths_no_quant_skips_undownloaded_priority_member() {
-        let m = manifest_with(&[("Q8_0", false), ("Q4_K_M", true), ("Q4_0", true)]);
+        let m = manifest_with(&[("Q4_0", false), ("Q4_K_M", true), ("Q8_0", true)]);
         let (q, _) = resolve_model_paths(&m, &PathBuf::from("/cache"), None).unwrap();
         assert_eq!(q, "Q4_K_M");
     }

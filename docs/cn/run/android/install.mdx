@@ -72,7 +72,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 适合需要修改 demo UI，或锁定特定已发布 SDK 版本的场景。
 
 <Note>
-Gradle 会从 **Maven Central** 拉取 GenieX SDK（坐标：`com.qualcomm.qti:geniex-android:0.1.6`）。该路径下你**无需**自行构建原生 SDK。
+Gradle 会从 **Maven Central** 拉取 GenieX SDK（坐标：`com.qualcomm.qti:geniex-android:0.2.2`）。该路径下你**无需**自行构建原生 SDK。
 </Note>
 
 <Steps>
@@ -86,7 +86,7 @@ Gradle 会从 **Maven Central** 拉取 GenieX SDK（坐标：`com.qualcomm.qti:g
     在 Android Studio 中打开 **`examples/android/`**。**不要**打开 `bindings/android/`——那是 SDK 绑定模块，本流程通过 Maven Central 消费它。
   </Step>
   <Step title="同步 Gradle">
-    Android Studio 会提示同步。同步过程会从 Maven Central 解析 `com.qualcomm.qti:geniex-android:0.1.6`。
+    Android Studio 会提示同步。同步过程会从 Maven Central 解析 `com.qualcomm.qti:geniex-android:0.2.2`。
   </Step>
   <Step title="连接设备">
     插入开启 USB 调试的骁龙 8 至尊版或 8 至尊版 Gen 5 手机，让 Android Studio 识别到。
@@ -102,7 +102,7 @@ Gradle 会从 **Maven Central** 拉取 GenieX SDK（坐标：`com.qualcomm.qti:g
 
 ```kotlin Gradle (Kotlin DSL)
 dependencies {
-    implementation("com.qualcomm.qti:geniex-android:0.1.6")
+    implementation("com.qualcomm.qti:geniex-android:0.2.2")
 }
 ```
 

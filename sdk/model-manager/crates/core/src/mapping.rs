@@ -12,26 +12,35 @@ pub fn resolve_alias(alias: &str) -> Option<String> {
 
 /// Orgs whose "<org>/<repo>" names are published on AI Hub rather than HF.
 /// Lowercased; lookup is case-insensitive. `qualcomm` is the canonical
-/// org used in our docs; `qai-hub-models` matches the public HuggingFace
-/// mirror so users can paste names from either source.
-const AI_HUB_ORGS: &[&str] = &["qualcomm", "qai-hub-models"];
+/// org; `ai-hub-models` is a user-convenience alias that
+/// [`canonicalize_model_name`] rewrites to `qualcomm`.
+const AI_HUB_ORGS: &[&str] = &["qualcomm", "ai-hub-models"];
 
 /// Canonicalise a user-supplied model name into the "org/repo" shape
 /// that [`crate::validation::validate_model_name`] expects.
 ///
 /// A name without '/' is assumed to be a bare AI Hub model id
 /// (e.g. `llama_v3_2_3b_instruct`) and is rewritten to `qualcomm/<name>`.
-/// Anything that already contains '/' is returned unchanged — including
-/// `qai-hub-models/<repo>`, which is stored as a separate cache entry
-/// from `qualcomm/<repo>` even though both route to AI Hub.
+/// The `ai-hub-models/<repo>` alias (case-insensitive) is rewritten to
+/// the canonical `qualcomm/<repo>` so both prefixes share one cache
+/// entry. Anything else with a '/' is returned unchanged.
 ///
 /// This is the single entry point callers should use before handing a
 /// name to `pull` / `get_paths` so the Store layout stays consistent.
 pub fn canonicalize_model_name(name: &str) -> String {
-    if name.contains('/') {
-        name.to_string()
-    } else {
-        format!("qualcomm/{name}")
+    // A pasted HuggingFace URL ("https://huggingface.co/org/repo") carries a
+    // scheme + host the rest of the pipeline can't parse; strip it down to
+    // "org/repo" first.
+    let name = name
+        .strip_prefix("https://huggingface.co/")
+        .or_else(|| name.strip_prefix("http://huggingface.co/"))
+        .unwrap_or(name);
+    match name.split_once('/') {
+        None => format!("qualcomm/{name}"),
+        Some((org, repo)) if org.eq_ignore_ascii_case("ai-hub-models") => {
+            format!("qualcomm/{repo}")
+        }
+        Some(_) => name.to_string(),
     }
 }
 
@@ -82,9 +91,9 @@ mod tests {
     }
 
     #[test]
-    fn aihub_display_name_matches_qai_hub_models_org() {
+    fn aihub_display_name_matches_ai_hub_models_org() {
         assert_eq!(
-            aihub_display_name_from_repo("qai-hub-models/Llama-v3.2-3B-Chat"),
+            aihub_display_name_from_repo("ai-hub-models/Llama-v3.2-3B-Chat"),
             Some("Llama-v3.2-3B-Chat")
         );
     }
@@ -101,7 +110,7 @@ mod tests {
             Some("Qwen3-4B")
         );
         assert_eq!(
-            aihub_display_name_from_repo("QAI-Hub-Models/Llama-v3.2-3B-Chat"),
+            aihub_display_name_from_repo("AI-Hub-Models/Llama-v3.2-3B-Chat"),
             Some("Llama-v3.2-3B-Chat")
         );
     }
@@ -125,7 +134,7 @@ mod tests {
         assert!(aihub_display_name_from_repo("qualcomm").is_none());
         assert!(aihub_display_name_from_repo("qualcomm/").is_none());
         assert!(aihub_display_name_from_repo("/Qwen3-4B").is_none());
-        assert!(aihub_display_name_from_repo("qai-hub-models/").is_none());
+        assert!(aihub_display_name_from_repo("ai-hub-models/").is_none());
     }
 
     #[test]
@@ -146,11 +155,35 @@ mod tests {
             canonicalize_model_name("ggml-org/Qwen3-1.7B-GGUF"),
             "ggml-org/Qwen3-1.7B-GGUF"
         );
-        // qai-hub-models/<repo> is preserved as a separate cache entry —
-        // we deliberately do not rewrite it to qualcomm/<repo>.
+    }
+
+    #[test]
+    fn canonicalize_strips_huggingface_url_prefix() {
         assert_eq!(
-            canonicalize_model_name("qai-hub-models/Llama-v3.2-3B-Chat"),
-            "qai-hub-models/Llama-v3.2-3B-Chat"
+            canonicalize_model_name("https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF"),
+            "ggml-org/Qwen3-1.7B-GGUF"
+        );
+        assert_eq!(
+            canonicalize_model_name("http://huggingface.co/bartowski/Foo"),
+            "bartowski/Foo"
+        );
+    }
+
+    #[test]
+    fn canonicalize_rewrites_ai_hub_models_to_qualcomm() {
+        assert_eq!(
+            canonicalize_model_name("ai-hub-models/Llama-v3.2-3B-Chat"),
+            "qualcomm/Llama-v3.2-3B-Chat"
+        );
+        // Case-insensitive on the org segment.
+        assert_eq!(
+            canonicalize_model_name("AI-Hub-Models/Qwen3-4B"),
+            "qualcomm/Qwen3-4B"
+        );
+        // The ":quant" suffix rides along on the repo untouched.
+        assert_eq!(
+            canonicalize_model_name("ai-hub-models/Qwen3-4B:Q4_K_M"),
+            "qualcomm/Qwen3-4B:Q4_K_M"
         );
     }
 }

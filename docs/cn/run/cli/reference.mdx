@@ -54,14 +54,14 @@ QAIRT 模型已预量化——无需选择。
 启动与语言模型的交互式对话。
 
 ```powershell
-geniex infer qualcomm/Qwen3-4B
+geniex infer ai-hub-models/Qwen3-4B
 ```
 
 **思考模式** —— 控制模型是否在回复前展示推理过程：
 
 ```powershell
-geniex infer qualcomm/Qwen3-4B --think         # 展示推理步骤
-geniex infer qualcomm/Qwen3-4B --think=false   # 直接回复
+geniex infer ai-hub-models/Qwen3-4B --think         # 展示推理步骤
+geniex infer ai-hub-models/Qwen3-4B --think=false   # 直接回复
 ```
 
 **计算单元选择**（通过 `--device`）—— 选择运行模型的计算单元（默认：`npu`）：
@@ -73,7 +73,7 @@ geniex infer unsloth/Qwen3.5-0.8B-GGUF --device gpu
 geniex infer unsloth/Qwen3.5-0.8B-GGUF --device cpu
 
 # QAIRT 模型仅支持 NPU
-geniex infer qualcomm/Qwen3-4B --device npu
+geniex infer ai-hub-models/Qwen3-4B --device npu
 ```
 
 <Warning>QAIRT 模型仅在 NPU 上运行。对 QAIRT 模型使用 `--device cpu` 或 `--device gpu` 会返回错误。</Warning>
@@ -83,7 +83,7 @@ geniex infer qualcomm/Qwen3-4B --device npu
 运行视觉语言模型推理，支持纯文本或图像输入：
 
 ```bash
-geniex infer Qualcomm/Qwen2.5-VL-7B-Instruct-GGUF
+geniex infer ai-hub-models/Qwen2.5-VL-7B-Instruct-GGUF
 ```
 
 如果只需文本输入，直接启动并对话即可。若要让模型基于图像回复，请提供**绝对路径**或将图片文件直接拖入终端：

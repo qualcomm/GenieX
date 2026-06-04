@@ -1,20 +1,20 @@
-# Geniex Android SDK Demo App
+# GenieX Android SDK Demo App
 
 ## Overview
 
-The Geniex AI Android SDK enables on-device AI inference for Android applications with NPU acceleration. Run Large Language Models (LLMs), Vision-Language Models (VLMs) on Android devices with support for NPU, GPU, and CPU inference. This folder contains the demo app for the Android SDK.
+The GenieX AI Android SDK enables on-device AI inference for Android applications with NPU acceleration. Run Large Language Models (LLMs), Vision-Language Models (VLMs) on Android devices with support for NPU, GPU, and CPU inference. This folder contains the demo app for the Android SDK.
 
 ## Pick Your Path
 
 - **Just want to try the demo?** Download the pre-built APK from the [Android install guide](https://refactored-happiness-4qyl9vn.pages.github.io/en/run/android/install/).
 - **Want to build the demo app locally?** Follow the [Build and Run](#build-and-run) steps below.
-- **Want to build your own Android app with the Geniex Java/Kotlin binding?** See the [Android quickstart](https://refactored-happiness-4qyl9vn.pages.github.io/en/run/android/quickstart/) for dependency setup and the [API reference](https://refactored-happiness-4qyl9vn.pages.github.io/en/run/android/api-reference/) for usage.
+- **Want to build your own Android app with the GenieX Java/Kotlin binding?** See the [Android quickstart](https://refactored-happiness-4qyl9vn.pages.github.io/en/run/android/quickstart/) for dependency setup and the [API reference](https://refactored-happiness-4qyl9vn.pages.github.io/en/run/android/api-reference/) for usage.
 
 ## Device Compatibility
 
 ### Supported Hardware
 
-- **NPU**: Qualcomm Snapdragon 8 Elite, 8 Elite Gen 5
+- **NPU**: Qualcomm Snapdragon 8 Elite or Snapdragon 8 Elite Gen 5
 - **GPU**: Qualcomm Adreno GPU
 - **CPU**: ARM64-v8a
 - **RAM**: 8GB+ recommended

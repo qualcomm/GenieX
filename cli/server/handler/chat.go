@@ -34,8 +34,6 @@ import (
 	"github.com/openai/openai-go/v3/shared/constant"
 
 	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
 	"github.com/qcom-it-nexa-ai/geniex/cli/server/service"
 	"github.com/qcom-it-nexa-ai/geniex/cli/server/utils"
@@ -105,29 +103,34 @@ func ChatCompletions(c *gin.Context) {
 	}
 
 	slog.Info("ChatCompletions", "param", param)
-	s := store.Get()
-	name, _ := model_hub.NormalizeModelName(param.Model)
-	manifest, err := s.GetManifest(name)
+	name, _ := geniex_sdk.SplitNameQuant(param.Model)
+	modelType, err := geniex_sdk.ModelGetType(name)
 	if err != nil {
-		slog.Error("Failed to get model manifest", "model", param.Model, "error", err)
+		slog.Error("Failed to get model type", "model", param.Model, "error", err)
+		c.JSON(http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	paths, err := geniex_sdk.ModelGetPaths(name)
+	if err != nil {
+		slog.Error("Failed to resolve model paths", "model", param.Model, "error", err)
 		c.JSON(http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	// Automatically adjust NCtx if MaxCompletionTokens is larger (llama_cpp only — QAIRT
 	// does not use NCtx and the 0-default must not be overwritten for non-llama_cpp plugins).
-	if manifest.PluginId == geniex_sdk.PluginLlamaCpp && param.NCtx < int32(param.MaxCompletionTokens.Value) {
+	if paths.PluginID == geniex_sdk.PluginLlamaCpp && param.NCtx < int32(param.MaxCompletionTokens.Value) {
 		slog.Debug("Adjust NCtx to MaxCompletionTokens", "from", param.NCtx, "to", param.MaxCompletionTokens.Value)
 		param.NCtx = int32(param.MaxCompletionTokens.Value)
 	}
 
-	switch manifest.ModelType {
-	case types.ModelTypeLLM:
-		chatCompletionsLLM(c, param, manifest.PluginId)
-	case types.ModelTypeVLM:
-		chatCompletionsVLM(c, param, manifest.PluginId)
+	switch modelType {
+	case geniex_sdk.ModelTypeLLM:
+		chatCompletionsLLM(c, param, paths.PluginID)
+	case geniex_sdk.ModelTypeVLM:
+		chatCompletionsVLM(c, param, paths.PluginID)
 	default:
-		slog.Error("Model type not support", "model_type", manifest.ModelType)
+		slog.Error("Model type not support", "model_type", modelType)
 		c.JSON(http.StatusBadRequest, map[string]any{"error": "model type not support"})
 		return
 	}
@@ -139,7 +142,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
 			for _, tc := range toolCalls {
 				messages = append(messages, geniex_sdk.LlmChatMessage{
-					Role: geniex_sdk.LLMRole(*msg.GetRole()),
+					Role: geniex_sdk.LlmRole(*msg.GetRole()),
 					Content: fmt.Sprintf(`<tool_call>{"name":"%s","arguments":"%s"}</tool_call>`,
 						tc.GetFunction().Name, tc.GetFunction().Arguments),
 				})
@@ -149,7 +152,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 
 		if toolResp := msg.GetToolCallID(); toolResp != nil {
 			messages = append(messages, geniex_sdk.LlmChatMessage{
-				Role:    geniex_sdk.LLMRole(*msg.GetRole()),
+				Role:    geniex_sdk.LlmRole(*msg.GetRole()),
 				Content: *msg.GetContent().AsAny().(*string),
 			})
 			continue
@@ -158,14 +161,14 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		switch content := msg.GetContent().AsAny().(type) {
 		case *string:
 			messages = append(messages, geniex_sdk.LlmChatMessage{
-				Role:    geniex_sdk.LLMRole(*msg.GetRole()),
+				Role:    geniex_sdk.LlmRole(*msg.GetRole()),
 				Content: *content,
 			})
 
 		case *[]openai.ChatCompletionContentPartTextParam:
 			for _, ct := range *content {
 				messages = append(messages, geniex_sdk.LlmChatMessage{
-					Role:    geniex_sdk.LLMRole(*msg.GetRole()),
+					Role:    geniex_sdk.LlmRole(*msg.GetRole()),
 					Content: ct.Text,
 				})
 			}
@@ -174,7 +177,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 				switch *ct.GetType() {
 				case "text":
 					messages = append(messages, geniex_sdk.LlmChatMessage{
-						Role:    geniex_sdk.LLMRole(*msg.GetRole()),
+						Role:    geniex_sdk.LlmRole(*msg.GetRole()),
 						Content: *ct.GetText(),
 					})
 				default:
@@ -188,7 +191,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 				switch *ct.GetType() {
 				case "text":
 					messages = append(messages, geniex_sdk.LlmChatMessage{
-						Role:    geniex_sdk.LLMRole(*msg.GetRole()),
+						Role:    geniex_sdk.LlmRole(*msg.GetRole()),
 						Content: *ct.GetText(),
 					})
 				default:
@@ -244,7 +247,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, pluginId st
 		dataCh := make(chan string)
 
 		var (
-			res   geniex_sdk.LlmGenerateOutput
+			res   *geniex_sdk.LlmGenerateOutput
 			err   error
 			resWg sync.WaitGroup
 		)

@@ -5,29 +5,22 @@ go_library(
     srcs = [
         "aihub.go",
         "selector.go",
-        "unzip.go",
+        "types.go",
     ],
     importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub",
     visibility = ["//cli:__subpackages__"],
     deps = [
         "//cli/internal/config",
-        "//cli/internal/qaihm",
-        "//cli/internal/types",
+        "@com_github_bytedance_sonic//:sonic",
         "@dev_resty_v3//:resty",
-        "@org_golang_google_protobuf//encoding/protojson",
-        "@org_golang_x_sync//errgroup",
     ],
 )
 
 go_test(
     name = "aihub_test",
-    srcs = [
-        "selector_test.go",
-        "unzip_test.go",
-    ],
+    srcs = ["selector_test.go"],
     embed = [":aihub"],
     deps = [
-        "//cli/internal/qaihm",
-        "@org_golang_google_protobuf//encoding/protojson",
+        "@com_github_bytedance_sonic//:sonic",
     ],
 )

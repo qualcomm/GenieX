@@ -14,6 +14,7 @@
 #endif
 
 #include "dispatch.h"             // provided by geniex-qairt/models/
+#include "geniex-proc/types.h"    // ChatMessage, Role, ChatTool, ChatTools
 #include "llm/llm_spec_loader.h"  // parseGenieSamplerConfig
 #include "logging.h"
 #include "pipeline/chat_template.h"
@@ -144,34 +145,63 @@ int32_t QairtLlm::apply_chat_template(
     if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
     if (!input->messages || input->message_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
-    // Extract the last user message (and the system message, if this is the first turn).
-    const char* user_message  = nullptr;
-    const char* system_prompt = nullptr;
-    for (int32_t i = input->message_count - 1; i >= 0; --i) {
-        const auto& m = input->messages[i];
-        if (!m.role) continue;
-        if (!user_message && std::strcmp(m.role, "user") == 0) {
-            user_message = m.content;
-        } else if (is_first_turn_ && !system_prompt && std::strcmp(m.role, "system") == 0) {
-            system_prompt = m.content;
+    int32_t start_idx = 0;
+    if (!is_first_turn_) {
+        for (int32_t i = input->message_count - 1; i >= 0; --i) {
+            const auto& m = input->messages[i];
+            if (m.role && std::strcmp(m.role, "assistant") == 0) {
+                start_idx = i + 1;
+                break;
+            }
         }
-        if (user_message && (!is_first_turn_ || system_prompt)) break;
+        if (start_idx >= input->message_count) {
+            GENIEX_LOG_ERROR("No new messages since last assistant turn");
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
     }
 
-    if (!user_message) {
-        GENIEX_LOG_ERROR("No user message found in chat messages");
-        return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    // Copy the FFI message array into the typed shape the new stateless
+    // applyChatTemplate() expects. Anything not in geniex_LlmChatMessage
+    // (tool_calls, reasoning_content, ...) is left default-empty; extending
+    // the FFI to carry those is its own change.
+    std::vector<ChatMessage> messages;
+    messages.reserve(static_cast<std::size_t>(input->message_count - start_idx) + 1);
+    bool has_system = false;
+    for (int32_t i = start_idx; i < input->message_count; ++i) {
+        const auto& m = input->messages[i];
+        if (!m.role) {
+            GENIEX_LOG_ERROR("messages[{}] has null role", i);
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
+        ChatMessage out;
+        if (std::strcmp(m.role, "system") == 0) {
+            out.role   = Role::System;
+            has_system = true;
+        } else if (std::strcmp(m.role, "user") == 0)
+            out.role = Role::User;
+        else if (std::strcmp(m.role, "assistant") == 0)
+            out.role = Role::Assistant;
+        else if (std::strcmp(m.role, "tool") == 0)
+            out.role = Role::Tool;
+        else {
+            GENIEX_LOG_ERROR("messages[{}] has unknown role: {}", i, m.role);
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
+        if (m.content) out.content = m.content;
+        messages.push_back(std::move(out));
+    }
+    if (is_first_turn_ && !has_system) {
+        ChatMessage sys;
+        sys.role    = Role::System;
+        sys.content = kDefaultSystemPrompt;
+        messages.insert(messages.begin(), std::move(sys));
     }
 
-    if (is_first_turn_) {
-        const char* sp = (system_prompt && system_prompt[0] != '\0') ? system_prompt : kDefaultSystemPrompt;
-        pipeline_->setSystemPrompt(sp);
-    }
-
-    // Tools usually live in the first-turn system block. They are part of the cached
-    // KV-cache prefix — re-staging on later turns would emit a duplicate
-    // system block. Callers that need a different tool list mid-conversation
-    // must call reset() first.
+    // Tools live in the first-turn system block of the rendered prompt.
+    // They become part of the cached KV prefix; re-staging on later turns
+    // would emit a duplicate block. Callers that need a different tool
+    // list mid-conversation must call reset() first.
+    ChatTools tools;
     if (is_first_turn_ && input->tools && input->tools[0] != '\0') {
         try {
             auto j = qualla::ordered_json::parse(input->tools);
@@ -179,10 +209,9 @@ int32_t QairtLlm::apply_chat_template(
                 GENIEX_LOG_ERROR("tools JSON must be an array");
                 return GENIEX_ERROR_COMMON_INVALID_INPUT;
             }
-            ChatTools tools;
             tools.reserve(j.size());
             for (const auto& el : j) {
-                // OAI compat wraps each entry as {"type":"function","function":{...}};
+                // OAI-compat wraps each entry as {"type":"function","function":{...}};
                 // tolerate the un-wrapped form too.
                 const auto& fn = (el.is_object() && el.contains("function")) ? el["function"] : el;
                 if (!fn.is_object()) continue;
@@ -194,7 +223,6 @@ int32_t QairtLlm::apply_chat_template(
                 }
                 if (!t.name.empty()) tools.push_back(std::move(t));
             }
-            pipeline_->setTools(std::move(tools));
         } catch (const std::exception& e) {
             GENIEX_LOG_ERROR("Failed to parse tools JSON: {}", e.what());
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
@@ -202,7 +230,7 @@ int32_t QairtLlm::apply_chat_template(
     }
 
     bool        thinking  = input->enable_thinking || enable_thinking_;
-    std::string formatted = pipeline_->applyChatTemplate(user_message, thinking);
+    std::string formatted = pipeline_->applyChatTemplate(messages, tools, thinking);
 
     output->formatted_text = portable_strdup(formatted.c_str());
     if (!output->formatted_text) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;

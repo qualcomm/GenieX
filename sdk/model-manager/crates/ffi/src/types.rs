@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -5,6 +6,33 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use model_manager_core::error::Error;
 
 use crate::logging;
+
+thread_local! {
+    /// Detailed message for the most recent failure on this thread, kept as a
+    /// live CString so `geniex_model_last_error_message` can hand out a stable
+    /// pointer valid until the next failing call.
+    static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
+}
+
+fn set_last_error(msg: &str) {
+    let c = CString::new(msg).unwrap_or_default();
+    LAST_ERROR.with(|slot| *slot.borrow_mut() = Some(c));
+}
+
+fn clear_last_error() {
+    LAST_ERROR.with(|slot| *slot.borrow_mut() = None);
+}
+
+/// Return the calling thread's last recorded error message, or NULL.
+/// Library-owned; valid until the next failing geniex_model_* call.
+#[no_mangle]
+pub extern "C" fn geniex_model_last_error_message() -> *const c_char {
+    LAST_ERROR.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .map_or(std::ptr::null(), |c| c.as_ptr())
+    })
+}
 
 /// Error codes mirroring geniex_ErrorCode from geniex.h.
 pub const GENIEX_SUCCESS: i32 = 0;
@@ -17,11 +45,12 @@ pub const GENIEX_ERROR_COMMON_NOT_INITIALIZED: i32 = -100007;
 pub const GENIEX_ERROR_COMMON_ALREADY_INITIALIZED: i32 = -100008;
 pub const GENIEX_ERROR_COMMON_MANIFEST_PARSE: i32 = -100014;
 pub const GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE: i32 = -100015;
+pub const GENIEX_ERROR_COMMON_MODEL_INVALID: i32 = -100203;
 
 /// C-compatible per-file progress entry. Must mirror `geniex_FileProgress`
 /// in geniex_model.h.
 #[repr(C)]
-pub struct GeniexFileProgress {
+pub struct GenieXFileProgress {
     pub file_name: *const c_char,
     pub downloaded_bytes: i64,
     pub total_bytes: i64,
@@ -40,18 +69,25 @@ pub fn err_to_code(e: &Error) -> i32 {
         Error::HttpStatus { .. } | Error::HttpTimeout(_) | Error::Http(_) => {
             GENIEX_ERROR_COMMON_NETWORK
         }
-        Error::ManifestParse { .. } => GENIEX_ERROR_COMMON_MANIFEST_PARSE,
+        // A local geniex.json that fails to deserialize is a manifest-parse
+        // failure, same category as a malformed remote index.
+        Error::ManifestParse { .. } | Error::Json(_) => GENIEX_ERROR_COMMON_MANIFEST_PARSE,
         Error::ChipsetUnavailable { .. } => GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE,
         Error::Cancelled => GENIEX_ERROR_COMMON_CANCELLED,
-        Error::Io(_) | Error::Json(_) | Error::Hub(_) | Error::ManifestInferenceFailed(_) => {
-            GENIEX_ERROR_COMMON_UNKNOWN
-        }
+        // Inference failed because the source has no files we recognize as a
+        // model — surface it as an invalid-model error, not a generic unknown.
+        Error::ManifestInferenceFailed(_) => GENIEX_ERROR_COMMON_MODEL_INVALID,
+        // Io / Hub are genuinely freeform; keep them as unknown.
+        Error::Io(_) | Error::Hub(_) => GENIEX_ERROR_COMMON_UNKNOWN,
     }
 }
 
-/// Log `e` via the geniex log callback and return the corresponding code.
+/// Log `e` via the geniex log callback, stash its message as this thread's
+/// last error, and return the corresponding code.
 pub fn report(e: &Error) -> i32 {
-    logging::error(&format!("{e}"));
+    let msg = format!("{e}");
+    logging::error(&msg);
+    set_last_error(&msg);
     err_to_code(e)
 }
 
@@ -61,6 +97,10 @@ pub fn ffi_guard<F>(f: F) -> i32
 where
     F: FnOnce() -> i32,
 {
+    // Clear any message left by a prior call on this thread so
+    // geniex_model_last_error_message only ever reflects THIS call's outcome
+    // (set again by report() / the panic arm below on failure).
+    clear_last_error();
     match catch_unwind(AssertUnwindSafe(f)) {
         Ok(code) => code,
         Err(payload) => {
@@ -72,6 +112,7 @@ where
                 "panic in FFI boundary".to_string()
             };
             logging::error(&format!("panic caught at FFI boundary: {msg}"));
+            set_last_error(&msg);
             GENIEX_ERROR_COMMON_UNKNOWN
         }
     }

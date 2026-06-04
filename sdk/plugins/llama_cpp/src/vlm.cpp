@@ -2,7 +2,6 @@
 
 #include <cstring>
 #include <nlohmann/json.hpp>
-#include <thread>
 
 #include "chat.h"
 #include "common.h"
@@ -12,6 +11,7 @@
 #include "logging.h"
 #include "mtmd-helper.h"
 #include "mtmd.h"
+#include "params.h"
 #include "profiler.h"
 
 namespace geniex {
@@ -36,23 +36,16 @@ int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
     // dance. Any llama.cpp class that might load onto HTP must participate.
     htp::reacquire_before_load();
 
-    llama_model_params mpar = llama_model_default_params();
-    mpar.use_mmap           = false;
-    mpar.use_mlock          = false;
-    mpar.n_gpu_layers       = input->config.n_gpu_layers;
-    if (input->device_id) {
-        auto device = ggml_backend_dev_by_name(input->device_id);
-        if (!device) {
-            // Device not found, log warning and continue with default device
-            GENIEX_LOG_ERROR("Device '{}' not found", input->device_id);
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
-        } else {
-            // Create a NULL-terminated array with the device
-            static ggml_backend_dev_t device_array[2];
-            device_array[0] = device;
-            device_array[1] = nullptr;  // NULL-terminated
-            mpar.devices    = device_array;
-        }
+    const Device             device = classify_device(input->device_id, input->config.n_gpu_layers);
+    const geniex_ModelConfig config = build_model_config(input->config, /*n_ctx_default=*/16384, device);
+
+    llama_model_params mpar      = build_model_params(config);
+    auto               selection = resolve_devices(input->device_id);
+    if (!selection) {
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    }
+    if (!selection->empty()) {
+        mpar.devices = selection->data();
     }
 
     // See llm.cpp for why this is registry-scoped rather than per-device.
@@ -67,17 +60,7 @@ int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 
-    llama_context_params cpar = llama_context_default_params();
-    cpar.n_ctx                = input->config.n_ctx > 0 ? input->config.n_ctx : 16384;
-    cpar.n_batch              = 256;
-    cpar.n_ubatch             = 512;
-    cpar.n_seq_max            = 1;
-    cpar.n_threads            = static_cast<int32_t>(std::thread::hardware_concurrency()) / 2;
-    cpar.n_threads_batch      = static_cast<int32_t>(std::thread::hardware_concurrency()) / 2;
-    cpar.flash_attn_type      = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-    cpar.swa_full             = false;
-    cpar.kv_unified           = false;
-    cpar.no_perf              = false;  // enable performance counters
+    llama_context_params cpar = build_context_params(config, device);
 
     this->ctx = llama_init_from_model(this->model, cpar);
     if (!this->ctx) {
@@ -86,10 +69,17 @@ int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 
+    ggml_threadpool_params tpp_main  = build_threadpool_params(cpar.n_threads, device);
+    ggml_threadpool_params tpp_batch = build_threadpool_params(cpar.n_threads_batch, device);
+    int32_t                tp_ret    = create_and_attach_threadpools(this->pools_, this->ctx, tpp_main, tpp_batch);
+    if (tp_ret != GENIEX_SUCCESS) {
+        return tp_ret;
+    }
+
     // Initialize vision context if mmproj_path provided
     if (input->mmproj_path) {
         mtmd_context_params mparams = mtmd_context_params_default();
-        mparams.use_gpu             = input->config.n_gpu_layers > 0;
+        mparams.use_gpu             = config.n_gpu_layers > 0;
         mparams.print_timings       = false;
         mparams.n_threads           = 4;
         // Zack TODO: elegant fix this error:  no member named 'verbosity' in 'mtmd_context_params'
@@ -161,7 +151,10 @@ int32_t LlamaVlm::apply_chat_template(
         tmpl_inputs.tools = common_chat_tools_parse_oaicompat(nlohmann::ordered_json::parse(std::string(input->tools)));
     }
 
-    tmpl_inputs.enable_thinking = input->enable_thinking;
+    if (input->enable_thinking) {
+        GENIEX_LOG_WARN("thinking mode not supported for llama.cpp VLM; ignoring enable_thinking=true");
+    }
+    tmpl_inputs.enable_thinking = false;
     GENIEX_LOG_DEBUG("applying chat template with add_generation_prompt=true, use_jinja={}", tmpl_inputs.use_jinja);
 
     // Apply chat template
@@ -199,6 +192,8 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
 
     geniex_GenerationConfig cfg = input->config ? *input->config : geniex_GenerationConfig{};
     if (cfg.max_tokens <= 0) cfg.max_tokens = 512;
+
+    this->set_sampler(cfg.sampler_config);
 
     // Prepare multimodal input: collect bitmaps for images and audio
     std::vector<mtmd_bitmap*> bitmaps;
@@ -471,16 +466,15 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
 
 namespace geniex {
 
-void LlamaVlm::reset_sampler() {
-    // Free existing sampler
+void LlamaVlm::reset_sampler() { this->set_sampler(nullptr); }
+
+void LlamaVlm::set_sampler(const geniex_SamplerConfig* cfg) {
     if (this->sampler) {
         common_sampler_free(this->sampler);
         this->sampler = nullptr;
     }
-
-    // Use default values from common_params_sampling (like ml-llm.cpp)
-    common_params_sampling s;
-    this->sampler = common_sampler_init(this->model, s);
+    common_params_sampling s = build_sampling_params(cfg);
+    this->sampler            = common_sampler_init(this->model, s);
 }
 
 bool LlamaVlm::vlm_message_to_common_chat_msg(const geniex_VlmChatMessage* input, common_chat_msg* output) {

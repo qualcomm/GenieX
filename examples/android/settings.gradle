@@ -1,0 +1,39 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}
+
+// CI override: when GENIEX_AAR_REPO names a local Maven repository, resolve
+// com.qualcomm.qti:geniex-android from there instead of Maven Central. CI
+// populates it from the AAR built in the same run (see _build-android-apk.yml),
+// so release/PR builds exercise the exact artifact being shipped *before* it is
+// published to Maven Central — otherwise a release that bumps the example's pin
+// to an as-yet-unpublished version fails dependency resolution. It must be a
+// real Maven repo (POM with `aar` packaging), not flatDir: AGP's variant-aware
+// resolution needs that metadata to accept a versioned coordinate as an AAR.
+// Real users never set this and pull the published version from Maven Central.
+def geniexAarRepo = System.getenv('GENIEX_AAR_REPO')
+
+dependencyResolutionManagement {
+    repositories {
+        if (geniexAarRepo != null) {
+            // Scoped to the one module so this repo is never consulted for any
+            // other dependency.
+            maven {
+                url = uri(geniexAarRepo)
+                content { includeModule('com.qualcomm.qti', 'geniex-android') }
+            }
+        }
+        google()
+        mavenCentral()
+        // JitPack hosts AndroidAutoSize.
+        maven { url 'https://jitpack.io' }
+    }
+}
+
+// Fix APK output filename to app-debug.apk regardless of the directory name the
+// project is built from (e.g. when fetched via qai-hub-apps and built on-device).
+rootProject.name = 'app'

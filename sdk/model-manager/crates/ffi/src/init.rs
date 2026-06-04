@@ -87,7 +87,7 @@ pub extern "C" fn geniex_model_init(data_dir: *const c_char) -> i32 {
         // Holding INIT_LOCK means no other thread is between the get()
         // check and set() call, so this always succeeds.
         let _ = STORE.set(store);
-        logging::info("geniex model manager initialized");
+        logging::debug("geniex model manager initialized");
         GENIEX_SUCCESS
     })
 }

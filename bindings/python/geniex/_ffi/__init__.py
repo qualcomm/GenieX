@@ -13,7 +13,7 @@
 # limitations under the License.
 
 from ._api import (
-    GeniexError,
+    GenieXError,
     _check,
     _encode,
     _str_list_to_c,
@@ -54,7 +54,7 @@ from ._types import (
 )
 
 __all__ = [
-    'GeniexError',
+    'GenieXError',
     '_check',
     '_encode',
     '_str_list_to_c',

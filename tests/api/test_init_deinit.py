@@ -33,9 +33,9 @@ def test_public_surface_exports():
     expected = {
         'AutoModelForCausalLM',
         'AutoModelForVision2Seq',
-        'GeniexError',
-        'GeniexLLM',
-        'GeniexVLM',
+        'GenieXError',
+        'GenieXLLM',
+        'GenieXVLM',
         'GenerateOutput',
         'ProfileData',
         'TextIteratorStreamer',

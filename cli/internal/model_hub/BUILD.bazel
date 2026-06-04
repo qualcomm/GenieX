@@ -1,38 +1,9 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "model_hub",
-    srcs = [
-        "errors.go",
-        "model_hub.go",
-        "model_hub_aihub.go",
-        "model_hub_hf.go",
-        "model_hub_localfs.go",
-    ],
+    srcs = ["errors.go"],
     importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub",
     visibility = ["//cli:__subpackages__"],
-    deps = [
-        "//cli/internal/config",
-        "//cli/internal/downloader",
-        "//cli/internal/model_hub/aihub",
-        "//cli/internal/render",
-        "//cli/internal/types",
-        "@com_github_bytedance_sonic//:sonic",
-        "@dev_resty_v3//:resty",
-        "@org_golang_x_sync//errgroup",
-    ],
-)
-
-go_test(
-    name = "model_hub_test",
-    srcs = [
-        "model_hub_hf_test.go",
-        "model_hub_localfs_test.go",
-        "model_hub_test.go",
-    ],
-    embed = [":model_hub"],
-    deps = [
-        "//cli/internal/types",
-        "@com_github_lmittmann_tint//:tint",
-    ],
+    deps = ["//cli/internal/model_hub/aihub"],
 )

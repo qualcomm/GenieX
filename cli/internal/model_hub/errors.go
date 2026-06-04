@@ -53,16 +53,3 @@ func TranslateAIHubError(err error) error {
 	}
 	return err
 }
-
-// wrapTransport tags a transport-layer error (DNS / dial / timeout) as
-// ErrUnreachable. Errors already carrying a hub sentinel pass through
-// untouched, so middleware-produced errors keep their original tag.
-func wrapTransport(url string, err error) error {
-	if err == nil {
-		return nil
-	}
-	if errors.Is(err, ErrUnreachable) || errors.Is(err, ErrAuthRequired) || errors.Is(err, ErrModelNotFound) {
-		return err
-	}
-	return fmt.Errorf("%w: %s: %v", ErrUnreachable, url, err)
-}

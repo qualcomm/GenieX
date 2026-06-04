@@ -2,10 +2,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "types",
-    srcs = [
-        "model.go",
-        "utils.go",
-    ],
+    srcs = ["model.go"],
     importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/types",
     visibility = ["//cli:__subpackages__"],
 )

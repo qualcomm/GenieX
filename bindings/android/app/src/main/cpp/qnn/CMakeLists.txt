@@ -14,12 +14,6 @@ set(JNI_SOURCES
         ${PARENT_DIR}/jni_cb.cpp
         ${PARENT_DIR}/llm_bridge_jni.cpp
         ${PARENT_DIR}/vlm_bridge_jni.cpp
-        ${PARENT_DIR}/asr_bridge_jni.cpp
-        ${PARENT_DIR}/cv_bridge_jni.cpp
-        ${PARENT_DIR}/embedder_bridge_jni.cpp
-        ${PARENT_DIR}/reranker_bridge_jni.cpp
-        ${PARENT_DIR}/img_gen_jni.cpp
-        ${PARENT_DIR}/tts_bridge_jni.cpp
         ${PARENT_DIR}/model_manager_jni.cpp
 )
 
