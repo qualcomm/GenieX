@@ -6,9 +6,9 @@ on:
   workflow_dispatch:
     inputs:
       device:
-        description: "QDC chipset"
+        description: "QDC chipset (blank = all devices)"
         type: string
-        default: "QCS9075M"
+        default: ""
 
 permissions:
   contents: read
@@ -27,10 +27,17 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
+      devices: ${{ steps.set.outputs.devices }}
     steps:
       - uses: actions/checkout@v6
       - id: set
-        run: echo "matrix=$(jq -c . sdk/tests/benchmark/qdc/scorecard-models.json)" >> "$GITHUB_OUTPUT"
+        env:
+          PICK: ${{ github.event.inputs.device }}
+        run: |
+          echo "matrix=$(jq -c . sdk/tests/benchmark/qdc/scorecard-models.json)" >> "$GITHUB_OUTPUT"
+          all='["QCS9075M","SM8850"]'
+          devices=$([ -n "$PICK" ] && jq -cn --arg d "$PICK" '[$d]' || echo "$all")
+          echo "devices=$devices" >> "$GITHUB_OUTPUT"
 
   scorecard:
     needs: [build-sdk, load-models]
@@ -40,6 +47,7 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
+        device: ${{ fromJson(needs.load-models.outputs.devices) }}
         model: ${{ fromJson(needs.load-models.outputs.matrix) }}
     env:
       QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
@@ -51,8 +59,11 @@ jobs:
           python-version: "3.11"
       - id: sdk
         run: |
-          d="${{ github.event.inputs.device || 'QCS9075M' }}"
-          case "$d" in SC*|CRD*|X*) echo "name=sdk-windows-arm64";; *) echo "name=sdk-linux-arm64";; esac >> "$GITHUB_OUTPUT"
+          case "${{ matrix.device }}" in
+            SM*)         echo "name=sdk-android-arm64" ;;
+            SC*|CRD*|X*) echo "name=sdk-windows-arm64" ;;
+            *)           echo "name=sdk-linux-arm64" ;;
+          esac >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
         with:
           name: ${{ steps.sdk.outputs.name }}
@@ -61,20 +72,23 @@ jobs:
       - run: |
           python sdk/tests/benchmark/qdc/run_qdc_jobs.py \
             --pkg-dir pkg-geniex \
-            --device "${{ github.event.inputs.device || 'QCS9075M' }}" \
+            --device "${{ matrix.device }}" \
             --model-name "${{ matrix.model.name }}" \
-            --cells-out "${{ matrix.model.name }}.json"
+            --cells-out "${{ matrix.device }}-${{ matrix.model.name }}.json"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: scorecard-cells-${{ matrix.model.name }}
-          path: ${{ matrix.model.name }}.json
+          name: scorecard-cells-${{ matrix.device }}-${{ matrix.model.name }}
+          path: ${{ matrix.device }}-${{ matrix.model.name }}.json
           if-no-files-found: ignore
 
   aggregate:
-    needs: [scorecard]
+    needs: [load-models, scorecard]
     if: always()
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        device: ${{ fromJson(needs.load-models.outputs.devices) }}
     env:
       GENIEX_RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
     steps:
@@ -84,9 +98,9 @@ jobs:
           python-version: "3.11"
       - uses: actions/download-artifact@v8
         with:
-          pattern: scorecard-cells-*
+          pattern: scorecard-cells-${{ matrix.device }}-*
           path: cells
       - run: |
           python sdk/tests/benchmark/qdc/run_qdc_jobs.py \
-            --device "${{ github.event.inputs.device || 'QCS9075M' }}" \
+            --device "${{ matrix.device }}" \
             --render-dir cells

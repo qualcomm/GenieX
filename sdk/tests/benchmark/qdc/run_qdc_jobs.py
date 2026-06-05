@@ -16,8 +16,8 @@
 
 Builds an artifact (SDK pkg + entry script), submits it as a QDC job, downloads
 the per-cell JSON geniex_benchmark emits, and writes a markdown scorecard to
-GITHUB_STEP_SUMMARY. Linux (QCS9075M) and Windows (SC8380XP) are implemented;
-the platform seam keeps android as a future drop-in.
+GITHUB_STEP_SUMMARY. Linux (QCS9075M, BASH), Windows (SC8380XP, PowerShell), and
+Android (SM8850, APPIUM via adb) are implemented.
 """
 
 from __future__ import annotations
@@ -63,6 +63,7 @@ CHIPSET = {
     "QCS9075M": "qualcomm-qcs9075",
     "SC8380XP": "qualcomm-snapdragon-x-elite",
     "SM8750": "qualcomm-snapdragon-8-elite",
+    "SM8850": "qualcomm-snapdragon-8-elite-gen5",
 }
 
 
@@ -138,11 +139,44 @@ def build_windows_artifact(
     return Path(shutil.make_archive(str(tmp / "artifact"), "zip", stage))
 
 
+def build_android_artifact(
+    pkg_dir: Path, models: list[dict], device: str, tmp: Path
+) -> Path:
+    # Phones lack python3/curl, so the appium pytest harness on the QDC host
+    # fetches+extracts each model and adb-pushes it, then runs geniex_benchmark
+    # on-device; results land in the device's QDC_logs and are auto-collected.
+    stage = tmp / "stage"
+    shutil.copytree(pkg_dir, stage / "pkg-geniex")
+    # libggml-cpu.so needs libomp.so, which the CLI package doesn't ship but the
+    # Android app provides from extLibs; drop it beside the ggml libs.
+    omp = (
+        HERE.parents[3]
+        / "bindings"
+        / "android"
+        / "app"
+        / "extLibs"
+        / "arm64-v8a"
+        / "libomp.so"
+    )
+    shutil.copy(omp, stage / "pkg-geniex" / "lib" / "llama_cpp" / "libomp.so")
+    (stage / "matrix_rows.txt").write_text("\n".join(model_rows(models, device)))
+    shutil.copytree(HERE / "tests", stage / "tests")
+    shutil.copy(HERE / "tests" / "requirements.txt", stage / "requirements.txt")
+    (stage / "pytest.ini").write_text("[pytest]\naddopts = --junitxml=results.xml\n")
+
+    return Path(shutil.make_archive(str(tmp / "artifact"), "zip", stage))
+
+
 ENTRY = {
     "linux": "/bin/bash /data/local/tmp/TestContent/run_linux.sh",
     "windows": "C:\\Temp\\TestContent\\run_windows.ps1",
+    "android": None,
 }
-BUILDERS = {"linux": build_linux_artifact, "windows": build_windows_artifact}
+BUILDERS = {
+    "linux": build_linux_artifact,
+    "windows": build_windows_artifact,
+    "android": build_android_artifact,
+}
 
 
 def wait_for_job(client, job_id: str, timeout: int) -> str:
@@ -295,7 +329,11 @@ def main() -> int:
             client, str(zip_path), ArtifactType.TESTSCRIPT
         )
 
-        framework = {"linux": TestFramework.BASH, "windows": TestFramework.POWERSHELL}
+        framework = {
+            "linux": TestFramework.BASH,
+            "windows": TestFramework.POWERSHELL,
+            "android": TestFramework.APPIUM,
+        }
         job_id = qdc_api.submit_job(
             public_api_client=client,
             target_id=target_id,
