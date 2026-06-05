@@ -46,14 +46,11 @@ type Client struct {
 	modelIndex map[string]*ManifestModelEntry
 }
 
-// NewClient: base URL and pinned aihm version come from CLI config.
+// NewClient: base URL is fixed; pinned aihm version comes from CLI config.
 func NewClient() *Client {
 	cfg := config.Get()
 
-	base := strings.TrimRight(cfg.AIHubBaseURL, "/")
-	if base == "" {
-		base = strings.TrimRight(config.DefaultAIHubBaseURL, "/")
-	}
+	base := strings.TrimRight(config.DefaultAIHubBaseURL, "/")
 	version := strings.Trim(cfg.AIHubVersion, "/")
 	if version == "" {
 		version = config.DefaultAIHubVersion

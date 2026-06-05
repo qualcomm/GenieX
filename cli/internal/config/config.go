@@ -23,13 +23,12 @@ import (
 )
 
 // DefaultAIHubBaseURL is the public root for Qualcomm AI Hub release assets.
-// Override via the GENIEX_AIHUBBASEURL env var (tests / mirrors).
 const DefaultAIHubBaseURL = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models"
 
 // DefaultAIHubVersion is the pinned aihm release the CLI consumes. The public
 // bucket has no `latest` alias; manifests are only at
 // <base>/releases/<version>/manifest.json. Override via GENIEX_AIHUBVERSION.
-const DefaultAIHubVersion = "v0.53.1"
+const DefaultAIHubVersion = "v0.55.0"
 
 type Config struct {
 	// Global settings
@@ -47,7 +46,6 @@ type Config struct {
 	// Env only params
 	HFToken      string
 	Log          string
-	AIHubBaseURL string // Override the AI Hub public assets base URL (rarely used)
 	AIHubVersion string // Override the pinned aihm release version
 }
 
@@ -56,7 +54,6 @@ func init() {
 	// ENV only param need to set default here
 	viper.SetDefault("hftoken", "")                       // Default empty token
 	viper.SetDefault("log", "none")                       // Default log level
-	viper.SetDefault("aihubbaseurl", DefaultAIHubBaseURL) // AI Hub public assets base URL
 	viper.SetDefault("aihubversion", DefaultAIHubVersion) // Pinned aihm release version
 
 	viper.SetEnvPrefix("geniex")
