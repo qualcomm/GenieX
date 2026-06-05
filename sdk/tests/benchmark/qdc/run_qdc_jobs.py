@@ -16,8 +16,8 @@
 
 Builds an artifact (SDK pkg + entry script), submits it as a QDC job, downloads
 the per-cell JSON geniex_benchmark emits, and writes a markdown scorecard to
-GITHUB_STEP_SUMMARY. Linux (QCS9075M) is implemented; the platform seam keeps
-android/windows as future drop-ins.
+GITHUB_STEP_SUMMARY. Linux (QCS9075M) and Windows (SC8380XP) are implemented;
+the platform seam keeps android as a future drop-in.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import urllib.request
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -56,6 +57,14 @@ POLL_INTERVAL = 30
 LOG_UPLOAD_TIMEOUT = 600
 HERE = Path(__file__).parent
 
+AIHUB_BASE = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models"
+AIHUB_VERSION = "v0.52.0"
+CHIPSET = {
+    "QCS9075M": "qualcomm-qcs9075",
+    "SC8380XP": "qualcomm-snapdragon-x-elite",
+    "SM8750": "qualcomm-snapdragon-8-elite",
+}
+
 
 def platform_for(device: str) -> str:
     if device.startswith("QCS"):
@@ -67,21 +76,42 @@ def platform_for(device: str) -> str:
     raise SystemExit(f"unknown device chipset: {device}")
 
 
-def build_linux_artifact(pkg_dir: Path, models: list[dict], tmp: Path) -> Path:
+def resolve_bundle_url(aihub_id: str, device: str) -> str | None:
+    slug = CHIPSET.get(device)
+    if slug is None:
+        raise SystemExit(f"no chipset slug for {device}")
+    url = f"{AIHUB_BASE}/models/{aihub_id}/releases/{AIHUB_VERSION}/release-assets.json"
+    with urllib.request.urlopen(url) as r:
+        assets = json.load(r).get("assets", [])
+    return next((a["download_url"] for a in assets if a.get("chipset") == slug), None)
+
+
+def model_rows(models: list[dict], device: str) -> list[str]:
+    rows = []
+    for m in models:
+        if "aihub_id" in m:
+            url = resolve_bundle_url(m["aihub_id"], device)
+            if url is None:
+                log.warning("no %s asset for %s, skipping", device, m["name"])
+                continue
+            kind = "bundle"
+        else:
+            url, kind = m["url"], "gguf"
+        rows.append(f"{m['name']}|{m['plugin']}|{','.join(m['devices'])}|{url}|{kind}")
+    return rows
+
+
+def build_linux_artifact(
+    pkg_dir: Path, models: list[dict], device: str, tmp: Path
+) -> Path:
     stage = tmp / "stage"
     shutil.copytree(pkg_dir, stage / "pkg-geniex")
 
-    rows = []
-    for m in models:
-        kind = "bundle" if "bundle_url" in m else "gguf"
-        url = m.get("bundle_url") or m["url"]
-        rows.append(f"{m['name']}|{m['plugin']}|{','.join(m['devices'])}|{url}|{kind}")
     script = (
         (HERE / "linux" / "run_linux.sh")
         .read_text()
-        .replace("{MODELS}", "\n".join(rows))
+        .replace("{MODELS}", "\n".join(model_rows(models, device)))
     )
-
     script_path = stage / "run_linux.sh"
     script_path.write_text(script, newline="\n")
     script_path.chmod(0o755)
@@ -89,8 +119,30 @@ def build_linux_artifact(pkg_dir: Path, models: list[dict], tmp: Path) -> Path:
     return Path(shutil.make_archive(str(tmp / "artifact"), "zip", stage))
 
 
-ENTRY = {"linux": "/bin/bash /data/local/tmp/TestContent/run_linux.sh"}
-BUILDERS = {"linux": build_linux_artifact}
+def build_windows_artifact(
+    pkg_dir: Path, models: list[dict], device: str, tmp: Path
+) -> Path:
+    stage = tmp / "stage"
+    shutil.copytree(pkg_dir, stage / "pkg-geniex")
+
+    script = (
+        (HERE / "windows" / "run_windows.ps1")
+        .read_text()
+        .replace("{MODELS}", "\n".join(model_rows(models, device)))
+    )
+    (stage / "run_windows.ps1").write_text(script, newline="\r\n")
+
+    cert = HERE.parents[3] / ".github" / "certs" / "hexagon" / "ggml-htp-v1.cer"
+    shutil.copy(cert, stage / "ggml-htp-v1.cer")
+
+    return Path(shutil.make_archive(str(tmp / "artifact"), "zip", stage))
+
+
+ENTRY = {
+    "linux": "/bin/bash /data/local/tmp/TestContent/run_linux.sh",
+    "windows": "C:\\Temp\\TestContent\\run_windows.ps1",
+}
+BUILDERS = {"linux": build_linux_artifact, "windows": build_windows_artifact}
 
 
 def wait_for_job(client, job_id: str, timeout: int) -> str:
@@ -237,12 +289,13 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        zip_path = BUILDERS[platform](args.pkg_dir, models, tmp)
+        zip_path = BUILDERS[platform](args.pkg_dir, models, args.device, tmp)
         log.info("uploading artifact (%d MB)", zip_path.stat().st_size // 1_000_000)
         artifact_id = qdc_api.upload_file(
             client, str(zip_path), ArtifactType.TESTSCRIPT
         )
 
+        framework = {"linux": TestFramework.BASH, "windows": TestFramework.POWERSHELL}
         job_id = qdc_api.submit_job(
             public_api_client=client,
             target_id=target_id,
@@ -251,7 +304,7 @@ def main() -> int:
             job_type=JobType.AUTOMATED,
             job_mode=JobMode.APPLICATION,
             timeout=max(1, args.job_timeout // 60),
-            test_framework=TestFramework.BASH,
+            test_framework=framework[platform],
             entry_script=ENTRY[platform],
             job_artifacts=[artifact_id],
             monkey_events=None,

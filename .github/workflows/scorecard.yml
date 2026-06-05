@@ -49,9 +49,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - id: sdk
+        run: |
+          d="${{ github.event.inputs.device || 'QCS9075M' }}"
+          case "$d" in SC*|CRD*|X*) echo "name=sdk-windows-arm64";; *) echo "name=sdk-linux-arm64";; esac >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v8
         with:
-          name: sdk-linux-arm64
+          name: ${{ steps.sdk.outputs.name }}
           path: pkg-geniex
       - uses: ./.github/actions/install-qdc-sdk
       - run: |
