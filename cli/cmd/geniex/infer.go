@@ -341,7 +341,8 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 					return res.FullText, res.ProfileData, common.ErrContextLengthExceeded
 				}
 				if err != nil {
-					return "", geniex_sdk.ProfileData{}, err
+					// The SDK keeps whatever was generated before the failure; surface it.
+					return res.FullText, res.ProfileData, err
 				}
 				// Clear tokenIDs after use so subsequent calls use normal mode
 				tokenIDs = nil
@@ -374,7 +375,8 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 					return res.FullText, res.ProfileData, common.ErrContextLengthExceeded
 				}
 				if err != nil {
-					return "", geniex_sdk.ProfileData{}, err
+					// The SDK keeps whatever was generated before the failure; surface it.
+					return res.FullText, res.ProfileData, err
 				}
 
 				history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LlmRoleAssistant, Content: res.FullText})
@@ -505,7 +507,7 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 					AudioPaths:     audios,
 				},
 			})
-			if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) && res != nil {
+			if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
 				res.ProfileData.StopReason = "context_length"
 				history = append(history, geniex_sdk.VlmChatMessage{
 					Role: geniex_sdk.VlmRoleAssistant,
@@ -516,7 +518,8 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 				return res.FullText, res.ProfileData, common.ErrContextLengthExceeded
 			}
 			if err != nil {
-				return "", geniex_sdk.ProfileData{}, err
+				// The SDK keeps whatever was generated before the failure; surface it.
+				return res.FullText, res.ProfileData, err
 			}
 
 			history = append(history, geniex_sdk.VlmChatMessage{
