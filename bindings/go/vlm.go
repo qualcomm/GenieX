@@ -346,11 +346,9 @@ func (v *VLM) Generate(input VlmGenerateInput) (*VlmGenerateOutput, error) {
 	defer freeVlmGenerateOutput(&cOutput)
 
 	res := C.geniex_vlm_generate(v.ptr, cInput, &cOutput)
-	// On context-length errors the SDK still populates whatever was generated
-	// before the cutoff; surface that to the caller alongside the error.
-	if res < 0 && res != C.GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH {
-		return nil, SDKError(res)
-	}
+	// The SDK populates whatever was generated before any cutoff, so surface the
+	// partial output to the caller even on error (e.g. truncation or a mid-run
+	// decode failure).
 	output := newVlmGenerateOutputFromCPtr(&cOutput)
 	if res < 0 {
 		return &output, SDKError(res)
