@@ -190,6 +190,8 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     common::Profiler profiler;
     profiler.prompt_start();
 
+    int32_t res = GENIEX_SUCCESS;
+
     geniex_GenerationConfig cfg = input->config ? *input->config : geniex_GenerationConfig{};
     if (cfg.max_tokens <= 0) cfg.max_tokens = 512;
 
@@ -272,39 +274,34 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             mtmd_input_chunks* chunks = mtmd_input_chunks_init();
             if (!chunks) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
 
-            int32_t res = mtmd_tokenize(this->ctx_vision, chunks, &text, (const mtmd_bitmap**)bitmaps.data(), n_media);
-            if (res != 0) {
+            int32_t tok_ret =
+                mtmd_tokenize(this->ctx_vision, chunks, &text, (const mtmd_bitmap**)bitmaps.data(), n_media);
+            for (auto bmp : bitmaps) {
+                if (bmp) mtmd_bitmap_free(bmp);
+            }
+            if (tok_ret != 0) {
                 mtmd_input_chunks_free(chunks);
-                for (auto bmp : bitmaps) {
-                    if (bmp) mtmd_bitmap_free(bmp);
-                }
                 GENIEX_LOG_ERROR("mtmd_tokenize failed");
                 return GENIEX_ERROR_VLM_GENERATION_FAILED;
             }
 
-            GENIEX_LOG_DEBUG("mtmd_tokenize successful");
-
-            // Clear bitmaps (like eval_message does)
-            for (auto bmp : bitmaps) mtmd_bitmap_free(bmp);
-
-            // Evaluate chunks (like eval_message does)
-            llama_pos new_n_past;
-            if (mtmd_helper_eval_chunks(this->ctx_vision,
-                    this->ctx,
-                    chunks,
-                    this->n_past,
-                    0,
-                    llama_n_batch(this->ctx),
-                    true,
-                    &new_n_past)) {
-                mtmd_input_chunks_free(chunks);
-                GENIEX_LOG_ERROR("mtmd_helper_eval_chunks failed");
-                return GENIEX_ERROR_VLM_GENERATION_FAILED;
+            // Evaluate chunks (like eval_message does). 1 means the prompt does
+            // not fit the KV cache: report truncation, not a generic failure.
+            llama_pos new_n_past = this->n_past;
+            switch (mtmd_helper_eval_chunks(
+                this->ctx_vision, this->ctx, chunks, this->n_past, 0, llama_n_batch(this->ctx), true, &new_n_past)) {
+                case 0:
+                    profiler.update_prompt_tokens(new_n_past - this->n_past);
+                    this->n_past = new_n_past;
+                    break;
+                case 1:
+                    res = GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+                    break;
+                default:
+                    GENIEX_LOG_ERROR("mtmd_helper_eval_chunks failed");
+                    res = GENIEX_ERROR_VLM_GENERATION_FAILED;
+                    break;
             }
-
-            GENIEX_LOG_DEBUG("mtmd_helper_eval_chunks successful, n_past: {} -> {}", this->n_past, new_n_past);
-            profiler.update_prompt_tokens(new_n_past - this->n_past);
-            this->n_past = new_n_past;
             mtmd_input_chunks_free(chunks);
         } else {
             // No new content to process, just clear bitmaps
@@ -352,14 +349,21 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
                 batch.pos[i] = this->n_past + i;
             }
 
-            if (llama_decode(this->ctx, batch) != 0) {
-                free(prompt_tokens);
-                GENIEX_LOG_ERROR("llama_decode failed");
-                return GENIEX_ERROR_VLM_GENERATION_FAILED;
-            }
+            int32_t decode_ret = llama_decode(this->ctx, batch);
             free(prompt_tokens);
-            this->n_past += prompt_len;
-            GENIEX_LOG_DEBUG("llama_decode successful, n_past updated to {}", this->n_past);
+            // 1 means the prompt does not fit the KV cache: report truncation, not a generic failure.
+            switch (decode_ret) {
+                case 0:
+                    this->n_past += prompt_len;
+                    break;
+                case 1:
+                    res = GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+                    break;
+                default:
+                    GENIEX_LOG_ERROR("llama_decode failed");
+                    res = GENIEX_ERROR_VLM_GENERATION_FAILED;
+                    break;
+            }
         } else {
             GENIEX_LOG_DEBUG("no new text content, skipping direct llama processing");
         }
@@ -375,7 +379,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
 
     std::stringstream full_text;
     int32_t           generated_token_count = 0;
-    for (int i = 0; i < cfg.max_tokens; ++i) {
+    while (res == GENIEX_SUCCESS && generated_token_count < cfg.max_tokens) {
         llama_token token = common_sampler_sample(this->sampler, this->ctx, -1);
 
         // Measure TTFT on first token
@@ -385,7 +389,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
         common_sampler_accept(this->sampler, token, true);
 
         if (llama_vocab_is_eog(vocab, token)) {
-            GENIEX_LOG_DEBUG("reached end of generation token at step {}", i);
+            GENIEX_LOG_DEBUG("reached end of generation token");
             profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_EOS);
             break;
         }
@@ -413,7 +417,6 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
         // Call the callback directly (UTF-8 validation is now handled at bridge level)
         if (input->on_token) {
             if (!input->on_token(token_buffer, input->user_data)) {
-                GENIEX_LOG_DEBUG("generation stopped by callback or stop sequence at step {}", i);
                 GENIEX_LOG_WARN("User callback requested stop during token generation");
                 profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_USER);
                 break;
@@ -421,45 +424,45 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
         }
         full_text << token_buffer;
 
-        // Decode next token using reusable batch (like mtmd-cli.cpp)
+        // Decode next token using reusable batch (like mtmd-cli.cpp). 1 means
+        // the KV cache is full (truncate); other non-zero values are failures.
         common_batch_clear(batch);
         common_batch_add(batch, token, this->n_past++, {0}, true);
-        if (llama_decode(this->ctx, batch) != 0) break;
+        switch (llama_decode(this->ctx, batch)) {
+            case 0:
+                break;
+            case 1:
+                res = GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+                break;
+            default:
+                res = GENIEX_ERROR_VLM_GENERATION_FAILED;
+                break;
+        }
     }
 
-    if (generated_token_count >= cfg.max_tokens) {
-        GENIEX_LOG_DEBUG("reached max_tokens limit ({})", cfg.max_tokens);
+    llama_batch_free(batch);
+
+    // Set stop reason if not already set
+    if (res == GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH) {
+        GENIEX_LOG_WARN("VLM generate: context window ({}) exhausted; truncating", llama_n_ctx(this->ctx));
+        profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_LENGTH);
+    } else if (generated_token_count >= cfg.max_tokens) {
         profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_LENGTH);
     }
-
-    // Clean up batch
-    llama_batch_free(batch);
 
     // Record decode processing end
     profiler.decode_end();
     profiler.update_generated_tokens(generated_token_count);
     profiler.to_profile_data(output->profile_data);
 
-    // Generate output text
-    if (generated_token_count == 0) {
-        // output->full_text = (char*)malloc(1);
-        // if (!output->full_text) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
-        // output->full_text[0] = '\0';
-        GENIEX_LOG_DEBUG("no tokens generated, returning empty string");
-        return GENIEX_SUCCESS;
-    } else {
-        auto full_text_str        = full_text.str();
-        output->full_text         = strdup(full_text_str.c_str());
+    auto full_text_str = full_text.str();
+    output->full_text  = strdup(full_text_str.c_str());
+    if (generated_token_count > 0) {
         this->global_n_past_chars = full_prompt_len + full_text_str.length();
-
-        GENIEX_LOG_DEBUG("updated global_text_pos to {} (prompt_len={} + generated_len={})",
-            this->global_n_past_chars,
-            full_prompt_len,
-            full_text_str.length());
     }
 
-    GENIEX_LOG_DEBUG("completed generation with {} tokens (no text output requested)", generated_token_count);
-    return GENIEX_SUCCESS;
+    GENIEX_LOG_DEBUG("completed generation with {} tokens", generated_token_count);
+    return res;
 }
 
 }  // namespace geniex
