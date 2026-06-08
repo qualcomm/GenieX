@@ -1,5 +1,6 @@
 #include "vlm.h"
 
+#include <algorithm>
 #include <cstring>
 #include <nlohmann/json.hpp>
 
@@ -109,14 +110,9 @@ int32_t LlamaVlm::get_capabilities(geniex_VlmCapabilities* output) {
 int32_t LlamaVlm::reset() {
     if (!this->ctx) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
-    // Clear memory keeping BOS token (like mtmd-cli.cpp does)
-    llama_memory_seq_rm(llama_get_memory(this->ctx), 0, 1, -1);
-
-    // Reset conversation state, setting to n_past = 1 since we preserved the BOS token above.
-    // TODO: revisit and verify that setting to 1 is correct. mtmd-cli.cpp in llama-cpp sets it to 0 but setting to 0
-    // will cause all test cases to fail.
-    this->n_past              = 1;
-    this->global_n_past_chars = 0;
+    this->n_past = 0;
+    this->past_text_prefix.clear();
+    llama_memory_clear(llama_get_memory(this->ctx), /*clear data=*/true);
 
     return GENIEX_SUCCESS;
 }
@@ -246,115 +242,98 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
 
     GENIEX_LOG_DEBUG("total media files loaded: {}", n_media);
 
-    // Get the full prompt length for tracking
-    const int32_t full_prompt_len = (int32_t)strlen(input->prompt_utf8);
-    GENIEX_LOG_DEBUG("full prompt length: {}, global_text_pos: {}", full_prompt_len, this->global_n_past_chars);
-
-    // Extract only the new text portion that hasn't been processed yet
-    std::string new_text_portion;
-    if (this->global_n_past_chars < full_prompt_len) {
-        new_text_portion = std::string(input->prompt_utf8 + this->global_n_past_chars);
-        GENIEX_LOG_DEBUG("new text portion length: {}", new_text_portion.length());
-    } else {
-        GENIEX_LOG_DEBUG("no new text to process (global_text_pos >= full_prompt_len)");
-    }
-
-    // Use mtmd path when ctx_vision is available, fallback to direct llama path otherwise
+    // The caller passes the whole conversation re-templated every turn, with the
+    // image marker(s) from earlier turns still in it. Image chunks can't be reused
+    // across turns (their embeddings are re-encoded and the encoder state isn't a
+    // plain token prefix), so the multimodal path clears the KV cache and decodes
+    // the full prompt from scratch each turn. n_past is taken authoritatively from
+    // mtmd_helper_eval_chunks (token count for text, n_pos for image/audio under
+    // M-RoPE), which is the whole point of the fix; the text-only path below still
+    // does token-prefix reuse.
     if (this->ctx_vision) {
         GENIEX_LOG_DEBUG("using multimodal (mtmd) path with ctx_vision");
 
-        // Only process if there's new text content
-        if (!new_text_portion.empty()) {
-            // prompt_utf8 already has chat template and media markers applied
-            mtmd_input_text text;
-            text.text          = new_text_portion.c_str();
-            text.add_special   = this->n_past == 0;  // add BOS only on first message
-            text.parse_special = true;
+        llama_memory_clear(llama_get_memory(this->ctx), /*clear data=*/true);
+        this->n_past = 0;
 
-            mtmd_input_chunks* chunks = mtmd_input_chunks_init();
-            if (!chunks) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
+        mtmd_input_text text;
+        text.text          = input->prompt_utf8;
+        text.add_special   = true;
+        text.parse_special = true;
 
-            int32_t tok_ret =
-                mtmd_tokenize(this->ctx_vision, chunks, &text, (const mtmd_bitmap**)bitmaps.data(), n_media);
-            for (auto bmp : bitmaps) {
-                if (bmp) mtmd_bitmap_free(bmp);
-            }
-            if (tok_ret != 0) {
-                mtmd_input_chunks_free(chunks);
-                GENIEX_LOG_ERROR("mtmd_tokenize failed");
-                return GENIEX_ERROR_VLM_GENERATION_FAILED;
-            }
-
-            // Evaluate chunks (like eval_message does). 1 means the prompt does
-            // not fit the KV cache: report truncation, not a generic failure.
-            llama_pos new_n_past = this->n_past;
-            switch (mtmd_helper_eval_chunks(
-                this->ctx_vision, this->ctx, chunks, this->n_past, 0, llama_n_batch(this->ctx), true, &new_n_past)) {
-                case 0:
-                    profiler.update_prompt_tokens(new_n_past - this->n_past);
-                    this->n_past = new_n_past;
-                    break;
-                case 1:
-                    res = GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
-                    break;
-                default:
-                    GENIEX_LOG_ERROR("mtmd_helper_eval_chunks failed");
-                    res = GENIEX_ERROR_VLM_GENERATION_FAILED;
-                    break;
-            }
-            mtmd_input_chunks_free(chunks);
-        } else {
-            // No new content to process, just clear bitmaps
+        mtmd_input_chunks* chunks = mtmd_input_chunks_init();
+        if (!chunks) {
             for (auto bmp : bitmaps) mtmd_bitmap_free(bmp);
-            GENIEX_LOG_DEBUG("no new text content, skipping mtmd processing");
+            return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
         }
+
+        int32_t tok_ret = mtmd_tokenize(this->ctx_vision, chunks, &text, (const mtmd_bitmap**)bitmaps.data(), n_media);
+        for (auto bmp : bitmaps) mtmd_bitmap_free(bmp);
+        if (tok_ret != 0) {
+            mtmd_input_chunks_free(chunks);
+            GENIEX_LOG_ERROR("mtmd_tokenize failed");
+            return GENIEX_ERROR_VLM_GENERATION_FAILED;
+        }
+
+        // Evaluate all chunks. A return of 1 means the prompt does not fit the KV
+        // cache: report truncation, not a generic failure.
+        llama_pos new_n_past = this->n_past;
+        switch (mtmd_helper_eval_chunks(
+            this->ctx_vision, this->ctx, chunks, this->n_past, 0, llama_n_batch(this->ctx), true, &new_n_past)) {
+            case 0:
+                profiler.update_prompt_tokens(new_n_past - this->n_past);
+                this->n_past = new_n_past;
+                break;
+            case 1:
+                res = GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+                break;
+            default:
+                mtmd_input_chunks_free(chunks);
+                GENIEX_LOG_ERROR("mtmd_helper_eval_chunks failed");
+                return GENIEX_ERROR_VLM_GENERATION_FAILED;
+        }
+
+        GENIEX_LOG_DEBUG("mtmd eval successful, n_past -> {}", this->n_past);
+        mtmd_input_chunks_free(chunks);
 
         profiler.prompt_end();
         profiler.decode_start();
     } else {
         GENIEX_LOG_DEBUG("using text-only (direct llama) path");
 
-        // Only process if there's new text content
-        if (!new_text_portion.empty()) {
-            // Fallback to direct llama path when ctx_vision is not available
-            const llama_vocab* vocab = llama_model_get_vocab(this->model);
+        const llama_vocab*       vocab = llama_model_get_vocab(this->model);
+        std::vector<llama_token> prompt_ids;
+        try {
+            prompt_ids = common_tokenize(vocab, std::string(input->prompt_utf8), true, true);
+        } catch (const std::exception&) {
+            return GENIEX_ERROR_LLM_TOKENIZATION_FAILED;
+        }
+        if (prompt_ids.empty()) return GENIEX_ERROR_LLM_TOKENIZATION_FAILED;
 
-            // Get required length
-            int32_t needed = llama_tokenize(
-                vocab, new_text_portion.c_str(), (int32_t)new_text_portion.length(), nullptr, 0, true, true);
-            if (needed < 0) needed = -needed;
-            if (needed == 0) return GENIEX_ERROR_LLM_TOKENIZATION_FAILED;
+        int match_len = 0;
+        while (match_len < std::min((int)past_text_prefix.size(), (int)prompt_ids.size()) &&
+               past_text_prefix[match_len] == prompt_ids[match_len]) {
+            match_len++;
+        }
+        if (match_len < this->n_past) {
+            llama_memory_seq_rm(llama_get_memory(this->ctx), 0, match_len, -1);
+            this->n_past = match_len;
+        }
 
-            // Allocate and tokenize
-            int32_t* prompt_tokens = (int32_t*)malloc(sizeof(int32_t) * needed);
-            if (!prompt_tokens) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
+        const int n_new = (int)prompt_ids.size() - match_len;
+        profiler.prompt_end();
+        profiler.update_prompt_tokens(n_new);
+        profiler.decode_start();
 
-            int32_t prompt_len = llama_tokenize(
-                vocab, new_text_portion.c_str(), (int32_t)new_text_portion.length(), prompt_tokens, needed, true, true);
-            if (prompt_len < 0) {
-                free(prompt_tokens);
-                return GENIEX_ERROR_LLM_TOKENIZATION_FAILED;
-            }
-
-            GENIEX_LOG_DEBUG("_ml_vlm_generate_internal: Tokenized new text portion into {} tokens", prompt_len);
-
-            // Record prompt processing end and decode start
-            profiler.prompt_end();
-            profiler.update_prompt_tokens(prompt_len);
-            profiler.decode_start();
-
-            llama_batch batch = llama_batch_get_one(prompt_tokens, prompt_len);
-            // Set positions based on current n_past
+        if (n_new > 0) {
+            llama_batch batch = llama_batch_get_one(prompt_ids.data() + match_len, n_new);
             for (int i = 0; i < batch.n_tokens; ++i) {
                 batch.pos[i] = this->n_past + i;
             }
-
-            int32_t decode_ret = llama_decode(this->ctx, batch);
-            free(prompt_tokens);
             // 1 means the prompt does not fit the KV cache: report truncation, not a generic failure.
-            switch (decode_ret) {
+            switch (llama_decode(this->ctx, batch)) {
                 case 0:
-                    this->n_past += prompt_len;
+                    this->n_past += n_new;
                     break;
                 case 1:
                     res = GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
@@ -364,9 +343,9 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
                     res = GENIEX_ERROR_VLM_GENERATION_FAILED;
                     break;
             }
-        } else {
-            GENIEX_LOG_DEBUG("no new text content, skipping direct llama processing");
         }
+        this->past_text_prefix = std::move(prompt_ids);
+        GENIEX_LOG_DEBUG("text-only decode successful, n_past updated to {}", this->n_past);
     }
 
     // Generate tokens (common for both multimodal and text-only)
@@ -455,11 +434,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     profiler.update_generated_tokens(generated_token_count);
     profiler.to_profile_data(output->profile_data);
 
-    auto full_text_str = full_text.str();
-    output->full_text  = strdup(full_text_str.c_str());
-    if (generated_token_count > 0) {
-        this->global_n_past_chars = full_prompt_len + full_text_str.length();
-    }
+    output->full_text = strdup(full_text.str().c_str());
 
     GENIEX_LOG_DEBUG("completed generation with {} tokens", generated_token_count);
     return res;
