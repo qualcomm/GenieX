@@ -84,16 +84,6 @@ interactive shell with the same env for manual debugging.
 |---|---|
 | `tests/api/` (minus `test_device_list`) | 13/13 pass |
 | `tests/api/test_device_list.py` | excluded — `geniex_get_device_list` SIGABRTs (SDK bug) |
-| `tests/plugins/qairt/test_qairt_llm.py` | NPU inference runs; currently fails in the binding's strict UTF-8 decode of a token-truncated output (downstream bug, not the harness) |
+| `tests/plugins/qairt/test_qairt_llm.py` | NPU inference runs; currently fails in a binding strict-UTF-8-decode bug (#888), not the harness |
 | `tests/plugins/qairt/test_qairt_vlm.py` | not yet verified |
 | `tests/plugins/llama_cpp/` | runs once libs are flattened (done by `deploy`) |
-
-## Known downstream bugs (follow-ups, not harness issues)
-
-Out of scope for these scripts:
-
-1. `geniex_get_device_list` SIGABRTs on Android (#682).
-2. llama.cpp Hexagon backend init (`ggml-hex error 0x80000406` → NULL device → assert) (#682).
-3. The Python binding decodes a token-truncated `full_text` with strict UTF-8
-   (`modeling.py` `string_at(out.full_text).decode()`), so a generate that ends
-   mid-multibyte raises `UnicodeDecodeError` — surfaces in `test_qairt_llm.py`.
