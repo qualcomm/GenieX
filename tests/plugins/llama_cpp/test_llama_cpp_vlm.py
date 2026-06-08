@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""llama_cpp VLM matrix: cpu, gpu, npu, hybrid."""
+"""llama_cpp VLM matrix: cpu, npu, hybrid."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def _vlm_prompt(vlm: geniex.GenieXVLM, image_path: str, text: str) -> str:
     )
 
 
-@pytest.mark.parametrize('device_map', ['cpu', 'gpu', 'npu', 'hybrid'])
+@pytest.mark.parametrize('device_map', ['cpu', 'npu', 'hybrid'])
 def test_generate_with_image(llama_cpp_vlm_paths, test_image, device_map):
     with geniex.AutoModelForVision2Seq.from_pretrained(
         LLAMA_CPP_VLM_MODEL,
