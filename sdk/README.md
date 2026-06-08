@@ -39,7 +39,7 @@ flowchart LR
 | [`src/`](src/)                         | Core library — device resolution, LLM/VLM, registry, logging.   |
 | [`plugins/`](plugins/)                 | Backend plugins: `llama_cpp`, `qairt`.                          |
 | [`model-manager/`](model-manager/)     | Rust model puller / cache shared by the CLI and bindings.       |
-| [`tests/benchmark/`](tests/benchmark/) | C inference benchmark driving the public API.                   |
+| [`benchmark/`](benchmark/)             | C inference benchmark driving the public API.                   |
 
 Compute-unit alias resolution (`cpu` / `gpu` / `npu` / `hybrid`) lives in
 [`src/device.cpp`](src/device.cpp) (`geniex_resolve_device`) — the single source

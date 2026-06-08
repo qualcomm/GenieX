@@ -122,3 +122,10 @@ jobs:
       # once the plugin can dlopen without an OpenCL ICD on the host.
       platforms: '["windows-arm64"]'
       gate_on_changed_files: true
+
+  qdc-pytest:
+    name: qdc-pytest
+    needs: [build-sdk]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_qdc-pytest.yml
+    secrets: inherit
