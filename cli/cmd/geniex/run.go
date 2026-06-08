@@ -21,8 +21,10 @@ import (
 	"net"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/ssestream"
 	"github.com/spf13/cobra"
 
 	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
@@ -40,6 +42,25 @@ func tagServerError(err error) error {
 		return fmt.Errorf("%w: %v", common.ErrServerUnreachable, err)
 	}
 	return err
+}
+
+// tagStreamError converts a streaming error into its source SDKError when the
+// server attached our `code` extension (an int32 SDKError) to the SSE error
+// event, so Processor can react to e.g. ErrLlmTokenizationContextLength.
+// Falls back to tagServerError for transport-layer errors.
+func tagStreamError(err error) error {
+	var se *ssestream.StreamError
+	if errors.As(err, &se) {
+		var body struct {
+			Code *int32 `json:"code"`
+		}
+		// code < 0 means the server error was not an SDKError (SDKErrorCode
+		// returns -1); keep the original stream error in that case.
+		if sonic.Unmarshal(se.Event.Data, &body) == nil && body.Code != nil && *body.Code >= 0 {
+			return geniex_sdk.SDKError(*body.Code)
+		}
+	}
+	return tagServerError(err)
 }
 
 var client openai.Client
@@ -125,6 +146,14 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 		ParseFile: modelType == geniex_sdk.ModelTypeVLM,
 		Verbose:   verbose,
 		TestMode:  testMode,
+		Reset: func() error {
+			history = nil
+			_, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
+				Messages: nil,
+				Model:    name,
+			})
+			return err
+		},
 		Run: func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			if len(images) > 0 || len(audios) > 0 {
 				contents := make([]openai.ChatCompletionContentPartUnionParam, 0)
@@ -213,7 +242,7 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 			profileData.DecodingSpeed = float64(profileData.GeneratedTokens) / float64(end.Sub(firstToken).Seconds())
 
 			if stream.Err() != nil {
-				return "", profileData, tagServerError(stream.Err())
+				return "", profileData, tagStreamError(stream.Err())
 			}
 
 			if len(acc.Choices) > 0 {
@@ -227,16 +256,8 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 	if len(prompt) > 0 || input != "" {
 		processor.GetPrompt = getPromptOrInput
 	} else {
-		repl := common.Repl{
-			Reset: func() error {
-				history = nil
-				_, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
-					Messages: nil,
-					Model:    name,
-				})
-				return err
-			},
-		}
+		repl := common.Repl{}
+		repl.Reset = processor.Reset
 		defer repl.Close()
 		processor.GetPrompt = repl.GetPrompt
 	}
