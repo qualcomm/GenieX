@@ -15,12 +15,99 @@
 package common
 
 import (
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
 )
+
+func TestProcessContextLengthExceeded(t *testing.T) {
+	cases := []struct {
+		name        string
+		runErr      error
+		resetErr    error
+		wantReset   int  // expected number of Reset calls
+		wantRuns    int  // expected number of Run calls
+		wantProcErr bool // Process should return a non-nil error
+	}{
+		{
+			name:      "context length exceeded resets and continues",
+			runErr:    geniex_sdk.ErrLlmTokenizationContextLength,
+			wantReset: 1,
+			wantRuns:  2, // first errors+resets, second returns nil then EOF
+		},
+		{
+			name:        "reset failure aborts the loop",
+			runErr:      geniex_sdk.ErrLlmTokenizationContextLength,
+			resetErr:    errors.New("reset boom"),
+			wantReset:   1,
+			wantRuns:    1,
+			wantProcErr: true,
+		},
+		{
+			name:        "unrelated error aborts without reset",
+			runErr:      errors.New("some other failure"),
+			wantReset:   0,
+			wantRuns:    1,
+			wantProcErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var resetCalls, runCalls int
+			firstRun := true
+
+			p := &Processor{
+				GetPrompt: func() (string, error) {
+					return "hi", nil
+				},
+				Run: func(_ string, _, _ []string, _ func(string) bool) (string, geniex_sdk.ProfileData, error) {
+					runCalls++
+					if firstRun {
+						firstRun = false
+						return "", geniex_sdk.ProfileData{}, tc.runErr
+					}
+					return "", geniex_sdk.ProfileData{}, nil
+				},
+				Reset: func() error {
+					resetCalls++
+					return tc.resetErr
+				},
+			}
+			// After a successful second round, stop the loop with EOF.
+			if tc.wantRuns > 1 {
+				prompts := 0
+				p.GetPrompt = func() (string, error) {
+					prompts++
+					if prompts > tc.wantRuns {
+						return "", io.EOF
+					}
+					return "hi", nil
+				}
+			}
+
+			err := p.Process()
+			if tc.wantProcErr && err == nil {
+				t.Fatalf("expected Process to return an error, got nil")
+			}
+			if !tc.wantProcErr && err != nil {
+				t.Fatalf("unexpected Process error: %v", err)
+			}
+			if resetCalls != tc.wantReset {
+				t.Errorf("reset calls = %d, want %d", resetCalls, tc.wantReset)
+			}
+			if runCalls != tc.wantRuns {
+				t.Errorf("run calls = %d, want %d", runCalls, tc.wantRuns)
+			}
+		})
+	}
+}
 
 func TestParseFiles(t *testing.T) {
 	tmp := t.TempDir()
