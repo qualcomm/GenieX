@@ -5,11 +5,11 @@
  *
  * geniex_benchmark — single-cell C inference benchmark, public-API only.
  *
- * Mirrors the Python harness in tests/benchmark/_runner.py:
- *   - same default prompt, max_new_tokens=128, temperature=0.0, seed=42
+ * Defaults:
+ *   - fixed default prompt, max_new_tokens=128, temperature=0.0, seed=42
  *   - 1 warmup + 3 measured runs (configurable)
  *   - llama_cpp prompts get a [warmup=i] / [run=i] suffix to bust KV cache
- *     between runs, matching _runner.py:82-83
+ *     between runs
  *   - per-cell aggregation: median / min / max for ttft_ms, prefill_tps,
  *     decode_tps; median-only for token counts
  *
@@ -42,7 +42,7 @@
 #include <dirent.h>
 #endif
 
-/* Default prompt mirrors tests/benchmark/_runner.py:28-31 verbatim. */
+/* Fixed default prompt for reproducible measured runs. */
 static const char* const DEFAULT_PROMPT =
     "Explain in three short sentences why the speed of light is the same "
     "in every inertial reference frame, and what that implies for time "
@@ -639,8 +639,8 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
             geniex_free(gout.full_text);
         }
         free(prompt);
-        /* Intentionally NOT calling geniex_llm_reset() between runs — matching
-         * tests/benchmark/_runner.py:87-103 which leaves the KV cache intact.
+        /* Intentionally NOT calling geniex_llm_reset() between runs — the KV
+         * cache is left intact.
          * The `[warmup=i]` / `[run=i]` suffix on the prompt is what differs
          * between runs and forces llama.cpp to actually run prefill instead
          * of short-circuiting on identical input (which would make

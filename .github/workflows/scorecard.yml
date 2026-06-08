@@ -34,7 +34,7 @@ jobs:
         env:
           PICK: ${{ github.event.inputs.device }}
         run: |
-          echo "matrix=$(jq -c . sdk/tests/benchmark/qdc/scorecard-models.json)" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(jq -c . sdk/benchmark/qdc/scorecard-models.json)" >> "$GITHUB_OUTPUT"
           all='["QCS9075M","SC8380XP","SC8480XP","SM8750","SM8850"]'
           devices=$([ -n "$PICK" ] && jq -cn --arg d "$PICK" '[$d]' || echo "$all")
           echo "devices=$devices" >> "$GITHUB_OUTPUT"
@@ -70,7 +70,7 @@ jobs:
           path: pkg-geniex
       - uses: ./.github/actions/install-qdc-sdk
       - run: |
-          python sdk/tests/benchmark/qdc/run_qdc_jobs.py \
+          python sdk/benchmark/qdc/run_qdc_jobs.py \
             --pkg-dir pkg-geniex \
             --device "${{ matrix.device }}" \
             --model-name "${{ matrix.model.name }}" \
@@ -101,6 +101,6 @@ jobs:
           pattern: scorecard-cells-${{ matrix.device }}-*
           path: cells
       - run: |
-          python sdk/tests/benchmark/qdc/run_qdc_jobs.py \
+          python sdk/benchmark/qdc/run_qdc_jobs.py \
             --device "${{ matrix.device }}" \
             --render-dir cells
