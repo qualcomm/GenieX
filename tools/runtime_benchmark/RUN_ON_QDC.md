@@ -109,9 +109,9 @@ smoke tests.
 | `--device-map`        | `auto`                                     | `device_map` for the geniex Python API: `auto`/`cpu`/`gpu`/`npu`/`hybrid`/`<plugin>:<device>`. |
 | `--out`               | `results/<slug>.csv`                       | Override the CSV path (the answers.json is always derived from it).    |
 | `--max-tokens`        | 0 (no cap)                                 | Cap on geniex tokens per prompt. `0` = run to natural EOS / context stop, like genie. Set positive to truncate. |
+| `--temperature`       | from `genie_config.json`                   | Override the geniex sampling temperature. By default the geniex side mirrors the model's `genie_config.json` sampler (`temp`/`top-k`/`top-p`/`seed`) so both runtimes decode identically; pass a value to force the temperature only. A thinking model (e.g. Qwen3-4B) only emits `<think>` when temperature > 0. |
 | `--timeout`           | 600                                        | Per-prompt timeout in seconds, for both the in-process geniex `generate` and the `genie-t2t-run` subprocess. |
-| `--bos-token`         | auto per model                             | BOS token prepended to the geniex chat-templated prompt (e.g. `<\|endoftext\|>` is auto-selected for Qwen3-4B-2507). Pass a string to force one. |
-| `--no-bos`            | off                                        | Disable BOS-token prepending on the geniex side even for models that would otherwise get one. |
+| `--bos-token`         | off                                        | BOS token to prepend to the geniex chat-templated prompt. Off by default (geniex uses the model's own chat template). Pass a string (e.g. `<\|endoftext\|>`) to force a leading BOS for a QAIRT bundle whose context-binary expects one but whose chat template doesn't emit it. |
 | `--limit N`           | 0 (all)                                    | Run only the first N prompts — handy for smoke tests.                  |
 | `--resume`            | off                                        | Skip prompts whose `id` already appears in `--out`. Use to continue.   |
 | `--skip-genie`        | off                                        | Skip the genie-t2t-run pass; only run geniex. Default `--out` becomes `results/<slug>_geniex_only.csv`. See "Geniex-only re-runs" below. |

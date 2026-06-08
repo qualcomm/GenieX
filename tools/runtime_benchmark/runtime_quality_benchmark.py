@@ -7,9 +7,13 @@ reset between prompts so each answer is independent. This is much faster than
 shelling out per prompt and exercises the same chat-template + generation path
 the bindings ship to users. For each prompt we build a [system, user] message
 list, call the model's own `apply_chat_template` (so geniex applies the real
-chat template, BOS handling and default flags), then call `generate`. The
-genie side still shells out to `genie-t2t-run` (which has no Python API and
-does no chat templating, so it gets a hand-built formatted prompt).
+chat template, BOS handling and default flags), then call `generate` with the
+sampler mirrored from the model's `genie_config.json` (temp/top-k/top-p/seed)
+so the geniex side decodes the same way the genie side does — a fair
+comparison, and the reason thinking models (e.g. Qwen3-4B) emit their `<think>`
+block (greedy decoding suppresses it). The genie side still shells out to
+`genie-t2t-run` (which has no Python API and does no chat templating, so it
+gets a hand-built formatted prompt).
 
 Usage (minimal — runs the bundled prompt suite, writes results into ./results/):
     python runtime_quality_benchmark.py --geniex-model qualcomm/Qwen3-4B-Instruct-2507
@@ -140,6 +144,51 @@ def detect_template(genie_config: dict) -> str:
     if bos == 128000:
         return "llama3"
     return "qwen"
+
+
+# ---------------------------------------------------------------------------
+# Sampler
+# ---------------------------------------------------------------------------
+
+# genie-t2t-run reads its sampler from genie_config.json's `dialog.sampler`
+# block (temp / top-k / top-p / seed). The geniex side used to fall through to
+# greedy (temperature 0.0), which (a) made it an unfair comparison against the
+# sampled genie side and (b) suppressed thinking entirely on reasoning models
+# like Qwen3-4B — at temp 0 they skip the `<think>` block. We mirror genie's
+# sampler onto the geniex `generate` call so both runtimes decode the same way.
+
+
+@dataclass
+class Sampler:
+    """Decoding params shared by both runtimes. Field names match geniex's
+    ``generate`` kwargs; :meth:`from_genie_config` maps genie's hyphenated keys
+    (``temp`` / ``top-k`` / ``top-p``) onto them."""
+    temperature: float = 0.8
+    top_k: int = 40
+    top_p: float = 0.95
+    seed: int = 42
+
+    @classmethod
+    def from_genie_config(cls, genie_config: dict) -> "Sampler":
+        """Build a Sampler from genie_config.json's ``dialog.sampler`` block,
+        falling back to this class's defaults for any missing field."""
+        s = genie_config.get("dialog", {}).get("sampler", {}) or {}
+        d = cls()
+        return cls(
+            temperature=float(s.get("temp", d.temperature)),
+            top_k=int(s.get("top-k", d.top_k)),
+            top_p=float(s.get("top-p", d.top_p)),
+            seed=int(s.get("seed", d.seed)),
+        )
+
+    def generate_kwargs(self) -> dict:
+        """The subset passed to ``model.generate`` (geniex kwarg names)."""
+        return {
+            "temperature": self.temperature,
+            "top_k": self.top_k,
+            "top_p": self.top_p,
+            "seed": self.seed,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -318,37 +367,6 @@ def _fmt_tps(v: float | None) -> str:
     return f"{v:5.1f}t/s" if v is not None else "    -   "
 
 
-# Models whose tokenizer/chat-template does NOT emit a BOS token but whose
-# QAIRT bundle expects one prepended to the formatted prompt. For these we
-# prepend `bos_token` (below) to the chat-templated string before generating.
-# Matched as a case-insensitive substring against the geniex model name.
-#
-# Qwen3-*-2507 is the known case: its chat template starts straight at
-# `<|im_start|>` with no BOS, but the QAIRT context-binary was prepared with
-# `<|endoftext|>` (id 151643) as a leading BOS, so geniex's NPU path answers
-# noticeably better when we add it back. genie-t2t-run is unaffected (it gets
-# the hand-built template, and its bos-token handling lives in genie_config).
-BOS_PREPEND_RULES = [
-    ("qwen3-4b-2507", "<|endoftext|>"),
-]
-
-
-def _bos_token_for_model(geniex_model: str) -> str | None:
-    """Return the BOS string to prepend for ``geniex_model``, or ``None``.
-
-    Normalises the model name (drop the org prefix, lower-case, collapse the
-    'instruct'/'thinking' infixes) so both ``qualcomm/Qwen3-4B-Instruct-2507``
-    and a bare ``Qwen3-4B-2507`` match the same rule."""
-    name = geniex_model.rsplit("/", 1)[-1].lower()
-    # Collapse the common variant infixes so "qwen3-4b-instruct-2507" and
-    # "qwen3-4b-2507" both contain the "qwen3-4b-2507" needle.
-    collapsed = name.replace("-instruct", "").replace("-thinking", "")
-    for needle, bos in BOS_PREPEND_RULES:
-        if needle in collapsed or needle in name:
-            return bos
-    return None
-
-
 # The geniex side has no native "unlimited" max_tokens: the SDK treats
 # max_tokens <= 0 as "use a small default" (128/512), not "no cap". To match
 # the genie side — which has no token cap and stops only on EOS / context
@@ -366,9 +384,10 @@ class GeniexRunner:
     out to the CLI. The model is loaded a single time in :meth:`__init__` and
     every :meth:`run` call resets the KV cache, applies the model's own chat
     template to a ``[system, user]`` message list, optionally prepends a BOS
-    token (see :func:`_bos_token_for_model`), then generates. This mirrors the
-    surface the bindings ship (same template + default flags) while being far
-    faster than a per-prompt subprocess.
+    token (only when one is passed via ``--bos-token``), then generates with
+    the shared :class:`Sampler` (mirrored from genie_config.json so both
+    runtimes decode identically). This mirrors the surface the bindings ship
+    while being far faster than a per-prompt subprocess.
     """
 
     def __init__(
@@ -377,6 +396,7 @@ class GeniexRunner:
         quant: str | None,
         device: str | None,
         bos_token: str | None,
+        sampler: Sampler,
     ) -> None:
         try:
             import geniex  # noqa: PLC0415 — imported lazily so --skip side still runs
@@ -389,6 +409,7 @@ class GeniexRunner:
         self._geniex = geniex
         self.model_name = geniex_model
         self.bos_token = bos_token
+        self.sampler = sampler
         # device_map='auto' lets the SDK pick its per-plugin default (npu for
         # QAIRT, hybrid for llama_cpp) — same default the CLI applies when no
         # -d is passed. A non-None device overrides that.
@@ -434,7 +455,7 @@ class GeniexRunner:
         try:
             # geniex applies the model's OWN chat template here — same BOS
             # handling and default flags as `geniex infer`. We then optionally
-            # prepend a model-specific BOS token (see _bos_token_for_model).
+            # prepend a BOS token, but only when one was passed via --bos-token.
             raw_prompt = self.model.tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
@@ -452,7 +473,12 @@ class GeniexRunner:
         # CLI uses on Ctrl-C). We drain chunks with a deadline and cancel if we
         # blow past it, so a wedged prompt can't stall the whole suite.
         try:
-            streamer = self.model.generate(raw_prompt, max_new_tokens=effective_max_tokens, stream=True)
+            streamer = self.model.generate(
+                raw_prompt,
+                max_new_tokens=effective_max_tokens,
+                stream=True,
+                **self.sampler.generate_kwargs(),
+            )
         except Exception as e:  # noqa: BLE001
             return RunResult(answer="", seconds=time.time() - start, error=str(e))
 
@@ -720,16 +746,21 @@ def main() -> int:
     p.add_argument(
         "--bos-token",
         default=None,
-        help="Override the BOS token prepended to the geniex chat-templated "
-        "prompt. By default the script auto-selects per model (e.g. "
-        "'<|endoftext|>' for Qwen3-4B-2507); pass a string to force a "
-        "specific token, or use --no-bos to disable prepending entirely.",
+        help="BOS token to prepend to the geniex chat-templated prompt. Off by "
+        "default — the geniex side relies on the model's own chat template. "
+        "Pass a string (e.g. '<|endoftext|>') to force a leading BOS for a "
+        "QAIRT bundle whose context-binary expects one but whose chat template "
+        "doesn't emit it.",
     )
     p.add_argument(
-        "--no-bos",
-        action="store_true",
-        help="Disable BOS-token prepending on the geniex side even for models "
-        "that would otherwise get one (see --bos-token).",
+        "--temperature",
+        type=float,
+        default=None,
+        help="Override the geniex sampling temperature. By default the geniex "
+        "side mirrors the model's genie_config.json sampler (temp/top-k/top-p/"
+        "seed) so both runtimes decode identically; pass a value to force the "
+        "temperature only (top-k/top-p/seed stay as in genie_config). Note: a "
+        "thinking model (e.g. Qwen3-4B) only emits <think> when temperature>0.",
     )
     p.add_argument(
         "--limit",
@@ -798,16 +829,23 @@ def main() -> int:
     template = TEMPLATES[template_key]
     print(f"Using chat template: {template_key}", flush=True)
 
-    # Resolve the BOS token to prepend on the geniex side. --no-bos disables it;
-    # --bos-token forces a value; otherwise auto-select per model name.
-    if args.no_bos:
-        bos_token = None
-    elif args.bos_token is not None:
-        bos_token = args.bos_token
-    else:
-        bos_token = _bos_token_for_model(args.geniex_model)
+    # BOS token to prepend on the geniex side. Off unless the user passes
+    # --bos-token; otherwise the geniex side relies on the model's own chat
+    # template (the same path the bindings ship to users).
+    bos_token = args.bos_token
     if bos_token:
         print(f"geniex: prepending BOS token {bos_token!r} to the templated prompt", flush=True)
+
+    # Sampler for the geniex side, mirrored from the model's genie_config.json
+    # so both runtimes decode the same way (--temperature overrides temp only).
+    sampler = Sampler.from_genie_config(genie_cfg)
+    if args.temperature is not None:
+        sampler.temperature = args.temperature
+    print(
+        f"geniex sampler: temp={sampler.temperature} top_k={sampler.top_k} "
+        f"top_p={sampler.top_p} seed={sampler.seed}",
+        flush=True,
+    )
 
     done_ids: set[int] = set()
     rows: list[dict] = []
@@ -868,7 +906,7 @@ def main() -> int:
         target = args.geniex_model + (f":{args.quant}" if args.quant else "")
         device_msg = f", device={args.device}" if args.device else ""
         print(f"Loading geniex model `{target}` in-process (pybind{device_msg}) ...", flush=True)
-        runner = GeniexRunner(args.geniex_model, args.quant, args.device, bos_token)
+        runner = GeniexRunner(args.geniex_model, args.quant, args.device, bos_token, sampler)
         print(f"  loaded ({runner.where})", flush=True)
 
     try:
