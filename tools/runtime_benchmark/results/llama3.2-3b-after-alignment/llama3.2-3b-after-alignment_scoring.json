@@ -1,0 +1,602 @@
+[
+  {
+    "id": 1,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "After-alignment: clean, accurate; trampoline analogy correct. Prior geniex (7) fabricated 'gravitational binding' as a second type of gravity -- fixed."
+  },
+  {
+    "id": 2,
+    "genie_score": 7,
+    "geniex_score": 10,
+    "note": "Accurate; 'banana-shaped ears' is a real llama trait. No Suri/Huacaya fleece swap (prior geniex error, 7) -- fixed."
+  },
+  {
+    "id": 3,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Correct prokaryotic/eukaryotic split; animal/plant/fungal listed as valid eukaryotes. Opening loosely calls the cell 'a semi-permeable membrane' but substance is sound. Prior 'glycolysis, glycolysis' repeat gone."
+  },
+  {
+    "id": 4,
+    "genie_score": 7,
+    "geniex_score": 10,
+    "note": "Accurate latte description; no inverted espresso:milk ratio."
+  },
+  {
+    "id": 5,
+    "genie_score": 7,
+    "geniex_score": 7,
+    "note": "Sound, but inverts program/data memory (says program=RAM, data=ROM; actually program=ROM/flash, data=RAM) and lists 'Intel Core' as a microcontroller / Cortex-M as multi-core."
+  },
+  {
+    "id": 6,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Accurate; Nobel 1921, relativity, E=mc^2, photoelectric effect all correct."
+  },
+  {
+    "id": 7,
+    "genie_score": 7,
+    "geniex_score": 7,
+    "note": "Neptune correct, but fabricates a '1989 aphelion' record date (1989 was the Voyager 2 flyby; Neptune's aphelion is not then)."
+  },
+  {
+    "id": 8,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Accurate Qualcomm description; the fabricated founders that sank the prior geniex run (2) are gone."
+  },
+  {
+    "id": 9,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Reasonable; no fabricated 'Google Cookie Database' with invented stats (prior geniex error, 2) -- fixed."
+  },
+  {
+    "id": 10,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Accurate; colors tied to altitude/energy without the altitude/color inversion the prior geniex run made (7)."
+  },
+  {
+    "id": 11,
+    "genie_score": 10,
+    "geniex_score": 7,
+    "note": "Mostly correct, but calls chemosynthesis 'a form of photosynthesis' (it is a distinct process) and lists lichens as a photosynthesis type."
+  },
+  {
+    "id": 12,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Correct: Ptolemy V, 196 BC, three scripts, Champollion. No 'Greek as official language' error (prior geniex, 7)."
+  },
+  {
+    "id": 13,
+    "genie_score": 2,
+    "geniex_score": 10,
+    "note": "Accurate virus/bacterium contrast; does not give bacteria a nucleus/mitochondria."
+  },
+  {
+    "id": 14,
+    "genie_score": 7,
+    "geniex_score": 7,
+    "note": "Process broadly correct, but mislabels heavy-water reactors as 'graphite moderated' (distinct moderator types)."
+  },
+  {
+    "id": 15,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Accurate Silk Road overview; Han origin, Hexi Corridor, trade goods."
+  },
+  {
+    "id": 16,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "210, correct."
+  },
+  {
+    "id": 17,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "150 miles, correct."
+  },
+  {
+    "id": 18,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "$36, correct."
+  },
+  {
+    "id": 19,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "6x+2, correct."
+  },
+  {
+    "id": 20,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "1/2, correct."
+  },
+  {
+    "id": 21,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "48 cm^2, correct."
+  },
+  {
+    "id": 22,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "~$1157.63, correct."
+  },
+  {
+    "id": 23,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "x=8, correct."
+  },
+  {
+    "id": 24,
+    "genie_score": 10,
+    "geniex_score": 2,
+    "note": "REGRESSION: GCD(84,126)=42, but the answer drops 42 from both factor lists and confidently concludes 21. Prior geniex got 42 (10)."
+  },
+  {
+    "id": 25,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "width=8 cm, correct."
+  },
+  {
+    "id": 26,
+    "genie_score": 2,
+    "geniex_score": 2,
+    "note": "REGRESSION: affirms the invalid syllogism ('some roses fade quickly') -- undistributed middle. Prior geniex correctly rejected it (7); genie also scored 2 here for the same affirmation."
+  },
+  {
+    "id": 27,
+    "genie_score": 2,
+    "geniex_score": 2,
+    "note": "Three-boxes puzzle: concludes a box is 'empty' (no empty box exists) -- internally inconsistent, wrong."
+  },
+  {
+    "id": 28,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: correctly answers 9 sheep with correct reasoning. Prior geniex answered 8 (2)."
+  },
+  {
+    "id": 29,
+    "genie_score": 7,
+    "geniex_score": 7,
+    "note": "Reaches 'not possible' but via a confused time-travel/bootstrap-paradox tangent that misidentifies the classic relational riddle."
+  },
+  {
+    "id": 30,
+    "genie_score": 2,
+    "geniex_score": 10,
+    "note": "FIXED: correctly answers 5 minutes. Prior geniex said 0.25 minutes (2)."
+  },
+  {
+    "id": 31,
+    "genie_score": 2,
+    "geniex_score": 2,
+    "note": "Two-ropes puzzle: method is nonsensical (assumes even burning by length) and never reaches 45 min."
+  },
+  {
+    "id": 32,
+    "genie_score": 2,
+    "geniex_score": 7,
+    "note": "Improved: identifies the $2 tip as the source of the bogus $74 sum and that there is no real missing dollar, though the path is muddled. Prior geniex asserted 'the missing dollar is $1' (2)."
+  },
+  {
+    "id": 33,
+    "genie_score": 2,
+    "geniex_score": 10,
+    "note": "Correct palindrome function; bracket properly closed."
+  },
+  {
+    "id": 34,
+    "genie_score": 7,
+    "geniex_score": 7,
+    "note": "REGRESSION: correct code, but explanation claims 'space complexity O(1) ... dictionary has a fixed size' -- the dict is O(n). Prior geniex omitted this claim (10)."
+  },
+  {
+    "id": 35,
+    "genie_score": 10,
+    "geniex_score": 7,
+    "note": "Two-pointer solution requires a SORTED list (docstring even says so), but the prompt's list is not sorted -- wrong indices for unsorted input. Prior geniex used a correct hashmap (10)."
+  },
+  {
+    "id": 36,
+    "genie_score": 10,
+    "geniex_score": 7,
+    "note": "REGRESSION: pop()/peek() call self.is_empty(), but no is_empty method is defined -- raises AttributeError. Prior geniex's stack ran (10)."
+  },
+  {
+    "id": 37,
+    "genie_score": 2,
+    "geniex_score": 10,
+    "note": "Correct SUM + GROUP BY + ORDER BY DESC + LIMIT 5."
+  },
+  {
+    "id": 38,
+    "genie_score": 7,
+    "geniex_score": 10,
+    "note": "Correct recursive flatten; only defect is a missing ']' inside an output COMMENT, not the runnable code."
+  },
+  {
+    "id": 39,
+    "genie_score": 10,
+    "geniex_score": 7,
+    "note": "Reverse-iteration roman_to_int has a logic bug: comparison/formula are inverted, so e.g. 'IV' computes 6 not 4. Claimed example outputs are wrong."
+  },
+  {
+    "id": 40,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: complete story with a twist (sister documenting her life) and resolution. Prior geniex cut off (7)."
+  },
+  {
+    "id": 41,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Coherent rainy-day poem; the awkward 'mist and repeat' line from the prior geniex run (7) is gone."
+  },
+  {
+    "id": 42,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Coherent, complete robot-emotion story."
+  },
+  {
+    "id": 43,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Heartfelt, well-formed letter."
+  },
+  {
+    "id": 44,
+    "genie_score": 7,
+    "geniex_score": 7,
+    "note": "Speaker tags drift: 'Maya' -> 'Mayaya'/'Mayya' mid-dialogue (same class of name-drift as prior, 7)."
+  },
+  {
+    "id": 45,
+    "genie_score": 10,
+    "geniex_score": 7,
+    "note": "Ocean haiku, but middle line 'Endless horizon meets the sky' is 8 syllables (5-8-5, not 5-7-5)."
+  },
+  {
+    "id": 46,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Atmospheric, complete mystery opening."
+  },
+  {
+    "id": 47,
+    "genie_score": 10,
+    "geniex_score": 7,
+    "note": "Limerick names the cat 'Pete' then uses 'She'd'/'her' (gender mismatch); 'a twinkle in air' is awkward."
+  },
+  {
+    "id": 48,
+    "genie_score": 7,
+    "geniex_score": 10,
+    "note": "FIXED: 'Bonjour, comment allez-vous?' is correct, idiomatic French. Prior geniex's 'Bonne matinee' (a parting phrase) scored 2."
+  },
+  {
+    "id": 49,
+    "genie_score": 7,
+    "geniex_score": 10,
+    "note": "FIXED: 'Te amo'/'Te quiero' with correct nuance; the encoding-garbled 'mAIa' from the prior geniex run (7) is gone."
+  },
+  {
+    "id": 50,
+    "genie_score": 2,
+    "geniex_score": 2,
+    "note": "REGRESSION: invents the non-word 'Nachtracht' and broken phrasing ('heil dir, gute Nachtracht'). Standard is 'Gute Nacht und suesse Traeume'. Prior geniex's 'Ein gutes Nacht' was only mildly wrong (7)."
+  },
+  {
+    "id": 51,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: 'stazione ferroviaria piu vicina' is idiomatic; the prior geniex 'stazione della ferrovia' (7) is gone."
+  },
+  {
+    "id": 52,
+    "genie_score": 2,
+    "geniex_score": 2,
+    "note": "Fails the translation: gives no actual Japanese, only nonsense romaji ('Kyu + kare + nara') and wrong glosses."
+  },
+  {
+    "id": 53,
+    "genie_score": 7,
+    "geniex_score": 10,
+    "note": "'Scientia potestas est' is correct."
+  },
+  {
+    "id": 54,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: complete, coherent social-media article. Prior geniex cut off (7)."
+  },
+  {
+    "id": 55,
+    "genie_score": 10,
+    "geniex_score": 7,
+    "note": "Correctly attributes Pavlov/Skinner (prior geniex's Watson error, 7, is fixed), but the US/UR/CS/CR example mislabels the bell as US and food as UR."
+  },
+  {
+    "id": 56,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Exactly three paragraphs; accurate."
+  },
+  {
+    "id": 57,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: complete capitalism/socialism comparison with hybrid models. Prior geniex cut off (7)."
+  },
+  {
+    "id": 58,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Complete, balanced UBI arguments."
+  },
+  {
+    "id": 59,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Exactly 5 numbered benefits, accurate (minor 'Management and Management' header dup)."
+  },
+  {
+    "id": 60,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Within 3 sentences; accurate qubit explanation."
+  },
+  {
+    "id": 61,
+    "genie_score": 2,
+    "geniex_score": 2,
+    "note": "Meets the consonant-only constraint, but the text is alliterative gibberish that never describes the water cycle -- garbled content."
+  },
+  {
+    "id": 62,
+    "genie_score": 7,
+    "geniex_score": 7,
+    "note": "~48 words, not exactly 50; content fine. (Prior geniex ~49, also 7.)"
+  },
+  {
+    "id": 63,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Correct 3-3-3 bulleted list with category headers; all classifications right."
+  },
+  {
+    "id": 64,
+    "genie_score": 7,
+    "geniex_score": 7,
+    "note": "Several Yosemite errors, notably placing giant sequoias in Tuolumne Meadows (they are in the groves) and a short-drive claim for Tioga Road."
+  },
+  {
+    "id": 65,
+    "genie_score": 7,
+    "geniex_score": 7,
+    "note": "Improved: complete itinerary (prior geniex cut off + put Scrovegni in the Uffizi, 2), but places Castello Sforzesco (Milan) in Rome."
+  },
+  {
+    "id": 66,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: complete home-workout routines. Prior geniex cut off (7)."
+  },
+  {
+    "id": 67,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: complete; recommends real books (no fabricated 'Frederic Kay', the prior geniex error, 7)."
+  },
+  {
+    "id": 68,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: complete; uses real layouts (L-shape/U-shape/galley) -- the fabricated 'L-galley'/'U-galley' (prior, 7) are gone."
+  },
+  {
+    "id": 69,
+    "genie_score": 7,
+    "geniex_score": 10,
+    "note": "FIXED: real AI trends; the fabricated 'Lagomancy' (prior geniex, 2) is gone (minor 'Fairness and Fairness' dup)."
+  },
+  {
+    "id": 70,
+    "genie_score": 7,
+    "geniex_score": 10,
+    "note": "FIXED: complete investment options. Prior geniex cut off (7)."
+  },
+  {
+    "id": 71,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Coherent, complete toddler-sleep tips."
+  },
+  {
+    "id": 72,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Coherent, complete puppy-care tips."
+  },
+  {
+    "id": 73,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Coherent, complete WFH focus strategies."
+  },
+  {
+    "id": 74,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "All six classified defensibly (tomato as culinary vegetable; avocado/strawberry as fruit)."
+  },
+  {
+    "id": 75,
+    "genie_score": 10,
+    "geniex_score": 7,
+    "note": "Self-contradictory: opens 'leaning slightly positive' then concludes 'slightly negative sentiment'. Prior geniex was consistent (10)."
+  },
+  {
+    "id": 76,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Correct extraction of names/dates/locations."
+  },
+  {
+    "id": 77,
+    "genie_score": 2,
+    "geniex_score": 2,
+    "note": "REGRESSION: miscategorizes Eagle as 'Land' (should be Air); only Bat is in Air. Prior geniex categorized correctly (10); genie made this same Eagle error (2)."
+  },
+  {
+    "id": 78,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Delivers the impasta joke."
+  },
+  {
+    "id": 79,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Honey-never-spoils fact is correct."
+  },
+  {
+    "id": 80,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Useful, coherent glass-jar uses."
+  },
+  {
+    "id": 81,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: complete list of story morals. Prior geniex cut off (7)."
+  },
+  {
+    "id": 82,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Coherent, accurate (Athens, Pericles 495-429 BCE)."
+  },
+  {
+    "id": 83,
+    "genie_score": 7,
+    "geniex_score": 10,
+    "note": "FIXED: complete chocolate-cake recipe + frosting. Prior geniex cut off (7)."
+  },
+  {
+    "id": 84,
+    "genie_score": 10,
+    "geniex_score": 7,
+    "note": "Claims Parmesan is 'traditional' on a Margherita (authentic Margherita is just mozzarella/basil/tomato); sugar in sauce also non-traditional."
+  },
+  {
+    "id": 85,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: correct, complete carbonara; the misleading 'Melt the eggs' step (prior, 7) is gone (one odd 'over-drink the pasta water' tip)."
+  },
+  {
+    "id": 86,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Coherent egg+onion dish (caramelized onions + scrambled eggs)."
+  },
+  {
+    "id": 87,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: complete flat-tire steps. Prior geniex cut off (7)."
+  },
+  {
+    "id": 88,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Within $300 with venue, food, and entertainment; food sub-items sum to $100."
+  },
+  {
+    "id": 89,
+    "genie_score": 10,
+    "geniex_score": 7,
+    "note": "Complete (prior cut off, 7), but the Python helper has a syntax error ('range(len(matrix)]]') and the '3-Partition' algorithm is muddled."
+  },
+  {
+    "id": 90,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: complete root-cause/solution framework. Prior geniex cut off (7)."
+  },
+  {
+    "id": 91,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: complete 500-error debugging walkthrough. Prior geniex cut off (7)."
+  },
+  {
+    "id": 92,
+    "genie_score": 7,
+    "geniex_score": 7,
+    "note": "REGRESSION: fabricates 'two types of gravitation: local and global' -- not a real GR distinction. Prior geniex (10) had no such error."
+  },
+  {
+    "id": 93,
+    "genie_score": 7,
+    "geniex_score": 7,
+    "note": "Acronym wrong ('Clustered Regularly Spaced Palindromes'), plus 'cut-and-suck system', 'the joke part', and HR using the gRNA as template -- multiple errors (prior geniex also 7 for the acronym)."
+  },
+  {
+    "id": 94,
+    "genie_score": 10,
+    "geniex_score": 7,
+    "note": "Fixes the prior 'Supervervised' typo, but claims ML uses labeled data while DL uses 'unlabeled or semi-labeled' -- incorrect (DL commonly uses large labeled sets)."
+  },
+  {
+    "id": 95,
+    "genie_score": 10,
+    "geniex_score": 7,
+    "note": "REGRESSION: calls vaccine-induced antibodies 'passive immunity ... providing herd immunity' -- vaccines give active immunity; passive immunity is pre-formed antibodies. Prior geniex (10) was clean."
+  },
+  {
+    "id": 96,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Accurate blockchain + security explanation."
+  },
+  {
+    "id": 97,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "FIXED: cleanly continues 21,34,55,89,144; the prior misleading wrap-up (7) is gone."
+  },
+  {
+    "id": 98,
+    "genie_score": 2,
+    "geniex_score": 2,
+    "note": "Wrong passive: 'The yard was crossed by the cat, which was chased by the dog' -- should be 'The cat was chased across the yard by the dog.' Both runtimes 2 here."
+  },
+  {
+    "id": 99,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Three valid Python/C++ differences."
+  },
+  {
+    "id": 100,
+    "genie_score": 10,
+    "geniex_score": 10,
+    "note": "Coherent waiter/restaurant API analogy."
+  }
+]
