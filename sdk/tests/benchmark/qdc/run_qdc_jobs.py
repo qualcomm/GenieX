@@ -26,6 +26,7 @@ import argparse
 import json
 import logging
 import os
+import random
 import shutil
 import subprocess
 import tempfile
@@ -55,6 +56,9 @@ log = logging.getLogger(__name__)
 
 POLL_INTERVAL = 30
 LOG_UPLOAD_TIMEOUT = 600
+SUBMIT_RETRY_BUDGET = 3600
+SUBMIT_BACKOFF_BASE = 30
+SUBMIT_BACKOFF_CAP = 300
 HERE = Path(__file__).parent
 
 AIHUB_BASE = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models"
@@ -62,7 +66,6 @@ AIHUB_VERSION = "v0.52.0"
 CHIPSET = {
     "QCS9075M": "qualcomm-qcs9075",
     "SC8380XP": "qualcomm-snapdragon-x-elite",
-    "SC8480XP": "qualcomm-snapdragon-x2-elite",
     "SM8750": "qualcomm-snapdragon-8-elite",
     "SM8850": "qualcomm-snapdragon-8-elite-gen5",
 }
@@ -178,6 +181,52 @@ BUILDERS = {
     "windows": build_windows_artifact,
     "android": build_android_artifact,
 }
+
+
+# A QDC key allows a fixed number of pending jobs; over it, submit returns
+# 400 "User <x> already has N pending jobs". Match that so we back off instead
+# of crashing; the other hints cover adjacent capacity/quota phrasings.
+_QUOTA_HINTS = (
+    "pending jobs",
+    "too many",
+    "quota",
+    "limit",
+    "capacity",
+)
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return any(h in msg for h in _QUOTA_HINTS)
+
+
+def submit_with_retry(client, **submit_kwargs) -> str:
+    # All max-parallel runners share the key's pending-job quota; instead of
+    # crashing when it's full, back off (with jitter so the runners don't retry
+    # in lockstep) until a slot frees up or the budget runs out.
+    elapsed = 0
+    attempt = 0
+    while True:
+        try:
+            return qdc_api.submit_job(public_api_client=client, **submit_kwargs)
+        except Exception as exc:
+            if not _is_quota_error(exc):
+                raise
+            base = min(SUBMIT_BACKOFF_CAP, SUBMIT_BACKOFF_BASE * 2**attempt)
+            sleep = base + random.uniform(0, base)
+            if elapsed + sleep > SUBMIT_RETRY_BUDGET:
+                raise
+            log.warning(
+                "submit hit pending-job quota (attempt %d, elapsed %ds): %s; "
+                "retrying in %.0fs",
+                attempt + 1,
+                elapsed,
+                exc,
+                sleep,
+            )
+            time.sleep(sleep)
+            elapsed += sleep
+            attempt += 1
 
 
 def wait_for_job(client, job_id: str, timeout: int) -> str:
@@ -335,8 +384,8 @@ def main() -> int:
             "windows": TestFramework.POWERSHELL,
             "android": TestFramework.APPIUM,
         }
-        job_id = qdc_api.submit_job(
-            public_api_client=client,
+        job_id = submit_with_retry(
+            client,
             target_id=target_id,
             job_name=f"geniex-bench-{args.device}"[:32],
             external_job_id=None,
