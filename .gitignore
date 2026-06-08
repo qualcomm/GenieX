@@ -4,6 +4,8 @@ venv/
 .ccache
 .agents/
 .cache/
+__pycache__/
+*.pyc
 
 # Claude Code: track shared config, ignore per-user overrides.
 .claude/settings.local.json

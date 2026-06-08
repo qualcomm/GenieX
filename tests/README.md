@@ -7,7 +7,7 @@ binding so the suite doubles as a public-surface contract check.
 tests/
 ├── api/                   # SDK metadata APIs (no model required)
 ├── plugins/
-│   ├── llama_cpp/         # LLM + VLM × {cpu, gpu, npu, hybrid}
+│   ├── llama_cpp/         # LLM + VLM × {cpu, npu, hybrid}
 │   └── qairt/             # LLM + VLM × {npu}
 ├── cli/                   # Bazel-driven Go CLI black-box tests (separate)
 ├── conftest.py            # Top-level fixtures (init, model paths, image)
@@ -23,12 +23,12 @@ The Go CLI tests under `tests/cli/` are excluded from pytest discovery
 | Plugin    | Device      | LLM | VLM |
 |-----------|-------------|-----|-----|
 | llama_cpp | `cpu`       | ✅  | ✅  |
-| llama_cpp | `gpu`       | ✅  | ✅  |
 | llama_cpp | `npu`       | ✅  | ✅  |
 | llama_cpp | `hybrid`    | ✅  | ✅  |
 | qairt     | `npu`       | ✅  | ✅  |
 
-= 10 generation cells, plus the API subset.
+= 8 generation cells, plus the API subset. The `gpu` (GPUOpenCL/Adreno)
+alias is excluded — it isn't in the production scorecard matrix either.
 
 The conftest auto-tags items with markers driven by their location and
 `device_map` parameter, so CI selects shards via `-m`:
@@ -39,17 +39,15 @@ The conftest auto-tags items with markers driven by their location and
 | `llama_cpp`     | items under `tests/plugins/llama_cpp/`                   |
 | `qairt`         | items under `tests/plugins/qairt/`                       |
 | `device_cpu`    | parametrised with `device_map='cpu'`                     |
-| `device_gpu`    | parametrised with `device_map='gpu'`                     |
 | `device_npu`    | parametrised with `device_map='npu'`                     |
 | `device_hybrid` | parametrised with `device_map='hybrid'`                  |
-| `snapdragon`    | any of `gpu`, `npu`, `hybrid`, or `qairt` (auto-applied) |
+| `snapdragon`    | any of `npu`, `hybrid`, or `qairt` (auto-applied)        |
 | `llm` / `vlm`   | applied per-module via `pytestmark`                      |
 
 `snapdragon`-marked items skip automatically unless
 `GENIEX_DEVICE_TEST=1` is set **and** the host is a Snapdragon machine.
-QAIRT models are not auto-pulled; populate the cache once with
-`geniex-py pull aihub/qwen3_4b` (and the VLM equivalent) before running
-the device shards.
+QAIRT models are pulled on demand from AI Hub (like the llama_cpp models
+from HF), so the device shards need network access but no manual pre-pull.
 
 ## Running
 
@@ -74,10 +72,15 @@ GENIEX_DEVICE_TEST=1 pytest tests -m qairt
 
 ## CI
 
-[.github/workflows/test.yml](../.github/workflows/test.yml) builds the
-SDK and runs the API + `llama_cpp` CPU shards on `windows-arm64` for
-every PR. Future Snapdragon-runner shards drop in by adding a job that
-filters on `-m snapdragon` and provides AI Hub credentials.
+GitHub runners run only the model-free `api` shard
+([.github/workflows/_test.yml](../.github/workflows/_test.yml)), since they
+have no Snapdragon hardware. The model-running cells (`llama_cpp` / `qairt`
+across every device) run on a real QDC Android phone, added to the PR graph
+by [pr-check.yml](../.github/workflows/pr-check.yml) via the reusable
+[_qdc-pytest.yml](../.github/workflows/_qdc-pytest.yml) (after build-sdk, so
+the SDK artifact is shared). Its harness under [qdc/](qdc/) reuses the
+benchmark's QDC submit/poll/collect plumbing and the
+[android/](android/) adb scripts to drive the device.
 
 ## Boundary with `bindings/python/tests/`
 

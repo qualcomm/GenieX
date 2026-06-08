@@ -163,11 +163,11 @@ def submit_and_wait(
 def download_log_members(
     client, job_id: str, tmp: Path, want: Callable[[str], bool]
 ) -> list[tuple[str, bytes]]:
-    """Return (member_name, bytes) for every zipped log member matching ``want``.
+    """Return (member_name, bytes) for every collected log member matching ``want``.
 
-    ``want`` is applied both to the QDC log-file name and to each name inside
-    the downloaded zip, so callers filter on extension / prefix without caring
-    about QDC's zip packaging.
+    ``want`` is applied to the QDC log-file name; if the downloaded file is a
+    zip it is also applied to each member inside, so callers filter on
+    extension / prefix without caring whether QDC ships the file raw or zipped.
     """
     elapsed = 0
     while elapsed < LOG_UPLOAD_TIMEOUT:
@@ -182,10 +182,13 @@ def download_log_members(
     for lf in qdc_api.get_job_log_files(client, job_id) or []:
         if not want(lf.filename):
             continue
-        zip_path = tmp / "log.zip"
-        qdc_api.download_job_log_files(client, lf.filename, str(zip_path))
-        with zipfile.ZipFile(zip_path) as z:
-            for name in z.namelist():
-                if want(name):
-                    out.append((name, z.read(name)))
+        dl = tmp / "log.bin"
+        qdc_api.download_job_log_files(client, lf.filename, str(dl))
+        if zipfile.is_zipfile(dl):
+            with zipfile.ZipFile(dl) as z:
+                for name in z.namelist():
+                    if want(name):
+                        out.append((name, z.read(name)))
+        else:
+            out.append((lf.filename, dl.read_bytes()))
     return out
