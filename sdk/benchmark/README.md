@@ -4,9 +4,7 @@ Single-file C example that drives the public geniex C API. One invocation
 runs one `(plugin, device, model)` cell (warmup + repeated measured runs)
 and prints / writes TTFT, prefill_tps, decode_tps, gen_tokens.
 
-The harness mirrors [`tests/benchmark/_runner.py`](../../../tests/benchmark/_runner.py)
-exactly so C and Python report comparable numbers off the same SDK. It runs
-from a **local model path** (a geniex bundle dir, or a `.gguf` file / its
+It runs from a **local model path** (a geniex bundle dir, or a `.gguf` file / its
 folder) on Windows, Android, and Linux — the same binary feeds the scorecard.
 
 ## Build
@@ -26,7 +24,7 @@ Gated on the `GENIEX_BENCHMARK` cmake option, which the snapdragon presets in
 cd sdk
 cmake --preset arm64-windows-snapdragon-release -B build
 cmake --build build -j --target geniex_benchmark
-# → build\tests\benchmark\geniex_benchmark.exe
+# → build\benchmark\geniex_benchmark.exe
 cmake --install build --prefix pkg-geniex   # optional → pkg-geniex\bin\geniex_benchmark.exe
 ```
 
@@ -113,19 +111,18 @@ geniex_benchmark \
 On Windows the same invocations work with `.exe` and backslash paths, e.g.:
 
 ```powershell
-build\tests\benchmark\geniex_benchmark.exe --plugin qairt --device npu `
+build\benchmark\geniex_benchmark.exe --plugin qairt --device npu `
   --model-path $env:USERPROFILE\.cache\geniex\models\qualcomm\Qwen3-4B-Instruct-2507
 ```
 
 Run `geniex_benchmark --help` for the full flag list.
 
-## Defaults (match the Python harness)
+## Defaults
 
-- prompt: identical literal to [`tests/benchmark/_runner.py:28-31`](../../../tests/benchmark/_runner.py#L28-L31)
 - `max_new_tokens=128`, `temperature=0.0`, `seed=42`
 - `--warmup 1`, `--repeat 3` (median over 3 measured runs after 1 warmup)
 - llama_cpp gets a `[warmup=i]` / `[run=i]` suffix appended to the prompt
-  so the KV cache is busted between runs (mirrors `_runner.py:82-83`)
+  so the KV cache is busted between runs
 
 ## Per-cell JSON shape
 
@@ -151,11 +148,9 @@ Run `geniex_benchmark --help` for the full flag list.
 
 ## Matrix-style runs
 
-The matrix lives in [`tests/benchmark/_matrix.py`](../../../tests/benchmark/_matrix.py)
-on the Python side. To get C-vs-Python comparable numbers, run the C
-binary in **matrix mode** so a single `geniex_init` covers the whole
-sweep — Hexagon FastRPC sessions and other plugin init costs are then
-amortised across cells exactly as the Python harness does:
+Run the C binary in **matrix mode** so a single `geniex_init` covers the
+whole sweep — Hexagon FastRPC sessions and other plugin init costs are
+then amortised across cells:
 
 ```bash
 cat > matrix.tsv <<EOF
@@ -181,6 +176,5 @@ puller.
 The earlier `sdk/tests/` C++ doctest tree was unused in CI and overlapped
 the Python e2e suite. It is replaced by this single, dependency-free C
 example. Caching, alias resolution, and matrix orchestration stay on the
-Python side ([`bindings/python/geniex/cli.py`](../../../bindings/python/geniex/cli.py),
-[`tests/benchmark/run.py`](../../../tests/benchmark/run.py)); the C
-binary stays small and exercises only the public API.
+Python side ([`bindings/python/geniex/cli.py`](../../../bindings/python/geniex/cli.py));
+the C binary stays small and exercises only the public API.

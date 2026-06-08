@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include "chat.h"
 #include "htp_session.h"
 #include "mtmd.h"
@@ -26,8 +28,8 @@ class LlamaVlm : public IVlm {
     bool supports_audio  = false;
 
     // Conversation state tracking
-    int32_t n_past              = 0;
-    int32_t global_n_past_chars = 0;  // Track character position in prompt text (not tokens)
+    llama_pos                n_past = 0;        // authoritative KV position cursor
+    std::vector<llama_token> past_text_prefix;  // leading text-only token run of last turn (for prefix match)
 
     // Tracks whether this instance pinned an HTP session; releases on last handoff.
     htp::SessionGuard htp_guard_;

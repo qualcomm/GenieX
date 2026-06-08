@@ -1,0 +1,36 @@
+name: QDC pytest (reusable)
+
+# Runs the SDK model-running pytest cells on a real QDC Android (SM8850) device
+# via the APPIUM framework. GitHub runners only cover the model-free `api` shard
+# (no Snapdragon hardware); the device-gated llama_cpp / qairt cells run here.
+# Reuses the benchmark's QDC submit/poll/collect plumbing (sdk/benchmark/qdc/_qdc.py)
+# and the tests/android adb harness to drive the phone.
+#
+# Called by pr-check.yml after build-sdk so the SDK artifact is shared with the
+# rest of the PR graph instead of rebuilt.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v8
+        with:
+          name: sdk-android-arm64
+          path: pkg-geniex
+      - uses: ./.github/actions/install-qdc-sdk
+      - run: python tests/qdc/run_qdc_pytest.py --pkg-dir pkg-geniex --device SM8850

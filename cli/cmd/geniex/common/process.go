@@ -32,9 +32,8 @@ import (
 )
 
 var (
-	ErrNoAudio               = errors.New("no audio file provided")
-	ErrNoImage               = errors.New("no image file provided")
-	ErrContextLengthExceeded = errors.New("model context length exceeded; output is truncated")
+	ErrNoAudio = errors.New("no audio file provided")
+	ErrNoImage = errors.New("no image file provided")
 )
 
 type Processor struct {
@@ -45,6 +44,7 @@ type Processor struct {
 
 	GetPrompt func() (string, error)
 	Run       func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error)
+	Reset     func() error
 
 	fsm      map[[2]any][2]any
 	fsmState int
@@ -133,8 +133,13 @@ func (p *Processor) Process() error {
 		case errors.Is(err, ErrNoImage):
 			fmt.Println(render.GetTheme().Error.Sprintf("No image file provided, please provide an image file"))
 			fmt.Println()
-		case errors.Is(err, ErrContextLengthExceeded):
-			fmt.Println(render.GetTheme().Error.Sprintf("Model context length exceeded; output above is truncated"))
+		case errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength):
+			if p.Reset != nil {
+				if resetErr := p.Reset(); resetErr != nil {
+					return resetErr
+				}
+			}
+			fmt.Println(render.GetTheme().Error.Sprintf("Model context length exceeded; conversation is reset"))
 			fmt.Println()
 		default:
 			return err

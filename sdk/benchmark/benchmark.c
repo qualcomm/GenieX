@@ -5,11 +5,11 @@
  *
  * geniex_benchmark — single-cell C inference benchmark, public-API only.
  *
- * Mirrors the Python harness in tests/benchmark/_runner.py:
- *   - same default prompt, max_new_tokens=128, temperature=0.0, seed=42
+ * Defaults:
+ *   - fixed default prompt, max_new_tokens=128, temperature=0.0, seed=42
  *   - 1 warmup + 3 measured runs (configurable)
  *   - llama_cpp prompts get a [warmup=i] / [run=i] suffix to bust KV cache
- *     between runs, matching _runner.py:82-83
+ *     between runs
  *   - per-cell aggregation: median / min / max for ttft_ms, prefill_tps,
  *     decode_tps; median-only for token counts
  *
@@ -42,7 +42,7 @@
 #include <dirent.h>
 #endif
 
-/* Default prompt mirrors tests/benchmark/_runner.py:28-31 verbatim. */
+/* Fixed default prompt for reproducible measured runs. */
 static const char* const DEFAULT_PROMPT =
     "Explain in three short sentences why the speed of light is the same "
     "in every inertial reference frame, and what that implies for time "
@@ -129,7 +129,9 @@ static void usage(const char* argv0) {
         "Required (matrix mode):\n"
         "  --matrix-file PATH  one cell per line, tab-separated:\n"
         "                      cell_id<TAB>plugin<TAB>device<TAB>model_path"
-        "[<TAB>tokenizer_path][<TAB>mmproj_path]\n"
+        "[<TAB>tokenizer_path][<TAB>mmproj_path][<TAB>image_paths][<TAB>vlm]\n"
+        "                      image_paths is comma-separated; vlm non-empty forces\n"
+        "                      VLM mode (QAIRT bundles without an mmproj)\n"
         "                      lines starting with '#' are ignored\n"
         "\n"
         "Optional:\n"
@@ -637,8 +639,8 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
             geniex_free(gout.full_text);
         }
         free(prompt);
-        /* Intentionally NOT calling geniex_llm_reset() between runs — matching
-         * tests/benchmark/_runner.py:87-103 which leaves the KV cache intact.
+        /* Intentionally NOT calling geniex_llm_reset() between runs — the KV
+         * cache is left intact.
          * The `[warmup=i]` / `[run=i]` suffix on the prompt is what differs
          * between runs and forces llama.cpp to actually run prefill instead
          * of short-circuiting on identical input (which would make
@@ -1032,12 +1034,13 @@ static int run_matrix(options_t* base) {
         if (line[0] == '\0' || line[0] == '#') continue;
 
         /* Tab-separated: cell_id <TAB> plugin <TAB> device <TAB> model_path
-         *                [<TAB> tokenizer_path] [<TAB> mmproj_path] */
-        char* fields[6] = {NULL};
+         *                [<TAB> tokenizer_path] [<TAB> mmproj_path]
+         *                [<TAB> image_paths (comma-separated)] [<TAB> vlm] */
+        char* fields[8] = {NULL};
         int   nf        = 0;
         char* p         = line;
         fields[nf++]    = p;
-        while (*p && nf < 6) {
+        while (*p && nf < 8) {
             if (*p == '\t') {
                 *p           = '\0';
                 fields[nf++] = p + 1;
@@ -1059,12 +1062,21 @@ static int run_matrix(options_t* base) {
         cell.tokenizer_path = (nf >= 5 && fields[4][0] != '\0') ? fields[4] : NULL;
         cell.mmproj_path    = (nf >= 6 && fields[5][0] != '\0') ? fields[5] : NULL;
         cell.output_md      = NULL;
-        /* The matrix file carries no media columns, so don't let a global
-         * --vlm / --image leak VLM mode into every cell; mmproj_path above is
-         * the only per-cell VLM trigger. */
-        cell.force_vlm   = false;
+        /* image_paths and force_vlm come per-row from fields[6]/[7], overwriting
+         * the values copied from `base` so a global --image / --vlm can't leak
+         * into every cell. No audio column: keep it explicitly zeroed. */
         cell.image_count = 0;
         cell.audio_count = 0;
+        if (nf >= 7 && fields[6][0] != '\0') {
+            char* tok = fields[6];
+            while (tok && cell.image_count < MAX_PATHS) {
+                char* comma = strchr(tok, ',');
+                if (comma) *comma = '\0';
+                cell.image_paths[cell.image_count++] = tok;
+                tok                                  = comma ? comma + 1 : NULL;
+            }
+        }
+        cell.force_vlm = (nf >= 8 && fields[7][0] != '\0');
 
         if (base->output_json_dir) {
             snprintf(json_path, sizeof(json_path), "%s/%s.json", base->output_json_dir, cell.cell_id);

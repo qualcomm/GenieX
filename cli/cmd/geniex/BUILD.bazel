@@ -34,6 +34,7 @@ go_library(
         "@com_github_jedib0t_go_pretty_v6//table",
         "@com_github_openai_openai_go_v3//:openai-go",
         "@com_github_openai_openai_go_v3//option",
+        "@com_github_openai_openai_go_v3//packages/ssestream",
         "@com_github_spf13_cobra//:cobra",
         "@com_github_spf13_pflag//:pflag",
         "@com_github_spf13_viper//:viper",

@@ -201,7 +201,6 @@ jobs:
         run: |
           set -euo pipefail
           python -m pytest tests -m api -v | tee .pytest-api.log
-          python -m pytest tests -m "llama_cpp and device_cpu" -v | tee .pytest-cpu.log
 
       - name: Run pytest — python bindings (Windows)
         if: steps.skip.outputs.skip != 'true' && inputs.language == 'python' && matrix.platform == 'windows-arm64'
@@ -248,7 +247,6 @@ jobs:
               python -m pip install "pytest>=7.0" "tqdm>=4.65"
               status=0
               python -m pytest tests -m api -v | tee .pytest-api.log || status=$?
-              python -m pytest tests -m "llama_cpp and device_cpu" -v | tee .pytest-cpu.log || status=$?
               chown -R "$HOST_UID:$HOST_GID" /workspace /root/.cache/geniex || true
               exit "$status"
             '

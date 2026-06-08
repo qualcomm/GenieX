@@ -165,4 +165,6 @@ add_compile_definitions(PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 add_subdirectory(./src)
 add_subdirectory(./plugins)
-add_subdirectory(./tests)
+if(GENIEX_BENCHMARK)
+    add_subdirectory(./benchmark)
+endif()

@@ -4,6 +4,8 @@ venv/
 .ccache
 .agents/
 .cache/
+__pycache__/
+*.pyc
 
 # Claude Code: track shared config, ignore per-user overrides.
 .claude/settings.local.json
@@ -23,10 +25,6 @@ modelfiles/*
 
 # Prebuilt Android demo APKs — distribute via GitHub Releases, not in-repo.
 *.apk
-
-# Benchmark output (timestamped JSON + Markdown per run).
-tests/benchmark/results/*.json
-tests/benchmark/results/*.md
 
 .gradle/
 *.log

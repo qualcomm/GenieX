@@ -1,53 +1,105 @@
 ---
-title: "支持的平台"
-description: "GenieX 支持的骁龙计算、移动以及 IoT 芯片，按操作系统分组。"
+title: "平台与运行时"
+description: "GenieX 支持的骁龙平台，以及在每类平台上应选哪种运行时。"
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-GenieX 覆盖三类骁龙平台，每一类都对应不同的接入方式与运行时策略。
+GenieX 仅运行在 Qualcomm 骁龙平台上——没有 x86 或非骁龙 ARM 构建。开始之前，先选择你要运行的**骁龙平台**，再根据手头的模型选择**运行时**。
 
-## **计算（Windows ARM64）**
+## **骁龙平台**
 
-骁龙 X 系列笔记本与台式机——Copilot+ PC。
+GenieX 覆盖三类骁龙平台——计算、移动与 IoT，分别对应 Windows ARM64、Android 与 Linux ARM64。
 
-**支持的芯片**
-- 骁龙 X Elite
-- 骁龙 X2 Elite
+| 操作系统 | 芯片 | 接入方式 |
+|---|---|---|
+| **Windows ARM64** *（计算 / Copilot+ PC）* | <ul><li>骁龙 X Elite</li><li>骁龙 X2 Elite</li></ul> | <ul><li>[CLI](/cn/run/cli/quickstart)</li><li>[Python SDK](/cn/run/python/quickstart)</li><li>[本地服务器](/cn/run/cli/local-server)</li></ul> |
+| **Android** *（移动）* | <ul><li>骁龙 8 至尊版（`SM8750`）</li><li>骁龙 8 至尊版 Gen 5（`SM8850`）</li></ul> | <ul><li>[Android SDK](/cn/run/android/quickstart)（Kotlin，Maven Central）</li></ul> |
+| **Linux ARM64** *（IoT —— 摄像头、机器人、工业自动化）* | <ul><li>高通 QCS9075</li></ul> | <ul><li>[原生安装](/cn/run/cli/install)</li><li>[Docker](/cn/run/linux/install)</li></ul> |
 
-**如何获取**
-- **本地** —— 任意骁龙 X 系列笔记本或台式机。
-- **云端** —— 在 [Qualcomm Developer Cloud — Compute 页面](https://qdc.qualcomm.com/devices/compute) 启动 `Snapdragon X Elite` 或 `Snapdragon X2 Elite` 设备。
+<Tip>**手头无设备？** 登录 [Qualcomm Developer Cloud (QDC)](https://qdc.qualcomm.com/) 即可远程访问骁龙 X、8 至尊版与 Dragonwing IQ-9075。详见 [FAQ 中的 QDC 操作步骤](/cn/resources/faq#qdc-qualcomm-device-cloud)。</Tip>
 
-**接入方式** —— [CLI](/cn/run/cli/quickstart)、[Python SDK](/cn/run/python/quickstart)、[本地服务器](/cn/run/cli/local-server)。
+## **GenieX 运行时**
 
-## **移动（Android）**
+GenieX 内置两种运行时，让你在同一套 SDK 中同时获得**广泛的模型覆盖**与**骁龙上的最佳性能**：
 
-骁龙 8 系列移动平台。
+- **`llama_cpp`** —— Hugging Face 上的任意 GGUF 模型，可通过高通 GGML Hexagon 后端在 Hexagon NPU、Adreno GPU 或 CPU 上运行。覆盖面最广。
+- **`qairt`** —— 来自 [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) 的预编译模型包，按芯片预编译并预量化，固定运行在 Hexagon NPU 上。当模型在 AI Hub 可用时，是最快的路径。
 
-**支持的芯片**
-- 骁龙 8 至尊版（`SM8750`）
-- 骁龙 8 至尊版 Gen 5（`SM8850`）
-- 骁龙 8 至尊版 Gen 6
+| | **llama.cpp** | **QAIRT** |
+|---|---|---|
+| **模型格式** | GGUF（任意社区模型） | AI Hub 预编译模型包 |
+| **计算单元** | NPU / GPU / CPU | 仅 NPU |
+| **量化由谁决定** | 你来选（`Q4_0`、`Q8_0`、`F16` 等） | 模型包内已预量化 |
+| **最适合场景** | 从 Hugging Face 自带 GGUF 模型 | 在 AI Hub 模型上获得最佳 NPU 性能 |
 
-**如何获取**
-- **本地** —— 任意骁龙 8 至尊版系列 Android 手机，开启 USB 调试。
-- **云端** —— 在 [Qualcomm Developer Cloud — Mobile 页面](https://qdc.qualcomm.com/devices/mobile) 启动 `Snapdragon 8 Elite` 或 `Snapdragon 8 Elite Gen 5` 设备。
+希望运行 Hugging Face 上任意 GGUF 模型，或需要 CPU/GPU 回退（例如没有 HTP 的 IoT 设备），选 **`llama_cpp`**。希望在 Qualcomm AI Hub 已发布的模型上获得最快 NPU 路径，选 **`qairt`**。
 
-**接入方式** —— [Android SDK](/cn/run/android/quickstart)（Kotlin，Maven Central）。
+### 默认值
 
-## **IoT（Linux ARM64）**
+如果不传入计算单元：
 
-面向边缘推理的高通 IoT 平台——智能摄像头、机器人、工业自动化等。
+| 运行时 | 默认计算单元 |
+|---|---|
+| `llama_cpp` | `hybrid`（HTP + CPU 按张量调度——骁龙上的快速路径） |
+| `qairt` | `npu` |
 
-**支持的芯片**
-- 高通 QCS9075
+部分模型族会覆盖默认值——例如 `gpt-oss` 在 `llama_cpp` 下会回退到 `npu`，因为它无法在 hybrid 路径上运行。
 
-**如何获取**
-- **本地** —— 高通 IoT 开发套件（如 Dragonwing RB3 Gen 2、QCS8550 HDK），运行 Linux ARM64。
-- **云端** —— 在 [Qualcomm Developer Cloud — IoT 页面](https://qdc.qualcomm.com/devices/iot) 启动 `Qualcomm Dragonwing IQ-9075` 设备。
+---
 
-**接入方式** —— [原生安装](/cn/run/cli/install)或 [Docker 镜像](/cn/run/cli/install)，Linux ARM64 带 NPU 加速。
+## **llama.cpp**
+
+`llama_cpp` 运行时通过 llama.cpp + 高通 GGML Hexagon 后端执行**任意 GGUF 模型**。可从 Hugging Face 拉取任意社区 GGUF 模型，并在骁龙 NPU、Adreno GPU 或纯 CPU 上运行。
+
+### 计算单元
+
+`--device` 选择计算单元，对应硬件如下：
+
+| 别名 | 行为 |
+|---|---|
+| `npu` | 固定到 Hexagon NPU（`HTP0`）。最佳 NPU 独占路径。 |
+| `gpu` | 通过 OpenCL 使用 Adreno GPU。 |
+| `cpu` | 纯 CPU。强制 `nGpuLayers = 0`。 |
+| `hybrid` *(默认)* | 空 `device_id` + `n_gpu_layers=999`——llama.cpp 的 HTP+CPU 按张量调度。**骁龙上的快速路径。** |
+
+`geniex pull` 时选择的精度也会决定模型最终落到哪个计算单元——详见[量化与设备落点](/cn/models/supported#量化与设备落点)。
+
+---
+
+## **QAIRT**
+
+`qairt` 运行时通过高通 AI Runtime 执行 **Qualcomm AI Hub** 上的预编译模型包。仅支持 NPU，模型包针对特定骁龙芯片预编译并预量化——当模型在 AI Hub 可用时，通常是最快的 NPU 路径。
+
+### 计算单元
+
+QAIRT **仅支持 NPU**。
+
+| 别名 | 行为 |
+|---|---|
+| `npu` *(默认)* | 固定 `HTP0`——唯一支持的路径。 |
+| `cpu` / `gpu` | 自动转为 `npu` 并打印告警，不会报错。 |
+
+### 运行时限制
+
+模型包内已固化**量化、上下文长度与 KV 缓存大小**——三者均无法在运行时修改。在 Android 上，`nGpuLayers != 0` 与 `nCtx != 0` 会被拒绝并返回 `PARAM_NOT_SUPPORTED`，请保持两者为默认值，仅调整 `max_tokens` / `enable_thinking`。如需改变精度或上下文长度，请从 [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) 获取另一个模型包。
+
+### Android 上的芯片
+
+在 Android 上拉取 AI Hub 模型时**必须显式传入芯片**——自动识别仅在骁龙 Windows 上生效。可选值：
+
+| 芯片 ID | 芯片 |
+|---|---|
+| `SM8750` | 骁龙 8 至尊版 |
+| `SM8850` | 骁龙 8 至尊版 Gen 5 |
+
+详见 [Android API 参考](/cn/run/android/api-reference#model-manager) 中的 `ModelPullInput.chipset`。
+
+### 限制
+
+- 仅 NPU——无 CPU/GPU 回退。
+- 上下文长度与 KV 缓存固化在模型包中。
+- 新增 AI Hub 模型需先在 C++ 侧注册（`third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`）。
 
 <br />
 

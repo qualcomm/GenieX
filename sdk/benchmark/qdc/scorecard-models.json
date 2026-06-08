@@ -1,0 +1,111 @@
+[
+  {
+    "name": "Qwen3-0.6B",
+    "plugin": "llama_cpp",
+    "devices": [
+      "cpu",
+      "npu",
+      "hybrid"
+    ],
+    "url": "https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_0.gguf"
+  },
+  {
+    "name": "Qwen3-1.7B",
+    "plugin": "llama_cpp",
+    "devices": [
+      "cpu",
+      "npu",
+      "hybrid"
+    ],
+    "url": "https://huggingface.co/unsloth/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_0.gguf"
+  },
+  {
+    "name": "Qwen3-4B",
+    "plugin": "llama_cpp",
+    "devices": [
+      "cpu",
+      "npu",
+      "hybrid"
+    ],
+    "url": "https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_0.gguf"
+  },
+  {
+    "name": "Llama-3.2-1B-Instruct",
+    "plugin": "llama_cpp",
+    "devices": [
+      "cpu",
+      "npu",
+      "hybrid"
+    ],
+    "url": "https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_0.gguf"
+  },
+  {
+    "name": "Llama-3.2-3B-Instruct",
+    "plugin": "llama_cpp",
+    "devices": [
+      "cpu",
+      "npu",
+      "hybrid"
+    ],
+    "url": "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_0.gguf"
+  },
+  {
+    "name": "phi-4-mini-instruct",
+    "plugin": "llama_cpp",
+    "devices": [
+      "cpu",
+      "npu",
+      "hybrid"
+    ],
+    "url": "https://huggingface.co/bartowski/microsoft_Phi-4-mini-instruct-GGUF/resolve/main/microsoft_Phi-4-mini-instruct-Q4_0.gguf"
+  },
+  {
+    "name": "Qwen3-4B-qairt",
+    "plugin": "qairt",
+    "devices": [
+      "npu"
+    ],
+    "aihub_id": "qwen3_4b"
+  },
+  {
+    "name": "Qwen3-4B-Instruct-2507-qairt",
+    "plugin": "qairt",
+    "devices": [
+      "npu"
+    ],
+    "aihub_id": "qwen3_4b_instruct_2507"
+  },
+  {
+    "name": "gemma-3n-E2B",
+    "plugin": "llama_cpp",
+    "devices": [
+      "cpu",
+      "npu",
+      "hybrid"
+    ],
+    "url": "https://huggingface.co/unsloth/gemma-3n-E2B-it-GGUF/resolve/main/gemma-3n-E2B-it-Q4_0.gguf"
+  },
+  {
+    "name": "Qwen3.5-0.8B",
+    "plugin": "llama_cpp",
+    "devices": [
+      "cpu",
+      "npu",
+      "hybrid"
+    ],
+    "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_0.gguf",
+    "mmproj_url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/mmproj-F16.gguf",
+    "vlm": true,
+    "image": true
+  },
+  {
+    "name": "Qwen2.5-VL-7B",
+    "plugin": "qairt",
+    "devices": [
+      "npu"
+    ],
+    "aihub_id": "qwen2_5_vl_7b_instruct",
+    "vlm": true,
+    "image": true
+  }
+]

@@ -22,18 +22,18 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="Where do I see what hardware GenieX supports?">
-    [Supported platforms](/en/get-started/platforms) — Snapdragon X on Windows ARM64, 8 Elite on Android, QCS series on Linux ARM64.
+    [Supported platforms](/en/get-started/platforms) — Snapdragon X on Windows ARM64, Snapdragon 8 Elite on Android, Dragonwing QCS9075 on Linux ARM64.
   </Accordion>
 </AccordionGroup>
 
 ## **Runtimes**
 
 <AccordionGroup>
-  <Accordion title="What's the difference between llama.cpp and QAIRT?">
+  <Accordion title="What's the difference between llama.cpp and Qualcomm AI Engine Direct?">
     - **llama.cpp** — runs any GGUF model, supports NPU/GPU/CPU compute units. Best for trying community models.
-    - **QAIRT** — runs pre-compiled AI Hub bundles, NPU only. Typically the fastest path when your model is on AI Hub.
+    - **[Qualcomm® AI Engine Direct](https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk)** (`qairt`) — runs pre-compiled Qualcomm AI Hub Models, NPU only. Typically the fastest path when your model is on Qualcomm AI Hub.
 
-    See [Choose your runtime](/en/get-started/choose-runtime).
+    See [Platforms & runtimes](/en/get-started/platforms#geniex-runtimes).
   </Accordion>
 
   <Accordion title="Which runtime is the default?">
@@ -44,8 +44,8 @@ import Feedback from "/snippets/page-feedback.mdx";
     Some models override this — e.g. `gpt-oss` falls back to `npu` on `llama_cpp`.
   </Accordion>
 
-  <Accordion title="Which quantization should I pick?">
-    For llama.cpp on Snapdragon NPU: **`Q4_0`**. It has the best Hexagon NPU support. QAIRT bundles are pre-quantized — no choice. See [Quantization](/en/models/quantization).
+  <Accordion title="Which precision (quantization) should I pick?">
+    For llama.cpp on Snapdragon NPU: **`Q4_0`**. It has the best Hexagon NPU support. Qualcomm AI Hub Models are pre-quantized — no choice. See [Precisions (Quantizations) & device placement](/en/models/supported#precisions-quantizations--device-placement).
   </Accordion>
 </AccordionGroup>
 
@@ -53,13 +53,13 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="Can I run any model from Hugging Face?">
-    Any **GGUF** model on the llama.cpp runtime. See [Bring your own model](/en/models/bring-your-own).
+    Any **GGUF** model on the llama.cpp runtime. See [Run a GGUF model from Hugging Face](/en/models/supported#run-a-gguf-model-from-hugging-face).
 
-    QAIRT requires a pre-compiled AI Hub bundle — adding a new one means registering it on the C++ side first.
+    Qualcomm AI Engine Direct requires a pre-compiled Qualcomm AI Hub Model — adding a new one means registering it on the C++ side first.
   </Accordion>
 
   <Accordion title="Where's the supported models list?">
-    [Supported models](/en/models/supported) — split by runtime (QAIRT, llama.cpp).
+    [Models](/en/models/supported) — split by runtime (Qualcomm AI Engine Direct, llama.cpp).
   </Accordion>
 </AccordionGroup>
 
@@ -70,8 +70,8 @@ import Feedback from "/snippets/page-feedback.mdx";
     Yes. GenieX targets Qualcomm Snapdragon chipsets — Hexagon NPU, Adreno GPU, and Snapdragon ARM CPU compute units. There's no x86 or non-Snapdragon ARM build. If you don't have a device on hand, use [Qualcomm Developer Cloud / Device Cloud](/en/get-started/platforms).
   </Accordion>
 
-  <Accordion title="My QAIRT model says NPU is required — can I run it on CPU?">
-    No. QAIRT is NPU-only by design. `cpu` and `gpu` aliases are coerced to NPU with a warning. Use the llama.cpp runtime (with a GGUF) if you need CPU/GPU fallback.
+  <Accordion title="My Qualcomm AI Hub Model says NPU is required — can I run it on CPU?">
+    No. Qualcomm AI Engine Direct is NPU-only by design. `cpu` and `gpu` aliases are coerced to NPU with a warning. Use the llama.cpp runtime (with a GGUF) if you need CPU/GPU fallback.
   </Accordion>
 </AccordionGroup>
 

@@ -1,13 +1,20 @@
 ---
-title: "支持的模型"
-description: "在 QAIRT 与 llama.cpp 运行时经过验证的 LLM 与 VLM。"
+title: "模型"
+description: "在哪里获取模型、如何运行，以及哪些精度会落到骁龙 NPU。"
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-GenieX 通过 QAIRT 运行时执行一组精选的预编译模型包，并通过 llama.cpp 运行时执行**任意 GGUF 模型**。下表为已验证的示例——llama.cpp 侧并不局限于这些模型。
+模型可以从两个地方获取，分别对应 GenieX 的两种[运行时](/cn/get-started/platforms#geniex-运行时)：
 
-## **QAIRT（AI Hub 模型包）**
+- **[Qualcomm AI Hub](https://aihub.qualcomm.com/models/)** —— QAIRT 预编译模型包，以及面向 llama.cpp 的精选 GGUF 模型。
+- **[Hugging Face](https://huggingface.co/models?library=gguf)** —— llama.cpp 可运行的任意 GGUF 模型，详见[运行 Hugging Face 上的 GGUF 模型](#运行-hugging-face-上的-gguf-模型)。
+
+<Note>下方第一节列出了已验证的模型。AI Hub 网站上线后，该列表会移到网站；当前版本只是临时方便，让你无需离开文档即可复制 `geniex infer` 命令。</Note>
+
+## **已验证的模型** *（临时——将移至 AI Hub 网站）*
+
+### QAIRT（AI Hub 模型包）
 
 来自 Qualcomm AI Hub 的预编译模型包，仅 NPU。
 
@@ -25,17 +32,9 @@ GenieX 通过 QAIRT 运行时执行一组精选的预编译模型包，并通过
 | `llama_v3_taide_8b_chat` | 自行转换（Hugging Face） |
 | `falcon_v3_7b_instruct` | 自行转换（Hugging Face） |
 
-直接运行 `ai-hub-models/*` 模型：
+### llama.cpp（GGUF）
 
-```powershell windows
-geniex infer ai-hub-models/Qwen3-4B
-```
-
-自行转换的模型包，请参考[自带模型指南](/cn/models/bring-your-own#qairt-自行转换的模型包)。
-
-## **llama.cpp（GGUF）**
-
-可在骁龙 NPU、GPU 或 CPU 上运行 Hugging Face 上的任意 GGUF 模型。以下为在 `Q4_0` 下表现良好的已验证示例：
+在 Hexagon NPU 上以 `Q4_0` 表现良好的已验证 GGUF 模型。
 
 | 模型 ID | 类型 |
 |---|---|
@@ -52,9 +51,111 @@ geniex infer ai-hub-models/Qwen3-4B
 | `Qwen/Qwen3-VL-2B-Instruct-GGUF` | VLM |
 | `Qwen/Qwen3-VL-4B-Instruct-GGUF` | VLM |
 
-<Tip>如需尝试其他 GGUF 模型，从 Hugging Face 复制任意兼容 GGUF 模型的路径，替换到[自带模型](/cn/models/bring-your-own)中的命令即可。</Tip>
-
 <Note>对 `Qwen3.5` 与 `Gemma4` 的多模态支持即将推出——目前选择 `llm` 即可。</Note>
+
+## **运行 AI Hub 模型包**
+
+对于 `qualcomm/*` 命名空间下的模型，直接 `geniex infer`：
+
+```powershell windows
+geniex infer qualcomm/Qwen3-4B
+```
+
+### 自行转换的 QAIRT 模型包
+
+`qualcomm/*` 命名空间之外的 QAIRT 模型包需要先下载到本地，再用 `--model-hub localfs` 拉取。
+
+确保已安装 [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/en/guides/cli)，然后在 Windows ARM64 上：
+
+```powershell windows
+# 设置模型名（必须与 HF 子目录名完全一致）
+$model = "llama_v3_2_1b_instruct"
+
+# 从 Hugging Face 下载模型
+hf download yichqian/geniex-qairt-models `
+  --local-dir $model `
+  --include "$model/**"
+
+# 使用下载好的目录拉取（绝对路径）
+geniex pull local/$model --model-hub localfs `
+  --local-path (Resolve-Path "$model\$model").Path
+
+# 运行推理
+geniex infer local/$model
+```
+
+<Note>QAIRT 仅 NPU。传入 `--device npu` 或省略该标志。</Note>
+
+## **运行 Hugging Face 上的 GGUF 模型**
+
+Hugging Face 上任意兼容的 GGUF 仓库都可以使用。复制仓库路径并传给 `geniex infer`：
+
+```powershell windows
+geniex infer <org>/<repo>-GGUF
+```
+
+例如：
+
+```powershell windows
+geniex infer unsloth/Phi-4-mini-instruct-GGUF
+```
+
+提示时选择：
+
+- **模型类型** —— 视觉-语言模型（Qwen3-VL 系列）选 `vlm`，其他选 `llm`。
+- **量化** —— `Q4_0` 在 Hexagon NPU 上支持最佳。详见[量化与设备落点](#量化与设备落点)。
+
+## **量化与设备落点**
+
+所选精度决定模型运行在哪。
+
+### llama.cpp
+
+llama.cpp 支持 GGML 全量化范围。运行 `geniex pull` 拉取 GGUF 模型时，CLI 会提示你选择：
+
+```powershell
+Choose a precision version to download
+> Q4_0       [1.2 GiB] (default)
+  Q8_0       [2.0 GiB]
+  F16        [3.8 GiB]
+```
+
+| 精度 | 落点 | 备注 |
+|---|---|---|
+| **`Q4_0`** *(默认)* | **Hexagon NPU** | llama.cpp 在 NPU 上的最佳支持。多数模型推荐使用。 |
+| `Q8_0` | GPU / CPU | 质量更好，磁盘与显存约为 2 倍。 |
+| `F16` | GPU / CPU | 参考精度。主要用于评估——较大且较慢。 |
+| `Q4_K_M`、`Q5_K_M` 等 | GPU / CPU | 混合精度 K-quants。未针对 Hexagon NPU 优化。 |
+
+<Tip>若希望模型落到 Hexagon NPU，请坚持使用 `Q4_0`。其他量化也可运行，但通常会落到 GPU 或 CPU。</Tip>
+
+### QAIRT
+
+QAIRT 模型包在出厂时已**静态预量化**——运行时无量化选择。如需不同精度，请从 [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) 获取另一个模型包。
+
+| 精度 | 落点 | 备注 |
+|---|---|---|
+| **`w4a16`** *(最常见)* | **Hexagon NPU** | 权重 int4，激活 int16。端侧 LLM 在模型大小与精度间的最佳平衡。 |
+| `w4` | **Hexagon NPU** | 权重 int4，激活浮点。精度略优于 w4a16，但计算开销更大。 |
+
+<Tip>Qualcomm AI Hub 上的预编译模型包多数使用 `w4a16`。量化级别在编译时即固化——请根据质量/性能目标选择对应的模型包。</Tip>
+
+其他模型包内固化的限制（上下文长度、KV 缓存、Android `nCtx`）参见 [QAIRT 运行时限制](/cn/get-started/platforms#运行时限制)。
+
+## **在 Python 中使用自定义模型**
+
+Python 中将 `from_pretrained` 指向本地路径：
+
+```python
+# 来自本地目录的 QAIRT 模型包
+model = AutoModelForCausalLM.from_pretrained(
+    r"C:\<your_path>\Qwen3-4B-Instruct-2507",
+    model_name="qwen3_4b_instruct_2507",
+    device_map="qairt",
+)
+```
+
+完整参数详见 [Python API 参考](/cn/run/python/api-reference)。
 
 <br />
 

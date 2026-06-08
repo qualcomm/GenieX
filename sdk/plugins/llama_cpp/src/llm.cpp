@@ -236,6 +236,10 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     const llama_vocab* vocab   = llama_model_get_vocab(this->model);
     const int          n_ctx   = llama_n_ctx(this->ctx);
     const int          n_batch = llama_n_batch(this->ctx);
+    // Sliding the window needs seq_add (aborts on M-RoPE) and a mid-sequence
+    // seq_rm (recurrent models reject it; can_shift is a false positive there).
+    // When unsupported, skip the slide and let decode report truncation.
+    const bool can_shift = llama_memory_can_shift(mem) && !llama_model_is_recurrent(this->model);
 
     // Encode the full prompt (either from input_ids or prompt_utf8)
     std::vector<llama_token> prompt_ids;
@@ -313,15 +317,19 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
     auto process = [&](std::vector<llama_token>& embd) {
         // Context shifting if needed
-        if (this->n_past + (int)embd.size() >= n_ctx) {
-            int       n_past_before = this->n_past;
-            int       n_keep        = 4;
-            const int n_discard     = this->n_past / 2 - n_keep;
+        if (can_shift && this->n_past + (int)embd.size() >= n_ctx) {
+            const int n_past_before = this->n_past;
+            const int n_keep        = 4;
+            const int needed        = this->n_past + (int)embd.size() - n_ctx + 1;
+            int       n_discard     = std::max(this->n_past / 2 - n_keep, needed);
+            n_discard               = std::min(n_discard, this->n_past - n_keep);
 
-            // Context shifting using llama.cpp memory management
-            llama_memory_seq_rm(mem, 0, n_keep, n_keep + n_discard);
-            llama_memory_seq_add(mem, 0, n_keep + n_discard, this->n_past, -n_discard);
-            this->n_past -= n_discard;
+            if (n_discard > 0) {
+                // Context shifting using llama.cpp memory management
+                llama_memory_seq_rm(mem, 0, n_keep, n_keep + n_discard);
+                llama_memory_seq_add(mem, 0, n_keep + n_discard, this->n_past, -n_discard);
+                this->n_past -= n_discard;
+            }
 
             GENIEX_LOG_INFO(
                 "Context shifting - discarding {} tokens, n_keep: {}, "
@@ -340,9 +348,14 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
             }
 
             llama_batch batch = llama_batch_get_one(&embd[i], n_eval);
-            if (llama_decode(this->ctx, batch) != 0) {
-                return GENIEX_ERROR_LLM_GENERATION_FAILED;  // error: llama_decode failed
-                                                            // during token processing
+            // 1 means the batch does not fit the KV cache: report truncation, not a generic failure.
+            switch (llama_decode(this->ctx, batch)) {
+                case 0:
+                    break;
+                case 1:
+                    return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+                default:
+                    return GENIEX_ERROR_LLM_GENERATION_FAILED;
             }
 
             n_past += n_eval;
@@ -356,6 +369,11 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     common::Profiler profiler;
     profiler.prompt_start();
 
+    bool                     first_token_generated = false;
+    int32_t                  res                   = GENIEX_SUCCESS;
+    std::vector<llama_token> generated_tokens;
+    std::stringstream        full_text;
+
     std::vector<llama_token> embd;
 
     for (size_t i = 0; i < embd_inp.size(); ++i) {
@@ -365,11 +383,13 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
         embd.push_back(embd_inp[i]);
         if ((int)embd.size() >= n_batch || i == embd_inp.size() - 1) {
-            int32_t res = process(embd);  // Enable detailed logging during prefilling
-            if (res != GENIEX_SUCCESS) {
-                return res;  // error during processing
-            }
+            // A prompt block that does not fit reports truncation; the unified
+            // finalize below still emits valid profiler data.
+            res = process(embd);
             embd.clear();
+            if (res != GENIEX_SUCCESS) {
+                break;
+            }
         }
     }
 
@@ -379,11 +399,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
     // Process output
 
-    bool                     first_token_generated = false;
-    std::vector<llama_token> generated_tokens;
-    std::stringstream        full_text;
-
-    while ((int)generated_tokens.size() < cfg.max_tokens) {
+    while (res == GENIEX_SUCCESS && (int)generated_tokens.size() < cfg.max_tokens) {
         llama_token id = common_sampler_sample(this->sampler, this->ctx, -1);
         common_sampler_accept(this->sampler, id, /* accept_grammar= */ true);
 
@@ -404,7 +420,10 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         char token_buf[64];
         // Use instance-level setting for special token output
         int n = llama_token_to_piece(vocab, id, token_buf, sizeof(token_buf) - 1, 0, this->allow_special_tokens);
-        if (n < 0) return GENIEX_ERROR_LLM_GENERATION_FAILED;
+        if (n < 0) {
+            res = GENIEX_ERROR_LLM_GENERATION_FAILED;
+            break;
+        }
         token_buf[n] = '\0';
 
         // Check stop sequences
@@ -433,26 +452,30 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         full_text << token_buf;
 
         std::vector<llama_token> embd(1, id);
-        int32_t                  res = process(embd);
-        if (res != GENIEX_SUCCESS) {
-            return res;  // error during processing
-        }
+        // Decode slides the window first when supported, so a single token fits.
+        // It only fails to fit when sliding is disabled (M-RoPE / recurrent):
+        // that surfaces as a context-length error and keeps the text so far.
+        // No break needed — it is the last statement, the while check exits.
+        res = process(embd);
     }
 
     // Set stop reason if not already set
-    if ((int)generated_tokens.size() >= cfg.max_tokens) {
+    if (res == GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH) {
+        GENIEX_LOG_WARN("LLM generate: context window ({}) exhausted; truncating", n_ctx);
+        profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_LENGTH);
+    } else if ((int)generated_tokens.size() >= cfg.max_tokens) {
         profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_LENGTH);
     }
     profiler.decode_end();
     profiler.update_generated_tokens(generated_tokens.size());
     profiler.to_profile_data(output->profile_data);
-    output->full_text = strdup(full_text.str().c_str());  // Initialize to null
-                                                          //
+    output->full_text = strdup(full_text.str().c_str());
+
     this->n_past_global = prompt_len + generated_tokens.size();
     this->past_prompt_tokens.insert(this->past_prompt_tokens.end(), embd_inp.begin(), embd_inp.end());
     this->past_prompt_tokens.insert(this->past_prompt_tokens.end(), generated_tokens.begin(), generated_tokens.end());
 
-    return GENIEX_SUCCESS;
+    return res;
 }
 }  // namespace geniex
 

@@ -8,7 +8,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 ## **前置条件**
 
 - 已安装 Python SDK——详见[安装](/cn/run/python/install)。
-- 了解[运行时选择](/cn/get-started/choose-runtime)——`qairt` 用于 AI Hub 模型包，`llama_cpp` 用于任意 GGUF。
+- 了解[运行时选择](/cn/get-started/platforms#geniex-运行时)——`qairt` 用于 AI Hub 模型包，`llama_cpp` 用于任意 GGUF。
 
 SDK 与 Hugging Face `transformers` 设计一致——通过 `AutoModelForCausalLM.from_pretrained()` 加载，再调用 `.generate()`。
 
@@ -95,8 +95,8 @@ print(model.generate(prompt, images=[image_path]).text)
   <Card title="API 参考" href="/cn/run/python/api-reference" icon="book">
     Python SDK 的全部类、方法与参数。
   </Card>
-  <Card title="自带模型" href="/cn/models/bring-your-own" icon="cube">
-    自定义 GGUF 与自行转换的 QAIRT 模型包。
+  <Card title="模型" href="/cn/models/supported" icon="cube">
+    支持的模型、Hugging Face 上的 GGUF，以及自行转换的 QAIRT 模型包。
   </Card>
 </CardGroup>
 

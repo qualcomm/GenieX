@@ -25,8 +25,10 @@ chmod +x bin/* 2>/dev/null
 export LD_LIBRARY_PATH="$BUNDLE/lib:$BUNDLE/lib/llama_cpp:$BUNDLE/lib/qairt:$LD_LIBRARY_PATH"
 export GENIEX_PLUGIN_PATH="$BUNDLE/lib"
 
+IMG=/data/local/tmp/TestContent/test.png
+
 : > "$TSV"
-while IFS='|' read -r name plugin devs url kind; do
+while IFS='|' read -r name plugin devs url kind mmproj_url vlm image; do
   [ -z "$name" ] && continue
   dir="$MODELS/$name"
   mkdir -p "$dir"
@@ -52,9 +54,20 @@ if len(e)==1 and os.path.isdir(os.path.join(d,e[0])):
       if [ $? -ne 0 ]; then echo "WARNING: $name fetch failed, skipping"; continue; fi
     fi
   fi
+  mmpath=""
+  if [ -n "$mmproj_url" ]; then
+    mmpath="$dir/mmproj.gguf"
+    if [ ! -f "$mmpath" ]; then
+      curl -L -fS --retry 3 --retry-delay 5 -o "$mmpath" "$mmproj_url"
+      if [ $? -ne 0 ]; then echo "WARNING: $name mmproj fetch failed, skipping"; continue; fi
+    fi
+  fi
+  imgpath=""
+  [ "$image" = "1" ] && imgpath="$IMG"
   IFS=','
   for d in $devs; do
-    printf '%s-%s-%s\t%s\t%s\t%s\n' "$name" "$plugin" "$d" "$plugin" "$d" "$mpath" >> "$TSV"
+    printf '%s-%s-%s\t%s\t%s\t%s\t\t%s\t%s\t%s\n' \
+      "$name" "$plugin" "$d" "$plugin" "$d" "$mpath" "$mmpath" "$imgpath" "$vlm" >> "$TSV"
   done
   IFS='|'
 done <<'EOF'

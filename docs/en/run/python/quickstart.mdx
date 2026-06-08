@@ -8,7 +8,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 ## **Prerequisites**
 
 - The Python SDK installed — see [Install](/en/run/python/install).
-- Familiarity with [runtime choice](/en/get-started/choose-runtime) — `qairt` for AI Hub bundles, `llama_cpp` for any GGUF.
+- Familiarity with [runtime choice](/en/get-started/platforms#geniex-runtimes) — `qairt` (Qualcomm AI Engine Direct) for Qualcomm AI Hub Models, `llama_cpp` for any GGUF.
 
 The SDK follows the same design as Hugging Face `transformers` — load with `AutoModelForCausalLM.from_pretrained()`, then call `.generate()`.
 
@@ -25,11 +25,11 @@ model = AutoModelForCausalLM.from_pretrained(
                                 # auto -> hybrid for llama_cpp, npu for qairt
 )
 
-# QAIRT bundle example (load from a local path)
+# Qualcomm AI Engine Direct bundle example (load from a local path)
 # model = AutoModelForCausalLM.from_pretrained(
 #     r"C:\<your_path>\Qwen3-4B-Instruct-2507",   # any .bin file from the bundle folder
-#     model_name="qwen3_4b_instruct_2507",        # matches the AI Hub model id
-#     device_map="qairt",                         # required for QAIRT
+#     model_name="qwen3_4b_instruct_2507",        # matches the Qualcomm AI Hub model id
+#     device_map="qairt",                         # required for Qualcomm AI Engine Direct
 # )
 
 messages = [{"role": "user", "content": "What is 2+2?"}]
@@ -95,8 +95,8 @@ For laptop users, follow the step-by-step Jupyter notebook at [examples/python/w
   <Card title="API reference" href="/en/run/python/api-reference" icon="book">
     All classes, methods, and parameters for the Python SDK.
   </Card>
-  <Card title="Bring your own model" href="/en/models/bring-your-own" icon="cube">
-    Custom GGUFs and self-converted QAIRT bundles.
+  <Card title="Models" href="/en/models/supported" icon="cube">
+    Supported models, GGUF on Hugging Face, and self-converted Qualcomm AI Engine Direct bundles.
   </Card>
 </CardGroup>
 

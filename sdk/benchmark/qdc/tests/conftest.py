@@ -12,18 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Make the flat-module imports inside this directory work under pytest.
+"""Appium session fixture for the on-device scorecard run."""
 
-The siblings (``_matrix``, ``_runner``, ``_report``) are imported by name
-without the ``tests.benchmark.`` prefix so the same modules can run both
-as a script (``python tests/benchmark/run.py``) and via pytest.
-"""
+import os
 
-from __future__ import annotations
+import pytest
+from appium import webdriver
 
-import sys
-from pathlib import Path
+from utils import options, write_qdc_log
 
-_HERE = Path(__file__).resolve().parent
-if str(_HERE) not in sys.path:
-    sys.path.insert(0, str(_HERE))
+
+@pytest.fixture(scope="session", autouse=True)
+def driver():
+    return webdriver.Remote(
+        command_executor="http://127.0.0.1:4723/wd/hub", options=options
+    )
+
+
+def pytest_sessionfinish(session, exitstatus):
+    xml = getattr(session.config.option, "xmlpath", None) or "results.xml"
+    if os.path.exists(xml):
+        with open(xml) as f:
+            write_qdc_log("results.xml", f.read())

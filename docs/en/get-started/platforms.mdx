@@ -1,21 +1,107 @@
 ---
-title: "Supported platforms"
-description: "Snapdragon platforms supported by GenieX, grouped by operating system."
+title: "Platforms & runtimes"
+description: "Snapdragon platforms supported by GenieX and which runtime to pick on each."
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-GenieX runs on Snapdragon across three operating systems. Pick the row that matches where you want to run.
+GenieX runs exclusively on Qualcomm Snapdragon — no x86 or non-Snapdragon ARM build. To get going, pick the **Snapdragon platform** you'll run on, then pick a **runtime** that matches the model you want to run.
+
+## **Snapdragon platforms**
+
+GenieX is supported across three Snapdragon families — compute, mobile, and IoT — covering Windows ARM64, Android, and Linux ARM64.
 
 | OS | Chipsets | Interfaces |
 |---|---|---|
-| **Windows ARM64** | <ul><li>Snapdragon X Elite</li><li>Snapdragon X2 Elite</li></ul> | <ul><li>[CLI](/en/run/cli/quickstart)</li><li>[Python SDK](/en/run/python/quickstart)</li><li>[Local Server](/en/run/cli/local-server)</li></ul> |
-| **Android** | <ul><li>Snapdragon 8 Elite (`SM8750`)</li><li>Snapdragon 8 Elite Gen 5 (`SM8850`)</li></ul> | <ul><li>[Android SDK](/en/run/android/quickstart) (Kotlin, Maven Central)</li></ul> |
-| **Linux ARM64** | <ul><li>Qualcomm QCS9075</li></ul> | <ul><li>[Native install](/en/run/cli/install)</li><li>[Docker](/en/run/linux/install)</li></ul> |
+| **Windows ARM64** *(Compute / Copilot+ PC)* | <ul><li>Snapdragon X Elite</li><li>Snapdragon X2 Elite</li></ul> | <ul><li>[CLI](/en/run/cli/quickstart)</li><li>[Python SDK](/en/run/python/quickstart)</li><li>[Local server](/en/run/cli/local-server)</li></ul> |
+| **Android** *(Mobile)* | <ul><li>Snapdragon 8 Elite (`SM8750`)</li><li>Snapdragon 8 Elite Gen 5 (`SM8850`)</li></ul> | <ul><li>[Android SDK](/en/run/android/quickstart) (Kotlin, Maven Central)</li></ul> |
+| **Linux ARM64** *(Dragonwing IoT — cameras, robotics, industrial)* | <ul><li>Dragonwing QCS9075</li></ul> | <ul><li>[Native install](/en/run/cli/install)</li><li>[Docker](/en/run/linux/install)</li></ul> |
 
-## **No physical device on hand?**
+<Tip>**No device on hand?** Sign in to [Qualcomm Developer Cloud (QDC)](https://qdc.qualcomm.com/) for remote sessions on Snapdragon X, 8 Elite, and Dragonwing QCS9075. See the [QDC walkthrough in the FAQ](/en/resources/faq#qdc-qualcomm-device-cloud).</Tip>
 
-Sign in to [Qualcomm Developer Cloud (QDC)](https://qdc.qualcomm.com/) for remote sessions on Snapdragon chipsets — Windows ARM64, Android, and Linux ARM64 are all available. See the [QDC walkthrough in the FAQ](/en/resources/faq#qdc-qualcomm-device-cloud) for setup and SSH instructions.
+## **GenieX runtimes**
+
+GenieX ships with two runtimes so you get both **broad model coverage** and **peak Snapdragon performance** in one stack:
+
+- **`llama_cpp`** — any GGUF model on Hugging Face, running on Hexagon NPU, Adreno GPU, or CPU through Qualcomm's GGML Hexagon backend. The widest model selection.
+- **`qairt`** ([Qualcomm® AI Engine Direct](https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk)) — pre-compiled bundles from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/), compiled and quantized per chipset and pinned to the Hexagon NPU. The fastest path when your model is on Qualcomm AI Hub.
+
+<Note>**Qualcomm AI Engine Direct** (also known as the *Qualcomm AI Engine Direct SDK*, *Qualcomm AI Runtime*, and historically *QAIRT*) is the official name. Throughout these docs we use the official name.</Note>
+
+| | **llama.cpp** | **Qualcomm AI Engine Direct** |
+|---|---|---|
+| **Model format** | GGUF (any community model) | Qualcomm AI Hub pre-compiled bundles |
+| **Compute units** | NPU / GPU / CPU | NPU only |
+| **Precisions (Quantizations) picked by** | You (`Q4_0`, `Q8_0`, `F16`, …) | Pre-quantized in the bundle |
+| **Best for** | Bringing your own GGUF from Hugging Face | Highest NPU performance on Qualcomm® AI Hub Models |
+
+Pick **`llama_cpp`** for any GGUF from Hugging Face, or when you need CPU/GPU fallback (e.g. IoT devices without HTP). Pick **`qairt`** for the fastest NPU path on models published to Qualcomm AI Hub.
+
+### Defaults
+
+If you don't pass a compute unit:
+
+| Runtime | Default compute unit |
+|---|---|
+| `llama_cpp` | `hybrid` (HTP + CPU per-tensor scheduling — the fast path on Snapdragon) |
+| `qairt` | `npu` |
+
+Some model families override this — for example, `gpt-oss` falls back to `npu` on `llama_cpp` because it can't run on the hybrid path.
+
+---
+
+## **llama.cpp**
+
+The `llama_cpp` runtime executes **any GGUF model** through llama.cpp with Qualcomm's GGML Hexagon backend. Pull any community GGUF from Hugging Face and run it on Snapdragon NPU, Adreno GPU, or pure CPU.
+
+### Compute units
+
+`--device` maps to the underlying hardware as follows:
+
+| Alias | Effect |
+|---|---|
+| `npu` | Pin to Hexagon NPU (`HTP0`). Best NPU-only path. |
+| `gpu` | Adreno GPU via OpenCL. |
+| `cpu` | Pure CPU. Forces `nGpuLayers = 0`. |
+| `hybrid` *(default)* | Empty `device_id` + `n_gpu_layers=999` — llama.cpp's per-tensor HTP+CPU scheduler. **The fast path on Snapdragon.** |
+
+The precision you pick at `geniex pull` time also determines where the model lands — see [Precisions (Quantizations) & device placement](/en/models/supported#precisions-quantizations--device-placement).
+
+---
+
+## **Qualcomm AI Engine Direct**
+
+The `qairt` runtime executes pre-compiled bundles from **Qualcomm AI Hub** through [Qualcomm® AI Engine Direct](https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk). NPU-only, with the bundle compiled and quantized for a specific Snapdragon chipset — typically the fastest NPU path when your model is on Qualcomm AI Hub.
+
+### Compute units
+
+Qualcomm AI Engine Direct is **NPU only**.
+
+| Alias | Effect |
+|---|---|
+| `npu` *(default)* | Pin `HTP0` — the only supported path. |
+| `cpu` / `gpu` | Coerced to `npu` with a warning. Never an error. |
+
+### Runtime constraints
+
+The bundle has its **precision, context length, and KV cache size baked in** — none can be changed at runtime. On Android, `nGpuLayers != 0` and `nCtx != 0` are rejected with `PARAM_NOT_SUPPORTED`; leave both at defaults and tune `max_tokens` / `enable_thinking` only. To change precision or context length, get a different bundle from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/).
+
+### Chipset on Android
+
+Qualcomm AI Hub pulls on Android **require an explicit chipset** — auto-detect only runs on Windows on Snapdragon. Use:
+
+| Chipset ID | Chipset |
+|---|---|
+| `SM8750` | Snapdragon 8 Elite |
+| `SM8850` | Snapdragon 8 Elite Gen 5 |
+
+See the [Android API reference](/en/run/android/api-reference#model-manager) for `ModelPullInput.chipset`.
+
+### Limitations
+
+- NPU only — no CPU/GPU fallback.
+- Context length and KV cache are fixed by the bundle.
+- Adding a new Qualcomm AI Hub Model requires registering it on the C++ side first (`third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`).
 
 <br />
 

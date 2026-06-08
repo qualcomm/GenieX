@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""llama_cpp LLM matrix: cpu, gpu, npu, hybrid."""
+"""llama_cpp LLM matrix: cpu, npu, hybrid."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from _models import LLAMA_CPP_LLM_MODEL, LLAMA_CPP_LLM_QUANT
 pytestmark = pytest.mark.llm
 
 
-@pytest.mark.parametrize('device_map', ['cpu', 'gpu', 'npu', 'hybrid'])
+@pytest.mark.parametrize('device_map', ['cpu', 'npu', 'hybrid'])
 def test_generate_blocking(llama_cpp_llm_paths, device_map):
     with geniex.AutoModelForCausalLM.from_pretrained(
         LLAMA_CPP_LLM_MODEL,

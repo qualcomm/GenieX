@@ -51,17 +51,8 @@
             "pages": [
               "en/get-started/what-is-geniex",
               "en/get-started/quickstart",
-              "en/get-started/choose-runtime",
-              "en/get-started/platforms"
-            ]
-          },
-          {
-            "group": "Models",
-            "icon": "cube",
-            "pages": [
-              "en/models/supported",
-              "en/models/quantization",
-              "en/models/bring-your-own"
+              "en/get-started/platforms",
+              "en/models/supported"
             ]
           },
           {
@@ -124,17 +115,8 @@
             "pages": [
               "cn/get-started/what-is-geniex",
               "cn/get-started/quickstart",
-              "cn/get-started/choose-runtime",
-              "cn/get-started/platforms"
-            ]
-          },
-          {
-            "group": "模型",
-            "icon": "cube",
-            "pages": [
-              "cn/models/supported",
-              "cn/models/quantization",
-              "cn/models/bring-your-own"
+              "cn/get-started/platforms",
+              "cn/models/supported"
             ]
           },
           {

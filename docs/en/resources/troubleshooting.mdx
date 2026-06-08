@@ -28,8 +28,8 @@ import Feedback from "/snippets/page-feedback.mdx";
     ```
   </Accordion>
 
-  <Accordion title="`--device cpu` or `--device gpu` errors with a QAIRT model">
-    QAIRT is NPU-only. Use `--device npu` (or omit the flag — `npu` is the default for QAIRT). To run on CPU/GPU, switch to a GGUF model on the [llama.cpp runtime](/en/get-started/choose-runtime#llamacpp).
+  <Accordion title="`--device cpu` or `--device gpu` errors with a Qualcomm AI Hub Model">
+    Qualcomm AI Engine Direct is NPU-only. Use `--device npu` (or omit the flag — `npu` is the default for `qairt`). To run on CPU/GPU, switch to a GGUF model on the [llama.cpp runtime](/en/get-started/platforms#llamacpp).
   </Accordion>
 </AccordionGroup>
 
@@ -122,19 +122,19 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="Model loads but generation self-repeats or outputs nothing">
-    The demo (or your code) is passing the **raw user text** into `generateStreamFlow` instead of the chat-templated prompt. QAIRT pipelines treat their input as already-templated — pass `applyChatTemplate().formattedText`, not the raw user message.
+    The demo (or your code) is passing the **raw user text** into `generateStreamFlow` instead of the chat-templated prompt. Qualcomm AI Engine Direct pipelines treat their input as already-templated — pass `applyChatTemplate().formattedText`, not the raw user message.
   </Accordion>
 
-  <Accordion title="AI Hub pull fails with `INVALID_INPUT`">
-    Android needs an explicit `chipset` for AI Hub pulls — auto-detect only runs on Windows on Snapdragon. Set `ModelPullInput.chipset` to `"SM8750"` (Snapdragon 8 Elite) or `"SM8850"` (Snapdragon 8 Elite Gen 5). See [Android API reference → ModelPullInput](/en/run/android/api-reference#modelpullinput).
+  <Accordion title="Qualcomm AI Hub pull fails with `INVALID_INPUT`">
+    Android needs an explicit `chipset` for Qualcomm AI Hub pulls — auto-detect only runs on Windows on Snapdragon. Set `ModelPullInput.chipset` to `"SM8750"` (Snapdragon 8 Elite) or `"SM8850"` (Snapdragon 8 Elite Gen 5). See [Android API reference → ModelPullInput](/en/run/android/api-reference#modelpullinput).
   </Accordion>
 
-  <Accordion title="QAIRT load fails with 'unknown model name'">
-    The model id returned by AI Hub must match an entry in the QAIRT runtime's registry (`qwen3_4b_instruct_2507`, `qwen2_5_vl_7b_instruct`, etc.). To add a new AI Hub model, register it on the C++ side first — see `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`.
+  <Accordion title="Qualcomm AI Engine Direct load fails with 'unknown model name'">
+    The model id returned by Qualcomm AI Hub must match an entry in the Qualcomm AI Engine Direct runtime's registry (`qwen3_4b_instruct_2507`, `qwen2_5_vl_7b_instruct`, etc.). To add a new Qualcomm AI Hub Model, register it on the C++ side first — see `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`.
   </Accordion>
 
-  <Accordion title="`nGpuLayers` or `nCtx` rejected on QAIRT">
-    QAIRT bundles are compiled with fixed KV cache and context length. Leave both `nGpuLayers` and `nCtx` at their defaults; tune `max_tokens` and `enable_thinking` instead.
+  <Accordion title="`nGpuLayers` or `nCtx` rejected on Qualcomm AI Engine Direct">
+    Qualcomm AI Hub Models are compiled with fixed KV cache and context length. Leave both `nGpuLayers` and `nCtx` at their defaults; tune `max_tokens` and `enable_thinking` instead.
   </Accordion>
 </AccordionGroup>
 

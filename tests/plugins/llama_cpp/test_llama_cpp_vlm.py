@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""llama_cpp VLM matrix: cpu, gpu, npu, hybrid."""
+"""llama_cpp VLM matrix: cpu, npu, hybrid."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def _vlm_prompt(vlm: geniex.GenieXVLM, image_path: str, text: str) -> str:
     )
 
 
-@pytest.mark.parametrize('device_map', ['cpu', 'gpu', 'npu', 'hybrid'])
+@pytest.mark.parametrize('device_map', ['cpu', 'npu', 'hybrid'])
 def test_generate_with_image(llama_cpp_vlm_paths, test_image, device_map):
     with geniex.AutoModelForVision2Seq.from_pretrained(
         LLAMA_CPP_VLM_MODEL,
@@ -59,3 +59,34 @@ def test_generate_with_image(llama_cpp_vlm_paths, test_image, device_map):
         # Tiny VLMs can hit EOS on the first token, so don't assert text is
         # non-empty; the profile object proves a generation step ran.
         assert out.profile is not None
+
+
+def test_multi_turn_without_reset(llama_cpp_vlm_paths, test_image):
+    # The caller re-templates the whole conversation each turn and never calls
+    # reset(); the second turn must still decode against a token-accurate n_past.
+    # With the old character-offset tracking the second turn diverged.
+    with geniex.AutoModelForVision2Seq.from_pretrained(
+        LLAMA_CPP_VLM_MODEL,
+        device_map='cpu',
+    ) as vlm:
+        history = [
+            {
+                'role': 'user',
+                'content': [
+                    {'type': 'image', 'image': test_image},
+                    {'type': 'text', 'text': 'Describe this image.'},
+                ],
+            }
+        ]
+        prompt1 = vlm.tokenizer.apply_chat_template(history, tokenize=False, add_generation_prompt=True)
+        out1 = vlm.generate(prompt1, max_new_tokens=8, temperature=0.0, seed=42, images=[test_image])
+        assert out1.profile.prompt_tokens > 0
+
+        history.append({'role': 'assistant', 'content': out1.text or '...'})
+        history.append({'role': 'user', 'content': [{'type': 'text', 'text': 'What color is it?'}]})
+        prompt2 = vlm.tokenizer.apply_chat_template(history, tokenize=False, add_generation_prompt=True)
+        # Old char-offset tracking sliced prompt2 past the image marker while a
+        # bitmap was still supplied, so mtmd_tokenize failed and generate() raised.
+        out2 = vlm.generate(prompt2, max_new_tokens=8, temperature=0.0, seed=42, images=[test_image])
+        assert isinstance(out2, geniex.GenerateOutput)
+        assert out2.profile.prompt_tokens > 0

@@ -132,17 +132,17 @@ def llama_cpp_vlm_paths(geniex_session):
 @pytest.fixture(scope='session')
 def qairt_llm_paths(geniex_session):
     try:
-        return _mm.get_paths(QAIRT_LLM_MODEL)
+        return _mm.ensure_cached(QAIRT_LLM_MODEL)
     except geniex.GenieXError as e:
-        pytest.skip(f'QAIRT model {QAIRT_LLM_MODEL} not cached ({e}); run `geniex-py pull` first')
+        pytest.skip(f'could not pull {QAIRT_LLM_MODEL}: {e}')
 
 
 @pytest.fixture(scope='session')
 def qairt_vlm_paths(geniex_session):
     try:
-        return _mm.get_paths(QAIRT_VLM_MODEL)
+        return _mm.ensure_cached(QAIRT_VLM_MODEL)
     except geniex.GenieXError as e:
-        pytest.skip(f'QAIRT model {QAIRT_VLM_MODEL} not cached ({e}); run `geniex-py pull` first')
+        pytest.skip(f'could not pull {QAIRT_VLM_MODEL}: {e}')
 
 
 @pytest.fixture(scope='session')
