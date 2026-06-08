@@ -63,6 +63,9 @@ HERE = Path(__file__).parent
 
 AIHUB_BASE = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models"
 AIHUB_VERSION = "v0.52.0"
+# Staged into every artifact and fed to VLM cells; reuses the committed VLM
+# e2e fixture (tests/conftest.py TEST_IMAGE_PATH).
+TEST_IMAGE = HERE.parents[3] / "cli" / "server" / "docs" / "ui" / "favicon-32x32.png"
 CHIPSET = {
     "QCS9075M": "qualcomm-qcs9075",
     "SC8380XP": "qualcomm-snapdragon-x-elite",
@@ -102,7 +105,13 @@ def model_rows(models: list[dict], device: str) -> list[str]:
             kind = "bundle"
         else:
             url, kind = m["url"], "gguf"
-        rows.append(f"{m['name']}|{m['plugin']}|{','.join(m['devices'])}|{url}|{kind}")
+        mmproj = m.get("mmproj_url", "")
+        vlm = "1" if m.get("vlm") else ""
+        image = "1" if m.get("image") else ""
+        rows.append(
+            f"{m['name']}|{m['plugin']}|{','.join(m['devices'])}|{url}|{kind}"
+            f"|{mmproj}|{vlm}|{image}"
+        )
     return rows
 
 
@@ -120,6 +129,8 @@ def build_linux_artifact(
     script_path = stage / "run_linux.sh"
     script_path.write_text(script, newline="\n")
     script_path.chmod(0o755)
+
+    shutil.copy(TEST_IMAGE, stage / "test.png")
 
     return Path(shutil.make_archive(str(tmp / "artifact"), "zip", stage))
 
@@ -139,6 +150,8 @@ def build_windows_artifact(
 
     cert = HERE.parents[3] / ".github" / "certs" / "hexagon" / "ggml-htp-v1.cer"
     shutil.copy(cert, stage / "ggml-htp-v1.cer")
+
+    shutil.copy(TEST_IMAGE, stage / "test.png")
 
     return Path(shutil.make_archive(str(tmp / "artifact"), "zip", stage))
 
@@ -166,6 +179,7 @@ def build_android_artifact(
     (stage / "matrix_rows.txt").write_text("\n".join(model_rows(models, device)))
     shutil.copytree(HERE / "tests", stage / "tests")
     shutil.copy(HERE / "tests" / "requirements.txt", stage / "requirements.txt")
+    shutil.copy(TEST_IMAGE, stage / "test.png")
     (stage / "pytest.ini").write_text("[pytest]\naddopts = --junitxml=results.xml\n")
 
     return Path(shutil.make_archive(str(tmp / "artifact"), "zip", stage))

@@ -31,9 +31,11 @@ $rows = @'
 {MODELS}
 '@ -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
 
+$IMG = "C:/Temp/TestContent/test.png"
+
 Remove-Item $TSV -ErrorAction SilentlyContinue
 foreach ($row in $rows) {
-    $name, $plugin, $devs, $url, $kind = $row -split '\|'
+    $name, $plugin, $devs, $url, $kind, $mmproj_url, $vlm, $image = $row -split '\|'
     $dir = "$MODELS\$name"
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     Write-Output "=== fetch $name ($kind) ==="
@@ -65,9 +67,24 @@ foreach ($row in $rows) {
             }
         }
     }
+    $mmpathfwd = ""
+    if ($mmproj_url) {
+        $mmpath = "$dir\mmproj.gguf"
+        if (-not (Test-Path $mmpath)) {
+            try {
+                Invoke-WebRequest -Uri $mmproj_url -OutFile $mmpath
+            } catch {
+                Write-Output "WARNING: $name mmproj fetch failed, skipping"
+                continue
+            }
+        }
+        $mmpathfwd = $mmpath -replace '\\', '/'
+    }
+    $imgpath = if ($image -eq "1") { $IMG } else { "" }
     $mpathfwd = $mpath -replace '\\', '/'
     foreach ($d in $devs -split ',') {
-        "{0}-{1}-{2}`t{1}`t{2}`t{3}" -f $name, $plugin, $d, $mpathfwd | Add-Content $TSV
+        "{0}-{1}-{2}`t{1}`t{2}`t{3}`t`t{4}`t{5}`t{6}" -f `
+            $name, $plugin, $d, $mpathfwd, $mmpathfwd, $imgpath, $vlm | Add-Content $TSV
     }
 }
 

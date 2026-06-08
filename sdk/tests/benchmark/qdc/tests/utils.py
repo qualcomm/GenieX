@@ -25,8 +25,10 @@ from appium.options.common import AppiumOptions
 # QDC extracts the artifact under /qdc/appium/ on the runner host.
 HOST_BUNDLE = "/qdc/appium/pkg-geniex"
 HOST_ROWS = "/qdc/appium/matrix_rows.txt"
+HOST_IMAGE = "/qdc/appium/test.png"
 BUNDLE_PATH = "/data/local/tmp/pkg-geniex"
 MODELS_PATH = "/data/local/tmp/models"
+IMAGE_PATH = "/data/local/tmp/test.png"
 QDC_LOGS_PATH = "/data/local/tmp/QDC_logs"
 RESULTS_PATH = f"{QDC_LOGS_PATH}/results"
 
