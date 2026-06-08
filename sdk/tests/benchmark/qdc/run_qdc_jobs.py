@@ -62,6 +62,7 @@ AIHUB_VERSION = "v0.52.0"
 CHIPSET = {
     "QCS9075M": "qualcomm-qcs9075",
     "SC8380XP": "qualcomm-snapdragon-x-elite",
+    "SC8480XP": "qualcomm-snapdragon-x2-elite",
     "SM8750": "qualcomm-snapdragon-8-elite",
     "SM8850": "qualcomm-snapdragon-8-elite-gen5",
 }
