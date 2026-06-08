@@ -321,6 +321,13 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 	processor := &common.Processor{
 		Verbose:  verbose,
 		TestMode: testMode,
+		Reset: func() error {
+			err := p.Reset()
+			if err == nil {
+				history = nil
+			}
+			return err
+		},
 		Run: func(prompt string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			var res *geniex_sdk.LlmGenerateOutput
 			var err error
@@ -335,11 +342,6 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 						SamplerConfig: samplerConfig,
 					},
 				})
-				if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
-					res.ProfileData.StopReason = "context_length"
-					tokenIDs = nil
-					return res.FullText, res.ProfileData, common.ErrContextLengthExceeded
-				}
 				if err != nil {
 					// The SDK keeps whatever was generated before the failure; surface it.
 					return res.FullText, res.ProfileData, err
@@ -369,11 +371,6 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 					},
 				})
 
-				if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
-					res.ProfileData.StopReason = "context_length"
-					history = append(history, geniex_sdk.LlmChatMessage{Role: geniex_sdk.LlmRoleAssistant, Content: res.FullText})
-					return res.FullText, res.ProfileData, common.ErrContextLengthExceeded
-				}
 				if err != nil {
 					// The SDK keeps whatever was generated before the failure; surface it.
 					return res.FullText, res.ProfileData, err
@@ -399,15 +396,8 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 	} else if len(prompt) > 0 || input != "" {
 		processor.GetPrompt = getPromptOrInput
 	} else {
-		repl := common.Repl{
-			Reset: func() error {
-				err := p.Reset()
-				if err == nil {
-					history = nil
-				}
-				return err
-			},
-		}
+		repl := common.Repl{}
+		repl.Reset = processor.Reset
 		defer repl.Close()
 		processor.GetPrompt = repl.GetPrompt
 	}
@@ -475,6 +465,13 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 		ParseFile: true,
 		Verbose:   verbose,
 		TestMode:  testMode,
+		Reset: func() error {
+			err := p.Reset()
+			if err == nil {
+				history = nil
+			}
+			return err
+		},
 		Run: func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
 			msg := geniex_sdk.VlmChatMessage{Role: geniex_sdk.VlmRoleUser}
 			msg.Contents = append(msg.Contents, geniex_sdk.VlmContent{Type: geniex_sdk.VlmContentTypeText, Text: prompt})
@@ -507,16 +504,6 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 					AudioPaths:     audios,
 				},
 			})
-			if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
-				res.ProfileData.StopReason = "context_length"
-				history = append(history, geniex_sdk.VlmChatMessage{
-					Role: geniex_sdk.VlmRoleAssistant,
-					Contents: []geniex_sdk.VlmContent{
-						{Type: geniex_sdk.VlmContentTypeText, Text: res.FullText},
-					},
-				})
-				return res.FullText, res.ProfileData, common.ErrContextLengthExceeded
-			}
 			if err != nil {
 				// The SDK keeps whatever was generated before the failure; surface it.
 				return res.FullText, res.ProfileData, err
@@ -536,15 +523,8 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 	if len(prompt) > 0 || input != "" {
 		processor.GetPrompt = getPromptOrInput
 	} else {
-		repl := common.Repl{
-			Reset: func() error {
-				err := p.Reset()
-				if err == nil {
-					history = nil
-				}
-				return err
-			},
-		}
+		repl := common.Repl{}
+		repl.Reset = processor.Reset
 		if caps.SupportsAudio {
 			repl.Record = func() (*string, error) {
 				t := strconv.Itoa(int(time.Now().Unix()))
