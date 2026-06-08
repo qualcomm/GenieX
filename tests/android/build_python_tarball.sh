@@ -6,7 +6,7 @@
 set -euo pipefail
 
 TERMUX_REPO="https://packages.termux.dev/apt/termux-main"
-DEPS="python gdbm libandroid-posix-semaphore libandroid-support libbz2 libcrypt libexpat libffi liblzma libsqlite ncurses ncurses-ui-libs openssl readline zlib"
+DEPS="python python-pip gdbm libandroid-posix-semaphore libandroid-support libbz2 libcrypt libexpat libffi liblzma libsqlite ncurses ncurses-ui-libs openssl readline zlib"
 PIP_PKGS="pytest tqdm"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -75,7 +75,6 @@ export PREFIX=/data/local/tmp/termux-usr
 export LD_LIBRARY_PATH=\$PREFIX/lib
 export HOME=/data/local/tmp TMPDIR=/data/local/tmp/tmp
 mkdir -p \$TMPDIR
-\$PREFIX/bin/python3 -m ensurepip
 \$PREFIX/bin/python3 -m pip install --target=\$PREFIX/lib/python3.13/site-packages $PIP_PKGS
 "
 

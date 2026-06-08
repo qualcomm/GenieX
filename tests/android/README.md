@@ -11,7 +11,7 @@ APK install, no on-device compiler.
 /data/local/tmp/
 ├── termux-usr/    ~22 MB   portable Python 3.13 + pip + pytest + tqdm
 ├── geniex/                 pkg-geniex (Android NDK build) + flattened plugin libs
-├── sdk-tests/             tests/ (without models/ and android/)
+├── tests/                  tests/ (without models/ and android/)
 └── .cache/geniex/models/   models (pulled manually, see below)
 ```
 
@@ -68,10 +68,10 @@ $PREFIX/bin/python3 -m geniex.cli pull qualcomm/Qwen3-4B-Instruct-2507
 No default selection — you pass the `-m` / paths explicitly:
 
 ```bash
-# API metadata subset (12/13 pass on Android; test_device_list SIGABRTs — SDK bug)
+# API metadata subset (13/13 pass; test_device_list excluded — SDK SIGABRT)
 tests/android/run_on_device.sh test -- -m api --ignore=api/test_device_list.py
 
-# Real QAIRT/NPU inference (1/1)
+# Real QAIRT/NPU inference
 tests/android/run_on_device.sh test -- plugins/qairt/test_qairt_llm.py
 ```
 
@@ -82,16 +82,18 @@ interactive shell with the same env for manual debugging.
 
 | Group | Status |
 |---|---|
-| `tests/api/` | 12/13 — `test_device_list` and `test_qairt_plugin_version_nonempty` hit SDK bugs |
-| `tests/plugins/qairt/test_qairt_llm.py` | passes (real NPU inference) |
+| `tests/api/` (minus `test_device_list`) | 13/13 pass |
+| `tests/api/test_device_list.py` | excluded — `geniex_get_device_list` SIGABRTs (SDK bug) |
+| `tests/plugins/qairt/test_qairt_llm.py` | NPU inference runs; currently fails in the binding's strict UTF-8 decode of a token-truncated output (downstream bug, not the harness) |
 | `tests/plugins/qairt/test_qairt_vlm.py` | not yet verified |
 | `tests/plugins/llama_cpp/` | runs once libs are flattened (done by `deploy`) |
 
-## Known SDK bugs (follow-ups, not harness issues)
+## Known downstream bugs (follow-ups, not harness issues)
 
-Filed under #682; out of scope for these scripts:
+Out of scope for these scripts:
 
-1. `geniex_get_device_list` SIGABRTs on Android.
-2. llama.cpp Hexagon backend init (`ggml-hex error 0x80000406` → NULL device → assert).
-3. qairt plugin `dlopen`s `lib/libQnnHtp.so` flat instead of `lib/qairt/htp-files/`.
-4. `geniex_get_plugin_version("qairt")` returns an empty string on Android.
+1. `geniex_get_device_list` SIGABRTs on Android (#682).
+2. llama.cpp Hexagon backend init (`ggml-hex error 0x80000406` → NULL device → assert) (#682).
+3. The Python binding decodes a token-truncated `full_text` with strict UTF-8
+   (`modeling.py` `string_at(out.full_text).decode()`), so a generate that ends
+   mid-multibyte raises `UnicodeDecodeError` — surfaces in `test_qairt_llm.py`.

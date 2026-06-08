@@ -13,7 +13,7 @@ PY_TARBALL="$SCRIPT_DIR/dist/python-android-portable.tar.gz"
 DEV_ROOT="/data/local/tmp"
 DEV_PY="$DEV_ROOT/termux-usr"
 DEV_SDK="$DEV_ROOT/geniex"
-DEV_TESTS="$DEV_ROOT/sdk-tests"
+DEV_TESTS="$DEV_ROOT/tests"
 PREFIX="$DEV_PY"
 
 DEVICE=""
@@ -113,11 +113,12 @@ done
 true
 "
 
-  # 4. tests/ (without models/ and android/)
+  # 4. tests/ (without models/ and android/). Keep the dir named `tests` — the
+  # conftest location markers (-m api / -m qairt) require parts[0] == 'tests'.
   echo ">> deploying tests/"
   tar --exclude='tests/models' --exclude='tests/android' -czf "$tmp/sdk-tests.tar.gz" -C "$REPO_ROOT" tests
   adb_push "$tmp/sdk-tests.tar.gz" "$DEV_ROOT/"
-  adb_sh "cd $DEV_ROOT && rm -rf sdk-tests && tar -xzf sdk-tests.tar.gz && mv tests sdk-tests && rm sdk-tests.tar.gz"
+  adb_sh "cd $DEV_ROOT && rm -rf tests && tar -xzf sdk-tests.tar.gz && rm sdk-tests.tar.gz"
 
   # 5. geniex Python bindings
   echo ">> deploying geniex Python bindings"
