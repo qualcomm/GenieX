@@ -94,8 +94,10 @@ into `_`. Examples:
 | `qualcomm/Llama-v3.2-1B-Instruct`     | `llama_v3_2_1b_instruct`  |
 
 Expected wall-clock: ~30 minutes for a 1B model, ~2 hours for a 4B model
-on Snapdragon X Elite (NPU). Both runtimes generate up to 512 tokens
-per prompt; the prompt suite has 100 prompts.
+on Snapdragon X Elite (NPU). By default both runtimes generate until their
+natural EOS / context-exhaustion stop (no token cap); the prompt suite has
+100 prompts. Pass `--max-tokens N` to truncate the geniex side for quick
+smoke tests.
 
 ## Useful flags
 
@@ -106,8 +108,10 @@ per prompt; the prompt suite has 100 prompts.
 | `--genie-config-dir`  | auto-discovered from the geniex cache      | Override only if the model isn't in the standard geniex cache layout.  |
 | `--device-map`        | `auto`                                     | `device_map` for the geniex Python API: `auto`/`cpu`/`gpu`/`npu`/`hybrid`/`<plugin>:<device>`. |
 | `--out`               | `results/<slug>.csv`                       | Override the CSV path (the answers.json is always derived from it).    |
-| `--max-tokens`        | 512                                        | Cap on tokens per prompt (geniex side; genie honors EOS via template). |
-| `--timeout`           | 600                                        | Per-prompt timeout in seconds for the `genie-t2t-run` subprocess.      |
+| `--max-tokens`        | 0 (no cap)                                 | Cap on geniex tokens per prompt. `0` = run to natural EOS / context stop, like genie. Set positive to truncate. |
+| `--timeout`           | 600                                        | Per-prompt timeout in seconds, for both the in-process geniex `generate` and the `genie-t2t-run` subprocess. |
+| `--bos-token`         | auto per model                             | BOS token prepended to the geniex chat-templated prompt (e.g. `<\|endoftext\|>` is auto-selected for Qwen3-4B-2507). Pass a string to force one. |
+| `--no-bos`            | off                                        | Disable BOS-token prepending on the geniex side even for models that would otherwise get one. |
 | `--limit N`           | 0 (all)                                    | Run only the first N prompts — handy for smoke tests.                  |
 | `--resume`            | off                                        | Skip prompts whose `id` already appears in `--out`. Use to continue.   |
 | `--skip-genie`        | off                                        | Skip the genie-t2t-run pass; only run geniex. Default `--out` becomes `results/<slug>_geniex_only.csv`. See "Geniex-only re-runs" below. |
