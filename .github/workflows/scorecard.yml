@@ -35,7 +35,7 @@ jobs:
           PICK: ${{ github.event.inputs.device }}
         run: |
           echo "matrix=$(jq -c . sdk/tests/benchmark/qdc/scorecard-models.json)" >> "$GITHUB_OUTPUT"
-          all='["QCS9075M","SM8850"]'
+          all='["QCS9075M","SC8380XP","SC8480XP","SM8750","SM8850"]'
           devices=$([ -n "$PICK" ] && jq -cn --arg d "$PICK" '[$d]' || echo "$all")
           echo "devices=$devices" >> "$GITHUB_OUTPUT"
 
