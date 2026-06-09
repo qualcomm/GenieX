@@ -1,0 +1,72 @@
+name: Run in ubuntu:24.04
+description: >-
+  Run a bash script inside an ubuntu:24.04 docker container with the
+  workspace mounted, optional cache mount, and a chown back to the
+  runner uid/gid on exit. Used by Linux test cells whose binaries link
+  against libgeniex's GLIBC_2.39.
+
+inputs:
+  script:
+    description: "Bash script body to run inside the container."
+    required: true
+  apt_packages:
+    description: "Space-separated apt packages to install before the script."
+    required: false
+    default: "ca-certificates python3 python3-pip python3-venv git"
+  cache_host_path:
+    description: "Host cache path to mount (a leading ~ expands to $HOME). Empty disables the mount."
+    required: false
+    default: ""
+  cache_container_path:
+    description: "Container mount target for the cache. Required when cache_host_path is set."
+    required: false
+    default: ""
+  env:
+    description: "Newline-separated KEY=VALUE pairs forwarded into the container."
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        APT_PACKAGES: ${{ inputs.apt_packages }}
+        CACHE_HOST: ${{ inputs.cache_host_path }}
+        CACHE_CONTAINER: ${{ inputs.cache_container_path }}
+        EXTRA_ENV: ${{ inputs.env }}
+        SCRIPT: ${{ inputs.script }}
+      run: |
+        set -euo pipefail
+        tmp="$(mktemp -d)"
+        printf '%s\n' "$SCRIPT" > "$tmp/run.sh"
+        printf '%s\n' "$EXTRA_ENV" > "$tmp/env"
+
+        cache_args=()
+        if [ -n "$CACHE_HOST" ]; then
+          host="${CACHE_HOST/#\~/$HOME}"
+          mkdir -p "$host"
+          cache_args=(-v "$host:$CACHE_CONTAINER")
+        fi
+
+        docker run --rm \
+          -v "${{ github.workspace }}:/workspace" \
+          -v "$tmp/run.sh:/tmp/run.sh:ro" \
+          --env-file "$tmp/env" \
+          "${cache_args[@]}" \
+          -w /workspace \
+          -e DEBIAN_FRONTEND=noninteractive \
+          -e HOST_UID="$(id -u)" \
+          -e HOST_GID="$(id -g)" \
+          -e APT_PACKAGES="$APT_PACKAGES" \
+          -e CACHE_CHOWN="$CACHE_CONTAINER" \
+          ubuntu:24.04 \
+          bash -euxo pipefail -c '
+            apt-get update -qq
+            apt-get install -y --no-install-recommends $APT_PACKAGES >/dev/null
+            git config --global --add safe.directory "*"
+            status=0
+            bash -euxo pipefail /tmp/run.sh || status=$?
+            chown -R "$HOST_UID:$HOST_GID" /workspace ${CACHE_CHOWN:+"$CACHE_CHOWN"} || true
+            exit "$status"
+          '
