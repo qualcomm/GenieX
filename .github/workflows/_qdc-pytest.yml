@@ -6,8 +6,8 @@ name: QDC pytest (reusable)
 # Reuses the benchmark's QDC submit/poll/collect plumbing (sdk/benchmark/qdc/_qdc.py)
 # and the tests/android adb harness to drive the phone.
 #
-# Called by pr-check.yml after build-sdk so the SDK artifact is shared with the
-# rest of the PR graph instead of rebuilt.
+# Called by pr-check.yml and test.yml after build-sdk so the SDK artifact is
+# shared with the rest of the PR / tag graph instead of rebuilt.
 
 on:
   workflow_call:
@@ -17,8 +17,8 @@ permissions:
   packages: read
 
 jobs:
-  pytest:
-    name: pytest
+  qdc:
+    name: qdc
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:

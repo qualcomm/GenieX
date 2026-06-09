@@ -89,8 +89,8 @@ jobs:
     with:
       push: false
 
-  go-test:
-    name: go-test
+  test-go:
+    name: test-go
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_test.yml
@@ -99,8 +99,8 @@ jobs:
       language: go
       gate_on_changed_files: true
 
-  python-pytest:
-    name: python-pytest
+  test-python:
+    name: test-python
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_test.yml
@@ -109,8 +109,8 @@ jobs:
       language: python
       gate_on_changed_files: true
 
-  sdk-pytest:
-    name: sdk-pytest
+  test-sdk-ci:
+    name: test-sdk-ci
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_test.yml
@@ -123,8 +123,8 @@ jobs:
       platforms: '["windows-arm64"]'
       gate_on_changed_files: true
 
-  qdc-pytest:
-    name: qdc-pytest
+  test-sdk-qdc:
+    name: test-sdk-qdc
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_qdc-pytest.yml

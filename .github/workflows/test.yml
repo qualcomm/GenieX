@@ -1,16 +1,17 @@
 name: Test
 
 # Top-level test entry point for tag pushes and manual reruns. Builds
-# the SDK on demand, then fans out to _test.yml for the three caller
-# jobs (go-test, python-pytest, sdk-pytest), each a 2-cell matrix over
-# linux-arm64 + windows-arm64 — six checks total.
+# the SDK on demand, then fans out to _test.yml (test-go, test-python,
+# test-sdk-ci) and _qdc-pytest.yml (test-sdk-qdc) so tag pushes get the
+# same coverage PRs do.
 #
-# This workflow is independent of release.yml. Both fire on the same
-# tag push but as siblings: failures here surface as a red check on the
-# tag commit and never gate the publish-* jobs in release.yml.
+# Independent of release.yml: both fire on the same tag push but as
+# siblings — failures here surface as a red check on the tag commit
+# and never gate the publish-* jobs in release.yml.
 #
-# pr-check.yml does NOT call this file — it calls _test.yml directly so
-# the SDK build is shared with the rest of the PR graph.
+# pr-check.yml does NOT call this file; it calls _test.yml /
+# _qdc-pytest.yml directly so the SDK build is shared with the rest of
+# the PR graph.
 
 on:
   push:
@@ -36,7 +37,7 @@ jobs:
       upload_artifact: true
       version_tag: ${{ inputs.version_tag || github.ref_name }}
 
-  go-test:
+  test-go:
     needs: [build-sdk]
     if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
     uses: ./.github/workflows/_test.yml
@@ -45,7 +46,7 @@ jobs:
       language: go
       gate_on_changed_files: false
 
-  python-pytest:
+  test-python:
     needs: [build-sdk]
     if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
     uses: ./.github/workflows/_test.yml
@@ -54,7 +55,7 @@ jobs:
       language: python
       gate_on_changed_files: false
 
-  sdk-pytest:
+  test-sdk-ci:
     needs: [build-sdk]
     if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
     uses: ./.github/workflows/_test.yml
@@ -64,3 +65,9 @@ jobs:
       # Linux disabled until the llama_cpp plugin can load without OpenCL.
       platforms: '["windows-arm64"]'
       gate_on_changed_files: false
+
+  test-sdk-qdc:
+    needs: [build-sdk]
+    if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
+    uses: ./.github/workflows/_qdc-pytest.yml
+    secrets: inherit
