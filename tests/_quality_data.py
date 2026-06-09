@@ -15,9 +15,21 @@
 """Quality-check prompts and image keywords shared by both plugin matrices.
 
 Mirrors the LLM and VLM keyword checks from upstream test-llama.cpp's QDC
-scorecard (`scripts/snapdragon/qdc/tests/run_scorecard_posix.py`). Sampler
-params and substring-match logic stay in lock-step so a regression on either
-side is comparable across the two suites.
+scorecard (`scripts/snapdragon/qdc/tests/run_scorecard_posix.py`). Prompts,
+seed, n-predict, and substring-match logic stay aligned with upstream so a
+regression on either side is comparable across the two suites.
+
+Two intentional deltas vs. upstream:
+
+- temperature is left at the SDK's `0.0 = defer-to-bundle-default` sentinel
+  (see bindings/python/geniex/generation/config.py); the llama.cpp plugin
+  resolves that to 0.8 (params.cpp). Upstream `llama-completion` similarly
+  doesn't pass `--temp`, so it lands at the same plugin default — both sides
+  sample, both rely on the matching `seed=1` for determinism. NOT greedy.
+- VLM only ships the dog photo + first keyword set. Upstream also iterates a
+  Qualcomm AIHub product image with vocabulary like person/phone/text; that
+  second image is deferred to keep the in-repo asset surface small. Tracked
+  alongside the perplexity follow-up.
 """
 
 from __future__ import annotations
@@ -30,7 +42,7 @@ LLM_QUALITY_PROMPTS: list[tuple[str, str]] = [
 ]
 
 LLM_QUALITY_MAX_NEW_TOKENS = 256
-LLM_QUALITY_TEMPERATURE = 0.0
+LLM_QUALITY_TEMPERATURE = 0.0  # 0.0 = defer to plugin default; see module docstring
 LLM_QUALITY_SEED = 1
 
 VLM_QUALITY_PROMPT = 'Describe this image in detail.'
@@ -44,6 +56,9 @@ VLM_QUALITY_KEYWORDS: tuple[str, ...] = (
     'outdoor',
     'pet',
 )
-VLM_QUALITY_MAX_NEW_TOKENS = 64
+# Upstream uses 512; we cap at 256 — same headroom as the LLM cell, plenty of
+# room for a keyword to appear in the caption, and bounded enough to keep the
+# QDC Android wall-clock predictable across 4 VLM cells.
+VLM_QUALITY_MAX_NEW_TOKENS = 256
 VLM_QUALITY_TEMPERATURE = 0.0
 VLM_QUALITY_SEED = 1

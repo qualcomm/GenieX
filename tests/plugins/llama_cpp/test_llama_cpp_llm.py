@@ -63,8 +63,9 @@ def test_generate_stream(llama_cpp_llm_paths, device_map):
 @pytest.mark.parametrize(('prompt', 'expected'), LLM_QUALITY_PROMPTS)
 def test_quality_keywords(llama_cpp_llm_paths, device_map, prompt, expected):
     # Mirrors run_scorecard_posix.py:_section_quality_checks (test-llama.cpp):
-    # greedy decode (temperature=0, seed=1), n_predict=256, case-insensitive
-    # substring match. A regression on either side is directly comparable.
+    # same prompts, n_predict=256, seed=1, plugin-default sampler (NOT greedy
+    # — see _quality_data.py module docstring), case-insensitive substring
+    # match. A regression on either side is directly comparable.
     with geniex.AutoModelForCausalLM.from_pretrained(
         LLAMA_CPP_LLM_MODEL,
         quant=LLAMA_CPP_LLM_QUANT,
