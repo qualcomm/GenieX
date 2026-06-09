@@ -137,8 +137,24 @@ def summarise(xml: bytes) -> tuple[int, str]:
     ]
     for status, name, msg, body in rows:
         if status == 'FAIL':
-            lines += [f'<details><summary>{icon[status]} <code>{name}</code> — {msg}</summary>', '']
-            lines += ['```', body, '```', '</details>']
+            # Quality-keyword failures dump the full completion (>1 KB, with
+            # literal `\n`, `$`, `=`, unbalanced quotes) into the assertion
+            # message. Render that inline and GitHub's markdown parser
+            # interprets it as math / breaks layout — collapse newlines to
+            # spaces, cap the snippet, and wrap in <code> so the <summary>
+            # line stays one row. Full message survives in the body block.
+            snippet = ' '.join((msg or '').split())
+            if len(snippet) > 200:
+                snippet = snippet[:200] + '…'
+            tail = f' — <code>{snippet}</code>' if snippet else ''
+            lines += [
+                f'<details><summary>{icon[status]} <code>{name}</code>{tail}</summary>',
+                '',
+                '```',
+                body,
+                '```',
+                '</details>',
+            ]
         elif status == 'SKIP':
             lines.append(f'{icon[status]} `{name}` — {msg}')
         else:
