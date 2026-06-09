@@ -1,0 +1,602 @@
+[
+ {
+  "id": 1,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Genie: correct, thorough. Geniex (NEW): correct, well-structured (was 2 in prior run — gravity bug fixed in 0.2.3rc3)."
+ },
+ {
+  "id": 2,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Genie: calls the llama 'Vicugna pacos' (that's the alpaca) and invents a Quechua etymology. Geniex (NEW): mostly correct, but baby llamas are 'crias' not 'joey' or 'lambs', and llamas don't have 'beaks'; minor 'Lllamas' typo."
+ },
+ {
+  "id": 3,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Genie: correct. Geniex (NEW): correct (prior run mis-classified protists; fixed)."
+ },
+ {
+  "id": 4,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct."
+ },
+ {
+  "id": 5,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct."
+ },
+ {
+  "id": 6,
+  "genie_score": 10,
+  "geniex_score": 7,
+  "note": "Geniex (NEW): mostly correct but fabricates 'Copleton Prize' (real award is the Copley Medal); also says he revised the static-universe model 'after observing the expansion' (it was Hubble's observation). Genie: correct."
+ },
+ {
+  "id": 7,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Neptune)."
+ },
+ {
+  "id": 8,
+  "genie_score": 2,
+  "geniex_score": 10,
+  "note": "Geniex (NEW): correct, complete description of Qualcomm (was jibberish founder name 'Irwin M. M. M.' in prior run — fixed). Genie: still garbled."
+ },
+ {
+  "id": 9,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Genie: calls Oreo 'chocolate-caramel'. Geniex (NEW): correct on Oreo as the answer, but lists Napoleons (a layered pastry) as a 'sandwich cookie' — minor category confusion."
+ },
+ {
+  "id": 10,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct."
+ },
+ {
+  "id": 11,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex cut only at the final summary equation)."
+ },
+ {
+  "id": 12,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex truncated only in trailing fun fact)."
+ },
+ {
+  "id": 13,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex truncated mid-trailing bullet — substance complete)."
+ },
+ {
+  "id": 14,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct."
+ },
+ {
+  "id": 15,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex truncated after 4 of expected ~4–5 reasons — substance complete)."
+ },
+ {
+  "id": 16,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (210)."
+ },
+ {
+  "id": 17,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (150 miles)."
+ },
+ {
+  "id": 18,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct ($36)."
+ },
+ {
+  "id": 19,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (6x+2)."
+ },
+ {
+  "id": 20,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (1/2)."
+ },
+ {
+  "id": 21,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (48 cm^2)."
+ },
+ {
+  "id": 22,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct ($1,157.63)."
+ },
+ {
+  "id": 23,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (x=8)."
+ },
+ {
+  "id": 24,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (42)."
+ },
+ {
+  "id": 25,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (8 cm)."
+ },
+ {
+  "id": 26,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Genie: opens 'Yes, we can conclude' then contradicts itself. Geniex (NEW): same self-contradiction pattern — opens 'Yes, we **can** conclude' then walks to '❌ No, not necessarily' (correct conclusion but the opening assertion is wrong); truncated."
+ },
+ {
+  "id": 27,
+  "genie_score": 7,
+  "geniex_score": 10,
+  "note": "Geniex (NEW): correct method and both cases worked through correctly (was botched in prior run — fixed). Genie: case 2 still wrong."
+ },
+ {
+  "id": 28,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (9)."
+ },
+ {
+  "id": 29,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Both: grammatical but rambling/incoherent in spots; miss the classic in-law answer. Geniex truncated."
+ },
+ {
+  "id": 30,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (5 minutes)."
+ },
+ {
+  "id": 31,
+  "genie_score": 7,
+  "geniex_score": 2,
+  "note": "Genie: very rambling but reaches the correct method/answer (45 min). Geniex (NEW): never produces the correct method (light rope1 both ends + rope2 one end, then light rope2's other end at 30 min); rambles, contradicts itself, truncates with no working solution."
+ },
+ {
+  "id": 32,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Both reach 'no missing dollar' but with messy/inconsistent intermediate accounting; Geniex truncated."
+ },
+ {
+  "id": 33,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct."
+ },
+ {
+  "id": 34,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex's bonus 2nd function truncated; requested function complete)."
+ },
+ {
+  "id": 35,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex (NEW): function correct with clean example output — prior run had garbled '(3,7)' trailer, fixed)."
+ },
+ {
+  "id": 36,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex truncated only in trailing usage example after class is fully defined)."
+ },
+ {
+  "id": 37,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct SQL."
+ },
+ {
+  "id": 38,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Genie: example usage has a bracket syntax error. Geniex (NEW): main flatten function correct, but Test 3 has an extra closing paren and Test 6 calls flatten with two args (function takes one) — examples won't run."
+ },
+ {
+  "id": 39,
+  "genie_score": 7,
+  "geniex_score": 2,
+  "note": "Genie: subtractive logic buggy (double-counts; IV->9). Geniex (NEW): subtractive cases never advance i (IV would yield 9 not 4), truncates with no working fix."
+ },
+ {
+  "id": 40,
+  "genie_score": 10,
+  "geniex_score": 7,
+  "note": "Genie: complete with twist + resolution. Geniex (NEW): rich plot and twist (mother in photo) but truncated before any resolution (the prompt required one)."
+ },
+ {
+  "id": 41,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both fine."
+ },
+ {
+  "id": 42,
+  "genie_score": 10,
+  "geniex_score": 7,
+  "note": "Geniex: truncated mid-scene, no ending. Genie: complete."
+ },
+ {
+  "id": 43,
+  "genie_score": 10,
+  "geniex_score": 7,
+  "note": "Geniex: truncated mid-paragraph, no closing. Genie: complete."
+ },
+ {
+  "id": 44,
+  "genie_score": 10,
+  "geniex_score": 7,
+  "note": "Geniex: truncated mid-Kai's response, no resolution. Genie: complete."
+ },
+ {
+  "id": 45,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Both: not a true 5-7-5 haiku (syllable counts off — 'Foam-whis-pers-on-the-shore' is 6, not 5)."
+ },
+ {
+  "id": 46,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both strong openings."
+ },
+ {
+  "id": 47,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Both fail limerick form (rhyme/meter/line-count); Geniex more awkward/forced."
+ },
+ {
+  "id": 48,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Bonjour, comment allez-vous ?)."
+ },
+ {
+  "id": 49,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Te quiero / Yo te amo)."
+ },
+ {
+  "id": 50,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Gute Nacht und süße Träume)."
+ },
+ {
+  "id": 51,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Geniex (NEW): correct Italian translation (was English directions in prior run — fixed). Genie: also correct."
+ },
+ {
+  "id": 52,
+  "genie_score": 10,
+  "geniex_score": 7,
+  "note": "Genie: correct Japanese. Geniex (NEW): translates but uses double は ('今日は天気は…') which is grammatically awkward — the natural form drops the second は or uses が."
+ },
+ {
+  "id": 53,
+  "genie_score": 10,
+  "geniex_score": 7,
+  "note": "Genie: correct ('Scientia est potentia'). Geniex: 'Scientia potestas' is doubly wrong — drops 'est' and uses potestas (legal/authority power) instead of potentia (capability)."
+ },
+ {
+  "id": 54,
+  "genie_score": 10,
+  "geniex_score": 7,
+  "note": "Geniex (NEW): substantive article, no nonsense words this time, but truncated mid-section ('Shaping Public Opinion and Activism') with no conclusion — for a 'write an article' prompt the missing wrap-up matters."
+ },
+ {
+  "id": 55,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct."
+ },
+ {
+  "id": 56,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Constraint: 3 paragraphs. Geniex (NEW): exactly 3 paragraphs covering renewable pros, renewable cons, fossil-fuel comparison — meets constraint AND content. Genie: also exactly 3, correct."
+ },
+ {
+  "id": 57,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex (NEW): comprehensive comparison; spurious-typo preamble from prior run is gone)."
+ },
+ {
+  "id": 58,
+  "genie_score": 10,
+  "geniex_score": 7,
+  "note": "Geniex: 'Arguments For' complete (7 points), 'Against' truncated after first item ('Incentive to Cease'). Genie: complete."
+ },
+ {
+  "id": 59,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both: exactly 5 numbered points, correct."
+ },
+ {
+  "id": 60,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both: <=3 sentences, correct."
+ },
+ {
+  "id": 61,
+  "genie_score": 7,
+  "geniex_score": 2,
+  "note": "Constraint: consonant-initial words only. Genie: describes the cycle but uses many vowel words. Geniex (NEW): pure word-salad list — uses vowel-initial words (escape, earth, under), heavy repetition (soak, soak, soak; touch, touch, touch), and never describes the cycle."
+ },
+ {
+  "id": 62,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Constraint: exactly 50 words. Genie: ~53. Geniex (NEW): ~39 words AND repeats 'Crystal-clear sound, dual charging, and long battery life.' verbatim twice — both constraint miss and repetition glitch."
+ },
+ {
+  "id": 63,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Constraint and format both right (3+3+3 with category headers). Genie: wrong binomials (Robin='Troglodytes', Eagle='Aquila aerula'). Geniex (NEW): also fabricates binomials (Aquila aeriformis, Natrix natalis, Varanus varius — all wrong species names)."
+ },
+ {
+  "id": 64,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Genie: Bridalveil height (2,200ft) and Tioga elevation (13,000ft) wrong, Lake Isabella not in Yosemite. Geniex (NEW): 'Devil's Slide' is in Pacifica not Yosemite, 'Tuolum' misspells Tuolumne, sections 5/6/7 repeat similar content (Glacier Point listed twice); truncated."
+ },
+ {
+  "id": 65,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Genie: invents hotels/sites. Geniex: only covers ~5 of the 7 days (truncated mid-Day 5)."
+ },
+ {
+  "id": 66,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both complete, correct."
+ },
+ {
+  "id": 67,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both solid (Geniex: 3 main sections delivered, truncated in trailing soft-skill bullet)."
+ },
+ {
+  "id": 68,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both complete, correct (Geniex (NEW): 5 design ideas listed; spurious 'Пропагандист' hallucination from prior run is gone)."
+ },
+ {
+  "id": 69,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both solid (Geniex truncated in trailing trend)."
+ },
+ {
+  "id": 70,
+  "genie_score": 7,
+  "geniex_score": 10,
+  "note": "Genie: wrong Roth IRA limit ('$17,500'; actual ~$7,000). Geniex: 3 main investment options delivered, no factual errors (truncated trailing)."
+ },
+ {
+  "id": 71,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both complete, good."
+ },
+ {
+  "id": 72,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both complete, good."
+ },
+ {
+  "id": 73,
+  "genie_score": 7,
+  "geniex_score": 10,
+  "note": "Geniex (NEW): substantive 8-strategy answer (was a refusal 'I can't assist with that' in prior run — fixed). Genie: complete with one garbled '番茄' insertion."
+ },
+ {
+  "id": 74,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex (NEW): correct botanical classification, no 'banana eaten as a vegetable' nonsense from prior run)."
+ },
+ {
+  "id": 75,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both: same correct verdict (negative/mixed-leaning-negative)."
+ },
+ {
+  "id": 76,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both: correct extraction."
+ },
+ {
+  "id": 77,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Genie: heavy waffling/self-correction (final answer ok). Geniex (NEW): puts Eagle in 'Land' (eagles are typically classified by Air since they fly) — defensible-but-wrong choice; rest of categorization correct."
+ },
+ {
+  "id": 78,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Geniex (NEW): coherent 'bugging' programmer-computer joke (was incoherent in prior run — fixed). Genie: classic working joke."
+ },
+ {
+  "id": 79,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex (NEW): three hearts + blue blood + hemocyanin all right; no contradictory self-doubt this time)."
+ },
+ {
+  "id": 80,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both complete, good (minor 'Bever' typo in section header doesn't affect substance)."
+ },
+ {
+  "id": 81,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both complete (Geniex (NEW): 12 morals listed; nonsensical 'you might have meant' preamble from prior run is gone)."
+ },
+ {
+  "id": 82,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Genie: wrong Yongle dates (1424–1487) and anachronisms. Geniex (NEW): chooses 16th-c Japan but ukiyo-e is Edo-period not Sengoku, fabricates 'Cristo de la Cruz' as the first European in Japan, and 'sukihan garden' isn't a real term."
+ },
+ {
+  "id": 83,
+  "genie_score": 7,
+  "geniex_score": 7,
+  "note": "Genie: batter omits eggs, 1.5 cups oil, inconsistent. Geniex (NEW): ingredient list lists milk twice with different amounts, and butter+oil+1.5c milk would be a soup; truncated mid-step 1."
+ },
+ {
+  "id": 84,
+  "genie_score": 10,
+  "geniex_score": 7,
+  "note": "Genie: correct ingredients. Geniex: ingredients list right (tomato/mozzarella/basil) but etymology wrong — 'margherita' doesn't mean 'rose', and the pizza is named after Queen Margherita of Savoy."
+ },
+ {
+  "id": 85,
+  "genie_score": 7,
+  "geniex_score": 2,
+  "note": "Genie: includes cream/milk then says traditional has none (inconsistent). Geniex (NEW): title says 'No Cream, No Cheese' but ingredients list includes Pecorino Romano AND heavy cream; pancetta/guanciale amounts listed three different ways (200g, 150g, 400g) — recipe is unfollowable."
+ },
+ {
+  "id": 86,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both complete, good."
+ },
+ {
+  "id": 87,
+  "genie_score": 7,
+  "geniex_score": 0,
+  "note": "Genie: truncated after only the safety intro (no actual steps). Geniex: EMPTY answer — generated nothing."
+ },
+ {
+  "id": 88,
+  "genie_score": 10,
+  "geniex_score": 7,
+  "note": "Constraint: under $300. Geniex (NEW): venue $75 + food itemized to $105 (claimed $130) + entertainment $110 (header — table truncated) ≈ within budget but food math is internally inconsistent ($130 claimed vs $105 itemized) and entertainment table is cut off."
+ },
+ {
+  "id": 89,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both: sound approach (Geniex truncated in example)."
+ },
+ {
+  "id": 90,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both complete (Geniex (NEW): full diagnose+solutions framework; prior run cut off before solutions)."
+ },
+ {
+  "id": 91,
+  "genie_score": 10,
+  "geniex_score": 7,
+  "note": "Genie: complete. Geniex (NEW): no 'timeout, timeout, timeout' glitch this time, but truncated at step 3 of an expected 5+ step debug walkthrough — incomplete."
+ },
+ {
+  "id": 92,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both clear, correct (Geniex (NEW): trampoline analogy + time bending; the 'прогрим' hallucination from prior run is gone)."
+ },
+ {
+  "id": 93,
+  "genie_score": 7,
+  "geniex_score": 10,
+  "note": "Genie: explanation correct but the 'fun fact' (CRISPR therapy approved 2016 for Leber) is fabricated. Geniex: accurate mechanism description."
+ },
+ {
+  "id": 94,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex truncated in DL strengths)."
+ },
+ {
+  "id": 95,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex (NEW): 'measles, polio, measles' repetition from prior run is gone)."
+ },
+ {
+  "id": 96,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct."
+ },
+ {
+  "id": 97,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (21, 34, 55, 89)."
+ },
+ {
+  "id": 98,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct passive voice."
+ },
+ {
+  "id": 99,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both correct (Geniex (NEW): clean 3-difference list; 'Прорыв typo' hallucination from prior run is gone)."
+ },
+ {
+  "id": 100,
+  "genie_score": 10,
+  "geniex_score": 10,
+  "note": "Both: clear restaurant analogy."
+ }
+]
