@@ -13,22 +13,15 @@
 #define portable_strdup strdup
 #endif
 
-#include "dispatch.h"             // provided by geniex-qairt/models/
-#include "geniex-proc/types.h"    // ChatMessage, Role, ChatTool, ChatTools
-#include "llm/llm_spec_loader.h"  // parseGenieSamplerConfig
+#include "dispatch.h"               // provided by geniex-qairt/models/
+#include "geniex-proc/tokenizer.h"  // ApplyChatTemplateOptions
+#include "geniex-proc/types.h"      // ChatMessage, Role
+#include "llm/llm_spec_loader.h"    // parseGenieSamplerConfig
 #include "logging.h"
-#include "pipeline/chat_template.h"
 #include "pipeline/llm_pipeline.h"
 #include "qnn_runtime_utils.h"
 #include "sampler_config_utils.h"
 #include "types.h"
-#include "utils/detail/json.hpp"  // qualla::ordered_json — vendored nlohmann/json
-                                  // already pulled in transitively via QnnApi.
-                                  // We deliberately do NOT use sdk/include/external/json.hpp
-                                  // here: nlohmann v3.12 (SDK) and qualla v3.11 (qnn-api)
-                                  // share NLOHMANN_* ABI macros, so including both in the
-                                  // same TU triggers macro redefinition / template arity
-                                  // mismatch errors.
 
 namespace fs = std::filesystem;
 
@@ -197,40 +190,19 @@ int32_t QairtLlm::apply_chat_template(
         messages.insert(messages.begin(), std::move(sys));
     }
 
-    // Tools live in the first-turn system block of the rendered prompt.
-    // They become part of the cached KV prefix; re-staging on later turns
-    // would emit a duplicate block. Callers that need a different tool
-    // list mid-conversation must call reset() first.
-    ChatTools tools;
+    ApplyChatTemplateOptions opts;
     if (is_first_turn_ && input->tools && input->tools[0] != '\0') {
-        try {
-            auto j = qualla::ordered_json::parse(input->tools);
-            if (!j.is_array()) {
-                GENIEX_LOG_ERROR("tools JSON must be an array");
-                return GENIEX_ERROR_COMMON_INVALID_INPUT;
-            }
-            tools.reserve(j.size());
-            for (const auto& el : j) {
-                // OAI-compat wraps each entry as {"type":"function","function":{...}};
-                // tolerate the un-wrapped form too.
-                const auto& fn = (el.is_object() && el.contains("function")) ? el["function"] : el;
-                if (!fn.is_object()) continue;
-                ChatTool t;
-                t.name        = fn.value("name", std::string{});
-                t.description = fn.value("description", std::string{});
-                if (fn.contains("parameters")) {
-                    t.parameters_json = fn["parameters"].dump();
-                }
-                if (!t.name.empty()) tools.push_back(std::move(t));
-            }
-        } catch (const std::exception& e) {
-            GENIEX_LOG_ERROR("Failed to parse tools JSON: {}", e.what());
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
-        }
+        opts.tools_json = input->tools;
     }
+    opts.enable_thinking = input->enable_thinking || enable_thinking_;
 
-    bool        thinking  = input->enable_thinking || enable_thinking_;
-    std::string formatted = pipeline_->applyChatTemplate(messages, tools, thinking);
+    std::string formatted;
+    try {
+        formatted = pipeline_->applyChatTemplate(messages, opts);
+    } catch (const std::exception& e) {
+        GENIEX_LOG_ERROR("applyChatTemplate failed: {}", e.what());
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    }
 
     output->formatted_text = portable_strdup(formatted.c_str());
     if (!output->formatted_text) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
