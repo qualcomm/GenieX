@@ -62,9 +62,13 @@ runs:
           filtered=$(printf '%s\n' "$filtered" | grep -vE "$EXCLUDE" || true)
         fi
 
+        # -e (not -f): submodule dirs are a real signal for sdk-pytest.
+        # if/fi (not && chain): keeps loop body exit 0 so `set -e` survives.
         if [ -n "$filtered" ]; then
           filtered=$(printf '%s\n' "$filtered" | while IFS= read -r f; do
-            [ -n "$f" ] && [ -f "$f" ] && printf '%s\n' "$f"
+            if [ -n "$f" ] && [ -e "$f" ]; then
+              printf '%s\n' "$f"
+            fi
           done)
         fi
 
