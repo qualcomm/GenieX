@@ -41,6 +41,7 @@ from _models import (
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 TEST_IMAGE_PATH = _REPO_ROOT / 'cli' / 'server' / 'docs' / 'ui' / 'favicon-32x32.png'
+QUALITY_IMAGE_PATH = Path(__file__).resolve().parent / 'assets' / 'quality_dog.jpg'
 
 _DEVICE_MARKER = {
     'cpu': 'device_cpu',
@@ -150,3 +151,13 @@ def test_image() -> str:
     if not TEST_IMAGE_PATH.is_file():
         pytest.skip(f'test image missing: {TEST_IMAGE_PATH}')
     return str(TEST_IMAGE_PATH)
+
+
+@pytest.fixture(scope='session')
+def quality_image() -> str:
+    # Real photographic image (golden retriever) shipped under tests/assets/.
+    # Used by VLM keyword-quality tests; the favicon `test_image` is too small
+    # for any meaningful caption to land on dog/grass/animal vocabulary.
+    if not QUALITY_IMAGE_PATH.is_file():
+        pytest.skip(f'quality image missing: {QUALITY_IMAGE_PATH}')
+    return str(QUALITY_IMAGE_PATH)

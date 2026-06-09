@@ -20,6 +20,12 @@ import geniex
 import pytest
 
 from _models import QAIRT_LLM_MODEL
+from _quality_data import (
+    LLM_QUALITY_MAX_NEW_TOKENS,
+    LLM_QUALITY_PROMPTS,
+    LLM_QUALITY_SEED,
+    LLM_QUALITY_TEMPERATURE,
+)
 
 pytestmark = pytest.mark.llm
 
@@ -35,3 +41,25 @@ def test_generate_blocking(qairt_llm_paths, device_map):
         assert isinstance(out, geniex.GenerateOutput)
         assert out.text
         assert out.profile.generated_tokens > 0
+
+
+@pytest.mark.parametrize('device_map', ['npu'])
+@pytest.mark.parametrize(('prompt', 'expected'), LLM_QUALITY_PROMPTS)
+def test_quality_keywords(qairt_llm_paths, device_map, prompt, expected):
+    # Same prompts / sampler as the llama_cpp matrix so QAIRT NPU output is
+    # comparable cross-plugin and against test-llama.cpp's scorecard.
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        QAIRT_LLM_MODEL,
+        device_map=device_map,
+    ) as llm:
+        out = llm.generate(
+            prompt,
+            max_new_tokens=LLM_QUALITY_MAX_NEW_TOKENS,
+            temperature=LLM_QUALITY_TEMPERATURE,
+            seed=LLM_QUALITY_SEED,
+        )
+        assert isinstance(out, geniex.GenerateOutput)
+        assert out.text, f'empty completion for prompt={prompt!r}'
+        assert expected.lower() in out.text.lower(), (
+            f'prompt={prompt!r} expected_substring={expected!r} ' f'device_map={device_map!r} got={out.text!r}'
+        )

@@ -20,6 +20,12 @@ import geniex
 import pytest
 
 from _models import LLAMA_CPP_LLM_MODEL, LLAMA_CPP_LLM_QUANT
+from _quality_data import (
+    LLM_QUALITY_MAX_NEW_TOKENS,
+    LLM_QUALITY_PROMPTS,
+    LLM_QUALITY_SEED,
+    LLM_QUALITY_TEMPERATURE,
+)
 
 pytestmark = pytest.mark.llm
 
@@ -51,3 +57,27 @@ def test_generate_stream(llama_cpp_llm_paths, device_map):
         assert chunks
         assert streamer.output is not None
         assert streamer.output.text
+
+
+@pytest.mark.parametrize('device_map', ['cpu', 'npu', 'hybrid'])
+@pytest.mark.parametrize(('prompt', 'expected'), LLM_QUALITY_PROMPTS)
+def test_quality_keywords(llama_cpp_llm_paths, device_map, prompt, expected):
+    # Mirrors run_scorecard_posix.py:_section_quality_checks (test-llama.cpp):
+    # greedy decode (temperature=0, seed=1), n_predict=256, case-insensitive
+    # substring match. A regression on either side is directly comparable.
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        LLAMA_CPP_LLM_MODEL,
+        quant=LLAMA_CPP_LLM_QUANT,
+        device_map=device_map,
+    ) as llm:
+        out = llm.generate(
+            prompt,
+            max_new_tokens=LLM_QUALITY_MAX_NEW_TOKENS,
+            temperature=LLM_QUALITY_TEMPERATURE,
+            seed=LLM_QUALITY_SEED,
+        )
+        assert isinstance(out, geniex.GenerateOutput)
+        assert out.text, f'empty completion for prompt={prompt!r}'
+        assert expected.lower() in out.text.lower(), (
+            f'prompt={prompt!r} expected_substring={expected!r} ' f'device_map={device_map!r} got={out.text!r}'
+        )

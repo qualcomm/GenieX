@@ -6,13 +6,15 @@ binding so the suite doubles as a public-surface contract check.
 ```
 tests/
 ├── api/                   # SDK metadata APIs (no model required)
+├── assets/                # Real test images (quality_dog.jpg + NOTICE.md)
 ├── plugins/
 │   ├── llama_cpp/         # LLM + VLM × {cpu, npu, hybrid}
 │   └── qairt/             # LLM + VLM × {npu}
 ├── cli/                   # Bazel-driven Go CLI black-box tests (separate)
 ├── conftest.py            # Top-level fixtures (init, model paths, image)
 ├── pytest.ini             # Marker registry + suite discovery
-└── _models.py             # Model identifiers used by the matrix
+├── _models.py             # Model identifiers used by the matrix
+└── _quality_data.py       # Keyword-quality prompts shared by both plugins
 ```
 
 The Go CLI tests under `tests/cli/` are excluded from pytest discovery
@@ -29,6 +31,18 @@ The Go CLI tests under `tests/cli/` are excluded from pytest discovery
 
 = 8 generation cells, plus the API subset. The `gpu` (GPUOpenCL/Adreno)
 alias is excluded — it isn't in the production scorecard matrix either.
+
+Each cell carries two layers of coverage:
+
+- **Smoke** (`test_generate_*`) — model loads, `out.text` non-empty,
+  `generated_tokens > 0`. Cheap, runs on every cell.
+- **Keyword quality** (`test_quality_keywords`) — mirrors the LLM and VLM
+  keyword checks in upstream test-llama.cpp's QDC scorecard
+  (`scripts/snapdragon/qdc/tests/run_scorecard_posix.py`). Greedy decode
+  (`temperature=0`, `seed=1`), 3 short Q/A for LLM (`Paris`, `4`,
+  `Mercury`) and any-of-N keyword match for VLM (golden retriever photo
+  in `tests/assets/quality_dog.jpg`). Hard-asserts the substring; failure
+  means the model wrote gibberish on that backend.
 
 The conftest auto-tags items with markers driven by their location and
 `device_map` parameter, so CI selects shards via `-m`:
