@@ -1,7 +1,0 @@
-Each prompt can give 0, 2, 7, or 10 points
-it's basically:
-
-0: complete jibberish
-2: catastrophic failure (repeated words, jibberish words)
-7: sound grammar, but strange strange content
-10: no issues
