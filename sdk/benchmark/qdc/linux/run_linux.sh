@@ -76,7 +76,7 @@ EOF
 
 echo "=== matrix ==="
 cat "$TSV"
-./bin/geniex_benchmark --matrix-file "$TSV" --output-json-dir "$OUT" --warmup 1 --repeat 3
+./bin/geniex_benchmark --matrix-file "$TSV" --output-json-dir "$OUT" -r 3
 echo "rc=$?  ($(ls "$OUT" | wc -l) cell json files)"
 echo "=== done ==="
 exit 0

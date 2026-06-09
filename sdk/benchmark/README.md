@@ -4,6 +4,12 @@ Single-file C example that drives the public geniex C API. One invocation
 runs one `(plugin, device, model)` cell (warmup + repeated measured runs)
 and prints / writes TTFT, prefill_tps, decode_tps, gen_tokens.
 
+Flag naming follows llama.cpp's
+[`llama-bench`](../../third-party/llama.cpp/tools/llama-bench/README.md) —
+`-r / --repetitions`, `-n / --n-gen`, `-c / --ctx-size`, `-t / --threads`,
+`-m / --model`, `--n-gpu-layers`, `--no-warmup` — so users moving between
+the two tools read the same vocabulary.
+
 It runs from a **local model path** (a geniex bundle dir, or a `.gguf` file / its
 folder) on Windows, Android, and Linux — the same binary feeds the scorecard.
 
@@ -66,22 +72,22 @@ DLLs resolve; on Android/Linux export `LD_LIBRARY_PATH=./lib:./lib/llama_cpp`
 and `GENIEX_PLUGIN_PATH=./lib` (see [`notes/run.md`](../../../notes/run.md)).
 
 ```bash
-# LLM, llama_cpp — point --model-path at a .gguf file
+# LLM, llama_cpp — point -m at a .gguf file
 geniex_benchmark \
   --plugin llama_cpp --device hybrid \
-  --model-path /path/to/Qwen3-0.6B-Q4_0.gguf
+  -m /path/to/Qwen3-0.6B-Q4_0.gguf
 
 # LLM, QAIRT — the bundle dir is the "model path"
 geniex_benchmark \
   --plugin qairt --device npu \
-  --model-path /path/to/qualcomm/Qwen3-4B-Instruct-2507/
+  -m /path/to/qualcomm/Qwen3-4B-Instruct-2507/
 
 # VLM, llama_cpp — pass the model gguf + its mmproj (switches to VLM mode)
 # and one or more --image. The prompt is run through the model's chat template
 # (which places the image tokens) before generation.
 geniex_benchmark \
   --plugin llama_cpp --device hybrid \
-  --model-path /path/to/SmolVLM-500M-Instruct-Q8_0.gguf \
+  -m /path/to/SmolVLM-500M-Instruct-Q8_0.gguf \
   --mmproj-path /path/to/mmproj-SmolVLM-500M-Instruct-f16.gguf \
   --image /path/to/sample.jpg
 
@@ -89,21 +95,21 @@ geniex_benchmark \
 # pass --vlm to force VLM mode plus one or more --image
 geniex_benchmark \
   --plugin qairt --device npu --vlm \
-  --model-path /path/to/qualcomm/Qwen2.5-VL-7B-Instruct/ \
+  -m /path/to/qualcomm/Qwen2.5-VL-7B-Instruct/ \
   --image /path/to/sample.jpg
 
 # GPU (llama_cpp) — the gpu alias selects GPUOpenCL but offloads no layers by
-# default; pass a high --ngl to actually run on the Adreno GPU
+# default; pass a high --n-gpu-layers to actually run on the Adreno GPU
 geniex_benchmark \
-  --plugin llama_cpp --device gpu --ngl 999 \
-  --model-path /path/to/Qwen3-4B-Q4_K_M.gguf
+  --plugin llama_cpp --device gpu --n-gpu-layers 999 \
+  -m /path/to/Qwen3-4B-Q4_K_M.gguf
 
 # Customise: prompt, sample count, output files
 geniex_benchmark \
   --plugin llama_cpp --device hybrid \
-  --model-path .../Qwen3-1.7B-Q4_0.gguf \
-  --warmup 1 --repeat 3 \
-  --max-new-tokens 128 --temperature 0.0 --seed 42 \
+  -m .../Qwen3-1.7B-Q4_0.gguf \
+  --warmup 1 -r 3 \
+  -n 128 --temperature 0.0 --seed 42 \
   --output-json results/qwen3-1.7b-hybrid.json \
   --cell-id Qwen3-1.7B-llama_cpp-hybrid
 ```
@@ -112,15 +118,16 @@ On Windows the same invocations work with `.exe` and backslash paths, e.g.:
 
 ```powershell
 build\benchmark\geniex_benchmark.exe --plugin qairt --device npu `
-  --model-path $env:USERPROFILE\.cache\geniex\models\qualcomm\Qwen3-4B-Instruct-2507
+  -m $env:USERPROFILE\.cache\geniex\models\qualcomm\Qwen3-4B-Instruct-2507
 ```
 
 Run `geniex_benchmark --help` for the full flag list.
 
 ## Defaults
 
-- `max_new_tokens=128`, `temperature=0.0`, `seed=42`
-- `--warmup 1`, `--repeat 3` (median over 3 measured runs after 1 warmup)
+- `n_gen=128`, `temperature=0.0`, `seed=42`
+- `--warmup 1`, `-r 3` (3 measured runs after 1 warmup; pass `--no-warmup`
+  to skip warmup)
 - llama_cpp gets a `[warmup=i]` / `[run=i]` suffix appended to the prompt
   so the KV cache is busted between runs
 
@@ -128,22 +135,33 @@ Run `geniex_benchmark --help` for the full flag list.
 
 ```json
 {
-  "schema_version": "1",
+  "schema_version": "2",
   "cell_id": "Qwen3-0.6B-llama_cpp-cpu",
   "plugin": "llama_cpp",
   "device": "cpu",
   "device_id": null,
   "model_path": ".../Qwen_Qwen3-0.6B-Q4_0.gguf",
-  "params": { "warmup": 1, "repeat": 3, "max_new_tokens": 128, ... },
+  "model_size_bytes": 368705536,
+  "params": { "warmup": 1, "repetitions": 3, "n_gen": 128, ... },
   "runs": [ { "run_idx": 0, "ttft_us": 49758, "prefill_tps": 102.1, ... }, ... ],
   "agg": {
-    "ttft_ms":     {"median": 49.8, "min": 47.4, "max": 52.1},
-    "prefill_tps": {"median": 102.1, ...},
-    "decode_tps":  {"median": 60.9, ...},
+    "ttft_ms":     {"median": 49.8, "min": 47.4, "max": 52.1, "mean": 49.7, "stdev": 2.4},
+    "prefill_tps": {"median": 102.1, "min": 98.0, "max": 110.3, "mean": 103.4, "stdev": 6.2},
+    "decode_tps":  {"median": 60.9, "min": 58.1, "max": 62.5, "mean": 60.5, "stdev": 2.3},
     "gen_tokens":  {"median": 128},
     "prompt_tokens":{"median": 42}
   }
 }
+```
+
+## Markdown row shape
+
+`--output-md` (and the QDC scorecard) produce a llama-bench-aligned table:
+
+```
+| Model     | Size    | Backend    | Device | ngl | Test       | TTFT (ms)   | Prefill (tok/s) | Decode (tok/s) |
+|-----------|--------:|------------|--------|----:|------------|------------:|----------------:|---------------:|
+| Qwen3-0.6B| 351 MiB | llama_cpp  | cpu    |   - | pp42+tg128 | 49.8 ± 2.4  |  102.1 ± 6.2    |  60.9 ± 2.3    |
 ```
 
 ## Matrix-style runs
@@ -165,7 +183,7 @@ geniex_benchmark --matrix-file matrix.tsv --output-json-dir results/
 
 For a one-cell-per-process invocation (cold-start each time, useful as
 the reference for a customer-facing single-call workload), pass
-`--plugin / --device / --model-path` directly without `--matrix-file`.
+`--plugin / --device / -m` directly without `--matrix-file`.
 
 Models must be pre-pulled (e.g. `geniex-py pull bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0`)
 before invoking this binary — the C side does not include a model

@@ -90,7 +90,7 @@ foreach ($row in $rows) {
 
 Write-Output "=== matrix ==="
 Get-Content $TSV
-& "$BUNDLE\bin\geniex_benchmark.exe" --matrix-file $TSV --output-json-dir "$OUT" --warmup 1 --repeat 3
+& "$BUNDLE\bin\geniex_benchmark.exe" --matrix-file $TSV --output-json-dir "$OUT" -r 3
 Write-Output "rc=$LASTEXITCODE  ($((Get-ChildItem $OUT).Count) cell json files)"
 Write-Output "=== done ==="
 Stop-Transcript | Out-Null

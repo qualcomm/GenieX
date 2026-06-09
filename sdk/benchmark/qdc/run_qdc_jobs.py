@@ -191,9 +191,28 @@ def download_cells(client, job_id: str, tmp: Path) -> list[dict]:
     return sorted(cells, key=lambda c: c["cell_id"])
 
 
-def _fmt(agg: dict, key: str) -> str:
-    v = agg.get(key, {}).get("median")
-    return f"{v:.1f}" if v else "-"
+def _fmt_med_sd(agg: dict, key: str) -> str:
+    entry = agg.get(key) or {}
+    med = entry.get("median")
+    sd = entry.get("stdev")
+    if med is None:
+        return "-"
+    if sd is None:
+        return f"{med:.1f}"
+    return f"{med:.1f} ± {sd:.1f}"
+
+
+def _human_size(n: int | None) -> str:
+    if not n or n <= 0:
+        return "-"
+    b = float(n)
+    if b < 1024:
+        return f"{int(b)} B"
+    if b < 1024**2:
+        return f"{b / 1024:.1f} KiB"
+    if b < 1024**3:
+        return f"{b / 1024**2:.1f} MiB"
+    return f"{b / 1024**3:.2f} GiB"
 
 
 def render(cells: list[dict], device: str, tag: str, sha: str) -> str:
@@ -204,18 +223,27 @@ def render(cells: list[dict], device: str, tag: str, sha: str) -> str:
         f"- git sha: `{sha}`",
         f"- generated: `{datetime.now(timezone.utc).isoformat(timespec='seconds')}`",
         "",
-        "| Model | Backend | Device | TTFT (ms) | Prefill (tok/s) | Decode (tok/s) | Gen tokens |",
-        "|-------|---------|--------|-----------|------------------|-----------------|------------|",
+        "| Model | Size | Backend | Device | ngl | Test | TTFT (ms) | Prefill (tok/s) | Decode (tok/s) |",
+        "|-------|-----:|---------|--------|----:|------|----------:|----------------:|---------------:|",
     ]
     for c in sorted(cells, key=lambda c: c["cell_id"]):
-        agg = c.get("agg", {})
+        agg = c.get("agg") or {}
+        params = c.get("params") or {}
         model = c["cell_id"].removesuffix(f"-{c['plugin']}-{c['device']}")
-        gen = agg.get("gen_tokens", {}).get("median")
-        gen = int(gen) if gen else "-"
+        size = _human_size(c.get("model_size_bytes"))
+        ngl_v = params.get("n_gpu_layers")
+        ngl = "-" if c["plugin"] == "qairt" or not ngl_v else str(ngl_v)
+        p_med = (agg.get("prompt_tokens") or {}).get("median")
+        g_med = (agg.get("gen_tokens") or {}).get("median")
+        test = (
+            f"pp{int(p_med)}+tg{int(g_med)}"
+            if p_med is not None and g_med is not None
+            else "-"
+        )
         lines.append(
-            f"| {model} | {c['plugin']} | "
-            f"{c['device']} | {_fmt(agg, 'ttft_ms')} | {_fmt(agg, 'prefill_tps')} | "
-            f"{_fmt(agg, 'decode_tps')} | {gen} |"
+            f"| {model} | {size} | {c['plugin']} | {c['device']} | {ngl} | {test} | "
+            f"{_fmt_med_sd(agg, 'ttft_ms')} | {_fmt_med_sd(agg, 'prefill_tps')} | "
+            f"{_fmt_med_sd(agg, 'decode_tps')} |"
         )
     return "\n".join(lines) + "\n"
 

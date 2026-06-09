@@ -124,7 +124,7 @@ def test_scorecard():
     )
     res = run_adb_command(
         f"cd {BUNDLE_PATH} && {env} ./bin/geniex_benchmark "
-        f"--matrix-file {TSV} --output-json-dir {RESULTS_PATH} --warmup 1 --repeat 3",
+        f"--matrix-file {TSV} --output-json-dir {RESULTS_PATH} -r 3",
         check=False,
     )
     count = run_adb_command(f"ls {RESULTS_PATH} | wc -l", check=False).stdout.strip()

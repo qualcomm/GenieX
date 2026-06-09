@@ -5,13 +5,18 @@
  *
  * geniex_benchmark — single-cell C inference benchmark, public-API only.
  *
+ * Flag naming follows llama.cpp's `llama-bench` (-r / --repetitions,
+ * -n / --n-gen, -c / --ctx-size, -t / --threads, -m / --model,
+ * --n-gpu-layers, --no-warmup) so users moving between the two read
+ * the same vocabulary.
+ *
  * Defaults:
- *   - fixed default prompt, max_new_tokens=128, temperature=0.0, seed=42
+ *   - fixed default prompt, n_gen=128, temperature=0.0, seed=42
  *   - 1 warmup + 3 measured runs (configurable)
  *   - llama_cpp prompts get a [warmup=i] / [run=i] suffix to bust KV cache
  *     between runs
- *   - per-cell aggregation: median / min / max for ttft_ms, prefill_tps,
- *     decode_tps; median-only for token counts
+ *   - per-cell aggregation: median / min / max / mean / stdev for ttft_ms,
+ *     prefill_tps, decode_tps; median-only for token counts
  *
  * The binary takes raw filesystem paths to a model + tokenizer + (optional)
  * mmproj. Resolving HuggingFace / AI Hub aliases is done by the Python CLI
@@ -20,6 +25,7 @@
  */
 
 #include <geniex.h>
+#include <math.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -116,7 +122,7 @@ static void usage(const char* argv0) {
         "Usage:\n"
         "  Single cell:\n"
         "    %s --plugin {llama_cpp|qairt} --device {cpu|gpu|npu|hybrid|auto} \\\n"
-        "                              --model-path <path> [options]\n"
+        "                              -m <path> [options]\n"
         "\n"
         "  Matrix (one process, shared geniex_init/deinit):\n"
         "    %s --matrix-file <path> [--output-json-dir <dir>] [shared options]\n"
@@ -124,7 +130,7 @@ static void usage(const char* argv0) {
         "Required (single-cell mode):\n"
         "  --plugin            llama_cpp | qairt\n"
         "  --device            cpu | gpu | npu | hybrid | auto (default auto)\n"
-        "  --model-path        path to .gguf or qairt bundle dir\n"
+        "  -m, --model PATH    path to .gguf or qairt bundle dir\n"
         "\n"
         "Required (matrix mode):\n"
         "  --matrix-file PATH  one cell per line, tab-separated:\n"
@@ -134,34 +140,39 @@ static void usage(const char* argv0) {
         "                      VLM mode (QAIRT bundles without an mmproj)\n"
         "                      lines starting with '#' are ignored\n"
         "\n"
-        "Optional:\n"
-        "  --tokenizer-path    explicit tokenizer file\n"
-        "  --mmproj-path       multimodal projector — switches to VLM mode\n"
-        "  --vlm               force VLM mode without an mmproj (QAIRT bundles)\n"
-        "  --image PATH        image input (VLM); may be passed multiple times\n"
-        "  --audio PATH        audio input (VLM); may be passed multiple times\n"
-        "  --device-id ID      override resolved device id (e.g. HTP0, GPUOpenCL)\n"
-        "  --max-new-tokens N  default 128\n"
-        "  --temperature F     default 0.0\n"
-        "  --seed N            default 42\n"
-        "  --warmup N          default 1\n"
-        "  --repeat N          default 3 (measured runs)\n"
-        "  --prompt TEXT       inline prompt; default mirrors Python BENCH_PROMPT\n"
-        "  --prompt-file PATH  read prompt from file\n"
-        "  --prompt-as-is      pass the prompt verbatim; do NOT append the\n"
-        "                      `[run=i]` / `[warmup=i]` cache-busting suffix.\n"
-        "                      Use this when the prompt is already-templated\n"
-        "                      chat content (e.g. a bundle's sample_prompt.txt\n"
-        "                      ending in `<|im_start|>assistant\\n`) where a\n"
-        "                      trailing suffix would corrupt the template.\n"
-        "  --n-ctx N           model n_ctx (0 = from model, default 0)\n"
-        "  --n-threads N       generation threads (0 = SDK default)\n"
-        "  --ngl N             llama_cpp layers to offload; overrides the device\n"
-        "                      alias default (needed for a real gpu run)\n"
-        "  --output-json PATH  (single-cell) write per-cell JSON report\n"
-        "  --output-md   PATH  (single-cell) write per-cell Markdown row\n"
+        "Optional (llama-bench-style names):\n"
+        "  -r, --repetitions N    default 3 (measured runs)\n"
+        "  -n, --n-gen N          tokens to generate per run; default 128\n"
+        "  -c, --ctx-size N       model n_ctx (0 = from model, default 0)\n"
+        "  -t, --threads N        generation threads (0 = SDK default)\n"
+        "  --n-gpu-layers N       llama_cpp layers to offload; overrides the\n"
+        "                         device alias default (needed for a real gpu run)\n"
+        "  --warmup N             default 1\n"
+        "  --no-warmup            equivalent to --warmup 0\n"
+        "  --temperature F        default 0.0\n"
+        "  --seed N               default 42\n"
+        "  --prompt TEXT          inline prompt; default mirrors Python BENCH_PROMPT\n"
+        "  --prompt-file PATH     read prompt from file\n"
+        "  --prompt-as-is         pass the prompt verbatim; do NOT append the\n"
+        "                         `[run=i]` / `[warmup=i]` cache-busting suffix.\n"
+        "                         Use this when the prompt is already-templated\n"
+        "                         chat content (e.g. a bundle's sample_prompt.txt\n"
+        "                         ending in `<|im_start|>assistant\\n`) where a\n"
+        "                         trailing suffix would corrupt the template.\n"
+        "\n"
+        "Optional (multimodal):\n"
+        "  --tokenizer-path PATH  explicit tokenizer file\n"
+        "  --mmproj-path PATH     multimodal projector — switches to VLM mode\n"
+        "  --vlm                  force VLM mode without an mmproj (QAIRT bundles)\n"
+        "  --image PATH           image input (VLM); may be passed multiple times\n"
+        "  --audio PATH           audio input (VLM); may be passed multiple times\n"
+        "  --device-id ID         override resolved device id (e.g. HTP0, GPUOpenCL)\n"
+        "\n"
+        "Optional (output):\n"
+        "  --output-json PATH     (single-cell) write per-cell JSON report\n"
+        "  --output-md PATH       (single-cell) write per-cell Markdown row\n"
         "  --output-json-dir DIR  (matrix) write <DIR>/<cell_id>.json per cell\n"
-        "  --cell-id ID        (single-cell) cell label used in reports\n"
+        "  --cell-id ID           (single-cell) cell label used in reports\n"
         "  --help / -h\n",
         argv0,
         argv0);
@@ -335,7 +346,7 @@ static void parse_args(int argc, char** argv, options_t* o) {
             o->device = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--device-id") == 0) {
             o->device_id = arg_value(argc, argv, &i, a);
-        } else if (strcmp(a, "--model-path") == 0) {
+        } else if (strcmp(a, "-m") == 0 || strcmp(a, "--model") == 0) {
             o->model_path = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--tokenizer-path") == 0) {
             o->tokenizer_path = arg_value(argc, argv, &i, a);
@@ -355,7 +366,7 @@ static void parse_args(int argc, char** argv, options_t* o) {
                 exit(2);
             }
             o->audio_paths[o->audio_count++] = arg_value(argc, argv, &i, a);
-        } else if (strcmp(a, "--max-new-tokens") == 0) {
+        } else if (strcmp(a, "-n") == 0 || strcmp(a, "--n-gen") == 0) {
             o->max_new_tokens = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--temperature") == 0) {
             o->temperature = (float)atof(arg_value(argc, argv, &i, a));
@@ -363,7 +374,9 @@ static void parse_args(int argc, char** argv, options_t* o) {
             o->seed = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--warmup") == 0) {
             o->warmup = atoi(arg_value(argc, argv, &i, a));
-        } else if (strcmp(a, "--repeat") == 0) {
+        } else if (strcmp(a, "--no-warmup") == 0) {
+            o->warmup = 0;
+        } else if (strcmp(a, "-r") == 0 || strcmp(a, "--repetitions") == 0) {
             o->repeat = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--prompt") == 0) {
             o->prompt = arg_value(argc, argv, &i, a);
@@ -372,11 +385,11 @@ static void parse_args(int argc, char** argv, options_t* o) {
             o->prompt     = o->prompt_buf;
         } else if (strcmp(a, "--prompt-as-is") == 0) {
             o->prompt_as_is = true;
-        } else if (strcmp(a, "--n-ctx") == 0) {
+        } else if (strcmp(a, "-c") == 0 || strcmp(a, "--ctx-size") == 0) {
             o->n_ctx = atoi(arg_value(argc, argv, &i, a));
-        } else if (strcmp(a, "--n-threads") == 0) {
+        } else if (strcmp(a, "-t") == 0 || strcmp(a, "--threads") == 0) {
             o->n_threads = atoi(arg_value(argc, argv, &i, a));
-        } else if (strcmp(a, "--ngl") == 0) {
+        } else if (strcmp(a, "--n-gpu-layers") == 0) {
             o->ngl_override = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--output-json") == 0) {
             o->output_json = arg_value(argc, argv, &i, a);
@@ -398,10 +411,10 @@ static void parse_args(int argc, char** argv, options_t* o) {
     }
 
     if (o->matrix_file) {
-        /* In matrix mode, --plugin/--device/--model-path come from each line of
+        /* In matrix mode, --plugin/--device/--model come from each line of
          * the matrix file, not from argv. */
         if (o->repeat < 1) {
-            fprintf(stderr, "ERROR: --repeat must be >=1\n");
+            fprintf(stderr, "ERROR: --repetitions must be >=1\n");
             exit(2);
         }
         return;
@@ -412,11 +425,11 @@ static void parse_args(int argc, char** argv, options_t* o) {
         exit(2);
     }
     if (!o->model_path) {
-        fprintf(stderr, "ERROR: --model-path is required\n");
+        fprintf(stderr, "ERROR: --model is required\n");
         exit(2);
     }
     if (o->repeat < 1) {
-        fprintf(stderr, "ERROR: --repeat must be >=1\n");
+        fprintf(stderr, "ERROR: --repetitions must be >=1\n");
         exit(2);
     }
 }
@@ -466,6 +479,80 @@ static void summarize(const double* values, int n, double* median, double* lo, d
     *hi     = tmp[n - 1];
     *median = (n % 2 == 1) ? tmp[n / 2] : 0.5 * (tmp[n / 2 - 1] + tmp[n / 2]);
     free(tmp);
+}
+
+/* Same shape as summarize() but also yields mean / sample stdev. n=1 emits
+ * stdev=0 (sample stdev with one observation is undefined; surface 0 to
+ * match llama-bench's `123.4 ± 0.0` rendering). */
+static void summarize_full(
+    const double* values, int n, double* median, double* lo, double* hi, double* mean, double* sd) {
+    summarize(values, n, median, lo, hi);
+    double sum = 0.0;
+    for (int i = 0; i < n; ++i) sum += values[i];
+    *mean = sum / (double)n;
+    if (n < 2) {
+        *sd = 0.0;
+        return;
+    }
+    double sq = 0.0;
+    for (int i = 0; i < n; ++i) {
+        double d = values[i] - *mean;
+        sq += d * d;
+    }
+    *sd = sqrt(sq / (double)(n - 1));
+}
+
+/* Total bytes occupied by the model on disk:
+ *  - regular file (.gguf): st_size of the file
+ *  - directory (qairt bundle): recursive sum of S_ISREG children
+ * Returns 0 on stat failure or unknown layout. */
+static int64_t compute_model_size(const char* path) {
+    struct stat st;
+    if (stat(path, &st) != 0) return 0;
+    if (S_ISREG(st.st_mode)) return (int64_t)st.st_size;
+    if (!S_ISDIR(st.st_mode)) return 0;
+
+    int64_t total = 0;
+    size_t  plen  = strlen(path);
+#ifdef _WIN32
+    char pattern[1024];
+    snprintf(pattern, sizeof(pattern), "%s\\*", path);
+    WIN32_FIND_DATAA ffd;
+    HANDLE           h = FindFirstFileA(pattern, &ffd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    do {
+        const char* name = ffd.cFileName;
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) continue;
+        size_t need = plen + 1 + strlen(name) + 1;
+        char*  cand = (char*)malloc(need);
+        if (!cand) {
+            FindClose(h);
+            return total;
+        }
+        snprintf(cand, need, "%s/%s", path, name);
+        total += compute_model_size(cand);
+        free(cand);
+    } while (FindNextFileA(h, &ffd));
+    FindClose(h);
+#else
+    DIR* d = opendir(path);
+    if (!d) return 0;
+    struct dirent* e;
+    while ((e = readdir(d)) != NULL) {
+        if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0) continue;
+        size_t need = plen + 1 + strlen(e->d_name) + 1;
+        char*  cand = (char*)malloc(need);
+        if (!cand) {
+            closedir(d);
+            return total;
+        }
+        snprintf(cand, need, "%s/%s", path, e->d_name);
+        total += compute_model_size(cand);
+        free(cand);
+    }
+    closedir(d);
+#endif
+    return total;
 }
 
 /* Build the per-run prompt the same way Python does (busts KV cache).
@@ -737,9 +824,9 @@ static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_
 /* ----------------------------- Reporting ----------------------------- */
 
 typedef struct {
-    double ttft_ms_med, ttft_ms_lo, ttft_ms_hi;
-    double prefill_med, prefill_lo, prefill_hi;
-    double decode_med, decode_lo, decode_hi;
+    double ttft_ms_med, ttft_ms_lo, ttft_ms_hi, ttft_ms_mean, ttft_ms_sd;
+    double prefill_med, prefill_lo, prefill_hi, prefill_mean, prefill_sd;
+    double decode_med, decode_lo, decode_hi, decode_mean, decode_sd;
     double gen_tokens_med;
     double prompt_tokens_med;
 } agg_t;
@@ -753,11 +840,11 @@ static void aggregate(const run_result_t* runs, int n, agg_t* a) {
     for (int i = 0; i < n; ++i) {
         tmp[i] = (double)runs[i].ttft_us / 1000.0;
     }
-    summarize(tmp, n, &a->ttft_ms_med, &a->ttft_ms_lo, &a->ttft_ms_hi);
+    summarize_full(tmp, n, &a->ttft_ms_med, &a->ttft_ms_lo, &a->ttft_ms_hi, &a->ttft_ms_mean, &a->ttft_ms_sd);
     for (int i = 0; i < n; ++i) tmp[i] = runs[i].prefill_tps;
-    summarize(tmp, n, &a->prefill_med, &a->prefill_lo, &a->prefill_hi);
+    summarize_full(tmp, n, &a->prefill_med, &a->prefill_lo, &a->prefill_hi, &a->prefill_mean, &a->prefill_sd);
     for (int i = 0; i < n; ++i) tmp[i] = runs[i].decode_tps;
-    summarize(tmp, n, &a->decode_med, &a->decode_lo, &a->decode_hi);
+    summarize_full(tmp, n, &a->decode_med, &a->decode_lo, &a->decode_hi, &a->decode_mean, &a->decode_sd);
     for (int i = 0; i < n; ++i) tmp[i] = (double)runs[i].gen_tokens;
     double med, lo, hi;
     summarize(tmp, n, &med, &lo, &hi);
@@ -833,23 +920,24 @@ static void json_field_i64(FILE* f, const char* k, int64_t v, bool last) {
     fprintf(f, "    \"%s\": %lld%s", k, (long long)v, last ? "\n" : ",\n");
 }
 
-static void write_json(
-    const options_t* o, const char* device_id, int32_t ngl, const run_result_t* runs, const agg_t* a) {
+static void write_json(const options_t* o, const char* device_id, int32_t ngl, int64_t model_size_bytes,
+    const run_result_t* runs, const agg_t* a) {
     FILE* f = fopen(o->output_json, "w");
     if (!f) {
         fprintf(stderr, "ERROR: cannot open %s for write\n", o->output_json);
         exit(1);
     }
     fprintf(f, "{\n");
-    json_field_str(f, "schema_version", "1", false);
+    json_field_str(f, "schema_version", "2", false);
     json_field_str(f, "cell_id", o->cell_id ? o->cell_id : "cell", false);
     json_field_str(f, "plugin", o->plugin, false);
     json_field_str(f, "device", o->device, false);
     json_field_str(f, "device_id", device_id, false);
     json_field_str(f, "model_path", o->model_path, false);
+    json_field_i64(f, "model_size_bytes", model_size_bytes, false);
     fprintf(f, "    \"params\": {\n");
     fprintf(f,
-        "      \"warmup\": %d, \"repeat\": %d, \"max_new_tokens\": %d,\n"
+        "      \"warmup\": %d, \"repetitions\": %d, \"n_gen\": %d,\n"
         "      \"temperature\": %.6f, \"seed\": %d, \"n_ctx\": %d, \"n_threads\": %d, \"n_gpu_layers\": %d\n",
         o->warmup,
         o->repeat,
@@ -883,20 +971,26 @@ static void write_json(
     fprintf(f, "    ],\n");
     fprintf(f, "    \"agg\": {\n");
     fprintf(f,
-        "      \"ttft_ms\":     {\"median\": %.6f, \"min\": %.6f, \"max\": %.6f},\n",
+        "      \"ttft_ms\":     {\"median\": %.6f, \"min\": %.6f, \"max\": %.6f, \"mean\": %.6f, \"stdev\": %.6f},\n",
         a->ttft_ms_med,
         a->ttft_ms_lo,
-        a->ttft_ms_hi);
+        a->ttft_ms_hi,
+        a->ttft_ms_mean,
+        a->ttft_ms_sd);
     fprintf(f,
-        "      \"prefill_tps\": {\"median\": %.6f, \"min\": %.6f, \"max\": %.6f},\n",
+        "      \"prefill_tps\": {\"median\": %.6f, \"min\": %.6f, \"max\": %.6f, \"mean\": %.6f, \"stdev\": %.6f},\n",
         a->prefill_med,
         a->prefill_lo,
-        a->prefill_hi);
+        a->prefill_hi,
+        a->prefill_mean,
+        a->prefill_sd);
     fprintf(f,
-        "      \"decode_tps\":  {\"median\": %.6f, \"min\": %.6f, \"max\": %.6f},\n",
+        "      \"decode_tps\":  {\"median\": %.6f, \"min\": %.6f, \"max\": %.6f, \"mean\": %.6f, \"stdev\": %.6f},\n",
         a->decode_med,
         a->decode_lo,
-        a->decode_hi);
+        a->decode_hi,
+        a->decode_mean,
+        a->decode_sd);
     fprintf(f, "      \"gen_tokens\":  {\"median\": %.6f},\n", a->gen_tokens_med);
     fprintf(f, "      \"prompt_tokens\":{\"median\": %.6f}\n", a->prompt_tokens_med);
     fprintf(f, "    }\n");
@@ -904,25 +998,94 @@ static void write_json(
     fclose(f);
     /* keep static-analysis happy */
     (void)json_field_dbl;
-    (void)json_field_i64;
 }
 
-static void write_md_row(const options_t* o, const agg_t* a) {
-    /* Append a single Markdown row to the file. */
+/* Trim the `-{plugin}-{device}` tail from a cell_id; falls back to the raw
+ * id when the suffix isn't present. Caller frees. */
+static char* model_label(const char* cell_id, const char* plugin, const char* device) {
+    if (!cell_id) return NULL;
+    size_t cl = strlen(cell_id);
+    size_t pl = plugin ? strlen(plugin) : 0;
+    size_t dl = device ? strlen(device) : 0;
+    /* expected suffix: "-<plugin>-<device>" */
+    size_t suf = 1 + pl + 1 + dl;
+    if (pl && dl && cl > suf && cell_id[cl - suf] == '-' && cell_id[cl - suf + 1 + pl] == '-' &&
+        strncmp(cell_id + cl - suf + 1, plugin, pl) == 0 && strncmp(cell_id + cl - dl, device, dl) == 0) {
+        char* out = (char*)malloc(cl - suf + 1);
+        if (!out) return NULL;
+        memcpy(out, cell_id, cl - suf);
+        out[cl - suf] = '\0';
+        return out;
+    }
+    char* out = (char*)malloc(cl + 1);
+    if (!out) return NULL;
+    memcpy(out, cell_id, cl + 1);
+    return out;
+}
+
+static void format_size(int64_t bytes, char* buf, size_t bufsz) {
+    if (bytes <= 0) {
+        snprintf(buf, bufsz, "-");
+        return;
+    }
+    double b = (double)bytes;
+    if (b < 1024.0) {
+        snprintf(buf, bufsz, "%lld B", (long long)bytes);
+    } else if (b < 1024.0 * 1024.0) {
+        snprintf(buf, bufsz, "%.1f KiB", b / 1024.0);
+    } else if (b < 1024.0 * 1024.0 * 1024.0) {
+        snprintf(buf, bufsz, "%.1f MiB", b / (1024.0 * 1024.0));
+    } else {
+        snprintf(buf, bufsz, "%.2f GiB", b / (1024.0 * 1024.0 * 1024.0));
+    }
+}
+
+static void write_md_row(const options_t* o, int32_t ngl, int64_t model_size_bytes, const agg_t* a) {
+    /* Write llama-bench-style row. First call writes the header + separator;
+     * subsequent calls append a single row. Detect "first call" by checking
+     * whether the file currently exists / is non-empty. */
+    struct stat st;
+    bool        first = (stat(o->output_md, &st) != 0) || st.st_size == 0;
+
     FILE* f = fopen(o->output_md, "a");
     if (!f) {
         fprintf(stderr, "ERROR: cannot open %s for append\n", o->output_md);
         exit(1);
     }
+    if (first) {
+        fprintf(f,
+            "| Model | Size | Backend | Device | ngl | Test | TTFT (ms) | Prefill (tok/s) | Decode (tok/s) |\n"
+            "|-------|-----:|---------|--------|----:|------|----------:|----------------:|---------------:|\n");
+    }
+
+    char  size_buf[32];
+    char  ngl_buf[16];
+    char  test_buf[32];
+    char* model = model_label(o->cell_id, o->plugin, o->device);
+    format_size(model_size_bytes, size_buf, sizeof(size_buf));
+    if (strcmp(o->plugin, "qairt") == 0 || ngl <= 0) {
+        snprintf(ngl_buf, sizeof(ngl_buf), "-");
+    } else {
+        snprintf(ngl_buf, sizeof(ngl_buf), "%d", ngl);
+    }
+    snprintf(
+        test_buf, sizeof(test_buf), "pp%lld+tg%lld", (long long)a->prompt_tokens_med, (long long)a->gen_tokens_med);
+
     fprintf(f,
-        "| %s | %s | %s | ok | %.1f | %.1f | %.1f | %.0f |\n",
-        o->cell_id ? o->cell_id : "cell",
+        "| %s | %s | %s | %s | %s | %s | %.1f ± %.1f | %.1f ± %.1f | %.1f ± %.1f |\n",
+        model ? model : (o->cell_id ? o->cell_id : "cell"),
+        size_buf,
         o->plugin,
         o->device,
+        ngl_buf,
+        test_buf,
         a->ttft_ms_med,
+        a->ttft_ms_sd,
         a->prefill_med,
+        a->prefill_sd,
         a->decode_med,
-        a->gen_tokens_med);
+        a->decode_sd);
+    free(model);
     fclose(f);
 }
 
@@ -961,8 +1124,9 @@ static int run_one_cell(options_t* o) {
     }
     const char* device_id = o->device_id ? o->device_id : rout.device_id;
     int32_t     ngl       = (rout.ngl == -1) ? 0 : rout.ngl;
-    /* --ngl overrides the alias default. The gpu alias resolves device_id but
-     * no ngl, so a high --ngl is what actually offloads layers to the GPU. */
+    /* --n-gpu-layers overrides the alias default. The gpu alias resolves
+     * device_id but no ngl, so a high --n-gpu-layers is what actually
+     * offloads layers to the GPU. */
     if (o->ngl_override >= 0) {
         ngl = o->ngl_override;
     }
@@ -994,8 +1158,10 @@ static int run_one_cell(options_t* o) {
     aggregate(runs, o->repeat, &a);
     print_summary(o, device_id, ngl, &a);
 
-    if (o->output_json) write_json(o, device_id, ngl, runs, &a);
-    if (o->output_md) write_md_row(o, &a);
+    int64_t model_size_bytes = compute_model_size(o->model_path);
+
+    if (o->output_json) write_json(o, device_id, ngl, model_size_bytes, runs, &a);
+    if (o->output_md) write_md_row(o, ngl, model_size_bytes, &a);
 
     free(runs);
     if (anchored) free(anchored);
