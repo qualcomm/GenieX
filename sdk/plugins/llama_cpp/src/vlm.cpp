@@ -72,7 +72,7 @@ int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
 
     ggml_threadpool_params tpp_main  = build_threadpool_params(cpar.n_threads, device);
     ggml_threadpool_params tpp_batch = build_threadpool_params(cpar.n_threads_batch, device);
-    int32_t                tp_ret    = create_and_attach_threadpools(this->pools_, this->ctx, tpp_main, tpp_batch);
+    int32_t                tp_ret    = this->pools_.attach(this->ctx, tpp_main, tpp_batch);
     if (tp_ret != GENIEX_SUCCESS) {
         return tp_ret;
     }

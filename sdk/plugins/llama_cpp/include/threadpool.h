@@ -6,29 +6,25 @@ struct llama_context;
 
 namespace geniex {
 
-// Owns a main + optional batch threadpool created from the CPU backend and
-// attached to a context. Both LlamaLlm and LlamaVlm need identical setup plus
-// teardown, so the lifecycle lives here. Destruction order: the owning class
-// frees its `ctx` (llama_free) in its destructor body before this member is
+// Owns a main + optional batch threadpool attached to a context, shared by
+// LlamaLlm and LlamaVlm. The owner must free its `ctx` before this member is
 // destroyed, matching llama.cpp's free order.
-struct Threadpools {
-    ggml_threadpool* main_pool        = nullptr;
-    ggml_threadpool* batch_pool       = nullptr;
-    void (*free_fn)(ggml_threadpool*) = nullptr;
-
+class Threadpools {
+   public:
     Threadpools()                              = default;
     Threadpools(const Threadpools&)            = delete;
     Threadpools& operator=(const Threadpools&) = delete;
     ~Threadpools();
-};
 
-// Create the CPU-backend threadpools described by `main` / `batch` and attach
-// them to `ctx`. When the two configs differ we materialise both pools and
-// keep the main pool paused (matches llama.cpp main.cpp). When they match,
-// only the main pool is created and serves both prefill and decode. All
-// per-(platform, device) tuning has already been baked into the inputs by
-// build_threadpool_params; this function is pure lifecycle.
-int32_t create_and_attach_threadpools(
-    Threadpools& pools, llama_context* ctx, ggml_threadpool_params main, ggml_threadpool_params batch);
+    // Create the CPU-backend threadpools and attach them to `ctx`. A separate
+    // batch pool (with main paused, as in llama.cpp main.cpp) is created only
+    // when batch tuning differs from main; otherwise main serves both.
+    int32_t attach(llama_context* ctx, ggml_threadpool_params main, ggml_threadpool_params batch);
+
+   private:
+    ggml_threadpool* main_pool_        = nullptr;
+    ggml_threadpool* batch_pool_       = nullptr;
+    void (*free_fn_)(ggml_threadpool*) = nullptr;
+};
 
 }  // namespace geniex
