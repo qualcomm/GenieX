@@ -43,15 +43,15 @@ func ApplyLogLevel() {
 
 	level := config.Get().Log
 
-	enableBridgeLog := true
-
 	switch level {
 	case LogLevelNone:
+		geniex_sdk.SetLog(false)
 		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 		return
 	case LogLevelTrace:
-		enableBridgeLog = false
 		options.Level = slog.LevelDebug
+		slog.SetDefault(slog.New(tint.NewHandler(os.Stderr, &options)))
+		return
 	case LogLevelDebug:
 		options.Level = slog.LevelDebug
 	case LogLevelInfo:
@@ -62,6 +62,6 @@ func ApplyLogLevel() {
 		options.Level = slog.LevelError
 	}
 
-	geniex_sdk.SetLog(enableBridgeLog)
+	geniex_sdk.SetLog(true)
 	slog.SetDefault(slog.New(tint.NewHandler(os.Stderr, &options)))
 }
