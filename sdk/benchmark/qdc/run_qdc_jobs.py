@@ -185,10 +185,7 @@ BUILDERS = {
 
 def download_cells(client, job_id: str, tmp: Path) -> list[dict]:
     members = _qdc.download_log_members(
-        client,
-        job_id,
-        tmp,
-        lambda n: "results/" in n and n.endswith(".json"),
+        client, job_id, tmp, lambda n: n.endswith(".json")
     )
     cells = [json.loads(data) for _, data in members]
     return sorted(cells, key=lambda c: c["cell_id"])

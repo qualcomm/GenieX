@@ -182,17 +182,15 @@ def main() -> int:
             timeout=args.job_timeout,
         )
 
-        # Match on basename: QDC ships logs zipped and the inner member name
-        # drops the directory prefix, so a path filter ("results/...") misses it.
-        def _base(n):
-            return n.replace('\\', '/').rsplit('/', 1)[-1]
-
-        members = _qdc.download_log_members(client, job_id, tmp, lambda n: _base(n) == 'device-results.xml')
+        members = _qdc.download_log_members(client, job_id, tmp, lambda n: n == 'device-results.xml')
         # Always pull the device-side logs so the on-device run is visible in CI
         # regardless of pass/fail — harness.log (build/deploy/test), the appium
         # pytest stdout, and the pip install log. Skip the multi-MB logcat.
         diag = _qdc.download_log_members(
-            client, job_id, tmp, lambda n: _base(n) in ('harness.log', 'appium_tests_stdout.txt', 'install.txt')
+            client,
+            job_id,
+            tmp,
+            lambda n: n in ('harness.log', 'appium_tests_stdout.txt', 'install.txt'),
         )
 
     for name, data in diag:
