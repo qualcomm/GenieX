@@ -109,7 +109,6 @@ smoke tests.
 | `--device-map`        | `auto`                                     | `device_map` for the geniex Python API: `auto`/`cpu`/`gpu`/`npu`/`hybrid`/`<plugin>:<device>`. |
 | `--out`               | `results/<slug>.csv`                       | Override the CSV path (the answers.json is always derived from it).    |
 | `--max-tokens`        | 0 (no cap)                                 | Cap on geniex tokens per prompt. `0` = run to natural EOS / context stop, like genie. Set positive to truncate. |
-| `--temperature`       | from `genie_config.json`                   | Override the geniex sampling temperature. By default the geniex side mirrors the model's `genie_config.json` sampler (`temp`/`top-k`/`top-p`/`seed`) so both runtimes decode identically; pass a value to force the temperature only. A thinking model (e.g. Qwen3-4B) only emits `<think>` when temperature > 0. |
 | `--timeout`           | 600                                        | Per-prompt timeout in seconds, for both the in-process geniex `generate` and the `genie-t2t-run` subprocess. |
 | `--bos-token`         | off                                        | BOS token to prepend to the geniex chat-templated prompt. Off by default (geniex uses the model's own chat template). Pass a string (e.g. `<\|endoftext\|>`) to force a leading BOS for a QAIRT bundle whose context-binary expects one but whose chat template doesn't emit it. |
 | `--limit N`           | 0 (all)                                    | Run only the first N prompts — handy for smoke tests.                  |
