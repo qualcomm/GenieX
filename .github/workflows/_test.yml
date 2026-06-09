@@ -2,18 +2,19 @@ name: Test (reusable)
 
 # Single reusable test driver. Caller picks the language; matrix fans
 # out across linux-arm64 + windows-arm64. Six call sites total —
-# (sdk-pytest | python-pytest | go-test) × (linux-arm64 | windows-arm64)
+# (test-sdk-ci | test-python | test-go) × (linux-arm64 | windows-arm64)
 # — each surfacing as `<caller-job> / <platform>` in the Checks UI.
 #
-# All three languages need the SDK artifact: sdk-pytest and
-# python-pytest dlopen libgeniex; go-test links bindings/go's cgo against
-# it. So this reusable always downloads sdk-${platform}.
+# All three languages need the SDK artifact: test-sdk-ci and test-python
+# dlopen libgeniex; test-go links bindings/go's cgo against it. So this
+# reusable always downloads sdk-${platform}.
 #
 # On linux-arm64 the SDK is cross-compiled in a ubuntu:24.04 toolchain
 # (GLIBC_2.39); the runner host is older, so any test step that loads
-# libgeniex.so must run inside ubuntu:24.04 too. Windows runs everything
-# directly on the host (no GLIBC concerns; runner ships Python 3.13
-# ARM64 + bazelisk).
+# libgeniex.so must run inside ubuntu:24.04 too — see
+# .github/actions/run-in-ubuntu24/. Windows runs everything directly on
+# the host (no GLIBC concerns; runner ships Python 3.13 ARM64 +
+# bazelisk).
 
 on:
   workflow_call:
@@ -50,6 +51,12 @@ jobs:
       # Surface SDK-side trace logs to stderr in every cell so a failed
       # assertion has the maximum signal available without a re-run.
       GENIEX_LOG: trace
+      # Windows pytest runs on the host, so the ctypes loader and the
+      # binding need to find libgeniex and the geniex package directly.
+      # Linux pytest runs inside a container that re-declares these in
+      # its env input.
+      PYTHONPATH: ${{ github.workspace }}/bindings/python
+      GENIEX_LIB_PATH: ${{ github.workspace }}/sdk/pkg-geniex/lib
 
     steps:
       - name: Configure Windows Git
@@ -106,7 +113,6 @@ jobs:
 
       # ---------------- go-test ----------------
 
-      # Mirrors the go-test-linux-arm64 docker pattern previously in test.yml.
       # cli/release/... is excluded because it depends on InnoSetup (Windows
       # installer) and the docker tarball — neither of which is testable on
       # the linux runner, and the InnoSetup repo rule fails the loading phase
@@ -122,41 +128,25 @@ jobs:
 
       - name: Run go test (Linux, ubuntu:24.04 container)
         if: steps.skip.outputs.skip != 'true' && inputs.language == 'go' && matrix.platform == 'linux-arm64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          uid="$(id -u)"
-          gid="$(id -g)"
-          mkdir -p "$HOME/.cache/bazel-disk"
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -v "$HOME/.cache/bazel-disk:/root/.cache/bazel-disk" \
-            -w /workspace \
-            -e DEBIAN_FRONTEND=noninteractive \
-            -e HOST_UID="$uid" \
-            -e HOST_GID="$gid" \
-            -e GENIEX_LOG="$GENIEX_LOG" \
-            ubuntu:24.04 \
-            bash -euxo pipefail -c '
-              apt-get update -qq
-              apt-get install -y --no-install-recommends \
-                ca-certificates curl unzip gcc g++ git python3 >/dev/null
-              curl -fsSL -o /usr/local/bin/bazelisk \
-                https://github.com/bazelbuild/bazelisk/releases/download/v1.22.1/bazelisk-linux-arm64
-              chmod +x /usr/local/bin/bazelisk
-              ln -sf /usr/local/bin/bazelisk /usr/local/bin/bazel
-              git config --global --add safe.directory "*"
-              status=0
-              bazelisk test \
-                --//sdk:sdk_type=local \
-                --disk_cache=/root/.cache/bazel-disk \
-                --test_output=errors \
-                --test_summary=terse \
-                -- //cli/... //bindings/go/... -//cli/release/... \
-                2>&1 | tee .bazel-test.log || status=$?
-              chown -R "$HOST_UID:$HOST_GID" /workspace /root/.cache/bazel-disk || true
-              exit "$status"
-            '
+        uses: ./.github/actions/run-in-ubuntu24
+        with:
+          apt_packages: "ca-certificates curl unzip gcc g++ git python3"
+          cache_host_path: ~/.cache/bazel-disk
+          cache_container_path: /root/.cache/bazel-disk
+          env: |
+            GENIEX_LOG=trace
+          script: |
+            curl -fsSL -o /usr/local/bin/bazelisk \
+              https://github.com/bazelbuild/bazelisk/releases/download/v1.22.1/bazelisk-linux-arm64
+            chmod +x /usr/local/bin/bazelisk
+            ln -sf /usr/local/bin/bazelisk /usr/local/bin/bazel
+            bazelisk test \
+              --//sdk:sdk_type=local \
+              --disk_cache=/root/.cache/bazel-disk \
+              --test_output=errors \
+              --test_summary=terse \
+              -- //cli/... //bindings/go/... -//cli/release/... \
+              2>&1 | tee .bazel-test.log
 
       - name: Run go test (Windows host)
         if: steps.skip.outputs.skip != 'true' && inputs.language == 'go' && matrix.platform == 'windows-arm64'
@@ -176,114 +166,51 @@ jobs:
 
       # ---- Windows: run pytest directly on the host (Python 3.13 ARM64 preinstalled). ----
 
-      - name: Smoke-test the binding (Windows)
+      - name: Run pytest (Windows)
         if: steps.skip.outputs.skip != 'true' && inputs.language != 'go' && matrix.platform == 'windows-arm64'
         shell: bash
-        env:
-          PYTHONPATH: ${{ github.workspace }}/bindings/python
-          GENIEX_LIB_PATH: ${{ github.workspace }}/sdk/pkg-geniex/lib
         run: |
           set -euo pipefail
-          python --version
           python -m pip install --upgrade pip
           # tqdm is the only runtime dep declared by bindings/python.
           # PEP 517 backend resolution fails on hosted Python 3.13 + pip 26.1
           # so install runtime deps directly instead of `pip install ./bindings/python`.
           python -m pip install "pytest>=7.0" "tqdm>=4.65"
-          python -c "import geniex; geniex.init(); print('plugins:', geniex.get_plugin_list()); geniex.deinit()"
-
-      - name: Run pytest — sdk suite (Windows)
-        if: steps.skip.outputs.skip != 'true' && inputs.language == 'sdk' && matrix.platform == 'windows-arm64'
-        shell: bash
-        env:
-          PYTHONPATH: ${{ github.workspace }}/bindings/python
-          GENIEX_LIB_PATH: ${{ github.workspace }}/sdk/pkg-geniex/lib
-        run: |
-          set -euo pipefail
-          python -m pytest tests -m api -v | tee .pytest-api.log
-
-      - name: Run pytest — python bindings (Windows)
-        if: steps.skip.outputs.skip != 'true' && inputs.language == 'python' && matrix.platform == 'windows-arm64'
-        shell: bash
-        env:
-          PYTHONPATH: ${{ github.workspace }}/bindings/python
-          GENIEX_LIB_PATH: ${{ github.workspace }}/sdk/pkg-geniex/lib
-        run: |
-          set -euo pipefail
-          # Phase 1 — pure-Python unit subset. conftest.py defers the geniex
-          # import error so this runs even if the SDK artifact is missing.
-          python -m pytest bindings/python/tests/unit -v | tee .pytest-unit.log
-          # Phase 2 — integration tests against the staged SDK artifact.
-          python -m pytest bindings/python/tests --ignore=bindings/python/tests/unit -v | tee .pytest-int.log
+          python -c "import geniex; geniex.init(); geniex.deinit()"
+          if [ "${{ inputs.language }}" = "sdk" ]; then
+            python -m pytest tests -m api -v | tee .pytest-api.log
+          else
+            python -m pytest bindings/python/tests/unit -v | tee .pytest-unit.log
+            python -m pytest bindings/python/tests --ignore=bindings/python/tests/unit -v | tee .pytest-int.log
+          fi
 
       # ---- Linux: run pytest inside ubuntu:24.04 (matches SDK's GLIBC). ----
 
-      - name: Run pytest — sdk suite (Linux, ubuntu:24.04 container)
-        if: steps.skip.outputs.skip != 'true' && inputs.language == 'sdk' && matrix.platform == 'linux-arm64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          uid="$(id -u)"
-          gid="$(id -g)"
-          mkdir -p "$HOME/.cache/geniex"
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -v "$HOME/.cache/geniex:/root/.cache/geniex" \
-            -w /workspace \
-            -e DEBIAN_FRONTEND=noninteractive \
-            -e HOST_UID="$uid" \
-            -e HOST_GID="$gid" \
-            -e PYTHONPATH=/workspace/bindings/python \
-            -e GENIEX_LIB_PATH=/workspace/sdk/pkg-geniex/lib \
-            -e GENIEX_LOG="$GENIEX_LOG" \
-            ubuntu:24.04 \
-            bash -euxo pipefail -c '
-              apt-get update -qq
-              apt-get install -y --no-install-recommends \
-                ca-certificates python3 python3-pip python3-venv git >/dev/null
-              python3 -m venv /tmp/venv
-              . /tmp/venv/bin/activate
-              python -m pip install --upgrade pip
-              python -m pip install "pytest>=7.0" "tqdm>=4.65"
-              status=0
+      - name: Run pytest (Linux, ubuntu:24.04 container)
+        if: steps.skip.outputs.skip != 'true' && inputs.language != 'go' && matrix.platform == 'linux-arm64'
+        uses: ./.github/actions/run-in-ubuntu24
+        with:
+          cache_host_path: ~/.cache/geniex
+          cache_container_path: /root/.cache/geniex
+          env: |
+            PYTHONPATH=/workspace/bindings/python
+            GENIEX_LIB_PATH=/workspace/sdk/pkg-geniex/lib
+            GENIEX_LOG=trace
+            LANGUAGE=${{ inputs.language }}
+          script: |
+            python3 -m venv /tmp/venv
+            . /tmp/venv/bin/activate
+            python -m pip install --upgrade pip
+            python -m pip install "pytest>=7.0" "tqdm>=4.65"
+            status=0
+            if [ "$LANGUAGE" = "sdk" ]; then
               python -m pytest tests -m api -v | tee .pytest-api.log || status=$?
-              chown -R "$HOST_UID:$HOST_GID" /workspace /root/.cache/geniex || true
-              exit "$status"
-            '
-
-      - name: Run pytest — python bindings (Linux, ubuntu:24.04 container)
-        if: steps.skip.outputs.skip != 'true' && inputs.language == 'python' && matrix.platform == 'linux-arm64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          uid="$(id -u)"
-          gid="$(id -g)"
-          mkdir -p "$HOME/.cache/geniex"
-          docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
-            -v "$HOME/.cache/geniex:/root/.cache/geniex" \
-            -w /workspace \
-            -e DEBIAN_FRONTEND=noninteractive \
-            -e HOST_UID="$uid" \
-            -e HOST_GID="$gid" \
-            -e PYTHONPATH=/workspace/bindings/python \
-            -e GENIEX_LIB_PATH=/workspace/sdk/pkg-geniex/lib \
-            -e GENIEX_LOG="$GENIEX_LOG" \
-            ubuntu:24.04 \
-            bash -euxo pipefail -c '
-              apt-get update -qq
-              apt-get install -y --no-install-recommends \
-                ca-certificates python3 python3-pip python3-venv git >/dev/null
-              python3 -m venv /tmp/venv
-              . /tmp/venv/bin/activate
-              python -m pip install --upgrade pip
-              python -m pip install "pytest>=7.0" "tqdm>=4.65"
-              status=0
+            else
+              # python: run both phases so phase 2 still surfaces if phase 1 regresses.
               python -m pytest bindings/python/tests/unit -v | tee .pytest-unit.log || status=$?
               python -m pytest bindings/python/tests --ignore=bindings/python/tests/unit -v | tee .pytest-int.log || status=$?
-              chown -R "$HOST_UID:$HOST_GID" /workspace /root/.cache/geniex || true
-              exit "$status"
-            '
+            fi
+            exit "$status"
 
       # ---------------- Step summary ----------------
 
@@ -295,7 +222,7 @@ jobs:
           {
             echo "## ${{ inputs.language }} test results — ${{ matrix.platform }}"
             echo
-            for log in .pytest-api.log .pytest-cpu.log .pytest-unit.log .pytest-int.log .bazel-test.log; do
+            for log in .pytest-api.log .pytest-unit.log .pytest-int.log .bazel-test.log; do
               [ -f "$log" ] || continue
               echo "### $log"
               echo
