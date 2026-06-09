@@ -48,6 +48,13 @@ def _enc(s: str | None) -> bytes | None:
     return s.encode() if s else None
 
 
+def _decode_utf8(p) -> str:
+    # Lenient UTF-8 decode for C-string outputs. The SDK can hand back a buffer
+    # whose tail is a partial multibyte sequence — e.g. when generation stops
+    # at max_new_tokens mid-character — and a strict decode would raise.
+    return string_at(p).decode('utf-8', errors='replace') if p else ''
+
+
 def _build_sampler(
     temperature: float,
     top_p: float,
@@ -161,7 +168,7 @@ class GenieXLLM:
         )
         out = geniex_LlmApplyChatTemplateOutput()
         _check(lib.geniex_llm_apply_chat_template(self._handle, byref(inp), byref(out)))
-        result = string_at(out.formatted_text).decode() if out.formatted_text else ''
+        result = _decode_utf8(out.formatted_text)
         if out.formatted_text:
             lib.geniex_free(out.formatted_text)
         return result
@@ -226,7 +233,7 @@ class GenieXLLM:
         )
         out = geniex_LlmGenerateOutput()
         rc = lib.geniex_llm_generate(self._handle, byref(inp), byref(out))
-        full = string_at(out.full_text).decode() if out.full_text else ''
+        full = _decode_utf8(out.full_text)
         profile = _apply_meta(ProfileData.from_c(out.profile_data), self._meta)
         if out.full_text:
             lib.geniex_free(out.full_text)
@@ -254,7 +261,7 @@ class GenieXLLM:
             )
             out = geniex_LlmGenerateOutput()
             rc = lib.geniex_llm_generate(self._handle, byref(inp), byref(out))
-            full = string_at(out.full_text).decode() if out.full_text else ''
+            full = _decode_utf8(out.full_text)
             profile = _apply_meta(ProfileData.from_c(out.profile_data), self._meta)
             if out.full_text:
                 lib.geniex_free(out.full_text)
@@ -393,7 +400,7 @@ class GenieXVLM:
         )
         out = geniex_VlmApplyChatTemplateOutput()
         _check(lib.geniex_vlm_apply_chat_template(self._handle, byref(inp), byref(out)))
-        result = string_at(out.formatted_text).decode() if out.formatted_text else ''
+        result = _decode_utf8(out.formatted_text)
         if out.formatted_text:
             lib.geniex_free(out.formatted_text)
         return result
@@ -477,7 +484,7 @@ class GenieXVLM:
         )
         out = geniex_VlmGenerateOutput()
         rc = lib.geniex_vlm_generate(self._handle, byref(inp), byref(out))
-        full = string_at(out.full_text).decode() if out.full_text else ''
+        full = _decode_utf8(out.full_text)
         profile = _apply_meta(ProfileData.from_c(out.profile_data), self._meta)
         if out.full_text:
             lib.geniex_free(out.full_text)
@@ -501,7 +508,7 @@ class GenieXVLM:
             )
             out = geniex_VlmGenerateOutput()
             rc = lib.geniex_vlm_generate(self._handle, byref(inp), byref(out))
-            full = string_at(out.full_text).decode() if out.full_text else ''
+            full = _decode_utf8(out.full_text)
             profile = _apply_meta(ProfileData.from_c(out.profile_data), self._meta)
             if out.full_text:
                 lib.geniex_free(out.full_text)
