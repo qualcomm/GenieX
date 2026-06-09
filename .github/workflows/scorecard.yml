@@ -40,6 +40,7 @@ jobs:
           echo "devices=$devices" >> "$GITHUB_OUTPUT"
 
   scorecard:
+    name: ${{ matrix.device }} · ${{ matrix.model.plugin }} · ${{ matrix.model.name }}
     needs: [build-sdk, load-models]
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -83,6 +84,7 @@ jobs:
           if-no-files-found: ignore
 
   aggregate:
+    name: aggregate · ${{ matrix.device }}
     needs: [load-models, scorecard]
     if: always()
     runs-on: ubuntu-latest
