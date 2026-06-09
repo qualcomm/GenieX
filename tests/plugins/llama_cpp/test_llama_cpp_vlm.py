@@ -20,6 +20,13 @@ import geniex
 import pytest
 
 from _models import LLAMA_CPP_VLM_MODEL
+from _quality_data import (
+    VLM_QUALITY_KEYWORDS,
+    VLM_QUALITY_MAX_NEW_TOKENS,
+    VLM_QUALITY_PROMPT,
+    VLM_QUALITY_SEED,
+    VLM_QUALITY_TEMPERATURE,
+)
 
 pytestmark = pytest.mark.vlm
 
@@ -90,3 +97,31 @@ def test_multi_turn_without_reset(llama_cpp_vlm_paths, test_image):
         out2 = vlm.generate(prompt2, max_new_tokens=8, temperature=0.0, seed=42, images=[test_image])
         assert isinstance(out2, geniex.GenerateOutput)
         assert out2.profile.prompt_tokens > 0
+
+
+@pytest.mark.parametrize('device_map', ['cpu', 'npu', 'hybrid'])
+def test_quality_keywords(llama_cpp_vlm_paths, quality_image, device_map):
+    # Mirrors run_scorecard_posix.py:_section_vlm_quality_checks (test-llama.cpp):
+    # any one of the canonical keywords is enough — VLMs vary in vocabulary
+    # (golden / retriever / dog / pet ...) but all should land somewhere on
+    # the dog-photo concept.
+    with geniex.AutoModelForVision2Seq.from_pretrained(
+        LLAMA_CPP_VLM_MODEL,
+        device_map=device_map,
+    ) as vlm:
+        prompt = _vlm_prompt(vlm, quality_image, VLM_QUALITY_PROMPT)
+        out = vlm.generate(
+            prompt,
+            max_new_tokens=VLM_QUALITY_MAX_NEW_TOKENS,
+            temperature=VLM_QUALITY_TEMPERATURE,
+            seed=VLM_QUALITY_SEED,
+            images=[quality_image],
+        )
+        assert isinstance(out, geniex.GenerateOutput)
+        assert out.text, f'empty caption for device_map={device_map!r}'
+        text = out.text.lower()
+        assert any(kw in text for kw in VLM_QUALITY_KEYWORDS), (
+            f'caption did not match any expected keyword '
+            f'device_map={device_map!r} keywords={VLM_QUALITY_KEYWORDS} '
+            f'got={out.text!r}'
+        )

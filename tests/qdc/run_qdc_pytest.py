@@ -135,14 +135,35 @@ def summarise(xml: bytes) -> tuple[int, str]:
         f'**{verdict}** — {passed} passed, {failed} failed, {errored} errored, {skipped} skipped (of {total})',
         '',
     ]
+    fails: list[tuple[str, str, str]] = []
     for status, name, msg, body in rows:
         if status == 'FAIL':
-            lines += [f'<details><summary>{icon[status]} <code>{name}</code> — {msg}</summary>', '']
-            lines += ['```', body, '```', '</details>']
+            lines.append(f'{icon[status]} `{name}`')
+            fails.append((name, msg, body))
         elif status == 'SKIP':
             lines.append(f'{icon[status]} `{name}` — {msg}')
         else:
             lines.append(f'{icon[status]} `{name}`')
+    if fails:
+        # Failure messages can include the full model completion (literal `\n`,
+        # `$`, unbalanced quotes) — render inline and GitHub markdown will
+        # parse `$...$` as LaTeX and break the page. Push everything into a
+        # fenced code block under the per-test <details>; the test name stays
+        # in the <summary> so the failure list above is one tidy line per id.
+        lines += ['', '### Failure details', '']
+        for name, msg, body in fails:
+            decoded_msg = (msg or '').replace('\\n', '\n').replace('\\t', '\t')
+            decoded_body = (body or '').replace('\\n', '\n').replace('\\t', '\t')
+            lines += [
+                f'<details><summary><code>{name}</code></summary>',
+                '',
+                '```',
+                decoded_msg,
+                '```',
+            ]
+            if decoded_body and decoded_body != decoded_msg:
+                lines += ['', '```', decoded_body, '```']
+            lines += ['</details>', '']
     return (0 if verdict == 'PASS' else 1), '\n'.join(lines) + '\n'
 
 
