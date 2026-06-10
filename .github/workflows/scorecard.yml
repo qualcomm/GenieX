@@ -6,7 +6,11 @@ on:
   workflow_dispatch:
     inputs:
       device:
-        description: "QDC chipset (blank = all devices)"
+        description: "QDC chipsets, comma-separated (blank = all)"
+        type: string
+        default: ""
+      model:
+        description: "Model names from scorecard-models.json, comma-separated (blank = all)"
         type: string
         default: ""
 
@@ -32,12 +36,38 @@ jobs:
       - uses: actions/checkout@v6
       - id: set
         env:
-          PICK: ${{ github.event.inputs.device }}
+          PICK_DEVICE: ${{ github.event.inputs.device }}
+          PICK_MODEL: ${{ github.event.inputs.model }}
         run: |
-          echo "matrix=$(jq -c . sdk/benchmark/qdc/scorecard-models.json)" >> "$GITHUB_OUTPUT"
-          all='["QCS9075M","SC8380XP","SC8480XP","SM8750","SM8850"]'
-          devices=$([ -n "$PICK" ] && jq -cn --arg d "$PICK" '[$d]' || echo "$all")
+          set -euo pipefail
+          MODELS_FILE=sdk/benchmark/qdc/scorecard-models.json
+
+          all_devs='["QCS9075M","SC8380XP","SC8480XP","SM8750","SM8850"]'
+          if [ -n "$PICK_DEVICE" ]; then
+            devices=$(jq -cn --arg s "$PICK_DEVICE" \
+              '$s | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0))')
+          else
+            devices="$all_devs"
+          fi
           echo "devices=$devices" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$PICK_MODEL" ]; then
+            matrix=$(jq -c --arg s "$PICK_MODEL" '
+              ($s | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0))) as $pick
+              | map(select(.name as $n | $pick | index($n)))
+            ' "$MODELS_FILE")
+            picked_n=$(jq 'length' <<<"$matrix")
+            want_n=$(jq -n --arg s "$PICK_MODEL" \
+              '$s | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0)) | length')
+            if [ "$picked_n" != "$want_n" ]; then
+              echo "::error::model input has unknown name(s): $PICK_MODEL"
+              echo "::error::available: $(jq -r '.[].name' "$MODELS_FILE" | paste -sd, -)"
+              exit 1
+            fi
+          else
+            matrix=$(jq -c . "$MODELS_FILE")
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   scorecard:
     name: ${{ matrix.device }} · ${{ matrix.model.plugin }} · ${{ matrix.model.name }}
