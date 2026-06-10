@@ -12,19 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Run the SDK model-running pytest suite on a real QDC Android device.
+"""Run the SDK model-running pytest suite on a real QDC device.
 
 GitHub runners only run the model-free ``api`` shard — they have no Snapdragon
 hardware. The device-gated cells (``llama_cpp`` / ``qairt`` across every backend)
-run here instead, on a QDC Android phone via the APPIUM framework:
+run here instead, on a QDC X Elite Windows ARM64 device via the POWERSHELL
+framework (``windows/run_pytest.ps1``):
 
   - this script packages pkg-geniex + the Python binding + the ``tests/`` tree
-    into an artifact (under payload/) and submits it;
-  - QDC runs the bundled appium pytest (``tests/qdc/appium/``) on its host, which
-    builds a portable Python, deploys everything to the phone (pure-Python adb,
-    see deploy.py — the host has no bash), runs the suite in ``adb shell``, and
-    writes the JUnit XML back to the device's QDC_logs;
-  - this script then downloads that XML and summarises it.
+    + the HTP cert into an artifact and submits it;
+  - QDC extracts the artifact under ``C:\\Temp\\TestContent\\`` and runs
+    ``run_pytest.ps1`` there, which bootstraps a portable Python, installs
+    pytest, then runs the suite directly against the windows-arm64 SDK;
+  - the entry script writes the JUnit XML to ``C:\\Temp\\QDC_Logs\\`` and the
+    POWERSHELL framework auto-uploads everything in QDC_Logs for collection.
 
 The QDC submit/poll/collect plumbing is shared with the benchmark scorecard via
 ``sdk/benchmark/qdc/_qdc.py``.
@@ -44,9 +45,6 @@ from xml.etree import ElementTree
 HERE = Path(__file__).parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(REPO / 'sdk' / 'benchmark' / 'qdc'))
-sys.path.insert(0, str(HERE / 'appium'))
-
-import deploy  # noqa: E402 — stdlib-only; must follow the sys.path insert above
 
 try:
     import _qdc
@@ -57,47 +55,46 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 # tests/conftest.py resolves the VLM sample image relative to the repo root
-# (parents[1] of the conftest), so the artifact must preserve this one asset.
+# (parents[1] of the conftest), so the artifact must preserve this asset.
 TEST_IMAGE_REL = Path('cli/server/docs/ui/favicon-32x32.png')
-# libggml-cpu.so needs libomp.so, which the CLI package omits but the Android
-# app ships in extLibs; drop it beside the ggml libs (mirrors the benchmark).
-OMP_REL = Path('bindings/android/app/extLibs/arm64-v8a/libomp.so')
+HTP_CERT_REL = Path('.github/certs/hexagon/ggml-htp-v1.cer')
 _IGNORE = shutil.ignore_patterns('__pycache__', '*.pyc', '.venv', '*.egg-info', 'models')
 
+ENTRY_SCRIPT = 'C:\\Temp\\TestContent\\run_pytest.ps1'
 
-def build_android_artifact(pkg_dir: Path, tmp: Path) -> Path:
-    # QDC's APPIUM framework runs `pytest tests` from the artifact root, so the
-    # host-side appium harness (+ its pure-Python adb deploy) goes in tests/. The
-    # mini-repo it deploys to the phone lives under payload/ so the host
-    # collector never imports payload/tests/conftest.py (which imports geniex —
-    # absent on the host); the harness points deploy.py at ../payload.
+
+def build_windows_artifact(pkg_dir: Path, marker: str, tmp: Path) -> Path:
+    """Stage everything QDC's POWERSHELL framework needs to run pytest on X Elite.
+
+    The framework extracts the zip to ``C:\\Temp\\TestContent\\`` and invokes
+    the entry script there; ``run_pytest.ps1`` boots a portable Python and runs
+    pytest against the staged tree directly (no wheel install — sets
+    ``PYTHONPATH=bindings\\python`` and ``GENIEX_LIB_PATH=pkg-geniex\\lib``,
+    matching the windows-arm64 cell in ``.github/workflows/_test.yml``).
+
+    ``marker`` is substituted into the pytest ``-m`` selector so the workflow
+    can split the matrix across two jobs (one per plugin) and stay under
+    QDC's 60-min POWERSHELL device timeout.
+    """
     stage = tmp / 'stage'
-    payload = stage / 'payload'
-    shutil.copytree(pkg_dir, payload / 'sdk' / 'pkg-geniex')
-    shutil.copy(REPO / OMP_REL, payload / 'sdk' / 'pkg-geniex' / 'lib' / 'llama_cpp' / 'libomp.so')
+    stage.mkdir()
+    shutil.copytree(pkg_dir, stage / 'pkg-geniex')
+    shutil.copytree(REPO / 'tests', stage / 'tests', ignore=_IGNORE)
+    shutil.copytree(REPO / 'bindings' / 'python', stage / 'bindings' / 'python', ignore=_IGNORE)
 
-    shutil.copytree(REPO / 'tests', payload / 'tests', ignore=_IGNORE)
-    shutil.copytree(REPO / 'bindings' / 'python', payload / 'bindings' / 'python', ignore=_IGNORE)
-
-    # Prebuild the Termux portable-Python usr/ tree here (the runner has public
-    # internet; the QDC appium host is sandboxed and can't reach termux.dev).
-    deploy.fetch_termux_usr(payload / 'termux-usr')
-
-    img = payload / TEST_IMAGE_REL
+    img = stage / TEST_IMAGE_REL
     img.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(REPO / TEST_IMAGE_REL, img)
 
-    host = stage / 'tests'
-    host.mkdir()
-    for name in ('conftest.py', 'test_run_suite.py', 'utils.py', 'deploy.py', 'requirements.txt'):
-        shutil.copy(HERE / 'appium' / name, host / name)
-    (stage / 'requirements.txt').write_text((HERE / 'appium' / 'requirements.txt').read_text())
-    (stage / 'pytest.ini').write_text('[pytest]\naddopts = --junitxml=results.xml\n')
+    shutil.copy(REPO / HTP_CERT_REL, stage / 'ggml-htp-v1.cer')
+    # CRLF line endings — QDC's PowerShell parser is friendlier with CRLF.
+    ps = (HERE / 'windows' / 'run_pytest.ps1').read_text().replace('{MARKER}', marker)
+    (stage / 'run_pytest.ps1').write_text(ps, newline='\r\n')
 
     return Path(shutil.make_archive(str(tmp / 'artifact'), 'zip', stage))
 
 
-def summarise(xml: bytes) -> tuple[int, str]:
+def summarise(xml: bytes, plugin: str = '') -> tuple[int, str]:
     """Parse JUnit XML; return (exit_code, markdown). Non-zero on any failure.
 
     Lists every cell with its status (like pytest's own per-test output) so it's
@@ -129,8 +126,9 @@ def summarise(xml: bytes) -> tuple[int, str]:
     passed = total - failed - errored - skipped
     verdict = 'PASS' if failed == 0 and errored == 0 else 'FAIL'
     icon = {'PASS': '✅', 'SKIP': '⏭️', 'FAIL': '❌'}
+    title_suffix = f' — {plugin}' if plugin else ''
     lines = [
-        '## QDC pytest — Android',
+        f'## QDC pytest — X Elite Windows{title_suffix}',
         '',
         f'**{verdict}** — {passed} passed, {failed} failed, {errored} errored, {skipped} skipped (of {total})',
         '',
@@ -177,7 +175,17 @@ def write_summary(text: str) -> None:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument('--pkg-dir', type=Path, required=True)
-    p.add_argument('--device', default='SM8850')
+    p.add_argument('--device', default='SC8380XP', help='QDC device alias (default: X Elite SC8380XP)')
+    p.add_argument(
+        '--plugin',
+        required=True,
+        help='Label for the matrix leg (used in job_name + summary heading).',
+    )
+    p.add_argument(
+        '--pytest-marker',
+        required=True,
+        help='Pytest -m expression (e.g. "llama_cpp and llm") substituted into the entry script.',
+    )
     p.add_argument('--job-timeout', type=int, default=10800)
     args = p.parse_args()
 
@@ -192,26 +200,28 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        zip_path = build_android_artifact(args.pkg_dir, tmp)
+        zip_path = build_windows_artifact(args.pkg_dir, args.pytest_marker, tmp)
         job_id = _qdc.submit_and_wait(
             client,
             target_id=target_id,
-            job_name=f'geniex-pytest-{args.device}',
-            platform='android',
-            entry_script=None,
+            job_name=f'geniex-pytest-{args.plugin}-{args.device}',
+            platform='windows',
+            entry_script=ENTRY_SCRIPT,
             zip_path=zip_path,
             timeout=args.job_timeout,
         )
 
         members = _qdc.download_log_members(client, job_id, tmp, lambda n: n == 'device-results.xml')
         # Always pull the device-side logs so the on-device run is visible in CI
-        # regardless of pass/fail — harness.log (build/deploy/test), the appium
-        # pytest stdout, and the pip install log. Skip the multi-MB logcat.
+        # regardless of pass/fail. test_dbg.stdout is QDC's full PowerShell
+        # stdout / stderr capture — strictly more complete than our
+        # Start-Transcript harness.log, which buffers and can drop tail bytes
+        # when the framework aborts the process on its 60-min device timeout.
         diag = _qdc.download_log_members(
             client,
             job_id,
             tmp,
-            lambda n: n in ('harness.log', 'appium_tests_stdout.txt', 'install.txt'),
+            lambda n: n in ('harness.log', 'test_dbg.stdout', 'test.stdout'),
         )
 
     for name, data in diag:
@@ -219,9 +229,11 @@ def main() -> int:
 
     if not members:
         log.error('no JUnit XML recovered (see device logs above)')
-        write_summary('## QDC pytest — Android\n\nNo JUnit XML recovered (see device logs above).\n')
+        write_summary(
+            f'## QDC pytest — X Elite Windows — {args.plugin}\n\n' 'No JUnit XML recovered (see device logs above).\n'
+        )
         return 1
-    code, md = summarise(members[0][1])
+    code, md = summarise(members[0][1], args.plugin)
     write_summary(md)
     return code
 

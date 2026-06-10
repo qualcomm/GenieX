@@ -76,11 +76,29 @@ pytest tests -m "api or (llama_cpp and device_cpu)"
 GENIEX_DEVICE_TEST=1 pytest tests
 ```
 
+## Models
+
+The matrix uses one model per modality, aligned across both plugins so a
+keyword-quality divergence between llama_cpp and QAIRT traces to backend /
+quantization rather than model identity (`tests/_models.py`):
+
+| Modality | llama_cpp (HF GGUF) | QAIRT (AI Hub) |
+|----------|---------------------|----------------|
+| LLM      | `unsloth/Qwen3-4B-GGUF` Q4_0 | `qualcomm/Qwen3-4B` |
+| VLM      | `unsloth/Qwen2.5-VL-7B-Instruct-GGUF` Q4_0 + mmproj-F16 | `qualcomm/Qwen2.5-VL-7B-Instruct` |
+
+The LLM is Qwen3-4B **base**, not Instruct-2507: Instruct-2507 emits a long
+`<think>` preamble before the answer that, on the 256-token budget the
+suite uses, pushes the keyword off the end of the completion and turns
+`test_quality_keywords` into a thinking-budget test rather than a
+backend-quality test (seen on QDC NPU/Hybrid). The base model answers
+directly.
+
 Override the QAIRT model identifiers without editing the suite:
 
 ```bash
-GENIEX_QAIRT_MODEL=aihub/<other-llm> \
-GENIEX_QAIRT_VLM_MODEL=aihub/<other-vlm> \
+GENIEX_QAIRT_MODEL=qualcomm/<other-llm> \
+GENIEX_QAIRT_VLM_MODEL=qualcomm/<other-vlm> \
 GENIEX_DEVICE_TEST=1 pytest tests -m qairt
 ```
 
@@ -89,12 +107,16 @@ GENIEX_DEVICE_TEST=1 pytest tests -m qairt
 GitHub runners run only the model-free `api` shard
 ([.github/workflows/_test.yml](../.github/workflows/_test.yml)), since they
 have no Snapdragon hardware. The model-running cells (`llama_cpp` / `qairt`
-across every device) run on a real QDC Android phone, added to the PR graph
-by [pr-check.yml](../.github/workflows/pr-check.yml) via the reusable
+across every device) run on a real QDC X Elite (SC8380XP) Windows ARM64
+device, added to the PR graph by
+[pr-check.yml](../.github/workflows/pr-check.yml) via the reusable
 [_qdc-pytest.yml](../.github/workflows/_qdc-pytest.yml) (after build-sdk, so
-the SDK artifact is shared). Its harness under [qdc/](qdc/) reuses the
-benchmark's QDC submit/poll/collect plumbing and the
-[android/](android/) adb scripts to drive the device.
+the SDK artifact is shared). The harness under [qdc/](qdc/) reuses
+[sdk/benchmark/qdc/_qdc.py](../sdk/benchmark/qdc/_qdc.py) for submit / poll /
+log-collect, and the QDC POWERSHELL framework runs
+[qdc/windows/run_pytest.ps1](qdc/windows/run_pytest.ps1) on the device — it
+fetches a portable Python ARM64, installs pytest, then runs this `tests/`
+tree directly against the windows-arm64 SDK.
 
 ## Boundary with `bindings/python/tests/`
 
