@@ -81,17 +81,21 @@ def resolve_bundle_url(aihub_id: str, device: str) -> str | None:
     return next((a["download_url"] for a in assets if a.get("chipset") == slug), None)
 
 
+def resolve_model_url(m: dict, device: str) -> tuple[str | None, str]:
+    """Return (download_url, kind) for a model entry; url is None when no
+    asset matches the device (QAIRT bundles only)."""
+    if "aihub_id" in m:
+        return resolve_bundle_url(m["aihub_id"], device), "bundle"
+    return m["url"], "gguf"
+
+
 def model_rows(models: list[dict], device: str) -> list[str]:
     rows = []
     for m in models:
-        if "aihub_id" in m:
-            url = resolve_bundle_url(m["aihub_id"], device)
-            if url is None:
-                log.warning("no %s asset for %s, skipping", device, m["name"])
-                continue
-            kind = "bundle"
-        else:
-            url, kind = m["url"], "gguf"
+        url, kind = resolve_model_url(m, device)
+        if url is None:
+            log.warning("no %s asset for %s, skipping", device, m["name"])
+            continue
         mmproj = m.get("mmproj_url", "")
         vlm = "1" if m.get("vlm") else ""
         image = "1" if m.get("image") else ""
@@ -206,17 +210,7 @@ def _fmt_med_sd(agg: dict, key: str) -> str:
     return f"{med:.1f} ± {sd:.1f}"
 
 
-def _human_size(n: int | None) -> str:
-    if not n or n <= 0:
-        return "-"
-    b = float(n)
-    if b < 1024:
-        return f"{int(b)} B"
-    if b < 1024**2:
-        return f"{b / 1024:.1f} KiB"
-    if b < 1024**3:
-        return f"{b / 1024**2:.1f} MiB"
-    return f"{b / 1024**3:.2f} GiB"
+LLAMA_CPP_COMMIT_BASE = "https://github.com/ggml-org/llama.cpp/commit"
 
 
 _CTX_SUFFIX = re.compile(r"-c(\d+)$")
@@ -235,23 +229,75 @@ def _model_label(c: dict) -> str:
     return cid.removesuffix(f"-{c['plugin']}-{c['device']}")
 
 
-def render(cells: list[dict], device: str, tag: str, sha: str) -> str:
+def detect_geniex_label(sha: str) -> str:
+    """Return `<tag> (<sha>)` when the current commit is a release tag, else
+    just `<sha>`. Three-layer fallback: explicit env > exact-match git tag >
+    bare sha."""
+    if env := os.environ.get("GENIEX_RELEASE_TAG"):
+        return f"{env} ({sha})"
+    r = subprocess.run(
+        ["git", "describe", "--tags", "--exact-match", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode == 0 and (tag := r.stdout.strip()):
+        return f"{tag} ({sha})"
+    return sha or "unknown"
+
+
+def _pick_field(cells: list[dict], key: str) -> str | None:
+    return next((v for c in cells if (v := c.get(key))), None)
+
+
+def _models_block(models: list[dict], device: str) -> list[str]:
+    lines = ["**Models**", ""]
+    for m in models:
+        url, _ = resolve_model_url(m, device)
+        lines.append(f"- {m['name']}: {url or '-'}")
+    return lines
+
+
+def _details_block(
+    cells: list[dict], device: str, label: str, models: list[dict] | None
+) -> list[str]:
+    qairt_v = _pick_field(cells, "qairt_version") or "-"
+    llama_v = _pick_field(cells, "llama_cpp_version")
+    llama_line = f"[`{llama_v}`]({LLAMA_CPP_COMMIT_BASE}/{llama_v})" if llama_v else "-"
     lines = [
-        f"## QDC Scorecard — {device} — {tag}",
+        "<details><summary>Build & models</summary>",
         "",
-        f"- geniex version: `{tag}`",
-        f"- git sha: `{sha}`",
+        "**Versions**",
+        "",
+        f"- geniex: `{label}`",
+        f"- QAIRT: `{qairt_v}`",
+        f"- llama.cpp: {llama_line}",
         f"- generated: `{datetime.now(timezone.utc).isoformat(timespec='seconds')}`",
         "",
-        "| Model | Size | Backend | Device | Ctx | ngl | Test | TTFT (ms) | Prefill (tok/s) | Decode (tok/s) |",
-        "|-------|-----:|---------|--------|----:|----:|------|----------:|----------------:|---------------:|",
+    ]
+    if models:
+        lines += _models_block(models, device)
+        lines.append("")
+    lines += ["</details>", ""]
+    return lines
+
+
+def render(
+    cells: list[dict],
+    device: str,
+    label: str,
+    models: list[dict] | None = None,
+) -> str:
+    lines = [f"## QDC Scorecard — {device} — {label}", ""]
+    lines += _details_block(cells, device, label, models)
+    lines += [
+        "| Model | Backend | Device | Ctx | ngl | Test | TTFT (ms) | Prefill (tok/s) | Decode (tok/s) |",
+        "|-------|---------|--------|----:|----:|------|----------:|----------------:|---------------:|",
     ]
     sort_key = lambda c: (_model_label(c), c["plugin"], c["device"], _ctx_from_cell(c))  # noqa: E731
     for c in sorted(cells, key=sort_key):
         agg = c.get("agg") or {}
         params = c.get("params") or {}
         model = _model_label(c)
-        size = _human_size(c.get("model_size_bytes"))
         ngl_v = params.get("n_gpu_layers")
         ngl = "-" if c["plugin"] == "qairt" or not ngl_v else str(ngl_v)
         ctx = _ctx_from_cell(c)
@@ -264,7 +310,7 @@ def render(cells: list[dict], device: str, tag: str, sha: str) -> str:
             else "-"
         )
         lines.append(
-            f"| {model} | {size} | {c['plugin']} | {c['device']} | {ctx_s} | {ngl} | {test} | "
+            f"| {model} | {c['plugin']} | {c['device']} | {ctx_s} | {ngl} | {test} | "
             f"{_fmt_med_sd(agg, 'ttft_ms')} | {_fmt_med_sd(agg, 'prefill_tps')} | "
             f"{_fmt_med_sd(agg, 'decode_tps')} |"
         )
@@ -278,7 +324,16 @@ def write_summary(text: str) -> None:
             f.write(text)
 
 
-def render_aggregate(cells_dir: Path, device: str) -> int:
+def _short_sha() -> str:
+    return (
+        subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
+        ).stdout.strip()
+        or "unknown"
+    )
+
+
+def render_aggregate(cells_dir: Path, device: str, models_file: Path) -> int:
     cells = (
         [
             c
@@ -288,17 +343,14 @@ def render_aggregate(cells_dir: Path, device: str) -> int:
         if cells_dir.exists()
         else []
     )
-    tag = os.environ.get("GENIEX_RELEASE_TAG") or "unknown"
-    sha = (
-        subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
-        ).stdout.strip()
-        or "unknown"
-    )
+    label = detect_geniex_label(_short_sha())
     if not cells:
-        write_summary(f"## QDC Scorecard — {device} — {tag}\n\nNo results recovered.\n")
+        write_summary(
+            f"## QDC Scorecard — {device} — {label}\n\nNo results recovered.\n"
+        )
         return 0
-    write_summary(render(cells, device, tag, sha))
+    models = json.loads(models_file.read_text()) if models_file.exists() else None
+    write_summary(render(cells, device, label, models))
     return 0
 
 
@@ -314,7 +366,7 @@ def main() -> int:
     args = p.parse_args()
 
     if args.render_dir:
-        return render_aggregate(args.render_dir, args.device)
+        return render_aggregate(args.render_dir, args.device, args.models_file)
 
     if _qdc is None:
         raise SystemExit("qualcomm_device_cloud_sdk is required for run mode")
@@ -358,14 +410,7 @@ def main() -> int:
 
     # Render this model's own table into its job summary for immediate visibility;
     # the aggregate job later flattens every model's cells into one unified table.
-    tag = os.environ.get("GENIEX_RELEASE_TAG") or "unknown"
-    sha = (
-        subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
-        ).stdout.strip()
-        or "unknown"
-    )
-    write_summary(render(cells, args.device, tag, sha))
+    write_summary(render(cells, args.device, detect_geniex_label(_short_sha()), models))
     return 0
 
 

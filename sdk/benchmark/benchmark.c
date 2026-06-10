@@ -951,6 +951,8 @@ static void write_json(const options_t* o, const char* device_id, int32_t ngl, i
     json_field_str(f, "device_id", device_id, false);
     json_field_str(f, "model_path", o->model_path, false);
     json_field_i64(f, "model_size_bytes", model_size_bytes, false);
+    json_field_str(f, "qairt_version", geniex_get_plugin_version("qairt"), false);
+    json_field_str(f, "llama_cpp_version", geniex_get_plugin_version("llama_cpp"), false);
     fprintf(f, "    \"params\": {\n");
     fprintf(f,
         "      \"warmup\": %d, \"repetitions\": %d, \"n_gen\": %d,\n"
