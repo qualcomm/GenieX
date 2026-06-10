@@ -24,7 +24,6 @@ require (
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.38.0
 	golang.org/x/term v0.37.0
-	resty.dev/v3 v3.0.0-beta.3
 )
 
 replace github.com/qcom-it-nexa-ai/geniex/bindings/go => ../bindings/go

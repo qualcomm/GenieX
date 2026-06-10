@@ -1,9 +1,0 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
-
-go_library(
-    name = "model_hub",
-    srcs = ["errors.go"],
-    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub",
-    visibility = ["//cli:__subpackages__"],
-    deps = ["//cli/internal/model_hub/aihub"],
-)

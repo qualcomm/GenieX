@@ -31,9 +31,7 @@ import (
 	"github.com/spf13/cobra"
 
 	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub/aihub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
 )
 
 var (
@@ -363,23 +361,11 @@ func pullModel(ctx context.Context, name string, quant string) error {
 		return err
 	}
 
-	// AI Hub pulls need a chipset; resolve it before the spinner since the
-	// picker can't share the terminal with one.
-	var chipset string
-	if _, ok := aihub.IsAIHubName(name); ok || hub == geniex_sdk.HubAIHub {
-		s := store.Get()
-		if err := chipsetEnsure(ctx, s); err != nil {
-			return err
-		}
-		chipset = chipsetGet(s)
-	}
-
 	in := geniex_sdk.ModelPullInput{
 		ModelName:   name,
 		Quant:       quant,
 		Hub:         hub,
 		LocalPath:   localPath,
-		Chipset:     chipset,
 		DisplayName: "",
 	}
 

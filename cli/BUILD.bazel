@@ -1,5 +1,3 @@
-# gazelle:resolve go resty.dev/v3 @dev_resty_v3//:resty
-
 load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_filegroup", "pkg_files", "strip_prefix")
 load("@rules_pkg//pkg:zip.bzl", "pkg_zip")
 

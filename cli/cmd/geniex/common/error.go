@@ -21,7 +21,6 @@ import (
 	"os"
 
 	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/model_hub"
 	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
 )
 
@@ -61,29 +60,6 @@ const (
 
 	hintContextLength = `Context length exceeded, please start a new conversation.`
 
-	hintHubUnreachable = `⚠️ Unable to reach the model hub while resolving metadata.
-
-Possible causes: network timeout, corporate proxy, or firewall.
-
-👉 Try these:
-- Check that you can open huggingface.co (or aihub.qualcomm.com) in a browser.
-- If you're behind a proxy, set HTTPS_PROXY before running geniex.
-- Use a local model path if it's already downloaded.
-- If the issue persists, see help in our discord or slack.`
-
-	hintHubAuthRequired = `⚠️ The model hub rejected the request (auth required).
-
-👉 Try these:
-- For HuggingFace gated models, set HF_TOKEN to a token with access.
-- Verify the token has not expired or been revoked.`
-
-	hintModelNotFound = `⚠️ Model not found on the hub.
-
-👉 Try these:
-- Check the spelling of the model name.
-- Run 'geniex model list' to see available AI Hub models.
-- For HuggingFace models, pass the full repo path (e.g. unsloth/Qwen3-4B-GGUF).`
-
 	hintServerUnreachable = `⚠️ Could not reach the geniex server.
 
 👉 Try these:
@@ -98,8 +74,8 @@ Possible causes: network timeout, corporate proxy, or firewall.
 - Drop the ':<precision>' suffix to be prompted from what's already downloaded.`
 )
 
-// CLI-side sentinels. Hub sentinels live in model_hub; SDK sentinels in
-// bindings/go. Producers wrap with %w; PrintError matches via errors.Is.
+// CLI-side sentinels. SDK sentinels live in bindings/go. Producers wrap with
+// %w; PrintError matches via errors.Is.
 var (
 	// ErrServerUnreachable: dial failure against the geniex HTTP server
 	// (geniex run path).
@@ -119,9 +95,6 @@ var errorHints = []struct {
 	{geniex_sdk.ErrCommonPluginLoad, hintPluginLoad},
 	{geniex_sdk.ErrCommonPluginInvalid, hintPluginInvalid},
 	{geniex_sdk.ErrLlmTokenizationContextLength, hintContextLength},
-	{model_hub.ErrUnreachable, hintHubUnreachable},
-	{model_hub.ErrAuthRequired, hintHubAuthRequired},
-	{model_hub.ErrModelNotFound, hintModelNotFound},
 	{ErrServerUnreachable, hintServerUnreachable},
 	{ErrPrecisionNotFound, hintPrecisionNotFound},
 }
