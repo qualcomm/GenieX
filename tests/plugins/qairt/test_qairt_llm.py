@@ -61,6 +61,8 @@ def test_quality_keywords(qairt_llm_paths, device_map, prompt, expected):
         )
         assert isinstance(out, geniex.GenerateOutput)
         assert out.text, f'empty completion for prompt={prompt!r}'
-        assert expected.lower() in out.text.lower(), (
+        # See test_llama_cpp_llm.test_quality_keywords for why this is hoisted.
+        matched = expected.lower() in out.text.lower()
+        assert matched, (
             f'prompt={prompt!r} expected_substring={expected!r} ' f'device_map={device_map!r} got={out.text!r}'
         )

@@ -79,6 +79,10 @@ def test_quality_keywords(llama_cpp_llm_paths, device_map, prompt, expected):
         )
         assert isinstance(out, geniex.GenerateOutput)
         assert out.text, f'empty completion for prompt={prompt!r}'
-        assert expected.lower() in out.text.lower(), (
+        # Hoist the comparison into a local bool so pytest's assertion
+        # introspection has nothing to walk — otherwise out.text gets
+        # echoed 4–5x per failure (lower() chain + GenerateOutput repr).
+        matched = expected.lower() in out.text.lower()
+        assert matched, (
             f'prompt={prompt!r} expected_substring={expected!r} ' f'device_map={device_map!r} got={out.text!r}'
         )
