@@ -63,7 +63,7 @@ _IGNORE = shutil.ignore_patterns('__pycache__', '*.pyc', '.venv', '*.egg-info', 
 ENTRY_SCRIPT = 'C:\\Temp\\TestContent\\run_pytest.ps1'
 
 
-def build_windows_artifact(pkg_dir: Path, tmp: Path) -> Path:
+def build_windows_artifact(pkg_dir: Path, marker: str, tmp: Path) -> Path:
     """Stage everything QDC's POWERSHELL framework needs to run pytest on X Elite.
 
     The framework extracts the zip to ``C:\\Temp\\TestContent\\`` and invokes
@@ -71,6 +71,10 @@ def build_windows_artifact(pkg_dir: Path, tmp: Path) -> Path:
     pytest against the staged tree directly (no wheel install — sets
     ``PYTHONPATH=bindings\\python`` and ``GENIEX_LIB_PATH=pkg-geniex\\lib``,
     matching the windows-arm64 cell in ``.github/workflows/_test.yml``).
+
+    ``marker`` is substituted into the pytest ``-m`` selector so the workflow
+    can split the matrix across two jobs (one per plugin) and stay under
+    QDC's 60-min POWERSHELL device timeout.
     """
     stage = tmp / 'stage'
     stage.mkdir()
@@ -84,13 +88,13 @@ def build_windows_artifact(pkg_dir: Path, tmp: Path) -> Path:
 
     shutil.copy(REPO / HTP_CERT_REL, stage / 'ggml-htp-v1.cer')
     # CRLF line endings — QDC's PowerShell parser is friendlier with CRLF.
-    ps = (HERE / 'windows' / 'run_pytest.ps1').read_text()
+    ps = (HERE / 'windows' / 'run_pytest.ps1').read_text().replace('{MARKER}', marker)
     (stage / 'run_pytest.ps1').write_text(ps, newline='\r\n')
 
     return Path(shutil.make_archive(str(tmp / 'artifact'), 'zip', stage))
 
 
-def summarise(xml: bytes) -> tuple[int, str]:
+def summarise(xml: bytes, plugin: str = '') -> tuple[int, str]:
     """Parse JUnit XML; return (exit_code, markdown). Non-zero on any failure.
 
     Lists every cell with its status (like pytest's own per-test output) so it's
@@ -122,8 +126,9 @@ def summarise(xml: bytes) -> tuple[int, str]:
     passed = total - failed - errored - skipped
     verdict = 'PASS' if failed == 0 and errored == 0 else 'FAIL'
     icon = {'PASS': '✅', 'SKIP': '⏭️', 'FAIL': '❌'}
+    title_suffix = f' — {plugin}' if plugin else ''
     lines = [
-        '## QDC pytest — X Elite Windows',
+        f'## QDC pytest — X Elite Windows{title_suffix}',
         '',
         f'**{verdict}** — {passed} passed, {failed} failed, {errored} errored, {skipped} skipped (of {total})',
         '',
@@ -171,6 +176,12 @@ def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument('--pkg-dir', type=Path, required=True)
     p.add_argument('--device', default='SC8380XP', help='QDC device alias (default: X Elite SC8380XP)')
+    p.add_argument(
+        '--plugin',
+        choices=('llama_cpp', 'qairt'),
+        required=True,
+        help='Which plugin matrix to run; one job per plugin keeps each leg under the 60-min QDC timeout.',
+    )
     p.add_argument('--job-timeout', type=int, default=10800)
     args = p.parse_args()
 
@@ -185,11 +196,11 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        zip_path = build_windows_artifact(args.pkg_dir, tmp)
+        zip_path = build_windows_artifact(args.pkg_dir, args.plugin, tmp)
         job_id = _qdc.submit_and_wait(
             client,
             target_id=target_id,
-            job_name=f'geniex-pytest-{args.device}',
+            job_name=f'geniex-pytest-{args.plugin}-{args.device}',
             platform='windows',
             entry_script=ENTRY_SCRIPT,
             zip_path=zip_path,
@@ -197,14 +208,16 @@ def main() -> int:
         )
 
         members = _qdc.download_log_members(client, job_id, tmp, lambda n: n == 'device-results.xml')
-        # Always pull the device-side harness log so the on-device run is
-        # visible in CI regardless of pass/fail (Python bootstrap, pytest
-        # stdout — Start-Transcript captures them all).
+        # Always pull the device-side logs so the on-device run is visible in CI
+        # regardless of pass/fail. test_dbg.stdout is QDC's full PowerShell
+        # stdout / stderr capture — strictly more complete than our
+        # Start-Transcript harness.log, which buffers and can drop tail bytes
+        # when the framework aborts the process on its 60-min device timeout.
         diag = _qdc.download_log_members(
             client,
             job_id,
             tmp,
-            lambda n: n == 'harness.log',
+            lambda n: n in ('harness.log', 'test_dbg.stdout', 'test.stdout'),
         )
 
     for name, data in diag:
@@ -212,9 +225,11 @@ def main() -> int:
 
     if not members:
         log.error('no JUnit XML recovered (see device logs above)')
-        write_summary('## QDC pytest — X Elite Windows\n\nNo JUnit XML recovered (see device logs above).\n')
+        write_summary(
+            f'## QDC pytest — X Elite Windows — {args.plugin}\n\n' 'No JUnit XML recovered (see device logs above).\n'
+        )
         return 1
-    code, md = summarise(members[0][1])
+    code, md = summarise(members[0][1], args.plugin)
     write_summary(md)
     return code
 

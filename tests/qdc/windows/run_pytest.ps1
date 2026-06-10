@@ -87,11 +87,14 @@ Set-Location "$ROOT\tests"
 Write-Output "=== pytest ==="
 # norecursedirs is already set in tests/pytest.ini; do not pass -o here
 # (pytest -o splits on `=` only, but the embed build's argparse rejects the
-# space-containing list value with exit 4).
+# space-containing list value with exit 4). The {MARKER} placeholder is
+# substituted by run_qdc_pytest.py — one job per plugin so neither matrix
+# leg hits the QDC POWERSHELL framework's 60-min device timeout (full
+# 26-cell run took ~62 min and was cut at the last QAIRT VLM cell).
 & "$PY_DIR\python.exe" -m pytest . -v `
     --tb=short `
     --junitxml="$LOG\device-results.xml" `
-    -m "not api" 2>&1
+    -m "{MARKER}" 2>&1
 $rc = $LASTEXITCODE
 Write-Output "=== pytest exit $rc ==="
 

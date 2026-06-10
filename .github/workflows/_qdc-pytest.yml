@@ -5,6 +5,11 @@ name: QDC pytest (reusable)
 # cover the model-free `api` shard (no Snapdragon hardware); the device-gated
 # llama_cpp / qairt cells run here.
 #
+# QDC's POWERSHELL framework caps a single job at 60 min on-device. The full
+# 26-cell matrix takes ~62 min and was getting cut at the last QAIRT VLM
+# cell — so we fan out one job per plugin (llama_cpp ~21 cells, qairt ~5
+# cells) and they run in parallel under that cap.
+#
 # Reuses the benchmark's QDC submit/poll/collect plumbing (sdk/benchmark/qdc/_qdc.py).
 # Called by pr-check.yml and test.yml after build-sdk so the SDK artifact is
 # shared with the rest of the PR / tag graph instead of rebuilt.
@@ -18,9 +23,13 @@ permissions:
 
 jobs:
   qdc:
-    name: qdc
+    name: ${{ matrix.plugin }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [llama_cpp, qairt]
     env:
       QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
     steps:
@@ -33,4 +42,4 @@ jobs:
           name: sdk-windows-arm64
           path: pkg-geniex
       - uses: ./.github/actions/install-qdc-sdk
-      - run: python tests/qdc/run_qdc_pytest.py --pkg-dir pkg-geniex --device SC8380XP
+      - run: python tests/qdc/run_qdc_pytest.py --pkg-dir pkg-geniex --device SC8380XP --plugin ${{ matrix.plugin }}
