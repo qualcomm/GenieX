@@ -107,12 +107,16 @@ GENIEX_DEVICE_TEST=1 pytest tests -m qairt
 GitHub runners run only the model-free `api` shard
 ([.github/workflows/_test.yml](../.github/workflows/_test.yml)), since they
 have no Snapdragon hardware. The model-running cells (`llama_cpp` / `qairt`
-across every device) run on a real QDC Android phone, added to the PR graph
-by [pr-check.yml](../.github/workflows/pr-check.yml) via the reusable
+across every device) run on a real QDC X Elite (SC8380XP) Windows ARM64
+device, added to the PR graph by
+[pr-check.yml](../.github/workflows/pr-check.yml) via the reusable
 [_qdc-pytest.yml](../.github/workflows/_qdc-pytest.yml) (after build-sdk, so
-the SDK artifact is shared). Its harness under [qdc/](qdc/) reuses the
-benchmark's QDC submit/poll/collect plumbing and the
-[android/](android/) adb scripts to drive the device.
+the SDK artifact is shared). The harness under [qdc/](qdc/) reuses
+[sdk/benchmark/qdc/_qdc.py](../sdk/benchmark/qdc/_qdc.py) for submit / poll /
+log-collect, and the QDC POWERSHELL framework runs
+[qdc/windows/run_pytest.ps1](qdc/windows/run_pytest.ps1) on the device — it
+fetches a portable Python ARM64, installs pytest, then runs this `tests/`
+tree directly against the windows-arm64 SDK.
 
 ## Boundary with `bindings/python/tests/`
 
