@@ -13,6 +13,9 @@ pub enum Error {
     #[error("model '{0}' not found in local cache")]
     ModelNotFound(String),
 
+    #[error("model {0} not found on hub")]
+    HubModelNotFound(String),
+
     #[error("quantization '{0}' not found for model '{1}'")]
     QuantNotFound(String, String),
 

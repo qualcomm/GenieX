@@ -32,6 +32,14 @@ const char* geniex_get_error_message(const geniex_ErrorCode error_code) {
             return "File not found or inaccessible";
         case GENIEX_ERROR_COMMON_NOT_INITIALIZED:
             return "Library not initialized";
+        case GENIEX_ERROR_COMMON_AUTH:
+            return "Hub rejected request; authentication required";
+        case GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND:
+            return "Model not found on hub";
+        case GENIEX_ERROR_COMMON_RATE_LIMITED:
+            return "Hub rate limit exceeded";
+        case GENIEX_ERROR_COMMON_HUB_SERVER:
+            return "Hub server error";
         case GENIEX_ERROR_COMMON_NOT_SUPPORTED:
             return "Operation not supported";
         case GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED:

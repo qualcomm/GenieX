@@ -49,6 +49,10 @@ typedef enum {
     GENIEX_ERROR_COMMON_CANCELLED           = -100006, /**< Operation cancelled by caller */
     GENIEX_ERROR_COMMON_NOT_INITIALIZED     = -100007, /**< Library not initialized */
     GENIEX_ERROR_COMMON_ALREADY_INITIALIZED = -100008, /**< Library already initialized; deinit first */
+    GENIEX_ERROR_COMMON_AUTH                = -100009, /**< Hub rejected request; auth required (HTTP 401/403) */
+    GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND = -100010, /**< Model not found on the remote hub (HTTP 404) */
+    GENIEX_ERROR_COMMON_RATE_LIMITED        = -100011, /**< Hub rate limit exceeded (HTTP 429) */
+    GENIEX_ERROR_COMMON_HUB_SERVER          = -100012, /**< Hub server error (HTTP 5xx) */
     GENIEX_ERROR_COMMON_NOT_SUPPORTED       = -100013, /**< Operation not supported */
     GENIEX_ERROR_COMMON_MANIFEST_PARSE      = -100014, /**< Failed to parse a manifest / index document */
     GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE = -100015, /**< Requested chipset not available for this model */

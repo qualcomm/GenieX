@@ -43,6 +43,10 @@ pub const GENIEX_ERROR_COMMON_NETWORK: i32 = -100005;
 pub const GENIEX_ERROR_COMMON_CANCELLED: i32 = -100006;
 pub const GENIEX_ERROR_COMMON_NOT_INITIALIZED: i32 = -100007;
 pub const GENIEX_ERROR_COMMON_ALREADY_INITIALIZED: i32 = -100008;
+pub const GENIEX_ERROR_COMMON_AUTH: i32 = -100009;
+pub const GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND: i32 = -100010;
+pub const GENIEX_ERROR_COMMON_RATE_LIMITED: i32 = -100011;
+pub const GENIEX_ERROR_COMMON_HUB_SERVER: i32 = -100012;
 pub const GENIEX_ERROR_COMMON_MANIFEST_PARSE: i32 = -100014;
 pub const GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE: i32 = -100015;
 pub const GENIEX_ERROR_COMMON_MODEL_INVALID: i32 = -100203;
@@ -61,11 +65,22 @@ pub fn err_to_code(e: &Error) -> i32 {
         Error::NotInitialized => GENIEX_ERROR_COMMON_NOT_INITIALIZED,
         Error::AlreadyInitialized => GENIEX_ERROR_COMMON_ALREADY_INITIALIZED,
         Error::ModelNotFound(_) => GENIEX_ERROR_COMMON_FILE_NOT_FOUND,
+        Error::HubModelNotFound(_) => GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND,
         Error::QuantNotFound(_, _)
         | Error::QuantNotDownloaded(_, _)
         | Error::NoDownloadedQuant(_)
         | Error::InvalidModelName(_)
         | Error::InvalidFileName(_) => GENIEX_ERROR_COMMON_INVALID_INPUT,
+        // Split HTTP status into actionable buckets; everything else (other
+        // statuses, timeout/DNS/proxy, freeform) stays a generic network error.
+        Error::HttpStatus { status, .. } if *status == 401 || *status == 403 => {
+            GENIEX_ERROR_COMMON_AUTH
+        }
+        Error::HttpStatus { status, .. } if *status == 404 => {
+            GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND
+        }
+        Error::HttpStatus { status, .. } if *status == 429 => GENIEX_ERROR_COMMON_RATE_LIMITED,
+        Error::HttpStatus { status, .. } if *status >= 500 => GENIEX_ERROR_COMMON_HUB_SERVER,
         Error::HttpStatus { .. } | Error::HttpTimeout(_) | Error::Http(_) => {
             GENIEX_ERROR_COMMON_NETWORK
         }
@@ -144,3 +159,62 @@ pub unsafe fn free_cptr(ptr: *mut c_char) {
 // use it; pull.rs re-imports c_void directly when it needs it.
 #[allow(dead_code)]
 pub(crate) type VoidPtr = *mut c_void;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The SDK C side provides geniex_model_log_emit at link time; stub it so
+    // the standalone test binary resolves the symbol.
+    #[no_mangle]
+    extern "C" fn geniex_model_log_emit(_level: std::os::raw::c_int, _msg: *const c_char) {}
+
+    fn http(status: u16) -> Error {
+        Error::HttpStatus {
+            url: "https://hub.example/x".to_string(),
+            status,
+        }
+    }
+
+    #[test]
+    fn http_status_splits_into_actionable_codes() {
+        assert_eq!(err_to_code(&http(401)), GENIEX_ERROR_COMMON_AUTH);
+        assert_eq!(err_to_code(&http(403)), GENIEX_ERROR_COMMON_AUTH);
+        assert_eq!(
+            err_to_code(&http(404)),
+            GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND
+        );
+        assert_eq!(err_to_code(&http(429)), GENIEX_ERROR_COMMON_RATE_LIMITED);
+        assert_eq!(err_to_code(&http(500)), GENIEX_ERROR_COMMON_HUB_SERVER);
+        assert_eq!(err_to_code(&http(503)), GENIEX_ERROR_COMMON_HUB_SERVER);
+        assert_eq!(err_to_code(&http(400)), GENIEX_ERROR_COMMON_NETWORK);
+    }
+
+    #[test]
+    fn connectivity_failures_stay_network() {
+        assert_eq!(
+            err_to_code(&Error::HttpTimeout("dns".to_string())),
+            GENIEX_ERROR_COMMON_NETWORK
+        );
+        assert_eq!(
+            err_to_code(&Error::Http("reset".to_string())),
+            GENIEX_ERROR_COMMON_NETWORK
+        );
+    }
+
+    #[test]
+    fn not_found_variants_are_distinct() {
+        assert_eq!(
+            err_to_code(&Error::ModelNotFound("m".to_string())),
+            GENIEX_ERROR_COMMON_FILE_NOT_FOUND
+        );
+        assert_eq!(
+            err_to_code(&Error::HubModelNotFound("m".to_string())),
+            GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND
+        );
+        assert_eq!(
+            err_to_code(&Error::Hub("misc".to_string())),
+            GENIEX_ERROR_COMMON_UNKNOWN
+        );
+    }
+}

@@ -128,12 +128,7 @@ impl ModelSource for AiHubSource {
             .models
             .iter()
             .find(|m| m.display_name == self.display_name || m.id == self.display_name)
-            .ok_or_else(|| {
-                Error::Hub(format!(
-                    "model {:?} not found in AI Hub manifest",
-                    self.display_name
-                ))
-            })?;
+            .ok_or_else(|| Error::HubModelNotFound(self.display_name.clone()))?;
 
         if !selector::is_domain_supported(&entry.domain) {
             return Err(Error::Hub(format!(
