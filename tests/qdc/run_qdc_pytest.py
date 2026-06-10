@@ -178,9 +178,13 @@ def main() -> int:
     p.add_argument('--device', default='SC8380XP', help='QDC device alias (default: X Elite SC8380XP)')
     p.add_argument(
         '--plugin',
-        choices=('llama_cpp', 'qairt'),
         required=True,
-        help='Which plugin matrix to run; one job per plugin keeps each leg under the 60-min QDC timeout.',
+        help='Label for the matrix leg (used in job_name + summary heading).',
+    )
+    p.add_argument(
+        '--pytest-marker',
+        required=True,
+        help='Pytest -m expression (e.g. "llama_cpp and llm") substituted into the entry script.',
     )
     p.add_argument('--job-timeout', type=int, default=10800)
     args = p.parse_args()
@@ -196,7 +200,7 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        zip_path = build_windows_artifact(args.pkg_dir, args.plugin, tmp)
+        zip_path = build_windows_artifact(args.pkg_dir, args.pytest_marker, tmp)
         job_id = _qdc.submit_and_wait(
             client,
             target_id=target_id,
