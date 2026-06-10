@@ -150,20 +150,20 @@ def summarise(xml: bytes) -> tuple[int, str]:
         # parse `$...$` as LaTeX and break the page. Push everything into a
         # fenced code block under the per-test <details>; the test name stays
         # in the <summary> so the failure list above is one tidy line per id.
+        # pytest's JUnit body already starts with the message, so prefer body
+        # and fall back to message — printing both repeats the model output.
         lines += ['', '### Failure details', '']
         for name, msg, body in fails:
-            decoded_msg = (msg or '').replace('\\n', '\n').replace('\\t', '\t')
-            decoded_body = (body or '').replace('\\n', '\n').replace('\\t', '\t')
+            text = (body or msg or '').replace('\\n', '\n').replace('\\t', '\t')
             lines += [
                 f'<details><summary><code>{name}</code></summary>',
                 '',
                 '```',
-                decoded_msg,
+                text,
                 '```',
+                '</details>',
+                '',
             ]
-            if decoded_body and decoded_body != decoded_msg:
-                lines += ['', '```', decoded_body, '```']
-            lines += ['</details>', '']
     return (0 if verdict == 'PASS' else 1), '\n'.join(lines) + '\n'
 
 

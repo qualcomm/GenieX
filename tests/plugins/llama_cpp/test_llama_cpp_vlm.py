@@ -120,7 +120,9 @@ def test_quality_keywords(llama_cpp_vlm_paths, quality_image, device_map):
         assert isinstance(out, geniex.GenerateOutput)
         assert out.text, f'empty caption for device_map={device_map!r}'
         text = out.text.lower()
-        assert any(kw in text for kw in VLM_QUALITY_KEYWORDS), (
+        # See test_llama_cpp_llm.test_quality_keywords for why this is hoisted.
+        matched = any(kw in text for kw in VLM_QUALITY_KEYWORDS)
+        assert matched, (
             f'caption did not match any expected keyword '
             f'device_map={device_map!r} keywords={VLM_QUALITY_KEYWORDS} '
             f'got={out.text!r}'
