@@ -7,8 +7,8 @@
  *
  * Flag naming follows llama.cpp's `llama-bench` (-r / --repetitions,
  * -n / --n-gen, -c / --ctx-size, -t / --threads, -m / --model,
- * --n-gpu-layers, --no-warmup) so users moving between the two read
- * the same vocabulary.
+ * -ngl / --n-gpu-layers, --no-warmup) so users moving between the two
+ * read the same vocabulary.
  *
  * Defaults:
  *   - fixed default prompt, n_gen=128, temperature=0.0, seed=42
@@ -146,7 +146,7 @@ static void usage(const char* argv0) {
         "  -n, --n-gen N          tokens to generate per run; default 128\n"
         "  -c, --ctx-size N       model n_ctx (0 = from model, default 0)\n"
         "  -t, --threads N        generation threads (0 = SDK default)\n"
-        "  --n-gpu-layers N       llama_cpp layers to offload; overrides the\n"
+        "  -ngl, --n-gpu-layers N llama_cpp layers to offload; overrides the\n"
         "                         device alias default (needed for a real gpu run)\n"
         "  --warmup N             default 1\n"
         "  --no-warmup            equivalent to --warmup 0\n"
@@ -397,7 +397,7 @@ static void parse_args(int argc, char** argv, options_t* o) {
             o->n_ctx = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "-t") == 0 || strcmp(a, "--threads") == 0) {
             o->n_threads = atoi(arg_value(argc, argv, &i, a));
-        } else if (strcmp(a, "--n-gpu-layers") == 0) {
+        } else if (strcmp(a, "-ngl") == 0 || strcmp(a, "--n-gpu-layers") == 0) {
             o->ngl_override = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--output-json") == 0) {
             o->output_json = arg_value(argc, argv, &i, a);
