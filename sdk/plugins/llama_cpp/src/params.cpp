@@ -27,137 +27,37 @@ constexpr Platform kHostPlatform =
 
 Device classify_device(const char* device_id, int n_gpu_layers) {
     if (n_gpu_layers <= 0) return Device::CPU;
-    if (!device_id || device_id[0] == '\0') return Device::HTP;
+    if (!device_id || device_id[0] == '\0') return Device::NPU;  // HYBRID treat as NPU
     const std::string id(device_id);
     if (id.rfind("GPU", 0) == 0) return Device::GPU;
-    if (id.rfind("HTP", 0) == 0) return Device::HTP;
-    return Device::HTP;
+    if (id.rfind("HTP", 0) == 0) return Device::NPU;
+    return Device::CPU;  // UNKOWN treat as CPU
 }
 
-// Resolve the effective thread count. An explicit caller value (`requested`
-// > 0, from geniex_ModelConfig.n_threads) always wins. Otherwise per-(platform,
-// device) defaults pick the count: HTP/GPU offload uses the upstream-fixed 6;
-// pure CPU falls back to `cpu_default` (hardware_concurrency()/2).
-int resolve_n_threads(int requested, Device device, int cpu_default) {
+int resolve_n_threads(int requested, Device device) {
+    static const int cpu_threads      = static_cast<int32_t>(std::thread::hardware_concurrency());
+    static const int cpu_matrix[3][3] = {
+        {cpu_threads, 6, 6},  // Linux
+        {cpu_threads, 6, 6},  // Windows
+        {cpu_threads, 6, 6}   // Android
+    };
+
     if (requested > 0) return requested;
 
-    int n = cpu_default;
-    switch (kHostPlatform) {
-        case Platform::Linux:
-            switch (device) {
-                case Device::CPU:
-                    n = cpu_default;
-                    break;
-                case Device::GPU:
-                    n = 6;
-                    break;
-                case Device::HTP:
-                    n = 6;
-                    break;
-            }
-            break;
-        case Platform::Windows:
-            switch (device) {
-                case Device::CPU:
-                    n = cpu_default;
-                    break;
-                case Device::GPU:
-                    n = 6;
-                    break;
-                case Device::HTP:
-                    n = 6;
-                    break;
-            }
-            break;
-        case Platform::Android:
-            switch (device) {
-                case Device::CPU:
-                    n = cpu_default;
-                    break;
-                case Device::GPU:
-                    n = 6;
-                    break;
-                case Device::HTP:
-                    n = 6;
-                    break;
-            }
-            break;
-    }
-    return n;
+    return cpu_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
 }
 
-geniex_ModelConfig build_model_config(const geniex_ModelConfig& config, int32_t n_ctx_default, Device device) {
-    const int cpu_threads = static_cast<int32_t>(std::thread::hardware_concurrency()) / 2;
+llama_model_params build_model_params(const geniex_ModelConfig& config, Device device) {
+    static const bool mmap_matrix[3][3] = {
+        {true, false, false},   // Linux
+        {false, false, false},  // Windows
+        {false, false, false}   // Android
+    };
 
-    // Per-(platform, device) defaults. Branches are intentionally identical
-    // for now — they exist as the seam where upstream's compute_configs.py
-    // per-device values will land. Don't fold them.
-    int32_t default_n_batch  = 256;
-    int32_t default_n_ubatch = 512;
-    switch (kHostPlatform) {
-        case Platform::Linux:
-            switch (device) {
-                case Device::CPU:
-                    default_n_batch  = 256;
-                    default_n_ubatch = 512;
-                    break;
-                case Device::GPU:
-                    default_n_batch  = 256;
-                    default_n_ubatch = 512;
-                    break;
-                case Device::HTP:
-                    default_n_batch  = 256;
-                    default_n_ubatch = 512;
-                    break;
-            }
-            break;
-        case Platform::Windows:
-            switch (device) {
-                case Device::CPU:
-                    default_n_batch  = 256;
-                    default_n_ubatch = 512;
-                    break;
-                case Device::GPU:
-                    default_n_batch  = 256;
-                    default_n_ubatch = 512;
-                    break;
-                case Device::HTP:
-                    default_n_batch  = 256;
-                    default_n_ubatch = 512;
-                    break;
-            }
-            break;
-        case Platform::Android:
-            switch (device) {
-                case Device::CPU:
-                    default_n_batch  = 256;
-                    default_n_ubatch = 512;
-                    break;
-                case Device::GPU:
-                    default_n_batch  = 256;
-                    default_n_ubatch = 512;
-                    break;
-                case Device::HTP:
-                    default_n_batch  = 256;
-                    default_n_ubatch = 512;
-                    break;
-            }
-            break;
-    }
+    bool use_mmap = mmap_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
 
-    geniex_ModelConfig out = config;
-    out.n_ctx              = config.n_ctx > 0 ? config.n_ctx : n_ctx_default;
-    out.n_batch            = config.n_batch > 0 ? config.n_batch : default_n_batch;
-    out.n_ubatch           = config.n_ubatch > 0 ? config.n_ubatch : default_n_ubatch;
-    out.n_seq_max          = config.n_seq_max > 0 ? config.n_seq_max : 1;
-    out.n_threads          = resolve_n_threads(config.n_threads, device, cpu_threads);
-    out.n_threads_batch    = resolve_n_threads(config.n_threads_batch, device, cpu_threads);
-    return out;
-}
-
-llama_model_params build_model_params(const geniex_ModelConfig& config) {
     llama_model_params mpar = llama_model_default_params();
-    mpar.use_mmap           = false;
+    mpar.use_mmap           = use_mmap;
     mpar.use_mlock          = false;
     mpar.n_gpu_layers       = config.n_gpu_layers;
     GENIEX_LOG_INFO("[Optimise] model params: n_gpu_layers={}, use_mmap={}, use_mlock={}",
@@ -167,64 +67,31 @@ llama_model_params build_model_params(const geniex_ModelConfig& config) {
     return mpar;
 }
 
-llama_context_params build_context_params(const geniex_ModelConfig& config, Device device) {
-    // Per-(platform, device) context defaults. Branches identical for now —
-    // they're the seam for upstream's compute_configs.py values (-fa off on
-    // GPU, -ctk/-ctv f16 on HTP, etc.). Don't fold them.
-    llama_flash_attn_type fa = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-    switch (kHostPlatform) {
-        case Platform::Linux:
-            switch (device) {
-                case Device::CPU:
-                    fa = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-                    break;
-                case Device::GPU:
-                    fa = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-                    break;
-                case Device::HTP:
-                    fa = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-                    break;
-            }
-            break;
-        case Platform::Windows:
-            switch (device) {
-                case Device::CPU:
-                    fa = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-                    break;
-                case Device::GPU:
-                    fa = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-                    break;
-                case Device::HTP:
-                    fa = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-                    break;
-            }
-            break;
-        case Platform::Android:
-            switch (device) {
-                case Device::CPU:
-                    fa = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-                    break;
-                case Device::GPU:
-                    fa = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-                    break;
-                case Device::HTP:
-                    fa = LLAMA_FLASH_ATTN_TYPE_ENABLED;
-                    break;
-            }
-            break;
-    }
+llama_context_params build_context_params(const geniex_ModelConfig& config, int32_t n_ctx_default, Device device) {
+    static const uint32_t ubatch_matrix[3][3] = {
+        {2048, 2048, 2048},  // Linux
+        {2048, 512, 1024},   // Windows
+        {2048, 2048, 2048}   // Android
+    };
+    static const bool fa_matrix[3][3] = {
+        {true, true, true},   // Linux
+        {true, false, true},  // Windows
+        {true, true, true}    // Android
+    };
+
+    uint32_t ubatch = ubatch_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+    bool     fa     = fa_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
 
     llama_context_params cpar = llama_context_default_params();
-    cpar.n_ctx                = config.n_ctx;
-    cpar.n_batch              = config.n_batch;
-    cpar.n_ubatch             = config.n_ubatch;
-    cpar.n_seq_max            = config.n_seq_max;
-    cpar.n_threads            = config.n_threads;
-    cpar.n_threads_batch      = config.n_threads_batch;
-    cpar.flash_attn_type      = fa;
-    cpar.swa_full             = false;
-    cpar.kv_unified           = false;
+    cpar.n_ctx                = config.n_ctx > 0 ? config.n_ctx : n_ctx_default;
+    cpar.n_batch              = config.n_batch > 0 ? config.n_batch : 2048;
+    cpar.n_ubatch             = config.n_ubatch > 0 ? config.n_ubatch : ubatch;
+    cpar.n_seq_max            = config.n_seq_max > 0 ? config.n_seq_max : 1;
+    cpar.n_threads            = resolve_n_threads(config.n_threads, device);
+    cpar.n_threads_batch      = resolve_n_threads(config.n_threads_batch, device);
+    cpar.flash_attn_type      = static_cast<llama_flash_attn_type>(fa);
     cpar.no_perf              = false;
+
     GENIEX_LOG_INFO(
         "[Optimise] context params: n_ctx={}, n_batch={}, n_ubatch={}, n_seq_max={}, n_threads={}, "
         "n_threads_batch={}, flash_attn_type={}, swa_full={}, kv_unified={}, no_perf={}",
@@ -242,75 +109,34 @@ llama_context_params build_context_params(const geniex_ModelConfig& config, Devi
 }
 
 ggml_threadpool_params build_threadpool_params(int n_threads, Device device) {
-    // Per-(platform, device) threadpool tuning. Branches identical for now —
-    // the seam where compute_configs.py's `--cpu-mask 0xfc --cpu-strict 1
-    // --poll 1000` (and its per-platform variants, when upstream adds them)
-    // will land. Mirrors the previous offloading-bool behaviour: pin worker
-    // threads to performance cores [reserved, reserved + n_threads) when the
-    // host has enough cores, otherwise fall back to llama.cpp defaults
-    // (shared affinity, poll=50).
-    int      reserved_cores = 2;     // cores 0/1: OS + HTP FastRPC busy-wait
-    uint32_t poll           = 1000;  // upstream `--poll 1000`
-    bool     pin            = true;
-    switch (kHostPlatform) {
-        case Platform::Linux:
-            switch (device) {
-                case Device::CPU:
-                    pin = false;
-                    break;
-                case Device::GPU:
-                    pin = true;
-                    break;
-                case Device::HTP:
-                    pin = true;
-                    break;
-            }
-            break;
-        case Platform::Windows:
-            switch (device) {
-                case Device::CPU:
-                    pin = false;
-                    break;
-                case Device::GPU:
-                    pin = true;
-                    break;
-                case Device::HTP:
-                    pin = true;
-                    break;
-            }
-            break;
-        case Platform::Android:
-            switch (device) {
-                case Device::CPU:
-                    pin = false;
-                    break;
-                case Device::GPU:
-                    pin = true;
-                    break;
-                case Device::HTP:
-                    pin = true;
-                    break;
-            }
-            break;
-    }
+    static const bool pin_matrix[3][3] = {
+        {false, true, true},    // Linux
+        {false, false, false},  // Windows
+        {false, true, true}     // Android
+    };
+    static const uint32_t poll_matrix[3][3] = {
+        {0, 1000, 1000},  // Linux
+        {0, 0, 0},        // Windows
+        {0, 1000, 1000}   // Android
+    };
+
+    int      reserved_cores = 2;
+    uint32_t poll           = poll_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+    bool     pin            = pin_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
 
     ggml_threadpool_params tpp = ggml_threadpool_params_default(n_threads);
-    if (!pin || n_threads < 1) {
-        return tpp;
+
+    if (pin) {
+        for (int i = 0; i < n_threads; ++i) {
+            tpp.cpumask[reserved_cores + i] = true;
+        }
+        tpp.strict_cpu = true;
     }
 
-    // Pin only if every worker gets its own core after reserving 0/1; else
-    // oversubscription would fight the accelerator cadence, so keep defaults.
-    const unsigned hw = std::thread::hardware_concurrency();
-    if (hw < static_cast<unsigned>(n_threads + reserved_cores)) {
-        return tpp;
+    if (poll > 0) {
+        tpp.poll = poll;
     }
 
-    for (int i = 0; i < n_threads; ++i) {
-        tpp.cpumask[reserved_cores + i] = true;
-    }
-    tpp.strict_cpu = true;
-    tpp.poll       = poll;
     return tpp;
 }
 

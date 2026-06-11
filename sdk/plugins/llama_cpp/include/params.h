@@ -16,7 +16,7 @@ namespace geniex {
 // below; mirrors test-llama.cpp's compute_configs.py ComputeUnit. HTP covers
 // both the pinned `npu` alias and the `hybrid` per-tensor scheduler — they
 // share the same upstream tuning.
-enum class Device { CPU, GPU, HTP };
+enum class Device { CPU, GPU, NPU };
 
 // Reverse-classify a resolved device selection. Mirrors the alias table in
 // sdk/src/device.cpp:
@@ -26,18 +26,15 @@ enum class Device { CPU, GPU, HTP };
 //   hybrid -> empty device_id, ngl == 999           -> HTP
 Device classify_device(const char* device_id, int n_gpu_layers);
 
-// Resolve a caller's config against the plugin defaults: each unset (0) numeric
-// field takes its default, and thread counts use the per-(platform, device)
-// rule (offloaded inference pins the upstream-fixed count; pure CPU uses
-// cores/2). Only n_ctx's default differs between LLM (4096) and VLM (16384).
-// The returned config has every numeric field populated, so the build_*_params
-// mappers below are pure field copies.
-geniex_ModelConfig build_model_config(const geniex_ModelConfig& config, int32_t n_ctx_default, Device device);
-
-// Map an already-resolved config to llama params. Device selection and
-// tensor-buffer overrides stay at the call site.
-llama_model_params   build_model_params(const geniex_ModelConfig& config);
-llama_context_params build_context_params(const geniex_ModelConfig& config, Device device);
+// Map a caller's config to llama params, filling each unset (0) field from the
+// plugin defaults. build_context_params resolves n_ctx (default differs between
+// LLM at 4096 and VLM at 16384) plus n_batch / n_ubatch / n_seq_max, and picks
+// thread counts via the per-(platform, device) rule (offloaded inference pins
+// the upstream-fixed count; pure CPU uses cores/2). build_model_params only
+// reads n_gpu_layers. Device selection and tensor-buffer overrides stay at the
+// call site.
+llama_model_params   build_model_params(const geniex_ModelConfig& config, Device device);
+llama_context_params build_context_params(const geniex_ModelConfig& config, int32_t n_ctx_default, Device device);
 
 // Build threadpool tuning (cpumask / strict / poll) for a given thread count
 // on the given target device. Returned struct is what ggml_threadpool_new

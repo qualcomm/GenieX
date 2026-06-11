@@ -35,10 +35,10 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     // session. No-op when HTP is unused or sessions are already live.
     htp::reacquire_before_load();
 
-    const Device             device = classify_device(input->device_id, input->config.n_gpu_layers);
-    const geniex_ModelConfig config = build_model_config(input->config, /*n_ctx_default=*/4096, device);
+    const Device              device = classify_device(input->device_id, input->config.n_gpu_layers);
+    const geniex_ModelConfig& config = input->config;
 
-    llama_model_params mpar = build_model_params(config);
+    llama_model_params mpar = build_model_params(config, device);
 
     // Check if model path contains "gpt" and "oss" (case insensitive)
     {
@@ -92,7 +92,7 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 
-    llama_context_params cpar = build_context_params(config, device);
+    llama_context_params cpar = build_context_params(config, /*n_ctx_default=*/4096, device);
 
     this->ctx = llama_init_from_model(this->model, cpar);
     if (!this->ctx) {
