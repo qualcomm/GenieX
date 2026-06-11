@@ -452,6 +452,11 @@ def _cmd_ls(args: argparse.Namespace) -> int:
 
         size = 0
         quants = sorted((manifest.get('ModelFile') or {}).keys())
+        # QAIRT keys ModelFile under "N/A" with the real precision on the
+        # top-level Precision field. Mirror the Rust FFI substitution.
+        precision_top = manifest.get('Precision') or ''
+        if precision_top and quants == ['N/A']:
+            quants = [precision_top]
 
         def _add(f: dict) -> None:
             nonlocal size
@@ -482,7 +487,7 @@ def _cmd_ls(args: argparse.Namespace) -> int:
             ]
         )
 
-    _render_table(rows, ['NAME', 'SIZE', 'PLUGIN', 'TYPE', 'PRECISION'])
+    _render_table(rows, ['NAME', 'SIZE', 'PLUGIN', 'TYPE', 'PRECISIONS'])
     return 0
 
 

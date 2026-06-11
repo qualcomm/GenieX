@@ -229,9 +229,9 @@ func printListTable(models []geniex_sdk.ModelDetail, verbose bool) {
 	tw.SetOutputMirror(os.Stdout)
 	tw.SetStyle(table.StyleLight)
 	if verbose {
-		tw.AppendHeader(table.Row{"NAME", "SIZE", "PLUGIN", "TYPE", "PRECISION"})
+		tw.AppendHeader(table.Row{"NAME", "SIZE", "PLUGIN", "TYPE", "PRECISIONS"})
 	} else {
-		tw.AppendHeader(table.Row{"NAME", "SIZE", "PRECISION"})
+		tw.AppendHeader(table.Row{"NAME", "SIZE", "PRECISIONS"})
 	}
 	for _, model := range models {
 		var size string

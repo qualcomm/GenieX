@@ -47,15 +47,10 @@ func TestPrintListTable(t *testing.T) {
 		printListTable(sampleListModels, false)
 		return nil
 	})
-	for _, want := range []string{"NAME", "SIZE", "PRECISION", "acme/llama", "Q4_0,Q8_0", "acme/yolo"} {
+	for _, want := range []string{"NAME", "SIZE", "PRECISIONS", "acme/llama", "Q4_0,Q8_0", "acme/yolo"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("table output missing %q:\n%s", want, out)
 		}
-	}
-	// Header is singular to match NAME/SIZE/PLUGIN/TYPE — guards against the
-	// regression that produced #952.
-	if strings.Contains(out, "PRECISIONS") {
-		t.Errorf("table header reverted to plural PRECISIONS:\n%s", out)
 	}
 	// Non-verbose hides PLUGIN/TYPE columns and the QuantNA precision.
 	if strings.Contains(out, "PLUGIN") || strings.Contains(out, geniex_sdk.QuantNA) {
