@@ -69,14 +69,14 @@ llama_model_params build_model_params(const geniex_ModelConfig& config, Device d
 
 llama_context_params build_context_params(const geniex_ModelConfig& config, int32_t n_ctx_default, Device device) {
     static const uint32_t ubatch_matrix[3][3] = {
-        {2048, 2048, 2048},  // Linux
-        {2048, 512, 1024},   // Windows
-        {2048, 2048, 2048}   // Android
+        {2048, 512, 1024},  // Linux
+        {2048, 512, 1024},  // Windows
+        {2048, 512, 1024}   // Android
     };
     static const bool fa_matrix[3][3] = {
-        {true, true, true},   // Linux
+        {true, false, true},  // Linux
         {true, false, true},  // Windows
-        {true, true, true}    // Android
+        {true, false, true}   // Android
     };
 
     uint32_t ubatch = ubatch_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
@@ -112,12 +112,12 @@ ggml_threadpool_params build_threadpool_params(int n_threads, Device device) {
     static const bool pin_matrix[3][3] = {
         {false, true, true},    // Linux
         {false, false, false},  // Windows
-        {false, true, true}     // Android
+        {false, false, false}   // Android
     };
     static const uint32_t poll_matrix[3][3] = {
         {0, 1000, 1000},  // Linux
         {0, 0, 0},        // Windows
-        {0, 1000, 1000}   // Android
+        {0, 0, 0}         // Android
     };
 
     int      reserved_cores = 2;
