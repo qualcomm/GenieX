@@ -374,8 +374,8 @@ GENIEX_API int32_t geniex_model_resolve_alias(const char* alias, char** out_full
  * list with geniex_model_list_chipsets_free().
  */
 typedef struct {
-    char*   name;        /**< Reference device, e.g. "Snapdragon X Elite CRD". */
-    char**  aliases;     /**< Accepted aliases, incl. the canonical id
+    char*  name;         /**< Reference device, e.g. "Snapdragon X Elite CRD". */
+    char** aliases;      /**< Accepted aliases, incl. the canonical id
                           *   "qualcomm-snapdragon-x-elite" and "sm8650".   */
     int32_t alias_count; /**< Length of `aliases`.                          */
 } geniex_ChipsetInfo;

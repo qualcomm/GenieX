@@ -95,8 +95,16 @@ pub async fn list_supported_chipsets(cfg: &AiHubConfig) -> Result<Vec<ChipsetInf
     let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
     let mut chipsets = fetch_platform_info(cfg, &transport).await?.chipsets;
     chipsets.sort_by(|a, b| {
-        let an = if a.reference_device.is_empty() { &a.name } else { &a.reference_device };
-        let bn = if b.reference_device.is_empty() { &b.name } else { &b.reference_device };
+        let an = if a.reference_device.is_empty() {
+            &a.name
+        } else {
+            &a.reference_device
+        };
+        let bn = if b.reference_device.is_empty() {
+            &b.name
+        } else {
+            &b.reference_device
+        };
         an.to_ascii_lowercase().cmp(&bn.to_ascii_lowercase())
     });
     Ok(chipsets)
