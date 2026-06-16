@@ -69,7 +69,7 @@ image_path = os.path.abspath("demo.jpg")
 
 model = AutoModelForCausalLM.from_pretrained(
     "unsloth/Qwen2.5-VL-3B-Instruct-GGUF",
-    quant="Q8_0",
+    precision="Q8_0",
     device_map="auto",
 )
 messages = [{

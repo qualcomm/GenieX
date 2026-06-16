@@ -59,19 +59,19 @@ geniex infer ai-hub-models/Qwen3-4B --think         # show reasoning steps
 geniex infer ai-hub-models/Qwen3-4B --think=false   # respond directly
 ```
 
-**计算单元选择**（通过 `--device`）——选择运行模型的计算单元（默认：`npu`）：
+**计算单元选择**（通过 `--compute`）——选择运行模型的计算单元（默认：`npu`）：
 
 ```powershell
 # llama.cpp models support all compute units
-geniex infer unsloth/Qwen3.5-0.8B-GGUF --device npu
-geniex infer unsloth/Qwen3.5-0.8B-GGUF --device gpu
-geniex infer unsloth/Qwen3.5-0.8B-GGUF --device cpu
+geniex infer unsloth/Qwen3.5-0.8B-GGUF --compute npu
+geniex infer unsloth/Qwen3.5-0.8B-GGUF --compute gpu
+geniex infer unsloth/Qwen3.5-0.8B-GGUF --compute cpu
 
 # Qualcomm AI Hub Models only support NPU
-geniex infer ai-hub-models/Qwen3-4B --device npu
+geniex infer ai-hub-models/Qwen3-4B --compute npu
 ```
 
-<Warning>Qualcomm AI Hub 模型仅在 NPU 上运行。使用 `--device cpu` 或 `--device gpu` 会返回错误。</Warning>
+<Warning>Qualcomm AI Hub 模型仅在 NPU 上运行。使用 `--compute cpu` 或 `--compute gpu` 会返回错误。</Warning>
 
 ### **`geniex infer` — VLM**
 

@@ -9,26 +9,26 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ### Runtime
 
-Choose the inference runtime via `plugin_id`:
+Choose the inference runtime via `runtime_id`:
 
 ```kotlin
-val plugin_id: String?   // "llama_cpp" | "qairt" | null
+val runtime_id: String?   // "llama_cpp" | "qairt" | null
 ```
 
-| `plugin_id`   | Runtime                          | Model format             | Compute units                  |
+| `runtime_id`   | Runtime                          | Model format             | Compute units                  |
 |---------------|----------------------------------|--------------------------|--------------------------------|
 | `"llama_cpp"` | llama.cpp + GGML Hexagon backend | GGUF                     | CPU / Adreno GPU / Hexagon NPU |
 | `"qairt"`     | Qualcomm® AI Engine Direct       | Qualcomm AI Hub pre-compiled bins | Hexagon NPU only      |
 | `null`        | SDK picks based on model paths   | —                        | —                              |
 
-Constants are exposed as [`PluginIdValue`](https://github.com/qcom-ai-hub/geniex/blob/main/bindings/android/app/src/main/java/com/geniex/sdk/bean/InputPluginBase.kt) (`LLAMA_CPP`, `QAIRT`).
+Constants are exposed as [`RuntimeIdValue`](https://github.com/qcom-ai-hub/geniex/blob/main/bindings/android/app/src/main/java/com/geniex/sdk/bean/InputPluginBase.kt) (`LLAMA_CPP`, `QAIRT`).
 
 ### Compute unit
 
 Friendly compute-unit aliases forwarded to `geniex_resolve_device` in the native SDK.
 
 ```kotlin
-val device_id: String?   // "cpu" | "gpu" | "npu" | null
+val compute_unit: String?   // "cpu" | "gpu" | "npu" | null
 ```
 
 | Alias   | Effect                                                              |
@@ -58,7 +58,7 @@ GenieXSdk.getInstance().init(context)
 ModelManagerWrapper.pullFlow(
     ModelPullInput(
         model_name = "unsloth/Qwen3-0.6B-GGUF",
-        quant      = "Q4_0",
+        precision  = "Q4_0",
         hub        = HubSource.HUGGINGFACE,
     )
 ).collect { event ->
@@ -83,7 +83,7 @@ ModelManagerWrapper.clean()            // wipe all cached models
 ```kotlin
 data class ModelPullInput(
     val model_name:   String,                     // "org/repo" or alias
-    val quant:        String? = null,             // precision (quantization) e.g. "Q4_0", "Q4_K_M"
+    val precision:    String? = null,             // precision (quantization) e.g. "Q4_0", "Q4_K_M"
     val hub:          HubSource = HubSource.AUTO, // AUTO routes by model_name
     val local_path:   String? = null,             // only when hub == LOCALFS
     val hf_token:     String? = null,             // falls back to GENIEX_HFTOKEN env
@@ -114,10 +114,10 @@ data class ModelPaths(
     val model_path:     String,
     val model_dir:      String,
     val model_name:     String,
-    val plugin_id:      String,            // authoritative — prefer over UI selection
+    val runtime_id:      String,            // authoritative — prefer over UI selection
     val mmproj_path:    String? = null,    // VLM projection weights
     val tokenizer_path: String? = null,
-    val device_id:      String? = null,
+    val compute_unit:      String? = null,
 )
 ```
 
@@ -137,8 +137,8 @@ data class LlmCreateInput(
     val model_path:     String,
     val tokenizer_path: String? = null,
     val config:         ModelConfig,
-    val plugin_id:      String? = null,
-    val device_id:      String? = null,
+    val runtime_id:      String? = null,
+    val compute_unit:      String? = null,
 )
 ```
 
@@ -150,8 +150,8 @@ data class VlmCreateInput(
     val model_path:  String,
     val mmproj_path: String? = null,     // vision projection weights (GGUF VLMs)
     val config:      ModelConfig,
-    val plugin_id:   String? = null,
-    val device_id:   String? = null,
+    val runtime_id:   String? = null,
+    val compute_unit:   String? = null,
 )
 ```
 
@@ -175,7 +175,7 @@ data class ModelConfig(
 ```
 
 <Note>
-`nGpuLayers` is rewritten by the JNI based on `device_id`: `cpu` forces 0, `npu` forces 999. For `gpu` the value you pass is used as-is — set 999 to offload all layers.
+`nGpuLayers` is rewritten by the JNI based on `compute_unit`: `cpu` forces 0, `npu` forces 999. For `gpu` the value you pass is used as-is — set 999 to offload all layers.
 </Note>
 
 ### `ChatMessage`
@@ -235,7 +235,7 @@ sealed class LlmStreamResult {
 
 ## **llama.cpp (GGUF models)**
 
-Runs any GGUF model on CPU, Adreno GPU, or Hexagon NPU. Compute-unit selection is controlled by `device_id`.
+Runs any GGUF model on CPU, Adreno GPU, or Hexagon NPU. Compute-unit selection is controlled by `compute_unit`.
 
 ### LLM
 
@@ -249,8 +249,8 @@ LlmWrapper.builder()
             model_name = paths.model_name,
             model_path = paths.model_path,
             config     = ModelConfig(nCtx = 4096),
-            plugin_id  = "llama_cpp",
-            device_id  = null,       // null → npu (recommended on Snapdragon)
+            runtime_id  = "llama_cpp",
+            compute_unit  = null,       // null → npu (recommended on Snapdragon)
         )
     )
     .build()
@@ -272,7 +272,7 @@ llmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
 
 #### Compute-unit variants
 
-| Goal | `device_id` | Notes |
+| Goal | `compute_unit` | Notes |
 |---|---|---|
 | Snapdragon NPU (recommended) | `"npu"` or `null` | Hexagon NPU acceleration. |
 | Adreno GPU (OpenCL) | `"gpu"` | Set `nGpuLayers = 999` to offload all layers. |
@@ -293,8 +293,8 @@ VlmWrapper.builder()
             model_path  = paths.model_path,
             mmproj_path = paths.mmproj_path,
             config      = ModelConfig(nCtx = 4096),
-            plugin_id   = "llama_cpp",
-            device_id   = null,
+            runtime_id   = "llama_cpp",
+            compute_unit   = null,
         )
     )
     .build()
@@ -368,8 +368,8 @@ LlmWrapper.builder()
             model_name = paths.model_name,
             model_path = paths.model_path,
             config     = ModelConfig(max_tokens = 2048, enable_thinking = false),
-            plugin_id  = "qairt",
-            device_id  = null,           // null → NPU (only option for Qualcomm AI Engine Direct)
+            runtime_id  = "qairt",
+            compute_unit  = null,           // null → NPU (only option for Qualcomm AI Engine Direct)
         )
     )
     .build()
@@ -406,8 +406,8 @@ VlmWrapper.builder()
             model_path  = paths.model_path,
             mmproj_path = paths.mmproj_path,
             config      = ModelConfig(max_tokens = 2048, enable_thinking = false),
-            plugin_id   = "qairt",
-            device_id   = null,
+            runtime_id   = "qairt",
+            compute_unit   = null,
         )
     )
     .build()

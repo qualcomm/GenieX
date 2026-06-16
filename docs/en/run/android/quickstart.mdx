@@ -33,7 +33,7 @@ The flow is the same regardless of model: **init the SDK → pull weights → lo
     ModelManagerWrapper.pullFlow(
         ModelPullInput(
             model_name = "unsloth/Qwen3-0.6B-GGUF",
-            quant      = "Q4_0",
+            precision  = "Q4_0",
             hub        = HubSource.HUGGINGFACE,
         )
     ).collect { event ->
@@ -61,8 +61,8 @@ The flow is the same regardless of model: **init the SDK → pull weights → lo
                 model_name = paths.model_name,
                 model_path = paths.model_path,
                 config     = ModelConfig(nCtx = 4096),
-                plugin_id  = "llama_cpp",
-                device_id  = null,   // null → NPU on Snapdragon (recommended)
+                runtime_id  = "llama_cpp",
+                compute_unit  = null,   // null → NPU on Snapdragon (recommended)
             )
         )
         .build()
@@ -97,19 +97,19 @@ The flow is the same regardless of model: **init the SDK → pull weights → lo
 
 ## **Switching models**
 
-Swapping models is mostly a matter of changing the `model_name` and the `plugin_id`. There are two runtimes:
+Swapping models is mostly a matter of changing the `model_name` and the `runtime_id`. There are two runtimes:
 
-- **`llama_cpp`** — runs any GGUF model. Supports NPU / GPU / CPU compute units via `device_id`.
+- **`llama_cpp`** — runs any GGUF model. Supports NPU / GPU / CPU compute units via `compute_unit`.
 - **`qairt`** (Qualcomm AI Engine Direct) — runs Qualcomm AI Hub Models. NPU-only, requires an explicit `chipset` on Android.
 
 ### Another GGUF model (llama.cpp)
 
-Just change the `model_name` (and `quant` if you want a different precision) — the rest of the flow is identical:
+Just change the `model_name` (and `precision` if you want a different one) — the rest of the flow is identical:
 
 ```kotlin
 ModelPullInput(
     model_name = "unsloth/Qwen3-VL-2B-Instruct-GGUF",
-    quant      = "Q4_0",
+    precision  = "Q4_0",
     hub        = HubSource.HUGGINGFACE,
 )
 ```
@@ -130,13 +130,13 @@ ModelManagerWrapper.pullFlow(
 ).collect { /* … */ }
 ```
 
-Then switch `plugin_id = "qairt"` in `LlmCreateInput`. See the supported Qualcomm AI Hub repos in the [API reference](/en/run/android/api-reference#supported-models).
+Then switch `runtime_id = "qairt"` in `LlmCreateInput`. See the supported Qualcomm AI Hub repos in the [API reference](/en/run/android/api-reference#supported-models).
 
 ### Switching compute unit (NPU / GPU / CPU)
 
-For `llama_cpp` only — set `device_id` on `LlmCreateInput`:
+For `llama_cpp` only — set `compute_unit` on `LlmCreateInput`:
 
-| `device_id`        | Compute unit                               |
+| `compute_unit`        | Compute unit                               |
 |--------------------|--------------------------------------------|
 | `null` or `"npu"`  | Hexagon NPU (recommended on Snapdragon).   |
 | `"gpu"`            | Adreno GPU via OpenCL.                     |

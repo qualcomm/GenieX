@@ -27,8 +27,8 @@ model = AutoModelForCausalLM.from_pretrained(
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `model_name_or_path` | `str` | *required* | HuggingFace repo id, short alias (e.g. `"qwen3"`), or local path. |
-| `device_map` | `str` | `"auto"` | `"auto"` picks the first available runtime + compute unit. Also accepts `"<plugin_id>"` (runtime) or `"<plugin_id>:<device_id>"` (runtime + compute unit). |
-| `quant` | `str \| None` | `None` | Precision (quantization) variant (e.g. `"Q4_K_M"`). Filters files when downloading from Hub. |
+| `device_map` | `str` | `"auto"` | `"auto"` picks the first available runtime + compute unit. Also accepts `"<runtime>"` (runtime) or `"<runtime>:<compute_unit>"` (runtime + compute unit). |
+| `precision` | `str \| None` | `None` | Precision (quantization) variant (e.g. `"Q4_K_M"`). Filters files when downloading from Hub. |
 | `mmproj_path` | `str \| None` | `None` | Path to the multimodal projector file. Auto-resolved from Hub; pass explicitly to force VLM mode. |
 
 <Expandable title="Additional parameters">
@@ -263,7 +263,7 @@ print(f"model removed: {MODEL}")
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `model_name` | `str` | *required* | `org/repo` or a short alias. |
-| `quant` | `str \| None` | `None` | Precision (quantization) hint (e.g. `"Q4_K_M"`). |
+| `precision` | `str \| None` | `None` | Precision (quantization) hint (e.g. `"Q4_K_M"`). |
 | `hub` | `str` | `"auto"` | `"auto"` \| `"hf"` \| `"localfs"`. |
 | `local_path` | `str \| None` | `None` | Source directory (required when `hub="localfs"`). |
 | `hf_token` | `str \| None` | `None` | HuggingFace bearer token. |
@@ -278,10 +278,10 @@ print(f"model removed: {MODEL}")
 | `model_path` | `str` | Path to the main model file. |
 | `model_dir` | `str` | Directory containing the model. |
 | `model_name` | `str` | Canonical model name. |
-| `plugin_id` | `str` | Plugin identifier. |
+| `runtime` | `str` | Runtime identifier. |
 | `mmproj_path` | `str \| None` | Multimodal projector path (VLM only). |
 | `tokenizer_path` | `str \| None` | Tokenizer file path. |
-| `device_id` | `str \| None` | Device identifier. |
+| `compute_unit` | `str \| None` | Compute unit identifier. |
 
 </Expandable>
 
@@ -294,8 +294,8 @@ print(f"model removed: {MODEL}")
 | `geniex.init()` | Initialize the SDK. Called automatically on first model load. |
 | `geniex.deinit()` | Shut down the SDK and release resources. |
 | `geniex.version()` | Returns the SDK version string. |
-| `geniex.get_plugin_list()` | Returns `list[str]` of available runtime IDs (`plugin_id`). |
-| `geniex.get_device_list(plugin_id)` | Returns `list[tuple[str, str]]` of `(device_id, device_name)` compute-unit pairs for the given runtime. |
+| `geniex.get_runtime_list()` | Returns `list[str]` of available runtime IDs. |
+| `geniex.get_compute_unit_list(runtime)` | Returns `list[tuple[str, str]]` of `(compute_unit, compute_unit_name)` pairs for the given runtime. |
 
 <br />
 

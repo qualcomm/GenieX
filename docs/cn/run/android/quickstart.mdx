@@ -33,7 +33,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     ModelManagerWrapper.pullFlow(
         ModelPullInput(
             model_name = "unsloth/Qwen3-0.6B-GGUF",
-            quant      = "Q4_0",
+            precision  = "Q4_0",
             hub        = HubSource.HUGGINGFACE,
         )
     ).collect { event ->
@@ -61,8 +61,8 @@ import Feedback from "/snippets/page-feedback.mdx";
                 model_name = paths.model_name,
                 model_path = paths.model_path,
                 config     = ModelConfig(nCtx = 4096),
-                plugin_id  = "llama_cpp",
-                device_id  = null,   // null → NPU on Snapdragon (recommended)
+                runtime_id  = "llama_cpp",
+                compute_unit  = null,   // null → NPU on Snapdragon (recommended)
             )
         )
         .build()
@@ -97,19 +97,19 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ## **切换模型**
 
-切换模型主要就是更改 `model_name` 和 `plugin_id`。这里有两种运行时：
+切换模型主要就是更改 `model_name` 和 `runtime_id`。这里有两种运行时：
 
-- **`llama_cpp`** —— 运行任意 GGUF 模型。通过 `device_id` 支持 NPU / GPU / CPU 计算单元。
+- **`llama_cpp`** —— 运行任意 GGUF 模型。通过 `compute_unit` 支持 NPU / GPU / CPU 计算单元。
 - **`qairt`**（Qualcomm AI Engine Direct）—— 运行 Qualcomm AI Hub Models。仅支持 NPU，在 Android 上需要显式指定 `chipset`。
 
 ### 另一个 GGUF 模型 (llama.cpp)
 
-只需更改 `model_name`（如果想要不同精度，再更改 `quant`）——其余流程完全相同：
+只需更改 `model_name`（如果想要不同精度，再更改 `precision`）——其余流程完全相同：
 
 ```kotlin
 ModelPullInput(
     model_name = "unsloth/Qwen3-VL-2B-Instruct-GGUF",
-    quant      = "Q4_0",
+    precision  = "Q4_0",
     hub        = HubSource.HUGGINGFACE,
 )
 ```
@@ -130,13 +130,13 @@ ModelManagerWrapper.pullFlow(
 ).collect { /* … */ }
 ```
 
-然后在 `LlmCreateInput` 中切换为 `plugin_id = "qairt"`。受支持的 Qualcomm AI Hub 仓库参阅 [API 参考](/cn/run/android/api-reference#已支持模型)。
+然后在 `LlmCreateInput` 中切换为 `runtime_id = "qairt"`。受支持的 Qualcomm AI Hub 仓库参阅 [API 参考](/cn/run/android/api-reference#已支持模型)。
 
 ### 切换计算单元 (NPU / GPU / CPU)
 
-仅适用于 `llama_cpp`——在 `LlmCreateInput` 上设置 `device_id`：
+仅适用于 `llama_cpp`——在 `LlmCreateInput` 上设置 `compute_unit`：
 
-| `device_id`        | 计算单元                                    |
+| `compute_unit`        | 计算单元                                    |
 |--------------------|--------------------------------------------|
 | `null` or `"npu"`  | Hexagon NPU（骁龙上推荐）。                  |
 | `"gpu"`            | 通过 OpenCL 使用 Adreno GPU。               |
