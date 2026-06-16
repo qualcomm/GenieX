@@ -48,8 +48,23 @@ pub extern "C" fn geniex_model_list_chipsets(out: *mut GenieXChipsetList) -> i32
         let mut infos: Vec<GenieXChipsetInfo> = chipsets
             .iter()
             .map(|c| {
+                // Surface the reference device (e.g. "Snapdragon X Elite
+                // CRD") as `name`, demoting the canonical chipset id
+                // ("qualcomm-snapdragon-x-elite") into the alias list so
+                // callers can still resolve / display it. Fall back to the
+                // canonical id when the bucket omits a reference device.
+                let display = if c.reference_device.is_empty() {
+                    c.name.as_str()
+                } else {
+                    c.reference_device.as_str()
+                };
+                let mut alias_strs: Vec<&str> = Vec::with_capacity(c.aliases.len() + 1);
+                if !c.aliases.iter().any(|a| a == &c.name) {
+                    alias_strs.push(c.name.as_str());
+                }
+                alias_strs.extend(c.aliases.iter().map(String::as_str));
                 let mut aliases: Vec<*mut c_char> =
-                    c.aliases.iter().map(|a| str_to_cptr(a)).collect();
+                    alias_strs.iter().map(|a| str_to_cptr(a)).collect();
                 aliases.shrink_to_fit();
                 let alias_count = aliases.len() as i32;
                 let aliases_ptr = if aliases.is_empty() {
@@ -59,7 +74,7 @@ pub extern "C" fn geniex_model_list_chipsets(out: *mut GenieXChipsetList) -> i32
                 };
                 std::mem::forget(aliases);
                 GenieXChipsetInfo {
-                    name: str_to_cptr(&c.name),
+                    name: str_to_cptr(display),
                     aliases: aliases_ptr,
                     alias_count,
                 }

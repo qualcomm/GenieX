@@ -88,10 +88,18 @@ async fn fetch_platform_info(
 }
 
 /// List every chipset AI Hub publishes assets for, with its canonical
-/// name and aliases. Sourced from `platform.json`.
+/// name and aliases. Sourced from `platform.json`. Sorted by the name
+/// callers display (reference device, falling back to the canonical id)
+/// so the FFI list is stable regardless of bucket ordering.
 pub async fn list_supported_chipsets(cfg: &AiHubConfig) -> Result<Vec<ChipsetInfo>> {
     let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
-    Ok(fetch_platform_info(cfg, &transport).await?.chipsets)
+    let mut chipsets = fetch_platform_info(cfg, &transport).await?.chipsets;
+    chipsets.sort_by(|a, b| {
+        let an = if a.reference_device.is_empty() { &a.name } else { &a.reference_device };
+        let bn = if b.reference_device.is_empty() { &b.name } else { &b.reference_device };
+        an.to_ascii_lowercase().cmp(&bn.to_ascii_lowercase())
+    });
+    Ok(chipsets)
 }
 
 pub struct AiHubSource {

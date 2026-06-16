@@ -37,7 +37,9 @@ pub fn resolve_chipset(plat: &PlatformInfo, chipset: &str) -> Result<String> {
         return Err(Error::Hub("empty chipset".to_string()));
     }
     for cs in &plat.chipsets {
-        if cs.name.to_ascii_lowercase() == target {
+        if cs.name.to_ascii_lowercase() == target
+            || cs.reference_device.to_ascii_lowercase() == target
+        {
             return Ok(cs.name.clone());
         }
         for a in &cs.aliases {
@@ -70,7 +72,7 @@ pub fn match_asset<'a>(
         Err(_) => {
             return Err(UnavailableChipset {
                 requested: chipset.to_string(),
-                available: collect_chipsets(ra),
+                available: collect_chipsets(ra, plat),
             });
         }
     };
@@ -84,7 +86,7 @@ pub fn match_asset<'a>(
     if candidates.is_empty() {
         return Err(UnavailableChipset {
             requested: chipset.to_string(),
-            available: collect_chipsets(ra),
+            available: collect_chipsets(ra, plat),
         });
     }
 
@@ -93,11 +95,21 @@ pub fn match_asset<'a>(
     Ok(candidates[0])
 }
 
-fn collect_chipsets(ra: &ModelReleaseAssets) -> Vec<String> {
+/// Collect the chipsets a model ships assets for, rendered as the
+/// reference device names callers see in `list_supported_chipsets` (so
+/// error messages match the picker). Falls back to the canonical id when
+/// `platform.json` has no reference device for it.
+fn collect_chipsets(ra: &ModelReleaseAssets, plat: &PlatformInfo) -> Vec<String> {
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for a in &ra.assets {
         if let Some(cs) = a.chipset.as_deref() {
-            seen.insert(cs.to_string());
+            let display = plat
+                .chipsets
+                .iter()
+                .find(|c| c.name == cs && !c.reference_device.is_empty())
+                .map(|c| c.reference_device.clone())
+                .unwrap_or_else(|| cs.to_string());
+            seen.insert(display);
         }
     }
     seen.into_iter().collect()
@@ -113,7 +125,7 @@ impl std::fmt::Display for UnavailableChipset {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "chipset {:?} not available; model supports: {}",
+            "device {:?} not available; model supports: {}",
             self.requested,
             self.available.join(", ")
         )
@@ -131,10 +143,26 @@ mod tests {
                 .iter()
                 .map(|(name, aliases)| ChipsetInfo {
                     name: (*name).to_string(),
+                    reference_device: String::new(),
                     aliases: aliases.iter().map(|a| (*a).to_string()).collect(),
                 })
                 .collect(),
         }
+    }
+
+    #[test]
+    fn resolves_reference_device() {
+        let plat = PlatformInfo {
+            chipsets: vec![ChipsetInfo {
+                name: "qualcomm-snapdragon-x-elite".to_string(),
+                reference_device: "Snapdragon X Elite CRD".to_string(),
+                aliases: vec![],
+            }],
+        };
+        assert_eq!(
+            resolve_chipset(&plat, "snapdragon x elite crd").unwrap(),
+            "qualcomm-snapdragon-x-elite"
+        );
     }
 
     fn asset(chipset: &str, runtime: &str, precision: &str) -> AssetDetails {
@@ -189,6 +217,27 @@ mod tests {
         };
         let err = match_asset(&ra, &plat, "C").unwrap_err();
         assert_eq!(err.available, vec!["A".to_string(), "B".to_string()]);
+    }
+
+    #[test]
+    fn available_uses_reference_device_names() {
+        let plat = PlatformInfo {
+            chipsets: vec![ChipsetInfo {
+                name: "qualcomm-snapdragon-x-elite".to_string(),
+                reference_device: "Snapdragon X Elite CRD".to_string(),
+                aliases: vec![],
+            }],
+        };
+        let ra = ModelReleaseAssets {
+            model_id: "m".into(),
+            assets: vec![asset(
+                "qualcomm-snapdragon-x-elite",
+                "RUNTIME_GENIE",
+                "PRECISION_FP16",
+            )],
+        };
+        let err = match_asset(&ra, &plat, "unknown").unwrap_err();
+        assert_eq!(err.available, vec!["Snapdragon X Elite CRD".to_string()]);
     }
 
     #[test]

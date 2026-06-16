@@ -107,6 +107,10 @@ pub struct PlatformInfo {
 pub struct ChipsetInfo {
     #[serde(default)]
     pub name: String,
+    /// Reference device AI Hub / Workbench shows for this chipset, e.g.
+    /// "Snapdragon X Elite CRD". Empty when the bucket omits it.
+    #[serde(default)]
+    pub reference_device: String,
     #[serde(default)]
     pub aliases: Vec<String>,
 }
