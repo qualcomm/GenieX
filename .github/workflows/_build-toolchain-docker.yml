@@ -12,8 +12,8 @@ name: Build Toolchain Docker
 #     tag equals the git tag minus the `toolchain-` prefix.
 #
 # Image names:
-#   ghcr.io/qcom-ai-hub/geniex-toolchain-linux:<version>
-#   ghcr.io/qcom-ai-hub/geniex-toolchain-android:<version>
+#   ghcr.io/qualcomm/geniex-toolchain-linux:<version>
+#   ghcr.io/qualcomm/geniex-toolchain-android:<version>
 #
 # We intentionally do NOT publish a :latest tag - _build-sdk.yml pins an
 # exact semantic version so upstream changes cannot silently affect SDK
@@ -54,10 +54,10 @@ jobs:
         include:
           - platform: linux
             dockerfile: .github/docker/toolchain-linux.Dockerfile
-            image: ghcr.io/qcom-ai-hub/geniex-toolchain-linux
+            image: ghcr.io/qualcomm/geniex-toolchain-linux
           - platform: android
             dockerfile: .github/docker/toolchain-android.Dockerfile
-            image: ghcr.io/qcom-ai-hub/geniex-toolchain-android
+            image: ghcr.io/qualcomm/geniex-toolchain-android
 
     steps:
       - name: Checkout source

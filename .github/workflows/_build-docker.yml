@@ -21,7 +21,7 @@ on:
         description: "Fully-qualified image reference without tag (release-only)."
         required: false
         type: string
-        default: ghcr.io/qcom-ai-hub/geniex-cli
+        default: ghcr.io/qualcomm/geniex-cli
       tag:
         description: "Image tag to publish, e.g. v1.2.3 (required when push=true)."
         required: false
@@ -38,7 +38,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: linux-arm64
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
 
     steps:
@@ -117,29 +117,29 @@ jobs:
           file "${tarball}"
           tar -tf "${tarball}" | head -10
 
-      # Enterprise policy blocks GITHUB_TOKEN from creating org packages,
-      # so login with GH_PAT (user-scoped, SAML-authorized).
-      - name: Log in to GHCR (crane)
-        if: inputs.push
-        shell: bash
-        env:
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          set -euo pipefail
-          echo "${GHCR_TOKEN}" | crane auth login ghcr.io -u "${GHCR_USER}" --password-stdin
-
-      - name: Push image to GHCR
-        if: inputs.push
-        shell: bash
-        env:
-          IMAGE: ${{ inputs.image }}
-          IMAGE_REF: ${{ env.IMAGE_REF }}
-          IS_PRERELEASE: ${{ inputs.is_prerelease }}
-        run: |
-          set -euo pipefail
-          crane push bazel-bin/cli/release/linux/geniex-cli-docker.tar "${IMAGE_REF}"
-          # Prereleases must not clobber the floating :latest tag.
-          if [[ "${IS_PRERELEASE}" != "true" ]]; then
-            crane tag "${IMAGE_REF}" latest
-          fi
+      # # Enterprise policy blocks GITHUB_TOKEN from creating org packages,
+      # # so login with GH_PAT (user-scoped, SAML-authorized).
+      # - name: Log in to GHCR (crane)
+      #   if: inputs.push
+      #   shell: bash
+      #   env:
+      #     GHCR_USER: ${{ github.actor }}
+      #     GHCR_TOKEN: ${{ secrets.GH_PAT }}
+      #   run: |
+      #     set -euo pipefail
+      #     echo "${GHCR_TOKEN}" | crane auth login ghcr.io -u "${GHCR_USER}" --password-stdin
+      #
+      # - name: Push image to GHCR
+      #   if: inputs.push
+      #   shell: bash
+      #   env:
+      #     IMAGE: ${{ inputs.image }}
+      #     IMAGE_REF: ${{ env.IMAGE_REF }}
+      #     IS_PRERELEASE: ${{ inputs.is_prerelease }}
+      #   run: |
+      #     set -euo pipefail
+      #     crane push bazel-bin/cli/release/linux/geniex-cli-docker.tar "${IMAGE_REF}"
+      #     # Prereleases must not clobber the floating :latest tag.
+      #     if [[ "${IS_PRERELEASE}" != "true" ]]; then
+      #       crane tag "${IMAGE_REF}" latest
+      #     fi

@@ -35,16 +35,16 @@ jobs:
       matrix:
         include:
           - platform: windows-arm64
-            runner: windows-arm64
+            runner: windows-11-arm
             preset: arm64-windows-snapdragon-release
           - platform: linux-arm64
             runner: ubuntu-latest
             preset: arm64-linux-snapdragon-release
-            container_image: ghcr.io/qcom-ai-hub/geniex-toolchain-linux:v0.0.2
+            container_image: ghcr.io/qualcomm/geniex-toolchain-linux:v0.0.2
           - platform: android-arm64
             runner: ubuntu-latest
             preset: arm64-android-snapdragon-release
-            container_image: ghcr.io/qcom-ai-hub/geniex-toolchain-android:v0.0.1
+            container_image: ghcr.io/qualcomm/geniex-toolchain-android:v0.0.1
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
 
@@ -58,6 +58,13 @@ jobs:
           git config --global core.protectNTFS false
           git config --global core.fscache true
           git config --global core.preloadindex true
+
+      # The geniex-qairt-plugin submodule pins a nested submodule (geniex-proc)
+      # by SSH URL (git@github.com:...). CI authenticates over HTTPS with a PAT,
+      # so rewrite SSH → HTTPS globally before checkout recurses into it.
+      - name: Rewrite SSH submodule URLs to HTTPS
+        shell: bash
+        run: git config --global url."https://github.com/".insteadOf "git@github.com:"
 
       - name: Checkout source
         uses: actions/checkout@v6
@@ -185,17 +192,6 @@ jobs:
           [IO.File]::WriteAllBytes($dst, [Convert]::FromBase64String($env:HEXAGON_HTP_CERT_PFX))
           Add-Content -Path $env:GITHUB_ENV -Value "HEXAGON_HTP_CERT=$dst"
           Write-Host "HEXAGON_HTP_CERT=$dst"
-
-      # Derived toolchain images live in a private GHCR package. GH_PAT
-      # is used because enterprise policy blocks GITHUB_TOKEN from org
-      # package pulls (same pattern as _build-docker.yml).
-      - name: Log in to GHCR
-        if: matrix.platform == 'linux-arm64' || matrix.platform == 'android-arm64'
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GH_PAT }}
 
       - name: Build SDK (cross-compile in toolchain container)
         if: matrix.platform != 'windows-arm64'

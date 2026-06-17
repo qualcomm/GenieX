@@ -30,9 +30,9 @@ jobs:
       matrix:
         include:
           - platform: windows-arm64
-            runner: windows-arm64
+            runner: windows-11-arm
           - platform: linux-arm64
-            runner: linux-arm64
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
 

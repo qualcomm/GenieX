@@ -51,7 +51,7 @@ jobs:
     timeout-minutes: 5
     environment:
       name: github-pages
-      url: https://qcom-ai-hub.github.io/geniex/
+      url: https://qualcomm.github.io/nexa-sdk/
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
