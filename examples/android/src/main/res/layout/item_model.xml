@@ -4,16 +4,40 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:gravity="center_vertical"
-    android:orientation="vertical">
+    android:orientation="horizontal"
+    android:paddingStart="15dp"
+    android:paddingEnd="15dp">
 
     <TextView
         android:id="@+id/tv_model_id"
-        android:layout_width="wrap_content"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:padding="15dp"
+        android:layout_weight="1"
+        android:paddingVertical="15dp"
         android:textSize="14sp"
         android:letterSpacing="0.01"
         android:textColor="#1F1F1F"
-        tools:text="test" />
+        tools:text="Qwen3-0.6B (GGUF)" />
+
+    <TextView
+        android:id="@+id/tv_model_size"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingVertical="15dp"
+        android:paddingStart="8dp"
+        android:textSize="12sp"
+        android:textColor="#888888"
+        tools:text="0.36 GB" />
+
+    <TextView
+        android:id="@+id/tv_downloaded"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingVertical="15dp"
+        android:paddingStart="4dp"
+        android:text="✓"
+        android:textColor="#4CAF50"
+        android:textSize="16sp"
+        android:visibility="gone" />
 
 </LinearLayout>

@@ -37,6 +37,7 @@ import android.widget.ProgressBar
 import android.widget.SimpleAdapter
 import android.widget.Spinner
 import android.widget.TextView
+import android.view.ViewGroup
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
@@ -121,6 +122,7 @@ class MainActivity : FragmentActivity() {
 
     private var enableThinking = false
     private var isGenerating = false
+    private val cachedModelNames = mutableSetOf<String>()
 
     private val savedImageFiles = mutableListOf<File>()
     private val messages = arrayListOf<Message>()
@@ -135,11 +137,35 @@ class MainActivity : FragmentActivity() {
         initData()
         initView()
         setListeners()
+        modelScope.launch {
+            cachedModelNames.addAll(ModelManagerWrapper.list())
+            runOnUiThread { updateSpinnerAdapter() }
+        }
     }
 
     private fun resetLoadState() {
         isLoadLlmModel = false
         isLoadVlmModel = false
+    }
+
+    private fun updateSpinnerAdapter() {
+        val names = cachedModelNames
+        spModelList.adapter = object : SimpleAdapter(this, modelList.map {
+            val map = mutableMapOf<String, String>()
+            map["displayName"] = it.displayName
+            map["sizeGb"] = it.size?.let { b -> "%.2f GB".format(b / 1e9) } ?: ""
+            map
+        }, R.layout.item_model, arrayOf("displayName", "sizeGb"), intArrayOf(R.id.tv_model_id, R.id.tv_model_size)) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                return super.getView(position, convertView, parent).also { v ->
+                    v.findViewById<TextView>(R.id.tv_downloaded).visibility =
+                        if (position < modelList.size && modelList[position].modelName in names) View.VISIBLE else View.GONE
+                }
+            }
+            override fun getDropDownView(position: Int, convertView: View?, parent: ViewGroup): View {
+                return getView(position, convertView, parent)
+            }
+        }
     }
 
     private fun initView() {
@@ -150,13 +176,7 @@ class MainActivity : FragmentActivity() {
         tvDownloadProgress = findViewById(R.id.tv_download_progress)
         pbDownloading = findViewById(R.id.pb_downloading)
         spModelList = findViewById(R.id.sp_model_list)
-        spModelList.adapter = object : SimpleAdapter(this, modelList.map {
-            val map = mutableMapOf<String, String>()
-            map["displayName"] = it.displayName
-            map
-        }, R.layout.item_model, arrayOf("displayName"), intArrayOf(R.id.tv_model_id)) {
-
-        }
+        updateSpinnerAdapter()
         spModelList.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(
                 parent: AdapterView<*>?, view: View?, position: Int, id: Long
@@ -491,18 +511,29 @@ Note: You must use the campaign_investigation function whenever a customer asks 
                 return@launch
             }
 
+            var lastProgressTime = System.currentTimeMillis()
+            var lastDoneBytes = 0L
+
             ModelManagerWrapper.pullFlow(input).collect { event ->
                 when (event) {
                     is ModelManagerWrapper.PullEvent.Progress -> {
                         val total = event.files.sumOf { if (it.total_bytes > 0) it.total_bytes else 0L }
                         val done = event.files.sumOf { it.downloaded_bytes }
                         val percent = if (total > 0) ((done * 100) / total).toInt() else 0
-                        runOnUiThread { tvDownloadProgress.text = "$percent%" }
+                        val now = System.currentTimeMillis()
+                        val dt = (now - lastProgressTime) / 1000.0
+                        val speedMb = if (dt > 0) (done - lastDoneBytes) / dt / 1_000_000.0 else 0.0
+                        lastProgressTime = now
+                        lastDoneBytes = done
+                        val speedStr = if (speedMb > 0) "  (%.1f MB/s)".format(speedMb) else ""
+                        runOnUiThread { tvDownloadProgress.text = "$percent%$speedStr" }
                     }
                     is ModelManagerWrapper.PullEvent.Completed -> {
                         runOnUiThread {
                             llDownloading.visibility = View.GONE
                             Toaster.show("${selectModelData.displayName} downloaded")
+                            cachedModelNames.add(selectModelData.modelName)
+                            updateSpinnerAdapter()
                         }
                     }
                     is ModelManagerWrapper.PullEvent.Error -> {
