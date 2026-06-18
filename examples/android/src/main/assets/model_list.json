@@ -6,7 +6,8 @@
     "quant": "Q4_0",
     "hub": "HUGGINGFACE",
     "type": "chat",
-    "runtime": "llama_cpp"
+    "runtime": "llama_cpp",
+    "size": 382156480
   },
   {
     "id": "Qwen3-1.7B-GGUF",
@@ -15,7 +16,8 @@
     "quant": "Q4_0",
     "hub": "HUGGINGFACE",
     "type": "chat",
-    "runtime": "llama_cpp"
+    "runtime": "llama_cpp",
+    "size": 1056782912
   },
   {
     "id": "Llama-3.2-3B-Instruct-GGUF",
@@ -24,7 +26,8 @@
     "quant": "Q4_K_M",
     "hub": "HUGGINGFACE",
     "type": "chat",
-    "runtime": "llama_cpp"
+    "runtime": "llama_cpp",
+    "size": 2019377600
   },
   {
     "id": "Ministral-3-3B-Instruct-2512-GGUF",
@@ -33,7 +36,8 @@
     "quant": "Q4_0",
     "hub": "HUGGINGFACE",
     "type": "chat",
-    "runtime": "llama_cpp"
+    "runtime": "llama_cpp",
+    "size": 2046375200
   },
   {
     "id": "granite-4.0-micro-GGUF",
@@ -42,7 +46,8 @@
     "quant": "Q4_0",
     "hub": "HUGGINGFACE",
     "type": "chat",
-    "runtime": "llama_cpp"
+    "runtime": "llama_cpp",
+    "size": 1991163648
   },
   {
     "id": "Phi-4-mini-instruct-GGUF",
@@ -51,7 +56,8 @@
     "quant": "Q4_K_M",
     "hub": "HUGGINGFACE",
     "type": "chat",
-    "runtime": "llama_cpp"
+    "runtime": "llama_cpp",
+    "size": 2491874272
   },
   {
     "_note": "Gemma 4 E2B is actually a VLM, but VLM support is not wired up for llama.cpp in the Android demo yet — exposed as type=chat so the text path still works.",
@@ -61,7 +67,8 @@
     "quant": "Q4_0",
     "hub": "HUGGINGFACE",
     "type": "chat",
-    "runtime": "llama_cpp"
+    "runtime": "llama_cpp",
+    "size": 3041376384
   },
   {
     "id": "Qwen3.5-0.8B-GGUF",
@@ -70,7 +77,8 @@
     "quant": "Q4_0",
     "hub": "HUGGINGFACE",
     "type": "vlm",
-    "runtime": "llama_cpp"
+    "runtime": "llama_cpp",
+    "size": 507154688
   },
   {
     "id": "Qwen3.5-2B-GGUF",
@@ -79,7 +87,8 @@
     "quant": "Q4_0",
     "hub": "HUGGINGFACE",
     "type": "vlm",
-    "runtime": "llama_cpp"
+    "runtime": "llama_cpp",
+    "size": 1214873856
   },
   {
     "id": "Qwen3-VL-2B-Instruct-GGUF",
@@ -88,7 +97,8 @@
     "quant": "Q4_0",
     "hub": "HUGGINGFACE",
     "type": "vlm",
-    "runtime": "llama_cpp"
+    "runtime": "llama_cpp",
+    "size": 1056784064
   },
   {
     "id": "Qwen2.5-VL-7B-Instruct-GGUF",
@@ -97,7 +107,8 @@
     "quant": "Q4_0",
     "hub": "HUGGINGFACE",
     "type": "vlm",
-    "runtime": "llama_cpp"
+    "runtime": "llama_cpp",
+    "size": 4444119936
   },
   {
     "id": "gpt-oss-20b-GGUF",
@@ -106,7 +117,8 @@
     "quant": "Q4_0",
     "hub": "HUGGINGFACE",
     "type": "chat",
-    "runtime": "llama_cpp"
+    "runtime": "llama_cpp",
+    "size": 11501495488
   },
   {
     "id": "Qwen3-4B-Instruct-2507",
@@ -115,7 +127,8 @@
     "hub": "AUTO",
     "chipset": "SM8750",
     "type": "chat",
-    "runtime": "qairt"
+    "runtime": "qairt",
+    "size": 2532949886
   },
   {
     "id": "Qwen2.5-VL-7B-Instruct",
@@ -124,6 +137,7 @@
     "hub": "AUTO",
     "chipset": "SM8750",
     "type": "vlm",
-    "runtime": "qairt"
+    "runtime": "qairt",
+    "size": 4933782555
   }
 ]

@@ -48,6 +48,8 @@ data class ModelData(
      * pair with an explicit `chipset`.
      */
     val chipset: String? = null,
+    /** Model file size in bytes (from HuggingFace / AI Hub). */
+    val size: Long? = null,
 ) {
     var isSupport = true
 }
