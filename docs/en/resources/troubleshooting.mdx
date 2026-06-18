@@ -81,7 +81,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="`geniex` install.sh reports missing shared libraries">
-    On a fresh Ubuntu 24.04 ARM64 host (e.g. IQ9075 EVK), `install.sh` checks for libraries like `libCB.so.1`, `libOpenCL_adreno.so.1`, `libcdsprpc.so.1.0.0`, `libgsl.so.1`, `libllvm-*.so.1`, `libpropertyvault.so.0.0.0`, `libdmabufheap.so.0.0.0`, plus Debian's `libatomic1` / `libglib2.0-0`. Install them in two steps.
+    On a fresh Ubuntu 24.04 ARM64 host (e.g. IQ9075 EVK), `install.sh` — and, for Docker, the pre-flight `check.sh` / container `entrypoint.sh` — check for libraries like `libCB.so.1`, `libOpenCL_adreno.so.1`, `libcdsprpc.so.1.0.0`, `libgsl.so.1`, `libllvm-*.so.1`, `libpropertyvault.so.0.0.0`, `libdmabufheap.so.0.0.0`, plus Debian's `libatomic1` / `libglib2.0-0`. Install them **on the host** in two steps — if you're inside the geniex container, `exit` first.
 
     **1. Standard APT packages**
 
@@ -114,7 +114,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 
     The PPA (`ppa:ubuntu-qcom-iot/qcom-ppa`) is pre-configured on the IQ9075 EVK Ubuntu image. `qcom-adreno1` automatically pulls in `qcom-libdmabufheap` and `qcom-property-vault`.
 
-    After this, re-run `install.sh` and the "Linking host NPU libraries" step should succeed.
+    After this, re-run `install.sh` (bare metal) or restart the container to confirm; the "Linking host NPU libraries" step should succeed. If `libcdsprpc.so` / `libadsprpc.so` symlinks are still missing on bare metal, re-run `install.sh` to recreate them.
   </Accordion>
 
   <Accordion title="Container loads model but inference fails with `Failed to create device: 14001`">

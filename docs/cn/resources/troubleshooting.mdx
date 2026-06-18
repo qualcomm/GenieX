@@ -81,7 +81,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="`geniex` install.sh 报缺少共享库">
-    在全新的 Ubuntu 24.04 ARM64 主机（例如 IQ9075 EVK）上，`install.sh` 会检查 `libCB.so.1`、`libOpenCL_adreno.so.1`、`libcdsprpc.so.1.0.0`、`libgsl.so.1`、`libllvm-*.so.1`、`libpropertyvault.so.0.0.0`、`libdmabufheap.so.0.0.0`，以及 Debian 的 `libatomic1` / `libglib2.0-0` 等库。分两步安装。
+    在全新的 Ubuntu 24.04 ARM64 主机（例如 IQ9075 EVK）上，`install.sh`——以及 Docker 场景下的预检脚本 `check.sh` / 容器入口脚本 `entrypoint.sh`——会检查 `libCB.so.1`、`libOpenCL_adreno.so.1`、`libcdsprpc.so.1.0.0`、`libgsl.so.1`、`libllvm-*.so.1`、`libpropertyvault.so.0.0.0`、`libdmabufheap.so.0.0.0`，以及 Debian 的 `libatomic1` / `libglib2.0-0` 等库。请在**宿主机**上分两步安装——如果当前在 geniex 容器内，请先 `exit`。
 
     **1. 标准 APT 包**
 
@@ -114,7 +114,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 
     PPA（`ppa:ubuntu-qcom-iot/qcom-ppa`）在 IQ9075 EVK Ubuntu 镜像中已预配置。`qcom-adreno1` 会自动拉入 `qcom-libdmabufheap` 与 `qcom-property-vault`。
 
-    完成后重新运行 `install.sh`，"Linking host NPU libraries" 步骤即可成功。
+    完成后在裸机上重新运行 `install.sh`，或重启容器来验证；"Linking host NPU libraries" 步骤即可成功。若裸机上 `libcdsprpc.so` / `libadsprpc.so` 软链接仍缺失，请重新运行 `install.sh` 重建。
   </Accordion>
 
   <Accordion title="容器内可加载模型但推理报 `Failed to create device: 14001`">

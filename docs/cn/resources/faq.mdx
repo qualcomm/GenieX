@@ -170,31 +170,6 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 </AccordionGroup>
 
-## **Linux ARM64 环境**
-
-<AccordionGroup>
-  <Accordion title="check.sh 报告缺少库——我该安装什么？">
-    预检脚本 (`check.sh`) 与 Docker 入口脚本 (`entrypoint.sh`) 会提示系统库或高通驱动缺失。请在**主机**上运行以下命令——如果当前在 geniex 容器内，请先 `exit`。在 Ubuntu / Debian 上用两条 `apt` 命令安装。
-
-    **1. 基础系统库（来自 Ubuntu 官方源）：**
-
-    ```bash
-    sudo apt update
-    sudo apt install -y \
-      libatomic1 \
-      libglib2.0-0 \
-      ocl-icd-libopencl1
-    ```
-
-    **2. 高通驱动包（Adreno GPU + FastRPC NPU bridge）：**
-
-    ```bash
-    sudo apt-get install -y qcom-adreno1 qcom-fastrpc1
-    ```
-
-    高通驱动包来自厂商 BSP / EVK 仓库——不在 Ubuntu 官方镜像中。安装完成后，在裸机上重新运行 `check.sh`，或重启容器来验证；若裸机上 `libcdsprpc.so` / `libadsprpc.so` 软链接仍缺失，请重新运行 geniex 安装脚本 (`install.sh`) 重建。
-  </Accordion>
-</AccordionGroup>
 
 <br />
 
