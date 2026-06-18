@@ -140,7 +140,7 @@ check_required_libs() {
         for _m in $_missing; do err "  - $_m"; done
         err "install missing system libraries (libatomic1, libglib2.0-0, ocl-icd-libopencl1)"
         err "and Qualcomm driver packages (qcom-adreno1, qcom-fastrpc1)."
-        err "see Troubleshooting -> Linux: https://geniex.ai/en/resources/troubleshooting#linux"
+        err "See the GenieX docs: Troubleshooting -> Linux."
         return 1
     fi
     return 0
@@ -165,7 +165,7 @@ check_npu_bare_libs() {
         fi
         if [ -z "$_found" ]; then
             err "$_bare not found — re-run the geniex installer to create the symlink,"
-            err "or install qcom-fastrpc1. See Troubleshooting -> Linux: https://geniex.ai/en/resources/troubleshooting#linux"
+            err "or install qcom-fastrpc1. See the GenieX docs: Troubleshooting -> Linux."
             _failed=1
         fi
     done
@@ -205,7 +205,7 @@ check_driver_versions() {
     IFS="$_ifs"
     if [ "$_failed" -eq 1 ]; then
         err "update the Qualcomm driver packages (qcom-adreno1, qcom-fastrpc1)."
-        err "see Troubleshooting -> Linux: https://geniex.ai/en/resources/troubleshooting#linux"
+        err "See the GenieX docs: Troubleshooting -> Linux."
         return 1
     fi
     return 0

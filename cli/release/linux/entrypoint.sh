@@ -55,7 +55,7 @@ if [ -n "$MISSING_LIBS" ]; then
         warn "  - $lib"
     done
     warn "install Qualcomm driver packages on the host (qcom-adreno1, qcom-fastrpc1)."
-    warn "see Troubleshooting -> Linux: https://geniex.ai/en/resources/troubleshooting#linux"
+    warn "See the GenieX docs: Troubleshooting -> Linux."
 fi
 
 # Default to an interactive bash shell when invoked with no arguments.
