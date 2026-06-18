@@ -70,7 +70,7 @@ const DEFAULT_AI_HUB_BASE_URL: &str =
     "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models";
 
 /// Mirrors `cli/internal/config/config.go:DefaultAIHubVersion`.
-const DEFAULT_AI_HUB_VERSION: &str = "v0.52.0";
+const DEFAULT_AI_HUB_VERSION: &str = "v0.55.0";
 
 fn default_data_dir() -> PathBuf {
     let home = std::env::var("HOME")

@@ -25,7 +25,7 @@ use model_manager_core::transport::ReqwestTransport;
 
 const AI_HUB_BASE_URL: &str =
     "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models";
-const AI_HUB_VERSION: &str = "v0.52.0";
+const AI_HUB_VERSION: &str = "v0.55.0";
 
 const PHI_DISPLAY_NAME: &str = "Phi-3.5-Mini-Instruct";
 const PHI_CHIPSET: &str = "qualcomm-snapdragon-x-elite";
