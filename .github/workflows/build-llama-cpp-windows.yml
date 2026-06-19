@@ -1,0 +1,161 @@
+name: Build llama.cpp (Windows ARM64)
+
+# Manual-only full build of upstream llama.cpp on the Snapdragon Windows
+# ARM64 runner, with the same GGML backends geniex ships (Hexagon HTP +
+# Adreno OpenCL). Builds straight from the official ggml-org/llama.cpp
+# repo rather than the geniex submodule, so an arbitrary upstream commit
+# can be exercised without touching the submodule pin.
+
+on:
+  workflow_dispatch:
+    inputs:
+      llama_ref:
+        description: "llama.cpp git ref to build (branch, tag, or commit SHA). Blank = latest master."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build:
+    name: build-llama-cpp
+    runs-on: windows-arm64
+    timeout-minutes: 120
+
+    steps:
+      - name: Configure Windows Git
+        shell: cmd
+        run: |
+          echo C:\Program Files\Git\bin>>%GITHUB_PATH%
+          git config --global core.longpaths true
+          git config --global core.protectNTFS false
+          git config --global core.fscache true
+          git config --global core.preloadindex true
+
+      # Need this repo's composite actions (setup-snapdragon-sdks,
+      # setup-vcvars); llama.cpp itself is cloned separately below.
+      - name: Checkout geniex (for composite actions)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Clone llama.cpp
+        id: llama
+        shell: powershell
+        env:
+          LLAMA_REF: ${{ inputs.llama_ref }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $dir = "$env:GITHUB_WORKSPACE\llama.cpp"
+          if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+          git clone https://github.com/ggml-org/llama.cpp.git $dir
+          if ($LASTEXITCODE -ne 0) { throw "git clone failed: $LASTEXITCODE" }
+          Push-Location $dir
+          if ($env:LLAMA_REF) {
+            git fetch --depth 1 origin $env:LLAMA_REF
+            if ($LASTEXITCODE -ne 0) { throw "git fetch '$env:LLAMA_REF' failed: $LASTEXITCODE" }
+            git checkout FETCH_HEAD
+            if ($LASTEXITCODE -ne 0) { throw "git checkout '$env:LLAMA_REF' failed: $LASTEXITCODE" }
+          }
+          $sha = (git rev-parse HEAD).Trim()
+          Pop-Location
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "sha=$sha"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "dir=$dir"
+          $refLabel = if ($env:LLAMA_REF) { $env:LLAMA_REF } else { "master" }
+          Write-Host "llama.cpp ref=$refLabel sha=$sha"
+
+      - name: Install and configure ccache
+        shell: powershell
+        run: |
+          if (-not (Get-Command ccache -ErrorAction SilentlyContinue)) {
+            choco install ccache --no-progress -y
+          }
+          $env:CCACHE_DIR = "${{ github.workspace }}/.ccache"
+          Add-Content $env:GITHUB_ENV "CCACHE_DIR=$env:CCACHE_DIR"
+          # Tolerate __DATE__/__TIME__ and mtime jitter in ggml sources.
+          Add-Content $env:GITHUB_ENV "CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime"
+          ccache --max-size=5G
+
+      - name: Restore ccache
+        uses: actions/cache@v5
+        with:
+          path: ${{ github.workspace }}/.ccache
+          key: ccache-llama-windows-arm64-${{ steps.llama.outputs.sha }}
+          restore-keys: ccache-llama-windows-arm64-
+
+      # Installs OpenCL + Hexagon SDKs and the WDK, exporting
+      # OPENCL_SDK_ROOT / HEXAGON_SDK_ROOT / HEXAGON_TOOLS_ROOT /
+      # WINDOWS_SDK_BIN — the same env the geniex SDK build consumes.
+      - name: Setup Snapdragon SDKs
+        uses: ./.github/actions/setup-snapdragon-sdks
+
+      - name: Configure HTP signing cert
+        shell: powershell
+        env:
+          HEXAGON_HTP_CERT_PFX: ${{ secrets.HEXAGON_HTP_CERT_PFX }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (-not $env:HEXAGON_HTP_CERT_PFX) {
+            throw "HEXAGON_HTP_CERT_PFX secret is empty; set it to the base64 of the HTP .pfx."
+          }
+          $dst = "$env:RUNNER_TEMP\ggml-htp-v1.pfx"
+          [IO.File]::WriteAllBytes($dst, [Convert]::FromBase64String($env:HEXAGON_HTP_CERT_PFX))
+          Add-Content -Path $env:GITHUB_ENV -Value "HEXAGON_HTP_CERT=$dst"
+          Write-Host "HEXAGON_HTP_CERT=$dst"
+
+      - name: Setup VS toolchain
+        uses: ./.github/actions/setup-vcvars
+
+      - name: Build llama.cpp
+        shell: powershell
+        env:
+          LLAMA_DIR: ${{ steps.llama.outputs.dir }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $Preset = "arm64-windows-llvm-release"
+          $BuildDir = "$env:LLAMA_DIR/build-$Preset"
+
+          # Source vcvars into this process so cmake's child processes
+          # (clang, ninja, inf2cat.exe, signtool.exe) inherit the
+          # Windows SDK PATH/INCLUDE/LIB.
+          $envDump = cmd /c "`"$env:VCVARS_BAT`" $env:VCVARS_ARGS && set"
+          foreach ($line in $envDump) {
+            if ($line -match "^(.+?)=(.*)$") {
+              [Environment]::SetEnvironmentVariable($matches[1], $matches[2], "Process")
+            }
+          }
+          $env:PATH = "$env:LLVM_BIN;$env:PATH"
+
+          # OpenCL is found via CMAKE_PREFIX_PATH (the Adreno SDK root);
+          # Hexagon/HTP signing pick up HEXAGON_SDK_ROOT / HEXAGON_HTP_CERT
+          # / WINDOWS_SDK_BIN from the environment set above.
+          cmake -S $env:LLAMA_DIR --preset $Preset -B $BuildDir --log-level=VERBOSE `
+            -DGGML_HEXAGON=ON `
+            -DGGML_OPENCL=ON `
+            -DCMAKE_PREFIX_PATH="$env:OPENCL_SDK_ROOT" `
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache `
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          if ($LASTEXITCODE -ne 0) { throw "cmake configure failed: $LASTEXITCODE" }
+
+          cmake --build $BuildDir -j $([Environment]::ProcessorCount)
+          if ($LASTEXITCODE -ne 0) { throw "cmake --build failed: $LASTEXITCODE" }
+
+      - name: ccache stats
+        shell: powershell
+        run: ccache --show-stats --verbose; $true
+
+      # bin/ holds the CLI/tool executables and shared libs; the Hexagon
+      # HTP skels and signed catalog land under ggml/src/ggml-hexagon/.
+      - name: Upload llama.cpp build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: llama-cpp-windows-arm64-${{ steps.llama.outputs.sha }}
+          path: |
+            ${{ steps.llama.outputs.dir }}/build-arm64-windows-llvm-release/bin/
+            ${{ steps.llama.outputs.dir }}/build-arm64-windows-llvm-release/ggml/src/ggml-hexagon/libggml-htp-v*.so
+            ${{ steps.llama.outputs.dir }}/build-arm64-windows-llvm-release/ggml/src/ggml-hexagon/libggml-htp.inf
+            ${{ steps.llama.outputs.dir }}/build-arm64-windows-llvm-release/ggml/src/ggml-hexagon/libggml-htp.cat
+          retention-days: 7
