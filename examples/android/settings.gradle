@@ -29,8 +29,6 @@ dependencyResolutionManagement {
         }
         google()
         mavenCentral()
-        // JitPack hosts AndroidAutoSize.
-        maven { url 'https://jitpack.io' }
     }
 }
 
