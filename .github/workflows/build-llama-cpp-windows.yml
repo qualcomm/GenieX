@@ -146,6 +146,7 @@ jobs:
             -DGGML_OPENCL=ON `
             -DHEXAGON_SDK_ROOT="$HexagonSdkRoot" `
             -DHEXAGON_TOOLS_ROOT="$HexagonToolsRoot" `
+            -DPREBUILT_LIB_DIR="windows_aarch64" `
             -DCMAKE_PREFIX_PATH="$OpenclSdkRoot" `
             -DCMAKE_INSTALL_LIBDIR=bin `
             -DCMAKE_C_COMPILER_LAUNCHER=ccache `
