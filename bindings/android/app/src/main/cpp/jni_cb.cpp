@@ -1,5 +1,8 @@
 #include "jni_cb.h"
 
+#include <cstdint>
+#include <vector>
+
 #include "android_utils.h"
 
 static JNIEnv* get_env(JavaVM* vm, bool& attached) {
@@ -42,77 +45,56 @@ bool jni_cb_init(JNIEnv* env, jobject callback, const char* onTokenName, const c
     return true;
 }
 
-bool isValidModifiedUTF8(const char* str) {
-    if (str == NULL) {
-        return false;
+// Decode standard UTF-8 to UTF-16 and build a jstring via NewString.
+// The SDK already buffers partial multi-byte sequences across token
+// boundaries, so the input is valid standard UTF-8 (including 4-byte emoji).
+// NewStringUTF expects JNI modified UTF-8 and mangles supplementary
+// characters, so we decode to UTF-16 (surrogate pairs) ourselves.
+static jstring utf8_to_jstring(JNIEnv* env, const char* str) {
+    std::vector<jchar>   u16;
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(str ? str : "");
+
+    while (*p) {
+        unsigned char c = *p;
+        uint32_t      cp;
+        int           n;
+        if (c < 0x80) {
+            cp = c;
+            n  = 1;
+        } else if ((c & 0xE0) == 0xC0) {
+            cp = c & 0x1F;
+            n  = 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            cp = c & 0x0F;
+            n  = 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            cp = c & 0x07;
+            n  = 4;
+        } else {
+            p++;  // invalid leading byte, skip
+            continue;
+        }
+
+        for (int i = 1; i < n; i++) {
+            if ((p[i] & 0xC0) != 0x80) {  // truncated sequence
+                cp = 0xFFFD;
+                n  = i;
+                break;
+            }
+            cp = (cp << 6) | (p[i] & 0x3F);
+        }
+        p += n;
+
+        if (cp <= 0xFFFF) {
+            u16.push_back(static_cast<jchar>(cp));
+        } else {  // supplementary plane -> surrogate pair
+            cp -= 0x10000;
+            u16.push_back(static_cast<jchar>(0xD800 + (cp >> 10)));
+            u16.push_back(static_cast<jchar>(0xDC00 + (cp & 0x3FF)));
+        }
     }
-    const unsigned char* p = (const unsigned char*)str;
 
-    while (*p != 0) {
-        if (*p == 0xC0 && *(p + 1) == 0x80) {
-            p += 2;
-            continue;
-        }
-
-        if ((*p & 0x80) == 0x00) {
-            if (*p == 0x00) {
-                return false;
-            }
-            p++;
-            continue;
-        }
-
-        if ((*p & 0xE0) == 0xC0) {
-            if (*(p + 1) == 0) return false;
-            if ((*(p + 1) & 0xC0) != 0x80) return false;
-            unsigned int codepoint = ((*p & 0x1F) << 6) | (*(p + 1) & 0x3F);
-            if (codepoint < 0x0080 || codepoint > 0x07FF) {
-                return false;
-            }
-
-            p += 2;
-            continue;
-        }
-
-        if ((*p & 0xF0) == 0xE0) {
-            if (*(p + 1) == 0 || *(p + 2) == 0) return false;
-            if ((*(p + 1) & 0xC0) != 0x80 || (*(p + 2) & 0xC0) != 0x80) {
-                return false;
-            }
-
-            unsigned int codepoint = ((*p & 0x0F) << 12) | ((*(p + 1) & 0x3F) << 6) | (*(p + 2) & 0x3F);
-
-            if (codepoint >= 0xD800 && codepoint <= 0xDFFF) {
-                if (codepoint >= 0xDC00) {
-                    return false;
-                }
-
-                if ((*(p + 3) & 0xF0) != 0xE0) {
-                    return false;
-                }
-
-                unsigned int low_surrogate = ((*(p + 3) & 0x0F) << 12) | ((*(p + 4) & 0x3F) << 6) | (*(p + 5) & 0x3F);
-
-                if (low_surrogate < 0xDC00 || low_surrogate > 0xDFFF) {
-                    return false;
-                }
-
-                p += 6;
-            } else {
-                if (codepoint < 0x0800 || codepoint > 0xFFFF) {
-                    return false;
-                }
-                p += 3;
-            }
-            continue;
-        }
-
-        if ((*p & 0xF8) == 0xF0) {
-            return false;
-        }
-        return false;
-    }
-    return true;
+    return env->NewString(u16.data(), static_cast<jsize>(u16.size()));
 }
 
 bool jni_cb_emit_token(JavaCallbackCtx* ctx, const char* token_utf8) {
@@ -123,12 +105,7 @@ bool jni_cb_emit_token(JavaCallbackCtx* ctx, const char* token_utf8) {
     JNIEnv* env      = get_env(ctx->vm, attached);
     if (!env) return false;
 
-    jstring jtoken;
-    if (isValidModifiedUTF8(token_utf8)) {
-        jtoken = env->NewStringUTF(token_utf8 ? token_utf8 : "");
-    } else {
-        jtoken = env->NewStringUTF("");
-    }
+    jstring jtoken = utf8_to_jstring(env, token_utf8);
 
     jboolean cont = env->CallBooleanMethod(ctx->cb_global, ctx->onToken_mid, jtoken);
 
