@@ -200,8 +200,9 @@ impl ModelSource for AiHubSource {
         let release_assets_url = &entry.manifest_urls.release_assets;
         if release_assets_url.is_empty() {
             return Err(Error::Hub(format!(
-                "AI Hub model {:?} does not ship a prebuilt QAIRT asset. \
-                 Follow the export guide at \
+                "No pre-compiled assets available for {:?} due to licensing \
+                 restrictions. Please use the qai-hub-models Python package to \
+                 manually export the model. See export instructions here: \
                  https://github.com/qualcomm/ai-hub-apps/blob/main/tutorials/llm_on_genie/export.md",
                 self.display_name
             )));
