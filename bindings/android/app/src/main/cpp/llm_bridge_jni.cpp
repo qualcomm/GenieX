@@ -45,7 +45,8 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Llm_create(
 
         if (result != GENIEX_SUCCESS || !handle) {
             LOGe("[JNI] create() failed, error code: %d", result);
-            throw_runtime_exception(env, "Llm create failed, error code: %d", result);
+            throw_runtime_exception(
+                env, "Llm create failed: %s", geniex_get_error_message(static_cast<geniex_ErrorCode>(result)));
             return 0;
         }
         LOGd("[JNI] create() geniex_llm_create returned handle=%p", handle);
@@ -121,7 +122,8 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Llm_generate(
                 delete g_stopFlags[h];
                 g_stopFlags.erase(h);
             }
-            throw_runtime_exception(env, "%d", ret);
+            throw_runtime_exception(
+                env, "LLM generate failed: %s", geniex_get_error_message(static_cast<geniex_ErrorCode>(ret)));
             return nullptr;
         }
 

@@ -31,7 +31,8 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Vlm_create(JNIEnv* en
 
         if (result != GENIEX_SUCCESS || !handle) {
             LOGe("[JNI] create() failed, error code: %d", result);
-            throw_runtime_exception(env, "Model create() failed, error code: %d", result);
+            throw_runtime_exception(
+                env, "Model create() failed: %s", geniex_get_error_message(static_cast<geniex_ErrorCode>(result)));
             return 0;
         }
 
@@ -81,7 +82,8 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_getCapabilities
     int32_t                ret = geniex_vlm_get_capabilities(reinterpret_cast<geniex_VLM*>(handle), &caps);
     if (ret != GENIEX_SUCCESS) {
         LOGe("[JNI] getCapabilities() failed, error code: %d", ret);
-        throw_runtime_exception(env, "VLM getCapabilities failed, error code: %d", ret);
+        throw_runtime_exception(
+            env, "VLM getCapabilities failed: %s", geniex_get_error_message(static_cast<geniex_ErrorCode>(ret)));
         return nullptr;
     }
 
@@ -141,7 +143,8 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_generate(
                 delete g_stopFlags[h];
                 g_stopFlags.erase(h);
             }
-            throw_runtime_exception(env, "VLM generate failed, error code: %d", ret);
+            throw_runtime_exception(
+                env, "VLM generate failed: %s", geniex_get_error_message(static_cast<geniex_ErrorCode>(ret)));
             return nullptr;
         }
 

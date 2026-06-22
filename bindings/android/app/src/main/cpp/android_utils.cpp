@@ -5,6 +5,7 @@
 #include "android_utils.h"
 
 #include <jni.h>
+#include <stdarg.h>
 #include <stdio.h>
 
 #include "jniutils.h"
@@ -14,10 +15,13 @@ namespace geniex_android_sdk {
 
 void throw_runtime_exception(JNIEnv *env, const char *_Nonnull format, ...) {
     va_list va;
-    jclass  excCls = env->FindClass("java/lang/RuntimeException");
+    va_start(va, format);
+    char errMsg[128];
+    vsnprintf(errMsg, sizeof(errMsg), format, va);
+    va_end(va);
+
+    jclass excCls = env->FindClass("java/lang/RuntimeException");
     if (excCls) {
-        char errMsg[128];
-        snprintf(errMsg, sizeof(errMsg), format, va);
         env->ThrowNew(excCls, errMsg);
     }
 }
