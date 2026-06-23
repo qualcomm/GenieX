@@ -290,11 +290,12 @@ nav a:has(img.nav-logo) *,
   leading-trim: both;
   text-edge: cap;
   font-family: var(--type-static-heading-sm-default-font-family, "Roboto Flex") !important;
-  font-size: var(--type-static-heading-sm-default-font-size, 20px) !important;
+  font-size: var(--type-static-heading-sm-default-font-size, 16px) !important;
   font-style: normal !important;
   font-weight: 500 !important;
-  line-height: var(--type-static-heading-sm-default-line-height, 24px) !important;
+  line-height: var(--type-static-heading-sm-default-line-height, 26px) !important;
   letter-spacing: 0 !important;
+  color: #4a5a75 !important;
 }
 
 .feedback-wrapper {

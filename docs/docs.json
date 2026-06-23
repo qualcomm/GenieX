@@ -1,10 +1,10 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Qualcomm® AI Hub GenieX",
+  "name": "Qualcomm® AI Hub Workbench",
   "colors": {
-    "primary": "#2a2aea",
-    "light": "#2a2aea",
+    "primary": "#4a5a75",
+    "light": "#4a5a75",
     "dark": "#99b3fd"
   },
   "styling": {
