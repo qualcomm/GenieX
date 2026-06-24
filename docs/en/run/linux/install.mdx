@@ -34,6 +34,10 @@ docker pull "$IMAGE"
   If `docker login` fails or `docker pull` returns `permission denied ... /var/run/docker.sock`, see [Troubleshooting → Linux](/en/resources/troubleshooting#linux) for the credential and `docker` group fixes.
 </Note>
 
+    <Note>
+      If the script reports missing shared libraries (`libCB.so.1`, `libOpenCL_adreno.so.1`, `libcdsprpc.so.1.0.0`, etc.), install the Qualcomm driver packages first — see [Troubleshooting → Linux](/en/resources/troubleshooting#linux).
+    </Note>
+
 ### **Run interactively**
 
 Drop into an interactive shell inside the container:
