@@ -169,6 +169,36 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 </AccordionGroup>
 
+## **Python**
+
+<AccordionGroup>
+  <Accordion title="How do I install Python on a Linux ARM64 device?" id="how-do-i-install-python-on-a-linux-arm64-device">
+    QDC devices (Qualcomm embedded Linux / Yocto) ship with Python pre-installed. If your device does not have Python, use one of these methods:
+
+    **Option 1 — [Miniconda](https://docs.anaconda.com/miniconda/) (recommended)**
+
+    ```bash
+    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh
+    bash Miniconda3-latest-Linux-aarch64.sh -b -p $HOME/miniconda
+    eval "$($HOME/miniconda/bin/conda shell.bash hook)"
+    conda create -n geniex python=3.13 -y
+    conda activate geniex
+    python --version
+    ```
+
+    **Option 2 — apt (Ubuntu)**
+
+    ```bash
+    sudo apt update && sudo apt install -y python3 python3-pip python3-venv
+    python3 --version
+    ```
+  </Accordion>
+
+  <Accordion title="Is Miniconda supported on Windows ARM64?">
+    No. There is currently no native Windows ARM64 Miniconda installer. On Windows ARM64, download the official [Python ARM64 installer](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe) from python.org instead — see [Python Install](/en/run/python/install).
+  </Accordion>
+</AccordionGroup>
+
 ## **Server / API**
 
 <AccordionGroup>
