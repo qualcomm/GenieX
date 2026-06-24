@@ -573,7 +573,6 @@ jobs:
     with:
       version_tag: ${{ needs.resolve-tag.outputs.tag }}
       push: true
-      image: ghcr.io/qualcomm/geniex-cli
       tag: ${{ needs.resolve-tag.outputs.tag }}
       is_prerelease: ${{ needs.resolve-tag.outputs.is_prerelease == 'true' }}
 

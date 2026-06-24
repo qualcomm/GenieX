@@ -13,15 +13,10 @@ on:
         type: string
         default: ""
       push:
-        description: "Push the image to ghcr.io (release-time only)"
+        description: "Push the image to the registries (release-time only)"
         required: false
         type: boolean
         default: false
-      image:
-        description: "Fully-qualified image reference without tag (release-only)."
-        required: false
-        type: string
-        default: ghcr.io/qualcomm/geniex-cli
       tag:
         description: "Image tag to publish, e.g. v1.2.3 (required when push=true)."
         required: false
@@ -95,17 +90,16 @@ jobs:
           echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
           "${HOME}/.local/bin/crane" version
 
-      - name: Determine image ref
+      - name: Determine image refs
         shell: bash
         env:
           RAW_VERSION: ${{ steps.version.outputs.version }}
-          IMAGE: ${{ inputs.image }}
           TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           bare="${RAW_VERSION#v}"
           dest_tag="${TAG:-$bare}"
-          echo "IMAGE_REF=${IMAGE}:${dest_tag}" >> "$GITHUB_ENV"
+          echo "DOCKERHUB_REF=docker.io/qualcomm/geniex:${dest_tag}" >> "$GITHUB_ENV"
 
       - name: Validate tarball (PR path)
         if: ${{ !inputs.push }}
@@ -117,29 +111,26 @@ jobs:
           file "${tarball}"
           tar -tf "${tarball}" | head -10
 
-      # # Enterprise policy blocks GITHUB_TOKEN from creating org packages,
-      # # so login with GH_PAT (user-scoped, SAML-authorized).
-      # - name: Log in to GHCR (crane)
-      #   if: inputs.push
-      #   shell: bash
-      #   env:
-      #     GHCR_USER: ${{ github.actor }}
-      #     GHCR_TOKEN: ${{ secrets.GH_PAT }}
-      #   run: |
-      #     set -euo pipefail
-      #     echo "${GHCR_TOKEN}" | crane auth login ghcr.io -u "${GHCR_USER}" --password-stdin
-      #
-      # - name: Push image to GHCR
-      #   if: inputs.push
-      #   shell: bash
-      #   env:
-      #     IMAGE: ${{ inputs.image }}
-      #     IMAGE_REF: ${{ env.IMAGE_REF }}
-      #     IS_PRERELEASE: ${{ inputs.is_prerelease }}
-      #   run: |
-      #     set -euo pipefail
-      #     crane push bazel-bin/cli/release/linux/geniex-cli-docker.tar "${IMAGE_REF}"
-      #     # Prereleases must not clobber the floating :latest tag.
-      #     if [[ "${IS_PRERELEASE}" != "true" ]]; then
-      #       crane tag "${IMAGE_REF}" latest
-      #     fi
+      - name: Log in to DockerHub (crane)
+        if: inputs.push
+        shell: bash
+        env:
+          DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "${DOCKERHUB_TOKEN}" | crane auth login docker.io -u "${DOCKERHUB_USER}" --password-stdin
+
+      - name: Push image to DockerHub
+        if: inputs.push
+        shell: bash
+        env:
+          IMAGE_REF: ${{ env.DOCKERHUB_REF }}
+          IS_PRERELEASE: ${{ inputs.is_prerelease }}
+        run: |
+          set -euo pipefail
+          crane push bazel-bin/cli/release/linux/geniex-cli-docker.tar "${IMAGE_REF}"
+          # Prereleases must not clobber the floating :latest tag.
+          if [[ "${IS_PRERELEASE}" != "true" ]]; then
+            crane tag "${IMAGE_REF}" latest
+          fi

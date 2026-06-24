@@ -56,8 +56,8 @@ Pin a version: `... | sh -s -- --version v0.1.8`. Override the install location:
 Prefer Docker (versioned image, repeatable, no host-side install):
 
 ```bash
-# Option A — GitHub Container Registry:
-IMAGE=ghcr.io/qualcomm/geniex-cli:<TAG>
+# Option A — Docker Hub:
+IMAGE=docker.io/qualcomm/geniex:<TAG>
 docker pull "$IMAGE"
 
 # Option B — Qualcomm registry (requires login):

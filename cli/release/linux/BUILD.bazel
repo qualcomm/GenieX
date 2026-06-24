@@ -89,7 +89,7 @@ oci_image(
 genrule(
     name = "_repo_tags",
     outs = ["repo_tags.txt"],
-    cmd = "echo ghcr.io/qualcomm/geniex-cli:latest > $@ && echo ghcr.io/qualcomm/geniex-cli:$(VERSION) >> $@",
+    cmd = "echo docker.io/qualcomm/geniex:latest > $@ && echo docker.io/qualcomm/geniex:$(VERSION) >> $@",
     target_compatible_with = ["@platforms//os:linux"],
 )
 

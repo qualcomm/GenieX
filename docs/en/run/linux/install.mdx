@@ -18,10 +18,8 @@ The Linux Docker path runs through a container image built for Linux ARM64 with 
 The image is published to two registries — pick whichever you have access to and set `IMAGE` accordingly, then pull:
 
 ```bash bash
-# Option A — GitHub Container Registry (PAT with read:packages):
-export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxx
-docker login ghcr.io -u <your-github-username> -p "$GITHUB_TOKEN"
-IMAGE=ghcr.io/qualcomm/geniex-cli:latest
+# Option A — Docker Hub (public, no login required):
+IMAGE=docker.io/qualcomm/geniex:latest
 
 # Option B — Qualcomm Container Registry:
 docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S

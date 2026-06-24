@@ -46,7 +46,7 @@ Build inside the Snapdragon Linux toolchain container per
 docker run --rm -u $(id -u):$(id -g) \
   --volume $(pwd):/workspace --workdir /workspace/sdk \
   --platform linux/amd64 \
-  ghcr.io/qualcomm/geniex-toolchain-linux:v0.0.2 \
+  docker.io/qualcomm/geniex-toolchain-linux:v0.0.1 \
   bash -c 'cmake --preset arm64-linux-snapdragon-release -B build-linux . \
     && cmake --build build-linux -j --target geniex-bench \
     && cmake --install build-linux --prefix pkg-geniex'
@@ -59,7 +59,7 @@ docker run --rm -u $(id -u):$(id -g) \
 docker run --rm -u $(id -u):$(id -g) \
   --volume $(pwd):/workspace --workdir /workspace/sdk \
   --platform linux/amd64 \
-  ghcr.io/qualcomm/geniex-toolchain-android:v0.0.1 \
+  docker.io/qualcomm/geniex-toolchain-android:v0.0.1 \
   bash -c 'cmake --preset arm64-android-snapdragon-release -B build-android . \
     && cmake --build build-android -j --target geniex-bench \
     && cmake --install build-android --prefix pkg-geniex'

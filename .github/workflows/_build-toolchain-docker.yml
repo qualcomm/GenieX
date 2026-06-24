@@ -12,8 +12,8 @@ name: Build Toolchain Docker
 #     tag equals the git tag minus the `toolchain-` prefix.
 #
 # Image names:
-#   ghcr.io/qualcomm/geniex-toolchain-linux:<version>
-#   ghcr.io/qualcomm/geniex-toolchain-android:<version>
+#   docker.io/qualcomm/geniex-toolchain-linux:<version>
+#   docker.io/qualcomm/geniex-toolchain-android:<version>
 #
 # We intentionally do NOT publish a :latest tag - _build-sdk.yml pins an
 # exact semantic version so upstream changes cannot silently affect SDK
@@ -41,7 +41,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   build:
@@ -54,10 +53,10 @@ jobs:
         include:
           - platform: linux
             dockerfile: .github/docker/toolchain-linux.Dockerfile
-            image: ghcr.io/qualcomm/geniex-toolchain-linux
+            image: docker.io/qualcomm/geniex-toolchain-linux
           - platform: android
             dockerfile: .github/docker/toolchain-android.Dockerfile
-            image: ghcr.io/qualcomm/geniex-toolchain-android
+            image: docker.io/qualcomm/geniex-toolchain-android
 
     steps:
       - name: Checkout source
@@ -105,17 +104,22 @@ jobs:
           steps.meta.outputs.platforms == matrix.platform
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GHCR
+      - name: Log in to DockerHub
         if: >-
           steps.meta.outputs.platforms == 'both' ||
           steps.meta.outputs.platforms == matrix.platform
         uses: docker/login-action@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GH_PAT }}
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push
+      # buildx pushing straight to Docker Hub fails the final blob PUT with
+      # an HTML "400 Bad request"; build to a tarball and push it with crane
+      # instead (same pattern as _build-docker.yml). Use type=docker, not
+      # type=oci: crane's tarball loader needs the manifest.json that only
+      # the docker-archive layout carries.
+      - name: Build image tarball
         if: >-
           steps.meta.outputs.platforms == 'both' ||
           steps.meta.outputs.platforms == matrix.platform
@@ -124,10 +128,41 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
-          push: true
+          push: false
           provenance: false
-          tags: |
-            ${{ matrix.image }}:${{ steps.meta.outputs.version }}
-            ${{ matrix.image }}:sha-${{ github.sha }}
+          outputs: type=docker,dest=${{ runner.temp }}/toolchain-${{ matrix.platform }}.tar
           cache-from: type=gha,scope=toolchain-${{ matrix.platform }}
           cache-to: type=gha,scope=toolchain-${{ matrix.platform }},mode=max
+
+      - name: Install crane (for tarball → registry push)
+        if: >-
+          steps.meta.outputs.platforms == 'both' ||
+          steps.meta.outputs.platforms == matrix.platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v crane >/dev/null 2>&1; then
+            crane version
+            exit 0
+          fi
+          version="v0.20.3"
+          tmp="$(mktemp -d)"
+          curl -fsSL -o "${tmp}/crane.tgz" \
+            "https://github.com/google/go-containerregistry/releases/download/${version}/go-containerregistry_Linux_x86_64.tar.gz"
+          mkdir -p "${HOME}/.local/bin"
+          tar -xzf "${tmp}/crane.tgz" -C "${HOME}/.local/bin" crane
+          echo "${HOME}/.local/bin" >> "$GITHUB_PATH"
+          "${HOME}/.local/bin/crane" version
+
+      - name: Push image with crane
+        if: >-
+          steps.meta.outputs.platforms == 'both' ||
+          steps.meta.outputs.platforms == matrix.platform
+        shell: bash
+        env:
+          TARBALL: ${{ runner.temp }}/toolchain-${{ matrix.platform }}.tar
+          IMAGE: ${{ matrix.image }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          crane push "${TARBALL}" "${IMAGE}:${VERSION}"

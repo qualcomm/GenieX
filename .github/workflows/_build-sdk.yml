@@ -40,11 +40,11 @@ jobs:
           - platform: linux-arm64
             runner: ubuntu-latest
             preset: arm64-linux-snapdragon-release
-            container_image: ghcr.io/qualcomm/geniex-toolchain-linux:v0.0.2
+            container_image: docker.io/qualcomm/geniex-toolchain-linux:v0.0.1
           - platform: android-arm64
             runner: ubuntu-latest
             preset: arm64-android-snapdragon-release
-            container_image: ghcr.io/qualcomm/geniex-toolchain-android:v0.0.1
+            container_image: docker.io/qualcomm/geniex-toolchain-android:v0.0.1
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
 
