@@ -57,6 +57,8 @@ pub(crate) fn runtime_handle() -> Handle {
 #[no_mangle]
 pub extern "C" fn geniex_model_init(data_dir: *const c_char) -> i32 {
     ffi_guard(|| {
+        logging::install_core_sink();
+
         let _guard = match INIT_LOCK.lock() {
             Ok(g) => g,
             // Mutex is poisoned only if a previous init panicked. Treat

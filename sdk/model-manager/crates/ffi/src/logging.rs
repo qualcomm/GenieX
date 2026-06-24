@@ -16,6 +16,7 @@ use std::os::raw::{c_char, c_int};
 
 #[repr(C)]
 #[derive(Copy, Clone)]
+#[allow(dead_code)] // levels are mapped from core's sink via a fn pointer
 pub enum GenieXLogLevel {
     Trace = 0,
     Debug = 1,
@@ -38,6 +39,23 @@ pub fn log(level: GenieXLogLevel, msg: &str) {
     }
 }
 
+/// Route core's pluggable log sink into the C log callback. Core can't
+/// depend on this crate (that would invert `ffi -> core`), so it exposes
+/// a sink we install once at init time.
+pub fn install_core_sink() {
+    use model_manager_core::logging::Level;
+    model_manager_core::logging::set_sink(|level, msg| {
+        let mapped = match level {
+            Level::Trace => GenieXLogLevel::Trace,
+            Level::Debug => GenieXLogLevel::Debug,
+            Level::Info => GenieXLogLevel::Info,
+            Level::Warn => GenieXLogLevel::Warn,
+            Level::Error => GenieXLogLevel::Error,
+        };
+        log(mapped, msg);
+    });
+}
+
 #[inline]
 #[allow(dead_code)]
 pub fn trace(msg: &str) {
@@ -51,6 +69,7 @@ pub fn debug(msg: &str) {
 }
 
 #[inline]
+#[allow(dead_code)]
 pub fn info(msg: &str) {
     log(GenieXLogLevel::Info, msg);
 }

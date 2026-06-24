@@ -10,13 +10,19 @@ The GenieX Python SDK ships as an ARM64 wheel for Windows ARM64 and Linux ARM64.
 ## **Prerequisites**
 
 - Snapdragon X-series chipset (X Elite or X2 Elite). See [Supported platforms](/en/get-started/platforms).
-- **ARM64 Python 3.10+**
+- **ARM64 Python 3.10+** — x86_64 / AMD64 builds are not supported.
 
 ## **Install via pip**
 
 <Tabs>
   <Tab title="Windows ARM64">
     If Python is not installed, download [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe).
+
+    Confirm Python is the ARM64 build — **must print `ARM64`** (not `AMD64`):
+
+    ```powershell
+    python -c "import platform; print(platform.machine())"
+    ```
 
     Create a virtual environment and install from test PyPI:
 
@@ -45,20 +51,7 @@ The GenieX Python SDK ships as an ARM64 wheel for Windows ARM64 and Linux ARM64.
     This pulls the package from [test PyPI](https://test.pypi.org/project/geniex/) and auto-fetches the Linux ARM64 SDK libraries.
 
     <Note>
-    **Building Python from source (non-QDC devices)**
-
-    If you are not using QDC but your own Dragonwing IoT chipset and Python is not pre-installed, you can download and build from source:
-
-    ```bash
-    apt update && apt install -y build-essential libffi-dev libssl-dev zlib1g-dev
-    wget https://www.python.org/ftp/python/3.13.3/Python-3.13.3.tar.xz
-    tar -xf Python-3.13.3.tar.xz
-    cd Python-3.13.3
-    ./configure --enable-optimizations
-    make -j$(nproc)
-    make altinstall
-    python3.13 --version
-    ```
+    If Python is not pre-installed, see [How do I install Python on a Linux ARM64 device?](/en/resources/faq#how-do-i-install-python-on-a-linux-arm64-device) for a verified Miniconda recipe (covers Qualcomm Yocto and Ubuntu ARM64).
     </Note>
   </Tab>
 </Tabs>

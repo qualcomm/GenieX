@@ -1,6 +1,7 @@
 pub mod config;
 pub mod error;
 pub mod executor;
+pub mod logging;
 pub mod manifest;
 pub mod manifest_builder;
 pub mod mapping;

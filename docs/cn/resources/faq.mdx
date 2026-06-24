@@ -169,6 +169,47 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 </AccordionGroup>
 
+## **Python**
+
+<AccordionGroup>
+  <Accordion title="如何在 Linux ARM64 设备上安装 Python？" id="如何在-linux-arm64-设备上安装-python">
+    GenieX 要求 **ARM64** Python，不支持 x86_64 / AMD64（即使在模拟器下也不支持）。
+
+    QDC 设备（高通嵌入式 Linux / Yocto）已预装 ARM64 Python，用 `python3 --version` 验证即可。如设备未预装 Python，使用下列方法之一。
+
+    **方法 1 —— [Miniconda](https://docs.anaconda.com/miniconda/)（推荐；Yocto 与 Ubuntu ARM64 均可用）**
+
+    ```bash
+    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh
+    # CONDA_OVERRIDE_GLIBC：Yocto 镜像通常不带 `ldd`，安装器会因此报
+    # "Installer requires GLIBC >=2.28, but system has ." 而退出。
+    # 该变量跳过探测；Qualcomm Linux 1.7+ 的实际 glibc 是 2.39，远超下限。
+    CONDA_OVERRIDE_GLIBC=2.39 bash Miniconda3-latest-Linux-aarch64.sh -b -p $HOME/miniconda
+    eval "$($HOME/miniconda/bin/conda shell.bash hook)"
+    # 新版 conda 在非交互模式下强制要求接受默认 channel 的 ToS，
+    # 否则下面的 `conda create` 会直接报错。
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+    conda create -n geniex python=3.13 -y
+    conda activate geniex
+    python --version
+    ```
+
+    **方法 2 —— apt（仅 Ubuntu ARM64）**
+
+    ```bash
+    sudo apt update && sudo apt install -y python3 python3-pip python3-venv
+    python3 --version
+    ```
+
+    QDC Yocto 镜像不带 `apt`，请使用上面的 Miniconda 方法。
+  </Accordion>
+
+  <Accordion title="Windows ARM64 是否支持 Miniconda？">
+    不支持。目前 Miniconda 没有原生的 Windows ARM64 安装程序。请直接从 python.org 下载官方 [Python 3.13.3 ARM64 安装程序](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe)——详见 [Python 安装](/cn/run/python/install)。不要安装 x86 / AMD64 版本：GenieX wheel 只支持 ARM64。
+  </Accordion>
+</AccordionGroup>
+
 ## **服务器 / API**
 
 <AccordionGroup>

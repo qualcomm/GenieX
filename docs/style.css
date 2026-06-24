@@ -237,7 +237,24 @@ h3.flex.group.font-semibold {
 
 .nav-logo {
   width: auto !important;
-  height: 24px !important;
+  height: auto !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  line-height: 1 !important;
+}
+
+.nav-logo::before {
+  content: "";
+  display: block;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  flex-shrink: 0;
+  background-image: url("/Images/logo.svg");
+  background-size: contain;
+  background-repeat: no-repeat;
 }
 
 header a[href="/"],
@@ -506,12 +523,30 @@ nav a:has(img.nav-logo) *,
 
 [data-component-part="code-group-tab-bar"] button:not([aria-selected="true"]) {
   font-size: 14px !important;
-  color: #c8c8c8 !important;
+  color: #636364 !important;
+}
+
+.dark [data-component-part="code-group-tab-bar"] button:not([aria-selected="true"]) {
+  color: #b9b9ba !important;
 }
 
 [data-component-part="code-group-tab-bar"] button:is([aria-selected="true"]) {
   font-size: 14px !important;
 }
+
+[data-component-part="code-group-tab-bar"] button[role="tab"]:hover,
+[data-component-part="code-group-tab-bar"] button[role="tab"]:focus,
+[data-component-part="code-group-tab-bar"] button[role="tab"]:active,
+.code-group [data-component-part="code-group-tab-bar"] button:hover,
+.code-group [data-component-part="code-group-tab-bar"] button:focus {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  border-radius: 0 !important;
+}
+
 
 [data-component-part="code-group-tab-bar"] button a {
   color: #fcfcfc !important;
@@ -732,6 +767,13 @@ nav a:has(img.nav-logo) *,
   border-bottom-color: #303031 !important;
 }
 
+.mdx-content [data-component-part="code-group-tab-bar"] [role="tablist"],
+[data-component-part="code-group-tab-bar"] [role="tablist"] {
+  border-bottom: none !important;
+  border-bottom-color: transparent !important;
+  padding-top: 0 !important;
+}
+
 button[data-state="active"] > div.absolute {
   display: none !important;
 }
@@ -867,6 +909,12 @@ button[data-state="active"] > div.absolute {
   background-color: #f7f7f8 !important;
   --shiki-light-bg: #f7f7f8 !important;
   --shiki-bg: #f7f7f8 !important;
+}
+
+.code-group [data-component-part="code-block-root"] {
+  border-top: 1px solid rgba(0, 0, 0, 0.10) !important;
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
 }
 
 .code-group {

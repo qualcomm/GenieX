@@ -321,18 +321,15 @@ impl ModelSource for AiHubSource {
                 Ok(bytes) => match serde_json::from_slice::<InfoJson>(&bytes) {
                     Ok(info) => Some(info),
                     Err(e) => {
-                        eprintln!(
-                            "[model-manager] aihub info.json parse for {}: {e}",
+                        crate::logging::warn(&format!(
+                            "aihub info.json parse for {}: {e}",
                             entry.id
-                        );
+                        ));
                         None
                     }
                 },
                 Err(e) => {
-                    eprintln!(
-                        "[model-manager] aihub info.json fetch for {}: {e}",
-                        entry.id
-                    );
+                    crate::logging::warn(&format!("aihub info.json fetch for {}: {e}", entry.id));
                     None
                 }
             }
@@ -458,15 +455,12 @@ fn read_cache(path: &Path, ttl: Duration) -> Option<Vec<u8>> {
 fn write_cache(path: &Path, data: &[u8]) {
     if let Some(parent) = path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
-            eprintln!(
-                "[model-manager] aihub cache mkdir {}: {e}",
-                parent.display()
-            );
+            crate::logging::warn(&format!("aihub cache mkdir {}: {e}", parent.display()));
             return;
         }
     }
     if let Err(e) = std::fs::write(path, data) {
-        eprintln!("[model-manager] aihub cache write {}: {e}", path.display());
+        crate::logging::warn(&format!("aihub cache write {}: {e}", path.display()));
     }
 }
 

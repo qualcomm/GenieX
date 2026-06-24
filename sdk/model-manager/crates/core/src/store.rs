@@ -116,11 +116,11 @@ impl Store {
                     Err(e) => {
                         // Log + skip corrupted manifests rather than failing the
                         // whole listing.
-                        eprintln!(
-                            "[model-manager] skipping corrupted manifest {}: {}",
+                        crate::logging::warn(&format!(
+                            "skipping corrupted manifest {}: {}",
                             manifest_path.display(),
                             e
-                        );
+                        ));
                     }
                 }
             }

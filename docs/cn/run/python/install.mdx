@@ -10,13 +10,19 @@ GenieX Python SDK 以 ARM64 wheel 形式发布，覆盖 Windows ARM64 与 Linux 
 ## **前置条件**
 
 - 骁龙 X 系列芯片（X Elite 或 X2 Elite）。详见[支持的平台](/cn/get-started/platforms)。
-- **ARM64 版本的 Python 3.10+**
+- **ARM64 版本的 Python 3.10+**——不支持 x86_64 / AMD64。
 
 ## **通过 pip 安装**
 
 <Tabs>
   <Tab title="Windows ARM64">
     如未安装 Python，请下载 [Python 3.13.3 for ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe)。
+
+    确认安装的是 ARM64 版本 —— **必须输出 `ARM64`**（不能是 `AMD64`）：
+
+    ```powershell
+    python -c "import platform; print(platform.machine())"
+    ```
 
     创建虚拟环境并从 test PyPI 安装：
 
@@ -45,20 +51,7 @@ GenieX Python SDK 以 ARM64 wheel 形式发布，覆盖 Windows ARM64 与 Linux 
     这将从 [test PyPI](https://test.pypi.org/project/geniex/) 拉取 Python 包，并自动获取 Linux ARM64 SDK 库。
 
     <Note>
-    **从源码构建 Python（非 QDC 设备）**
-
-    如果你不在 QDC，而是使用自己的高通 IoT 芯片且未预装 Python，可下载源码自行构建：
-
-    ```bash
-    apt update && apt install -y build-essential libffi-dev libssl-dev zlib1g-dev
-    wget https://www.python.org/ftp/python/3.13.3/Python-3.13.3.tar.xz
-    tar -xf Python-3.13.3.tar.xz
-    cd Python-3.13.3
-    ./configure --enable-optimizations
-    make -j$(nproc)
-    make altinstall
-    python3.13 --version
-    ```
+    如设备未预装 Python，请参考常见问题中的[如何在 Linux ARM64 设备上安装 Python？](/cn/resources/faq#如何在-linux-arm64-设备上安装-python)（已验证可用的 Miniconda 流程，覆盖 Qualcomm Yocto 与 Ubuntu ARM64）。
     </Note>
   </Tab>
 </Tabs>

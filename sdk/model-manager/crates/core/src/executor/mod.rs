@@ -19,7 +19,7 @@
 pub mod chunk;
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -27,6 +27,7 @@ use tokio::fs::OpenOptions;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
+use tokio_util::sync::CancellationToken;
 
 use crate::error::{Error, Result};
 use crate::source::{BytesSource, FileSpec};
@@ -136,7 +137,7 @@ impl Executor {
             })
             .collect();
 
-        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel = CancellationToken::new();
         let file_sem = Arc::new(Semaphore::new(self.cfg.file_concurrency));
         let chunk_sem = Arc::new(Semaphore::new(self.cfg.chunk_concurrency));
 
@@ -172,11 +173,11 @@ impl Executor {
                         None => break,
                         Some(Ok(Ok(()))) => {}
                         Some(Ok(Err(e))) => {
-                            cancel.store(true, Ordering::SeqCst);
+                            cancel.cancel();
                             first_err.get_or_insert(e);
                         }
                         Some(Err(join_err)) => {
-                            cancel.store(true, Ordering::SeqCst);
+                            cancel.cancel();
                             first_err.get_or_insert(Error::Http(format!("join: {join_err}")));
                         }
                     }
@@ -186,7 +187,7 @@ impl Executor {
                         let snaps: Vec<FileProgress> =
                             states.iter().map(|s| s.snapshot()).collect();
                         if !(cb)(&snaps) {
-                            cancel.store(true, Ordering::SeqCst);
+                            cancel.cancel();
                         }
                     }
                 }
@@ -201,7 +202,7 @@ impl Executor {
         if let Some(e) = first_err {
             return Err(e);
         }
-        if cancel.load(Ordering::SeqCst) {
+        if cancel.is_cancelled() {
             return Err(Error::Cancelled);
         }
         Ok(())
@@ -214,7 +215,7 @@ async fn run_one(
     dest_dir: &Path,
     transport: Arc<dyn HttpTransport>,
     chunk_sem: Arc<Semaphore>,
-    cancel: Arc<AtomicBool>,
+    cancel: CancellationToken,
 ) -> Result<()> {
     match spec.bytes.clone() {
         BytesSource::Http { url, auth } => {
@@ -431,7 +432,7 @@ async fn download_range_based(
     dest_dir: &Path,
     transport: Arc<dyn HttpTransport>,
     chunk_sem: Arc<Semaphore>,
-    cancel: Arc<AtomicBool>,
+    cancel: CancellationToken,
     url: url::Url,
     auth: Option<String>,
     base_offset: u64,
@@ -462,7 +463,7 @@ async fn download_range_based(
 
     let mut chunk_tasks: JoinSet<Result<()>> = JoinSet::new();
     for range in pending {
-        if cancel.load(Ordering::SeqCst) {
+        if cancel.is_cancelled() {
             break;
         }
         let sem = chunk_sem.clone();
@@ -474,7 +475,7 @@ async fn download_range_based(
         let state = state.clone();
         let cancel = cancel.clone();
         chunk_tasks.spawn(async move {
-            if cancel.load(Ordering::SeqCst) {
+            if cancel.is_cancelled() {
                 return Err(Error::Cancelled);
             }
             let _permit = sem
@@ -490,15 +491,18 @@ async fn download_range_based(
             file.seek(std::io::SeekFrom::Start(range.offset)).await?;
 
             let mut counted = CountingSink::new(&mut file, state.clone());
-            transport
-                .get_range(
-                    &url,
-                    auth.as_deref(),
-                    base_offset + range.offset,
-                    range.len,
-                    &mut counted,
-                )
-                .await?;
+            let fetch = transport.get_range(
+                &url,
+                auth.as_deref(),
+                base_offset + range.offset,
+                range.len,
+                &mut counted,
+            );
+            tokio::select! {
+                biased;
+                _ = cancel.cancelled() => return Err(Error::Cancelled),
+                res = fetch => res?,
+            }
             drop(counted);
             file.flush().await?;
             drop(file);
@@ -513,11 +517,11 @@ async fn download_range_based(
         match res {
             Ok(Ok(())) => {}
             Ok(Err(e)) => {
-                cancel.store(true, Ordering::SeqCst);
+                cancel.cancel();
                 first_err.get_or_insert(e);
             }
             Err(join_err) => {
-                cancel.store(true, Ordering::SeqCst);
+                cancel.cancel();
                 first_err.get_or_insert(Error::Http(format!("chunk join: {join_err}")));
             }
         }
@@ -526,7 +530,7 @@ async fn download_range_based(
     if let Some(e) = first_err {
         return Err(e);
     }
-    if cancel.load(Ordering::SeqCst) {
+    if cancel.is_cancelled() {
         return Err(Error::Cancelled);
     }
     Ok(())
@@ -545,7 +549,7 @@ async fn download_http_deflate(
     state: Arc<FileState>,
     dest_dir: &Path,
     transport: Arc<dyn HttpTransport>,
-    cancel: Arc<AtomicBool>,
+    cancel: CancellationToken,
     url: url::Url,
     auth: Option<String>,
 ) -> Result<()> {
@@ -574,7 +578,7 @@ async fn download_http_deflate(
         }
     }
 
-    if cancel.load(Ordering::SeqCst) {
+    if cancel.is_cancelled() {
         return Err(Error::Cancelled);
     }
 
@@ -596,12 +600,16 @@ async fn download_http_deflate(
             uncompressed_size as f64 / compressed_len as f64
         };
         let mut counted = CountingSink::scaled(&mut compressed, state.clone(), scale);
-        transport
-            .get_range(&url, auth.as_deref(), offset, compressed_len, &mut counted)
-            .await?;
+        let fetch =
+            transport.get_range(&url, auth.as_deref(), offset, compressed_len, &mut counted);
+        tokio::select! {
+            biased;
+            _ = cancel.cancelled() => return Err(Error::Cancelled),
+            res = fetch => res?,
+        }
     }
 
-    if cancel.load(Ordering::SeqCst) {
+    if cancel.is_cancelled() {
         return Err(Error::Cancelled);
     }
 

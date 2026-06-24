@@ -169,6 +169,47 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 </AccordionGroup>
 
+## **Python**
+
+<AccordionGroup>
+  <Accordion title="How do I install Python on a Linux ARM64 device?" id="how-do-i-install-python-on-a-linux-arm64-device">
+    GenieX requires **ARM64** Python. x86_64 / AMD64 builds are not supported, even under emulation.
+
+    QDC devices (Qualcomm embedded Linux / Yocto) ship with ARM64 Python pre-installed — verify with `python3 --version`. If your device does not have Python, use one of the methods below.
+
+    **Option 1 — [Miniconda](https://docs.anaconda.com/miniconda/) (recommended; works on Yocto and Ubuntu ARM64)**
+
+    ```bash
+    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh
+    # CONDA_OVERRIDE_GLIBC: Yocto images often ship without `ldd`, which makes the
+    # installer's glibc probe fail with "Installer requires GLIBC >=2.28, but system has .".
+    # The override skips the probe; the real glibc on Qualcomm Linux 1.7+ is already 2.39.
+    CONDA_OVERRIDE_GLIBC=2.39 bash Miniconda3-latest-Linux-aarch64.sh -b -p $HOME/miniconda
+    eval "$($HOME/miniconda/bin/conda shell.bash hook)"
+    # Newer conda releases require explicit ToS acceptance for the default channels
+    # in non-interactive mode; without these, `conda create` errors out.
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+    conda create -n geniex python=3.13 -y
+    conda activate geniex
+    python --version
+    ```
+
+    **Option 2 — apt (Ubuntu ARM64 only)**
+
+    ```bash
+    sudo apt update && sudo apt install -y python3 python3-pip python3-venv
+    python3 --version
+    ```
+
+    QDC Yocto images do not ship `apt` — use Miniconda above.
+  </Accordion>
+
+  <Accordion title="Is Miniconda supported on Windows ARM64?">
+    No. There is currently no native Windows ARM64 Miniconda installer. On Windows ARM64, download the official [Python 3.13.3 ARM64 installer](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe) from python.org — see [Python Install](/en/run/python/install). Do not install the x86 / AMD64 build: GenieX wheels only target ARM64.
+  </Accordion>
+</AccordionGroup>
+
 ## **Server / API**
 
 <AccordionGroup>

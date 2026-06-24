@@ -161,7 +161,7 @@ impl HttpTransport for ReqwestTransport {
                 Err(e) if attempt < self.retries => {
                     attempt += 1;
                     tokio::time::sleep(self.retry_backoff).await;
-                    log_retry(format!("head retry {attempt}: {e}"));
+                    crate::logging::warn(&format!("head retry {attempt}: {e}"));
                     continue;
                 }
                 Err(e) => return Err(Error::HttpTimeout(format!("HEAD {url}: {e}"))),
@@ -171,7 +171,7 @@ impl HttpTransport for ReqwestTransport {
             if Self::is_transient(status) && attempt < self.retries {
                 attempt += 1;
                 tokio::time::sleep(self.retry_backoff).await;
-                log_retry(format!("head retry {attempt}: status {status}"));
+                crate::logging::warn(&format!("head retry {attempt}: status {status}"));
                 continue;
             }
             if !status.is_success() {
@@ -232,7 +232,7 @@ impl HttpTransport for ReqwestTransport {
                 Err(e) if attempt < self.retries => {
                     attempt += 1;
                     tokio::time::sleep(self.retry_backoff).await;
-                    log_retry(format!("get_range retry {attempt}: {e}"));
+                    crate::logging::warn(&format!("get_range retry {attempt}: {e}"));
                     continue;
                 }
                 Err(e) => {
@@ -244,7 +244,7 @@ impl HttpTransport for ReqwestTransport {
             if Self::is_transient(status) && attempt < self.retries {
                 attempt += 1;
                 tokio::time::sleep(self.retry_backoff).await;
-                log_retry(format!("get_range retry {attempt}: status {status}"));
+                crate::logging::warn(&format!("get_range retry {attempt}: status {status}"));
                 continue;
             }
             // 200 is accepted only if the server returned the full body
@@ -282,7 +282,7 @@ impl HttpTransport for ReqwestTransport {
                 if attempt < self.retries {
                     attempt += 1;
                     tokio::time::sleep(self.retry_backoff).await;
-                    log_retry(format!(
+                    crate::logging::warn(&format!(
                         "short read retry {attempt}: got {written} / expected {len}"
                     ));
                     continue;
@@ -294,11 +294,4 @@ impl HttpTransport for ReqwestTransport {
             return Ok(());
         }
     }
-}
-
-fn log_retry(msg: String) {
-    // Upstream FFI log bridge can grab stderr if needed; direct
-    // eprintln avoids pulling in a logging facade just for a handful
-    // of retry lines.
-    eprintln!("[model-manager] {msg}");
 }

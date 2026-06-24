@@ -257,10 +257,10 @@ fn remove_inflight_dir(inflight_dir: &Path) {
     }
     if let Err(e) = fs::remove_dir_all(inflight_dir) {
         if e.kind() != std::io::ErrorKind::NotFound {
-            eprintln!(
-                "[model-manager] failed to clean up {} after successful pull: {e}",
+            crate::logging::warn(&format!(
+                "failed to clean up {} after successful pull: {e}",
                 inflight_dir.display()
-            );
+            ));
         }
     }
 }

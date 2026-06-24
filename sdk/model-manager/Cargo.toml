@@ -23,6 +23,7 @@ tokio = { version = "1", features = [
     "fs",
     "time",
 ] }
+tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
 # Manual roots (no built-in webpki bundle) so our own platform verifier
 # can delegate to the OS trust store — required for corporate MITM proxies.
 reqwest = { version = "0.12", default-features = false, features = [

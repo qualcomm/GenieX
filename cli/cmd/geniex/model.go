@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/signal"
 	"slices"
 	"strconv"
 	"strings"
@@ -427,7 +428,9 @@ func pullModel(ctx context.Context, name string, quant string) error {
 		}
 	}
 
-	// Download with a progress bar driven by the SDK callback.
+	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
+	defer stop()
+
 	var bar *render.ProgressBar
 	in.OnProgress = func(files []geniex_sdk.FileProgress) bool {
 		var downloaded, total int64
@@ -441,12 +444,16 @@ func pullModel(ctx context.Context, name string, quant string) error {
 			bar = render.NewProgressBar(total, "downloading")
 		}
 		bar.Set(downloaded)
-		return true
+		return ctx.Err() == nil
 	}
 
 	if err := geniex_sdk.ModelPull(in); err != nil {
 		if bar != nil {
 			bar.Clear()
+		}
+		if ctx.Err() != nil {
+			fmt.Println(render.GetTheme().Warning.Sprint("✗  Download cancelled"))
+			return nil
 		}
 		return err
 	}
