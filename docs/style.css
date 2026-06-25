@@ -235,6 +235,28 @@ h3.flex.group.font-semibold {
   font-weight: 600 !important;
 }
 
+.nav-logo {
+  width: auto !important;
+  height: auto !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  line-height: 1 !important;
+}
+
+.nav-logo::before {
+  content: "";
+  display: block;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  flex-shrink: 0;
+  background-image: url("/Images/logo.svg");
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
 header a[href="/"],
 header a[href="/"] span,
 header a[href="/"] p,

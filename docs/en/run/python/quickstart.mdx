@@ -19,8 +19,12 @@ Any GGUF model from Hugging Face runs via `llama_cpp`. Model weights are downloa
 ```python
 from geniex import AutoModelForCausalLM
 
-# HF repo id of a GGUF model, or a local .gguf path
-model = AutoModelForCausalLM.from_pretrained("unsloth/Qwen3-0.6B-GGUF", precision="Q4_0")
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B-GGUF",     # HF repo id of a GGUF model, or a local .gguf path
+    device_map="auto",          # "auto" | "cpu" | "gpu" | "npu" | "hybrid"
+                                # | "<runtime>" | "<runtime>:<compute-unit>"
+                                # auto -> hybrid for llama_cpp, npu for qairt
+)
 
 messages = [{"role": "user", "content": "What is 2+2?"}]
 prompt = model.tokenizer.apply_chat_template(
@@ -48,8 +52,10 @@ Pre-compiled bundles from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) 
 ```python
 from geniex import AutoModelForCausalLM
 
-# Qualcomm AI Hub model id
-model = AutoModelForCausalLM.from_pretrained("ai-hub-models/Qwen3-4B")
+model = AutoModelForCausalLM.from_pretrained(
+    "ai-hub-models/Qwen3-4B",   # Qualcomm AI Hub model id
+    device_map="qairt",         # NPU-only
+)
 
 messages = [{"role": "user", "content": "What is 2+2?"}]
 prompt = model.tokenizer.apply_chat_template(
@@ -86,8 +92,10 @@ from geniex import AutoModelForCausalLM
 
 image_path = os.path.abspath("demo.jpg")
 
-# Qualcomm AI Hub VLM bundle
-model = AutoModelForCausalLM.from_pretrained("ai-hub-models/Qwen2.5-VL-7B-Instruct")
+model = AutoModelForCausalLM.from_pretrained(
+    "ai-hub-models/Qwen2.5-VL-7B-Instruct",  # Qualcomm AI Hub VLM bundle
+    device_map="qairt",
+)
 messages = [{
     "role": "user",
     "content": [
