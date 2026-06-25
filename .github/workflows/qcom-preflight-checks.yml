@@ -1,0 +1,24 @@
+name: QC Preflight Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  preflight:
+    name: Run QC Preflight Checks
+    uses: qualcomm/qcom-reusable-workflows/.github/workflows/reusable-qcom-preflight-checks-orchestrator.yml@v2
+    with:
+      enable-semgrep-scan: true
+      enable-dependency-review: true
+      enable-repolinter-check: true
+      enable-copyright-license-check: true
+      enable-commit-email-check: true
+      enable-commit-msg-check: false
+      enable-armor-checkers: false
