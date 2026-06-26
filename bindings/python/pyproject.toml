@@ -10,9 +10,9 @@ backend-path = ["."]
 [project]
 name = "geniex"
 dynamic = ["version"]
-description = "GenieX-Bridge Python binding for running AI models on Qualcomm platforms."
+description = "GenieX-Bridge Python binding for running AI models on Qualcomm platforms. Subject to Qualcomm Terms of Use: https://www.qualcomm.com/site/terms-of-use"
 readme = "README.md"
-license = "Apache-2.0"
+license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 authors = [{ name = "Qualcomm" }]
 dependencies = ["tqdm>=4.65"]
@@ -22,6 +22,7 @@ classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "Topic :: Software Development :: Libraries :: Python Modules",
+  "License :: OSI Approved :: BSD License",
 ]
 
 [project.scripts]

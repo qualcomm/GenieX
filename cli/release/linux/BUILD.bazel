@@ -73,8 +73,10 @@ oci_image(
     exposed_ports = ["18181/tcp"],
     labels = {
         "org.opencontainers.image.title": "GenieX-CLI",
-        "org.opencontainers.image.description": "GenieX-CLI for running multi models",
-        "org.opencontainers.image.vendor": "GenieX",
+        "org.opencontainers.image.description": "GenieX — on-device Gen AI inference runtime for Qualcomm devices (Snapdragon / Hexagon). Subject to Qualcomm Terms of Use: https://www.qualcomm.com/site/terms-of-use",
+        "org.opencontainers.image.vendor": "Qualcomm",
+        "org.opencontainers.image.licenses": "BSD-3-Clause",
+        "org.opencontainers.image.url": "https://github.com/qualcomm/GenieX",
     },
     target_compatible_with = ["@platforms//os:linux"],
     tars = [
