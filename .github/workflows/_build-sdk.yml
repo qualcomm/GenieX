@@ -71,7 +71,7 @@ jobs:
         with:
           fetch-depth: 1
           submodules: recursive
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.CLONE_PAT }}
 
       - name: Detect build version
         id: version

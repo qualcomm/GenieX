@@ -42,7 +42,7 @@ jobs:
         with:
           fetch-depth: 1
           submodules: false
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.CLONE_PAT }}
 
       - name: Detect build version
         id: version

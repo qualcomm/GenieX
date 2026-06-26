@@ -105,7 +105,7 @@ Other assets (AAR, sdist, HTP cert/to-sign zips) ship via GitHub Releases / Mave
 
 ### Manifest contract for client apps
 
-Schema lives in [.github/scripts/release_s3_manifest.py](../.github/scripts/release_s3_manifest.py); all files carry `schema_version: 1`.
+S3 publishing runs in the geniex repo (the IAM role's OIDC trust only allows `qcom-ai-hub/geniex`); this repo's `publish-s3` job just dispatches it. The schema lives in [`release_s3_manifest.py`](https://github.com/qcom-ai-hub/geniex/blob/chore/publish-s3/.github/scripts/release_s3_manifest.py) on geniex's `chore/publish-s3` branch; all files carry `schema_version: 1`.
 
 - **Update check (lightest)** — GET `latest.json`. Compare `tag` with the locally installed version. Cached `no-cache`, so the response is always current. Only present once a stable tag has shipped.
 

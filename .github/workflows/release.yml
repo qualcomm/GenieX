@@ -374,193 +374,50 @@ jobs:
             const release = require('./.github/scripts/release.js');
             await release({ github, context, core });
 
+  # S3 publish runs in the geniex repo, not here: the bitsyfactory IAM role's
+  # OIDC trust only allows repo:qcom-ai-hub/geniex, so nexa-sdk cannot assume it.
+  # We dispatch geniex's chore/publish-s3 workflow (GH_PAT, with actions:rw on
+  # geniex), passing this run's id so it can pull our release-assets artifact
+  # cross-repo, then watch it so an S3 failure surfaces here instead of silently.
   publish-s3:
-    name: publish-s3
+    name: publish-s3 (via geniex)
     needs: [resolve-tag, overlay-htp, package-release]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      RELEASE_TAG: ${{ needs.resolve-tag.outputs.tag }}
-      IS_PRERELEASE: ${{ needs.resolve-tag.outputs.is_prerelease }}
-      HTP_SIGNED: ${{ needs.overlay-htp.outputs.signed }}
-      LLAMA_SHA: ${{ needs.overlay-htp.outputs.llama_sha }}
-      S3_BUCKET: qaihub-public-assets
-      S3_PREFIX: qai-hub-geniex/
-      PUBLIC_BASE_URL: https://qaihub-public-assets.s3.us-west-2.amazonaws.com
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 1
-          submodules: false
-
-      # Pin so the manifest scripts below don't rely on the runner image's `python` alias.
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: release-assets
-          path: release-assets
-
-      - name: Configure AWS credentials (bitsyfactory role)
-        uses: ./.github/actions/configure-multiple-aws-roles
-        with:
-          profile: bitsy
-          aws-region: us-west-2
-          role-to-assume: arn:aws:iam::234967179373:role/github-bitsyfactory
-          role-session-name: geniex-release-${{ github.run_id }}
-
-      - name: Upload versioned release assets to S3 (flat)
-        shell: bash
+      - name: Trigger & watch geniex publish-s3
         env:
-          AWS_PROFILE: bitsy
-          AWS_DEFAULT_REGION: us-west-2
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          TAG: ${{ needs.resolve-tag.outputs.tag }}
+          IS_PRERELEASE: ${{ needs.resolve-tag.outputs.is_prerelease }}
+          HTP_SIGNED: ${{ needs.overlay-htp.outputs.signed }}
+          LLAMA_SHA: ${{ needs.overlay-htp.outputs.llama_sha }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          # Flat layout under qai-hub-geniex/ — the <tag> in every filename
-          # disambiguates versions. SDK zips, CLI installer (+ .sha256), and
-          # APK (+ .sha256) all land at the prefix root. --acl public-read is
-          # required because the bucket policy only opens qai-hub-models/wheels
-          # for anonymous GetObject by default.
-          aws s3 sync release-assets/ "s3://${S3_BUCKET}/${S3_PREFIX}" \
-            --exclude '*' \
-            --include 'geniex-sdk-windows-arm64-*.zip' \
-            --include 'geniex-sdk-windows-arm64-*.zip.sha256' \
-            --include 'geniex-sdk-linux-arm64-*.zip' \
-            --include 'geniex-sdk-linux-arm64-*.zip.sha256' \
-            --include 'geniex-bench-linux-arm64-*.tar.gz' \
-            --include 'geniex-bench-linux-arm64-*.tar.gz.sha256' \
-            --include 'geniex-bench-android-arm64-*.tar.gz' \
-            --include 'geniex-bench-android-arm64-*.tar.gz.sha256' \
-            --include 'geniex-bench-windows-arm64-*.zip' \
-            --include 'geniex-bench-windows-arm64-*.zip.sha256' \
-            --include "geniex-cli-setup-windows-arm64-${RELEASE_TAG}.exe" \
-            --include "geniex-cli-setup-windows-arm64-${RELEASE_TAG}.exe.sha256" \
-            --include "geniex-cli-linux-arm64-${RELEASE_TAG}.tar.gz" \
-            --include "geniex-cli-linux-arm64-${RELEASE_TAG}.tar.gz.sha256" \
-            --include "install-${RELEASE_TAG}.sh" \
-            --include "install-${RELEASE_TAG}.sh.sha256" \
-            --include "geniex-demo-${RELEASE_TAG}.apk" \
-            --include "geniex-demo-${RELEASE_TAG}.apk.sha256" \
-            --acl public-read
+          gh workflow run release.yml \
+            --repo qcom-ai-hub/geniex \
+            --ref chore/publish-s3 \
+            -f tag="${TAG}" \
+            -f is_prerelease="${IS_PRERELEASE}" \
+            -f run_id="${RUN_ID}" \
+            -f htp_signed="${HTP_SIGNED}" \
+            -f llama_sha="${LLAMA_SHA}"
 
-      - name: Force text/x-shellscript content-type on the install scripts
-        shell: bash
-        env:
-          AWS_PROFILE: bitsy
-          AWS_DEFAULT_REGION: us-west-2
-        run: |
-          set -euo pipefail
-          # Re-upload the .sh objects so curl-piping browsers don't get a
-          # text/html or application/octet-stream that some shells refuse.
-          aws s3 cp \
-            "release-assets/install-${RELEASE_TAG}.sh" \
-            "s3://${S3_BUCKET}/${S3_PREFIX}install-${RELEASE_TAG}.sh" \
-            --content-type "text/x-shellscript; charset=utf-8" \
-            --acl public-read
+          # The geniex run-name embeds "run ${RUN_ID}", so match on it to find
+          # the run we just dispatched rather than racing on most-recent.
+          target=""
+          for _ in $(seq 1 12); do
+            target=$(gh run list --repo qcom-ai-hub/geniex --workflow release.yml \
+              --branch chore/publish-s3 --json databaseId,displayTitle \
+              --jq "[.[] | select(.displayTitle | contains(\"run ${RUN_ID}\"))][0].databaseId")
+            [ -n "${target}" ] && break
+            sleep 5
+          done
+          [ -n "${target}" ] || { echo "::error::geniex publish-s3 run for nexa-sdk run ${RUN_ID} not found"; exit 1; }
 
-      - name: Refresh mutable "latest stable" pointers
-        if: ${{ needs.resolve-tag.outputs.is_prerelease != 'true' }}
-        shell: bash
-        env:
-          AWS_PROFILE: bitsy
-          AWS_DEFAULT_REGION: us-west-2
-        run: |
-          set -euo pipefail
-          # Only advance the unversioned pointers on bare vX.Y.Z so rc/alpha
-          # builds never become the default download. Cache-Control no-cache
-          # forces revalidation since the bytes change each release.
-          aws s3 cp \
-            "release-assets/geniex-cli-setup-windows-arm64-${RELEASE_TAG}.exe" \
-            "s3://${S3_BUCKET}/${S3_PREFIX}geniex-cli.exe" \
-            --acl public-read \
-            --cache-control "no-cache, max-age=0"
-          aws s3 cp \
-            "release-assets/geniex-cli-linux-arm64-${RELEASE_TAG}.tar.gz" \
-            "s3://${S3_BUCKET}/${S3_PREFIX}geniex-cli-linux-arm64.tar.gz" \
-            --acl public-read \
-            --cache-control "no-cache, max-age=0"
-          aws s3 cp \
-            "release-assets/geniex-cli-linux-arm64-${RELEASE_TAG}.tar.gz.sha256" \
-            "s3://${S3_BUCKET}/${S3_PREFIX}geniex-cli-linux-arm64.tar.gz.sha256" \
-            --acl public-read \
-            --cache-control "no-cache, max-age=0"
-          aws s3 cp \
-            "release-assets/install-${RELEASE_TAG}.sh" \
-            "s3://${S3_BUCKET}/${S3_PREFIX}install.sh" \
-            --content-type "text/x-shellscript; charset=utf-8" \
-            --acl public-read \
-            --cache-control "no-cache, max-age=0"
-          aws s3 cp \
-            "release-assets/geniex-demo-${RELEASE_TAG}.apk" \
-            "s3://${S3_BUCKET}/${S3_PREFIX}geniex-demo.apk" \
-            --acl public-read \
-            --cache-control "no-cache, max-age=0"
-          # geniex-bench latest pointers (one per platform).
-          aws s3 cp \
-            "release-assets/geniex-bench-linux-arm64-${RELEASE_TAG}.tar.gz" \
-            "s3://${S3_BUCKET}/${S3_PREFIX}geniex-bench-linux-arm64.tar.gz" \
-            --acl public-read \
-            --cache-control "no-cache, max-age=0"
-          aws s3 cp \
-            "release-assets/geniex-bench-android-arm64-${RELEASE_TAG}.tar.gz" \
-            "s3://${S3_BUCKET}/${S3_PREFIX}geniex-bench-android-arm64.tar.gz" \
-            --acl public-read \
-            --cache-control "no-cache, max-age=0"
-          aws s3 cp \
-            "release-assets/geniex-bench-windows-arm64-${RELEASE_TAG}.zip" \
-            "s3://${S3_BUCKET}/${S3_PREFIX}geniex-bench-windows-arm64.zip" \
-            --acl public-read \
-            --cache-control "no-cache, max-age=0"
-
-      - name: Generate manifest files
-        shell: bash
-        env:
-          AWS_PROFILE: bitsy
-          AWS_DEFAULT_REGION: us-west-2
-          RELEASE_ASSETS_DIR: release-assets
-          OUTPUT_DIR: manifests
-        run: |
-          set -euo pipefail
-          python .github/scripts/release_s3_manifest.py build-tag-manifest
-          python .github/scripts/release_s3_manifest.py update-index
-          python .github/scripts/release_s3_manifest.py build-latest
-
-      - name: Upload manifest files to S3
-        shell: bash
-        env:
-          AWS_PROFILE: bitsy
-          AWS_DEFAULT_REGION: us-west-2
-        run: |
-          set -euo pipefail
-          # Per-tag manifest is immutable: the tag itself never changes (it's a
-          # project hard constraint), and the script preserves released_at on
-          # re-runs, so byte-identical contents can be cached forever.
-          aws s3 cp "manifests/manifest-${RELEASE_TAG}.json" \
-            "s3://${S3_BUCKET}/${S3_PREFIX}manifest-${RELEASE_TAG}.json" \
-            --content-type application/json \
-            --acl public-read \
-            --cache-control "public, max-age=31536000, immutable"
-          # index.json is mutable — every release adds a row. no-cache so apps
-          # see new versions immediately.
-          aws s3 cp manifests/index.json \
-            "s3://${S3_BUCKET}/${S3_PREFIX}index.json" \
-            --content-type application/json \
-            --acl public-read \
-            --cache-control "no-cache, max-age=0"
-          # latest.json only on stable tags — the build-latest subcommand is a
-          # no-op for prereleases and won't produce the file.
-          if [[ -f manifests/latest.json ]]; then
-            aws s3 cp manifests/latest.json \
-              "s3://${S3_BUCKET}/${S3_PREFIX}latest.json" \
-              --content-type application/json \
-              --acl public-read \
-              --cache-control "no-cache, max-age=0"
-          fi
+          echo "Watching geniex publish-s3 run ${target}"
+          gh run watch "${target}" --repo qcom-ai-hub/geniex --exit-status
 
   publish-docker:
     name: publish-docker
