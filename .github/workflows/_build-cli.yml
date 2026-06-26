@@ -68,7 +68,7 @@ jobs:
       # ~99% hit, so the cache is worth keeping there.
       - name: Restore Bazel disk cache
         if: runner.os == 'Linux'
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/bazel-disk
           key: bazel-cli-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'cli/**/BUILD.bazel', 'cli/**/*.bzl') }}

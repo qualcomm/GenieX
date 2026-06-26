@@ -80,7 +80,7 @@ jobs:
           version_tag: ${{ inputs.version_tag }}
 
       - name: Restore ccache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/.ccache
           key: ccache-sdk-${{ matrix.platform }}-${{ github.sha }}
@@ -96,7 +96,7 @@ jobs:
       # No restore-keys — a source change forces a clean rebuild instead of a
       # fuzzy restore that would re-trigger the staleness.
       - name: Restore cargo target
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             sdk/model-manager/target
@@ -128,7 +128,7 @@ jobs:
       # configure-time inputs; a change there mints a new entry, while
       # restore-keys lets unchanged-config runs reuse the previous tree.
       - name: Restore CMake build dir
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: sdk/build-${{ matrix.preset }}
           key: cmake-build-${{ matrix.platform }}-${{ steps.tc.outputs.tag }}-${{ hashFiles('sdk/CMakeLists.txt', 'sdk/**/CMakeLists.txt', 'sdk/CMakePresets.json', 'sdk/cmake/**', 'sdk/patches/**', '.gitmodules', 'third-party/**/CMakeLists.txt', 'third-party/**/*.cmake', 'third-party/**/cmake/**') }}-${{ github.sha }}
