@@ -236,6 +236,32 @@ jobs:
         if: matrix.platform == 'windows-arm64'
         uses: ./.github/actions/setup-vcvars
 
+      # TEMPORARY (remove after one run): the windows-arm64 runner is
+      # self-hosted, so sdk/build-* persists across runs. The qualcomm/nexa-sdk
+      # -> qualcomm/GenieX rename moved the checkout path, leaving a stale
+      # CMakeCache.txt that points at the old c:/a/nexa-sdk/... source dir and
+      # makes cmake configure hard-error. Delete any such stale build dir once,
+      # then this step (and its PR) should be reverted.
+      - name: One-time stale CMake build-dir cleanup (Windows)
+        if: matrix.platform == 'windows-arm64'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          Get-ChildItem -Path "sdk" -Directory -Filter "build-*" -ErrorAction SilentlyContinue | ForEach-Object {
+            $cacheFile = Join-Path $_.FullName "CMakeCache.txt"
+            if (Test-Path $cacheFile) {
+              $cachedSrc = (Select-String -Path $cacheFile -Pattern "^CMAKE_HOME_DIRECTORY:" | Select-Object -First 1)
+              $cachedSrc = if ($cachedSrc) { (($cachedSrc.Line -split "=", 2)[1]) -replace "\\", "/" } else { "" }
+              $currentSrc = (Resolve-Path "sdk").Path -replace "\\", "/"
+              if ($cachedSrc -and ($cachedSrc -ne $currentSrc)) {
+                Write-Host "Removing stale build dir $($_.FullName): cached source '$cachedSrc' != current '$currentSrc'"
+                Remove-Item -Recurse -Force $_.FullName
+              } else {
+                Write-Host "Keeping $($_.FullName): cached source '$cachedSrc' matches '$currentSrc'"
+              }
+            }
+          }
+
       - name: Build SDK (Windows)
         if: matrix.platform == 'windows-arm64'
         shell: powershell
