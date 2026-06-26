@@ -123,7 +123,7 @@ jobs:
         if: >-
           steps.meta.outputs.platforms == 'both' ||
           steps.meta.outputs.platforms == matrix.platform
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
