@@ -124,7 +124,7 @@ adb shell "cd /data/local/tmp/geniex && \
   ./bin/geniex_test_llm"
 ```
 
-The Android demo app is no longer hosted in this repo — it lives in [`qcom-ai-hub/ai-hub-apps`](https://github.com/qcom-ai-hub/ai-hub-apps). Build the AAR here, then point the demo app at it.
+The Android demo app is no longer hosted in this repo — it lives in [`qualcomm/ai-hub-apps`](https://github.com/qualcomm/ai-hub-apps/tree/main/apps/geniex_chat_android). Build the AAR here, then point the demo app at it.
 
 ## Build and run the CLI
 
