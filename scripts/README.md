@@ -152,8 +152,7 @@ dependencies {
 
 **Run** — fastest path is the sample app (chat UI, model picker for GGUF + Qualcomm AI Hub bundles, VLM support):
 
-- 📱 Install the [demo APK](https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-demo.apk), or
-- ▶️ open [`examples/android/`](examples/android) in Android Studio and hit **Run**.
+The Android demo app lives in [`qcom-ai-hub/ai-hub-apps`](https://github.com/qcom-ai-hub/ai-hub-apps). Clone it, open the `geniex` sample in Android Studio, and hit **Run**.
 
 📖 **Docs** — [Install](https://geniex.aihub.qualcomm.com/en/run/android/install) · [Quickstart](https://geniex.aihub.qualcomm.com/en/run/android/quickstart) · [API reference](https://geniex.aihub.qualcomm.com/en/run/android/api-reference)
 

@@ -124,12 +124,7 @@ adb shell "cd /data/local/tmp/geniex && \
   ./bin/geniex_test_llm"
 ```
 
-Build the Android app (requires Android SDK + Gradle on the host — installing them inside the container is possible but significantly more complex):
-
-```bash
-cd examples/android
-gradle build
-```
+The Android demo app is no longer hosted in this repo — it lives in [`qcom-ai-hub/ai-hub-apps`](https://github.com/qcom-ai-hub/ai-hub-apps). Build the AAR here, then point the demo app at it.
 
 ## Build and run the CLI
 
