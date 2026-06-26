@@ -23,9 +23,9 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 
-	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
+	geniex_sdk "github.com/qualcomm/nexa-sdk/bindings/go"
+	"github.com/qualcomm/nexa-sdk/cli/internal/render"
+	"github.com/qualcomm/nexa-sdk/cli/internal/store"
 )
 
 // configCmd builds the `geniex config` command tree:

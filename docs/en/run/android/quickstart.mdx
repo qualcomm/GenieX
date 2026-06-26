@@ -5,7 +5,7 @@ description: "Run your first model from the GenieX Android SDK in Kotlin."
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-This page walks through running your first model from a Kotlin app, then swapping in a different model. For a complete reference app with chat UI, model picker, and VLM support, see the [sample app](https://github.com/qcom-ai-hub/geniex/tree/main/examples/android).
+This page walks through running your first model from a Kotlin app, then swapping in a different model. For a complete reference app with chat UI, model picker, and VLM support, see the [sample app](https://github.com/qualcomm/nexa-sdk/tree/main/examples/android).
 
 ## **Prerequisites**
 
@@ -155,7 +155,7 @@ The full Android snippets for importing a local GGUF model and a local Qualcomm 
 
 ## **Using the sample app**
 
-The [sample app](https://github.com/qcom-ai-hub/geniex/tree/main/examples/android) at `examples/android/` is a fully wired chat client built on top of the snippets above. A few patterns worth borrowing when you build your own UI:
+The [sample app](https://github.com/qualcomm/nexa-sdk/tree/main/examples/android) at `examples/android/` is a fully wired chat client built on top of the snippets above. A few patterns worth borrowing when you build your own UI:
 
 - **Model picker UI** — the dropdown is driven by `examples/android/app/src/main/assets/model_list.json`. Each entry pins a `model_name`, `hub`, and (for Qualcomm AI Engine Direct) a `chipset`. Edit this file to add new models without touching code.
 - **Resumable downloads with progress** — the `Progress` events from `pullFlow` carry per-file byte counts; the sample wires them straight into a `LinearProgressIndicator`.

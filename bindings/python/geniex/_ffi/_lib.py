@@ -204,5 +204,5 @@ def load_library() -> ctypes.CDLL:
         '\n'
         'The native library must be present alongside this package.\n'
         f'Set GENIEX_LIB_PATH=/path/to/lib/dir/ to point to your local build,\n'
-        'or see https://github.qualcomm.com/qcom-it-nexa-ai/geniex for build instructions.'
+        'or see https://github.com/qualcomm/nexa-sdk for build instructions.'
     )

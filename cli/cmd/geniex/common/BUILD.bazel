@@ -13,7 +13,7 @@ go_library(
         "util_linux.go",
         "util_windows.go",
     ],
-    importpath = "github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common",
+    importpath = "github.com/qualcomm/nexa-sdk/cli/cmd/geniex/common",
     visibility = ["//visibility:public"],
     deps = [
         "//bindings/go:geniex_sdk_go",

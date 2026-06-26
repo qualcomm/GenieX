@@ -5,7 +5,7 @@ description: "使用 Kotlin 运行 GenieX Android SDK 中的第一个模型。"
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-本页将指导你在 Kotlin APP中运行第一个模型，然后再换用另一个模型。如需一个完整的参考应用——包含聊天 UI、模型选择器和 VLM 支持——请参阅[示例应用](https://github.com/qcom-ai-hub/geniex/tree/main/examples/android)。
+本页将指导你在 Kotlin APP中运行第一个模型，然后再换用另一个模型。如需一个完整的参考应用——包含聊天 UI、模型选择器和 VLM 支持——请参阅[示例应用](https://github.com/qualcomm/nexa-sdk/tree/main/examples/android)。
 
 ## **前置条件**
 
@@ -230,7 +230,7 @@ val llm = LlmWrapper.builder()
 
 ## **使用示例应用**
 
-位于 `examples/android/` 的[示例应用](https://github.com/qcom-ai-hub/geniex/tree/main/examples/android)是一个完整连通的聊天客户端，构建在上述代码片段之上。当你构建自己的 UI 时，有几个值得借鉴的模式：
+位于 `examples/android/` 的[示例应用](https://github.com/qualcomm/nexa-sdk/tree/main/examples/android)是一个完整连通的聊天客户端，构建在上述代码片段之上。当你构建自己的 UI 时，有几个值得借鉴的模式：
 
 - **模型选择器 UI** —— 下拉菜单由 `examples/android/app/src/main/assets/model_list.json` 驱动。每个条目固定了一个 `model_name`、`hub`，以及一个 `chipset`（对于 Qualcomm AI Engine Direct）。编辑此文件即可添加新模型而无需改动代码。
 - **带进度的断点续传下载** —— 来自 `pullFlow` 的 `Progress` 事件携带每个文件的字节计数；示例将它们直接接入 `LinearProgressIndicator`。

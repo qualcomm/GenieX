@@ -57,13 +57,9 @@ import Feedback from "/snippets/page-feedback.mdx";
   <Accordion title="`docker pull` fails with permission / unauthorized">
     Two separate things have to be right:
 
-    1. **Registry login.** Log in to whichever registry you pull from:
+    1. **Registry login.** Docker Hub (`docker.io/qualcomm/geniex`) is public and needs no login. For the Qualcomm Container Registry, log in first:
 
        ```bash bash
-       # GitHub Container Registry — PAT (classic) with at least read:packages:
-       export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxx
-       docker login ghcr.io -u <your-github-username> -p "$GITHUB_TOKEN"
-
        # Qualcomm Container Registry:
        docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
        ```

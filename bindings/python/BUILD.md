@@ -41,9 +41,9 @@ is skipped entirely. See GH #538.
 
 ```bash
 # From GitHub Release (canonical) — pick the distribution you need
-pip install https://github.com/qcom-ai-hub/geniex/releases/download/v0.0.3-alpha.1/geniex-0.0.3a1.tar.gz
-pip install https://github.com/qcom-ai-hub/geniex/releases/download/v0.0.3-alpha.1/geniex_llama_cpp-0.0.3a1.tar.gz
-pip install https://github.com/qcom-ai-hub/geniex/releases/download/v0.0.3-alpha.1/geniex_qairt-0.0.3a1.tar.gz
+pip install https://github.com/qualcomm/nexa-sdk/releases/download/v0.0.3-alpha.1/geniex-0.0.3a1.tar.gz
+pip install https://github.com/qualcomm/nexa-sdk/releases/download/v0.0.3-alpha.1/geniex_llama_cpp-0.0.3a1.tar.gz
+pip install https://github.com/qualcomm/nexa-sdk/releases/download/v0.0.3-alpha.1/geniex_qairt-0.0.3a1.tar.gz
 
 # From TestPyPI (pre-release tags are auto-published)
 pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex

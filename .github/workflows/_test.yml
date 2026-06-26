@@ -45,7 +45,11 @@ jobs:
       fail-fast: false
       matrix:
         platform: ${{ fromJSON(inputs.platforms) }}
-    runs-on: ${{ matrix.platform }}
+    # platform is the canonical id (matches sdk-<platform> artifacts and the
+    # windows-arm64 step conditions below); map it to a real runner label.
+    # linux tests run the arm64 SDK binary, so they need an arm64 host
+    # (ubuntu-24.04-arm), not the x86 ubuntu-latest.
+    runs-on: ${{ matrix.platform == 'windows-arm64' && 'windows-11-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 45
     env:
       # Surface SDK-side trace logs to stderr in every cell so a failed

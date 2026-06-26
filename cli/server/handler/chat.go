@@ -33,10 +33,10 @@ import (
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/shared/constant"
 
-	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
-	"github.com/qcom-it-nexa-ai/geniex/cli/server/service"
-	"github.com/qcom-it-nexa-ai/geniex/cli/server/utils"
+	geniex_sdk "github.com/qualcomm/nexa-sdk/bindings/go"
+	"github.com/qualcomm/nexa-sdk/cli/internal/types"
+	"github.com/qualcomm/nexa-sdk/cli/server/service"
+	"github.com/qualcomm/nexa-sdk/cli/server/utils"
 )
 
 // =============== request types ===============

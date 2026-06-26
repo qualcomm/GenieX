@@ -19,9 +19,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/server/docs"
-	"github.com/qcom-it-nexa-ai/geniex/cli/server/handler"
-	"github.com/qcom-it-nexa-ai/geniex/cli/server/middleware"
+	"github.com/qualcomm/nexa-sdk/cli/server/docs"
+	"github.com/qualcomm/nexa-sdk/cli/server/handler"
+	"github.com/qualcomm/nexa-sdk/cli/server/middleware"
 )
 
 func RegisterRoot(r *gin.Engine) {

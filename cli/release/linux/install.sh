@@ -16,7 +16,7 @@
 # Installer for the GenieX CLI on Linux ARM64.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/qcom-ai-hub/geniex/main/cli/release/linux/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/qualcomm/nexa-sdk/main/cli/release/linux/install.sh | sh
 #   curl -fsSL <url> | sh -s -- --version v0.4.0
 #   curl -fsSL <url> | sh -s -- --prefix /opt/geniex
 
@@ -28,7 +28,7 @@ set -eu
 
 S3_BASE="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex"
 ASSET_STEM="geniex-cli-linux-arm64"
-ISSUE_URL="https://github.com/qcom-ai-hub/geniex/issues"
+ISSUE_URL="https://github.com/qualcomm/nexa-sdk/issues"
 
 VERSION=""
 PREFIX=""

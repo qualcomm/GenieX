@@ -142,7 +142,7 @@ hf download yichqian/geniex-qairt-models --local-dir=geniex-qairt-models
 
 ## Running a prebuilt CI release (Windows on Snapdragon)
 
-Every `v*` tag publishes the Windows ARM64 installer on [the Releases page](https://github.com/qcom-ai-hub/geniex/releases). Download both:
+Every `v*` tag publishes the Windows ARM64 installer on [the Releases page](https://github.com/qualcomm/nexa-sdk/releases). Download both:
 
 - `geniex-cli-setup.exe` — the installer
 - `geniex-sdk-windows-arm64-<tag>.zip` — the SDK
@@ -211,7 +211,7 @@ Upstream background: `third-party/llama.cpp/docs/backend/snapdragon/windows.md`.
 
 Before `serve` / `run` / `infer` start, geniex consults a cached "latest release" entry and prints a one-line notice if a newer version exists, at most once per 8 h. The cache is refreshed in the background every 24 h.
 
-Because the release repo (`qcom-ai-hub/geniex`) is private, the background refresh needs a GitHub PAT with `repo:read`. Supply it via either env var — `GENIEX_GITHUB_TOKEN` wins if both are set:
+Because the release repo (`qualcomm/nexa-sdk`) is private, the background refresh needs a GitHub PAT with `repo:read`. Supply it via either env var — `GENIEX_GITHUB_TOKEN` wins if both are set:
 
 ```bash
 export GENIEX_GITHUB_TOKEN=ghp_…   # geniex-specific

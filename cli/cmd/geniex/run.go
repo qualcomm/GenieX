@@ -27,10 +27,10 @@ import (
 	"github.com/openai/openai-go/v3/packages/ssestream"
 	"github.com/spf13/cobra"
 
-	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
-	"github.com/qcom-it-nexa-ai/geniex/cli/cmd/geniex/common"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
+	geniex_sdk "github.com/qualcomm/nexa-sdk/bindings/go"
+	"github.com/qualcomm/nexa-sdk/cli/cmd/geniex/common"
+	"github.com/qualcomm/nexa-sdk/cli/internal/config"
+	"github.com/qualcomm/nexa-sdk/cli/internal/render"
 )
 
 // tagServerError tags transport-layer dial errors as ErrServerUnreachable

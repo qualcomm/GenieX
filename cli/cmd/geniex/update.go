@@ -32,13 +32,13 @@ import (
 	"golang.org/x/mod/semver"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/downloader"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
+	"github.com/qualcomm/nexa-sdk/cli/internal/downloader"
+	"github.com/qualcomm/nexa-sdk/cli/internal/render"
+	"github.com/qualcomm/nexa-sdk/cli/internal/store"
 )
 
 const (
-	githubAPIURL = "https://api.github.com/repos/qcom-ai-hub/geniex/releases/latest"
+	githubAPIURL = "https://api.github.com/repos/qualcomm/nexa-sdk/releases/latest"
 	userAgent    = "GenieX-Updater/1.0"
 
 	updateCheckInterval  = 24 * time.Hour

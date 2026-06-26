@@ -21,9 +21,9 @@ import (
 	"sync"
 	"time"
 
-	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/types"
+	geniex_sdk "github.com/qualcomm/nexa-sdk/bindings/go"
+	"github.com/qualcomm/nexa-sdk/cli/internal/config"
+	"github.com/qualcomm/nexa-sdk/cli/internal/types"
 )
 
 // KeepAliveGet retrieves a model from the keepalive cache or creates it if not found

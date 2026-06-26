@@ -18,7 +18,7 @@
 # independently of install.sh.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/qcom-ai-hub/geniex/main/cli/release/linux/check.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/qualcomm/nexa-sdk/main/cli/release/linux/check.sh | sh
 
 # Wrap the whole script in a brace group so a partial download from
 # `curl | sh` cannot execute a truncated tail.

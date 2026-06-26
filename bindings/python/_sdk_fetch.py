@@ -49,7 +49,7 @@ from typing import Literal
 
 Backend = Literal['llama-cpp', 'qairt']
 
-DEFAULT_BASE_URL = 'https://github.com/qcom-ai-hub/geniex/releases/download'
+DEFAULT_BASE_URL = 'https://github.com/qualcomm/nexa-sdk/releases/download'
 DEFAULT_S3_BASE_URL = 'https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex'
 
 # (sys.platform, platform.machine().lower()) -> release asset platform triple.

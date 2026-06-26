@@ -42,7 +42,7 @@ AAR will compile.
 ### 1. Clone and check out
 
 ```bash
-git clone github-work:qcom-ai-hub/geniex.git
+git clone github-work:qualcomm/nexa-sdk.git
 cd geniex
 git fetch origin perry/refactor/android-app-align
 git checkout perry/refactor/android-app-align
@@ -61,7 +61,7 @@ docker run --rm -u $(id -u):$(id -g) \
     --workdir /workspace/sdk \
     -e CCACHE_DIR=/workspace/.ccache \
     --platform linux/amd64 \
-    ghcr.io/qcom-ai-hub/geniex-toolchain-android:v0.0.1 \
+    docker.io/qualcomm/geniex-toolchain-android:v0.0.1 \
     bash -c 'cmake --preset arm64-android-snapdragon-debug -B build-android . \
       && cmake --build build-android -j \
       && cmake --install build-android --prefix pkg-geniex'

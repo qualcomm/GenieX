@@ -21,8 +21,8 @@ import (
 
 	"github.com/lmittmann/tint"
 
-	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/config"
+	geniex_sdk "github.com/qualcomm/nexa-sdk/bindings/go"
+	"github.com/qualcomm/nexa-sdk/cli/internal/config"
 )
 
 const (

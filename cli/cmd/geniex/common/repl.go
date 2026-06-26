@@ -21,9 +21,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/readline"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/render"
-	"github.com/qcom-it-nexa-ai/geniex/cli/internal/store"
+	"github.com/qualcomm/nexa-sdk/cli/internal/readline"
+	"github.com/qualcomm/nexa-sdk/cli/internal/render"
+	"github.com/qualcomm/nexa-sdk/cli/internal/store"
 )
 
 var baseHelp = [][2]string{

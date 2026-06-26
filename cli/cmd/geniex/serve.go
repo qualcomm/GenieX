@@ -18,8 +18,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
-	"github.com/qcom-it-nexa-ai/geniex/cli/server"
+	geniex_sdk "github.com/qualcomm/nexa-sdk/bindings/go"
+	"github.com/qualcomm/nexa-sdk/cli/server"
 )
 
 // serve creates a command to start the GenieX server.

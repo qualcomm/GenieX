@@ -57,13 +57,9 @@ import Feedback from "/snippets/page-feedback.mdx";
   <Accordion title="`docker pull` 报权限错误 / 未授权">
     需要同时满足两点：
 
-    1. **镜像仓库登录。** 登录你拉取所用的仓库：
+    1. **镜像仓库登录。** Docker Hub（`docker.io/qualcomm/geniex`）是公开的，无需登录。Qualcomm Container Registry 则需先登录：
 
        ```bash bash
-       # GitHub Container Registry — PAT (classic) with at least read:packages:
-       export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxx
-       docker login ghcr.io -u <your-github-username> -p "$GITHUB_TOKEN"
-
        # Qualcomm Container Registry:
        docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
        ```

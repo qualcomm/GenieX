@@ -22,7 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v3"
 
-	geniex_sdk "github.com/qcom-it-nexa-ai/geniex/bindings/go"
+	geniex_sdk "github.com/qualcomm/nexa-sdk/bindings/go"
 )
 
 func ListModels(c *gin.Context) {

@@ -9,7 +9,7 @@
 ### The easiest way to run frontier LLMs & VLMs locally on Qualcomm devices
 
 [![Docs](https://img.shields.io/badge/docs-geniex.aihub.qualcomm.com-2A2AEA?style=flat-square&logo=readthedocs&logoColor=white)](https://geniex.aihub.qualcomm.com)
-[![Release](https://img.shields.io/github/v/release/qcom-ai-hub/geniex?style=flat-square&color=2A2AEA&label=release)](https://github.com/qcom-ai-hub/geniex/releases)
+[![Release](https://img.shields.io/github/v/release/qualcomm/nexa-sdk?style=flat-square&color=2A2AEA&label=release)](https://github.com/qualcomm/nexa-sdk/releases)
 [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue?style=flat-square)](LICENSE)
 [![Slack](https://img.shields.io/badge/Slack-join%20the%20community-4A154B?style=flat-square&logo=slack&logoColor=white)](https://app.slack.com/client/T06LGRG1MG8/C06KMD15QH4)
 
@@ -50,7 +50,7 @@ Pick your interface below. Each one follows the same three steps — **Install**
 
 **Install**
 
-- **Windows ARM64** — [download the installer](https://github.com/qcom-ai-hub/geniex/releases), run it, then open a new terminal.
+- **Windows ARM64** — [download the installer](https://github.com/qualcomm/nexa-sdk/releases), run it, then open a new terminal.
 - **Linux ARM64** — one line, no `sudo`:
   ```bash
   curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
@@ -164,7 +164,7 @@ dependencies {
 **Install**
 
 ```bash
-docker pull ghcr.io/qcom-ai-hub/geniex-cli:latest
+docker pull docker.io/qualcomm/geniex:latest
 ```
 
 **Run** — the container wraps the CLI, so `geniex infer …` works exactly as above.
@@ -214,15 +214,15 @@ Contributions are welcome! Before opening a PR, please read **[CONTRIBUTING.md](
 Questions, ideas, or want to show off what you built? Come say hi.
 
 - 💬 [**Slack**](https://app.slack.com/client/T06LGRG1MG8/C06KMD15QH4) — ask questions and chat with the community in real time.
-- 🐛 [**GitHub Issues**](https://github.com/qcom-ai-hub/geniex/issues) — report a bug or request a feature.
+- 🐛 [**GitHub Issues**](https://github.com/qualcomm/nexa-sdk/issues) — report a bug or request a feature.
 - 🔗 [**LinkedIn**](https://www.linkedin.com/company/qualcommaihub) — follow Qualcomm AI Hub for news and updates.
 
 ### Contributors
 
 Thanks to everyone building GenieX 💙
 
-<a href="https://github.com/qcom-ai-hub/geniex/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=qcom-ai-hub/geniex&max=20" alt="GenieX contributors" />
+<a href="https://github.com/qualcomm/nexa-sdk/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=qualcomm/nexa-sdk&max=20" alt="GenieX contributors" />
 </a>
 
 ---
