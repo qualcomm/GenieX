@@ -78,7 +78,6 @@ jobs:
           # avoids "missing base" failures on multi-commit PRs.
           fetch-depth: 0
           submodules: false
-          token: ${{ secrets.CLONE_PAT }}
 
       - name: Resolve changed files
         id: files

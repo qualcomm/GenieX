@@ -1,219 +1,231 @@
-<div align="center" style="text-decoration: none;">
-  <p>
-    <a href="https://www.producthunt.com/products/nexasdk-for-mobile?embed=true&utm_source=badge-top-post-badge&utm_medium=badge&utm_campaign=badge-nexasdk-for-mobile" target="_blank" rel="noopener noreferrer">
-        <img alt="NexaSDK for Mobile - #1 Product of the Day" width="180" height="39" src="https://api.producthunt.com/widgets/embed-image/v1/top-post-badge.svg?post_id=1049998&theme=dark&period=daily&t=1765991451976">
-    </a>
-  </p>
-  <p>
-    <a href="https://docs.nexa.ai">
-        <img src="https://img.shields.io/badge/docs-website-brightgreen?logo=readthedocs" alt="Documentation">
-    </a>
-  </p>
+<div align="center">
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="GenieX-Logo-Hor-1-White.png" />
+  <source media="(prefers-color-scheme: light)" srcset="GenieX-Logo-Hor-1-Black.png" />
+  <img src="GenieX-Logo-Hor-1-Black.png" width="420" alt="Qualcomm AI Hub GenieX" />
+</picture>
+
+### The easiest way to run frontier LLMs & VLMs locally on Qualcomm devices
+
+[![Docs](https://img.shields.io/badge/docs-geniex.aihub.qualcomm.com-2A2AEA?style=flat-square&logo=readthedocs&logoColor=white)](https://geniex.aihub.qualcomm.com)
+[![Release](https://img.shields.io/github/v/release/qualcomm/nexa-sdk?style=flat-square&color=2A2AEA&label=release)](https://github.com/qualcomm/nexa-sdk/releases)
+[![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue?style=flat-square)](LICENSE)
+[![Slack](https://img.shields.io/badge/Slack-join%20the%20community-4A154B?style=flat-square&logo=slack&logoColor=white)](https://app.slack.com/client/T06LGRG1MG8/C06KMD15QH4)
+
+[**Documentation**](https://geniex.aihub.qualcomm.com) · [**Quickstart**](#quickstart) · [**Models**](#models) · [**Community**](#-community--contact)
+
 </div>
 
-# NexaSDK
+---
 
-**NexaSDK lets you build the smartest and fastest on-device AI with minimum energy.** It is a highly performant local inference framework that runs the latest multimodal AI models locally on NPU, GPU, and CPU - across Android, Windows, and Linux devices with a few lines of code.
+GenieX is an **on-device Gen AI inference runtime for Qualcomm devices**. Bring  almost any GGUF model from Hugging Face — or a pre-compiled bundle from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) — and run it locally on the **Hexagon NPU, Adreno GPU, or CPU** in a few lines of code. One C SDK underneath, exposed through a CLI, Python, Kotlin/Java, Docker, and an OpenAI-compatible server. It is the community version of Qualcomm GENIE.
 
-NexaSDK supported latest models **weeks or months before anyone else** — Qwen3-VL, DeepSeek-OCR, Gemma3n (Vision), and more.
+<div align="center">
+  <img src="docs/Mintlify-image/geniex_arch.png" width="820" alt="GenieX architecture: CLI, Python, Java, Docker, and OpenAI-compatible Serve interfaces sit on a single GenieX SDK, which dispatches to the llama.cpp runtime (GGML over CPU / GPU / Hexagon HTP kernels) or the Qualcomm AI Engine Direct runtime on the NPU — across Windows, Android, and Linux." />
+</div>
 
-> ⭐ **Star this repo** to keep up with exciting updates and new releases about latest on-device AI capabilities.
+## Supported platforms
 
-## 🏆 Recognized Milestones
+GenieX runs **only on Qualcomm Snapdragon**. Find your platform, then jump straight to the interface you want to use.
 
-- **Qualcomm** featured us **3 times** in official blogs.
-  - [Innovating Multimodal AI on Qualcomm Hexagon NPU](https://www.qualcomm.com/developer/blog/2025/09/omnineural-4b-nexaml-qualcomm-hexagon-npu).
-  - [First-ever Day-0 model support on Qualcomm Hexagon NPU for compute and mobile platforms, Auto and IoT](https://www.qualcomm.com/developer/blog/2025/10/granite-4-0-to-the-edge-on-device-ai-for-real-world-performance).
-  - [A simple way to bring on-device AI to smartphones with Snapdragon](https://www.qualcomm.com/developer/blog/2025/11/nexa-ai-for-android-simple-way-to-bring-on-device-ai-to-smartphones-with-snapdragon)
+| Platform | Example devices | Jump to a quickstart |
+| --- | --- | --- |
+| 🪟 **Windows ARM64** *(Compute)* | Snapdragon X · X Elite | [CLI](#cli) · [Python](#python) · [Local server](#openai-compatible-server) |
+| 🤖 **Android** *(Mobile)* | Snapdragon 8 Elite · 8 Elite Gen 5 | [Android SDK](#android-kotlin--java) |
+| 🐧 **Linux ARM64** *(IoT)* | Dragonwing QCS9075 | [CLI](#cli) · [Docker](#docker) · [Python](#python) |
 
-## 🚀 Quick Start
 
-| Platform        | Links                                                                                     |
-| --------------- | ----------------------------------------------------------------------------------------- |
-| 🖥️ CLI          | [Quick Start](#-cli) ｜ [Docs](https://docs.nexa.ai/en/nexa-sdk-go/NexaCLI)               |
-| 🐍 Python       | [Quick Start](#-python-sdk) ｜ [Docs](https://docs.nexa.ai/en/nexa-sdk-python/overview)   |
-| 🤖 Android      | [Quick Start](#-android-sdk) ｜ [Docs](https://docs.nexa.ai/en/nexa-sdk-android/overview) |
-| 🐳 Linux Docker | [Quick Start](#-linux-docker) ｜ [Docs](https://docs.nexa.ai/en/nexa-sdk-docker/overview) |
+> No device on hand? Spin up a remote session on [Qualcomm Device Cloud](https://qdc.qualcomm.com/).
 
 ---
 
-### 🖥️ CLI
+## Quickstart
 
-**Download:**
+Pick your interface below. Each one follows the same three steps — **Install**, **Run**, and **Docs** — and shows both runtimes: a **GGUF** model from Hugging Face (`llama_cpp`) and a **pre-compiled bundle** from Qualcomm AI Hub (`qairt`, NPU).
 
-| Windows                                                                                                  | Linux                                                                                        |
-| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [arm64 (Qualcomm NPU)](https://public-storage.nexa4ai.com/nexa_sdk/downloads/nexa-cli_windows_arm64.exe) | [arm64](https://github.com/NexaAI/nexa-sdk/releases/latest/download/nexa-cli_linux_arm64.sh) |
-| [x64](https://public-storage.nexa4ai.com/nexa_sdk/downloads/nexa-cli_windows_x86_64.exe) | [x64](https://github.com/NexaAI/nexa-sdk/releases/latest/download/nexa-cli_linux_x86_64.sh)  |
+### CLI
 
+![Windows ARM64](https://img.shields.io/badge/Windows%20ARM64-0078D6?style=flat-square&logo=windows&logoColor=white) ![Linux ARM64](https://img.shields.io/badge/Linux%20ARM64-FCC624?style=flat-square&logo=linux&logoColor=black)
 
+**Install**
 
-**NPU Access Token (required for NPU models):**
+- **Windows ARM64** — [download the installer](https://github.com/qualcomm/nexa-sdk/releases), run it, then open a new terminal.
+- **Linux ARM64** — one line, no `sudo`:
+  ```bash
+  curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
+  ```
 
-> **Note:** Our previous token validation service has been deprecated. For any NPU usage, simply set the access token below — no additional registration or validation is needed.
-
-For Windows:
-```shell
-$env:NEXA_TOKEN="key/eyJhY2NvdW50Ijp7ImlkIjoiNDI1Y2JiNWQtNjk1NC00NDYxLWJiOWMtYzhlZjBiY2JlYzA2In0sInByb2R1Y3QiOnsiaWQiOiJkYjI4ZTNmYy1mMjU4LTQ4ZTctYmNkYi0wZmE4YjRkYTJhNWYifSwicG9saWN5Ijp7ImlkIjoiMmYyOWQyMjctNDVkZS00MzQ3LTg0YTItMjUwNTYwMmEzYzMyIiwiZHVyYXRpb24iOjMxMTA0MDAwMH0sInVzZXIiOnsiaWQiOiI3MGE2YzA4NS1jYjc3LTQ3YmEtOWUxNC1lNjFjYTA2ZThmZjUiLCJlbWFpbCI6ImFsYW40QG5leGE0YWkuY29tIn0sImxpY2Vuc2UiOnsiaWQiOiI4OTlhZGQ2NS1lOTI2LTQ2M2ItODllNi0xMjc0NzM3ZjA1MzYiLCJjcmVhdGVkIjoiMjAyNS0wOS0wNlQwMDo1MzozNi4yMDNaIiwiZXhwaXJ5IjoiMjAzNS0xMi0zMVQyMzo1OTo1OS4wMDBaIn19.BXoUHIEzFMuuZbBT7RvsKO9nTi5950C6kHO64blF7XBnfKvZ6ClA8a55tmszI1ZWdngzpNFTzMM5PV5euuzMCA=="
-```
-
-For Linux / Android adb shell:
-```shell
-export NEXA_TOKEN="key/eyJhY2NvdW50Ijp7ImlkIjoiNDI1Y2JiNWQtNjk1NC00NDYxLWJiOWMtYzhlZjBiY2JlYzA2In0sInByb2R1Y3QiOnsiaWQiOiJkYjI4ZTNmYy1mMjU4LTQ4ZTctYmNkYi0wZmE4YjRkYTJhNWYifSwicG9saWN5Ijp7ImlkIjoiMmYyOWQyMjctNDVkZS00MzQ3LTg0YTItMjUwNTYwMmEzYzMyIiwiZHVyYXRpb24iOjMxMTA0MDAwMH0sInVzZXIiOnsiaWQiOiI3MGE2YzA4NS1jYjc3LTQ3YmEtOWUxNC1lNjFjYTA2ZThmZjUiLCJlbWFpbCI6ImFsYW40QG5leGE4YWkuY29tIn0sImxpY2Vuc2UiOnsiaWQiOiI4OTlhZGQ2NS1lOTI2LTQ2M2ItODllNi0xMjc0NzM3ZjA1MzYiLCJjcmVhdGVkIjoiMjAyNS0wOS0wNlQwMDo1MzozNi4yMDNaIiwiZXhwaXJ5IjoiMjAzNS0xMi0zMVQyMzo1OTo1OS4wMDBaIn19.BXoUHIEzFMuuZbBT7RvsKO9nTi5950C6kHO64blF7XBnfKvZ6ClA8a55tmszI1ZWdngzpNFTzMM5PV5euuzMCA=="
-```
-
-**Run your first model:**
+**Run** — chat with any model in one line (drag in an image for VLMs):
 
 ```bash
-# Chat with Qwen3
-nexa infer ggml-org/Qwen3-1.7B-GGUF
+# GGUF from Hugging Face → llama.cpp (NPU / GPU / CPU)
+geniex infer unsloth/Qwen3-0.6B-GGUF -p "Explain on-device AI in one sentence."
 
-# Multimodal: drag images into the CLI
-nexa infer NexaAI/Qwen3-VL-4B-Instruct-GGUF
-
-# NPU (Windows arm64 with Snapdragon X Elite)
-nexa infer NexaAI/OmniNeural-4B
+# Pre-compiled bundle from Qualcomm AI Hub → Qualcomm AI Engine Direct (NPU)
+geniex infer ai-hub-models/Qwen3-4B -p "Explain on-device AI in one sentence."
 ```
 
-- **Models:** LLM, Multimodal, ASR, OCR, Rerank, Object Detection, Image Generation, Embedding
-- **Formats:** GGUF, NEXA
-- 📖 [CLI Reference Docs](https://docs.nexa.ai/en/nexa-sdk-go/NexaCLI)
+📖 **Docs** — [Install](https://geniex.aihub.qualcomm.com/en/run/cli/install) · [Quickstart](https://geniex.aihub.qualcomm.com/en/run/cli/quickstart) · [Command reference](https://geniex.aihub.qualcomm.com/en/run/cli/reference)
 
----
+### Python
 
-### 🐍 Python SDK
+![Windows ARM64](https://img.shields.io/badge/Windows%20ARM64-0078D6?style=flat-square&logo=windows&logoColor=white) ![Linux ARM64](https://img.shields.io/badge/Linux%20ARM64-FCC624?style=flat-square&logo=linux&logoColor=black)
+
+**Install**
 
 ```bash
-pip install nexaai
+pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex
+```
+
+**Run** — mirrors Hugging Face `transformers` (`from_pretrained()` → `.generate()`):
+
+```python
+# GGUF from Hugging Face → llama.cpp
+from geniex import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained("unsloth/Qwen3-0.6B-GGUF", precision="Q4_0")
+
+messages = [{"role": "user", "content": "What is 2+2?"}]
+prompt = model.tokenizer.apply_chat_template(messages, add_generation_prompt=True)
+
+for chunk in model.generate(prompt, max_new_tokens=256, stream=True):
+    print(chunk, end="", flush=True)
+
+model.close()
 ```
 
 ```python
-from nexaai import LLM, GenerationConfig, ModelConfig, LlmChatMessage
+# Pre-compiled bundle from Qualcomm AI Hub → Qualcomm AI Engine Direct (NPU)
+from geniex import AutoModelForCausalLM
 
-llm = LLM.from_(model="NexaAI/Qwen3-0.6B-GGUF", config=ModelConfig())
+model = AutoModelForCausalLM.from_pretrained("ai-hub-models/Qwen3-4B")
 
-conversation = [
-    LlmChatMessage(role="user", content="Hello, tell me a joke")
-]
-prompt = llm.apply_chat_template(conversation)
-for token in llm.generate_stream(prompt, GenerationConfig(max_tokens=100)):
-    print(token, end="", flush=True)
+messages = [{"role": "user", "content": "What is 2+2?"}]
+prompt = model.tokenizer.apply_chat_template(messages, add_generation_prompt=True)
+
+for chunk in model.generate(prompt, max_new_tokens=256, stream=True):
+    print(chunk, end="", flush=True)
+
+model.close()
 ```
 
-- **Models:** LLM, Multimodal, ASR, OCR, Rerank, Object Detection, Image Generation, Embedding
-- **Formats:** GGUF, NEXA
-- 📖 [Python SDK Docs](https://docs.nexa.ai/en/nexa-sdk-python/quickstart)
+📖 **Docs** — [Install](https://geniex.aihub.qualcomm.com/en/run/python/install) · [Quickstart](https://geniex.aihub.qualcomm.com/en/run/python/quickstart) · [API reference](https://geniex.aihub.qualcomm.com/en/run/python/api-reference)
 
----
+### OpenAI-compatible server
 
-### 🤖 Android SDK
+![Windows ARM64](https://img.shields.io/badge/Windows%20ARM64-0078D6?style=flat-square&logo=windows&logoColor=white) ![Linux ARM64](https://img.shields.io/badge/Linux%20ARM64-FCC624?style=flat-square&logo=linux&logoColor=black)
 
-Add to your `app/AndroidManifest.xml`
+**Install** — ships with the CLI ([install above](#cli)).
 
-```xml
-<application android:extractNativeLibs="true">
+**Run** — pull any model (GGUF or Qualcomm AI Hub bundle), then serve an OpenAI-compatible API:
+
+```bash
+geniex pull ai-hub-models/Qwen3-4B-Instruct-2507
+geniex serve   # serves http://127.0.0.1:18181/v1
 ```
 
-Add to your `build.gradle.kts`:
+```bash
+curl http://127.0.0.1:18181/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ai-hub-models/Qwen3-4B-Instruct-2507",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+Point any OpenAI client at `http://127.0.0.1:18181/v1` — no code changes.
+
+📖 **Docs** — [Local server guide](https://geniex.aihub.qualcomm.com/en/run/cli/local-server)
+
+### Android (Kotlin / Java)
+
+![Android](https://img.shields.io/badge/Android-3DDC84?style=flat-square&logo=android&logoColor=white)
+
+**Install** — add the SDK to your app module's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("ai.nexa:core:0.0.19")
+    implementation("com.qualcomm.qti:geniex-android:0.3.1")
 }
 ```
 
-```kotlin
-// Initialize SDK
-NexaSdk.getInstance().init(this)
+**Run** — fastest path is the sample app (chat UI, model picker for GGUF + Qualcomm AI Hub bundles, VLM support):
 
-// Load and run model
-VlmWrapper.builder()
-    .vlmCreateInput(VlmCreateInput(
-        model_name = "omni-neural",
-        model_path = "/data/data/your.app/files/models/OmniNeural-4B/files-1-1.nexa",
-        plugin_id = "npu",
-        config = ModelConfig()
-    ))
-    .build()
-    .onSuccess { vlm ->
-        vlm.generateStreamFlow("Hello!", GenerationConfig()).collect { print(it) }
-    }
-```
+The Android demo app lives in [`qualcomm/ai-hub-apps`](https://github.com/qualcomm/ai-hub-apps/tree/main). Clone it, open the `apps/geniex_chat_android` sample in Android Studio, and hit **Run**.
 
-- **Requirements:** Android minSdk 27, Qualcomm Snapdragon 8 Gen 4 Chip
-- **Models:** LLM, Multimodal, ASR, OCR, Rerank, Embedding
-- **NPU Models:** [Supported Models](https://docs.nexa.ai/en/nexa-sdk-android/overview#supported-models)
-- 📖 [Android SDK Docs](https://docs.nexa.ai/en/nexa-sdk-android/quickstart)
+📖 **Docs** — [Install](https://geniex.aihub.qualcomm.com/en/run/android/install) · [Quickstart](https://geniex.aihub.qualcomm.com/en/run/android/quickstart) · [API reference](https://geniex.aihub.qualcomm.com/en/run/android/api-reference)
 
----
+### Docker
 
-### 🐳 Linux Docker
+![Linux ARM64](https://img.shields.io/badge/Linux%20ARM64-FCC624?style=flat-square&logo=linux&logoColor=black)
+
+**Install**
 
 ```bash
-docker pull nexa4ai/nexasdk:latest
-
-export NEXA_TOKEN="your_token_here"
-docker run --rm -it --privileged \
-  -e NEXA_TOKEN \
-  nexa4ai/nexasdk:latest infer NexaAI/Granite-4.0-h-350M-NPU
+docker pull docker.io/qualcomm/geniex:latest
 ```
 
-- **Requirements:** Qualcomm Dragonwing IQ9, ARM64 systems
-- **Models:** LLM, VLM, ASR, CV, Rerank, Embedding
-- **NPU Models:** [Supported Models](https://docs.nexa.ai/en/nexa-sdk-docker/overview#supported-models)
-- 📖 [Linux Docker Docs](https://docs.nexa.ai/en/nexa-sdk-docker/quickstart)
+**Run** — the container wraps the CLI, so `geniex infer …` works exactly as above.
+
+📖 **Docs** — [Docker guide](https://geniex.aihub.qualcomm.com/en/run/linux/install)
+
+### C / C++ SDK
+
+![Windows ARM64](https://img.shields.io/badge/Windows%20ARM64-0078D6?style=flat-square&logo=windows&logoColor=white) ![Linux ARM64](https://img.shields.io/badge/Linux%20ARM64-FCC624?style=flat-square&logo=linux&logoColor=black) ![Android](https://img.shields.io/badge/Android-3DDC84?style=flat-square&logo=android&logoColor=white)
+
+**Install** — link against the single C header [`sdk/include/geniex.h`](sdk/include/geniex.h); every other interface is a thin wrapper over it.
+
+📖 **Docs** — [sdk/README.md](sdk/README.md) · [notes/build.md](notes/build.md)
 
 ---
 
-## ⚙️ Features & Comparisons
+## Models
 
-<div align="center">
+GenieX has two runtimes so you get **broad model coverage** *and* **peak Snapdragon performance** in one stack. Both LLMs and VLMs are supported.
 
-| Features                                 | **NexaSDK**                                                | **Ollama** | **llama.cpp** | **LM Studio** |
-| ---------------------------------------- | ---------------------------------------------------------- | ---------- | ------------- | ------------- |
-| NPU support                              | ✅ NPU-first                                               | ❌         | ❌            | ❌            |
-| Android SDK support                  | ✅ NPU/GPU/CPU support                                     | ⚠️         | ⚠️            | ❌            |
-| Linux support (Docker image)             | ✅                                                         | ✅         | ✅            | ❌            |
-| Day-0 model support  | ✅                                                         | ❌         | ⚠️            | ❌            |
-| Full multimodality support               | ✅ Image, Audio, Text, Embedding, Rerank, ASR, TTS         | ⚠️         | ⚠️            | ⚠️            |
-| Cross-platform support                   | ✅ Desktop, Mobile (Android), Automotive, IoT (Linux) | ⚠️         | ⚠️            | ⚠️            |
-| One line of code to run                  | ✅                                                         | ✅         | ⚠️            | ✅            |
-| OpenAI-compatible API + Function calling | ✅                                                         | ✅         | ✅            | ✅            |
+| | **llama.cpp** (`llama_cpp`) | **Qualcomm AI Engine Direct** (`qairt`) |
+| --- | --- | --- |
+| **Get models from** | [Hugging Face](https://huggingface.co/models?library=gguf) (any GGUF) | [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) (pre-compiled) |
+| **Format** | GGUF | Per-chipset bundle |
+| **Compute units** | NPU · GPU · CPU | NPU only |
+| **Best for** | Bringing your own GGUF | Highest NPU performance |
 
-<p align="center" style="margin-top:14px">
-  <i>
-      <b>Legend:</b>
-      <span title="Full support">✅ Supported</span> &nbsp; | &nbsp;
-      <span title="Partial or limited support">⚠️ Partial or limited support </span> &nbsp; | &nbsp;
-      <span title="Not Supported">❌ No</span>
-  </i>
-</p>
-</div>
 
-## 🙏 Acknowledgements
+> For llama.cpp, pick the **`Q4_0`** precision when prompted — it has the best Hexagon NPU support. See the [Models guide →](https://geniex.aihub.qualcomm.com/en/models/supported) for the full list, precisions, and how to run a local model.
 
-We would like to thank the following projects:
 
-- [ggml](https://github.com/ggml-org/ggml)
-- [mlx-lm](https://github.com/ml-explore/mlx-lm)
-- [mlx-vlm](https://github.com/Blaizzy/mlx-vlm)
-- [mlx-audio](https://github.com/Blaizzy/mlx-audio)
+## 🤝 Contributing
+
+Contributions are welcome! Before opening a PR, please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for branch naming, commit / PR title format, pre-commit checks, and the FFI-update rule for public SDK headers.
+
+| | |
+| --- | --- |
+| 🏗️ **Build** the CLI, SDK, or Python bindings | [notes/build.md](notes/build.md) |
+| ▶️ **Run** & select compute units / pull models | [notes/run.md](notes/run.md) |
+| 🏷️ **Release** — SemVer tags, channels, HTP signing | [notes/release.md](notes/release.md) |
+| 📚 **All developer docs** | [docs/README.md](docs/README.md) |
+
+
+
+## 💬 Community & Contact
+
+Questions, ideas, or want to show off what you built? Come say hi.
+
+- 💬 [**Slack**](https://app.slack.com/client/T06LGRG1MG8/C06KMD15QH4) — ask questions and chat with the community in real time.
+- 🐛 [**GitHub Issues**](https://github.com/qualcomm/nexa-sdk/issues) — report a bug or request a feature.
+- 🔗 [**LinkedIn**](https://www.linkedin.com/company/qualcommaihub) — follow Qualcomm AI Hub for news and updates.
+
+### Contributors
+
+Thanks to everyone building GenieX 💙
+
+<a href="https://github.com/qualcomm/nexa-sdk/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=qualcomm/nexa-sdk&max=20" alt="GenieX contributors" />
+</a>
+
+---
 
 ## 📄 License
 
-NexaSDK uses a dual licensing model:
-
-### CPU/GPU Components
-
-Licensed under [BSD 3-Clause License](LICENSE).
-
-### NPU Components
-
-- **Personal Use**: Free license key available from [Nexa AI Model Hub](https://sdk.nexa.ai/model). Each key activates 1 device for NPU usage.
-- **Commercial Use**: Contact [hello@nexa.ai](mailto:hello@nexa.ai) for licensing.
-
-## 🤝 Contact & Community Support
-
-Want more model support, backend support, device support or other features? We'd love to hear from you!
-
-Feel free to [submit an issue](https://github.com/NexaAI/nexa-sdk/issues) on our GitHub repository with your requests, suggestions, or feedback. Your input helps us prioritize what to build next.
+BSD 3-Clause — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
