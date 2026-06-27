@@ -22,7 +22,6 @@ classifiers = [
   "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "Topic :: Software Development :: Libraries :: Python Modules",
-  "License :: OSI Approved :: BSD License",
 ]
 
 [project.scripts]

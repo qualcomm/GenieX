@@ -82,7 +82,7 @@ use_repo(
     "com_github_lmittmann_tint",
     "com_github_mattn_go_runewidth",
     "com_github_openai_openai_go_v3",
-    "com_github_qualcomm_nexa_sdk_bindings_go",
+    "com_github_qualcomm_geniex_bindings_go",
     "com_github_schollz_progressbar_v3",
     "com_github_spf13_cobra",
     "com_github_spf13_pflag",
