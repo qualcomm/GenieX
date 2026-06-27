@@ -33,7 +33,10 @@ notebook = ["ipywidgets>=8"]
 test = ["pytest>=7.0"]
 
 [project.urls]
-# TODO: add the current GenieX-Bridge project homepage.
+Homepage = "https://github.com/qualcomm/GenieX"
+Repository = "https://github.com/qualcomm/GenieX"
+License = "https://github.com/qcom-ai-hub/geniex/blob/main/LICENSE"
+"Terms of Use" = "https://www.qualcomm.com/site/terms-of-use"
 
 [tool.setuptools]
 include-package-data = true

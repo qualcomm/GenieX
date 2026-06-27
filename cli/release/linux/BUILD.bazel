@@ -77,6 +77,9 @@ oci_image(
         "org.opencontainers.image.vendor": "Qualcomm",
         "org.opencontainers.image.licenses": "BSD-3-Clause",
         "org.opencontainers.image.url": "https://github.com/qualcomm/GenieX",
+        "org.opencontainers.image.documentation": "https://github.com/qcom-ai-hub/geniex/blob/main/LICENSE",
+        "io.qualcomm.license.url": "https://github.com/qcom-ai-hub/geniex/blob/main/LICENSE",
+        "io.qualcomm.terms-of-use.url": "https://www.qualcomm.com/site/terms-of-use",
     },
     target_compatible_with = ["@platforms//os:linux"],
     tars = [
