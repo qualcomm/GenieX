@@ -35,7 +35,7 @@ test = ["pytest>=7.0"]
 [project.urls]
 Homepage = "https://github.com/qualcomm/GenieX"
 Repository = "https://github.com/qualcomm/GenieX"
-License = "https://github.com/qcom-ai-hub/geniex/blob/main/LICENSE"
+License = "https://github.com/qualcomm/geniex/blob/main/LICENSE"
 "Terms of Use" = "https://www.qualcomm.com/site/terms-of-use"
 
 [tool.setuptools]

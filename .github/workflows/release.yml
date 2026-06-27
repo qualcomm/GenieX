@@ -502,7 +502,7 @@ jobs:
           <name>${ARTIFACT_ID}</name>
           <description>GenieX Android AAR - multi-platform AI inference runtime (Snapdragon / Hexagon). Subject to Qualcomm Terms of Use: https://www.qualcomm.com/site/terms-of-use</description>
           <url>https://github.com/qualcomm/GenieX</url>
-          <licenses><license><name>BSD 3-Clause License</name><url>https://github.com/qcom-ai-hub/geniex/blob/main/LICENSE</url><distribution>repo</distribution></license><license><name>Qualcomm Terms of Use</name><url>https://www.qualcomm.com/site/terms-of-use</url><distribution>repo</distribution></license></licenses>
+          <licenses><license><name>BSD 3-Clause License</name><url>https://github.com/qualcomm/geniex/blob/main/LICENSE</url><distribution>repo</distribution></license><license><name>Qualcomm Terms of Use</name><url>https://www.qualcomm.com/site/terms-of-use</url><distribution>repo</distribution></license></licenses>
           <developers><developer><id>qualcomm-aisw</id><name>Qualcomm AISW</name><organization>Qualcomm</organization><organizationUrl>https://www.qualcomm.com</organizationUrl></developer></developers>
           <scm><connection>scm:git:git://github.com/qualcomm/GenieX.git</connection><developerConnection>scm:git:ssh://github.com/qualcomm/GenieX.git</developerConnection><url>https://github.com/qualcomm/GenieX</url></scm>
           </project>

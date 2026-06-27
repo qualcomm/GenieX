@@ -194,6 +194,6 @@ the sdist, and the TestPyPI smoke-test workflow.
 
 ## License
 
-BSD 3-Clause — see [LICENSE](https://github.com/qcom-ai-hub/geniex/blob/main/LICENSE).
+BSD 3-Clause — see [LICENSE](https://github.com/qualcomm/geniex/blob/main/LICENSE).
 
 Use of this package is also subject to Qualcomm's [Terms of Use](https://www.qualcomm.com/site/terms-of-use).
