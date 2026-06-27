@@ -22,7 +22,7 @@
 GenieX is an **on-device Gen AI inference runtime for Qualcomm devices**. Bring  almost any GGUF model from Hugging Face — or a pre-compiled bundle from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) — and run it locally on the **Hexagon NPU, Adreno GPU, or CPU** in a few lines of code. One C SDK underneath, exposed through a CLI, Python, Kotlin/Java, Docker, and an OpenAI-compatible server. It is the community version of Qualcomm GENIE.
 
 <div align="center">
-  <img src="docs/Mintlify-image/geniex_arch.png" width="820" alt="GenieX architecture: CLI, Python, Java, Docker, and OpenAI-compatible Serve interfaces sit on a single GenieX SDK, which dispatches to the llama.cpp runtime (GGML over CPU / GPU / Hexagon HTP kernels) or the Qualcomm AI Engine Direct runtime on the NPU — across Windows, Android, and Linux." />
+  <img src="docs/Mintlify-image/geniex_arch_v2.png" width="820" alt="GenieX architecture: CLI, Python, Java, Docker, and OpenAI-compatible Serve interfaces sit on a single GenieX SDK, which dispatches to the llama.cpp runtime (GGML over CPU / GPU / Hexagon HTP kernels) or the Qualcomm AI Engine Direct runtime on the NPU — across Windows, Android, and Linux." />
 </div>
 
 ## Supported platforms
@@ -60,10 +60,10 @@ Pick your interface below. Each one follows the same three steps — **Install**
 
 ```bash
 # GGUF from Hugging Face → llama.cpp (NPU / GPU / CPU)
-geniex infer unsloth/Qwen3-0.6B-GGUF -p "Explain on-device AI in one sentence."
+geniex infer google/gemma-4-E4B-it-qat-q4_0-gguf
 
 # Pre-compiled bundle from Qualcomm AI Hub → Qualcomm AI Engine Direct (NPU)
-geniex infer ai-hub-models/Qwen3-4B -p "Explain on-device AI in one sentence."
+geniex infer ai-hub-models/Qwen2.5-VL-7B-Instruct
 ```
 
 📖 **Docs** — [Install](https://geniex.aihub.qualcomm.com/en/run/cli/install) · [Quickstart](https://geniex.aihub.qualcomm.com/en/run/cli/quickstart) · [Command reference](https://geniex.aihub.qualcomm.com/en/run/cli/reference)
@@ -84,7 +84,7 @@ pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/
 # GGUF from Hugging Face → llama.cpp
 from geniex import AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("unsloth/Qwen3-0.6B-GGUF", precision="Q4_0")
+model = AutoModelForCausalLM.from_pretrained("unsloth/Qwen3.5-2B-GGUF", precision="Q4_0")
 
 messages = [{"role": "user", "content": "What is 2+2?"}]
 prompt = model.tokenizer.apply_chat_template(messages, add_generation_prompt=True)
@@ -152,7 +152,7 @@ dependencies {
 
 **Run** — fastest path is the sample app (chat UI, model picker for GGUF + Qualcomm AI Hub bundles, VLM support):
 
-The Android demo app lives in [`qualcomm/ai-hub-apps`](https://github.com/qualcomm/ai-hub-apps/tree/main). Clone it, open the `apps/geniex_chat_android` sample in Android Studio, and hit **Run**.
+The Android demo app lives in [`qualcomm/ai-hub-apps`](https://github.com/qualcomm/ai-hub-apps/blob/release/geniex_chat_android/README.md). Clone it, open the sample app in Android Studio, and hit **Run**.
 
 📖 **Docs** — [Install](https://geniex.aihub.qualcomm.com/en/run/android/install) · [Quickstart](https://geniex.aihub.qualcomm.com/en/run/android/quickstart) · [API reference](https://geniex.aihub.qualcomm.com/en/run/android/api-reference)
 
