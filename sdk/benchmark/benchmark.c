@@ -96,7 +96,7 @@ typedef struct {
     int32_t warmup;
     int32_t repeat;
     bool    reset_between_runs; /* true => geniex_llm_reset() before each run, freeing KV */
-    bool    accuracy;          /* true => single run (warmup=0, repeat=1), print generated text */
+    bool    accuracy;           /* true => single run (warmup=0, repeat=1), print generated text */
     int32_t n_ctx;
     int32_t n_threads;
     int32_t ngl_override; /* -1 = use resolved alias default; >=0 overrides */
@@ -254,7 +254,7 @@ static void usage(const char* argv0) {
  *
  * Edge case: a bare `model.gguf` in the current working directory — a path
  * — has no '/' so this returns true, which is the correct branch.
- * Conversely an org/repo without quant (e.g. `NexaAI/Qwen3-4B-GGUF`) has
+ * Conversely an org/repo without quant (e.g. `unsloth/Qwen3-4B-GGUF`) has
  * '/' in the middle and falls through to the model-id branch. */
 static bool looks_like_path(const char* s) {
     if (!s || !*s) return true;
@@ -837,7 +837,7 @@ static char* build_vlm_prompt(geniex_VLM* vlm, const options_t* o, const char* b
 static void print_gen_text(const char* text) {
     const char* line = text;
     while (*line) {
-        const char* nl = strchr(line, '\n');
+        const char* nl  = strchr(line, '\n');
         size_t      len = nl ? (size_t)(nl - line) : strlen(line);
         fprintf(stdout, "[gen ] %.*s\n", (int)len, line);
         if (!nl) break;

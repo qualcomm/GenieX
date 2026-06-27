@@ -358,7 +358,7 @@ jobs:
             await release({ github, context, core });
 
   # S3 publish runs in the geniex repo, not here: the bitsyfactory IAM role's
-  # OIDC trust only allows repo:qcom-ai-hub/geniex, so nexa-sdk cannot assume it.
+  # OIDC trust only allows repo:qcom-ai-hub/geniex, so GenieX cannot assume it.
   # We dispatch geniex's chore/publish-s3 workflow (GH_PAT, with actions:rw on
   # geniex), passing this run's id so it can pull our release-assets artifact
   # cross-repo, then watch it so an S3 failure surfaces here instead of silently.
@@ -397,7 +397,7 @@ jobs:
             [ -n "${target}" ] && break
             sleep 5
           done
-          [ -n "${target}" ] || { echo "::error::geniex publish-s3 run for nexa-sdk run ${RUN_ID} not found"; exit 1; }
+          [ -n "${target}" ] || { echo "::error::geniex publish-s3 run for GenieX run ${RUN_ID} not found"; exit 1; }
 
           echo "Watching geniex publish-s3 run ${target}"
           gh run watch "${target}" --repo qcom-ai-hub/geniex --exit-status

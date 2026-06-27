@@ -93,7 +93,7 @@ static int test_localfs(const char* data_dir) {
     printf("\n=== LocalFS test ===\n");
 
     /* 1. Create a fake model source directory */
-    const char* src_dir = "/tmp/geniex-localfs-src/NexaAI/TestModel-GGUF";
+    const char* src_dir = "/tmp/geniex-localfs-src/qualcomm/TestModel-GGUF";
     mkdir_p(src_dir);
 
     /* Fake GGUF file */
@@ -106,7 +106,7 @@ static int test_localfs(const char* data_dir) {
     snprintf(manifest_path, sizeof(manifest_path), "%s/geniex.json", src_dir);
     write_file(manifest_path,
         "{"
-        "\"Name\":\"NexaAI/TestModel-GGUF\","
+        "\"Name\":\"qualcomm/TestModel-GGUF\","
         "\"ModelName\":\"test-1b\","
         "\"ModelType\":\"llm\","
         "\"PluginId\":\"llama_cpp\","
@@ -121,10 +121,10 @@ static int test_localfs(const char* data_dir) {
     geniex_ModelPullInput pull_input;
     memset(&pull_input, 0, sizeof(pull_input));
     pull_input.struct_size = sizeof(pull_input);
-    pull_input.model_name  = "NexaAI/TestModel-GGUF";
+    pull_input.model_name  = "qualcomm/TestModel-GGUF";
     pull_input.quant       = NULL;
     pull_input.hub         = GENIEX_HUB_LOCALFS;
-    pull_input.local_path  = "/tmp/geniex-localfs-src/NexaAI/TestModel-GGUF";
+    pull_input.local_path  = "/tmp/geniex-localfs-src/qualcomm/TestModel-GGUF";
     pull_input.hf_token    = NULL;
     pull_input.on_progress = progress_cb;
     pull_input.user_data   = &progress_calls;
@@ -149,7 +149,7 @@ static int test_localfs(const char* data_dir) {
 
     /* 4. Get type */
     geniex_ModelType mtype;
-    CHECK(geniex_model_get_type("NexaAI/TestModel-GGUF", &mtype));
+    CHECK(geniex_model_get_type("qualcomm/TestModel-GGUF", &mtype));
     if (mtype != GENIEX_MODEL_TYPE_LLM) {
         fprintf(stderr, "FAIL  expected GENIEX_MODEL_TYPE_LLM (%d), got %d\n", GENIEX_MODEL_TYPE_LLM, mtype);
         return 1;
@@ -158,7 +158,7 @@ static int test_localfs(const char* data_dir) {
 
     /* 5. Get paths */
     geniex_ModelPaths paths = {0};
-    CHECK(geniex_model_get_paths("NexaAI/TestModel-GGUF", &paths));
+    CHECK(geniex_model_get_paths("qualcomm/TestModel-GGUF", &paths));
     printf("      model_path: %s\n", paths.model_path ? paths.model_path : "(null)");
     printf("      model_dir:  %s\n", paths.model_dir ? paths.model_dir : "(null)");
     printf("      model_name: %s\n", paths.model_name ? paths.model_name : "(null)");
@@ -172,14 +172,14 @@ static int test_localfs(const char* data_dir) {
     geniex_model_paths_free(&paths);
 
     /* 6. Get paths with explicit quant */
-    CHECK(geniex_model_get_paths("NexaAI/TestModel-GGUF:Q4_K_M", &paths));
+    CHECK(geniex_model_get_paths("qualcomm/TestModel-GGUF:Q4_K_M", &paths));
     geniex_model_paths_free(&paths);
 
     /* 7. Error case: unknown quant */
-    EXPECT_FAIL(geniex_model_get_paths("NexaAI/TestModel-GGUF:Q8_0", &paths), GENIEX_ERROR_COMMON_INVALID_INPUT);
+    EXPECT_FAIL(geniex_model_get_paths("qualcomm/TestModel-GGUF:Q8_0", &paths), GENIEX_ERROR_COMMON_INVALID_INPUT);
 
     /* 8. Remove */
-    CHECK(geniex_model_remove("NexaAI/TestModel-GGUF"));
+    CHECK(geniex_model_remove("qualcomm/TestModel-GGUF"));
 
     /* 9. Verify gone */
     geniex_ModelListDetailedOutput list2 = {0};

@@ -150,7 +150,7 @@ installed):
 
 ```bash
 geniex-py chat qwen3                       # interactive chat (auto-downloads)
-geniex-py chat NexaAI/Qwen3-4B-GGUF --quant Q4_K_M
+geniex-py chat unsloth/Qwen3-4B-GGUF --quant Q4_K_M
 geniex-py chat /path/to/model.gguf --system "You are a concise assistant."
 
 geniex-py pull qwen3                       # download into the cache only

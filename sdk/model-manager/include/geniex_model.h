@@ -353,11 +353,9 @@ GENIEX_API void geniex_model_query_free(geniex_ModelQueryOutput* out);
  * ============================================================ */
 
 /**
- * @brief Resolve a short alias to the canonical "org/repo" name for the
- *        current OS and CPU architecture.
+ * @brief Resolve a short alias to its canonical "org/repo[:quant]" name.
  *
- * Example: "qwen3"   → "NexaAI/Qwen3-4B-GGUF"   (x86-64)
- *          "qwen3vl" → "NexaAI/Qwen3-VL-4B-NPU"  (Windows arm64)
+ * Example: "qwen3" → "ggml-org/Qwen3-1.7B-GGUF:Q4_K_M"
  *
  * @param alias         Short model name.
  * @param out_full_name Set to a heap-allocated string on success.
