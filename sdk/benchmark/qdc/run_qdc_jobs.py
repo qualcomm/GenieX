@@ -209,18 +209,6 @@ def build_android_artifact(
     # on-device; results land in the device's QDC_logs and are auto-collected.
     stage = tmp / "stage"
     shutil.copytree(pkg_dir, stage / "pkg-geniex")
-    # libggml-cpu.so needs libomp.so, which the CLI package doesn't ship but the
-    # Android app provides from extLibs; drop it beside the ggml libs.
-    omp = (
-        HERE.parents[2]
-        / "bindings"
-        / "android"
-        / "app"
-        / "extLibs"
-        / "arm64-v8a"
-        / "libomp.so"
-    )
-    shutil.copy(omp, stage / "pkg-geniex" / "lib" / "llama_cpp" / "libomp.so")
     (stage / "matrix_rows.txt").write_text("\n".join(model_rows(models, device)))
     (stage / "chipset.txt").write_text(CHIPSET.get(device, ""))
     shutil.copytree(HERE / "tests", stage / "tests")

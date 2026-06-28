@@ -39,3 +39,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             DESTINATION lib/llama_cpp
             RENAME "libgomp.so.1")
 endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    file(GLOB_RECURSE _android_libomp
+        "$ENV{ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/*/libomp.so")
+    list(FILTER _android_libomp INCLUDE REGEX "/lib/linux/aarch64/libomp.so$")
+    if(NOT _android_libomp)
+        message(FATAL_ERROR "Android NDK libomp.so not found under $ENV{ANDROID_NDK_ROOT}")
+    endif()
+    list(GET _android_libomp 0 _android_libomp)
+    install(FILES "${_android_libomp}" DESTINATION lib/llama_cpp)
+endif()
