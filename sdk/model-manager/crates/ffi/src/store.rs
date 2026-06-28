@@ -56,14 +56,14 @@ pub extern "C" fn geniex_model_get_paths(
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
         let name = match unsafe { cstr_to_str(model_name) } {
-            Some(s) => s,
+            Some(s) => normalize_quant_suffix(s),
             None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
         };
         let store = match get_store() {
             Ok(s) => s,
             Err(c) => return c,
         };
-        match store.get_paths(name) {
+        match store.get_paths(&name) {
             Ok((_, paths)) => {
                 unsafe {
                     (*out_paths).model_path = str_to_cptr(&paths.model_path.to_string_lossy());
@@ -110,14 +110,14 @@ pub unsafe extern "C" fn geniex_model_paths_free(paths: *mut GenieXModelPaths) {
 pub extern "C" fn geniex_model_remove(model_name: *const c_char) -> i32 {
     ffi_guard(|| {
         let name = match unsafe { cstr_to_str(model_name) } {
-            Some(s) => s,
+            Some(s) => normalize_quant_suffix(s),
             None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
         };
         let store = match get_store() {
             Ok(s) => s,
             Err(c) => return c,
         };
-        match store.remove(name) {
+        match store.remove(&name) {
             Ok(()) => GENIEX_SUCCESS,
             Err(e) => report(&e),
         }

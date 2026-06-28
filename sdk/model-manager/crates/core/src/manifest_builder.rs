@@ -399,15 +399,15 @@ fn is_mmproj_filename(lname: &str) -> bool {
         || stem.contains("_mmproj_")
 }
 
-/// Extract a quant tag like `Q4_K_M`, `Q8_0`, `IQ4_XS`, or `TQ1_0` from a
-/// filename. The match is case-insensitive (HF repos publish both `q4_0`
-/// and `Q4_0`); the returned tag is upper-cased so it lines up with
+/// Extract a quant tag like `Q4_K_M`, `Q8_0`, `IQ4_XS`, `TQ1_0`, or `MXFP4`
+/// from a filename. The match is case-insensitive (HF repos publish both
+/// `q4_0` and `Q4_0`); the returned tag is upper-cased so it lines up with
 /// [`QUANT_PRIORITY`]. Returns the highest-priority match if multiple are
 /// present, else the first match, else None.
 fn extract_quant(name: &str) -> Option<String> {
     // Walk the (uppercased, ASCII-only) name token by token. A quant tag
     // must sit on a token boundary so that `IQ4_XS` doesn't get scanned as
-    // `Q4_XS` from index 1 — we anchor each candidate Q at a separator.
+    // `Q4_XS` from index 1 — we anchor each candidate at a separator.
     let upper = name.to_ascii_uppercase();
     let bytes = upper.as_bytes();
     let mut composite: Vec<String> = Vec::new();
@@ -415,6 +415,15 @@ fn extract_quant(name: &str) -> Option<String> {
     while i < bytes.len() {
         if !is_token_start(bytes, i) {
             i += 1;
+            continue;
+        }
+        // Try MXFP-anchored tags first (`MXFP4`, `MXFP4_MOE`) — ggml-org's
+        // gpt-oss GGUFs use them and they don't start with Q.
+        if let Some(end) = scan_token(bytes, i, b"MXFP") {
+            if let Ok(s) = std::str::from_utf8(&bytes[i..end]) {
+                composite.push(s.to_string());
+            }
+            i = end;
             continue;
         }
         // Optional 1-byte prefix used by i-quants (`IQ*`) and ternary
@@ -436,23 +445,7 @@ fn extract_quant(name: &str) -> Option<String> {
         while i < bytes.len() && bytes[i].is_ascii_digit() {
             i += 1;
         }
-        // Trailing `_XXX` segments. Each segment must be 1..=3 ASCII
-        // upper/digit chars — long alphabetic words like `_FINETUNE`
-        // are NOT part of the quant tag.
-        while i + 1 < bytes.len() && bytes[i] == b'_' {
-            let seg_start = i + 1;
-            let mut seg_end = seg_start;
-            while seg_end < bytes.len()
-                && (bytes[seg_end].is_ascii_uppercase() || bytes[seg_end].is_ascii_digit())
-            {
-                seg_end += 1;
-            }
-            let seg_len = seg_end - seg_start;
-            if seg_len == 0 || seg_len > 3 {
-                break;
-            }
-            i = seg_end;
-        }
+        i = consume_short_suffix_segments(bytes, i);
         if let Ok(s) = std::str::from_utf8(&bytes[start..i]) {
             composite.push(s.to_string());
         }
@@ -466,6 +459,43 @@ fn extract_quant(name: &str) -> Option<String> {
         }
     }
     Some(composite.remove(0))
+}
+
+/// If the slice at `start` begins with `prefix` followed by ≥1 digit, return
+/// the end index of the full tag (including any trailing short `_XXX`
+/// segments); otherwise None.
+fn scan_token(bytes: &[u8], start: usize, prefix: &[u8]) -> Option<usize> {
+    if !bytes[start..].starts_with(prefix) {
+        return None;
+    }
+    let mut i = start + prefix.len();
+    if !(i < bytes.len() && bytes[i].is_ascii_digit()) {
+        return None;
+    }
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    Some(consume_short_suffix_segments(bytes, i))
+}
+
+/// Trailing `_XXX` segments. Each segment must be 1..=3 ASCII upper/digit
+/// chars — long alphabetic words like `_FINETUNE` are NOT part of the tag.
+fn consume_short_suffix_segments(bytes: &[u8], mut i: usize) -> usize {
+    while i + 1 < bytes.len() && bytes[i] == b'_' {
+        let seg_start = i + 1;
+        let mut seg_end = seg_start;
+        while seg_end < bytes.len()
+            && (bytes[seg_end].is_ascii_uppercase() || bytes[seg_end].is_ascii_digit())
+        {
+            seg_end += 1;
+        }
+        let seg_len = seg_end - seg_start;
+        if seg_len == 0 || seg_len > 3 {
+            break;
+        }
+        i = seg_end;
+    }
+    i
 }
 
 /// True when index `i` of `bytes` sits at the start of a filename token —
@@ -550,6 +580,24 @@ mod tests {
     }
 
     #[test]
+    fn extract_quant_recognises_mxfp() {
+        // ggml-org/gpt-oss-*-GGUF publishes MXFP4 shards; the tag must be
+        // recognised regardless of case and survive trailing shard suffixes.
+        assert_eq!(extract_quant("model-MXFP4.gguf"), Some("MXFP4".to_string()));
+        assert_eq!(extract_quant("model-mxfp4.gguf"), Some("MXFP4".to_string()));
+        assert_eq!(
+            extract_quant("gpt-oss-20b-mxfp4-00001-of-00002.gguf"),
+            Some("MXFP4".to_string())
+        );
+        assert_eq!(
+            extract_quant("model-MXFP4_MOE.gguf"),
+            Some("MXFP4_MOE".to_string())
+        );
+        // Mid-token MXFP (no separator before it) is not a quant.
+        assert_eq!(extract_quant("aMXFP4.gguf"), None);
+    }
+
+    #[test]
     fn is_mmproj_filename_matches_known_layouts() {
         // Standard llama.cpp prefix layout.
         assert!(is_mmproj_filename("mmproj-f16.gguf"));
@@ -627,6 +675,27 @@ mod tests {
         assert!(extra.contains(&"model-Q4_0-00002-of-00003.gguf"));
         assert!(extra.contains(&"model-Q4_0-00003-of-00003.gguf"));
         assert_eq!(m.total_size(), 600, "every shard counted exactly once");
+    }
+
+    #[test]
+    fn gpt_oss_20b_mxfp4_layout() {
+        // ggml-org/gpt-oss-20b-GGUF ships a single 12 GB MXFP4 weight (no
+        // shards). Before MXFP was recognised the file landed in the
+        // `"default"` bucket and `:mxfp4` failed with QuantNotFound.
+        let (names, sizes) = sizes_of(&[("gpt-oss-20b-mxfp4.gguf", 12_109_566_560)]);
+        let hint = ManifestHint {
+            quant: Some("MXFP4".to_string()),
+            ..Default::default()
+        };
+        let m =
+            infer_manifest_from_names("ggml-org/gpt-oss-20b-GGUF", &names, &sizes, hint).unwrap();
+        let entry = m.model_file.get("MXFP4").expect("MXFP4 key present");
+        assert_eq!(entry.name, "gpt-oss-20b-mxfp4.gguf");
+        assert!(
+            m.extra_files.is_empty(),
+            "single-file repo has no extras: {:?}",
+            m.extra_files
+        );
     }
 
     #[test]

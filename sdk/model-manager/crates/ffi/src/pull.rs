@@ -248,7 +248,10 @@ pub extern "C" fn geniex_model_pull(input: *const GenieXModelPullInput) -> i32 {
 
         // Thread `quant` into the manifest hint so `pull` only fetches
         // the requested quantization instead of every GGUF in the repo.
-        let quant = unsafe { cstr_to_str(inp.quant) }.map(str::to_string);
+        // Upper-cased here so the lookup in `manifest_builder::infer_*`
+        // (against keys produced by `extract_quant`, which upper-cases)
+        // succeeds for bindings that don't normalize themselves.
+        let quant = unsafe { cstr_to_str(inp.quant) }.map(|s| s.to_ascii_uppercase());
         // -1 (GENIEX_MODEL_TYPE_AUTO) leaves detection to the inferer; 0/1 force
         // the type so the manifest is written correctly in one shot.
         let model_type = match inp.model_type {

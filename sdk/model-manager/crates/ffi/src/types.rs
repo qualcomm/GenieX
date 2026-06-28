@@ -155,6 +155,20 @@ pub unsafe fn free_cptr(ptr: *mut c_char) {
     }
 }
 
+/// Upper-case the `:QUANT` suffix of a model name. Manifest keys are
+/// produced by `extract_quant`, which upper-cases (so `q4_0` -> `Q4_0`);
+/// without matching the lookup side, `pull <repo>:q4_0` fails for callers
+/// (Python, JNI) whose bindings don't already upper-case. Done here at the
+/// FFI boundary so the invariant is a single point of enforcement.
+pub fn normalize_quant_suffix(name: &str) -> String {
+    match name.rsplit_once(':') {
+        Some((base, quant)) if !quant.is_empty() => {
+            format!("{base}:{}", quant.to_ascii_uppercase())
+        }
+        _ => name.to_string(),
+    }
+}
+
 // Silence unused warning for c_void import when building without features that
 // use it; pull.rs re-imports c_void directly when it needs it.
 #[allow(dead_code)]
@@ -200,6 +214,29 @@ mod tests {
             err_to_code(&Error::Http("reset".to_string())),
             GENIEX_ERROR_COMMON_NETWORK
         );
+    }
+
+    #[test]
+    fn normalize_quant_suffix_upper_cases_only_after_colon() {
+        assert_eq!(
+            normalize_quant_suffix("ggml-org/Qwen3-0.6B-GGUF:q4_0"),
+            "ggml-org/Qwen3-0.6B-GGUF:Q4_0"
+        );
+        assert_eq!(
+            normalize_quant_suffix("ggml-org/Qwen3-0.6B-GGUF:Q4_0"),
+            "ggml-org/Qwen3-0.6B-GGUF:Q4_0"
+        );
+        assert_eq!(
+            normalize_quant_suffix("ggml-org/gpt-oss-20b-GGUF:mxfp4"),
+            "ggml-org/gpt-oss-20b-GGUF:MXFP4"
+        );
+        // No suffix → unchanged.
+        assert_eq!(
+            normalize_quant_suffix("ggml-org/Qwen3-0.6B-GGUF"),
+            "ggml-org/Qwen3-0.6B-GGUF"
+        );
+        // Trailing colon (no quant) → unchanged.
+        assert_eq!(normalize_quant_suffix("Org/Repo:"), "Org/Repo:");
     }
 
     #[test]
