@@ -37,7 +37,7 @@ jobs:
 
       # Needed for the composite actions; llama.cpp is cloned separately.
       - name: Checkout geniex (for composite actions)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
