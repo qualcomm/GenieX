@@ -83,6 +83,7 @@ typedef struct {
     char*       mm_mmproj;
     char*       mm_tokenizer;
     bool        force_vlm; /* run VLM path even without an mmproj (QAIRT bundles) */
+    bool        mm_is_vlm; /* manager classified the resolved model as VLM (geniex_ModelType) */
     const char* image_paths[MAX_PATHS];
     int32_t     image_count;
     const char* audio_paths[MAX_PATHS];
@@ -268,6 +269,67 @@ static bool looks_like_path(const char* s) {
     return false;
 }
 
+/* VLM detection for a local QAIRT bundle:
+ * read metadata.json's genie.supports_vision. Lets geniex-bench route a VLM
+ * bundle to the VLM run loop even when --vlm / matrix col 8 is unset.
+ * `model_path` may be a bundle directory or a file inside it. Any read/parse
+ * miss is treated as "not VLM". */
+static bool local_bundle_is_vlm(const char* model_path) {
+    if (!model_path || !*model_path) return false;
+
+    /* If model_path is a regular file, use its parent; else treat as the dir. */
+    char dir[1024];
+    snprintf(dir, sizeof(dir), "%s", model_path);
+    struct stat st;
+    if (stat(dir, &st) == 0 && !S_ISDIR(st.st_mode)) {
+        char* slash = strrchr(dir, '/');
+#ifdef _WIN32
+        char* bslash = strrchr(dir, '\\');
+        if (bslash && (!slash || bslash > slash)) slash = bslash;
+#endif
+        if (slash) *slash = '\0';
+    }
+
+    char meta[1100];
+    snprintf(meta, sizeof(meta), "%s/metadata.json", dir);
+
+    FILE* f = fopen(meta, "rb");
+    if (!f) return false;
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz <= 0 || sz > (long)(8 * 1024 * 1024)) {
+        fclose(f);
+        return false;
+    }
+    char* buf = (char*)malloc((size_t)sz + 1);
+    if (!buf) {
+        fclose(f);
+        return false;
+    }
+    size_t got = fread(buf, 1, (size_t)sz, f);
+    fclose(f);
+    buf[got] = '\0';
+
+    /* Anchor on the "genie" object so this matches the CLI's
+     * meta['genie']['supports_vision'] rather than any top-level key.
+     * Parser-free: metadata.json is small, machine-generated JSON. */
+    bool        is_vlm = false;
+    const char* genie  = strstr(buf, "\"genie\"");
+    const char* p      = strstr(genie ? genie : buf, "\"supports_vision\"");
+    if (p) {
+        p += strlen("\"supports_vision\"");
+        const char* colon = strchr(p, ':');
+        if (colon) {
+            const char* v = colon + 1;
+            while (*v == ' ' || *v == '\t' || *v == '\n' || *v == '\r') v++;
+            if (strncmp(v, "true", 4) == 0) is_vlm = true;
+        }
+    }
+    free(buf);
+    return is_vlm;
+}
+
 static geniex_HubSource parse_hub(const char* s) {
     if (!s || !*s || strcmp(s, "auto") == 0) return GENIEX_HUB_AUTO;
     if (strcmp(s, "hf") == 0 || strcmp(s, "huggingface") == 0) return GENIEX_HUB_HUGGINGFACE;
@@ -355,12 +417,22 @@ static int resolve_via_mm(options_t* o, const char* id_in) {
     o->mm_model_path = paths.model_path;
     o->mm_mmproj     = paths.mmproj_path;
     o->mm_tokenizer  = paths.tokenizer_path;
+    /* Capture the manager's LLM/VLM classification (geniex_ModelType) — the
+     * CLI's _is_vlm() signal (3). */
+    o->mm_is_vlm     = (paths.model_type == GENIEX_MODEL_TYPE_VLM);
     paths.model_path = paths.mmproj_path = paths.tokenizer_path = NULL;
     /* model_dir / model_name / plugin_id aren't consumed here; free via the
      * paths_free() helper to keep the allocator pairing intact. */
     geniex_model_paths_free(&paths);
 
     o->model_path = o->mm_model_path;
+    /* QAIRT VLM bundles have no mmproj and the dispatcher has no LLM factory
+     * for VLM model_ids, so a VLM bundle in run_llm hard-fails. Force
+     * the VLM run loop when the manager classified it as VLM. */
+    if (o->mm_is_vlm && o->plugin && strcmp(o->plugin, "qairt") == 0 && !o->force_vlm) {
+        fprintf(stderr, "[mm  ] %s is a VLM bundle; forcing VLM run loop\n", id_in);
+        o->force_vlm = true;
+    }
     /* Only adopt the manager's mmproj when the user explicitly opted into VLM
      * (--vlm or the matrix `vlm` column). A passively-present mmproj sibling
      * in the manager bundle (e.g. unsloth/gemma-4-E2B-it-GGUF ships an mmproj
@@ -520,6 +592,7 @@ static void parse_args(int argc, char** argv, options_t* o) {
     o->mm_mmproj          = NULL;
     o->mm_tokenizer       = NULL;
     o->force_vlm          = false;
+    o->mm_is_vlm          = false;
     o->image_count        = 0;
     o->audio_count        = 0;
     o->n_prompt           = 512;
@@ -1380,6 +1453,11 @@ static int run_one_cell(options_t* o) {
         if (resolve_via_mm(o, o->model_path) != 0) {
             return 1;
         }
+    } else if (o->plugin && strcmp(o->plugin, "qairt") == 0 && !o->force_vlm && local_bundle_is_vlm(o->model_path)) {
+        /* Local QAIRT VLM bundle (resolve_via_mm skipped for path inputs):
+         * force VLM so it doesn't hit the dispatcher's "no LLM factory". */
+        fprintf(stderr, "[info] %s is a VLM bundle (metadata.json); forcing VLM run loop\n", o->model_path);
+        o->force_vlm = true;
     }
 
     char* anchored = resolve_local_anchor(o->model_path);
