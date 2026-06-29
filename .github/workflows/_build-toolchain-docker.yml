@@ -102,7 +102,7 @@ jobs:
         if: >-
           steps.meta.outputs.platforms == 'both' ||
           steps.meta.outputs.platforms == matrix.platform
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to DockerHub
         if: >-
