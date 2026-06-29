@@ -44,7 +44,7 @@ jobs:
     env:
       QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"

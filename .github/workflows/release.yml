@@ -112,7 +112,7 @@ jobs:
       signed: ${{ steps.htp.outputs.signed }}
       llama_sha: ${{ steps.htp.outputs.llama_sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
           submodules: false
@@ -187,7 +187,7 @@ jobs:
       HTP_SIGNED: ${{ needs.overlay-htp.outputs.signed }}
       LLAMA_SHA: ${{ needs.overlay-htp.outputs.llama_sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
           submodules: false
@@ -323,7 +323,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
           submodules: false
