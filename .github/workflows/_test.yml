@@ -72,7 +72,7 @@ jobs:
           git config --global core.protectNTFS false
 
       - name: Checkout source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           # changed-files diffs against the PR base SHA; fetch-depth 0
           # avoids "missing base" failures on multi-commit PRs.
