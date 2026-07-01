@@ -54,6 +54,7 @@ module.exports = async ({ github, context, core }) => {
       owner,
       repo,
       tag_name: VERSION,
+      target_commitish: context.sha,
       name: VERSION,
       body,
       generate_release_notes: true,

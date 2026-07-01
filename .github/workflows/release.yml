@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Tag to release, for example v1.2.3"
+        description: "Tag to release (existing tag, or a new tag to create at the selected ref)"
         required: true
         type: string
 
@@ -41,20 +41,23 @@ jobs:
           [[ "${TAG}" =~ $semver ]] || { echo "::error::Invalid SemVer 2.0 tag: ${TAG}"; exit 1; }
 
           # workflow_dispatch runs against GITHUB_SHA = the ref the workflow
-          # was launched from. If that's not the tag's commit, downstream
-          # _build-* jobs will check out the wrong source and stamp it as
-          # ${TAG} — which we cannot move (tags are immutable).
+          # was launched from. If TAG already exists, it must point at the same
+          # commit so downstream _build-* jobs don't stamp the wrong source as
+          # ${TAG} — which we cannot move (tags are immutable). If TAG does not
+          # exist yet, publish-github-release will create it at GITHUB_SHA.
           if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
-            ref_obj=$(gh api "repos/${GH_REPO}/git/ref/tags/${TAG}" 2>/dev/null) \
-              || { echo "::error::Tag ${TAG} not found on origin"; exit 1; }
-            tag_sha=$(jq -r '.object.sha' <<<"${ref_obj}")
-            tag_type=$(jq -r '.object.type' <<<"${ref_obj}")
-            if [[ "${tag_type}" == "tag" ]]; then
-              tag_sha=$(gh api "repos/${GH_REPO}/git/tags/${tag_sha}" --jq '.object.sha')
-            fi
-            if [[ "${tag_sha}" != "${GITHUB_SHA}" ]]; then
-              echo "::error::Dispatch ref ${GITHUB_SHA} != tag ${TAG} (${tag_sha}). Re-run from the tag ref: Actions → Release → Run workflow → Use workflow from → Tags → ${TAG}."
-              exit 1
+            if ref_obj=$(gh api "repos/${GH_REPO}/git/ref/tags/${TAG}" 2>/dev/null); then
+              tag_sha=$(jq -r '.object.sha' <<<"${ref_obj}")
+              tag_type=$(jq -r '.object.type' <<<"${ref_obj}")
+              if [[ "${tag_type}" == "tag" ]]; then
+                tag_sha=$(gh api "repos/${GH_REPO}/git/tags/${tag_sha}" --jq '.object.sha')
+              fi
+              if [[ "${tag_sha}" != "${GITHUB_SHA}" ]]; then
+                echo "::error::Dispatch ref ${GITHUB_SHA} != tag ${TAG} (${tag_sha}). Re-run from the tag ref: Actions → Release → Run workflow → Use workflow from → Tags → ${TAG}."
+                exit 1
+              fi
+            else
+              echo "::notice::Tag ${TAG} not found on origin; continuing and creating it from ${GITHUB_SHA} during publish-github-release."
             fi
           fi
 
