@@ -44,7 +44,7 @@ jobs:
           # was launched from. If TAG already exists, it must point at the same
           # commit so downstream _build-* jobs don't stamp the wrong source as
           # ${TAG} — which we cannot move (tags are immutable). If TAG does not
-          # exist yet, publish-github-release will create it at GITHUB_SHA.
+          # exist yet, the release publish step will create it at GITHUB_SHA.
           if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
             if ref_obj=$(gh api "repos/${GH_REPO}/git/ref/tags/${TAG}" 2>/dev/null); then
               tag_sha=$(jq -r '.object.sha' <<<"${ref_obj}")
@@ -57,7 +57,7 @@ jobs:
                 exit 1
               fi
             else
-              echo "::notice::Tag ${TAG} not found on origin; continuing and creating it from ${GITHUB_SHA} during publish-github-release."
+              echo "::notice::Tag ${TAG} not found on origin; continuing and creating it from ${GITHUB_SHA} during the release publish step."
             fi
           fi
 
