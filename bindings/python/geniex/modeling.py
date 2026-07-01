@@ -330,15 +330,21 @@ class GenieXLLM:
 
 
 def _messages_have_modality(messages: list[dict], modality: str) -> bool:
-    # True if any message's content list contains a block with the given
-    # ``type`` (e.g. 'image' / 'audio'). Plain string content trivially
-    # holds none.
-    for msg in messages:
-        content = msg.get('content')
-        if isinstance(content, list):
-            for item in content:
-                if isinstance(item, dict) and item.get('type') == modality:
-                    return True
+    # True if the LAST message's content list contains a block with the
+    # given ``type`` (e.g. 'image' / 'audio'). Only the last turn matters
+    # here: generate(images=[...]) supplies the paths for the current
+    # turn, and stale image/audio blocks in prior turns must not gate it
+    # (see Go CLI / server behaviour in cli/cmd/geniex/infer.go and
+    # cli/server/handler/chat.go). Plain string content trivially holds
+    # none.
+    if not messages:
+        return False
+    content = messages[-1].get('content')
+    if not isinstance(content, list):
+        return False
+    for item in content:
+        if isinstance(item, dict) and item.get('type') == modality:
+            return True
     return False
 
 
