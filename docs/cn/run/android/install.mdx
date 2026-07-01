@@ -28,7 +28,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 ## **将 SDK 添加到你的应用**
 
 <Steps>
-  <Step title="Enable Maven Central">
+  <Step title="启用 Maven Central">
     在 `settings.gradle.kts`（或较旧项目的顶层 `build.gradle.kts`）中：
 
     ```kotlin
@@ -41,7 +41,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     ```
   </Step>
 
-  <Step title="Add the dependency">
+  <Step title="添加依赖">
     在你的 **应用模块** 的 `build.gradle.kts` 中：
 
     ```kotlin
@@ -53,7 +53,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     该构件附带原生 `arm64-v8a` 库——你这边无需 NDK 或 CMake。
   </Step>
 
-  <Step title="Declare permissions">
+  <Step title="声明权限">
     SDK 会在运行时拉取权重。在 `AndroidManifest.xml` 中：
 
     ```xml
@@ -63,7 +63,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     对于从相册加载图片的 VLM，还需声明 `READ_EXTERNAL_STORAGE`（或 Android 13+ 上的范围化媒体权限）。
   </Step>
 
-  <Step title="Sync Gradle">
+  <Step title="同步 Gradle">
     在 Android Studio 中点击 **Sync Now**。
   </Step>
 </Steps>

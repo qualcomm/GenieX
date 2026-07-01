@@ -5,7 +5,7 @@ description: "使用 Kotlin 运行 GenieX Android SDK 中的第一个模型。"
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-本页将指导你在 Kotlin APP中运行第一个模型，然后再换用另一个模型。如需一个完整的参考应用——包含聊天 UI、模型选择器和 VLM 支持——请参阅[示例应用](https://github.com/qualcomm/ai-hub-apps/blob/release/geniex_chat_android/README.md)。
+本页将指导你在 Kotlin 应用中运行第一个模型，然后再换用另一个模型。如需一个完整的参考应用——包含聊天 UI、模型选择器和 VLM 支持——请参阅[示例应用](https://github.com/qualcomm/ai-hub-apps/blob/release/geniex_chat_android/README.md)。
 
 ## **前置条件**
 
@@ -18,7 +18,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 无论使用哪个模型，流程都是相同的：**初始化 SDK → 拉取权重 → 加载 → 生成**。下面是一个使用 `unsloth/Qwen3-0.6B-GGUF` 的最小端到端示例——这是一个小型的 Qwen3 0.6B 对话模型，可以在任何受支持的芯片组上运行。
 
 <Steps>
-  <Step title="Init the SDK">
+  <Step title="初始化 SDK">
     在应用启动时调用一次（幂等——可安全地放在 `Activity.onCreate` 中）：
 
     ```kotlin
@@ -26,7 +26,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     ```
   </Step>
 
-  <Step title="Pull the model">
+  <Step title="拉取模型">
     `pullFlow` 会流式推送进度事件。在 `Dispatchers.IO` 上的协程中运行：
 
     ```kotlin
@@ -48,7 +48,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     下载支持断点续传——在拉取过程中杀掉应用并重新运行，会从上次中断处继续。
   </Step>
 
-  <Step title="Load the model">
+  <Step title="加载模型">
     解析磁盘上的路径并构建一个 `LlmWrapper`：
 
     ```kotlin
@@ -70,7 +70,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     ```
   </Step>
 
-  <Step title="Generate">
+  <Step title="生成">
     应用 chat template，然后从流式 flow 中收集 token：
 
     ```kotlin
@@ -148,85 +148,10 @@ Qualcomm AI Engine Direct 会忽略此设置——`cpu`/`gpu` 会带警告地被
 
 如果权重已经在设备上——通过 `adb push` 侧载、打包进应用的 files 目录，或由其他工具生成——只需让模型管理器指向该目录，而不是某个 hub。设置 `hub = HubSource.LOCALFS`，并将 `local_path` 指向磁盘上的位置。`pullFlow` 会将其导入到 SDK 缓存中（不联网），之后 `getPaths` / `LlmWrapper` 的用法与下载的模型完全一致。
 
-这里的 `model_name` 只是缓存键——任意 `org/repo` 风格的字符串都可以，常见约定是加上 `local/` 前缀。**运行时由导入的目录布局决定，而不是由你指定**：GGUF 目录导入为 `llama_cpp`，AI Hub 目录/zip 导入为 `qairt`。当你导入混合类型的模型时，请优先使用 `paths.runtime_id`（权威值），而不是硬编码 `runtime_id`。
+导入本地 GGUF 模型和本地 Qualcomm AI Engine Direct bundle 的完整 Android 代码片段位于“模型”页：
 
-### 本地 GGUF 模型 (llama.cpp)
-
-`local_path` 是一个包含 `.gguf` 文件的目录。如果存在 `geniex.json` manifest 则会使用它，否则会根据文件名推断布局。对于 VLM，将 `mmproj-*.gguf` 放入同一目录即可。
-
-```kotlin
-ModelManagerWrapper.pullFlow(
-    ModelPullInput(
-        model_name = "local/qwen3-0.6b",
-        hub        = HubSource.LOCALFS,
-        local_path = "/data/local/tmp/qwen3-0.6b",   // 包含 *.gguf 的目录
-    )
-).collect { event ->
-    when (event) {
-        is ModelManagerWrapper.PullEvent.Progress  -> /* update UI */
-        ModelManagerWrapper.PullEvent.Completed    -> /* imported */
-        is ModelManagerWrapper.PullEvent.Error     -> /* show error */
-    }
-}
-```
-
-然后使用 `runtime_id = "llama_cpp"` 加载——与下载模型的流程完全相同：
-
-```kotlin
-val paths = ModelManagerWrapper.getPaths("local/qwen3-0.6b")
-    ?: error("Model not imported")
-
-val llm = LlmWrapper.builder()
-    .llmCreateInput(
-        LlmCreateInput(
-            model_name = paths.model_name,
-            model_path = paths.model_path,
-            config     = ModelConfig(nCtx = 4096),
-            runtime_id  = "llama_cpp",
-            compute_unit  = null,   // null → 骁龙上使用 NPU（推荐）
-        )
-    )
-    .build()
-    .getOrThrow()
-```
-
-### 本地 Qualcomm AI Hub 模型 (qairt)
-
-`local_path` 指向以下两者之一：已解压的 AI Hub 目录（一个 `metadata.json` 加上一个或多个 `.bin` 分片），或从 Qualcomm AI Hub 下载的 AI Hub `.zip`。插件会被强制设为 `qairt`，模态（LLM 还是 VLM）会从 `metadata.json` 中读取。无需 `chipset`——该 bundle 已经针对特定芯片组编译完成。
-
-```kotlin
-ModelManagerWrapper.pullFlow(
-    ModelPullInput(
-        model_name = "local/qwen3-4b-2507",
-        hub        = HubSource.LOCALFS,
-        local_path = "/data/local/tmp/Qwen3-4B-Instruct-2507",  // 已解压目录或 .zip
-    )
-).collect { /* Progress / Completed / Error */ }
-```
-
-然后使用 `runtime_id = "qairt"` 加载：
-
-```kotlin
-val paths = ModelManagerWrapper.getPaths("local/qwen3-4b-2507")
-    ?: error("Model not imported")
-
-val llm = LlmWrapper.builder()
-    .llmCreateInput(
-        LlmCreateInput(
-            model_name = paths.model_name,
-            model_path = paths.model_path,
-            config     = ModelConfig(max_tokens = 2048, enable_thinking = false),
-            runtime_id  = "qairt",
-            compute_unit  = null,   // qairt 仅支持 NPU
-        )
-    )
-    .build()
-    .getOrThrow()
-```
-
-<Note>
-本地导入时你无需自己编写 `geniex.json`——模型管理器会在导入过程中于其缓存中生成一份。它从 `local_path` 读取的内容取决于布局：GGUF 目录需要一个 `*.gguf`（若存在 `geniex.json` 则会被采用，否则会根据文件名推断 manifest）；QAIRT 目录则通过 `metadata.json` + `.bin` 分片（或 `.zip`）来识别。对于 QAIRT，请按 Qualcomm AI Hub 提供的原样导入已解压的 bundle 或 `.zip`——一个只含零散 `.bin` 文件、缺少 `metadata.json` 的目录将无法被识别。
-</Note>
+- [运行本地 Qualcomm AI Engine Direct bundle → Android](/cn/models/supported#run-a-local-qualcomm-ai-engine-direct-bundle)
+- [运行本地 GGUF 模型 → Android](/cn/models/supported#run-a-local-gguf-model)
 
 ## **使用示例应用**
 

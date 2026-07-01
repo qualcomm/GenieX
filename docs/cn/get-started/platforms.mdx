@@ -65,7 +65,7 @@ GenieX 内置两种运行环境，让你在同一套 SDK 中同时获得**广泛
 | `npu` | 固定到 Hexagon NPU（`HTP0`）。最佳 NPU 独占路径。 |
 | `gpu` | 通过 OpenCL 使用 Adreno GPU。 |
 | `cpu` | 纯 CPU。强制 `nGpuLayers = 0`。 |
-| `hybrid` *(默认)* | 空 `device_id` + `n_gpu_layers=999`——llama.cpp 的 HTP+CPU 按张量调度。**快捷使用。** |
+| `hybrid` *(默认)* | 空 `device_id` + `n_gpu_layers=999`——llama.cpp 的 HTP+CPU 按张量调度。**骁龙上的快速路径。** |
 
 `geniex pull` 时选择的精度也会决定模型最终落到哪里运行——详见[支持的精度（量化）](/cn/models/supported#支持的精度量化)。
 
@@ -87,23 +87,6 @@ Qualcomm AI Engine Direct **仅支持 NPU**。
 ### 运行环境限制
 
 模型包内已固化其**精度、上下文长度与 KV 缓存大小**——三者均无法在运行时修改。在 Android 上，`nGpuLayers != 0` 与 `nCtx != 0` 会被拒绝并返回 `PARAM_NOT_SUPPORTED`，请保持两者为默认值，仅调整 `max_tokens` / `enable_thinking`。如需改变精度或上下文长度，请从 [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) 获取另一个模型包。
-
-### Android 上的芯片
-
-在 Android 上拉取 Qualcomm AI Hub 模型时**必须显式传入芯片类型**——自动识别仅在骁龙 Windows 上生效。可选值：
-
-| 芯片 ID | 芯片 |
-|---|---|
-| `SM8750` | 骁龙 8 至尊版 |
-| `SM8850` | 骁龙 8 至尊版 Gen 5 |
-
-详见 [Android API 参考](/cn/run/android/api-reference#模型管理器) 中的 `ModelPullInput.chipset`。
-
-### 限制
-
-- 仅 NPU——无 CPU/GPU 回退。
-- 上下文长度与 KV 缓存由模型包固定。
-- 新增 Qualcomm AI Hub 模型需先在 C++ 侧注册（`third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`）。
 
 <br />
 
