@@ -54,9 +54,10 @@
 #include <dirent.h>
 #endif
 
-/* Fixed VLM prompt. Multimodal cells still go through the bundle's chat
- * template (which needs real text), so the LLM/VLM paths are intentionally
- * asymmetric: LLM prefills random ids; VLM keeps a one-line text payload. */
+/* Fixed VLM prompt. Multimodal cells always go through the bundle's chat
+ * template (which needs real text); the LLM text-prompt path (--prompt-file)
+ * does the same. LLM diverges only in its default random-ids prefill mode,
+ * which skips the tokenizer and template entirely. */
 static const char* const VLM_DEFAULT_PROMPT = "Describe the image.";
 
 #define MAX_PATHS 16
@@ -203,8 +204,9 @@ static void usage(const char* argv0) {
         "  --temperature F        default 0.0\n"
         "  --seed N               default 42; also seeds rand() for prompt ids\n"
         "  --prompt-file PATH     opt out of random-ids prefill: read a UTF-8 prompt\n"
-        "                         from PATH and feed it via prompt_utf8 instead. The\n"
-        "                         only way to bench plugins that don't support\n"
+        "                         from PATH, run it through the bundle's chat template\n"
+        "                         (like real inference), and feed it via prompt_utf8.\n"
+        "                         The only way to bench plugins that don't support\n"
         "                         input_ids (today: qairt). With this flag, reported\n"
         "                         `pp` is the tokenizer's count, NOT --n-prompt.\n"
         "  --no-reset-between-runs\n"
@@ -891,8 +893,9 @@ static char* build_vlm_prompt(geniex_VLM* vlm, const options_t* o, const char* b
     geniex_VlmApplyChatTemplateOutput tout;
     memset(&tin, 0, sizeof(tin));
     memset(&tout, 0, sizeof(tout));
-    tin.messages      = &msg;
-    tin.message_count = 1;
+    tin.messages        = &msg;
+    tin.message_count   = 1;
+    tin.enable_thinking = true;
 
     int32_t rc = geniex_vlm_apply_chat_template(vlm, &tin, &tout);
     if (rc != GENIEX_SUCCESS) {
@@ -919,6 +922,37 @@ static void print_gen_text(const char* text) {
 }
 
 /* ----------------------------- LLM run loop ----------------------------- */
+
+/* Build an LLM prompt by running the bundle's chat template over a single user
+ * message holding the text prompt. Mirrors build_vlm_prompt so the LLM
+ * text-prompt path (--prompt-file) and the VLM path format the prompt the same
+ * way — matching what real inference (the CLI) feeds the model. Returns heap
+ * text the caller frees with geniex_free, or NULL on failure. */
+static char* build_llm_prompt(geniex_LLM* llm, const char* base_prompt) {
+    geniex_LlmChatMessage msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.role    = "user";
+    msg.content = base_prompt;
+
+    geniex_LlmApplyChatTemplateInput  tin;
+    geniex_LlmApplyChatTemplateOutput tout;
+    memset(&tin, 0, sizeof(tin));
+    memset(&tout, 0, sizeof(tout));
+    tin.messages              = &msg;
+    tin.message_count         = 1;
+    tin.add_generation_prompt = true;
+    tin.enable_thinking       = true;
+
+    int32_t rc = geniex_llm_apply_chat_template(llm, &tin, &tout);
+    if (rc != GENIEX_SUCCESS) {
+        fprintf(stderr,
+            "ERROR: geniex_llm_apply_chat_template: %s (%d)\n",
+            geniex_get_error_message((geniex_ErrorCode)rc),
+            rc);
+        return NULL;
+    }
+    return tout.formatted_text;
+}
 
 static void fill_sampler(geniex_SamplerConfig* s, const options_t* o) {
     memset(s, 0, sizeof(*s));
@@ -966,13 +1000,24 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
     check(geniex_llm_create(&cin, &llm), "geniex_llm_create");
 
     /* Two prefill modes, picked by whether --prompt-file was passed:
-     *   - prompt_buf != NULL: feed prompt_utf8 verbatim (the plugin tokenizes).
-     *     `pp` is the tokenizer's count, NOT n_prompt. Required for plugins
-     *     that don't accept input_ids (today: qairt).
+     *   - prompt_buf != NULL: run the text through the bundle's chat template
+     *     (matching real inference and the VLM path), then feed the templated
+     *     prompt_utf8 (the plugin tokenizes). `pp` is the tokenizer's count,
+     *     NOT n_prompt. Required for plugins that don't accept input_ids
+     *     (today: qairt).
      *   - prompt_buf == NULL: random-ids mode (mirrors llama-bench
      *     test_prompt) — query vocab + BOS via geniex_llm_get_model_info,
      *     fill n_prompt positions with rand() % vocab_size, overwrite pos 0
      *     with BOS when add_bos. `pp` is exactly n_prompt. */
+    char* templated_prompt = NULL;
+    if (o->prompt_buf) {
+        templated_prompt = build_llm_prompt(llm, o->prompt_buf);
+        if (!templated_prompt) {
+            geniex_llm_destroy(llm);
+            exit(1);
+        }
+    }
+
     int32_t* tokens = NULL;
     if (!o->prompt_buf) {
         geniex_LlmModelInfo info;
@@ -1025,7 +1070,7 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
         memset(&gin, 0, sizeof(gin));
         memset(&gout, 0, sizeof(gout));
         if (o->prompt_buf) {
-            gin.prompt_utf8 = o->prompt_buf;
+            gin.prompt_utf8 = templated_prompt;
         } else {
             gin.input_ids       = tokens;
             gin.input_ids_count = o->n_prompt;
@@ -1038,6 +1083,7 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
             const char* msg = geniex_get_error_message((geniex_ErrorCode)rc);
             fprintf(stderr, "ERROR: geniex_llm_generate run %d failed: %s (%d)\n", run_idx, msg ? msg : "?", rc);
             free(tokens);
+            if (templated_prompt) geniex_free(templated_prompt);
             geniex_llm_destroy(llm);
             exit(1);
         }
@@ -1066,6 +1112,7 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
     }
 
     free(tokens);
+    if (templated_prompt) geniex_free(templated_prompt);
     check(geniex_llm_destroy(llm), "geniex_llm_destroy");
 }
 
@@ -1096,9 +1143,8 @@ static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_
         int32_t run_idx   = is_warmup ? i : (i - o->warmup);
         /* VLM generate() takes a fully-templated prompt; run a fixed base
          * text + media through the bundle's chat template so the image
-         * tokens land right. The LLM path uses random-ids and skips the
-         * tokenizer; the VLM path can't because the chat template needs
-         * real text plus typed content parts. */
+         * tokens land right. Same as the LLM text-prompt path, but with
+         * typed content parts for the media. */
         char* prompt = build_vlm_prompt(vlm, o, VLM_DEFAULT_PROMPT);
         if (!prompt) {
             geniex_vlm_destroy(vlm);
