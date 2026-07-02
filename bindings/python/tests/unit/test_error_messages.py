@@ -212,6 +212,46 @@ def test_messages_have_modality_audio():
     assert _messages_have_modality(msgs, 'audio') is True
 
 
+def test_messages_have_modality_ignores_prior_turns():
+    # Multi-turn VLM: the current turn is text-only, so generate() must
+    # not be gated on the image block from an earlier turn -- prior-turn
+    # media is already in the KV cache and must not be re-supplied.
+    msgs = [
+        {
+            'role': 'user',
+            'content': [
+                {'type': 'image', 'image': '/cat.png'},
+                {'type': 'text', 'text': 'describe'},
+            ],
+        },
+        {'role': 'assistant', 'content': 'a cat on a mat'},
+        {'role': 'user', 'content': 'what color?'},
+    ]
+    assert _messages_have_modality(msgs, 'image') is False
+    assert _messages_have_modality(msgs, 'audio') is False
+
+
+def test_messages_have_modality_detects_current_turn():
+    # Same shape as above but the *current* turn references an image ->
+    # generate() must still fire the "pass images=[...]" guard.
+    msgs = [
+        {'role': 'user', 'content': 'hello'},
+        {'role': 'assistant', 'content': 'hi'},
+        {
+            'role': 'user',
+            'content': [
+                {'type': 'image', 'image': '/dog.png'},
+                {'type': 'text', 'text': 'describe'},
+            ],
+        },
+    ]
+    assert _messages_have_modality(msgs, 'image') is True
+
+
+def test_messages_have_modality_empty():
+    assert _messages_have_modality([], 'image') is False
+
+
 # ---------------------------------------------------------------------------
 # #726 / #727: VLM.generate predicates can be unit-tested via a stub
 # ---------------------------------------------------------------------------
