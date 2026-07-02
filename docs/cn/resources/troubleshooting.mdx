@@ -55,25 +55,11 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="`docker pull` 报权限错误 / 未授权">
-    需要同时满足两点：
+    将当前用户加入 `docker` 组后重新登录：
 
-    1. **镜像仓库登录。** Docker Hub（`docker.io/qualcomm/geniex`）是公开的，无需登录。Qualcomm Container Registry 则需先登录：
-
-       ```bash bash
-       # Qualcomm Container Registry:
-       docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
-       ```
-
-       出现 `Login Succeeded` 即成功。
-
-    2. **加入 docker 用户组。** 若 `docker pull` 返回 `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`，说明当前用户不在 `docker` 组：
-
-       ```bash bash
-       sudo usermod -aG docker $USER
-       newgrp docker        # apply the new group in the current shell
-       ```
-
-       然后重新执行拉取。
+    ```bash bash
+    sudo usermod -aG docker $USER
+    ```
   </Accordion>
 
   <Accordion title="`geniex` install.sh 报缺少共享库">
