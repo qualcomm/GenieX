@@ -102,6 +102,20 @@ import Feedback from "/snippets/page-feedback.mdx";
   <Accordion title="容器内可加载模型但推理报 `Failed to create device: 14001`">
     容器无法访问 NPU。确认 `docker run` 带 `--privileged` 与 `/usr/lib` 挂载，并且主机已安装高通驱动包（`qcom-adreno1`、`qcom-fastrpc1`）——参见上面的缺少共享库条目。
   </Accordion>
+
+  <Accordion title="`--compute npu` 报 `SDKError(Invalid input parameters or handle)` / `Device 'HTP0' not found`">
+    llama.cpp 的 Hexagon 后端 `dlopen` 的是**无版本号**的 `libcdsprpc.so`，而 `qcom-fastrpc1` 只提供 `libcdsprpc.so.1`。裸机上 `install.sh` 会创建该软链接；若你直接部署 release tarball（没有 `install.sh`），请手动创建：
+
+    ```bash bash
+    sudo ln -sf /usr/lib/aarch64-linux-gnu/libcdsprpc.so.1 /usr/lib/aarch64-linux-gnu/libcdsprpc.so
+    sudo ln -sf /usr/lib/aarch64-linux-gnu/libadsprpc.so.1 /usr/lib/aarch64-linux-gnu/libadsprpc.so
+    sudo ldconfig
+    ```
+  </Accordion>
+
+  <Accordion title="`--compute hybrid` 能运行但只有 CPU 速度（静默回退到 CPU）">
+    若 Hexagon 驱动无法加载（见上一条），`hybrid` 仍会输出正确结果——只是全部跑在 CPU 上，因此失败是静默的。用 `GGML_HEX_VERBOSE=1` 运行以确认 NPU 确实生效；你应能看到 `Hexagon Arch version vNN` 及 `libggml-htp-vNN.so` 会话。若没有这些日志，说明已回退到 CPU。
+  </Accordion>
 </AccordionGroup>
 
 ## **Android**
