@@ -55,25 +55,11 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="`docker pull` fails with permission / unauthorized">
-    Two separate things have to be right:
+    Add yourself to the `docker` group and re-login:
 
-    1. **Registry login.** Docker Hub (`docker.io/qualcomm/geniex`) is public and needs no login. For the Qualcomm Container Registry, log in first:
-
-       ```bash bash
-       # Qualcomm Container Registry:
-       docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
-       ```
-
-       You should see `Login Succeeded`.
-
-    2. **Docker group membership.** If `docker pull` returns `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, your user isn't in the `docker` group:
-
-       ```bash bash
-       sudo usermod -aG docker $USER
-       newgrp docker        # apply the new group in the current shell
-       ```
-
-       Then retry the pull.
+    ```bash bash
+    sudo usermod -aG docker $USER
+    ```
   </Accordion>
 
   <Accordion title="`geniex` install.sh reports missing shared libraries">
