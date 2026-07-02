@@ -15,6 +15,54 @@ import (
 	"github.com/qualcomm/GenieX/cli/internal/types"
 )
 
+// ResolveModelParam turns the per-request (nctx, ngl, compute) knobs into the
+// ModelParam the keep-alive cache keys on, filling unset fields from the
+// server-wide defaults (config: --nctx / --ngl / --compute). A request value of
+// 0 / "" means "unset, use the server default". NCtx / NGpuLayers are meaningful
+// only for llama_cpp; for other plugins (e.g. qairt) they stay 0 so the plugin's
+// param-guard is not tripped. Compute is resolved to a concrete DeviceID by the
+// SDK (sdk/src/device.cpp); any coercion warning is logged.
+//
+// Every handler that loads a model must build its ModelParam through this so the
+// server-wide defaults and device resolution apply uniformly.
+func ResolveModelParam(runtimeID, modelName string, reqNCtx, reqNgl int32, reqCompute string) (types.ModelParam, error) {
+	cfg := config.Get()
+
+	nctx, ngl := reqNCtx, reqNgl
+	if runtimeID == geniex_sdk.RuntimeLlamaCpp {
+		if nctx == 0 {
+			nctx = cfg.NCtx
+		}
+		if ngl == 0 {
+			ngl = cfg.Ngl
+		}
+	}
+
+	compute := reqCompute
+	if compute == "" {
+		compute = cfg.Compute
+	}
+
+	resolved, err := geniex_sdk.ResolveDevice(geniex_sdk.ResolveDeviceInput{
+		RuntimeID:   runtimeID,
+		ModelName:   modelName,
+		ComputeUnit: compute,
+		NglDefault:  ngl,
+	})
+	if err != nil {
+		return types.ModelParam{}, err
+	}
+	if resolved.Warning != "" {
+		slog.Warn("compute unit coerced", "warning", resolved.Warning)
+	}
+
+	return types.ModelParam{
+		NCtx:       nctx,
+		NGpuLayers: resolved.Ngl,
+		DeviceID:   resolved.DeviceID,
+	}, nil
+}
+
 // KeepAliveGet retrieves a model from the keepalive cache or creates it if not found
 // This avoids the overhead of repeatedly loading/unloading models from disk
 func KeepAliveGet[T any](name string, param types.ModelParam, reset bool) (*T, error) {
@@ -124,21 +172,9 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 		delete(keepAlive.models, name)
 	}
 
-	// Resolve llama_cpp-only defaults: NCtx and NGpuLayers are meaningful only for
-	// llama_cpp. For other plugins (e.g. qairt) they must stay 0 so the plugin's
-	// param-guard is not tripped by the request defaults.
-	// TODO: Remove this resolution once the C API exposes geniex_get_last_error_detail()
-	// and the plugin can report the exact unsupported param name directly.
-	nctx, ngl := param.NCtx, param.NGpuLayers
-	if paths.RuntimeID == geniex_sdk.RuntimeLlamaCpp {
-		if nctx == 0 {
-			nctx = 4096
-		}
-		if ngl == 0 {
-			ngl = 999
-		}
-	}
-
+	// param already carries the resolved NCtx / NGpuLayers / DeviceID (see
+	// resolveServeModelParam in the chat handler); the cache keys on it, so no
+	// further resolution happens here.
 	var t keepable
 	var e error
 	switch reflect.TypeFor[T]() {
@@ -146,9 +182,10 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 		t, e = geniex_sdk.NewLLM(geniex_sdk.LlmCreateInput{
 			ModelName: paths.ModelName,
 			ModelPath: modelfile,
+			DeviceID:  param.DeviceID,
 			Config: geniex_sdk.ModelConfig{
-				NCtx:       nctx,
-				NGpuLayers: ngl,
+				NCtx:       param.NCtx,
+				NGpuLayers: param.NGpuLayers,
 			},
 			RuntimeID: paths.RuntimeID,
 		})
@@ -157,9 +194,10 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 			ModelName:  paths.ModelName,
 			ModelPath:  modelfile,
 			MmprojPath: paths.MmprojPath,
+			DeviceID:   param.DeviceID,
 			Config: geniex_sdk.ModelConfig{
-				NCtx:       nctx,
-				NGpuLayers: ngl,
+				NCtx:       param.NCtx,
+				NGpuLayers: param.NGpuLayers,
 			},
 			RuntimeID: paths.RuntimeID,
 		})

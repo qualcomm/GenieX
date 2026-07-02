@@ -27,6 +27,12 @@ type Config struct {
 	Host      string // Server host and port (default: "127.0.0.1:18181")
 	Origins   string // Allowed CORS origins (default: "*")
 	KeepAlive int64  // Connection keep-alive timeout in seconds (default: 300)
+	// Model-load defaults applied when a request omits them (llama_cpp only;
+	// per-request body fields still override). Compute is the alias resolved by
+	// the SDK (sdk/src/device.cpp); empty means the SDK's own default.
+	NCtx    int32  // Default context window size (default: 4096)
+	Ngl     int32  // Default GPU/NPU layers to offload (default: 999)
+	Compute string // Default compute unit: cpu, gpu, npu, hybrid (default: "")
 	// HTTPS / TLS settings
 	HTTPS    bool   // Whether to serve over HTTPS (default: false)
 	CertFile string // TLS certificate file path

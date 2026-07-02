@@ -95,8 +95,7 @@ components:
         nctx:
           type: integer
           minimum: 1
-          description: The maximum number of tokens that can be processed in the chat completion
-          default: 4096
+          description: Context window size (llama_cpp only). Omit to use the server default set via `geniex serve --nctx` / `GENIEX_NCTX` (4096 out of the box).
         max_completion_tokens:
           type: integer
           minimum: 1
@@ -176,7 +175,11 @@ components:
           description: Grammar string for structured output
         ngl:
           type: integer
-          description: Number of GPU layers to use. Do not set — the server chooses the correct layout per backend.
+          description: Number of GPU/NPU layers to offload (llama_cpp only). Omit to use the server default set via `geniex serve --ngl` / `GENIEX_NGL` (999 out of the box); the server chooses the correct layout per backend.
+        compute:
+          type: string
+          enum: [cpu, gpu, npu, hybrid]
+          description: Compute unit to run on. Omit to use the server default set via `geniex serve --compute` / `GENIEX_COMPUTE`. QAIRT is NPU-only; other aliases are coerced with a warning.
         image_max_length:
           type: integer
           description: Maximum length for image processing (VLM only)

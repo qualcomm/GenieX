@@ -18,6 +18,10 @@ go_library(
 
 go_cgo_test(
     name = "service_test",
-    srcs = ["package_test.go"],
+    srcs = ["keepalive_test.go"],
     embed = [":service"],
+    deps = [
+        "//bindings/go:geniex_sdk_go",
+        "@com_github_spf13_viper//:viper",
+    ],
 )

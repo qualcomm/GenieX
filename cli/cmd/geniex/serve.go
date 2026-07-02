@@ -27,6 +27,11 @@ func serve() *cobra.Command {
 	serveCmd.Flags().String("host", "127.0.0.1:18181", "Default server address (env: GENIEX_HOST)")
 	serveCmd.Flags().String("origins", "*", "Default CORS origins (env: GENIEX_ORIGINS)")
 	serveCmd.Flags().Int("keepalive", 300, "Keepalive seconds (env: GENIEX_KEEPALIVE)")
+	// Model-load defaults applied when a request omits them (llama_cpp only;
+	// per-request body fields still override).
+	serveCmd.Flags().Int32("nctx", 4096, "Default context window size, llama_cpp only (env: GENIEX_NCTX)")
+	serveCmd.Flags().Int32("ngl", 999, "Default layers to offload to gpu/npu, llama_cpp only (env: GENIEX_NGL)")
+	serveCmd.Flags().String("compute", "", "Default compute unit: cpu, gpu, npu, or hybrid (env: GENIEX_COMPUTE)")
 	// HTTPS / TLS flags
 	serveCmd.Flags().Bool("https", false, "Enable HTTPS/TLS (env: GENIEX_HTTPS)")
 	serveCmd.Flags().String("certfile", "cert.pem", "TLS certificate file path (env: GENIEX_CERTFILE)")
@@ -35,6 +40,9 @@ func serve() *cobra.Command {
 	viper.BindPFlag("host", serveCmd.Flags().Lookup("host"))
 	viper.BindPFlag("origins", serveCmd.Flags().Lookup("origins"))
 	viper.BindPFlag("keepalive", serveCmd.Flags().Lookup("keepalive"))
+	viper.BindPFlag("nctx", serveCmd.Flags().Lookup("nctx"))
+	viper.BindPFlag("ngl", serveCmd.Flags().Lookup("ngl"))
+	viper.BindPFlag("compute", serveCmd.Flags().Lookup("compute"))
 	viper.BindPFlag("enablehttps", serveCmd.Flags().Lookup("https"))
 	viper.BindPFlag("certfile", serveCmd.Flags().Lookup("certfile"))
 	viper.BindPFlag("keyfile", serveCmd.Flags().Lookup("keyfile"))

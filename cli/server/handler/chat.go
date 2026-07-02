@@ -36,9 +36,10 @@ type ChatCompletionRequest struct {
 	ChatCompletionNewParams
 	Stream bool `json:"stream"`
 
-	EnableThink bool  `json:"enable_think"`
-	NCtx        int32 `json:"nctx"`
-	Ngl         int32 `json:"ngl"`
+	EnableThink bool   `json:"enable_think"`
+	NCtx        int32  `json:"nctx"`
+	Ngl         int32  `json:"ngl"`
+	Compute     string `json:"compute"`
 
 	ImageMaxLength int32 `json:"image_max_length"`
 
@@ -58,8 +59,9 @@ func defaultChatCompletionRequest() ChatCompletionRequest {
 		Stream: false,
 
 		EnableThink:       true,
-		NCtx:              0, // llama_cpp only; 0 = not set, resolved to 4096 for llama_cpp
-		Ngl:               0, // llama_cpp only; 0 = not set, resolved to 999 for llama_cpp
+		NCtx:              0,  // llama_cpp only; 0 = not set, falls back to server default (--nctx)
+		Ngl:               0,  // llama_cpp only; 0 = not set, falls back to server default (--ngl)
+		Compute:           "", // "" = not set, falls back to server default (--compute)
 		ImageMaxLength:    512,
 		TopK:              0,
 		MinP:              0.0,
@@ -106,18 +108,28 @@ func ChatCompletions(c *gin.Context) {
 		return
 	}
 
+	// Fill unset request knobs from the server-wide defaults and resolve the
+	// compute unit. Done before the MaxCompletionTokens floor so a body that
+	// omits nctx picks up the server default, not the floor.
+	modelParam, err := service.ResolveModelParam(paths.RuntimeID, paths.ModelName, param.NCtx, param.Ngl, param.Compute)
+	if err != nil {
+		slog.Error("Failed to resolve model params", "model", param.Model, "error", err)
+		c.JSON(http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+
 	// Automatically adjust NCtx if MaxCompletionTokens is larger (llama_cpp only — QAIRT
 	// does not use NCtx and the 0-default must not be overwritten for non-llama_cpp plugins).
-	if paths.RuntimeID == geniex_sdk.RuntimeLlamaCpp && param.NCtx < int32(param.MaxCompletionTokens.Value) {
-		slog.Debug("Adjust NCtx to MaxCompletionTokens", "from", param.NCtx, "to", param.MaxCompletionTokens.Value)
-		param.NCtx = int32(param.MaxCompletionTokens.Value)
+	if paths.RuntimeID == geniex_sdk.RuntimeLlamaCpp && modelParam.NCtx < int32(param.MaxCompletionTokens.Value) {
+		slog.Debug("Adjust NCtx to MaxCompletionTokens", "from", modelParam.NCtx, "to", param.MaxCompletionTokens.Value)
+		modelParam.NCtx = int32(param.MaxCompletionTokens.Value)
 	}
 
 	switch modelType {
 	case geniex_sdk.ModelTypeLLM:
-		chatCompletionsLLM(c, param)
+		chatCompletionsLLM(c, param, modelParam)
 	case geniex_sdk.ModelTypeVLM:
-		chatCompletionsVLM(c, param)
+		chatCompletionsVLM(c, param, modelParam)
 	default:
 		slog.Error("Model type not support", "model_type", modelType)
 		c.JSON(http.StatusBadRequest, map[string]any{"error": "model type not support"})
@@ -125,7 +137,7 @@ func ChatCompletions(c *gin.Context) {
 	}
 }
 
-func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
+func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, modelParam types.ModelParam) {
 	messages := make([]geniex_sdk.LlmChatMessage, 0, len(param.Messages))
 	for _, msg := range param.Messages {
 		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
@@ -209,7 +221,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 
 	p, err := service.KeepAliveGet[geniex_sdk.LLM](
 		string(param.Model),
-		types.ModelParam{NCtx: param.NCtx, NGpuLayers: param.Ngl},
+		modelParam,
 		c.GetHeader("GenieX-KeepCache") != "true",
 	)
 	if writeKeepAliveError(c, err) {
@@ -294,7 +306,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest) {
 	}
 }
 
-func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
+func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, modelParam types.ModelParam) {
 	messages := make([]geniex_sdk.VlmChatMessage, 0, len(param.Messages))
 	for _, msg := range param.Messages {
 		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
@@ -430,7 +442,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest) {
 
 	p, err := service.KeepAliveGet[geniex_sdk.VLM](
 		string(param.Model),
-		types.ModelParam{NCtx: param.NCtx, NGpuLayers: param.Ngl},
+		modelParam,
 		c.GetHeader("GenieX-KeepCache") != "true",
 	)
 	if writeKeepAliveError(c, err) {
