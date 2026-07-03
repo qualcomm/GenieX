@@ -1,4 +1,7 @@
 #!/bin/sh
+# Copyright 2024-2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause
+#
 # Resolve host QCOM libs at container start.
 #
 # /opt/qcom-lib is the user's bind-mounted host /usr/lib. Host layout

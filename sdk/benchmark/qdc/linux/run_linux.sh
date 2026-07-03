@@ -1,4 +1,7 @@
 #!/bin/bash
+# Copyright 2024-2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause
+#
 # geniex-bench entry script for QDC Linux IoT (BASH framework).
 #
 # QDC extracts the artifact zip to /data/local/tmp/TestContent/ and runs this
