@@ -144,6 +144,10 @@ Run `geniex-bench --help` for the full flag list.
   yields meaningless text.
 - llama_cpp gets a `[warmup=i]` / `[run=i]` suffix appended to the prompt
   so the KV cache is busted between runs
+- for `--plugin qairt`, `prompt_tokens` and `prefill_tps` are reported over the
+  padded prompt length `ceil(prompt_tokens / 128) * 128`: the QAIRT engine pads
+  input_ids to a 128-token prefill chunk, so the padded count reflects the work
+  actually done (#1194). llama_cpp does no such padding and is reported as-is
 
 ## Per-cell JSON shape
 

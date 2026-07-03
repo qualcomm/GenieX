@@ -60,6 +60,12 @@ static const char* const VLM_DEFAULT_PROMPT = "Describe the image.";
 
 #define MAX_PATHS 16
 
+/* QAIRT prefill chunk size: the engine pads input_ids up to the next multiple
+ * of this before running prefill, so the real prefill work (and thus the honest
+ * tokens/sec) is over the padded length, not the raw prompt length. llama_cpp
+ * has no such padding and is left untouched. See qcom-ai-hub/geniex#1194. */
+#define QAIRT_PREFILL_CHUNK 128
+
 typedef struct {
     const char* plugin;
     const char* device;
@@ -136,6 +142,19 @@ typedef struct {
     char        err[256];
 } run_result_t;
 
+/* Adjust the reported prefill metrics for the engine's real prefill work.
+ * QAIRT pads the prompt to a QAIRT_PREFILL_CHUNK multiple before prefill, so
+ * prompt_tokens/prefill_tps should reflect that padded length (#1194); QAIRT's
+ * prompt_time equals ttft, so recomputing the rate over the padded count keeps
+ * rate == prompt_tokens / prompt_time consistent. llama_cpp does no such
+ * padding, so its metrics are left as the SDK reported them. */
+static void normalize_prefill_metrics(run_result_t* r, const char* plugin) {
+    if (!plugin || strcmp(plugin, "qairt") != 0 || r->prompt_tokens <= 0) return;
+    int64_t padded   = ((r->prompt_tokens + QAIRT_PREFILL_CHUNK - 1) / QAIRT_PREFILL_CHUNK) * QAIRT_PREFILL_CHUNK;
+    r->prompt_tokens = padded;
+    r->prefill_tps   = r->prompt_time_us > 0 ? (double)padded / ((double)r->prompt_time_us / 1e6) : 0.0;
+}
+
 static void die(int32_t code, const char* what) {
     const char* msg = geniex_get_error_message((geniex_ErrorCode)code);
     fprintf(stderr, "ERROR: %s: %s (code=%d)\n", what, msg ? msg : "?", code);
@@ -206,6 +225,9 @@ static void usage(const char* argv0) {
         "                         only way to bench plugins that don't support\n"
         "                         input_ids (today: qairt). With this flag, reported\n"
         "                         `pp` is the tokenizer's count, NOT --n-prompt.\n"
+        "                         For qairt, `pp` and prefill tok/s are reported over\n"
+        "                         the padded length ceil(pp/128)*128, matching the\n"
+        "                         engine's 128-token prefill chunking (#1194).\n"
         "  --no-reset-between-runs\n"
         "                         keep KV cache across measured runs (default is\n"
         "                         to call geniex_llm_reset() before every run so\n"
@@ -1054,6 +1076,7 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
             r->decode_tps     = gout.profile_data.decoding_speed;
             r->stop_reason    = gout.profile_data.stop_reason;
             r->status         = 0;
+            normalize_prefill_metrics(r, o->plugin);
         }
 
         if (!is_warmup && o->accuracy && gout.full_text) {
@@ -1138,6 +1161,7 @@ static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_
             r->decode_tps     = gout.profile_data.decoding_speed;
             r->stop_reason    = gout.profile_data.stop_reason;
             r->status         = 0;
+            normalize_prefill_metrics(r, o->plugin);
         }
 
         if (!is_warmup && o->accuracy && gout.full_text) {
