@@ -319,15 +319,16 @@ class GenieXLLM:
 
 
 def _messages_have_modality(messages: list[dict], modality: str) -> bool:
-    # True if any message's content list contains a block with the given
-    # ``type`` (e.g. 'image' / 'audio'). Plain string content trivially
-    # holds none.
-    for msg in messages:
+    # True if the last user message contains a content block with the given
+    # ``type`` (e.g. 'image' / 'audio'). Only the current turn is checked:
+    # prior-turn media is already in the KV cache and must not be re-supplied.
+    for msg in reversed(messages):
+        if msg.get('role') != 'user':
+            continue
         content = msg.get('content')
         if isinstance(content, list):
-            for item in content:
-                if isinstance(item, dict) and item.get('type') == modality:
-                    return True
+            return any(isinstance(item, dict) and item.get('type') == modality for item in content)
+        return False
     return False
 
 

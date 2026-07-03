@@ -26,8 +26,8 @@ def _vlm_prompt(vlm: geniex.GenieXVLM, image_path: str, text: str) -> str:
             {
                 'role': 'user',
                 'content': [
-                    {'type': 'image', 'image': image_path},
                     {'type': 'text', 'text': text},
+                    {'type': 'image', 'image': image_path},
                 ],
             }
         ],
