@@ -446,6 +446,9 @@ jobs:
     if: needs.resolve-tag.outputs.is_prerelease != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      # OIDC token for PyPI Trusted Publishing — no API token needed.
+      id-token: write
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -455,11 +458,8 @@ jobs:
       - name: Publish sdist to PyPI
         uses: pypa/gh-action-pypi-publish@v1.14.0
         with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
           packages-dir: dist/
           skip-existing: true
-          # API-token auth, not Trusted Publishing — attestations are a no-op.
-          attestations: false
 
   # Uploads the AAR to the Sonatype Central Portal under com.qualcomm.qti:geniex-android.
   # Stable tags only. Default publishingType is USER_MANAGED — upload lands in the Portal
