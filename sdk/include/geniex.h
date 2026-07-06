@@ -598,9 +598,9 @@ typedef struct {
  *   - GENIEX_SUCCESS                          on success.
  *   - GENIEX_ERROR_COMMON_NOT_INITIALIZED     when handle is NULL.
  *   - GENIEX_ERROR_COMMON_INVALID_INPUT       when output is NULL.
- *   - GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED when the plugin cannot report the metadata
- *                                             (today: qairt). Callers that need vocab_size
- *                                             must treat this as a hard failure.
+ *   - GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED when the plugin cannot report the metadata.
+ *                                             Callers that need vocab_size must treat this
+ *                                             as a hard failure.
  */
 GENIEX_API int32_t geniex_llm_get_model_info(geniex_LLM* handle, geniex_LlmModelInfo* output);
 

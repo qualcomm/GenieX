@@ -34,6 +34,8 @@ class QairtLlm : public ILlm {
         const geniex_LlmApplyChatTemplateInput*, geniex_LlmApplyChatTemplateOutput*) override;
 
     virtual int32_t generate(const geniex_LlmGenerateInput*, geniex_LlmGenerateOutput*) override;
+
+    virtual int32_t get_model_info(geniex_LlmModelInfo*) override;
 };
 
 }  // namespace geniex

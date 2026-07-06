@@ -208,9 +208,9 @@ static void usage(const char* argv0) {
         "                         positions with `rand() %% vocab_size` (BOS at pos 0\n"
         "                         when the model wants one) and feeds them via\n"
         "                         input_ids, so `pp` is exactly N for every model.\n"
-        "                         The qairt plugin currently rejects input_ids; the\n"
-        "                         tool fails with a clear error pointing to the\n"
-        "                         tracking issue.\n"
+        "                         Requires the plugin to implement\n"
+        "                         geniex_llm_get_model_info; the tool fails with a\n"
+        "                         clear error otherwise.\n"
         "  -n, --n-gen N          tokens to generate per run; default 128\n"
         "  -c, --ctx-size N       model n_ctx (0 = from model, default 0)\n"
         "  -t, --threads N        generation threads (0 = SDK default)\n"
@@ -222,8 +222,8 @@ static void usage(const char* argv0) {
         "  --seed N               default 42; also seeds rand() for prompt ids\n"
         "  --prompt-file PATH     opt out of random-ids prefill: read a UTF-8 prompt\n"
         "                         from PATH and feed it via prompt_utf8 instead. The\n"
-        "                         only way to bench plugins that don't support\n"
-        "                         input_ids (today: qairt). With this flag, reported\n"
+        "                         only way to bench plugins that don't implement\n"
+        "                         geniex_llm_get_model_info. With this flag, reported\n"
         "                         `pp` is the tokenizer's count, NOT --n-prompt.\n"
         "                         For qairt, `pp` and prefill tok/s are reported over\n"
         "                         the padded length ceil(pp/128)*128, matching the\n"
@@ -561,7 +561,7 @@ static char* resolve_local_anchor(const char* path) {
 }
 
 /* Load whole file into a heap buffer (caller frees). Used by --prompt-file
- * for plugins that don't support input_ids (qairt). */
+ * for plugins that don't implement geniex_llm_get_model_info. */
 static char* slurp(const char* path) {
     FILE* f = fopen(path, "rb");
     if (!f) {
@@ -989,7 +989,7 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
     /* Two prefill modes, picked by whether --prompt-file was passed:
      *   - prompt_buf != NULL: feed prompt_utf8 verbatim (the plugin tokenizes).
      *     `pp` is the tokenizer's count, NOT n_prompt. Required for plugins
-     *     that don't accept input_ids (today: qairt).
+     *     that don't implement geniex_llm_get_model_info.
      *   - prompt_buf == NULL: random-ids mode (mirrors llama-bench
      *     test_prompt) — query vocab + BOS via geniex_llm_get_model_info,
      *     fill n_prompt positions with rand() % vocab_size, overwrite pos 0
