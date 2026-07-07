@@ -144,9 +144,7 @@ module.exports = async ({ github, context, core }) => {
               ? "application/gzip"
               : fileName.endsWith(".aar")
                 ? "application/java-archive"
-                : fileName.endsWith(".apk")
-                  ? "application/vnd.android.package-archive"
-                  : "application/zip";
+                : "application/zip";
       await withRetry(
         () =>
           github.rest.repos.uploadReleaseAsset({
