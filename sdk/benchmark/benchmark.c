@@ -95,7 +95,8 @@ typedef struct {
     int32_t     audio_count;
 
     int32_t n_prompt;   /* LLM random-ids prefill length (llama-bench -p), used when prompt_buf is NULL */
-    char*   prompt_buf; /* heap-owned text prompt loaded via --prompt-file; NULL = use random-ids */
+    char*   prompt_buf; /* heap-owned text prompt loaded via --prompt-file; NULL = use random-ids.
+                         * Split into multiple prompts on lines that are exactly "---". */
     int32_t max_new_tokens;
     float   temperature;
     int32_t seed;
@@ -228,6 +229,12 @@ static void usage(const char* argv0) {
         "                         For qairt, `pp` and prefill tok/s are reported over\n"
         "                         the padded length ceil(pp/128)*128, matching the\n"
         "                         engine's 128-token prefill chunking (#1194).\n"
+        "                         Batch prompts by separating them with a line that\n"
+        "                         is exactly `---`; each segment runs as its own\n"
+        "                         prompt (KV cache reset between segments), delimited\n"
+        "                         in stdout by a `[sep ] prompt i/n` marker. A file\n"
+        "                         with no `---` line is a single prompt, so this works\n"
+        "                         the same in timing and --accuracy runs.\n"
         "  --no-reset-between-runs\n"
         "                         keep KV cache across measured runs (default is\n"
         "                         to call geniex_llm_reset() before every run so\n"
@@ -559,6 +566,9 @@ static char* resolve_local_anchor(const char* path) {
 #endif
     return best;
 }
+
+/* Defined near main(); used by run_llm to trim prompt separator lines. */
+static char* rstrip(char* s);
 
 /* Load whole file into a heap buffer (caller frees). Used by --prompt-file
  * for plugins that don't support input_ids (qairt). */
@@ -941,6 +951,15 @@ static void print_gen_text(const char* text) {
 
 /* ----------------------------- LLM run loop ----------------------------- */
 
+/* Append `seg` to the prompt list unless it is NULL or all whitespace, so
+ * stray/leading/trailing "---" separators don't produce empty prompts. */
+static void append_prompt_if_nonempty(const char** prompts, int32_t* n, char* seg) {
+    if (!seg) return;
+    const char* s = seg;
+    while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') s++;
+    if (*s) prompts[(*n)++] = seg;
+}
+
 static void fill_sampler(geniex_SamplerConfig* s, const options_t* o) {
     memset(s, 0, sizeof(*s));
     s->temperature        = o->temperature;
@@ -989,7 +1008,8 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
     /* Two prefill modes, picked by whether --prompt-file was passed:
      *   - prompt_buf != NULL: feed prompt_utf8 verbatim (the plugin tokenizes).
      *     `pp` is the tokenizer's count, NOT n_prompt. Required for plugins
-     *     that don't accept input_ids (today: qairt).
+     *     that don't accept input_ids (today: qairt). The buffer is split into
+     *     one prompt per "---"-delimited segment (see the loop below).
      *   - prompt_buf == NULL: random-ids mode (mirrors llama-bench
      *     test_prompt) — query vocab + BOS via geniex_llm_get_model_info,
      *     fill n_prompt positions with rand() % vocab_size, overwrite pos 0
@@ -1032,61 +1052,132 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
     fill_sampler(&sampler, o);
     fill_gen_config(&gconfig, &sampler, o, /*with_media=*/false);
 
-    int32_t total = o->warmup + o->repeat;
-    for (int32_t i = 0; i < total; ++i) {
-        bool    is_warmup = (i < o->warmup);
-        int32_t run_idx   = is_warmup ? i : (i - o->warmup);
+    /* Prompt list for the outer loop:
+     *   - random-ids mode (prompt_buf == NULL): a single NULL entry.
+     *   - --prompt-file: split prompt_buf on lines that are exactly "---"
+     *     (a "\n---\n" separator, ignoring leading/trailing whitespace on that
+     *     line). No separator => the whole file is one prompt, so the same
+     *     split works for both accuracy and timing runs without branching on
+     *     the mode. Multiple prompts reset the KV cache between segments.
+     * Each separator line is overwritten with a NUL so the preceding segment
+     * ends there; `prompts` points into prompt_buf and is freed here. */
+    const char** prompts   = NULL;
+    int32_t      n_prompts = 1;
+    if (o->prompt_buf) {
+        /* Upper bound: one more segment than newlines. */
+        int32_t cap = 1;
+        for (char* p = o->prompt_buf; *p; ++p)
+            if (*p == '\n') cap++;
+        prompts   = (const char**)malloc((size_t)cap * sizeof(char*));
+        n_prompts = 0;
 
-        if (o->reset_between_runs) {
-            check(geniex_llm_reset(llm), "geniex_llm_reset");
+        char* seg = o->prompt_buf; /* start of the current segment, NULL at EOF */
+        for (char* line = o->prompt_buf; line;) {
+            char* nl = strchr(line, '\n');
+            if (nl) *nl = '\0'; /* isolate this line for the separator test */
+
+            /* Is `line` exactly "---" once surrounding whitespace is ignored? */
+            char* t = line;
+            while (*t == ' ' || *t == '\t' || *t == '\r') t++;
+            rstrip(t);
+            bool is_sep = (strcmp(t, "---") == 0);
+
+            if (is_sep) {
+                /* End the preceding segment. When it spans real lines (seg <
+                 * line) terminate at the newline before this separator so the
+                 * trailing "\n" is dropped; an empty segment (seg == line, e.g.
+                 * a leading or back-to-back separator) collapses to "". */
+                if (line > seg)
+                    line[-1] = '\0';
+                else if (seg)
+                    *seg = '\0';
+                append_prompt_if_nonempty(prompts, &n_prompts, seg);
+                seg = nl ? nl + 1 : NULL;
+            } else if (nl) {
+                *nl = '\n'; /* not a separator: restore so segment text is intact */
+            }
+            line = nl ? nl + 1 : NULL;
         }
-
-        geniex_LlmGenerateInput  gin;
-        geniex_LlmGenerateOutput gout;
-        memset(&gin, 0, sizeof(gin));
-        memset(&gout, 0, sizeof(gout));
-        if (o->prompt_buf) {
-            gin.prompt_utf8 = o->prompt_buf;
-        } else {
-            gin.input_ids       = tokens;
-            gin.input_ids_count = o->n_prompt;
-        }
-        gin.config   = &gconfig;
-        gin.on_token = on_token;
-
-        int32_t rc = geniex_llm_generate(llm, &gin, &gout);
-        if (rc != GENIEX_SUCCESS) {
-            const char* msg = geniex_get_error_message((geniex_ErrorCode)rc);
-            fprintf(stderr, "ERROR: geniex_llm_generate run %d failed: %s (%d)\n", run_idx, msg ? msg : "?", rc);
+        /* Trailing segment (the whole file when there is no "---"). */
+        append_prompt_if_nonempty(prompts, &n_prompts, seg);
+        if (n_prompts == 0) {
+            fprintf(stderr, "ERROR: --prompt-file has no non-empty prompts\n");
+            free(prompts);
             free(tokens);
             geniex_llm_destroy(llm);
             exit(1);
         }
+    } else {
+        prompts    = (const char**)malloc(sizeof(char*));
+        prompts[0] = NULL; /* random-ids */
+    }
 
-        if (!is_warmup) {
-            run_result_t* r = &out[run_idx];
-            memset(r, 0, sizeof(*r));
-            r->run_idx        = run_idx;
-            r->ttft_us        = gout.profile_data.ttft;
-            r->prompt_time_us = gout.profile_data.prompt_time;
-            r->decode_time_us = gout.profile_data.decode_time;
-            r->prompt_tokens  = gout.profile_data.prompt_tokens;
-            r->gen_tokens     = gout.profile_data.generated_tokens;
-            r->prefill_tps    = gout.profile_data.prefill_speed;
-            r->decode_tps     = gout.profile_data.decoding_speed;
-            r->stop_reason    = gout.profile_data.stop_reason;
-            r->status         = 0;
-            normalize_prefill_metrics(r, o->plugin);
+    int32_t total = o->warmup + o->repeat;
+    for (int32_t pi = 0; pi < n_prompts; ++pi) {
+        const char* cur_prompt = prompts[pi];
+        if (n_prompts > 1) {
+            fprintf(stdout, "[sep ] prompt %d/%d\n", pi + 1, n_prompts);
         }
+        for (int32_t i = 0; i < total; ++i) {
+            bool    is_warmup = (i < o->warmup);
+            int32_t run_idx   = is_warmup ? i : (i - o->warmup);
 
-        if (!is_warmup && o->accuracy && gout.full_text) {
-            print_gen_text(gout.full_text);
-        }
-        if (gout.full_text) {
-            geniex_free(gout.full_text);
+            /* Reset before each run (llama-bench semantics) OR always at the
+             * start of a new prompt segment, so batched prompts never inherit
+             * the previous segment's KV cache even under
+             * --no-reset-between-runs. */
+            if (o->reset_between_runs || (n_prompts > 1 && i == 0)) {
+                check(geniex_llm_reset(llm), "geniex_llm_reset");
+            }
+
+            geniex_LlmGenerateInput  gin;
+            geniex_LlmGenerateOutput gout;
+            memset(&gin, 0, sizeof(gin));
+            memset(&gout, 0, sizeof(gout));
+            if (cur_prompt) {
+                gin.prompt_utf8 = cur_prompt;
+            } else {
+                gin.input_ids       = tokens;
+                gin.input_ids_count = o->n_prompt;
+            }
+            gin.config   = &gconfig;
+            gin.on_token = on_token;
+
+            int32_t rc = geniex_llm_generate(llm, &gin, &gout);
+            if (rc != GENIEX_SUCCESS) {
+                const char* msg = geniex_get_error_message((geniex_ErrorCode)rc);
+                fprintf(stderr, "ERROR: geniex_llm_generate run %d failed: %s (%d)\n", run_idx, msg ? msg : "?", rc);
+                free(tokens);
+                geniex_llm_destroy(llm);
+                exit(1);
+            }
+
+            if (!is_warmup) {
+                run_result_t* r = &out[run_idx];
+                memset(r, 0, sizeof(*r));
+                r->run_idx        = run_idx;
+                r->ttft_us        = gout.profile_data.ttft;
+                r->prompt_time_us = gout.profile_data.prompt_time;
+                r->decode_time_us = gout.profile_data.decode_time;
+                r->prompt_tokens  = gout.profile_data.prompt_tokens;
+                r->gen_tokens     = gout.profile_data.generated_tokens;
+                r->prefill_tps    = gout.profile_data.prefill_speed;
+                r->decode_tps     = gout.profile_data.decoding_speed;
+                r->stop_reason    = gout.profile_data.stop_reason;
+                r->status         = 0;
+                normalize_prefill_metrics(r, o->plugin);
+            }
+
+            if (!is_warmup && o->accuracy && gout.full_text) {
+                print_gen_text(gout.full_text);
+            }
+            if (gout.full_text) {
+                geniex_free(gout.full_text);
+            }
         }
     }
 
+    free(prompts);
     free(tokens);
     check(geniex_llm_destroy(llm), "geniex_llm_destroy");
 }
