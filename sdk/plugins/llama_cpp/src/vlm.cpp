@@ -154,10 +154,7 @@ int32_t LlamaVlm::apply_chat_template(
         tmpl_inputs.tools = common_chat_tools_parse_oaicompat(nlohmann::ordered_json::parse(std::string(input->tools)));
     }
 
-    if (input->enable_thinking) {
-        GENIEX_LOG_WARN("thinking mode not supported for llama.cpp VLM; ignoring enable_thinking=true");
-    }
-    tmpl_inputs.enable_thinking = false;
+    tmpl_inputs.enable_thinking = input->enable_thinking;
     GENIEX_LOG_DEBUG("applying chat template with add_generation_prompt=true, use_jinja={}", tmpl_inputs.use_jinja);
 
     // Apply chat template
@@ -399,7 +396,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             break;
         }
 
-        int n = llama_token_to_piece(vocab, token, token_buffer, sizeof(token_buffer) - 1, 0, false);
+        int n = llama_token_to_piece(vocab, token, token_buffer, sizeof(token_buffer) - 1, 0, true);
         if (n < 0) n = 0;
         token_buffer[n] = '\0';
 
