@@ -103,6 +103,7 @@ typedef struct {
     int32_t repeat;
     bool    reset_between_runs; /* true => geniex_llm_reset() before each run, freeing KV */
     bool    accuracy;           /* true => single run (warmup=0, repeat=1), print generated text */
+    bool    ignore_eos;         /* true => keep generating past EOS so decode always runs n_gen (llama_cpp only) */
     int32_t n_ctx;
     int32_t n_threads;
     int32_t ngl_override; /* -1 = use resolved alias default; >=0 overrides */
@@ -218,6 +219,9 @@ static void usage(const char* argv0) {
         "                         device alias default (needed for a real gpu run)\n"
         "  --warmup N             default 1\n"
         "  --no-warmup            equivalent to --warmup 0\n"
+        "  --ignore-eos           keep generating past EOS so decode always runs the\n"
+        "                         full --n-gen tokens (llama_cpp only; no-op on qairt).\n"
+        "                         Reported stop_reason becomes \"length\".\n"
         "  --temperature F        default 0.0\n"
         "  --seed N               default 42; also seeds rand() for prompt ids\n"
         "  --prompt-file PATH     opt out of random-ids prefill: read a UTF-8 prompt\n"
@@ -625,6 +629,7 @@ static void parse_args(int argc, char** argv, options_t* o) {
     o->repeat             = 5;
     o->reset_between_runs = true;
     o->accuracy           = false;
+    o->ignore_eos         = false;
     o->n_ctx              = 0;
     o->n_threads          = 0;
     o->ngl_override       = -1;
@@ -682,6 +687,8 @@ static void parse_args(int argc, char** argv, options_t* o) {
             o->warmup = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--no-warmup") == 0) {
             o->warmup = 0;
+        } else if (strcmp(a, "--ignore-eos") == 0) {
+            o->ignore_eos = true;
         } else if (strcmp(a, "-r") == 0 || strcmp(a, "--repetitions") == 0) {
             o->repeat = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--no-reset-between-runs") == 0) {
@@ -955,6 +962,7 @@ static void fill_gen_config(geniex_GenerationConfig* g, geniex_SamplerConfig* s,
     memset(g, 0, sizeof(*g));
     g->max_tokens     = o->max_new_tokens;
     g->sampler_config = s;
+    g->ignore_eos     = o->ignore_eos;
     if (with_media && o->image_count > 0) {
         g->image_paths = (geniex_Path*)o->image_paths;
         g->image_count = o->image_count;

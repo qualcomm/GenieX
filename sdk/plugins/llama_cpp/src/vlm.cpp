@@ -393,7 +393,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
         // Accept the token first (like mtmd-cli.cpp does)
         common_sampler_accept(this->sampler, token, true);
 
-        if (llama_vocab_is_eog(vocab, token)) {
+        if (!cfg.ignore_eos && llama_vocab_is_eog(vocab, token)) {
             GENIEX_LOG_DEBUG("reached end of generation token");
             profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_EOS);
             break;

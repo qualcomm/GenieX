@@ -356,8 +356,8 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
             GENIEX_LOG_DEBUG("First token generated, TTFT recorded");
         }
 
-        // Check EOS token
-        if (llama_vocab_is_eog(vocab, id)) {
+        // Check EOS token (skipped when ignore_eos forces a full-length run)
+        if (!cfg.ignore_eos && llama_vocab_is_eog(vocab, id)) {
             GENIEX_LOG_DEBUG("EOS token generated, stopping generation");
             profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_EOS);
             break;

@@ -397,6 +397,7 @@ typedef struct {
     int32_t      image_max_length; /* Maximum length of the image */
     geniex_Path* audio_paths;      /* Array of audio paths for VLM (NULL if none) */
     int32_t      audio_count;      /* Number of audios */
+    bool         ignore_eos;       /* Continue generating past EOS/EOG (bench reproducibility) */
 } geniex_GenerationConfig;
 
 /** LLM / VLM model configuration */

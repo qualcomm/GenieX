@@ -82,6 +82,7 @@ class geniex_GenerationConfig(Structure):
         ('image_max_length', c_int32),
         ('audio_paths', POINTER(c_char_p)),
         ('audio_count', c_int32),
+        ('ignore_eos', c_bool),
     ]
 
 

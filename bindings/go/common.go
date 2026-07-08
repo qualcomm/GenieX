@@ -104,6 +104,7 @@ type GenerationConfig struct {
 	ImagePaths     []string
 	ImageMaxLength int32
 	AudioPaths     []string
+	IgnoreEos      bool
 }
 
 // LCOV_EXCL_START
@@ -113,6 +114,7 @@ func (gc GenerationConfig) toCPtr() *C.geniex_GenerationConfig {
 		max_tokens:       C.int32_t(gc.MaxTokens),
 		n_past:           C.int32_t(gc.NPast),
 		image_max_length: C.int32_t(gc.ImageMaxLength),
+		ignore_eos:       C.bool(gc.IgnoreEos),
 	}
 
 	if len(gc.Stop) > 0 {

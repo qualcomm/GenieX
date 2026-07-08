@@ -152,6 +152,10 @@ geniex_GenerationConfig extract_generation_config(JNIEnv* env, jobject configObj
     cfg.audio_paths = audioPathPtrs.empty() ? nullptr : (geniex_Path*)audioPathPtrs.data();
     cfg.audio_count = audioPathPtrs.size();
 
+    // ----------- ignoreEos -----------
+    jfieldID ignoreEosId = env->GetFieldID(cls, "ignoreEos", "Z");
+    cfg.ignore_eos       = ignoreEosId ? env->GetBooleanField(configObj, ignoreEosId) : false;
+
     return cfg;
 }
 
