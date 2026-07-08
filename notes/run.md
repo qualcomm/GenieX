@@ -111,6 +111,27 @@ Warning: qairt plugin only supports NPU inference; ignoring device='cpu' and run
 
 QAIRT models need a `geniex.json` to work. See the [granite4_micro example](https://huggingface.co/yichqian/geniex-qairt-models/blob/main/granite4_micro/geniex.json).
 
+### Using a custom QNN library
+
+By default the QAIRT plugin loads the QNN shared libraries bundled with the GenieX
+release. To validate a different QAIRT/QNN build without reinstalling, point the plugin
+at a folder that directly contains the QNN libraries (`QnnHtp.dll` / `QnnSystem.dll` /
+`QnnHtpNetRunExtensions.dll` on Windows, the `libQnn*.so` equivalents on Linux/Android):
+
+```bash
+# via the CLI flag (qairt models only)
+geniex infer local/granite4_micro --qnn-lib /path/to/custom-qnn-libs
+
+# or via the environment variable (picked up by any front-end: CLI, pybind, Android)
+GENIEX_QNN_LIB=/path/to/custom-qnn-libs geniex infer local/granite4_micro
+```
+
+`--qnn-lib` is a convenience wrapper that sets `GENIEX_QNN_LIB` for the process; the flag
+wins when both are given. The path must be a directory containing at least the backend
+library — otherwise model load fails fast with a clear error (e.g. `GENIEX_QNN_LIB does not
+contain QnnHtp.dll: <path>`). When neither the flag nor the env var is set, behavior is
+unchanged and the bundled QNN-lib is used.
+
 ### Build and run locally
 
 ```bash

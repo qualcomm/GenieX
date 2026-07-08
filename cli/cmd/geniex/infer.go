@@ -38,6 +38,7 @@ var (
 	input          string
 	systemPrompt   string
 	computeUnit    string
+	qnnLib         string
 
 	// sampler config
 	temperature       float32
@@ -75,6 +76,7 @@ var (
 		llmFlags := pflag.NewFlagSet("LLM/VLM Model", pflag.ExitOnError)
 		llmFlags.SortFlags = false
 		llmFlags.StringVarP(&computeUnit, "compute", "c", "", "compute unit to run on: cpu, gpu, npu, or hybrid (default: hybrid for llama_cpp, npu for qairt)")
+		llmFlags.StringVarP(&qnnLib, "qnn-lib", "", "", "path to a folder holding custom QNN libraries (qairt only; overrides GENIEX_QNN_LIB, default: bundled QNN-lib)")
 		llmFlags.Int32VarP(&ngl, "ngl", "n", 0, "number of layers to offload to gpu/npu (llama_cpp only, default 999)")
 		llmFlags.Int32VarP(&nctx, "nctx", "", 0, "context window size (llama_cpp only, default 4096)")
 		llmFlags.Int32VarP(&maxTokens, "max-tokens", "", 2048, "max tokens")
@@ -120,6 +122,15 @@ func infer() *cobra.Command {
 		paths, err := ensureModelAvailable(cmd.Context(), name, precision)
 		if err != nil {
 			return err
+		}
+
+		// --qnn-lib is a convenience wrapper over the GENIEX_QNN_LIB env var the qairt
+		// plugin reads at model-load time. Exporting it here means both the LLM and VLM
+		// paths (and any binding that shares this process) pick it up uniformly.
+		if qnnLib != "" {
+			if err := os.Setenv("GENIEX_QNN_LIB", qnnLib); err != nil {
+				return fmt.Errorf("failed to set GENIEX_QNN_LIB: %w", err)
+			}
 		}
 
 		geniex_sdk.Init()
