@@ -113,10 +113,18 @@ QAIRT models need a `geniex.json` to work. See the [granite4_micro example](http
 
 ### Using a custom QNN library
 
+> [!WARNING]
+> **Testing/validation aid — not a general version-mixing feature.** GenieX's QAIRT plugin
+> is compiled against a specific set of QAIRT headers, and QAIRT is not currently guaranteed
+> to be ABI-stable across versions. Loading a QNN build whose struct layouts, field offsets,
+> or vtables differ can **segfault** on the first changed code path — it will appear to work on
+> unchanged paths and crash on changed ones (see ai-hub-models-internal#3964). Use this to
+> validate a specific candidate QAIRT build before bundling it into a GenieX `.alpha`/RC, not
+> to run against arbitrary installed QAIRT versions in production.
+
 By default the QAIRT plugin loads the QNN shared libraries bundled with the GenieX
-release. To validate a different QAIRT/QNN build without reinstalling — e.g. to run a
-GenieX build against several installed QAIRT SDK versions — point the plugin at the
-library location:
+release. To validate a different QAIRT/QNN build without reinstalling, point the plugin at
+the library location:
 
 ```bash
 # via the CLI flag (qairt models only)

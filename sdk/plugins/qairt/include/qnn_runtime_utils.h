@@ -187,6 +187,15 @@ inline QnnRuntimeConfig make_qnn_runtime_config(const std::filesystem::path& mod
         std::string adsp_path = collect_adsp_library_path(qnn_lib_root);
         if (adsp_path.empty()) adsp_path = host_dir.string();
 
+        // QAIRT is not guaranteed ABI-stable across versions: this plugin is compiled against
+        // a specific set of QAIRT headers, so loading a QNN build whose struct layouts / vtables
+        // differ can segfault on the first changed code path (see ai-hub-models-internal#3964).
+        // Overriding the bundled libraries is therefore a testing/validation aid, not a supported
+        // way to mix arbitrary QAIRT versions — warn loudly so a later crash is easy to trace.
+        GENIEX_LOG_WARN(
+            "GENIEX_QNN_LIB override active: loading QNN libraries from {} instead of the bundled set. "
+            "This is intended for testing a specific QAIRT build; an ABI-incompatible QAIRT version may crash.",
+            qnn_lib_root.string());
         GENIEX_LOG_INFO("Using custom QNN libraries from GENIEX_QNN_LIB: {} (host libs: {})",
             qnn_lib_root.string(),
             host_dir.string());
