@@ -138,6 +138,8 @@ Run `geniex-bench --help` for the full flag list.
 - `n_gen=128`, `temperature=0.0`, `seed=42`
 - `--warmup 1`, `-r 5` (5 measured runs after 1 warmup; pass `--no-warmup`
   to skip warmup)
+- `--delay 0` (sleep this many seconds between runs for device cooldown; no
+  sleep after the last run)
 - `--accuracy` pins a single run (`--warmup 0 -r 1`) and prints the generated
   text to stdout (`[gen ] ...`); use it to sanity-check output quality rather
   than timing. Pair with `--prompt-file`, since the default random-ids prefill

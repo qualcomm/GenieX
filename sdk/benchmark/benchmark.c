@@ -102,6 +102,7 @@ typedef struct {
     int32_t seed;
     int32_t warmup;
     int32_t repeat;
+    double  delay_s;            /* sleep this many seconds between runs (0 = no delay); for thermal cooldown */
     bool    reset_between_runs; /* true => geniex_llm_reset() before each run, freeing KV */
     bool    accuracy;           /* true => single run (warmup=0, repeat=1), print generated text */
     int32_t n_ctx;
@@ -219,6 +220,9 @@ static void usage(const char* argv0) {
         "                         device alias default (needed for a real gpu run)\n"
         "  --warmup N             default 1\n"
         "  --no-warmup            equivalent to --warmup 0\n"
+        "  --delay F              sleep F seconds between runs (default 0); lets the\n"
+        "                         device cool down between repetitions. Counts warmup\n"
+        "                         and measured runs; no sleep after the last run.\n"
         "  --temperature F        default 0.0\n"
         "  --seed N               default 42; also seeds rand() for prompt ids\n"
         "  --prompt-file PATH     opt out of random-ids prefill: read a UTF-8 prompt\n"
@@ -633,6 +637,7 @@ static void parse_args(int argc, char** argv, options_t* o) {
     o->seed               = 42;
     o->warmup             = 1;
     o->repeat             = 5;
+    o->delay_s            = 0.0;
     o->reset_between_runs = true;
     o->accuracy           = false;
     o->n_ctx              = 0;
@@ -694,6 +699,8 @@ static void parse_args(int argc, char** argv, options_t* o) {
             o->warmup = 0;
         } else if (strcmp(a, "-r") == 0 || strcmp(a, "--repetitions") == 0) {
             o->repeat = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--delay") == 0) {
+            o->delay_s = atof(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--no-reset-between-runs") == 0) {
             o->reset_between_runs = false;
         } else if (strcmp(a, "--accuracy") == 0) {
@@ -766,6 +773,20 @@ static void parse_args(int argc, char** argv, options_t* o) {
         fprintf(stderr, "ERROR: --n-prompt must be >=1\n");
         exit(2);
     }
+}
+
+/* Sleep for `seconds` (fractional ok). Used by --delay to cool the device down
+ * between runs; no-op for seconds <= 0. */
+static void sleep_seconds(double seconds) {
+    if (seconds <= 0.0) return;
+#ifdef _WIN32
+    Sleep((DWORD)(seconds * 1000.0));
+#else
+    struct timespec ts;
+    ts.tv_sec  = (time_t)seconds;
+    ts.tv_nsec = (long)((seconds - (double)ts.tv_sec) * 1e9);
+    nanosleep(&ts, NULL);
+#endif
 }
 
 static void busy_wait_us(int us) {
@@ -1174,6 +1195,9 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
             if (gout.full_text) {
                 geniex_free(gout.full_text);
             }
+
+            /* Cool down between runs (--delay); skip after the very last run. */
+            if (!(pi == n_prompts - 1 && i == total - 1)) sleep_seconds(o->delay_s);
         }
     }
 
@@ -1268,6 +1292,8 @@ static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_
          * prompt and generates nothing (prompt_tokens=0, immediate eos). */
         if (i + 1 < total) {
             check(geniex_vlm_reset(vlm), "geniex_vlm_reset");
+            /* Cool down between runs (--delay); skip after the last run. */
+            sleep_seconds(o->delay_s);
         }
     }
 
@@ -1393,7 +1419,8 @@ static void write_json(const options_t* o, const char* device_id, int32_t ngl, i
     fprintf(f, "    \"params\": {\n");
     fprintf(f,
         "      \"warmup\": %d, \"repetitions\": %d, \"n_prompt\": %d, \"n_gen\": %d,\n"
-        "      \"temperature\": %.6f, \"seed\": %d, \"n_ctx\": %d, \"n_threads\": %d, \"n_gpu_layers\": %d\n",
+        "      \"temperature\": %.6f, \"seed\": %d, \"n_ctx\": %d, \"n_threads\": %d, \"n_gpu_layers\": %d,\n"
+        "      \"delay_s\": %.6f\n",
         o->warmup,
         o->repeat,
         o->n_prompt,
@@ -1402,7 +1429,8 @@ static void write_json(const options_t* o, const char* device_id, int32_t ngl, i
         o->seed,
         o->n_ctx,
         o->n_threads,
-        ngl);
+        ngl,
+        o->delay_s);
     fprintf(f, "    },\n");
     fprintf(f, "    \"runs\": [\n");
     for (int i = 0; i < o->repeat; ++i) {
