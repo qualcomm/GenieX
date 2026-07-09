@@ -114,23 +114,34 @@ QAIRT models need a `geniex.json` to work. See the [granite4_micro example](http
 ### Using a custom QNN library
 
 By default the QAIRT plugin loads the QNN shared libraries bundled with the GenieX
-release. To validate a different QAIRT/QNN build without reinstalling, point the plugin
-at a folder that directly contains the QNN libraries (`QnnHtp.dll` / `QnnSystem.dll` /
-`QnnHtpNetRunExtensions.dll` on Windows, the `libQnn*.so` equivalents on Linux/Android):
+release. To validate a different QAIRT/QNN build without reinstalling — e.g. to run a
+GenieX build against several installed QAIRT SDK versions — point the plugin at the
+library location:
 
 ```bash
 # via the CLI flag (qairt models only)
-geniex infer local/granite4_micro --qnn-lib /path/to/custom-qnn-libs
+geniex infer local/granite4_micro --qnn-lib /path/to/qairt/2.XX.0
 
 # or via the environment variable (picked up by any front-end: CLI, pybind, Android)
-GENIEX_QNN_LIB=/path/to/custom-qnn-libs geniex infer local/granite4_micro
+GENIEX_QNN_LIB=/path/to/qairt/2.XX.0 geniex infer local/granite4_micro
 ```
 
+The path accepts either layout:
+
+- **A QAIRT SDK root** (as installed from the Qualcomm Software Center). The plugin resolves
+  the host libraries from `lib/<triple>` (`aarch64-windows-msvc`, `aarch64-android`, or
+  `aarch64-oe-linux-gcc11.2`) and points `ADSP_LIBRARY_PATH` at every Hexagon DSP skel folder
+  (`lib/hexagon-v*/unsigned`), so the on-device HTP arch is matched automatically. This mirrors
+  the manual env-var setup in the [llm_on_genie tutorial](https://github.com/qualcomm/ai-hub-apps/tree/main/tutorials/llm_on_genie#windows-powershell).
+- **A flat folder** that directly holds `QnnHtp.dll` / `QnnSystem.dll` /
+  `QnnHtpNetRunExtensions.dll` (or the `libQnn*.so` equivalents) — the same shape as the
+  bundled `htp-files` layout.
+
 `--qnn-lib` is a convenience wrapper that sets `GENIEX_QNN_LIB` for the process; the flag
-wins when both are given. The path must be a directory containing at least the backend
-library — otherwise model load fails fast with a clear error (e.g. `GENIEX_QNN_LIB does not
-contain QnnHtp.dll: <path>`). When neither the flag nor the env var is set, behavior is
-unchanged and the bundled QNN-lib is used.
+wins when both are given. If no backend library is found under either layout, model load
+fails fast with a clear error (e.g. `GENIEX_QNN_LIB does not contain QnnHtp.dll (looked in
+the folder itself and lib/aarch64-windows-msvc): <path>`). When neither the flag nor the env
+var is set, behavior is unchanged and the bundled QNN-lib is used.
 
 ### Build and run locally
 
