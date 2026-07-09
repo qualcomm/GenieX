@@ -49,7 +49,13 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向跃龙 QCS9075 等 
 
     ### **安装**
 
-    运行安装脚本：
+    若 `HOME` 未设置（在精简容器或 `sudo -s` 会话中常见），请先导出该变量，以便安装器知道将二进制文件放置在何处：
+
+    ```bash bash
+    export HOME=/root
+    ```
+
+    然后运行安装脚本：
 
     ```bash bash
     curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
@@ -64,7 +70,7 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向跃龙 QCS9075 等 
     打开新 shell 或 `source` 该文件以使更改生效。
 
     <Note>
-      若脚本提示缺少共享库（`libCB.so.1`、`libOpenCL_adreno.so.1`、`libcdsprpc.so.1.0.0` 等），请先安装高通驱动包——参见[故障排查 → Linux](/cn/resources/troubleshooting#linux)。
+      若脚本提示缺少共享库（`libCB.so.1`、`libOpenCL_adreno.so.1`、`libcdsprpc.so.1.0.0` 等），请先安装高通驱动包——参见 [Linux 安装 → 安装宿主机依赖](/cn/run/linux/install#安装宿主机依赖)。
     </Note>
 
     ### **验证**

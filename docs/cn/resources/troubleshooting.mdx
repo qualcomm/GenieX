@@ -55,66 +55,29 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="`docker pull` 报权限错误 / 未授权">
-    将当前用户加入 `docker` 组后重新登录：
+    需要同时满足两点：
 
-    ```bash bash
-    sudo usermod -aG docker $USER
-    ```
-  </Accordion>
+    1. **镜像仓库登录。** Docker Hub（`docker.io/qualcomm/geniex`）是公开的，无需登录。Qualcomm Container Registry 则需先登录：
 
-  <Accordion title="`geniex` install.sh 报缺少共享库">
-    在全新的 Ubuntu 24.04 ARM64 主机（例如 IQ9075 EVK）上，`install.sh`——以及 Docker 场景下的预检脚本 `check.sh` / 容器入口脚本 `entrypoint.sh`——会检查 `libCB.so.1`、`libOpenCL_adreno.so.1`、`libcdsprpc.so.1.0.0`、`libgsl.so.1`、`libllvm-*.so.1`、`libpropertyvault.so.0.0.0`、`libdmabufheap.so.0.0.0`，以及 Debian 的 `libatomic1` / `libglib2.0-0` 等库。请在**宿主机**上分两步安装——如果当前在 geniex 容器内，请先 `exit`。
+       ```bash bash
+       # Qualcomm Container Registry:
+       docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
+       ```
 
-    **1. 标准 APT 包**
+       出现 `Login Succeeded` 即成功。
 
-    满足 `geniex` 安装器报告的 `libatomic1` 与 `libglib2.0-0` 依赖，并提供通用 OpenCL ICD loader：
+    2. **加入 docker 用户组。** 若 `docker pull` 返回 `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`，说明当前用户不在 `docker` 组：
 
-    ```bash bash
-    sudo apt update
-    sudo apt install -y \
-      libatomic1 \
-      libglib2.0-0 \
-      ocl-icd-libopencl1
-    ```
+       ```bash bash
+       sudo usermod -aG docker $USER
+       newgrp docker        # apply the new group in the current shell
+       ```
 
-    <Note>`ocl-icd-libopencl1` 会在下一步被 `qcom-adreno1` 替换。</Note>
-
-    **2. 高通驱动包（来自 `ubuntu-qcom-iot` PPA）**
-
-    提供 `geniex` 所需的高通专有库：
-
-    | Missing library | Provided by |
-    | --- | --- |
-    | `libOpenCL_adreno.so.1`, `libCB.so.1`, `libadreno_utils.so.1`, `libgsl.so.1`, `libllvm-*.so.1` | `qcom-adreno1` |
-    | `libdmabufheap.so.0.0.0` | `qcom-libdmabufheap` *(auto-dep of `qcom-adreno1`)* |
-    | `libpropertyvault.so.0.0.0` | `qcom-property-vault` *(auto-dep of `qcom-adreno1`)* |
-    | `libcdsprpc.so.1.0.0` | `qcom-fastrpc1` |
-
-    ```bash bash
-    sudo apt-get install -y qcom-adreno1 qcom-fastrpc1
-    ```
-
-    PPA（`ppa:ubuntu-qcom-iot/qcom-ppa`）在 IQ9075 EVK Ubuntu 镜像中已预配置。`qcom-adreno1` 会自动拉入 `qcom-libdmabufheap` 与 `qcom-property-vault`。
-
-    完成后在裸机上重新运行 `install.sh`，或重启容器来验证；"Linking host NPU libraries" 步骤即可成功。若裸机上 `libcdsprpc.so` / `libadsprpc.so` 软链接仍缺失，请重新运行 `install.sh` 重建。
+       然后重新执行拉取。
   </Accordion>
 
   <Accordion title="容器内可加载模型但推理报 `Failed to create device: 14001`">
-    容器无法访问 NPU。确认 `docker run` 带 `--privileged` 与 `/usr/lib` 挂载，并且主机已安装高通驱动包（`qcom-adreno1`、`qcom-fastrpc1`）——参见上面的缺少共享库条目。
-  </Accordion>
-
-  <Accordion title="`--compute npu` 报 `SDKError(Invalid input parameters or handle)` / `Device 'HTP0' not found`">
-    llama.cpp 的 Hexagon 后端 `dlopen` 的是**无版本号**的 `libcdsprpc.so`，而 `qcom-fastrpc1` 只提供 `libcdsprpc.so.1`。裸机上 `install.sh` 会创建该软链接；若你直接部署 release tarball（没有 `install.sh`），请手动创建：
-
-    ```bash bash
-    sudo ln -sf /usr/lib/aarch64-linux-gnu/libcdsprpc.so.1 /usr/lib/aarch64-linux-gnu/libcdsprpc.so
-    sudo ln -sf /usr/lib/aarch64-linux-gnu/libadsprpc.so.1 /usr/lib/aarch64-linux-gnu/libadsprpc.so
-    sudo ldconfig
-    ```
-  </Accordion>
-
-  <Accordion title="`--compute hybrid` 能运行但只有 CPU 速度（静默回退到 CPU）">
-    若 Hexagon 驱动无法加载（见上一条），`hybrid` 仍会输出正确结果——只是全部跑在 CPU 上，因此失败是静默的。用 `GGML_HEX_VERBOSE=1` 运行以确认 NPU 确实生效；你应能看到 `Hexagon Arch version vNN` 及 `libggml-htp-vNN.so` 会话。若没有这些日志，说明已回退到 CPU。
+    容器无法访问 NPU。确认 `docker run` 带 `--privileged` 与 `/usr/lib` 挂载，并且主机已安装高通驱动包（`qcom-adreno1`、`qcom-fastrpc1`）——参见 [Linux 安装 → 安装宿主机依赖](/cn/run/linux/install#安装宿主机依赖)。
   </Accordion>
 </AccordionGroup>
 

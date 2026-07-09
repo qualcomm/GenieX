@@ -11,14 +11,61 @@ The Linux Docker path runs through a container image built for Linux ARM64 with 
 
 - Linux ARM64 host with Docker installed — if you don't have Docker yet, follow [Docker's Ubuntu install guide](https://docs.docker.com/engine/install/ubuntu/).
 - Dragonwing IoT chipset — see [Supported platforms](/en/get-started/platforms).
-### **Pull the image**
+- Credentials with read access to one of the registries below.
 
-The image is published on [Docker Hub](https://hub.docker.com/r/qualcomm/geniex):
+### **Install host dependencies**
+
+The container reaches the NPU through the host's Qualcomm driver libraries, mounted in via `-v /usr/lib:/opt/qcom-lib:ro`. Install them **on the host** before `docker run` — in two steps.
+
+**1. Standard APT packages**
+
+Provides `libatomic1`, `libglib2.0-0`, and a generic OpenCL ICD loader:
 
 ```bash bash
-docker pull qualcomm/geniex:latest
+sudo apt update
+sudo apt install -y \
+  libatomic1 \
+  libglib2.0-0 \
+  ocl-icd-libopencl1
 ```
 
+<Note>`ocl-icd-libopencl1` is replaced by `qcom-adreno1` in the next step.</Note>
+
+**2. Qualcomm driver packages (via `ubuntu-qcom-iot` PPA)**
+
+Provides the Qualcomm-proprietary libraries the NPU needs:
+
+| Library | Provided by |
+| --- | --- |
+| `libOpenCL_adreno.so.1`, `libCB.so.1`, `libadreno_utils.so.1`, `libgsl.so.1`, `libllvm-*.so.1` | `qcom-adreno1` |
+| `libdmabufheap.so.0.0.0` | `qcom-libdmabufheap` *(auto-dep of `qcom-adreno1`)* |
+| `libpropertyvault.so.0.0.0` | `qcom-property-vault` *(auto-dep of `qcom-adreno1`)* |
+| `libcdsprpc.so.1.0.0` | `qcom-fastrpc1` |
+
+```bash bash
+sudo apt-get install -y qcom-adreno1 qcom-fastrpc1
+```
+
+The PPA (`ppa:ubuntu-qcom-iot/qcom-ppa`) is pre-configured on the IQ9075 EVK Ubuntu image. `qcom-adreno1` automatically pulls in `qcom-libdmabufheap` and `qcom-property-vault`.
+
+### **Pull the image**
+
+The image is published to two registries — pick whichever you have access to and set `IMAGE` accordingly, then pull:
+
+```bash bash
+# Option A — Docker Hub (public, no login required):
+IMAGE=docker.io/qualcomm/geniex:latest
+
+# Option B — Qualcomm Container Registry:
+docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
+IMAGE=docker-registry.qualcomm.com/qcom-ai-hub/geniex-cli:latest
+
+docker pull "$IMAGE"
+```
+
+<Note>
+  If `docker login` fails or `docker pull` returns `permission denied ... /var/run/docker.sock`, see [Troubleshooting → Linux](/en/resources/troubleshooting#linux) for the credential and `docker` group fixes.
+</Note>
 
 ### **Run interactively**
 
@@ -28,7 +75,7 @@ Drop into an interactive shell inside the container:
 docker run -it --rm --privileged \
   -v "$PWD/data:/data" \
   -v /usr/lib:/opt/qcom-lib:ro \
-  qualcomm/geniex:latest
+  "$IMAGE"
 ```
 
 ### **Verify**

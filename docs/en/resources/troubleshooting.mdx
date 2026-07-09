@@ -55,52 +55,29 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="`docker pull` fails with permission / unauthorized">
-    Add yourself to the `docker` group and re-login:
+    Two separate things have to be right:
 
-    ```bash bash
-    sudo usermod -aG docker $USER
-    ```
-  </Accordion>
+    1. **Registry login.** Docker Hub (`docker.io/qualcomm/geniex`) is public and needs no login. For the Qualcomm Container Registry, log in first:
 
-  <Accordion title="`geniex` install.sh reports missing shared libraries">
-    On a fresh Ubuntu 24.04 ARM64 host (e.g. IQ9075 EVK), `install.sh` — and, for Docker, the pre-flight `check.sh` / container `entrypoint.sh` — check for libraries like `libCB.so.1`, `libOpenCL_adreno.so.1`, `libcdsprpc.so.1.0.0`, `libgsl.so.1`, `libllvm-*.so.1`, `libpropertyvault.so.0.0.0`, `libdmabufheap.so.0.0.0`, plus Debian's `libatomic1` / `libglib2.0-0`. Install them **on the host** in two steps — if you're inside the geniex container, `exit` first.
+       ```bash bash
+       # Qualcomm Container Registry:
+       docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
+       ```
 
-    **1. Standard APT packages**
+       You should see `Login Succeeded`.
 
-    Addresses the `libatomic1` and `libglib2.0-0` requirements reported by the `geniex` installer, and provides a generic OpenCL ICD loader:
+    2. **Docker group membership.** If `docker pull` returns `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, your user isn't in the `docker` group:
 
-    ```bash bash
-    sudo apt update
-    sudo apt install -y \
-      libatomic1 \
-      libglib2.0-0 \
-      ocl-icd-libopencl1
-    ```
+       ```bash bash
+       sudo usermod -aG docker $USER
+       newgrp docker        # apply the new group in the current shell
+       ```
 
-    <Note>`ocl-icd-libopencl1` is replaced by `qcom-adreno1` in the next step.</Note>
-
-    **2. Qualcomm driver packages (via `ubuntu-qcom-iot` PPA)**
-
-    Provides the Qualcomm-proprietary libraries required by `geniex`:
-
-    | Missing library | Provided by |
-    | --- | --- |
-    | `libOpenCL_adreno.so.1`, `libCB.so.1`, `libadreno_utils.so.1`, `libgsl.so.1`, `libllvm-*.so.1` | `qcom-adreno1` |
-    | `libdmabufheap.so.0.0.0` | `qcom-libdmabufheap` *(auto-dep of `qcom-adreno1`)* |
-    | `libpropertyvault.so.0.0.0` | `qcom-property-vault` *(auto-dep of `qcom-adreno1`)* |
-    | `libcdsprpc.so.1.0.0` | `qcom-fastrpc1` |
-
-    ```bash bash
-    sudo apt-get install -y qcom-adreno1 qcom-fastrpc1
-    ```
-
-    The PPA (`ppa:ubuntu-qcom-iot/qcom-ppa`) is pre-configured on the IQ9075 EVK Ubuntu image. `qcom-adreno1` automatically pulls in `qcom-libdmabufheap` and `qcom-property-vault`.
-
-    After this, re-run `install.sh` (bare metal) or restart the container to confirm; the "Linking host NPU libraries" step should succeed. If `libcdsprpc.so` / `libadsprpc.so` symlinks are still missing on bare metal, re-run `install.sh` to recreate them.
+       Then retry the pull.
   </Accordion>
 
   <Accordion title="Container loads model but inference fails with `Failed to create device: 14001`">
-    The container can't reach the NPU. Make sure your `docker run` includes `--privileged` and the `/usr/lib` mount, and that the host's Qualcomm driver packages (`qcom-adreno1`, `qcom-fastrpc1`) are installed — see the missing-libraries entry above.
+    The container can't reach the NPU. Make sure your `docker run` includes `--privileged` and the `/usr/lib` mount, and that the host's Qualcomm driver packages (`qcom-adreno1`, `qcom-fastrpc1`) are installed — see [Linux install → Install host dependencies](/en/run/linux/install#install-host-dependencies).
   </Accordion>
 
   <Accordion title="`--compute npu` fails with `SDKError(Invalid input parameters or handle)` / `Device 'HTP0' not found`">
