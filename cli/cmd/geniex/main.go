@@ -55,7 +55,11 @@ func RootCmd() *cobra.Command {
 			}
 
 			if !skipUpdate {
-				notifyUpdate()
+				// `update` fetches and prints the latest version itself; the
+				// cached notify banner would be redundant and possibly stale.
+				if subCmd != "update" {
+					notifyUpdate()
+				}
 				// skip network probe for quick commands
 				if !slices.Contains([]string{
 					"geniex",
