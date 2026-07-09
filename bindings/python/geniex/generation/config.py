@@ -28,3 +28,7 @@ class GenerationConfig:
     images: list[str] = field(default_factory=list)
     audios: list[str] = field(default_factory=list)
     stream: bool = False
+
+    # Opt-in ring-buffer context eviction (qairt only). See qcom-ai-hub/geniex#1197.
+    sliding_window: bool = False
+    sliding_window_n_keep: int = 0  # 0 = plugin default (4)

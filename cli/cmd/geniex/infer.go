@@ -270,16 +270,6 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
 
-	// GENIEX_SLIDING_WINDOW is read by the qairt plugin's generate() on every call; llama_cpp
-	// ignores it (it always context-shifts). Set once, before model creation, so it's in effect
-	// for the whole session.
-	if slidingWindow {
-		if setErr := os.Setenv("GENIEX_SLIDING_WINDOW", "1"); setErr != nil {
-			spin.Stop()
-			return fmt.Errorf("failed to set GENIEX_SLIDING_WINDOW: %w", setErr)
-		}
-	}
-
 	p, err := geniex_sdk.NewLLM(geniex_sdk.LlmCreateInput{
 		ModelName: paths.ModelName,
 		ModelPath: paths.ModelPath,
@@ -341,6 +331,7 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 					Config: &geniex_sdk.GenerationConfig{
 						MaxTokens:     maxTokens,
 						SamplerConfig: samplerConfig,
+						SlidingWindow: slidingWindow,
 					},
 				})
 				if err != nil {
@@ -369,6 +360,7 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 						MaxTokens:     maxTokens,
 						Stop:          stopSequences,
 						SamplerConfig: samplerConfig,
+						SlidingWindow: slidingWindow,
 					},
 				})
 

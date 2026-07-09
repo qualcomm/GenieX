@@ -82,6 +82,8 @@ class geniex_GenerationConfig(Structure):
         ('image_max_length', c_int32),
         ('audio_paths', POINTER(c_char_p)),
         ('audio_count', c_int32),
+        ('sliding_window', c_bool),
+        ('sliding_window_n_keep', c_int32),
     ]
 
 

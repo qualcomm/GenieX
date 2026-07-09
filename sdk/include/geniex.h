@@ -397,6 +397,12 @@ typedef struct {
     int32_t      image_max_length; /* Maximum length of the image */
     geniex_Path* audio_paths;      /* Array of audio paths for VLM (NULL if none) */
     int32_t      audio_count;      /* Number of audios */
+    // --- Context-length overflow handling (qcom-ai-hub/geniex#1197) ---
+    /* qairt only; llama_cpp ignores this (it always context-shifts). When true,
+     * evicts the oldest context tokens above sliding_window_n_keep instead of
+     * erroring on context-length overflow. */
+    bool    sliding_window;
+    int32_t sliding_window_n_keep; /* Tokens to keep anchored when sliding (0 = plugin default of 4) */
 } geniex_GenerationConfig;
 
 /** LLM / VLM model configuration */

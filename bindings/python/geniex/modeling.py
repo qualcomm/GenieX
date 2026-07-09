@@ -76,6 +76,8 @@ def _build_gen_config(
     sampler: geniex_SamplerConfig,
     images: list[str],
     audios: list[str],
+    sliding_window: bool = False,
+    sliding_window_n_keep: int = 0,
 ) -> tuple[geniex_GenerationConfig, object, object, object]:
     # Callers must keep the returned arrays alive until after the C call
     # returns — ctypes does not retain a reference through cast().
@@ -89,6 +91,8 @@ def _build_gen_config(
         sampler_config=pointer(sampler),
         image_count=img_count,
         audio_count=aud_count,
+        sliding_window=sliding_window,
+        sliding_window_n_keep=sliding_window_n_keep,
     )
     if stop_arr is not None:
         cfg.stop = cast(stop_arr, POINTER(c_char_p))
@@ -196,6 +200,9 @@ class GenieXLLM:
         grammar: str | None = None,
         json_mode: bool = False,
         stream: bool = False,
+        # Opt-in ring-buffer context eviction (qairt only).
+        sliding_window: bool = False,
+        sliding_window_n_keep: int = 0,
         **_kwargs,
     ) -> GenerateOutput | TextIteratorStreamer:
         """Generate text from ``prompt``.
@@ -217,7 +224,9 @@ class GenieXLLM:
             grammar,
             json_mode,
         )
-        cfg, _sa, _ia, _aa = _build_gen_config(max_new_tokens, stop, sampler, [], [])
+        cfg, _sa, _ia, _aa = _build_gen_config(
+            max_new_tokens, stop, sampler, [], [], sliding_window, sliding_window_n_keep
+        )
 
         if stream:
             return self._generate_stream(prompt, cfg, sampler, _sa, _ia, _aa)

@@ -35,9 +35,9 @@ letting the conversation continue past the context limit:
 geniex infer <model> --sliding-window
 ```
 
-This sets `GENIEX_SLIDING_WINDOW=1` for the process, which the `qairt` plugin reads on every
-`generate()` call; `llama_cpp` ignores it (it always context-shifts). Without the flag, exceeding the
-context length still returns the original error — the feature is strictly opt-in.
+This sets `sliding_window: true` on the generation config for every `generate()` call; `llama_cpp`
+ignores it (it always context-shifts). Without the flag, exceeding the context length still returns
+the original error — the feature is strictly opt-in.
 
 ### Model pull
 

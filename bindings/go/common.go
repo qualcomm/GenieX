@@ -104,15 +104,21 @@ type GenerationConfig struct {
 	ImagePaths     []string
 	ImageMaxLength int32
 	AudioPaths     []string
+
+	// Opt-in ring-buffer context eviction (qairt only).
+	SlidingWindow      bool
+	SlidingWindowNKeep int32 // 0 = plugin default (4)
 }
 
 // LCOV_EXCL_START
 func (gc GenerationConfig) toCPtr() *C.geniex_GenerationConfig {
 	cPtr := (*C.geniex_GenerationConfig)(cMalloc(C.sizeof_geniex_GenerationConfig))
 	*cPtr = C.geniex_GenerationConfig{
-		max_tokens:       C.int32_t(gc.MaxTokens),
-		n_past:           C.int32_t(gc.NPast),
-		image_max_length: C.int32_t(gc.ImageMaxLength),
+		max_tokens:            C.int32_t(gc.MaxTokens),
+		n_past:                C.int32_t(gc.NPast),
+		image_max_length:      C.int32_t(gc.ImageMaxLength),
+		sliding_window:        C.bool(gc.SlidingWindow),
+		sliding_window_n_keep: C.int32_t(gc.SlidingWindowNKeep),
 	}
 
 	if len(gc.Stop) > 0 {

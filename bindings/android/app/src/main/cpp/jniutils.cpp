@@ -152,6 +152,13 @@ geniex_GenerationConfig extract_generation_config(JNIEnv* env, jobject configObj
     cfg.audio_paths = audioPathPtrs.empty() ? nullptr : (geniex_Path*)audioPathPtrs.data();
     cfg.audio_count = audioPathPtrs.size();
 
+    // ----------- sliding window (qcom-ai-hub/geniex#1197) -----------
+    jfieldID slidingWindowId = env->GetFieldID(cls, "slidingWindow", "Z");
+    cfg.sliding_window       = slidingWindowId ? env->GetBooleanField(configObj, slidingWindowId) : false;
+
+    jfieldID slidingWindowNKeepId = env->GetFieldID(cls, "slidingWindowNKeep", "I");
+    cfg.sliding_window_n_keep     = slidingWindowNKeepId ? env->GetIntField(configObj, slidingWindowNKeepId) : 0;
+
     return cfg;
 }
 

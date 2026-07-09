@@ -3,7 +3,6 @@
 
 #include "llm.h"
 
-#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -35,15 +34,6 @@ namespace {
 // Default system prompt used on the first turn when the caller does not supply one
 // via a `system` role chat message.
 constexpr const char* kDefaultSystemPrompt = "You are a helpful AI assistant.";
-
-// Opt-in ring-buffer context eviction (qcom-ai-hub/geniex#1197). Checked once
-// per generate() call rather than cached, so it can be toggled between turns
-// without recreating the model. GENIEX_SLIDING_WINDOW=1 enables it; unset or
-// any other value keeps the default (throw on context-length overflow).
-bool sliding_window_enabled() {
-    const char* e = std::getenv("GENIEX_SLIDING_WINDOW");
-    return e != nullptr && std::strcmp(e, "1") == 0;
-}
 }  // namespace
 
 QairtLlm::~QairtLlm() = default;
@@ -242,9 +232,15 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     if (input->config) {
         gen_cfg.max_tokens = input->config->max_tokens > 0 ? input->config->max_tokens : 512;
         qairt::apply_sampler_config(input->config->sampler_config, gen_cfg, bundle_sampler_);
+
+        // Opt-in ring-buffer context eviction. llama_cpp
+        // ignores this field (it always context-shifts).
+        gen_cfg.sliding_window = input->config->sliding_window;
+        if (input->config->sliding_window_n_keep > 0) {
+            gen_cfg.sliding_window_n_keep = input->config->sliding_window_n_keep;
+        }
     }
-    gen_cfg.thinking_mode  = enable_thinking_;
-    gen_cfg.sliding_window = sliding_window_enabled();
+    gen_cfg.thinking_mode = enable_thinking_;
 
     // Wrap token callback
     std::function<bool(const char*)> on_token_fn;
