@@ -34,17 +34,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # qairt_qnn_versions: space-separated QAIRT/QNN ABI versions to build the
+          # qairt plugin for. Each is built into lib/qairt-<ver>; the SDK selects the
+          # matching variant at runtime from the libs passed via --qnn-lib. Empty on
+          # platforms/presets that don't build the qairt plugin.
           - platform: windows-arm64
             runner: windows-11-arm
             preset: arm64-windows-snapdragon-release
+            qairt_qnn_versions: "2.45 2.47 2.48"
           - platform: linux-arm64
             runner: ubuntu-latest
             preset: arm64-linux-snapdragon-release
             container_image: docker.io/qualcomm/geniex-toolchain-linux:v0.1.0
+            qairt_qnn_versions: "2.45 2.47 2.48"
           - platform: android-arm64
             runner: ubuntu-latest
             preset: arm64-android-snapdragon-release
             container_image: docker.io/qualcomm/geniex-toolchain-android:v0.1.0
+            qairt_qnn_versions: "2.45 2.47 2.48"
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
 
@@ -126,10 +133,15 @@ jobs:
       # and link products survive across runs. hashFiles covers the
       # configure-time inputs; a change there mints a new entry, while
       # restore-keys lets unchanged-config runs reuse the previous tree.
+      # Cache both the single-configure dir (platforms without qairt versioning)
+      # and every per-version build dir (build-<preset>-qnn-<ver>) the qairt loop
+      # creates, so incremental rebuilds survive across runs.
       - name: Restore CMake build dir
         uses: actions/cache@v6
         with:
-          path: sdk/build-${{ matrix.preset }}
+          path: |
+            sdk/build-${{ matrix.preset }}
+            sdk/build-${{ matrix.preset }}-qnn-*
           key: cmake-build-${{ matrix.platform }}-${{ steps.tc.outputs.tag }}-${{ hashFiles('sdk/CMakeLists.txt', 'sdk/**/CMakeLists.txt', 'sdk/CMakePresets.json', 'sdk/cmake/**', 'sdk/patches/**', '.gitmodules', 'third-party/**/CMakeLists.txt', 'third-party/**/*.cmake', 'third-party/**/cmake/**') }}-${{ github.sha }}
           restore-keys: cmake-build-${{ matrix.platform }}-${{ steps.tc.outputs.tag }}-${{ hashFiles('sdk/CMakeLists.txt', 'sdk/**/CMakeLists.txt', 'sdk/CMakePresets.json', 'sdk/cmake/**', 'sdk/patches/**', '.gitmodules', 'third-party/**/CMakeLists.txt', 'third-party/**/*.cmake', 'third-party/**/cmake/**') }}-
 
@@ -142,10 +154,11 @@ jobs:
         shell: bash
         run: |
           set -eu
-          dir="sdk/build-${{ matrix.preset }}"
-          if [ -d "$dir" ]; then
-            find "$dir" -type d -name "*-subbuild" -prune -print -exec rm -rf {} +
-          fi
+          for dir in "sdk/build-${{ matrix.preset }}" sdk/build-${{ matrix.preset }}-qnn-*; do
+            if [ -d "$dir" ]; then
+              find "$dir" -type d -name "*-subbuild" -prune -print -exec rm -rf {} +
+            fi
+          done
 
       # Linux/Android ccache lives in the toolchain container; host just
       # owns the dir so actions/cache can persist it.
@@ -200,6 +213,7 @@ jobs:
           EXTRA_CMAKE_FLAGS: ${{ inputs.extra_cmake_flags }}
           PRESET: ${{ matrix.preset }}
           CONTAINER_IMAGE: ${{ matrix.container_image }}
+          QAIRT_QNN_VERSIONS: ${{ matrix.qairt_qnn_versions }}
         run: |
           set -euo pipefail
           # Runs as root because the image's rust/apt layers were built
@@ -213,6 +227,7 @@ jobs:
             -e GENIEX_VERSION \
             -e EXTRA_CMAKE_FLAGS \
             -e PRESET \
+            -e QAIRT_QNN_VERSIONS \
             -e CCACHE_DIR=/workspace/.ccache \
             -e CCACHE_SLOPPINESS=time_macros,include_file_mtime,include_file_ctime \
             -e HOST_UID="$uid" \
@@ -221,13 +236,32 @@ jobs:
             "$CONTAINER_IMAGE" \
             bash -eux -c '
               git config --global --add safe.directory "*"
-              cmake -S sdk --preset "$PRESET" \
-                -DGENIEX_VERSION="$GENIEX_VERSION" \
-                -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-                -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-                $EXTRA_CMAKE_FLAGS
-              cmake --build "sdk/build-$PRESET" -j "$(nproc)"
-              cmake --install "sdk/build-$PRESET" --prefix sdk/pkg-geniex
+              # The qairt plugin bundles no QNN libs; instead it is built once per
+              # supported QAIRT/QNN ABI version into lib/qairt-<ver>, and the SDK picks
+              # the variant matching the libs passed at runtime via --qnn-lib. Build and
+              # install every version into the same pkg-geniex prefix. QAIRT_QNN_VERSIONS
+              # is defined per-platform in the matrix (empty on platforms without qairt).
+              versions="${QAIRT_QNN_VERSIONS:-}"
+              if [ -z "$versions" ]; then
+                cmake -S sdk --preset "$PRESET" \
+                  -DGENIEX_VERSION="$GENIEX_VERSION" \
+                  -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+                  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                  $EXTRA_CMAKE_FLAGS
+                cmake --build "sdk/build-$PRESET" -j "$(nproc)"
+                cmake --install "sdk/build-$PRESET" --prefix sdk/pkg-geniex
+              else
+                for ver in $versions; do
+                  cmake -S sdk --preset "$PRESET" -B "sdk/build-$PRESET-qnn-$ver" \
+                    -DGENIEX_VERSION="$GENIEX_VERSION" \
+                    -DQAIRT_QNN_VERSION="$ver" \
+                    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+                    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                    $EXTRA_CMAKE_FLAGS
+                  cmake --build "sdk/build-$PRESET-qnn-$ver" -j "$(nproc)"
+                  cmake --install "sdk/build-$PRESET-qnn-$ver" --prefix sdk/pkg-geniex
+                done
+              fi
               ccache -s -v || true
               chown -R "$HOST_UID:$HOST_GID" sdk .ccache || true
             '
@@ -242,9 +276,9 @@ jobs:
         env:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
           PRESET: ${{ matrix.preset }}
+          QAIRT_QNN_VERSIONS: ${{ matrix.qairt_qnn_versions }}
         run: |
           $ErrorActionPreference = "Stop"
-          $BuildDir = "sdk/build-$env:PRESET"
 
           # Source vcvars into this process so cmake's child processes
           # (clang, ninja, inf2cat.exe) inherit PATH/INCLUDE/LIB for the
@@ -257,17 +291,32 @@ jobs:
           }
           $env:PATH = "$env:LLVM_BIN;$env:PATH"
 
-          cmake -S sdk --preset $env:PRESET -B $BuildDir --log-level=VERBOSE `
-            "-DGENIEX_VERSION=$env:GENIEX_VERSION" `
-            -DCMAKE_C_COMPILER_LAUNCHER=ccache `
-            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          if ($LASTEXITCODE -ne 0) { throw "cmake configure failed: $LASTEXITCODE" }
+          # The qairt plugin bundles no QNN libs; it is built once per supported
+          # QAIRT/QNN ABI version into lib/qairt-<ver>, and the SDK selects the
+          # variant matching the libs passed at runtime via --qnn-lib. Build and
+          # install every version into the same pkg-geniex prefix.
+          $versions = if ($env:QAIRT_QNN_VERSIONS) { $env:QAIRT_QNN_VERSIONS.Split(" ") } else { @("") }
+          foreach ($ver in $versions) {
+            if ($ver) {
+              $BuildDir = "sdk/build-$env:PRESET-qnn-$ver"
+              $verFlag  = "-DQAIRT_QNN_VERSION=$ver"
+            } else {
+              $BuildDir = "sdk/build-$env:PRESET"
+              $verFlag  = ""
+            }
 
-          cmake --build $BuildDir -j $([Environment]::ProcessorCount)
-          if ($LASTEXITCODE -ne 0) { throw "cmake --build failed: $LASTEXITCODE" }
+            cmake -S sdk --preset $env:PRESET -B $BuildDir --log-level=VERBOSE `
+              "-DGENIEX_VERSION=$env:GENIEX_VERSION" $verFlag `
+              -DCMAKE_C_COMPILER_LAUNCHER=ccache `
+              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+            if ($LASTEXITCODE -ne 0) { throw "cmake configure failed ($ver): $LASTEXITCODE" }
 
-          cmake --install $BuildDir --prefix sdk/pkg-geniex
-          if ($LASTEXITCODE -ne 0) { throw "cmake install failed: $LASTEXITCODE" }
+            cmake --build $BuildDir -j $([Environment]::ProcessorCount)
+            if ($LASTEXITCODE -ne 0) { throw "cmake --build failed ($ver): $LASTEXITCODE" }
+
+            cmake --install $BuildDir --prefix sdk/pkg-geniex
+            if ($LASTEXITCODE -ne 0) { throw "cmake install failed ($ver): $LASTEXITCODE" }
+          }
 
       # On Linux/Android ccache runs inside the container; only the on-disk
       # size is visible from the host. Never fail the job on a stats read.

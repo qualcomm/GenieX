@@ -279,9 +279,9 @@ jobs:
               chmod +x "${bench_dir}/bin/geniex-bench"
               cp "${src}"/lib/*.so "${bench_dir}/lib/" 2>/dev/null || true
             fi
-            # Include plugin libs (llama_cpp / qairt subdirs).
+            # Include plugin libs (llama_cpp + every per-version qairt-<ver> subdir).
             cp -r "${src}"/lib/llama_cpp "${bench_dir}/lib/" 2>/dev/null || true
-            cp -r "${src}"/lib/qairt "${bench_dir}/lib/" 2>/dev/null || true
+            cp -r "${src}"/lib/qairt-* "${bench_dir}/lib/" 2>/dev/null || true
             if [[ "$plat" == "windows-arm64" ]]; then
               zip -r "${bench_dir}.zip" "${bench_dir}"
             else

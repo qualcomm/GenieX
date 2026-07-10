@@ -242,7 +242,11 @@ def _classify_entry(filename: str, backends: frozenset[Backend]) -> str | None:
         return rel[0]
     if rel[0] == _BACKEND_DIRS['llama-cpp'] and 'llama-cpp' in backends:
         return '/'.join(rel)
-    if rel[0] == _BACKEND_DIRS['qairt'] and 'qairt' in backends:
+    # The qairt plugin ships one ABI variant per QAIRT/QNN version, each in its own
+    # ``qairt-<ver>`` directory (e.g. qairt-2.45, qairt-2.47). Accept the bare
+    # ``qairt`` dir (older single-variant layout) and every ``qairt-*`` variant.
+    qairt_dir = _BACKEND_DIRS['qairt']
+    if (rel[0] == qairt_dir or rel[0].startswith(qairt_dir + '-')) and 'qairt' in backends:
         return '/'.join(rel)
     return None
 
