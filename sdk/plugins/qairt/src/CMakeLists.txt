@@ -20,5 +20,5 @@ target_link_libraries(geniex_qairt
     PRIVATE geniex geniex_core geniex-proc geniex_vlm)
 
 install(TARGETS geniex_qairt
-    LIBRARY DESTINATION lib/qairt
-    RUNTIME DESTINATION lib/qairt)
+    LIBRARY DESTINATION lib/qairt-${QAIRT_QNN_VERSION}
+    RUNTIME DESTINATION lib/qairt-${QAIRT_QNN_VERSION})

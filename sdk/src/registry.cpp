@@ -11,8 +11,10 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <memory>
+#include <regex>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -29,6 +31,89 @@ const char* get_geniex_plugin_name() {
     return "libgeniex_plugin.so";
 #endif
 }
+
+namespace {
+
+// The qairt plugin ships one variant per QAIRT/QNN ABI version, installed side by
+// side as lib/qairt-<ver>/ (e.g. qairt-2.45, qairt-2.47, qairt-2.48). No QNN
+// runtime libraries are bundled; the user supplies them via GENIEX_QNN_LIB. Each
+// variant is compiled against a specific QNN header set and is ABI-compatible
+// only with matching libraries, so exactly one variant must be loaded — loading a
+// mismatched one crashes at HTP init. selectQairtVariant() reads the QNN version
+// from GENIEX_QNN_LIB and returns the qairt-<ver> directory name that should load;
+// all other qairt-* directories are skipped.
+
+// Reads GENIEX_QNN_LIB (a QAIRT SDK root or lib folder) and returns its
+// QNN_API_VERSION_MINOR, or -1 if it cannot be determined.
+int detectQnnApiMinor(const std::filesystem::path& qnn_lib_root) {
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    // QnnCommon.h lives at <sdk-root>/include/QNN/QnnCommon.h in a full QAIRT SDK.
+    // Also probe a couple of shallower spots in case a trimmed folder was passed.
+    const fs::path candidates[] = {
+        qnn_lib_root / "include" / "QNN" / "QnnCommon.h",
+        qnn_lib_root / "include" / "QnnCommon.h",
+        qnn_lib_root / "QnnCommon.h",
+    };
+    for (const auto& hdr : candidates) {
+        if (!fs::exists(hdr, ec)) continue;
+        std::ifstream f(hdr);
+        std::string   line;
+        const std::regex re(R"(#define\s+QNN_API_VERSION_MINOR\s+(\d+))");
+        while (std::getline(f, line)) {
+            std::smatch m;
+            if (std::regex_search(line, m, re)) {
+                return std::stoi(m[1].str());
+            }
+        }
+    }
+    return -1;
+}
+
+// Maps a QNN API minor version onto the qairt plugin variant that targets it.
+// Compatibility windows were established empirically on Snapdragon (Hexagon v73):
+// a plugin compiled against minor N runs that minor and, for 2.45, the next one.
+//   minor <= 35 (QAIRT <= 2.46) -> qairt-2.45
+//   minor == 36 (QAIRT 2.47)    -> qairt-2.47
+//   minor >= 37 (QAIRT >= 2.48) -> qairt-2.48
+std::string qairtVariantForMinor(int minor) {
+    if (minor < 0) return "";
+    if (minor <= 35) return "qairt-2.45";
+    if (minor == 36) return "qairt-2.47";
+    return "qairt-2.48";
+}
+
+// Returns the single qairt-<ver> directory name that should be loaded, based on
+// GENIEX_QNN_LIB. Empty string means "no QAIRT version selected" (either the env
+// var is unset or the version could not be read) — in that case no qairt-* variant
+// is loaded and the caller surfaces a clear error if a qairt model is requested.
+std::string selectQairtVariant() {
+    std::filesystem::path qnn_lib_root;
+#if defined(_WIN32)
+    size_t required_size = 0;
+    _wgetenv_s(&required_size, nullptr, 0, L"GENIEX_QNN_LIB");
+    if (required_size > 0) {
+        std::vector<wchar_t> buf(required_size);
+        _wgetenv_s(&required_size, buf.data(), required_size, L"GENIEX_QNN_LIB");
+        if (buf[0] != L'\0') qnn_lib_root = std::filesystem::path(buf.data());
+    }
+#else
+    if (const char* v = std::getenv("GENIEX_QNN_LIB")) qnn_lib_root = std::filesystem::path(v);
+#endif
+    if (qnn_lib_root.empty()) return "";
+
+    const int minor = detectQnnApiMinor(qnn_lib_root);
+    const std::string variant = qairtVariantForMinor(minor);
+    if (variant.empty()) {
+        GENIEX_LOG_WARN("GENIEX_QNN_LIB set but QNN_API_VERSION_MINOR not found under {}; "
+                        "no qairt variant selected", qnn_lib_root.u8string());
+    } else {
+        GENIEX_LOG_INFO("GENIEX_QNN_LIB QNN API minor {} -> loading plugin variant {}", minor, variant);
+    }
+    return variant;
+}
+
+}  // namespace
 
 namespace geniex {
 PluginFactory::PluginFactory(const std::filesystem::path& path) {
@@ -176,9 +261,22 @@ void Registry::scan_plugins() {
 
     GENIEX_LOG_TRACE("Scanning plugins in: {}", plugin_path.u8string());
 
+    // The qairt plugin ships as several ABI variants (qairt-2.45, qairt-2.47, …),
+    // one per QAIRT/QNN version, that all register the same plugin_id. Exactly one
+    // may load — pick the one matching the QNN libs named by GENIEX_QNN_LIB and
+    // skip the rest. Empty => no qairt libs specified, so skip all qairt variants.
+    const std::string selected_qairt = selectQairtVariant();
+
     // Search child plugin directories for the brand-specific plugin shared library.
     for (const auto& dir_entry : std::filesystem::directory_iterator(plugin_path)) {
         if (!dir_entry.is_directory()) continue;
+
+        const std::string dir_name = dir_entry.path().filename().u8string();
+        if (dir_name.rfind("qairt-", 0) == 0 && dir_name != selected_qairt) {
+            GENIEX_LOG_TRACE("Skipping qairt variant {} (selected: '{}')", dir_name, selected_qairt);
+            continue;
+        }
+
         GENIEX_LOG_TRACE("Scanning directory: {}", dir_entry.path().u8string());
 
         for (const auto& file_entry : std::filesystem::directory_iterator(dir_entry.path())) {

@@ -19,17 +19,19 @@ add_subdirectory(
 add_subdirectory(./src)
 
 # setup install
+#
+# This plugin is built once per QAIRT/QNN version (QAIRT_QNN_VERSION, forwarded
+# to the geniex-qairt subdir above). Each version installs into its own
+# lib/qairt-<ver>/ folder so multiple ABI builds coexist in one SDK; the SDK
+# registry scans these subdirs and the runtime picks the one matching the QAIRT
+# libs passed via --qnn-lib / GENIEX_QNN_LIB. No QNN runtime libs are bundled.
+set(QAIRT_PLUGIN_DIR "lib/qairt-${QAIRT_QNN_VERSION}")
 
 set(QAIRT_LIBS geniex_core geniex-proc geniex-proc-vision geniex-proc-audio geniex_vlm)
 foreach(dep IN LISTS QAIRT_LIBS)
     if(TARGET ${dep})
         install(TARGETS ${dep}
-            LIBRARY DESTINATION lib/qairt
-            RUNTIME DESTINATION lib/qairt)
+            LIBRARY DESTINATION ${QAIRT_PLUGIN_DIR}
+            RUNTIME DESTINATION ${QAIRT_PLUGIN_DIR})
     endif()
 endforeach()
-
-# Install htp-files-v{arch}/ folders from the build tree into lib/qairt/.
-install(DIRECTORY "$<TARGET_FILE_DIR:geniex_core>/htp-files/"
-    DESTINATION lib/qairt/htp-files
-    OPTIONAL)

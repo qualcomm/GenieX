@@ -76,7 +76,7 @@ var (
 		llmFlags := pflag.NewFlagSet("LLM/VLM Model", pflag.ExitOnError)
 		llmFlags.SortFlags = false
 		llmFlags.StringVarP(&computeUnit, "compute", "c", "", "compute unit to run on: cpu, gpu, npu, or hybrid (default: hybrid for llama_cpp, npu for qairt)")
-		llmFlags.StringVarP(&qnnLib, "qnn-lib", "", "", "QAIRT SDK root or lib folder for testing a custom QNN build (qairt only; sets GENIEX_QNN_LIB; may crash on ABI-incompatible QAIRT versions; default: bundled QNN-lib)")
+		llmFlags.StringVarP(&qnnLib, "qnn-lib", "", "", "path to the QAIRT SDK providing the QNN libraries (qairt only; sets GENIEX_QNN_LIB; REQUIRED — no QNN libs are bundled; the matching plugin ABI variant is selected automatically)")
 		llmFlags.Int32VarP(&ngl, "ngl", "n", 0, "number of layers to offload to gpu/npu (llama_cpp only, default 999)")
 		llmFlags.Int32VarP(&nctx, "nctx", "", 0, "context window size (llama_cpp only, default 4096)")
 		llmFlags.Int32VarP(&maxTokens, "max-tokens", "", 2048, "max tokens")
