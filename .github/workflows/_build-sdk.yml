@@ -258,8 +258,13 @@ jobs:
           }
           $env:PATH = "$env:LLVM_BIN;$env:PATH"
 
+          # Pass the cert path explicitly: GGML_HEXAGON_HTP_CERT is a cached
+          # PATH, so a restored build dir keeps a prior run's value and an
+          # empty env alone won't clear it — on a fork PR (no secret) that
+          # leaves signing on and signtool fails on the missing .pfx.
           cmake -S sdk --preset $env:PRESET -B $BuildDir --log-level=VERBOSE `
             "-DGENIEX_VERSION=$env:GENIEX_VERSION" `
+            "-DGGML_HEXAGON_HTP_CERT=$env:HEXAGON_HTP_CERT" `
             -DCMAKE_C_COMPILER_LAUNCHER=ccache `
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           if ($LASTEXITCODE -ne 0) { throw "cmake configure failed: $LASTEXITCODE" }
