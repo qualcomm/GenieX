@@ -338,6 +338,7 @@ class geniex_ModelPaths(Structure):
         ('model_name', c_char_p),
         ('plugin_id', c_char_p),
         ('model_type', c_int32),
+        ('qairt_version', c_char_p),
     ]
 
 

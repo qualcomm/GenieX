@@ -162,7 +162,7 @@ impl std::fmt::Display for UnavailableChipset {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::ai_hub::manifest::ChipsetInfo;
+    use crate::source::ai_hub::manifest::{ChipsetInfo, ToolVersions};
 
     fn platform(entries: &[(&str, &[&str])]) -> PlatformInfo {
         PlatformInfo {
@@ -199,6 +199,7 @@ mod tests {
             precision: precision.to_string(),
             download_url: format!("https://example.invalid/{chipset}-{precision}.zip"),
             uncompressed_size: Some(1),
+            tool_versions: ToolVersions::default(),
         }
     }
 

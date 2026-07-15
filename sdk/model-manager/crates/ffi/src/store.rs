@@ -33,6 +33,7 @@ pub struct GenieXModelPaths {
     pub model_name: *mut c_char,
     pub plugin_id: *mut c_char,
     pub model_type: GenieXModelType,
+    pub qairt_version: *mut c_char,
 }
 
 impl GenieXModelPaths {
@@ -45,6 +46,7 @@ impl GenieXModelPaths {
             model_name: std::ptr::null_mut(),
             plugin_id: std::ptr::null_mut(),
             model_type: GenieXModelType::Llm,
+            qairt_version: std::ptr::null_mut(),
         }
     }
 }
@@ -73,6 +75,7 @@ pub extern "C" fn geniex_model_get_paths(
                     (*out_paths).model_dir = str_to_cptr(&paths.model_dir.to_string_lossy());
                     (*out_paths).model_name = str_to_cptr(&paths.model_name);
                     (*out_paths).plugin_id = str_to_cptr(&paths.plugin_id);
+                    (*out_paths).qairt_version = str_to_cptr(&paths.qairt_version);
                     (*out_paths).mmproj_path = paths
                         .mmproj_path
                         .as_ref()
@@ -104,6 +107,7 @@ pub unsafe extern "C" fn geniex_model_paths_free(paths: *mut GenieXModelPaths) {
     free_cptr(p.model_dir);
     free_cptr(p.model_name);
     free_cptr(p.plugin_id);
+    free_cptr(p.qairt_version);
     *paths = GenieXModelPaths::null();
 }
 

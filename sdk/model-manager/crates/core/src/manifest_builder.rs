@@ -252,6 +252,7 @@ pub fn infer_manifest_from_names(
         model_type,
         plugin_id,
         precision: String::new(),
+        qairt_version: String::new(),
         model_file,
         mmproj_file,
         tokenizer_file,

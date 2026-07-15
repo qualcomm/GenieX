@@ -134,7 +134,8 @@ async fn ai_hub_pull_writes_manifest_and_extracts_flat() {
               "runtime": "RUNTIME_GENIE",
               "precision": "PRECISION_W4A16",
               "download_url": "{asset_url}",
-              "uncompressed_size": {}
+              "uncompressed_size": {},
+              "tool_versions": {{"qairt": "2.45.0.260326154327"}}
             }}
           ]
         }}"#,
@@ -212,6 +213,7 @@ async fn ai_hub_pull_writes_manifest_and_extracts_flat() {
     let mf = store.get_manifest("tests/TestNet").unwrap();
     assert_eq!(mf.plugin_id, "qairt");
     assert_eq!(mf.precision, "W4A16");
+    assert_eq!(mf.qairt_version, "2.45.0.260326154327");
     let entry = mf.model_file.get("N/A").expect("N/A quant entry");
     assert_eq!(entry.name, "model-00.bin");
     assert!(entry.downloaded);

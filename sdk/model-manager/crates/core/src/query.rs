@@ -114,6 +114,7 @@ mod tests {
                 model_type: ModelType::Llm,
                 plugin_id: "llama_cpp".to_string(),
                 precision: String::new(),
+                qairt_version: String::new(),
                 model_file,
                 mmproj_file: ModelFileInfo::default(),
                 tokenizer_file: ModelFileInfo::default(),

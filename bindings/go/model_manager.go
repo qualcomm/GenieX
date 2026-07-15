@@ -343,6 +343,9 @@ type ModelPaths struct {
 	ModelName     string
 	RuntimeID     string
 	ModelType     ModelType
+	// QairtVersion is the QAIRT version the model's assets were pulled for
+	// (from AI Hub metadata); empty for non-AI-Hub / llama.cpp models.
+	QairtVersion string
 }
 
 // ModelGetPaths resolves "org/repo[:precision]" (or alias) to absolute on-disk paths.
@@ -362,6 +365,7 @@ func ModelGetPaths(name string) (*ModelPaths, error) {
 		ModelName:     C.GoString(out.model_name),
 		RuntimeID:     C.GoString(out.plugin_id),
 		ModelType:     ModelType(out.model_type),
+		QairtVersion:  C.GoString(out.qairt_version),
 	}, nil
 }
 
