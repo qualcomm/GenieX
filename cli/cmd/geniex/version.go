@@ -88,7 +88,10 @@ func resolvePluginVersions() map[string]string {
 		return cached
 	}
 
-	geniex_sdk.Init()
+	if err := geniex_sdk.Init(); err != nil {
+		// Best-effort path: without init we just report no plugin versions.
+		return nil
+	}
 	defer geniex_sdk.DeInit()
 
 	versions := make(map[string]string, len(pluginIDs))

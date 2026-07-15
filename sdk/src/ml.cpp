@@ -31,6 +31,21 @@ void* _crypto_dummy = (void*)OpenSSL_version;
 #include <windows.h>
 #endif
 
+// Baseline armv8.0 boards (e.g. unoq) lack the armv8.2 features this build bakes
+// in, so bail cleanly instead of SIGILL. Keep in sync with -march. See #1217.
+#if defined(__linux__) && defined(__aarch64__)
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+
+static bool cpu_features_supported() {
+    unsigned long need =
+        HWCAP_ATOMICS | HWCAP_ASIMDRDM | HWCAP_ASIMDDP | HWCAP_FPHP | HWCAP_ASIMDHP | HWCAP_CRC32;
+    return (getauxval(AT_HWCAP) & need) == need;
+}
+#else
+static bool cpu_features_supported() { return true; }
+#endif
+
 using namespace geniex;
 
 // Default log handler — always compiled. Emits to stderr with optional ANSI
@@ -72,6 +87,13 @@ int32_t geniex_init(void) {
 #endif
 
     GENIEX_LOG_DEBUG("initializing ml");
+
+    if (!cpu_features_supported()) {
+        GENIEX_LOG_ERROR(
+            "this device's CPU lacks features required by geniex; "
+            "running would crash with an illegal instruction");
+        return GENIEX_ERROR_COMMON_NOT_SUPPORTED;
+    }
 
     try {
         Registry::instance().scan_plugins();

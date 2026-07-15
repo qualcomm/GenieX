@@ -124,7 +124,9 @@ func infer() *cobra.Command {
 			return err
 		}
 
-		geniex_sdk.Init()
+		if err := common.InitSDK(); err != nil {
+			return err
+		}
 
 		switch paths.ModelType {
 		case geniex_sdk.ModelTypeLLM:

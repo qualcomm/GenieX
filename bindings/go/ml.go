@@ -56,8 +56,12 @@ var (
 )
 
 // Init must be called before any other SDK function.
-func Init() {
-	C.geniex_init()
+func Init() error {
+	res := C.geniex_init()
+	if res < 0 {
+		return SDKError(res)
+	}
+	return nil
 }
 
 func DeInit() {

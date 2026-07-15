@@ -4,10 +4,13 @@
 package main
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
+	"github.com/qualcomm/GenieX/cli/cmd/geniex/common"
 	"github.com/qualcomm/GenieX/cli/server"
 )
 
@@ -49,7 +52,10 @@ func serve() *cobra.Command {
 
 	serveCmd.Run = func(cmd *cobra.Command, args []string) {
 		checkAudioDependency()
-		geniex_sdk.Init()
+		if err := common.InitSDK(); err != nil {
+			common.PrintError(err)
+			os.Exit(1)
+		}
 
 		server.Serve()
 

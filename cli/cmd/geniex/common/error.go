@@ -90,6 +90,12 @@ Possible causes: network timeout, corporate proxy, or firewall.
 - Run 'geniex list' to see what's been downloaded for this model.
 - Run 'geniex pull <model>:<precision>' to download it.
 - Drop the ':<precision>' suffix to be prompted from what's already downloaded.`
+
+	hintCPUUnsupported = `⚠️ This device is missing CPU features that geniex requires, so it cannot run here.
+
+👉 Try these:
+- Run geniex on a newer device that meets the CPU requirements.
+- If you believe this device should be supported, report it in our discord or slack with the output of 'uname -m' and 'cat /proc/cpuinfo'.`
 )
 
 // CLI-side sentinels. SDK sentinels live in bindings/go. Producers wrap with
@@ -101,6 +107,11 @@ var (
 	// ErrPrecisionNotFound: the user-specified precision is missing from
 	// the model's local manifest (or listed but not downloaded).
 	ErrPrecisionNotFound = errors.New("precision not found")
+	// ErrCPUUnsupported: geniex_init reported the CPU lacks a required
+	// feature. The SDK returns the generic NOT_SUPPORTED code for this, so
+	// callers wrap it here to get a CPU-specific hint distinct from the
+	// unsupported-model-type case.
+	ErrCPUUnsupported = errors.New("cpu feature unsupported")
 )
 
 var errorHints = []struct {
@@ -120,6 +131,7 @@ var errorHints = []struct {
 	{geniex_sdk.ErrCommonNetwork, hintHubUnreachable},
 	{ErrServerUnreachable, hintServerUnreachable},
 	{ErrPrecisionNotFound, hintPrecisionNotFound},
+	{ErrCPUUnsupported, hintCPUUnsupported},
 }
 
 // PrintError renders err for the user on stderr in the theme's error style
