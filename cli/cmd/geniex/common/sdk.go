@@ -5,7 +5,6 @@ package common
 
 import (
 	"errors"
-	"fmt"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 )
@@ -16,11 +15,10 @@ import (
 func InitSDK() error {
 	err := geniex_sdk.Init()
 	if errors.Is(err, geniex_sdk.ErrCommonNotSupport) {
-		// Wrap with %v, not %w: the SDK returns the generic NOT_SUPPORTED code
-		// for both this and the unsupported-model-type case, so keeping it in
-		// the Is-chain would match hintNotSupport first. ErrCPUUnsupported is
-		// the only sentinel we want PrintError to see here.
-		return fmt.Errorf("%w: %v", ErrCPUUnsupported, err)
+		// Return ErrCPUUnsupported alone, not wrapping the SDK error: the SDK
+		// uses the same NOT_SUPPORTED code for the unsupported-model-type case,
+		// so keeping it in the Is-chain would match hintNotSupport first.
+		return ErrCPUUnsupported
 	}
 	return err
 }

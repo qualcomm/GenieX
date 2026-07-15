@@ -5,7 +5,6 @@ package common
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
@@ -23,14 +22,12 @@ func hintFor(err error) string {
 }
 
 // The SDK returns the same NOT_SUPPORTED code for an unsupported model type and
-// for a CPU-feature failure at init. InitSDK wraps the init case so it resolves
-// to the CPU hint, not the model-type hint, even though the CPU sentinel is
-// listed after it in errorHints.
+// for a CPU-feature failure at init. InitSDK maps the init case to
+// ErrCPUUnsupported so it resolves to the CPU hint, not the model-type hint, even
+// though ErrCommonNotSupport is listed before it in errorHints.
 func TestCPUUnsupportedHintWins(t *testing.T) {
-	wrapped := fmt.Errorf("%w: %v", ErrCPUUnsupported, geniex_sdk.ErrCommonNotSupport)
-
-	if got := hintFor(wrapped); got != hintCPUUnsupported {
-		t.Fatalf("wrapped init error resolved to wrong hint:\n%s", got)
+	if got := hintFor(ErrCPUUnsupported); got != hintCPUUnsupported {
+		t.Fatalf("ErrCPUUnsupported resolved to wrong hint:\n%s", got)
 	}
 	// A bare NOT_SUPPORTED (e.g. unsupported model type) must still get its own hint.
 	if got := hintFor(geniex_sdk.ErrCommonNotSupport); got != hintNotSupport {

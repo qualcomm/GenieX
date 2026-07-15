@@ -38,8 +38,7 @@ void* _crypto_dummy = (void*)OpenSSL_version;
 #include <sys/auxv.h>
 
 static bool cpu_features_supported() {
-    unsigned long need =
-        HWCAP_ATOMICS | HWCAP_ASIMDRDM | HWCAP_ASIMDDP | HWCAP_FPHP | HWCAP_ASIMDHP | HWCAP_CRC32;
+    unsigned long need = HWCAP_ATOMICS | HWCAP_ASIMDRDM | HWCAP_ASIMDDP | HWCAP_FPHP | HWCAP_ASIMDHP | HWCAP_CRC32;
     return (getauxval(AT_HWCAP) & need) == need;
 }
 #else
@@ -86,14 +85,16 @@ int32_t geniex_init(void) {
     SetConsoleOutputCP(CP_UTF8);
 #endif
 
-    GENIEX_LOG_DEBUG("initializing ml");
-
+    // Checked before any logging: a logging macro could itself compile to an
+    // armv8.2/LSE instruction, which would SIGILL on the very CPUs this guards.
     if (!cpu_features_supported()) {
         GENIEX_LOG_ERROR(
             "this device's CPU lacks features required by geniex; "
             "running would crash with an illegal instruction");
         return GENIEX_ERROR_COMMON_NOT_SUPPORTED;
     }
+
+    GENIEX_LOG_DEBUG("initializing ml");
 
     try {
         Registry::instance().scan_plugins();
