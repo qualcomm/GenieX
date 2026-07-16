@@ -108,6 +108,9 @@ typedef struct {
     int32_t n_threads;
     int32_t ngl_override; /* -1 = use resolved alias default; >=0 overrides */
 
+    const char* draft_model;  /* draft/MTP GGUF for speculative decoding (llama_cpp); NULL = disabled */
+    int32_t     draft_tokens; /* draft tokens per step (0 = plugin default) */
+
     const char* output_json;
     const char* output_md;
     const char* cell_id;
@@ -217,6 +220,8 @@ static void usage(const char* argv0) {
         "  -t, --threads N        generation threads (0 = SDK default)\n"
         "  -ngl, --n-gpu-layers N llama_cpp layers to offload; overrides the\n"
         "                         device alias default (-1 = all layers)\n"
+        "  --draft-model PATH     draft/MTP GGUF enabling speculative decoding (llama_cpp)\n"
+        "  --draft-tokens N       draft tokens per step (0 = plugin default)\n"
         "  --warmup N             default 1\n"
         "  --no-warmup            equivalent to --warmup 0\n"
         "  --temperature F        default 0.0\n"
@@ -704,6 +709,10 @@ static void parse_args(int argc, char** argv, options_t* o) {
             o->n_threads = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "-ngl") == 0 || strcmp(a, "--n-gpu-layers") == 0) {
             o->ngl_override = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--draft-model") == 0) {
+            o->draft_model = arg_value(argc, argv, &i, a);
+        } else if (strcmp(a, "--draft-tokens") == 0) {
+            o->draft_tokens = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--output-json") == 0) {
             o->output_json = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--output-md") == 0) {
@@ -986,10 +995,12 @@ static void fill_gen_config(geniex_GenerationConfig* g, geniex_SamplerConfig* s,
 
 static void fill_model_config(geniex_ModelConfig* c, const options_t* o, int32_t ngl) {
     memset(c, 0, sizeof(*c));
-    c->n_ctx        = o->n_ctx;
-    c->n_threads    = o->n_threads;
-    c->n_gpu_layers = ngl;
-    c->max_tokens   = o->max_new_tokens;
+    c->n_ctx            = o->n_ctx;
+    c->n_threads        = o->n_threads;
+    c->n_gpu_layers     = ngl;
+    c->max_tokens       = o->max_new_tokens;
+    c->spec_draft_model = o->draft_model; /* may be NULL */
+    c->spec_n_draft     = o->draft_tokens;
 }
 
 static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_result_t* out) {
@@ -1170,6 +1181,13 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
 
             if (!is_warmup && o->accuracy && gout.full_text) {
                 print_gen_text(gout.full_text);
+            }
+            if (!is_warmup && gout.profile_data.draft_n_total > 0) {
+                fprintf(stderr,
+                    "[spec] draft acceptance = %.5f (%lld accepted / %lld generated)\n",
+                    (double)gout.profile_data.draft_n_accepted / (double)gout.profile_data.draft_n_total,
+                    (long long)gout.profile_data.draft_n_accepted,
+                    (long long)gout.profile_data.draft_n_total);
             }
             if (gout.full_text) {
                 geniex_free(gout.full_text);
