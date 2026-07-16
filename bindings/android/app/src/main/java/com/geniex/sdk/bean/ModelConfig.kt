@@ -44,4 +44,10 @@ data class ModelConfig(
     val enable_thinking: Boolean = false,
 
     val verbose: Boolean = false,
+
+    /** Path to a draft / MTP model GGUF to enable speculative decoding (llama_cpp only; "" = disabled) */
+    val spec_draft_model: String = "",
+
+    /** Draft tokens per step for speculative decoding (0 = plugin default) */
+    val spec_n_draft: Int = 0,
 )

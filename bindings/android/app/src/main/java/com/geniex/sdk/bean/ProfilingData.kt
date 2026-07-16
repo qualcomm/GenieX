@@ -10,5 +10,7 @@ data class ProfilingData(
     val prefillSpeed: Double,   /* Prefill speed (tokens/sec) */
     val decodingSpeed: Double,  /* Decoding speed (tokens/sec) */
     val realTimeFactor: Double,  /* Real-Time Factor(RTF) (1.0 = real-time, >1.0 = faster, <1.0 = slower) */
+    val draftNTotal: Long,    /* Speculative decoding: draft tokens generated (0 when disabled) */
+    val draftNAccepted: Long,  /* Speculative decoding: draft tokens accepted by the target model */
     val stopReason: String  /* Stop reason: "eos", "length", "user", "stop_sequence" */
 )

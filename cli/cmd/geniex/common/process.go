@@ -242,10 +242,10 @@ func (p *Processor) fsmInit() {
 		{STATE_START, "assistant"}:       {STATE_ASSISTANT, nil},
 
 		// gemma4
-		{STATE_ASSISTANT, "<|channel>"}:    {STATE_GEMMA_CHANNEL, nil},
-		{STATE_GEMMA_CHANNEL, "thought"}:   {STATE_GEMMA_CHANNEL_THOUGHT, nil},
+		{STATE_ASSISTANT, "<|channel>"}:     {STATE_GEMMA_CHANNEL, nil},
+		{STATE_GEMMA_CHANNEL, "thought"}:    {STATE_GEMMA_CHANNEL_THOUGHT, nil},
 		{STATE_GEMMA_CHANNEL_THOUGHT, "\n"}: {STATE_THINK, thinkStart(true)},
-		{STATE_THINK, "<channel|>"}:        {STATE_NORMAL, thinkEnd(true)},
+		{STATE_THINK, "<channel|>"}:         {STATE_NORMAL, thinkEnd(true)},
 	}
 	p.fsmState = STATE_ASSISTANT
 }
@@ -292,6 +292,13 @@ stop reason:    %s
 			pd.StopReason,
 		)
 
+		if pd.DraftNTotal > 0 {
+			text += fmt.Sprintf("\ndraft accept:   %d/%d (%.1f%%)",
+				pd.DraftNAccepted,
+				pd.DraftNTotal,
+				100.0*float64(pd.DraftNAccepted)/float64(pd.DraftNTotal))
+		}
+
 	} else {
 		if pd.AudioDuration > 0 { // ASR TTS
 			text = fmt.Sprintf("processing_time %.2fs  |  audio_duration %.2fs  |  RTF %.2f (%.1fx realtime)",
@@ -301,10 +308,14 @@ stop reason:    %s
 				1.0/pd.RealTimeFactor)
 
 		} else if pd.DecodingSpeed != 0 {
-			text = fmt.Sprintf("— %.1f tok/s • %d tok • %.1f s first token —",
+			text = fmt.Sprintf("— %.1f tok/s • %d tok • %.1f s first token",
 				pd.DecodingSpeed,
 				pd.GeneratedTokens,
 				float64(pd.TTFT)/1e6)
+			if pd.DraftNTotal > 0 {
+				text += fmt.Sprintf(" • %.0f%% accept", 100.0*float64(pd.DraftNAccepted)/float64(pd.DraftNTotal))
+			}
+			text += " —"
 
 		} else {
 			if pd.TotalTimeUs() != 0 {

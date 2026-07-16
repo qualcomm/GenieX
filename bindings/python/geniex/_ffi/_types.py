@@ -40,6 +40,8 @@ class geniex_ProfileData(Structure):
         ('prefill_speed', c_double),
         ('decoding_speed', c_double),
         ('real_time_factor', c_double),
+        ('draft_n_total', c_int64),
+        ('draft_n_accepted', c_int64),
         ('stop_reason', c_char_p),
     ]
 
@@ -109,6 +111,8 @@ class geniex_ModelConfig(Structure):
         ('max_tokens', c_int32),
         ('enable_thinking', c_bool),
         ('verbose', c_bool),
+        ('spec_draft_model', c_char_p),
+        ('spec_n_draft', c_int32),
     ]
 
 

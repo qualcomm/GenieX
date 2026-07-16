@@ -39,6 +39,8 @@ var (
 	systemPrompt   string
 	computeUnit    string
 	slidingWindow  bool
+	draftModel     string
+	draftTokens    int32
 
 	// sampler config
 	temperature       float32
@@ -87,6 +89,8 @@ var (
 		llmFlags.StringArrayVarP(&prompt, "prompt", "p", nil, "pass prompt")
 		llmFlags.StringVarP(&tokenFile, "token-file", "t", "", "path to token file (space-separated token IDs) (llama_cpp only)")
 		llmFlags.BoolVarP(&slidingWindow, "sliding-window", "", false, "evict oldest context on overflow instead of erroring (qairt only)")
+		llmFlags.StringVarP(&draftModel, "draft-model", "", "", "path to a draft/MTP model GGUF to enable speculative decoding (llama_cpp only)")
+		llmFlags.Int32VarP(&draftTokens, "draft-tokens", "", 3, "draft tokens per step for speculative decoding (llama_cpp only)")
 		return llmFlags
 	}()
 	vlmFlags = func() *pflag.FlagSet {
@@ -264,6 +268,16 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 		return err
 	}
 
+	// Speculative decoding is llama_cpp-only; ignore the draft model for other runtimes.
+	specDraftModel := draftModel
+	if paths.RuntimeID != geniex_sdk.RuntimeLlamaCpp {
+		if specDraftModel != "" {
+			fmt.Println(render.GetTheme().Warning.Sprintf(
+				"Warning: --draft-model is only supported by llama_cpp; ignoring for runtime %s", paths.RuntimeID))
+		}
+		specDraftModel = ""
+	}
+
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
 
@@ -273,8 +287,10 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 		RuntimeID: paths.RuntimeID,
 		DeviceID:  deviceID,
 		Config: geniex_sdk.ModelConfig{
-			NCtx:       nctxResolved,
-			NGpuLayers: nglResolved,
+			NCtx:           nctxResolved,
+			NGpuLayers:     nglResolved,
+			SpecDraftModel: specDraftModel,
+			SpecNDraft:     draftTokens,
 		},
 	})
 	spin.Stop()

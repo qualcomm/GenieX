@@ -258,14 +258,23 @@ geniex_ModelConfig extract_model_config(JNIEnv* env, jobject configObj) {
     fid            = env->GetFieldID(cls, "verbose", "Z");
     config.verbose = env->GetBooleanField(configObj, fid);
 
+    // spec_draft_model
+    fid                     = env->GetFieldID(cls, "spec_draft_model", "Ljava/lang/String;");
+    jstr                    = (jstring)env->GetObjectField(configObj, fid);
+    config.spec_draft_model = jstr ? hold_c_str(jstring2str(env, jstr)) : nullptr;
+
+    // spec_n_draft
+    fid                 = env->GetFieldID(cls, "spec_n_draft", "I");
+    config.spec_n_draft = env->GetIntField(configObj, fid);
+
     return config;
 }
 jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data) {
     jclass cls = env->FindClass("com/geniex/sdk/bean/ProfilingData");
     if (!cls) return nullptr;
 
-    // (DDDJJJDDDLjava/lang/String;)V
-    jmethodID ctor = env->GetMethodID(cls, "<init>", "(DDDJJJDDDLjava/lang/String;)V");
+    // (DDDJJJDDDJJLjava/lang/String;)V
+    jmethodID ctor = env->GetMethodID(cls, "<init>", "(DDDJJJDDDJJLjava/lang/String;)V");
     if (!ctor) return nullptr;
 
     const jdouble ttft_ms   = static_cast<jdouble>(data.ttft / 1000.0);
@@ -291,6 +300,9 @@ jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data) {
 
     LOGe("prefill_speed=%.6f tok/s, decoding_speed=%.6f tok/s, rtf=%.4f", prefill_speed, decoding_speed, rtf);
 
+    const jlong draft_n_total    = static_cast<jlong>(data.draft_n_total);
+    const jlong draft_n_accepted = static_cast<jlong>(data.draft_n_accepted);
+
     jstring jStopReason = env->NewStringUTF(data.stop_reason ? data.stop_reason : "");
 
     jobject obj = env->NewObject(cls,
@@ -303,8 +315,10 @@ jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data) {
         audio_ms,  // J J J
         prefill_speed,
         decoding_speed,
-        rtf,         // D D D
-        jStopReason  // String
+        rtf,  // D D D
+        draft_n_total,
+        draft_n_accepted,  // J J
+        jStopReason        // String
     );
 
     env->DeleteLocalRef(jStopReason);

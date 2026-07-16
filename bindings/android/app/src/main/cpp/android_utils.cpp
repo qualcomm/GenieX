@@ -16,7 +16,7 @@
 #define MAX_PATH_LEN 512
 namespace geniex_android_sdk {
 
-void throw_runtime_exception(JNIEnv *env, const char *_Nonnull format, ...) {
+void throw_runtime_exception(JNIEnv* env, const char* _Nonnull format, ...) {
     va_list va;
     va_start(va, format);
     char errMsg[128];
@@ -29,12 +29,12 @@ void throw_runtime_exception(JNIEnv *env, const char *_Nonnull format, ...) {
     }
 }
 
-jobject create_java_profile_data(JNIEnv *env, geniex_ProfileData data) {
+jobject create_java_profile_data(JNIEnv* env, geniex_ProfileData data) {
     jclass cls = env->FindClass("com/geniex/sdk/bean/ProfilingData");
     if (!cls) return nullptr;
 
-    // (DDDJJJDDDLjava/lang/String;)V
-    jmethodID ctor = env->GetMethodID(cls, "<init>", "(DDDJJJDDDLjava/lang/String;)V");
+    // (DDDJJJDDDJJLjava/lang/String;)V
+    jmethodID ctor = env->GetMethodID(cls, "<init>", "(DDDJJJDDDJJLjava/lang/String;)V");
     if (!ctor) return nullptr;
 
     const auto ttft_ms   = static_cast<jdouble>(data.ttft / 1000.0);
@@ -60,6 +60,9 @@ jobject create_java_profile_data(JNIEnv *env, geniex_ProfileData data) {
 
     LOGd("prefill_speed=%.6f tok/s, decoding_speed=%.6f tok/s, rtf=%.4f", prefill_speed, decoding_speed, rtf);
 
+    const auto draft_n_total    = static_cast<jlong>(data.draft_n_total);
+    const auto draft_n_accepted = static_cast<jlong>(data.draft_n_accepted);
+
     jstring jStopReason = env->NewStringUTF(data.stop_reason ? data.stop_reason : "");
 
     jobject obj = env->NewObject(cls,
@@ -72,15 +75,17 @@ jobject create_java_profile_data(JNIEnv *env, geniex_ProfileData data) {
         audio_ms,  // J J J
         prefill_speed,
         decoding_speed,
-        rtf,         // D D D
-        jStopReason  // String
+        rtf,  // D D D
+        draft_n_total,
+        draft_n_accepted,  // J J
+        jStopReason        // String
     );
 
     env->DeleteLocalRef(jStopReason);
     return obj;
 }
 
-bool check_jni_exception(JNIEnv *env, const char *where) {
+bool check_jni_exception(JNIEnv* env, const char* where) {
     if (env->ExceptionCheck()) {
         LOGe("Exception at %s", where);
         env->ExceptionDescribe();
@@ -98,7 +103,7 @@ bool check_jni_exception(JNIEnv *env, const char *where) {
  * @param fieldName
  * @return
  */
-const char *getStringField(JNIEnv *env, jclass cls, jobject inputObj, const char *fieldName) {
+const char* getStringField(JNIEnv* env, jclass cls, jobject inputObj, const char* fieldName) {
     jfieldID fid = env->GetFieldID(cls, fieldName, "Ljava/lang/String;");
     if (check_jni_exception(env, "GetFieldID failed") || !fid) {
         LOGe("field '%s' not found", fieldName);
@@ -111,7 +116,7 @@ const char *getStringField(JNIEnv *env, jclass cls, jobject inputObj, const char
     }
     std::string s = jniutils::jstring2str(env, jstr);
     env->DeleteLocalRef(jstr);
-    const char *c = jniutils::hold_c_str(s);
+    const char* c = jniutils::hold_c_str(s);
     LOGd("%s = %s", fieldName, c);
     return c;
 }
@@ -124,7 +129,7 @@ const char *getStringField(JNIEnv *env, jclass cls, jobject inputObj, const char
  * @param fieldName
  * @return
  */
-jint getIntField(JNIEnv *env, jclass cls, jobject obj, const char *fieldName) {
+jint getIntField(JNIEnv* env, jclass cls, jobject obj, const char* fieldName) {
     jfieldID fieldId = env->GetFieldID(cls, fieldName, "Ljava/lang/Integer;");
     if (check_jni_exception(env, "GetFieldID failed") || !fieldId) {
         LOGe("field '%s' not found", fieldName);
@@ -155,7 +160,7 @@ jint getIntField(JNIEnv *env, jclass cls, jobject obj, const char *fieldName) {
  * @param fieldName
  * @return
  */
-jfloat getFloatField(JNIEnv *env, jclass cls, jobject obj, const char *fieldName) {
+jfloat getFloatField(JNIEnv* env, jclass cls, jobject obj, const char* fieldName) {
     jfieldID fieldId = env->GetFieldID(cls, fieldName, "Ljava/lang/Float;");
     if (!fieldId) {
         LOGe("field '%s' not found", fieldName);
@@ -178,7 +183,7 @@ jfloat getFloatField(JNIEnv *env, jclass cls, jobject obj, const char *fieldName
     return result;
 }
 
-jobject getObjectField(JNIEnv *env, jclass cls, jobject obj, const char *name, const char *sig) {
+jobject getObjectField(JNIEnv* env, jclass cls, jobject obj, const char* name, const char* sig) {
     jfieldID configId = env->GetFieldID(cls, name, sig);
     if (check_jni_exception(env, "GetFieldID failed") || !configId) {
         LOGe("field '%s' not found", name);
@@ -194,7 +199,7 @@ jobject getObjectField(JNIEnv *env, jclass cls, jobject obj, const char *name, c
     }
 }
 
-jboolean getBoolField(JNIEnv *env, jclass cls, jobject obj, const char *fieldName) {
+jboolean getBoolField(JNIEnv* env, jclass cls, jobject obj, const char* fieldName) {
     jfieldID fieldId = env->GetFieldID(cls, fieldName, "Z");
     if (check_jni_exception(env, "GetFieldID failed") || !fieldId) {
         LOGe("field '%s' not found", fieldName);
@@ -213,7 +218,7 @@ jboolean getBoolField(JNIEnv *env, jclass cls, jobject obj, const char *fieldNam
  * Get primitive float field (for non-nullable Kotlin Float)
  * JNI signature: "F"
  */
-jfloat getPrimitiveFloatField(JNIEnv *env, jclass cls, jobject obj, const char *fieldName) {
+jfloat getPrimitiveFloatField(JNIEnv* env, jclass cls, jobject obj, const char* fieldName) {
     jfieldID fieldId = env->GetFieldID(cls, fieldName, "F");
     if (check_jni_exception(env, "GetFieldID failed") || !fieldId) {
         LOGe("primitive float field '%s' not found", fieldName);
@@ -232,7 +237,7 @@ jfloat getPrimitiveFloatField(JNIEnv *env, jclass cls, jobject obj, const char *
  * Get primitive int field (for non-nullable Kotlin Int)
  * JNI signature: "I"
  */
-jint getPrimitiveIntField(JNIEnv *env, jclass cls, jobject obj, const char *fieldName) {
+jint getPrimitiveIntField(JNIEnv* env, jclass cls, jobject obj, const char* fieldName) {
     jfieldID fieldId = env->GetFieldID(cls, fieldName, "I");
     if (check_jni_exception(env, "GetFieldID failed") || !fieldId) {
         LOGe("primitive int field '%s' not found", fieldName);
@@ -247,7 +252,7 @@ jint getPrimitiveIntField(JNIEnv *env, jclass cls, jobject obj, const char *fiel
     return result;
 }
 
-jobject create_string_list(JNIEnv *env, const char **strings, int count) {
+jobject create_string_list(JNIEnv* env, const char** strings, int count) {
     jclass    array_list_class       = env->FindClass("java/util/ArrayList");
     jmethodID array_list_constructor = env->GetMethodID(array_list_class, "<init>", "()V");
     jmethodID array_list_add         = env->GetMethodID(array_list_class, "add", "(Ljava/lang/Object;)Z");
@@ -265,7 +270,7 @@ jobject create_string_list(JNIEnv *env, const char **strings, int count) {
     return list;
 }
 
-jobject create_float_list(JNIEnv *env, float *floats, int count) {
+jobject create_float_list(JNIEnv* env, float* floats, int count) {
     jclass    array_list_class       = env->FindClass("java/util/ArrayList");
     jmethodID array_list_constructor = env->GetMethodID(array_list_class, "<init>", "()V");
     jmethodID array_list_add         = env->GetMethodID(array_list_class, "add", "(Ljava/lang/Object;)Z");

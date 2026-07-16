@@ -221,9 +221,9 @@ def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **
             _logger.warning('qairt runtime does not consume n_ctx=%d; forcing 0', n_ctx)
             n_ctx = 0
     cfg = geniex_ModelConfig(n_ctx=n_ctx, n_gpu_layers=n_gpu_layers)
-    _int_fields = {'n_threads', 'n_threads_batch', 'n_batch', 'n_ubatch', 'n_seq_max', 'max_tokens'}
+    _int_fields = {'n_threads', 'n_threads_batch', 'n_batch', 'n_ubatch', 'n_seq_max', 'max_tokens', 'spec_n_draft'}
     _bool_fields = {'enable_thinking', 'verbose'}
-    _str_fields = {'chat_template_path', 'chat_template_content', 'system_prompt'}
+    _str_fields = {'chat_template_path', 'chat_template_content', 'system_prompt', 'spec_draft_model'}
     for k, v in kwargs.items():
         if k in _int_fields:
             setattr(cfg, k, int(v))

@@ -363,6 +363,9 @@ typedef struct {
     double decoding_speed;   /* Decoding speed (tokens/sec) */
     double real_time_factor; /* Real-Time Factor(RTF) (1.0 = real-time, >1.0 = faster, <1.0 = slower) */
 
+    int64_t draft_n_total;    /* Speculative decoding: draft tokens generated (0 when disabled) */
+    int64_t draft_n_accepted; /* Speculative decoding: draft tokens accepted by the target model */
+
     const char* stop_reason; /* Stop reason: "eos", "length", "user", "stop_sequence", "context_length" */
 } geniex_ProfileData;
 
@@ -425,6 +428,12 @@ typedef struct {
     int32_t     max_tokens;             // max tokens to generate
     bool        enable_thinking;        // enable thinking mode for Qwen models
     bool        verbose;                // verbose logging
+
+    // Speculative decoding (llama_cpp only; ignored by qairt). Enabled when
+    // spec_draft_model is a non-empty path to a draft/MTP GGUF (e.g. a Gemma-4
+    // `mtp-` assistant). Other backends ignore these fields.
+    geniex_Path spec_draft_model;  // path to the draft / MTP head GGUF ("" = disabled)
+    int32_t     spec_n_draft;      // draft tokens per step (0 = plugin default of 3)
 } geniex_ModelConfig;
 
 /* ====================  LLM Handle  ======================================== */

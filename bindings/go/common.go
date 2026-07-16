@@ -23,6 +23,8 @@ type ProfileData struct {
 	PrefillSpeed    float64
 	DecodingSpeed   float64
 	RealTimeFactor  float64
+	DraftNTotal     int64
+	DraftNAccepted  int64
 	StopReason      string
 }
 
@@ -46,6 +48,8 @@ func newProfileDataFromCPtr(c C.geniex_ProfileData) ProfileData {
 		PrefillSpeed:    float64(c.prefill_speed),
 		DecodingSpeed:   float64(c.decoding_speed),
 		RealTimeFactor:  float64(c.real_time_factor),
+		DraftNTotal:     int64(c.draft_n_total),
+		DraftNAccepted:  int64(c.draft_n_accepted),
 		StopReason:      C.GoString(c.stop_reason),
 	}
 }
@@ -163,6 +167,8 @@ type ModelConfig struct {
 	NGpuLayers          int32
 	ChatTemplatePath    string
 	ChatTemplateContent string
+	SpecDraftModel      string
+	SpecNDraft          int32
 }
 
 // fillC writes mc into an embedded C struct; pair with freeCModelConfig to
@@ -179,6 +185,8 @@ func (mc ModelConfig) fillC(out *C.geniex_ModelConfig) {
 		n_gpu_layers:          C.int32_t(mc.NGpuLayers),
 		chat_template_path:    cStringIfSet(mc.ChatTemplatePath),
 		chat_template_content: cStringIfSet(mc.ChatTemplateContent),
+		spec_draft_model:      cStringIfSet(mc.SpecDraftModel),
+		spec_n_draft:          C.int32_t(mc.SpecNDraft),
 	}
 }
 
@@ -188,6 +196,7 @@ func freeCModelConfig(c *C.geniex_ModelConfig) {
 	}
 	cFreeIfSet(unsafe.Pointer(c.chat_template_path))
 	cFreeIfSet(unsafe.Pointer(c.chat_template_content))
+	cFreeIfSet(unsafe.Pointer(c.spec_draft_model))
 }
 
 // LCOV_EXCL_STOP
