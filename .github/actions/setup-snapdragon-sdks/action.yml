@@ -9,11 +9,11 @@ inputs:
   hexagon-version:
     description: "Hexagon SDK version"
     required: false
-    default: "6.4.0.2"
+    default: "6.6.0.0"
   hexagon-tools-version:
     description: "Hexagon tools version under $HEXAGON_SDK_ROOT/tools/HEXAGON_Tools"
     required: false
-    default: "19.0.04"
+    default: "19.0.07"
 
 runs:
   using: "composite"
