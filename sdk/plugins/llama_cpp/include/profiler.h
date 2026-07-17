@@ -32,6 +32,7 @@ class Profiler {
     void       record_ttft();
     void       update_prompt_tokens(uint32_t);
     void       update_generated_tokens(uint32_t);
+    void       set_draft_stats(int64_t n_total, int64_t n_accepted);
     void       set_stop_reason(StopReason);
     StopReason get_stop_reason() const;
     void       end();
@@ -56,6 +57,8 @@ class Profiler {
     StopReason stop_reason      = StopReason::GENIEX_STOP_REASON_UNKNOWN;
     uint32_t   prompt_tokens    = 0;
     uint32_t   generated_tokens = 0;
+    int64_t    draft_n_total    = 0;
+    int64_t    draft_n_accepted = 0;
 };
 
 }  // namespace common

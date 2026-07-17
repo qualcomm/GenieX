@@ -360,6 +360,9 @@ typedef struct {
     double decoding_speed;   /* Decoding speed (tokens/sec) */
     double real_time_factor; /* Real-Time Factor(RTF) (1.0 = real-time, >1.0 = faster, <1.0 = slower) */
 
+    int64_t draft_n_total;    /* Speculative decoding: draft tokens generated (0 when disabled) */
+    int64_t draft_n_accepted; /* Speculative decoding: draft tokens accepted by the target model */
+
     const char* stop_reason; /* Stop reason: "eos", "length", "user", "stop_sequence", "context_length" */
 } geniex_ProfileData;
 
@@ -422,6 +425,18 @@ typedef struct {
     int32_t     max_tokens;             // max tokens to generate
     bool        enable_thinking;        // enable thinking mode for Qwen models
     bool        verbose;                // verbose logging
+
+    // Speculative decoding (llama_cpp only; ignored by qairt). Disabled when
+    // spec_type is NULL/""/"none". One or comma-separated llama.cpp type names,
+    // chained by llama.cpp's fixed priority:
+    //   draft models: "draft-mtp", "draft-eagle3", "draft-simple" (need spec_draft_model)
+    //   self-speculative (no draft model): "ngram-simple", "ngram-map-k",
+    //     "ngram-map-k4v", "ngram-mod", "ngram-cache"
+    const char* spec_type;         // speculative type(s), "" / "none" = disabled
+    geniex_Path spec_draft_model;  // draft GGUF for draft-* types ("" for ngram-*)
+    int32_t     spec_n_max;        // max draft tokens per step (0 = plugin default of 3)
+    int32_t     spec_n_min;        // min draft tokens per step (0 = llama.cpp default)
+    float       spec_p_min;        // min greedy draft probability (0 = llama.cpp default)
 } geniex_ModelConfig;
 
 /* ====================  LLM Handle  ======================================== */
