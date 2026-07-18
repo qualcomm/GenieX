@@ -348,6 +348,7 @@ impl ModelSource for AiHubSource {
             model_type,
             plugin_id: "qairt".to_string(),
             precision: precision_label,
+            qairt_version: asset.tool_versions.qairt.clone(),
             model_file,
             mmproj_file: ModelFileInfo::default(),
             tokenizer_file: ModelFileInfo::default(),

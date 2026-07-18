@@ -96,6 +96,18 @@ pub struct AssetDetails {
     pub download_url: String,
     #[serde(default)]
     pub uncompressed_size: Option<u64>,
+    /// Tool versions the asset was built against, e.g. `{"qairt": "2.45.0.…"}`.
+    /// Genie/QAIRT assets carry `qairt`; llama.cpp assets ship an empty map.
+    #[serde(default)]
+    pub tool_versions: ToolVersions,
+}
+
+/// Compiler/runtime versions an AI Hub asset was exported with.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct ToolVersions {
+    #[serde(default)]
+    pub qairt: String,
 }
 
 /// `platform.json`: chipset catalogue with aliases used to canonicalize
@@ -116,4 +128,60 @@ pub struct ChipsetInfo {
     pub reference_device: String,
     #[serde(default)]
     pub aliases: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Trimmed from a live release-assets.json (qwen3_4b, v0.57.0). Genie
+    // assets carry tool_versions.qairt; llama.cpp assets ship an empty map.
+    const RELEASE_ASSETS: &str = r#"{
+        "model_id": "qwen3_4b",
+        "aihm_version": "0.57.0",
+        "assets": [
+            {
+                "precision": "PRECISION_W4A16",
+                "runtime": "RUNTIME_GENIE",
+                "chipset": "qualcomm-snapdragon-x-elite",
+                "download_url": "https://example.invalid/qwen3_4b.zip",
+                "tool_versions": {"qairt": "2.45.0.260326154327"}
+            },
+            {
+                "precision": "PRECISION_W4A16",
+                "runtime": "RUNTIME_GENIEX_LLAMACPP",
+                "chipset": null,
+                "download_url": "https://example.invalid/qwen3_4b-llamacpp.zip",
+                "tool_versions": {}
+            }
+        ]
+    }"#;
+
+    #[test]
+    fn parses_qairt_tool_version_from_genie_asset() {
+        let ra: ModelReleaseAssets = serde_json::from_str(RELEASE_ASSETS).unwrap();
+        let genie = ra
+            .assets
+            .iter()
+            .find(|a| a.runtime == "RUNTIME_GENIE")
+            .unwrap();
+        assert_eq!(genie.tool_versions.qairt, "2.45.0.260326154327");
+    }
+
+    #[test]
+    fn tool_versions_defaults_empty_when_absent_or_bare() {
+        let ra: ModelReleaseAssets = serde_json::from_str(RELEASE_ASSETS).unwrap();
+        let llama = ra
+            .assets
+            .iter()
+            .find(|a| a.runtime == "RUNTIME_GENIEX_LLAMACPP")
+            .unwrap();
+        assert!(llama.tool_versions.qairt.is_empty());
+
+        // Assets predating the tool_versions field must still parse.
+        let legacy =
+            r#"{"runtime":"RUNTIME_GENIE","precision":"","download_url":"","chipset":null}"#;
+        let asset: AssetDetails = serde_json::from_str(legacy).unwrap();
+        assert!(asset.tool_versions.qairt.is_empty());
+    }
 }

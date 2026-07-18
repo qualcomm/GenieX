@@ -74,6 +74,9 @@ class ModelPaths:
     model_type: str  # "llm" or "vlm"
     mmproj_path: str | None = None
     tokenizer_path: str | None = None
+    # QAIRT version the model's assets were pulled for (AI Hub metadata);
+    # empty for non-AI-Hub / llama.cpp models.
+    qairt_version: str = ''
 
 
 @dataclass(frozen=True)
@@ -406,6 +409,7 @@ def get_paths(model_name: str) -> ModelPaths:
             model_type=_type_str(out.model_type),
             mmproj_path=out.mmproj_path.decode() if out.mmproj_path else None,
             tokenizer_path=out.tokenizer_path.decode() if out.tokenizer_path else None,
+            qairt_version=out.qairt_version.decode() if out.qairt_version else '',
         )
     finally:
         lib.geniex_model_paths_free(byref(out))

@@ -101,6 +101,7 @@ typedef struct {
     char*            model_name;     /**< Architecture name, e.g. "qwen3-4b".       */
     char*            plugin_id;      /**< Plugin ID, e.g. "llama_cpp".               */
     geniex_ModelType model_type;     /**< LLM or VLM.                          */
+    char*            qairt_version;  /**< QAIRT version the assets were built for; "" if none. */
 } geniex_ModelPaths;
 
 /**

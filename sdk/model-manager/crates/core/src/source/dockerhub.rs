@@ -530,6 +530,7 @@ fn build_plan(
         model_type,
         plugin_id: "llama_cpp".to_string(),
         precision: config.quantization.clone(),
+        qairt_version: String::new(),
         model_file,
         mmproj_file,
         tokenizer_file: ModelFileInfo::default(),

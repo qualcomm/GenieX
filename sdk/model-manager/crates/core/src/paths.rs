@@ -16,6 +16,10 @@ pub struct ModelPaths {
     pub model_name: String,
     pub plugin_id: String,
     pub model_type: ModelType,
+    /// QAIRT version the model's assets were exported against (from the
+    /// manifest). Empty for non-AI-Hub / llama.cpp models. Lets callers
+    /// detect artifacts left stale by a GenieX update.
+    pub qairt_version: String,
 }
 
 /// Resolve file paths from a manifest + local base directory + optional quant hint.
@@ -84,6 +88,7 @@ pub fn resolve_model_paths(
             model_name: manifest.model_name.clone(),
             plugin_id: manifest.plugin_id.clone(),
             model_type: manifest.model_type.clone(),
+            qairt_version: manifest.qairt_version.clone(),
         },
     ))
 }
@@ -145,6 +150,7 @@ mod tests {
             model_type: ModelType::Llm,
             plugin_id: "llama_cpp".to_string(),
             precision: String::new(),
+            qairt_version: String::new(),
             model_file,
             mmproj_file: ModelFileInfo::default(),
             tokenizer_file: ModelFileInfo::default(),
