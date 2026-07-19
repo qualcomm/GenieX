@@ -63,11 +63,11 @@ The Rust build script [`build.rs`](../build.rs) locates the native C library usi
 
 In PowerShell:
 ```powershell
-# Specify path to geniex.lib if located outside default paths
-$env:CARGO_GENIEX_LIB_DIR="C:\Users\mini\Projects\GenieX\sdk\pkg-geniex\lib"
+# Specify path to geniex.lib if located outside default lookup paths
+$env:CARGO_GENIEX_LIB_DIR="C:\path\to\GenieX\sdk\pkg-geniex\lib"
 
-# Add DLL locations (geniex.dll & backend plugins) to system PATH for runtime execution
-$env:PATH="$env:PATH;C:\Users\mini\Projects\GenieX\sdk\pkg-geniex\lib;C:\Users\mini\Projects\GenieX\sdk\pkg-geniex\lib\llama_cpp"
+# (Optional) Add DLL locations to system PATH if running custom binaries outside cargo
+$env:PATH="$env:PATH;C:\path\to\GenieX\sdk\pkg-geniex\lib;C:\path\to\GenieX\sdk\pkg-geniex\lib\llama_cpp"
 ```
 
 ---

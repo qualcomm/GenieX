@@ -12,9 +12,9 @@ This directory contains a functional example demonstrating how to use the GenieX
    cmake --install build --prefix pkg-geniex
    ```
 
-2. Add DLL and plugin paths to your environment (Windows PowerShell):
+2. (Optional) If running outside Cargo build automation, add DLL paths to your environment (Windows PowerShell):
    ```powershell
-   $env:PATH="$env:PATH;C:\Users\mini\Projects\GenieX\sdk\pkg-geniex\lib;C:\Users\mini\Projects\GenieX\sdk\pkg-geniex\lib\llama_cpp"
+   $env:PATH="$env:PATH;$PWD\..\..\sdk\pkg-geniex\lib;$PWD\..\..\sdk\pkg-geniex\lib\llama_cpp"
    ```
 
 ## Running the Example
