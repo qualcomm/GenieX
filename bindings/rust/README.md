@@ -8,6 +8,8 @@ Rust bindings for the GenieX C API (`geniex.h`).
 - LLVM / Clang (required by `bindgen`)
 - GenieX C SDK shared library (`geniex.dll` / `libgeniex.so` / `libgeniex.dylib`)
 
+For Windows ARM64 specific setup and step-by-step procedure, see [docs/rust_windows_arm64.md](docs/rust_windows_arm64.md).
+
 ## Build
 
 Build the Rust crate:

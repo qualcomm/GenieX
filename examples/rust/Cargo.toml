@@ -1,0 +1,7 @@
+[package]
+name = "geniex-rust-example"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+geniex = { path = "../../bindings/rust" }

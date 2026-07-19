@@ -33,3 +33,29 @@ fn test_chat_message() {
     };
     assert_eq!(msg.role, "user");
 }
+
+#[test]
+fn test_init_and_plugins() -> Result<()> {
+    init()?;
+    let ver = version();
+    assert!(!ver.is_empty(), "Version string should not be empty");
+
+    let plugins = get_plugin_list()?;
+    println!("Loaded plugins: {:?}", plugins);
+
+    deinit()?;
+    Ok(())
+}
+
+#[test]
+fn test_resolve_device() -> Result<()> {
+    let input = ResolveDeviceInput {
+        plugin_id: "llama_cpp".to_string(),
+        model_name: Some("test.gguf".to_string()),
+        mode: Some("cpu".to_string()),
+        ngl_default: -1,
+    };
+    let output = resolve_device(&input)?;
+    assert_eq!(output.ngl, 0); // cpu forces ngl = 0
+    Ok(())
+}
