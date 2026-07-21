@@ -41,8 +41,12 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
     // MoE override + null terminator; must outlive the load_from_file call below.
     llama_model_tensor_buft_override tensor_overrides[2];
 
-    // FIX: HTP backend patch
-    { htp::reacquire_before_load(); }
+    // FIX: HTP backend patch — only reacquire HTP sessions when we're actually
+    // going to use them (npu / hybrid). CPU and GPU targets shouldn't be gated
+    // on the ADSP domain's health.
+    if (device == Device::NPU) {
+        htp::reacquire_before_load();
+    }
 
     // FIX: gpt oss offload patch
     {
