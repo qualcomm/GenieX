@@ -31,7 +31,7 @@ The server runs on `http://127.0.0.1:18181` by default. Keep this terminal open 
 
 ## **POST /v1/chat/completions**
 
-Creates a model response for a conversation. Supports LLM (text-only) and VLM (image + text).
+Creates a model response for a conversation. Supports LLM (text-only) and VLM (image + text), plus [tool calling](#tool-calling) for both.
 
 ### **LLM request**
 
@@ -44,6 +44,47 @@ Creates a model response for a conversation. Supports LLM (text-only) and VLM (i
   "max_tokens": 256,
   "temperature": 0.7,
   "stream": false
+}
+```
+
+### **Chat completion (curl)**
+
+Standard single-shot request/response, non-streaming — the shape any OpenAI-compatible client speaks:
+
+```bash bash
+curl http://127.0.0.1:18181/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ai-hub-models/Qwen3-4B-Instruct-2507",
+    "messages": [
+      {"role": "user", "content": "Hello! Briefly introduce yourself."}
+    ],
+    "max_tokens": 256,
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+
+Response (fields trimmed to the ones you'll typically read; the actual body carries a few more OpenAI-schema placeholders):
+
+```json
+{
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "Hello! I'm a helpful AI assistant designed to provide accurate, useful, and friendly information on a wide range of topics."
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 28,
+    "completion_tokens": 51,
+    "total_tokens": 79
+  }
 }
 ```
 
@@ -97,6 +138,185 @@ In Swagger UI, replace the request body with this VLM payload, point `image_url.
 ![Editing the VLM request body in Try-it-out mode before executing](/Images/server/curl-4.png)
 
 ![Response body showing a successful 200 response with the VLM's image description](/Images/server/curl-5.png)
+
+## **Tool calling**
+
+The server exposes OpenAI-style function/tool calling. You declare tools in the request, the model responds with a `tool_calls` array when it decides to call one, you execute the tool locally, then send the result back as a `role: "tool"` message so the model can produce its final answer.
+
+<Note>
+Tool calling relies on the model wrapping its call in a `<tool_call>...</tool_call>` block (or a fenced ```` ```json ```` block) that the server can parse — this is what recent Qwen3 GGUF instruct variants do out of the box. Verified with **`unsloth/Qwen3-4B-GGUF:Q4_0`** (llama.cpp backend); other models may bypass the tag and return raw JSON in `message.content`, which currently falls back to a plain text response.
+</Note>
+
+### **Round 1 — model requests a tool**
+
+```bash bash
+curl http://127.0.0.1:18181/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
+    "messages": [
+      {"role": "user", "content": "What is the weather in San Diego right now?"}
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_current_weather",
+          "description": "Get the current weather for a given city.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "city": {"type": "string", "description": "City name, e.g. San Diego"},
+              "unit": {"type": "string", "enum": ["celsius", "fahrenheit"], "default": "celsius"}
+            },
+            "required": ["city"]
+          }
+        }
+      }
+    ],
+    "stream": false
+  }'
+```
+
+Response — `finish_reason: "tool_calls"` and the model fills in the arguments (only the tool argument fields the model chose to populate appear):
+
+```json
+{
+  "id": "call_744359685",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "tool_calls",
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "function": {
+              "name": "get_current_weather",
+              "arguments": "{\"city\": \"San Diego\"}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+### **Round 2 — return the tool result**
+
+Run the function on your side, then append both the assistant `tool_calls` turn and a `role: "tool"` message with the result. Send the full transcript back:
+
+```bash bash
+curl http://127.0.0.1:18181/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
+    "messages": [
+      {"role": "user", "content": "What is the weather in San Diego right now?"},
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "call_abc123",
+            "type": "function",
+            "function": {
+              "name": "get_current_weather",
+              "arguments": "{\"city\":\"San Diego\"}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_abc123",
+        "content": "{\"city\":\"San Diego\",\"temperature\":22,\"unit\":\"celsius\",\"condition\":\"sunny\"}"
+      }
+    ],
+    "stream": false
+  }'
+```
+
+Response — the model now speaks in natural language using the tool result:
+
+```json
+{
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "The current weather in San Diego is **sunny** with a temperature of **22°C**. Enjoy the pleasant day! ☀️"
+      }
+    }
+  ]
+}
+```
+
+### **End-to-end with the OpenAI SDK**
+
+Wiring the two rounds into one script — mirrors how you'd integrate GenieX into an agent loop:
+
+```python python
+import json
+from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:18181/v1", api_key="geniex")
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_current_weather",
+            "description": "Get the current weather for a given city.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string"},
+                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+                },
+                "required": ["city"],
+            },
+        },
+    }
+]
+
+def get_current_weather(city: str, unit: str = "celsius") -> dict:
+    # Real code would call a weather API here.
+    return {"city": city, "temperature": 22, "unit": unit, "condition": "sunny"}
+
+messages = [{"role": "user", "content": "What is the weather in San Diego right now?"}]
+
+# Round 1: model picks a tool
+first = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=messages,
+    tools=tools,
+)
+call = first.choices[0].message.tool_calls[0]
+args = json.loads(call.function.arguments)
+result = get_current_weather(**args)
+
+# Round 2: feed the result back
+messages.append(first.choices[0].message)
+messages.append({
+    "role": "tool",
+    "tool_call_id": call.id,
+    "content": json.dumps(result),
+})
+final = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=messages,
+    tools=tools,
+)
+# Qwen3 is a hybrid-thinking model, so the final answer may start with
+# a <think>...</think> block — strip it if you only want the response.
+print(final.choices[0].message.content)
+```
 
 ## **Python client (OpenAI SDK)**
 

@@ -31,7 +31,7 @@ geniex serve
 
 ## **POST /v1/chat/completions**
 
-为给定对话创建模型响应。支持 LLM（纯文本）与 VLM（图像 + 文本）。
+为给定对话创建模型响应。支持 LLM（纯文本）与 VLM（图像 + 文本），LLM 与 VLM 均支持[工具调用](#工具调用)。
 
 ### **LLM 请求**
 
@@ -44,6 +44,47 @@ geniex serve
   "max_tokens": 256,
   "temperature": 0.7,
   "stream": false
+}
+```
+
+### **Chat completion（curl）**
+
+标准的单次请求/响应示例，非流式——即任意兼容 OpenAI 协议的客户端所使用的报文形态：
+
+```bash bash
+curl http://127.0.0.1:18181/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ai-hub-models/Qwen3-4B-Instruct-2507",
+    "messages": [
+      {"role": "user", "content": "Hello! Briefly introduce yourself."}
+    ],
+    "max_tokens": 256,
+    "temperature": 0.7,
+    "stream": false
+  }'
+```
+
+响应（下面精简到常用字段；实际返回体里还会带若干 OpenAI schema 中默认为空的占位字段）：
+
+```json
+{
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "Hello! I'm a helpful AI assistant designed to provide accurate, useful, and friendly information on a wide range of topics."
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 28,
+    "completion_tokens": 51,
+    "total_tokens": 79
+  }
 }
 ```
 
@@ -97,6 +138,185 @@ geniex serve
 ![在 Try-it-out 模式下编辑 VLM 请求体后执行](/Images/server/curl-4.png)
 
 ![响应体展示 200 成功响应及 VLM 对图像的描述](/Images/server/curl-5.png)
+
+## **工具调用**
+
+服务器支持 OpenAI 风格的 function / tool calling。请求里声明可用工具，模型决定调用时会在响应中返回 `tool_calls` 数组；你在本地执行对应函数，再以 `role: "tool"` 消息把结果回传，让模型给出最终自然语言答复。
+
+<Note>
+工具调用依赖模型把调用信息包在 `<tool_call>...</tool_call>` 块（或 ```` ```json ```` fenced 块）里，服务器只解析这两种格式——较新的 Qwen3 GGUF instruct 系列默认就是这么输出。已在 **`unsloth/Qwen3-4B-GGUF:Q4_0`**（llama.cpp 后端）上验证通过；其他模型可能直接返回裸 JSON 到 `message.content`，此时服务器会退回到纯文本响应，`finish_reason` 会是 `stop` 而不是 `tool_calls`。
+</Note>
+
+### **第 1 轮——模型请求调用工具**
+
+```bash bash
+curl http://127.0.0.1:18181/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
+    "messages": [
+      {"role": "user", "content": "What is the weather in San Diego right now?"}
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_current_weather",
+          "description": "Get the current weather for a given city.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "city": {"type": "string", "description": "City name, e.g. San Diego"},
+              "unit": {"type": "string", "enum": ["celsius", "fahrenheit"], "default": "celsius"}
+            },
+            "required": ["city"]
+          }
+        }
+      }
+    ],
+    "stream": false
+  }'
+```
+
+响应——`finish_reason: "tool_calls"`，模型给出实参（只有它主动填写的参数字段会出现在 `arguments` 里）：
+
+```json
+{
+  "id": "call_744359685",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "tool_calls",
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "function": {
+              "name": "get_current_weather",
+              "arguments": "{\"city\": \"San Diego\"}"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+### **第 2 轮——把工具结果回传给模型**
+
+在本地执行函数，然后把 assistant 的 `tool_calls` 轮次与 `role: "tool"` 的结果消息都追加进 `messages`，再次调用接口：
+
+```bash bash
+curl http://127.0.0.1:18181/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
+    "messages": [
+      {"role": "user", "content": "What is the weather in San Diego right now?"},
+      {
+        "role": "assistant",
+        "tool_calls": [
+          {
+            "id": "call_abc123",
+            "type": "function",
+            "function": {
+              "name": "get_current_weather",
+              "arguments": "{\"city\":\"San Diego\"}"
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "tool_call_id": "call_abc123",
+        "content": "{\"city\":\"San Diego\",\"temperature\":22,\"unit\":\"celsius\",\"condition\":\"sunny\"}"
+      }
+    ],
+    "stream": false
+  }'
+```
+
+响应——模型基于工具结果给出最终自然语言答复：
+
+```json
+{
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "The current weather in San Diego is **sunny** with a temperature of **22°C**. Enjoy the pleasant day! ☀️"
+      }
+    }
+  ]
+}
+```
+
+### **使用 OpenAI SDK 串起两轮调用**
+
+把上面两轮拼进一段脚本，就是把 GenieX 接进 agent 循环时的最小可运行样板：
+
+```python python
+import json
+from openai import OpenAI
+
+client = OpenAI(base_url="http://127.0.0.1:18181/v1", api_key="geniex")
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_current_weather",
+            "description": "Get the current weather for a given city.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string"},
+                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+                },
+                "required": ["city"],
+            },
+        },
+    }
+]
+
+def get_current_weather(city: str, unit: str = "celsius") -> dict:
+    # 实际代码里应调用真正的天气 API。
+    return {"city": city, "temperature": 22, "unit": unit, "condition": "sunny"}
+
+messages = [{"role": "user", "content": "What is the weather in San Diego right now?"}]
+
+# 第 1 轮：让模型挑选工具
+first = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=messages,
+    tools=tools,
+)
+call = first.choices[0].message.tool_calls[0]
+args = json.loads(call.function.arguments)
+result = get_current_weather(**args)
+
+# 第 2 轮：把工具结果回传
+messages.append(first.choices[0].message)
+messages.append({
+    "role": "tool",
+    "tool_call_id": call.id,
+    "content": json.dumps(result),
+})
+final = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=messages,
+    tools=tools,
+)
+# Qwen3 是 hybrid-thinking 模型，最终答复可能以 <think>...</think>
+# 块开头，若只需要正式回答请自行 strip 掉。
+print(final.choices[0].message.content)
+```
 
 ## **Python 客户端（OpenAI SDK）**
 
