@@ -15,38 +15,7 @@ The Linux Docker path runs through a container image built for Linux ARM64 with 
 
 ### **Install host dependencies**
 
-The container reaches the NPU through the host's Qualcomm driver libraries, mounted in via `-v /usr/lib:/opt/qcom-lib:ro`. Install them **on the host** before `docker run` — in two steps.
-
-**1. Standard APT packages**
-
-Provides `libatomic1`, `libglib2.0-0`, and a generic OpenCL ICD loader:
-
-```bash bash
-sudo apt update
-sudo apt install -y \
-  libatomic1 \
-  libglib2.0-0 \
-  ocl-icd-libopencl1
-```
-
-<Note>`ocl-icd-libopencl1` is replaced by `qcom-adreno1` in the next step.</Note>
-
-**2. Qualcomm driver packages (via `ubuntu-qcom-iot` PPA)**
-
-Provides the Qualcomm-proprietary libraries the NPU needs:
-
-| Library | Provided by |
-| --- | --- |
-| `libOpenCL_adreno.so.1`, `libCB.so.1`, `libadreno_utils.so.1`, `libgsl.so.1`, `libllvm-*.so.1` | `qcom-adreno1` |
-| `libdmabufheap.so.0.0.0` | `qcom-libdmabufheap` *(auto-dep of `qcom-adreno1`)* |
-| `libpropertyvault.so.0.0.0` | `qcom-property-vault` *(auto-dep of `qcom-adreno1`)* |
-| `libcdsprpc.so.1.0.0` | `qcom-fastrpc1` |
-
-```bash bash
-sudo apt-get install -y qcom-adreno1 qcom-fastrpc1
-```
-
-The PPA (`ppa:ubuntu-qcom-iot/qcom-ppa`) is pre-configured on the IQ9075 EVK Ubuntu image. `qcom-adreno1` automatically pulls in `qcom-libdmabufheap` and `qcom-property-vault`.
+The container reaches the NPU through the host's Qualcomm driver libraries, mounted in via `-v /usr/lib:/opt/qcom-lib:ro`. Install them **on the host** before `docker run` — follow [CLI Install → Install host dependencies](/en/run/cli/install#install-host-dependencies).
 
 ### **Pull the image**
 

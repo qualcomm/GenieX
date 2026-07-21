@@ -47,6 +47,41 @@ The CLI ships as a native Windows ARM64 executable, and as a Linux ARM64 Docker 
     - Linux ARM64 host.
     - Dragonwing IoT chipset — see [Supported platforms](/en/get-started/platforms).
 
+    ### **Install host dependencies**
+
+    `geniex` reaches the NPU through the host's Qualcomm driver libraries. Install them before running `geniex` — in two steps.
+
+    **1. Standard APT packages**
+
+    Provides `libatomic1`, `libglib2.0-0`, and a generic OpenCL ICD loader:
+
+    ```bash bash
+    sudo apt update
+    sudo apt install -y \
+      libatomic1 \
+      libglib2.0-0 \
+      ocl-icd-libopencl1
+    ```
+
+    <Note>`ocl-icd-libopencl1` is replaced by `qcom-adreno1` in the next step.</Note>
+
+    **2. Qualcomm driver packages (via `ubuntu-qcom-iot` PPA)**
+
+    Provides the Qualcomm-proprietary libraries the NPU needs:
+
+    | Library | Provided by |
+    | --- | --- |
+    | `libOpenCL_adreno.so.1`, `libCB.so.1`, `libadreno_utils.so.1`, `libgsl.so.1`, `libllvm-*.so.1` | `qcom-adreno1` |
+    | `libdmabufheap.so.0.0.0` | `qcom-libdmabufheap` *(auto-dep of `qcom-adreno1`)* |
+    | `libpropertyvault.so.0.0.0` | `qcom-property-vault` *(auto-dep of `qcom-adreno1`)* |
+    | `libcdsprpc.so.1.0.0` | `qcom-fastrpc1` |
+
+    ```bash bash
+    sudo apt-get install -y qcom-adreno1 qcom-fastrpc1
+    ```
+
+    The PPA (`ppa:ubuntu-qcom-iot/qcom-ppa`) is pre-configured on the IQ9075 EVK Ubuntu image. `qcom-adreno1` automatically pulls in `qcom-libdmabufheap` and `qcom-property-vault`.
+
     ### **Install**
 
     If `HOME` is not set (common in minimal containers or `sudo -s` sessions), export it first so the installer knows where to place binaries:
@@ -70,7 +105,7 @@ The CLI ships as a native Windows ARM64 executable, and as a Linux ARM64 Docker 
     Open a new shell or `source` that file to pick up the change.
 
     <Note>
-      If the script reports missing shared libraries (`libCB.so.1`, `libOpenCL_adreno.so.1`, `libcdsprpc.so.1.0.0`, etc.), install the Qualcomm driver packages first — see [Linux install → Install host dependencies](/en/run/linux/install#install-host-dependencies).
+      If the script reports missing shared libraries (`libCB.so.1`, `libOpenCL_adreno.so.1`, `libcdsprpc.so.1.0.0`, etc.), install the Qualcomm driver packages first — see [Install host dependencies](#install-host-dependencies) above.
     </Note>
 
     ### **Verify**

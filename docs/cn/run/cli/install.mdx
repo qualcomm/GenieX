@@ -47,6 +47,41 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向跃龙 QCS9075 等 
     - Linux ARM64 主机。
     - 跃龙 IoT 芯片——详见[支持的平台](/cn/get-started/platforms)。
 
+    ### **安装宿主机依赖**
+
+    `geniex` 通过宿主机的高通驱动库来访问 NPU。请在运行 `geniex` 之前分两步安装这些库。
+
+    **1. 标准 APT 包**
+
+    提供 `libatomic1`、`libglib2.0-0`，以及通用 OpenCL ICD loader：
+
+    ```bash bash
+    sudo apt update
+    sudo apt install -y \
+      libatomic1 \
+      libglib2.0-0 \
+      ocl-icd-libopencl1
+    ```
+
+    <Note>`ocl-icd-libopencl1` 会在下一步被 `qcom-adreno1` 替换。</Note>
+
+    **2. 高通驱动包（来自 `ubuntu-qcom-iot` PPA）**
+
+    提供 NPU 所需的高通专有库：
+
+    | Library | Provided by |
+    | --- | --- |
+    | `libOpenCL_adreno.so.1`, `libCB.so.1`, `libadreno_utils.so.1`, `libgsl.so.1`, `libllvm-*.so.1` | `qcom-adreno1` |
+    | `libdmabufheap.so.0.0.0` | `qcom-libdmabufheap` *(auto-dep of `qcom-adreno1`)* |
+    | `libpropertyvault.so.0.0.0` | `qcom-property-vault` *(auto-dep of `qcom-adreno1`)* |
+    | `libcdsprpc.so.1.0.0` | `qcom-fastrpc1` |
+
+    ```bash bash
+    sudo apt-get install -y qcom-adreno1 qcom-fastrpc1
+    ```
+
+    PPA（`ppa:ubuntu-qcom-iot/qcom-ppa`）在 IQ9075 EVK Ubuntu 镜像中已预配置。`qcom-adreno1` 会自动拉入 `qcom-libdmabufheap` 与 `qcom-property-vault`。
+
     ### **安装**
 
     若 `HOME` 未设置（在精简容器或 `sudo -s` 会话中常见），请先导出该变量，以便安装器知道将二进制文件放置在何处：
@@ -70,7 +105,7 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向跃龙 QCS9075 等 
     打开新 shell 或 `source` 该文件以使更改生效。
 
     <Note>
-      若脚本提示缺少共享库（`libCB.so.1`、`libOpenCL_adreno.so.1`、`libcdsprpc.so.1.0.0` 等），请先安装高通驱动包——参见 [Linux 安装 → 安装宿主机依赖](/cn/run/linux/install#安装宿主机依赖)。
+      若脚本提示缺少共享库（`libCB.so.1`、`libOpenCL_adreno.so.1`、`libcdsprpc.so.1.0.0` 等），请先安装高通驱动包——参见上文[安装宿主机依赖](#安装宿主机依赖)。
     </Note>
 
     ### **验证**
