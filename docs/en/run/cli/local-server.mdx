@@ -98,6 +98,194 @@ In Swagger UI, replace the request body with this VLM payload, point `image_url.
 
 ![Response body showing a successful 200 response with the VLM's image description](/Images/server/curl-5.png)
 
+### **Non-streaming example**
+
+A full single-turn request paired with the response the server returns. The `enable_think: false` field turns off Qwen3's default `<think>…</think>` reasoning prefix so the reply content stays clean.
+
+Request:
+
+```json Example Value
+{
+  "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
+  "messages": [
+    {"role": "user", "content": "Hello! Briefly introduce yourself."}
+  ],
+  "max_tokens": 128,
+  "temperature": 0.7,
+  "enable_think": false,
+  "stream": false
+}
+```
+
+Response:
+
+```json Example Value
+{
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! I'm Qwen, a large language model developed by Alibaba Group. I can help with a wide range of tasks, including answering questions, writing articles, creating stories, and more. I'm here to assist you in any way I can! How can I help you today?"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 19,
+    "completion_tokens": 58,
+    "total_tokens": 77
+  }
+}
+```
+
+### **Tool calling**
+
+Function calling is supported via the OpenAI `tools` schema. The server extracts the tool call from the model's generated text (`<tool_call>…</tool_call>` tags or a fenced ` ```json ` block, produced by chat templates such as Qwen3's) and re-emits it as OpenAI `tool_calls`.
+
+<Note>
+Only one tool call per assistant turn is parsed — parallel tool calls in a single response are not supported.
+</Note>
+
+**Step 1 — model requests a tool call**
+
+Request:
+
+```json Example Value
+{
+  "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
+  "messages": [
+    {"role": "user", "content": "What is the weather in Beijing? Use the tool."}
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "Get the current weather in a given city.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "city": {"type": "string", "description": "City name, e.g. Beijing"}
+          },
+          "required": ["city"]
+        }
+      }
+    }
+  ],
+  "tool_choice": "auto",
+  "max_tokens": 256,
+  "enable_think": false,
+  "stream": false
+}
+```
+
+Response — `finish_reason` is `tool_calls` and the parsed call is under `message.tool_calls`:
+
+```json Example Value
+{
+  "id": "call_2385941380",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_2385941380",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"city\": \"Beijing\"}"
+            }
+          }
+        ]
+      },
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 175,
+    "completion_tokens": 20,
+    "total_tokens": 195
+  }
+}
+```
+
+**Step 2 — execute the tool locally, feed the result back**
+
+Append the assistant's tool-call message and a `role: "tool"` message carrying your tool's output. The model uses the result to produce the final answer.
+
+Request:
+
+```json Example Value
+{
+  "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
+  "messages": [
+    {"role": "user", "content": "What is the weather in Beijing? Use the tool."},
+    {
+      "role": "assistant",
+      "content": "",
+      "tool_calls": [
+        {
+          "id": "call_2385941380",
+          "type": "function",
+          "function": {"name": "get_weather", "arguments": "{\"city\": \"Beijing\"}"}
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_2385941380",
+      "content": "{\"city\": \"Beijing\", \"temperature_c\": 24, \"condition\": \"Sunny\"}"
+    }
+  ],
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "description": "Get the current weather in a given city.",
+        "parameters": {
+          "type": "object",
+          "properties": {"city": {"type": "string"}},
+          "required": ["city"]
+        }
+      }
+    }
+  ],
+  "max_tokens": 128,
+  "enable_think": false,
+  "stream": false
+}
+```
+
+Response:
+
+```json Example Value
+{
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The current weather in Beijing is 24°C and sunny."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 228,
+    "completion_tokens": 13,
+    "total_tokens": 241
+  }
+}
+```
+
 ## **Python client (OpenAI SDK)**
 
 Because the server speaks the OpenAI protocol, you can point the official `openai` Python client at the local endpoint and reuse any existing OpenAI code. Install with `pip install openai`, then:
