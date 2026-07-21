@@ -98,197 +98,9 @@ geniex serve
 
 ![响应体展示 200 成功响应及 VLM 对图像的描述](/Images/server/curl-5.png)
 
-### **非流式示例**
-
-一次完整的单轮请求以及服务器返回的响应。`enable_think: false` 关闭 Qwen3 默认的 `<think>…</think>` 推理前缀，让回复内容更干净。
-
-请求：
-
-```json Example Value
-{
-  "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
-  "messages": [
-    {"role": "user", "content": "Hello! Briefly introduce yourself."}
-  ],
-  "max_tokens": 128,
-  "temperature": 0.7,
-  "enable_think": false,
-  "stream": false
-}
-```
-
-响应：
-
-```json Example Value
-{
-  "object": "chat.completion",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "Hello! I'm Qwen, a large language model developed by Alibaba Group. I can help with a wide range of tasks, including answering questions, writing articles, creating stories, and more. I'm here to assist you in any way I can! How can I help you today?"
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 19,
-    "completion_tokens": 58,
-    "total_tokens": 77
-  }
-}
-```
-
-### **工具调用（Tool calling）**
-
-通过 OpenAI `tools` schema 支持函数/工具调用。服务器会从模型生成的文本中解析工具调用（`<tool_call>…</tool_call>` 标签或 ` ```json ` 代码块——例如 Qwen3 的 chat template 产出的格式），并以 OpenAI `tool_calls` 形式返回。
-
-<Note>
-每次助手响应仅解析一个工具调用——暂不支持单次响应中的并行工具调用。
-</Note>
-
-**步骤 1 —— 模型发起工具调用**
-
-请求：
-
-```json Example Value
-{
-  "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
-  "messages": [
-    {"role": "user", "content": "What is the weather in Beijing? Use the tool."}
-  ],
-  "tools": [
-    {
-      "type": "function",
-      "function": {
-        "name": "get_weather",
-        "description": "Get the current weather in a given city.",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "city": {"type": "string", "description": "City name, e.g. Beijing"}
-          },
-          "required": ["city"]
-        }
-      }
-    }
-  ],
-  "tool_choice": "auto",
-  "max_tokens": 256,
-  "enable_think": false,
-  "stream": false
-}
-```
-
-响应——`finish_reason` 为 `tool_calls`，解析后的调用位于 `message.tool_calls`：
-
-```json Example Value
-{
-  "id": "call_2385941380",
-  "object": "chat.completion",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "",
-        "tool_calls": [
-          {
-            "id": "call_2385941380",
-            "type": "function",
-            "function": {
-              "name": "get_weather",
-              "arguments": "{\"city\": \"Beijing\"}"
-            }
-          }
-        ]
-      },
-      "finish_reason": "tool_calls"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 175,
-    "completion_tokens": 20,
-    "total_tokens": 195
-  }
-}
-```
-
-**步骤 2 —— 本地执行工具，把结果回传给模型**
-
-把助手的 tool-call 消息与一条 `role: "tool"` 消息（携带工具执行结果）追加进 `messages`。模型会基于结果生成最终回答。
-
-请求：
-
-```json Example Value
-{
-  "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
-  "messages": [
-    {"role": "user", "content": "What is the weather in Beijing? Use the tool."},
-    {
-      "role": "assistant",
-      "content": "",
-      "tool_calls": [
-        {
-          "id": "call_2385941380",
-          "type": "function",
-          "function": {"name": "get_weather", "arguments": "{\"city\": \"Beijing\"}"}
-        }
-      ]
-    },
-    {
-      "role": "tool",
-      "tool_call_id": "call_2385941380",
-      "content": "{\"city\": \"Beijing\", \"temperature_c\": 24, \"condition\": \"Sunny\"}"
-    }
-  ],
-  "tools": [
-    {
-      "type": "function",
-      "function": {
-        "name": "get_weather",
-        "description": "Get the current weather in a given city.",
-        "parameters": {
-          "type": "object",
-          "properties": {"city": {"type": "string"}},
-          "required": ["city"]
-        }
-      }
-    }
-  ],
-  "max_tokens": 128,
-  "enable_think": false,
-  "stream": false
-}
-```
-
-响应：
-
-```json Example Value
-{
-  "object": "chat.completion",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "The current weather in Beijing is 24°C and sunny."
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 228,
-    "completion_tokens": 13,
-    "total_tokens": 241
-  }
-}
-```
-
 ## **Python 客户端（OpenAI SDK）**
 
-由于服务器使用 OpenAI 协议，可直接将官方 `openai` Python 客户端指向本地端点，复用任意已有的 OpenAI 代码。先通过 `pip install openai` 安装，然后：
+由于服务器使用 OpenAI 协议，可直接将官方 `openai` Python 客户端指向本地端点，复用任意已有的 OpenAI 代码。先通过 `pip install openai` 安装，然后创建 client：
 
 ```python python
 from openai import OpenAI
@@ -297,9 +109,17 @@ client = OpenAI(
     base_url="http://127.0.0.1:18181/v1",
     api_key="geniex",  # any non-empty string; the server does not check it
 )
+```
 
+下面的示例都复用此 `client`。请把 `model` 替换为已拉取的模型；可选的 `:<precision>` 后缀（例如 `Q4_0`、`Q4_K_M`、`Q8_0`）选择量化变体——`Q4_0` 推荐用于 Hexagon NPU 上的 llama.cpp。详见[支持的精度（量化）](/cn/models/supported#支持的精度量化)。
+
+### **流式（Streaming）**
+
+按 delta 到达顺序逐段打印：
+
+```python python
 stream = client.chat.completions.create(
-    model="unsloth/Qwen3-4B-GGUF:Q4_0",  # org/repo[:precision] — Q4_0 has the best Hexagon NPU support
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
     messages=[
         {"role": "user", "content": "Hello! Briefly introduce yourself."},
     ],
@@ -315,9 +135,126 @@ for chunk in stream:
 print()
 ```
 
+### **Chat completion（非流式）**
+
+单次请求、单次响应，不启用流式——标准的 OpenAI `chat.completions.create` 形式。`enable_think=False` 关闭 Qwen3 默认的 `<think>…</think>` 推理前缀，让回复内容更干净。
+
+```python python
+resp = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=[
+        {"role": "user", "content": "Hello! Briefly introduce yourself."},
+    ],
+    max_tokens=128,
+    temperature=0.7,
+    extra_body={"enable_think": False},
+)
+
+print(resp.choices[0].message.content)
+print("finish_reason:", resp.choices[0].finish_reason)
+print("usage:", resp.usage)
+```
+
+输出：
+
+```text
+Hello! I'm Qwen, a large language model developed by Alibaba Cloud. I can help with a wide range of tasks, including answering questions, writing articles, creating stories, and more. I'm here to assist you in any way I can! How can I help you today?
+finish_reason: stop
+usage: CompletionUsage(completion_tokens=58, prompt_tokens=19, total_tokens=77, ...)
+```
+
+### **工具调用（Tool calling）**
+
+函数/工具调用使用标准的 OpenAI `tools` schema。服务器会从模型生成的文本中解析工具调用（`<tool_call>…</tool_call>` 标签或 ` ```json ` 代码块——例如 Qwen3 的 chat template 产出的格式），并以 OpenAI `tool_calls` 形式返回。
+
 <Note>
-请将 `model` 替换为已经拉取的模型。可选的 `:<precision>` 后缀用于选择精度（量化）变体（例如 `Q4_0`、`Q4_K_M`、`Q8_0`），`Q4_0` 推荐用于 Hexagon NPU 上的 llama.cpp。详见[支持的精度（量化）](/cn/models/supported#支持的精度量化)。
+每次助手响应仅解析一个工具调用——暂不支持单次响应中的并行工具调用。
 </Note>
+
+两步往返：(1) 模型返回一条 `tool_calls` 消息；(2) 本地执行工具，将结果作为 `role="tool"` 消息回传给模型，模型基于结果生成最终答案。
+
+```python python
+import json
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather in a given city.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "City name, e.g. Beijing"},
+                },
+                "required": ["city"],
+            },
+        },
+    }
+]
+
+def get_weather(city: str) -> dict:
+    # replace this with your real implementation
+    return {"city": city, "temperature_c": 24, "condition": "Sunny"}
+
+messages = [
+    {"role": "user", "content": "What is the weather in Beijing? Use the tool."},
+]
+
+# Step 1 — model requests a tool call.
+first = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=messages,
+    tools=tools,
+    tool_choice="auto",
+    max_tokens=256,
+    extra_body={"enable_think": False},
+)
+call = first.choices[0].message.tool_calls[0]
+print("finish_reason:", first.choices[0].finish_reason)  # -> "tool_calls"
+print("call:", call.function.name, call.function.arguments)
+
+# Step 2 — run the tool, feed the result back.
+result = get_weather(**json.loads(call.function.arguments))
+
+messages.append(
+    {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {
+                "id": call.id or "call_0",
+                "type": "function",
+                "function": {"name": call.function.name, "arguments": call.function.arguments},
+            }
+        ],
+    }
+)
+messages.append(
+    {
+        "role": "tool",
+        "tool_call_id": call.id or "call_0",
+        "content": json.dumps(result),
+    }
+)
+
+final = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=messages,
+    tools=tools,
+    max_tokens=128,
+    extra_body={"enable_think": False},
+)
+print(final.choices[0].message.content)
+```
+
+输出：
+
+```text
+finish_reason: tool_calls
+call: get_weather {"city": "Beijing"}
+The weather in Beijing is 24°C and sunny.
+```
 
 ## **其他端点**
 

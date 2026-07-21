@@ -98,197 +98,9 @@ In Swagger UI, replace the request body with this VLM payload, point `image_url.
 
 ![Response body showing a successful 200 response with the VLM's image description](/Images/server/curl-5.png)
 
-### **Non-streaming example**
-
-A full single-turn request paired with the response the server returns. The `enable_think: false` field turns off Qwen3's default `<think>…</think>` reasoning prefix so the reply content stays clean.
-
-Request:
-
-```json Example Value
-{
-  "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
-  "messages": [
-    {"role": "user", "content": "Hello! Briefly introduce yourself."}
-  ],
-  "max_tokens": 128,
-  "temperature": 0.7,
-  "enable_think": false,
-  "stream": false
-}
-```
-
-Response:
-
-```json Example Value
-{
-  "object": "chat.completion",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "Hello! I'm Qwen, a large language model developed by Alibaba Group. I can help with a wide range of tasks, including answering questions, writing articles, creating stories, and more. I'm here to assist you in any way I can! How can I help you today?"
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 19,
-    "completion_tokens": 58,
-    "total_tokens": 77
-  }
-}
-```
-
-### **Tool calling**
-
-Function calling is supported via the OpenAI `tools` schema. The server extracts the tool call from the model's generated text (`<tool_call>…</tool_call>` tags or a fenced ` ```json ` block, produced by chat templates such as Qwen3's) and re-emits it as OpenAI `tool_calls`.
-
-<Note>
-Only one tool call per assistant turn is parsed — parallel tool calls in a single response are not supported.
-</Note>
-
-**Step 1 — model requests a tool call**
-
-Request:
-
-```json Example Value
-{
-  "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
-  "messages": [
-    {"role": "user", "content": "What is the weather in Beijing? Use the tool."}
-  ],
-  "tools": [
-    {
-      "type": "function",
-      "function": {
-        "name": "get_weather",
-        "description": "Get the current weather in a given city.",
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "city": {"type": "string", "description": "City name, e.g. Beijing"}
-          },
-          "required": ["city"]
-        }
-      }
-    }
-  ],
-  "tool_choice": "auto",
-  "max_tokens": 256,
-  "enable_think": false,
-  "stream": false
-}
-```
-
-Response — `finish_reason` is `tool_calls` and the parsed call is under `message.tool_calls`:
-
-```json Example Value
-{
-  "id": "call_2385941380",
-  "object": "chat.completion",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "",
-        "tool_calls": [
-          {
-            "id": "call_2385941380",
-            "type": "function",
-            "function": {
-              "name": "get_weather",
-              "arguments": "{\"city\": \"Beijing\"}"
-            }
-          }
-        ]
-      },
-      "finish_reason": "tool_calls"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 175,
-    "completion_tokens": 20,
-    "total_tokens": 195
-  }
-}
-```
-
-**Step 2 — execute the tool locally, feed the result back**
-
-Append the assistant's tool-call message and a `role: "tool"` message carrying your tool's output. The model uses the result to produce the final answer.
-
-Request:
-
-```json Example Value
-{
-  "model": "unsloth/Qwen3-4B-GGUF:Q4_0",
-  "messages": [
-    {"role": "user", "content": "What is the weather in Beijing? Use the tool."},
-    {
-      "role": "assistant",
-      "content": "",
-      "tool_calls": [
-        {
-          "id": "call_2385941380",
-          "type": "function",
-          "function": {"name": "get_weather", "arguments": "{\"city\": \"Beijing\"}"}
-        }
-      ]
-    },
-    {
-      "role": "tool",
-      "tool_call_id": "call_2385941380",
-      "content": "{\"city\": \"Beijing\", \"temperature_c\": 24, \"condition\": \"Sunny\"}"
-    }
-  ],
-  "tools": [
-    {
-      "type": "function",
-      "function": {
-        "name": "get_weather",
-        "description": "Get the current weather in a given city.",
-        "parameters": {
-          "type": "object",
-          "properties": {"city": {"type": "string"}},
-          "required": ["city"]
-        }
-      }
-    }
-  ],
-  "max_tokens": 128,
-  "enable_think": false,
-  "stream": false
-}
-```
-
-Response:
-
-```json Example Value
-{
-  "object": "chat.completion",
-  "choices": [
-    {
-      "index": 0,
-      "message": {
-        "role": "assistant",
-        "content": "The current weather in Beijing is 24°C and sunny."
-      },
-      "finish_reason": "stop"
-    }
-  ],
-  "usage": {
-    "prompt_tokens": 228,
-    "completion_tokens": 13,
-    "total_tokens": 241
-  }
-}
-```
-
 ## **Python client (OpenAI SDK)**
 
-Because the server speaks the OpenAI protocol, you can point the official `openai` Python client at the local endpoint and reuse any existing OpenAI code. Install with `pip install openai`, then:
+Because the server speaks the OpenAI protocol, you can point the official `openai` Python client at the local endpoint and reuse any existing OpenAI code. Install with `pip install openai`, then create a client:
 
 ```python python
 from openai import OpenAI
@@ -297,9 +109,17 @@ client = OpenAI(
     base_url="http://127.0.0.1:18181/v1",
     api_key="geniex",  # any non-empty string; the server does not check it
 )
+```
 
+The examples below reuse this `client`. Replace the `model` value with a model you have already pulled. The optional `:<precision>` suffix (e.g. `Q4_0`, `Q4_K_M`, `Q8_0`) selects a quantization variant — `Q4_0` is recommended for llama.cpp on Hexagon NPU. See [Precisions (Quantizations) Supported](/en/models/supported#precisions-quantizations-supported).
+
+### **Streaming**
+
+Print each delta as it arrives:
+
+```python python
 stream = client.chat.completions.create(
-    model="unsloth/Qwen3-4B-GGUF:Q4_0",  # org/repo[:precision] — Q4_0 has the best Hexagon NPU support
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
     messages=[
         {"role": "user", "content": "Hello! Briefly introduce yourself."},
     ],
@@ -315,9 +135,126 @@ for chunk in stream:
 print()
 ```
 
+### **Chat completion (non-streaming)**
+
+Single request, single response, no streaming — the standard OpenAI `chat.completions.create` shape. The `enable_think=False` extra parameter turns off Qwen3's default `<think>…</think>` reasoning prefix so the reply content stays clean.
+
+```python python
+resp = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=[
+        {"role": "user", "content": "Hello! Briefly introduce yourself."},
+    ],
+    max_tokens=128,
+    temperature=0.7,
+    extra_body={"enable_think": False},
+)
+
+print(resp.choices[0].message.content)
+print("finish_reason:", resp.choices[0].finish_reason)
+print("usage:", resp.usage)
+```
+
+Output:
+
+```text
+Hello! I'm Qwen, a large language model developed by Alibaba Cloud. I can help with a wide range of tasks, including answering questions, writing articles, creating stories, and more. I'm here to assist you in any way I can! How can I help you today?
+finish_reason: stop
+usage: CompletionUsage(completion_tokens=58, prompt_tokens=19, total_tokens=77, ...)
+```
+
+### **Tool calling**
+
+Function/tool calling uses the standard OpenAI `tools` schema. The server extracts the tool call from the model's generated text (`<tool_call>…</tool_call>` tags or a fenced ` ```json ` block, produced by chat templates such as Qwen3's) and re-emits it as OpenAI `tool_calls`.
+
 <Note>
-Replace the `model` value with a model you have already pulled. The optional `:<precision>` suffix selects a precision (quantization) variant (e.g. `Q4_0`, `Q4_K_M`, `Q8_0`) — `Q4_0` is recommended for llama.cpp on Hexagon NPU. See [Precisions (Quantizations) Supported](/en/models/supported#precisions-quantizations-supported).
+Only one tool call per assistant turn is parsed — parallel tool calls in a single response are not supported.
 </Note>
+
+Two-step round trip: (1) the model returns a `tool_calls` message, (2) you execute the tool locally and feed the result back as a `role="tool"` message so the model can produce the final answer.
+
+```python python
+import json
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather in a given city.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "City name, e.g. Beijing"},
+                },
+                "required": ["city"],
+            },
+        },
+    }
+]
+
+def get_weather(city: str) -> dict:
+    # replace this with your real implementation
+    return {"city": city, "temperature_c": 24, "condition": "Sunny"}
+
+messages = [
+    {"role": "user", "content": "What is the weather in Beijing? Use the tool."},
+]
+
+# Step 1 — model requests a tool call.
+first = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=messages,
+    tools=tools,
+    tool_choice="auto",
+    max_tokens=256,
+    extra_body={"enable_think": False},
+)
+call = first.choices[0].message.tool_calls[0]
+print("finish_reason:", first.choices[0].finish_reason)  # -> "tool_calls"
+print("call:", call.function.name, call.function.arguments)
+
+# Step 2 — run the tool, feed the result back.
+result = get_weather(**json.loads(call.function.arguments))
+
+messages.append(
+    {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+            {
+                "id": call.id or "call_0",
+                "type": "function",
+                "function": {"name": call.function.name, "arguments": call.function.arguments},
+            }
+        ],
+    }
+)
+messages.append(
+    {
+        "role": "tool",
+        "tool_call_id": call.id or "call_0",
+        "content": json.dumps(result),
+    }
+)
+
+final = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=messages,
+    tools=tools,
+    max_tokens=128,
+    extra_body={"enable_think": False},
+)
+print(final.choices[0].message.content)
+```
+
+Output:
+
+```text
+finish_reason: tool_calls
+call: get_weather {"city": "Beijing"}
+The weather in Beijing is 24°C and sunny.
+```
 
 ## **Other endpoints**
 
