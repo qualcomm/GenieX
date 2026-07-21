@@ -36,6 +36,26 @@ pub struct ManifestHint {
 /// share.
 pub(crate) const QUANT_PRIORITY: &[&str] = &["Q4_0", "Q4_K_M", "Q8_0"];
 
+/// Bucket key for GGUFs whose filename carries no recognizable quant tag
+/// (e.g. an untagged FP16 export). Deliberately lower-case: it is a
+/// sentinel, not a real quant tag, and it is user-visible — in the
+/// precision picker, in "available:" error lists, and as a `:default`
+/// pull spec.
+pub const DEFAULT_QUANT: &str = "default";
+
+/// Canonicalize a user-supplied quant so it matches manifest keys: real
+/// tags are upper-cased (keys come from [`extract_quant`], which
+/// upper-cases), while any casing of [`DEFAULT_QUANT`] folds to the
+/// lower-case sentinel. Blanket upper-casing turned `:default` into
+/// `"DEFAULT"`, which no manifest ever keys (#1202).
+pub fn normalize_quant_tag(tag: &str) -> String {
+    if tag.eq_ignore_ascii_case(DEFAULT_QUANT) {
+        DEFAULT_QUANT.to_string()
+    } else {
+        tag.to_ascii_uppercase()
+    }
+}
+
 /// Infer a manifest by scanning `src_dir` for model files.
 pub fn infer_manifest_from_dir(
     name: &str,
@@ -91,7 +111,7 @@ pub fn infer_manifest_from_names(
             } else if lname.contains("mtp") {
                 // TODO: MTP draft models can't load standalone; skip for now.
             } else {
-                let quant = extract_quant(n).unwrap_or_else(|| "default".to_string());
+                let quant = extract_quant(n).unwrap_or_else(|| DEFAULT_QUANT.to_string());
                 ggufs.entry(quant).or_default().push(n);
             }
         } else if lname.ends_with("tokenizer.json") {
@@ -700,6 +720,38 @@ mod tests {
             m.extra_files.is_empty(),
             "single-file repo has no extras: {:?}",
             m.extra_files
+        );
+    }
+
+    #[test]
+    fn normalize_quant_tag_folds_default_and_upper_cases_tags() {
+        assert_eq!(normalize_quant_tag("q4_0"), "Q4_0");
+        assert_eq!(normalize_quant_tag("mxfp4"), "MXFP4");
+        assert_eq!(normalize_quant_tag("default"), DEFAULT_QUANT);
+        assert_eq!(normalize_quant_tag("DEFAULT"), DEFAULT_QUANT);
+        assert_eq!(normalize_quant_tag("Default"), DEFAULT_QUANT);
+    }
+
+    #[test]
+    fn quant_hint_default_selects_untagged_gguf() {
+        // #1202: Qwen/Qwen2-1.5B-Instruct-GGUF ships tagged quants plus an
+        // untagged fp16 export that lands in the "default" bucket. Pulling
+        // `:default` — the exact key the picker and error list advertise —
+        // must select that bucket, not fail with QuantNotFound.
+        let (names, sizes) = sizes_of(&[
+            ("qwen2-1_5b-instruct-q4_0.gguf", 1_000_000),
+            ("qwen2-1_5b-instruct-fp16.gguf", 3_100_000),
+        ]);
+        let hint = ManifestHint {
+            quant: Some(DEFAULT_QUANT.to_string()),
+            ..Default::default()
+        };
+        let m = infer_manifest_from_names("Qwen/Qwen2-1.5B-Instruct-GGUF", &names, &sizes, hint)
+            .unwrap();
+        assert_eq!(m.model_file.len(), 1);
+        assert_eq!(
+            m.model_file.get(DEFAULT_QUANT).map(|f| f.name.as_str()),
+            Some("qwen2-1_5b-instruct-fp16.gguf")
         );
     }
 

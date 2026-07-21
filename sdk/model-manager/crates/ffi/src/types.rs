@@ -7,6 +7,7 @@ use std::os::raw::{c_char, c_void};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use model_manager_core::error::Error;
+use model_manager_core::manifest_builder::normalize_quant_tag;
 
 use crate::logging;
 
@@ -158,15 +159,17 @@ pub unsafe fn free_cptr(ptr: *mut c_char) {
     }
 }
 
-/// Upper-case the `:QUANT` suffix of a model name. Manifest keys are
+/// Canonicalize the `:QUANT` suffix of a model name. Manifest keys are
 /// produced by `extract_quant`, which upper-cases (so `q4_0` -> `Q4_0`);
 /// without matching the lookup side, `pull <repo>:q4_0` fails for callers
-/// (Python, JNI) whose bindings don't already upper-case. Done here at the
-/// FFI boundary so the invariant is a single point of enforcement.
+/// (Python, JNI) whose bindings don't already upper-case. The untagged-GGUF
+/// bucket is keyed by the lower-case "default" sentinel, so that spelling
+/// folds down instead of up (#1202). Done here at the FFI boundary so the
+/// invariant is a single point of enforcement.
 pub fn normalize_quant_suffix(name: &str) -> String {
     match name.rsplit_once(':') {
         Some((base, quant)) if !quant.is_empty() => {
-            format!("{base}:{}", quant.to_ascii_uppercase())
+            format!("{base}:{}", normalize_quant_tag(quant))
         }
         _ => name.to_string(),
     }
@@ -240,6 +243,20 @@ mod tests {
         );
         // Trailing colon (no quant) → unchanged.
         assert_eq!(normalize_quant_suffix("Org/Repo:"), "Org/Repo:");
+    }
+
+    #[test]
+    fn normalize_quant_suffix_folds_default_sentinel() {
+        // #1202: the untagged-GGUF bucket is keyed "default" (lower-case);
+        // upper-casing the suffix made `<repo>:default` unmatchable.
+        assert_eq!(
+            normalize_quant_suffix("Qwen/Qwen2-1.5B-Instruct-GGUF:default"),
+            "Qwen/Qwen2-1.5B-Instruct-GGUF:default"
+        );
+        assert_eq!(
+            normalize_quant_suffix("Qwen/Qwen2-1.5B-Instruct-GGUF:DEFAULT"),
+            "Qwen/Qwen2-1.5B-Instruct-GGUF:default"
+        );
     }
 
     #[test]
