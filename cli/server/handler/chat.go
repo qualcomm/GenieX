@@ -149,9 +149,8 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
 			for _, tc := range toolCalls {
 				messages = append(messages, geniex_sdk.LlmChatMessage{
-					Role: geniex_sdk.LlmRole(*msg.GetRole()),
-					Content: fmt.Sprintf(`<tool_call>{"name":"%s","arguments":"%s"}</tool_call>`,
-						tc.GetFunction().Name, tc.GetFunction().Arguments),
+					Role:    geniex_sdk.LlmRole(*msg.GetRole()),
+					Content: formatToolCallBlock(tc.GetFunction().Name, tc.GetFunction().Arguments),
 				})
 			}
 			continue
@@ -320,8 +319,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 			for _, tc := range toolCalls {
 				contents = append(contents, geniex_sdk.VlmContent{
 					Type: geniex_sdk.VlmContentTypeText,
-					Text: fmt.Sprintf(`<tool_call>{"name":"%s","arguments":"%s"}</tool_call>`,
-						tc.GetFunction().Name, tc.GetFunction().Arguments),
+					Text: formatToolCallBlock(tc.GetFunction().Name, tc.GetFunction().Arguments),
 				})
 			}
 			messages = append(messages, geniex_sdk.VlmChatMessage{
@@ -628,9 +626,13 @@ func writeBlockingResponse(c *gin.Context, fullText string, profile geniex_sdk.P
 			choice := openai.ChatCompletionChoice{}
 			choice.FinishReason = "tool_calls"
 			choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
-			choice.Message.ToolCalls = []openai.ChatCompletionMessageToolCallUnion{{Function: toolCall}}
+			choice.Message.ToolCalls = []openai.ChatCompletionMessageToolCallUnion{{
+				ID:       fmt.Sprintf("call_%d", rand.Uint32()),
+				Type:     "function",
+				Function: toolCall,
+			}}
 			c.JSON(http.StatusOK, openai.ChatCompletion{
-				ID:      fmt.Sprintf("call_%d", rand.Uint32()),
+				ID:      fmt.Sprintf("chatcmpl-%d", rand.Uint32()),
 				Choices: []openai.ChatCompletionChoice{choice},
 				Usage:   profile2Usage(profile),
 			})
@@ -716,7 +718,8 @@ func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, inc
 			Choices: []openai.ChatCompletionChunkChoice{{
 				Delta: openai.ChatCompletionChunkChoiceDelta{
 					ToolCalls: []openai.ChatCompletionChunkChoiceDeltaToolCall{{
-						ID: fmt.Sprintf("call_%d", rand.Uint32()),
+						ID:   fmt.Sprintf("call_%d", rand.Uint32()),
+						Type: "function",
 						Function: openai.ChatCompletionChunkChoiceDeltaToolCallFunction{
 							Name:      toolCall.Name,
 							Arguments: toolCall.Arguments,
@@ -762,6 +765,31 @@ func mapFinishReason(stopReason string) string {
 }
 
 // =============== tool-call parsing ===============
+
+// formatToolCallBlock renders an assistant tool_calls turn into the
+// <tool_call>...</tool_call> block the chat template expects, using proper
+// JSON encoding. Raw string concatenation is unsafe: the OpenAI schema stores
+// arguments as an already-encoded JSON string (e.g. `{"city":"San Diego"}`),
+// so splicing it into `"arguments":"%s"` produces malformed JSON that crashes
+// the C-side chat-template applier.
+func formatToolCallBlock(name string, arguments string) string {
+	args := ast.NewRaw(arguments)
+	if !args.Valid() {
+		// arguments the model sent aren't valid JSON — treat as a plain
+		// string so the payload still parses on the way in.
+		args = ast.NewString(arguments)
+	}
+	payload := ast.NewObject([]ast.Pair{
+		ast.NewPair("name", ast.NewString(name)),
+		ast.NewPair("arguments", args),
+	})
+	encoded, err := payload.MarshalJSON()
+	if err != nil {
+		slog.Warn("Failed to marshal tool_call payload, falling back to text", "error", err)
+		return fmt.Sprintf("<tool_call>%s</tool_call>", arguments)
+	}
+	return fmt.Sprintf("<tool_call>%s</tool_call>", encoded)
+}
 
 var toolCallRegex = regexp.MustCompile(`<tool_call>([\s\S]+)<\/tool_call>` + "|" + "```json([\\s\\S]+)```")
 
