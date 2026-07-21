@@ -423,6 +423,9 @@ jobs:
     if: needs.resolve-tag.outputs.is_prerelease == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      # OIDC token for TestPyPI Trusted Publishing — no API token needed.
+      id-token: write
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -433,11 +436,8 @@ jobs:
         uses: pypa/gh-action-pypi-publish@v1.14.1
         with:
           repository-url: https://test.pypi.org/legacy/
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
           packages-dir: dist/
           skip-existing: true
-          # API-token auth, not Trusted Publishing — attestations are a no-op.
-          attestations: false
 
   # Stable (bare vX.Y.Z) tags publish to production PyPI.
   publish-pypi:
