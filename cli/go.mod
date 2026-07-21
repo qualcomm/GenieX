@@ -14,7 +14,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.16
 	github.com/openai/openai-go/v3 v3.17.0
 	github.com/qualcomm/GenieX/bindings/go v0.0.0
-	github.com/schollz/progressbar/v3 v3.18.0
+	github.com/schollz/progressbar/v3 v3.19.2-0.20260717173216-87dbc50586f3
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
 	github.com/spf13/viper v1.21.0
@@ -22,8 +22,8 @@ require (
 	golang.org/x/image v0.38.0
 	golang.org/x/mod v0.33.0
 	golang.org/x/sync v0.20.0
-	golang.org/x/sys v0.38.0
-	golang.org/x/term v0.37.0
+	golang.org/x/sys v0.46.0
+	golang.org/x/term v0.44.0
 )
 
 replace github.com/qualcomm/GenieX/bindings/go => ../bindings/go
@@ -60,7 +60,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect

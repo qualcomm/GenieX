@@ -16,7 +16,7 @@ type ProgressBar struct {
 }
 
 // NewProgressBar creates a new progress bar with huh-style interface
-func NewProgressBar(total int64, description string) *ProgressBar {
+func NewProgressBar(total, startingBytes int64, description string) *ProgressBar {
 	bar := progressbar.NewOptions64(
 		total,
 		progressbar.OptionSetDescription(description),
@@ -33,6 +33,7 @@ func NewProgressBar(total int64, description string) *ProgressBar {
 		progressbar.OptionFullWidth(),
 		progressbar.OptionSetRenderBlankState(true),
 		progressbar.OptionUseANSICodes(true),
+		progressbar.OptionSetStartingBytes(startingBytes),
 	)
 	return &ProgressBar{bar: bar}
 }

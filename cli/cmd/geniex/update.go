@@ -109,7 +109,7 @@ func runUpdate(_ *cobra.Command, _ []string) error {
 
 	dst := filepath.Join(os.TempDir(), ast.Name)
 	progress := make(chan int64)
-	bar := render.NewProgressBar(int64(ast.Size), "downloading")
+	bar := render.NewProgressBar(int64(ast.Size), 0, "downloading")
 
 	var dlErr error
 	go func() {

@@ -445,7 +445,7 @@ func pullModel(ctx context.Context, name string, quant string) error {
 			}
 		}
 		if bar == nil {
-			bar = render.NewProgressBar(total, "downloading")
+			bar = render.NewProgressBar(total, downloaded, "downloading")
 		}
 		bar.Set(downloaded)
 		return ctx.Err() == nil
