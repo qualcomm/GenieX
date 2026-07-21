@@ -44,4 +44,20 @@ data class ModelConfig(
     val enable_thinking: Boolean = false,
 
     val verbose: Boolean = false,
+
+    /** Speculative decoding type(s), comma-separated (llama_cpp only; "" / "none" = disabled).
+     *  Draft models: "draft-mtp","draft-eagle3","draft-simple". Self-speculative: "ngram-*". */
+    val spec_type: String = "",
+
+    /** Draft GGUF for draft-* spec types ("" for ngram-* or when disabled) */
+    val spec_draft_model: String = "",
+
+    /** Max draft tokens per step (0 = plugin default of 3) */
+    val spec_n_max: Int = 0,
+
+    /** Min draft tokens per step (0 = llama.cpp default) */
+    val spec_n_min: Int = 0,
+
+    /** Min greedy draft probability (0 = llama.cpp default) */
+    val spec_p_min: Float = 0.0f,
 )

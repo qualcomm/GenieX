@@ -30,6 +30,8 @@ class ProfileData:
     generated_tokens: int = 0
     prefill_speed: float = 0.0
     decode_speed: float = 0.0
+    draft_n_total: int = 0
+    draft_n_accepted: int = 0
     stop_reason: str | None = None
     backend: str | None = None
     device: str | None = None
@@ -47,6 +49,8 @@ class ProfileData:
             generated_tokens=c.generated_tokens,
             prefill_speed=c.prefill_speed,
             decode_speed=c.decoding_speed,
+            draft_n_total=c.draft_n_total,
+            draft_n_accepted=c.draft_n_accepted,
             stop_reason=stop,
         )
 
