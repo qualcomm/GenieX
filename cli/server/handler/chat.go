@@ -628,9 +628,12 @@ func writeBlockingResponse(c *gin.Context, fullText string, profile geniex_sdk.P
 			choice := openai.ChatCompletionChoice{}
 			choice.FinishReason = "tool_calls"
 			choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
-			choice.Message.ToolCalls = []openai.ChatCompletionMessageToolCallUnion{{Function: toolCall}}
+			choice.Message.ToolCalls = []openai.ChatCompletionMessageToolCallUnion{{
+				ID:       fmt.Sprintf("call_%d", rand.Uint32()),
+				Type:     "function",
+				Function: toolCall,
+			}}
 			c.JSON(http.StatusOK, openai.ChatCompletion{
-				ID:      fmt.Sprintf("call_%d", rand.Uint32()),
 				Choices: []openai.ChatCompletionChoice{choice},
 				Usage:   profile2Usage(profile),
 			})
@@ -716,7 +719,8 @@ func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, inc
 			Choices: []openai.ChatCompletionChunkChoice{{
 				Delta: openai.ChatCompletionChunkChoiceDelta{
 					ToolCalls: []openai.ChatCompletionChunkChoiceDeltaToolCall{{
-						ID: fmt.Sprintf("call_%d", rand.Uint32()),
+						ID:   fmt.Sprintf("call_%d", rand.Uint32()),
+						Type: "function",
 						Function: openai.ChatCompletionChunkChoiceDeltaToolCallFunction{
 							Name:      toolCall.Name,
 							Arguments: toolCall.Arguments,
