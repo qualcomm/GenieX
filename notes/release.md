@@ -98,6 +98,7 @@ All objects live directly under the prefix — no `<tag>/` subdirectories. The `
 | `manifest-<tag>.json` | every tag | `immutable` | Per-tag asset listing |
 | `index.json` | every tag | `no-cache` | Full version catalogue |
 | `latest.json` | stable only | `no-cache` | Pointer to the latest stable manifest |
+| `windows-signed.txt` | stable only | `no-cache` | Code-signing gate for the latest Windows installer — see [§ Windows installer signing gate](#windows-installer-signing-gate) |
 
 Other assets (AAR, sdist, HTP cert/to-sign zips) ship via GitHub Releases / Maven Central / PyPI (stable) / TestPyPI (prerelease) only — not via S3.
 
@@ -165,3 +166,9 @@ The S3 bundle must contain exactly these eight files at the zip root: `libggml-h
 2. Submit for Microsoft signing.
 3. Upload the result to `s3://qaihub-public-assets/llama-cpp/libggml-htp-<sha>.zip`.
 4. Re-run the Release workflow for the same tag.
+
+## Windows installer signing gate
+
+The Windows installer is published before it is Authenticode-signed, so `geniex update` gates on `windows-signed.txt` to avoid pushing an unsigned build. On Windows, once a newer version is found, the updater GETs this file (see [`cli/cmd/geniex/update.go`](../cli/cmd/geniex/update.go), `isWindowsSigned`): contents `true` → proceed with the download; anything else or missing → treat as up-to-date and skip.
+
+Release-side: upload `windows-signed.txt` with `true` after the latest stable installer is signed; set it back to a non-`true` value before publishing the next, not-yet-signed installer.

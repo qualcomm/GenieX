@@ -44,6 +44,7 @@ const (
 	defaultNumWorkers = 16
 
 	linuxInstallScriptURL = releaseBaseURL + "install.sh"
+	windowsSignedURL      = releaseBaseURL + "windows-signed.txt"
 )
 
 func update() *cobra.Command {
@@ -90,6 +91,16 @@ func runUpdate(_ *cobra.Command, _ []string) error {
 	}
 	if runtime.GOOS != "windows" {
 		return fmt.Errorf("auto-update is not supported on %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+
+	// Skip until the published installer is code-signed.
+	signed, err := isWindowsSigned()
+	if err != nil {
+		return err
+	}
+	if !signed {
+		fmt.Println("Already up-to-date.")
+		return nil
 	}
 
 	mf, err := getManifest(latest)
@@ -207,6 +218,30 @@ func getManifest(tag string) (manifest, error) {
 		return mf, err
 	}
 	return mf, nil
+}
+
+// isWindowsSigned reports whether windows-signed.txt on S3 contains "true".
+func isWindowsSigned() (bool, error) {
+	req, err := http.NewRequest("GET", windowsSignedURL, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, nil
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, err
+	}
+	return strings.EqualFold(strings.TrimSpace(string(body)), "true"), nil
 }
 
 // verifySHA256 checks that the file at path matches the expected hex digest.
