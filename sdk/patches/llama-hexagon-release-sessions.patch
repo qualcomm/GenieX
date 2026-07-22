@@ -1,11 +1,12 @@
 diff --git a/ggml/src/ggml-hexagon/ggml-hexagon.cpp b/ggml/src/ggml-hexagon/ggml-hexagon.cpp
-index 3d68b8004..da06a3a76 100644
+index 54d313ade..5ed2e3de3 100644
 --- a/ggml/src/ggml-hexagon/ggml-hexagon.cpp
 +++ b/ggml/src/ggml-hexagon/ggml-hexagon.cpp
-@@ -3255,6 +3255,42 @@ ggml_hexagon_registry::ggml_hexagon_registry(ggml_backend_reg_t reg) {
+@@ -4325,6 +4325,42 @@ ggml_hexagon_registry::ggml_hexagon_registry(ggml_backend_reg_t reg) {
      }
  }
  
++
 +// geniex: release all HTP sessions without destroying the registry. Lets
 +// GenieX tear down llama.cpp's FastRPC channels between plugin handoffs so
 +// QAIRT can re-create its own HTP contexts without the sessions poisoning
@@ -41,14 +42,13 @@ index 3d68b8004..da06a3a76 100644
 +        }
 +    }
 +}
-+
  ggml_hexagon_registry::~ggml_hexagon_registry() {
      GGML_LOG_INFO("ggml-hex: releasing registry\n");
  
-@@ -3290,6 +3326,14 @@ static void * ggml_backend_hexagon_get_proc_address(ggml_backend_reg_t reg, cons
-         ggml_backend_dev_get_extra_bufts_t fct = ggml_backend_hexagon_device_get_extra_buffers_type;
+@@ -4361,6 +4397,14 @@ static void * ggml_backend_hexagon_get_proc_address(ggml_backend_reg_t reg, cons
          return (void *) fct;
      }
+ 
 +    if (strcmp(name, "ggml_backend_hexagon_release_sessions") == 0) {
 +        auto fct = ggml_backend_hexagon_release_sessions;
 +        return (void *) fct;
@@ -57,6 +57,6 @@ index 3d68b8004..da06a3a76 100644
 +        auto fct = ggml_backend_hexagon_reacquire_sessions;
 +        return (void *) fct;
 +    }
- 
      return NULL;
+     GGML_UNUSED(reg);
  }
