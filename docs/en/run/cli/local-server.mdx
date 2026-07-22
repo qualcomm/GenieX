@@ -217,23 +217,11 @@ print("call:", call.function.name, call.function.arguments)
 # Step 2 — run the tool, feed the result back.
 result = get_weather(**json.loads(call.function.arguments))
 
-messages.append(
-    {
-        "role": "assistant",
-        "content": "",
-        "tool_calls": [
-            {
-                "id": call.id or "call_0",
-                "type": "function",
-                "function": {"name": call.function.name, "arguments": call.function.arguments},
-            }
-        ],
-    }
-)
+messages.append(first.choices[0].message)
 messages.append(
     {
         "role": "tool",
-        "tool_call_id": call.id or "call_0",
+        "tool_call_id": call.id,
         "content": json.dumps(result),
     }
 )
