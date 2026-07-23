@@ -31,7 +31,7 @@ pub fn detect_host_chipset() -> Option<String> {
     }
     #[cfg(target_os = "linux")]
     {
-        linux::detect_dt_chipset()
+        linux::detect_dt_chipset().or_else(linux::detect_socinfo_chipset)
     }
     #[cfg(target_os = "android")]
     {
@@ -149,29 +149,26 @@ ProcessorNameString    REG_SZ    Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz\r\n
 
 #[cfg(target_os = "linux")]
 mod linux {
-    //! OpenEmbedded-based Qualcomm Linux images always expose the boot
-    //! Device Tree at `/sys/firmware/devicetree/base/compatible` — a
-    //! NUL-separated list of `vendor,model` strings ordered from most
-    //! specific (board) to most generic (SoC family). On QCS9075 EVK
-    //! the three entries are:
+    //! Two probes, tried in order:
     //!
-    //! ```text
-    //! qcom,qcs9075-addons-iq-9075-evk\0qcom,qcs9075\0qcom,sa8775p\0
-    //! ```
+    //! 1. `/sys/firmware/devicetree/base/compatible` — NUL-separated
+    //!    `vendor,model` list, walked for `qcom,<soc>` matches. Example
+    //!    QCS9075 EVK: `qcom,qcs9075-addons-iq-9075-evk\0qcom,qcs9075\0qcom,sa8775p\0`.
     //!
-    //! We walk that list in order and map the first entry whose SoC
-    //! suffix is in our explicit table to an AI Hub chipset id. Board
-    //! rows like `qcs9075-addons-iq-9075-evk` and SoC-family rows like
-    //! `sa8775p` are not in the table and fall through, so a hit is
-    //! only possible on a SoC we have AI Hub assets for.
+    //! 2. `/sys/devices/soc0/{family,machine}` — fallback for boards
+    //!    whose DT compat lacks a per-SoC row (e.g. IQ-8275 EVK reports
+    //!    `arduino,monza\0qcom,monaco-monza\0qcom,qcs8300\0`; the real
+    //!    SoC id `QCS8275` only surfaces via socinfo). Guarded by
+    //!    `family == "Snapdragon"`.
     //!
-    //! `/proc/cpuinfo` is deliberately not consulted — the aarch64
-    //! kernel on these images exposes only ARM-standard fields
-    //! (`CPU part: 0xd4b`) with no Qualcomm SoC branding.
+    //! `/proc/cpuinfo` exposes only ARM-standard fields on these
+    //! kernels, so it is not consulted.
 
     use std::fs;
 
     const DT_COMPATIBLE: &str = "/sys/firmware/devicetree/base/compatible";
+    const SOC0_FAMILY: &str = "/sys/devices/soc0/family";
+    const SOC0_MACHINE: &str = "/sys/devices/soc0/machine";
 
     // Map a Device Tree `qcom,<soc>` suffix to the AI Hub chipset id
     // that owns the qairt assets for it. Only SoCs currently present
@@ -183,9 +180,17 @@ mod linux {
         ("qcs9075", "qualcomm-qcs9075"),
     ];
 
+    const MACHINE_TO_CHIPSET: &[(&str, &str)] = &[("QCS8275", "qualcomm-qcs8275")];
+
     pub(super) fn detect_dt_chipset() -> Option<String> {
         let bytes = fs::read(DT_COMPATIBLE).ok()?;
         map_compatible(&bytes).map(|s| s.to_string())
+    }
+
+    pub(super) fn detect_socinfo_chipset() -> Option<String> {
+        let family = fs::read_to_string(SOC0_FAMILY).ok()?;
+        let machine = fs::read_to_string(SOC0_MACHINE).ok()?;
+        map_socinfo(&family, &machine).map(|s| s.to_string())
     }
 
     fn map_compatible(bytes: &[u8]) -> Option<&'static str> {
@@ -201,6 +206,17 @@ mod linux {
             }
         }
         None
+    }
+
+    fn map_socinfo(family: &str, machine: &str) -> Option<&'static str> {
+        if !family.trim().eq_ignore_ascii_case("Snapdragon") {
+            return None;
+        }
+        let m = machine.trim().to_ascii_uppercase();
+        MACHINE_TO_CHIPSET
+            .iter()
+            .find(|(k, _)| *k == m)
+            .map(|(_, v)| *v)
     }
 
     #[cfg(test)]
@@ -249,6 +265,33 @@ mod linux {
         fn trailing_nul_missing_is_tolerated() {
             // Final entry without trailing NUL still parses.
             assert_eq!(map_compatible(b"qcom,qcs9075"), Some("qualcomm-qcs9075"));
+        }
+
+        #[test]
+        fn socinfo_maps_iq8275_evk_real_fixture() {
+            assert_eq!(
+                map_socinfo("Snapdragon\n", "QCS8275\n"),
+                Some("qualcomm-qcs8275")
+            );
+        }
+
+        #[test]
+        fn socinfo_rejects_non_snapdragon_family() {
+            assert_eq!(map_socinfo("MSM\n", "QCS8275\n"), None);
+            assert_eq!(map_socinfo("", "QCS8275"), None);
+        }
+
+        #[test]
+        fn socinfo_ignores_unknown_machine() {
+            assert_eq!(map_socinfo("Snapdragon\n", "QCS8300\n"), None);
+        }
+
+        #[test]
+        fn socinfo_family_match_is_case_insensitive() {
+            assert_eq!(
+                map_socinfo("snapdragon\n", "qcs8275\n"),
+                Some("qualcomm-qcs8275")
+            );
         }
     }
 }
