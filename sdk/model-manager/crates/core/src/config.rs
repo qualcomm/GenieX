@@ -37,6 +37,13 @@ impl StoreConfig {
         std::env::var("GENIEX_HFTOKEN").ok()
     }
 
+    pub fn hf_endpoint() -> String {
+        match std::env::var("HF_ENDPOINT") {
+            Ok(v) if !v.trim().is_empty() => v.trim().trim_end_matches('/').to_string(),
+            _ => crate::source::hf::DEFAULT_HF_ENDPOINT.to_string(),
+        }
+    }
+
     /// AI Hub public assets base URL. Mirrors the Go CLI's
     /// `DefaultAIHubBaseURL`; override via `GENIEX_AIHUBBASEURL`.
     pub fn ai_hub_base_url() -> String {
@@ -80,4 +87,57 @@ fn default_data_dir() -> PathBuf {
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
     PathBuf::from(home).join(".cache").join("geniex")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::hf::DEFAULT_HF_ENDPOINT;
+
+    struct EnvGuard {
+        key: &'static str,
+        prev: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let prev = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            Self { key, prev }
+        }
+        fn unset(key: &'static str) -> Self {
+            let prev = std::env::var(key).ok();
+            std::env::remove_var(key);
+            Self { key, prev }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    #[test]
+    fn hf_endpoint_covers_unset_custom_and_trailing_slash() {
+        {
+            let _g = EnvGuard::unset("HF_ENDPOINT");
+            assert_eq!(StoreConfig::hf_endpoint(), DEFAULT_HF_ENDPOINT);
+        }
+        {
+            let _g = EnvGuard::set("HF_ENDPOINT", "https://hf-mirror.com");
+            assert_eq!(StoreConfig::hf_endpoint(), "https://hf-mirror.com");
+        }
+        {
+            let _g = EnvGuard::set("HF_ENDPOINT", "https://hf-mirror.com/");
+            assert_eq!(StoreConfig::hf_endpoint(), "https://hf-mirror.com");
+        }
+        {
+            let _g = EnvGuard::set("HF_ENDPOINT", "  ");
+            assert_eq!(StoreConfig::hf_endpoint(), DEFAULT_HF_ENDPOINT);
+        }
+    }
 }
