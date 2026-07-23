@@ -35,12 +35,15 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
-    // See llm.cpp for the rationale behind the HTP session release/reacquire
-    // dance. Any llama.cpp class that might load onto HTP must participate.
-    htp::reacquire_before_load();
-
     const Device              device = classify_device(input->device_id, input->config.n_gpu_layers);
     const geniex_ModelConfig& config = input->config;
+
+    // See llm.cpp for the rationale behind the HTP session release/reacquire
+    // dance. Only reacquire when we're actually going to use HTP — CPU/GPU
+    // targets shouldn't touch the ADSP domain.
+    if (device == Device::NPU) {
+        htp::reacquire_before_load();
+    }
 
     llama_model_params mpar      = build_model_params(config, device);
     auto               selection = resolve_devices(input->device_id);
@@ -273,7 +276,6 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             // prompt_utf8 already has chat template and media markers applied
             mtmd_input_text text;
             text.text          = new_text_portion.c_str();
-            text.text_len      = new_text_portion.length();
             text.add_special   = this->n_past == 0;  // add BOS only on first message
             text.parse_special = true;
 

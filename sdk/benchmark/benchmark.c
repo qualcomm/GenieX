@@ -108,6 +108,12 @@ typedef struct {
     int32_t n_threads;
     int32_t ngl_override; /* -1 = use resolved alias default; >=0 overrides */
 
+    const char* spec_type;    /* speculative type(s), comma-separated (llama_cpp); NULL = disabled */
+    const char* draft_model;  /* draft/MTP GGUF for draft-* spec types (NULL for ngram-*) */
+    int32_t     draft_tokens; /* max draft tokens per step (0 = plugin default) */
+    int32_t     draft_min;    /* min draft tokens per step (0 = llama.cpp default) */
+    float       draft_p_min;  /* min greedy draft probability (0 = llama.cpp default) */
+
     const char* output_json;
     const char* output_md;
     const char* cell_id;
@@ -217,6 +223,13 @@ static void usage(const char* argv0) {
         "  -t, --threads N        generation threads (0 = SDK default)\n"
         "  -ngl, --n-gpu-layers N llama_cpp layers to offload; overrides the\n"
         "                         device alias default (-1 = all layers)\n"
+        "  --spec-type TYPES      speculative type(s), comma-separated: draft-mtp,\n"
+        "                         draft-eagle3,draft-simple,ngram-simple,ngram-map-k,\n"
+        "                         ngram-map-k4v,ngram-mod,ngram-cache (llama_cpp)\n"
+        "  --draft-model PATH     draft/MTP GGUF for draft-* spec types (llama_cpp)\n"
+        "  --draft-tokens N       max draft tokens per step (0 = plugin default)\n"
+        "  --draft-min N          min draft tokens per step (0 = llama.cpp default)\n"
+        "  --draft-p-min F        min greedy draft probability (0 = llama.cpp default)\n"
         "  --warmup N             default 1\n"
         "  --no-warmup            equivalent to --warmup 0\n"
         "  --temperature F        default 0.0\n"
@@ -638,6 +651,11 @@ static void parse_args(int argc, char** argv, options_t* o) {
     o->n_ctx              = 0;
     o->n_threads          = 0;
     o->ngl_override       = -1;
+    o->spec_type          = NULL;
+    o->draft_model        = NULL;
+    o->draft_tokens       = 0;
+    o->draft_min          = 0;
+    o->draft_p_min        = 0.0f;
     o->output_json        = NULL;
     o->output_md          = NULL;
     o->cell_id            = NULL;
@@ -704,6 +722,16 @@ static void parse_args(int argc, char** argv, options_t* o) {
             o->n_threads = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "-ngl") == 0 || strcmp(a, "--n-gpu-layers") == 0) {
             o->ngl_override = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--spec-type") == 0) {
+            o->spec_type = arg_value(argc, argv, &i, a);
+        } else if (strcmp(a, "--draft-model") == 0) {
+            o->draft_model = arg_value(argc, argv, &i, a);
+        } else if (strcmp(a, "--draft-tokens") == 0) {
+            o->draft_tokens = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--draft-min") == 0) {
+            o->draft_min = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--draft-p-min") == 0) {
+            o->draft_p_min = (float)atof(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--output-json") == 0) {
             o->output_json = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--output-md") == 0) {
@@ -986,10 +1014,15 @@ static void fill_gen_config(geniex_GenerationConfig* g, geniex_SamplerConfig* s,
 
 static void fill_model_config(geniex_ModelConfig* c, const options_t* o, int32_t ngl) {
     memset(c, 0, sizeof(*c));
-    c->n_ctx        = o->n_ctx;
-    c->n_threads    = o->n_threads;
-    c->n_gpu_layers = ngl;
-    c->max_tokens   = o->max_new_tokens;
+    c->n_ctx            = o->n_ctx;
+    c->n_threads        = o->n_threads;
+    c->n_gpu_layers     = ngl;
+    c->max_tokens       = o->max_new_tokens;
+    c->spec_type        = o->spec_type;   /* may be NULL */
+    c->spec_draft_model = o->draft_model; /* may be NULL */
+    c->spec_n_max       = o->draft_tokens;
+    c->spec_n_min       = o->draft_min;
+    c->spec_p_min       = o->draft_p_min;
 }
 
 static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_result_t* out) {
@@ -1170,6 +1203,13 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
 
             if (!is_warmup && o->accuracy && gout.full_text) {
                 print_gen_text(gout.full_text);
+            }
+            if (!is_warmup && gout.profile_data.draft_n_total > 0) {
+                fprintf(stderr,
+                    "[spec] draft acceptance = %.5f (%lld accepted / %lld generated)\n",
+                    (double)gout.profile_data.draft_n_accepted / (double)gout.profile_data.draft_n_total,
+                    (long long)gout.profile_data.draft_n_accepted,
+                    (long long)gout.profile_data.draft_n_total);
             }
             if (gout.full_text) {
                 geniex_free(gout.full_text);

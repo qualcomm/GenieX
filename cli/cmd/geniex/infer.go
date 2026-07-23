@@ -39,6 +39,11 @@ var (
 	systemPrompt   string
 	computeUnit    string
 	slidingWindow  bool
+	specType       string
+	draftModel     string
+	draftTokens    int32
+	draftMin       int32
+	draftPMin      float32
 
 	// sampler config
 	temperature       float32
@@ -87,6 +92,11 @@ var (
 		llmFlags.StringArrayVarP(&prompt, "prompt", "p", nil, "pass prompt")
 		llmFlags.StringVarP(&tokenFile, "token-file", "t", "", "path to token file (space-separated token IDs) (llama_cpp only)")
 		llmFlags.BoolVarP(&slidingWindow, "sliding-window", "", false, "evict oldest context on overflow instead of erroring (qairt only)")
+		llmFlags.StringVarP(&specType, "spec-type", "", "", "speculative decoding type(s), comma-separated: draft-mtp,draft-eagle3,draft-simple,ngram-simple,ngram-map-k,ngram-map-k4v,ngram-mod,ngram-cache (llama_cpp only)")
+		llmFlags.StringVarP(&draftModel, "draft-model", "", "", "draft/MTP model for draft-* spec types: catalogue name or local GGUF path (llama_cpp only)")
+		llmFlags.Int32VarP(&draftTokens, "draft-tokens", "", 3, "max draft tokens per step for speculative decoding (llama_cpp only)")
+		llmFlags.Int32VarP(&draftMin, "draft-min", "", 0, "min draft tokens per step (0 = llama.cpp default) (llama_cpp only)")
+		llmFlags.Float32VarP(&draftPMin, "draft-p-min", "", 0.0, "min greedy draft probability (0 = llama.cpp default) (llama_cpp only)")
 		return llmFlags
 	}()
 	vlmFlags = func() *pflag.FlagSet {
@@ -130,7 +140,7 @@ func infer() *cobra.Command {
 
 		switch paths.ModelType {
 		case geniex_sdk.ModelTypeLLM:
-			err = inferLLM(paths)
+			err = inferLLM(cmd.Context(), paths)
 		case geniex_sdk.ModelTypeVLM:
 			err = inferVLM(paths)
 		default:
@@ -164,6 +174,21 @@ func ensureModelAvailable(ctx context.Context, name, quant string) (*geniex_sdk.
 		paths, err = geniex_sdk.ModelGetPaths(key)
 	}
 	return paths, err
+}
+
+// resolveDraftModel maps a --draft-model value to a GGUF path the SDK can load.
+// An existing local file is used as-is; anything else is treated as a catalogue
+// name and resolved (pulling if needed) like the main model.
+func resolveDraftModel(ctx context.Context, draft string) (string, error) {
+	if _, err := os.Stat(draft); err == nil {
+		return draft, nil
+	}
+	name, precision := geniex_sdk.SplitNamePrecision(draft)
+	paths, err := ensureModelAvailable(ctx, name, precision)
+	if err != nil {
+		return "", fmt.Errorf("resolve draft model %q: %w", draft, err)
+	}
+	return paths.ModelPath, nil
 }
 
 func getPromptOrInput() (string, error) {
@@ -240,7 +265,7 @@ func resolveModelParams(runtimeID, modelName string) (deviceID string, resolvedN
 	return
 }
 
-func inferLLM(paths *geniex_sdk.ModelPaths) error {
+func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths) error {
 	samplerConfig := &geniex_sdk.SamplerConfig{
 		Temperature:       temperature,
 		TopP:              topP,
@@ -264,6 +289,25 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 		return err
 	}
 
+	// Speculative decoding is llama_cpp-only; ignore the spec flags for other runtimes.
+	resolvedSpecType := specType
+	specDraftModel := draftModel
+	if paths.RuntimeID != geniex_sdk.RuntimeLlamaCpp {
+		if resolvedSpecType != "" || specDraftModel != "" {
+			fmt.Println(render.GetTheme().Warning.Sprintf(
+				"Warning: speculative decoding is only supported by llama_cpp; ignoring for runtime %s", paths.RuntimeID))
+		}
+		resolvedSpecType = ""
+		specDraftModel = ""
+	} else if specDraftModel != "" {
+		// A draft model may be a local GGUF path or a catalogue name (resolved
+		// and pulled like the main model).
+		specDraftModel, err = resolveDraftModel(ctx, specDraftModel)
+		if err != nil {
+			return err
+		}
+	}
+
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
 
@@ -273,8 +317,13 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 		RuntimeID: paths.RuntimeID,
 		DeviceID:  deviceID,
 		Config: geniex_sdk.ModelConfig{
-			NCtx:       nctxResolved,
-			NGpuLayers: nglResolved,
+			NCtx:           nctxResolved,
+			NGpuLayers:     nglResolved,
+			SpecType:       resolvedSpecType,
+			SpecDraftModel: specDraftModel,
+			SpecNMax:       draftTokens,
+			SpecNMin:       draftMin,
+			SpecPMin:       draftPMin,
 		},
 	})
 	spin.Stop()
