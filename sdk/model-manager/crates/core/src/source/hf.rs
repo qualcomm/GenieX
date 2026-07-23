@@ -37,7 +37,8 @@ pub struct HfSource {
 impl HfSource {
     pub fn new(repo: String, token: Option<String>, hint: ManifestHint) -> Result<Self> {
         let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
-        Self::with_endpoint_and_transport(repo, DEFAULT_HF_ENDPOINT, token, transport, hint)
+        let endpoint = crate::config::StoreConfig::hf_endpoint();
+        Self::with_endpoint_and_transport(repo, &endpoint, token, transport, hint)
     }
 
     /// Escape hatch for tests / alternate endpoints / shared transports.

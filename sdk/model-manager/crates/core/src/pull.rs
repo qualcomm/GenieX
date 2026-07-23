@@ -214,9 +214,10 @@ pub(crate) fn build_source(
 ) -> Result<Box<dyn ModelSource>> {
     match &req.intent {
         PullIntent::HuggingFace { repo, token } => {
+            let endpoint = StoreConfig::hf_endpoint();
             let src = HfSource::with_endpoint_and_transport(
                 repo.clone(),
-                crate::source::hf::DEFAULT_HF_ENDPOINT,
+                &endpoint,
                 token.clone(),
                 transport,
                 req.hint.clone(),
