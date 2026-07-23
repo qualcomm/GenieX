@@ -32,9 +32,9 @@ GenieX runs **only on Qualcomm Snapdragon**. Find your platform, then jump strai
 
 | Platform | Example devices | Jump to a quickstart |
 | --- | --- | --- |
-| 🪟 **Windows ARM64** *(Compute)* | Snapdragon X · X Elite | [CLI](#cli) · [Python](#python) · [Local server](#openai-compatible-server) |
+| 🪟 **Windows ARM64** *(Compute)* | Snapdragon X · X Elite · X Plus | [CLI](#cli) · [Python](#python) · [Rust](#rust) · [Local server](#openai-compatible-server) |
 | 🤖 **Android** *(Mobile)* | Snapdragon 8 Elite · 8 Elite Gen 5 | [Android SDK](#android-kotlin--java) |
-| 🐧 **Linux ARM64** *(IoT)* | Dragonwing QCS9075 | [CLI](#cli) · [Docker](#docker) · [Python](#python) |
+| 🐧 **Linux ARM64** *(IoT)* | Dragonwing QCS9075 | [CLI](#cli) · [Docker](#docker) · [Python](#python) · [Rust](#rust) |
 
 
 > No device on hand? Spin up a remote session on [Qualcomm Device Cloud](https://qdc.qualcomm.com/).
@@ -115,6 +115,44 @@ model.close()
 ```
 
 📖 **Docs** — [Install](https://geniex.aihub.qualcomm.com/en/run/python/install) · [Quickstart](https://geniex.aihub.qualcomm.com/en/run/python/quickstart) · [API reference](https://geniex.aihub.qualcomm.com/en/run/python/api-reference)
+
+### Rust
+
+![Windows ARM64](https://img.shields.io/badge/Windows%20ARM64-0078D6?style=flat-square&logo=windows&logoColor=white) ![Linux ARM64](https://img.shields.io/badge/Linux%20ARM64-FCC624?style=flat-square&logo=linux&logoColor=black)
+
+**Install** — add `geniex` to your `Cargo.toml`:
+
+```toml
+[dependencies]
+geniex = { path = "bindings/rust" }
+```
+
+**Run** — initialize GenieX runtime and generate text:
+
+```rust
+use geniex::*;
+
+fn main() -> Result<()> {
+    init()?;
+
+    let config = ModelConfig::default();
+    let mut llm = Llm::create("qwen3-0.6b.gguf", "llama_cpp", &config, None, None, None)?;
+
+    let messages = vec![ChatMessage {
+        role: "user".to_string(),
+        content: "Hello!".to_string(),
+    }];
+
+    let prompt = llm.apply_chat_template(&messages, None, false, true)?;
+    let (text, _) = llm.generate::<fn(&str) -> bool>(Some(&prompt), None, None, None)?;
+    println!("{}", text);
+
+    deinit()?;
+    Ok(())
+}
+```
+
+📖 **Docs** — [bindings/rust/README.md](bindings/rust/README.md) · [bindings/rust/docs/rust_windows_arm64.md](bindings/rust/docs/rust_windows_arm64.md)
 
 ### OpenAI-compatible server
 
