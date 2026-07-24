@@ -275,7 +275,7 @@ typedef struct {
      *
      * NULL or an empty string asks the SDK to auto-detect the host
      * chipset. Detection currently works on Windows-on-Snapdragon
-     * (X Elite / X Plus / X2 Elite); on other hosts an auto-detect
+     * (X Elite / X Plus / X2 Elite / X2 Plus); on other hosts an auto-detect
      * request fails with GENIEX_ERROR_COMMON_INVALID_INPUT and the
      * caller must pass a chipset explicitly.
      */
@@ -437,7 +437,7 @@ GENIEX_API void geniex_model_list_chipsets_free(geniex_ChipsetList* out);
 /**
  * @brief Detect the chipset of the current host.
  *
- * Probes the host (Windows-on-Snapdragon X Elite / X Plus / X2 Elite, Linux
+ * Probes the host (Windows-on-Snapdragon X Elite / X Plus / X2 Elite / X2 Plus, Linux
  * on Qualcomm Dragonwing boards QCS6490 / QCS9075, Android on Snapdragon via
  * `ro.soc.model`), then resolves the raw id to the AI Hub reference device
  * name (e.g. "Snapdragon X Elite CRD") — the same name geniex_model_list_chipsets

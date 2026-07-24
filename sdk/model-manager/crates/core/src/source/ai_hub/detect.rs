@@ -10,9 +10,9 @@
 //! module takes a best-effort guess from the host.
 //!
 //! Current coverage:
-//!   * Windows on Snapdragon (X Elite / X Plus / X2 Elite) — parsed
-//!     from the CPU brand string via a `reg query` probe. This is the
-//!     95% case for Genie runtime users today.
+//!   * Windows on Snapdragon (X Elite / X Plus / X2 Elite / X2 Plus) —
+//!     parsed from the CPU brand string via a `reg query` probe. This
+//!     is the 95% case for Genie runtime users today.
 //!   * Linux on Qualcomm Dragonwing boards (QCS6490 / QCS9075) —
 //!     parsed from `/sys/firmware/devicetree/base/compatible`.
 //!   * Android on Snapdragon — parsed from the `ro.soc.model`
@@ -54,6 +54,10 @@ pub(crate) fn cpu_name_to_chipset_alias(brand: String) -> Option<String> {
         "X1E" => Some("qualcomm-snapdragon-x-elite".to_string()),
         "X1P" => Some("qualcomm-snapdragon-x-plus-8-core".to_string()),
         "X2E" => Some("qualcomm-snapdragon-x2-elite".to_string()),
+        // AI Hub publishes no dedicated X2 Plus bucket; the X2 Elite
+        // assets are the right ones — same Hexagon NPU generation
+        // (HTP v81), per maintainer guidance on issue #1223.
+        "X2P" => Some("qualcomm-snapdragon-x2-elite".to_string()),
         _ => None,
     }
 }
@@ -393,6 +397,17 @@ mod tests {
     #[test]
     fn parses_x2_elite_brand_string() {
         let brand = "Snapdragon X2 Elite - X2E80100 - Qualcomm Oryon CPU".to_string();
+        assert_eq!(
+            cpu_name_to_chipset_alias(brand).as_deref(),
+            Some("qualcomm-snapdragon-x2-elite")
+        );
+    }
+
+    #[test]
+    fn parses_x2_plus_brand_string() {
+        // X2 Plus has no dedicated AI Hub bucket; it must resolve to
+        // the X2 Elite assets (issue #1223).
+        let brand = "Snapdragon X2 Plus - X2P64100 - Qualcomm Oryon CPU".to_string();
         assert_eq!(
             cpu_name_to_chipset_alias(brand).as_deref(),
             Some("qualcomm-snapdragon-x2-elite")
