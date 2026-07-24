@@ -59,7 +59,7 @@ docker run --rm -u $(id -u):$(id -g) \
     --workdir /workspace/sdk \
     -e CCACHE_DIR=/workspace/.ccache \
     --platform linux/amd64 \
-    docker.io/qualcomm/geniex-toolchain-linux:v0.0.1 \
+    docker.io/qualcomm/geniex-toolchain-linux:v0.1.0 \
     bash -c 'cmake --preset arm64-linux-snapdragon-debug -B build-linux . \
       && cmake --build build-linux -j \
       && cmake --install build-linux --prefix pkg-geniex'
@@ -73,7 +73,7 @@ docker run --rm -it -u $(id -u):$(id -g) \
     --workdir /workspace/sdk \
     -e CCACHE_DIR=/workspace/.ccache \
     --platform linux/amd64 \
-    docker.io/qualcomm/geniex-toolchain-linux:v0.0.1 bash
+    docker.io/qualcomm/geniex-toolchain-linux:v0.1.0 bash
 # then, inside the container:
 cmake --preset arm64-linux-snapdragon-debug -B build-linux .
 cmake --build build-linux -j
@@ -92,7 +92,7 @@ docker run --rm -u $(id -u):$(id -g) \
     --workdir /workspace/sdk \
     -e CCACHE_DIR=/workspace/.ccache \
     --platform linux/amd64 \
-    docker.io/qualcomm/geniex-toolchain-android:v0.0.1 \
+    docker.io/qualcomm/geniex-toolchain-android:v0.1.0 \
     bash -c 'cmake --preset arm64-android-snapdragon-debug -B build-android . \
       && cmake --build build-android -j \
       && cmake --install build-android --prefix pkg-geniex'
@@ -106,7 +106,7 @@ docker run --rm -it -u $(id -u):$(id -g) \
     --workdir /workspace/sdk \
     -e CCACHE_DIR=/workspace/.ccache \
     --platform linux/amd64 \
-    docker.io/qualcomm/geniex-toolchain-android:v0.0.1 bash
+    docker.io/qualcomm/geniex-toolchain-android:v0.1.0 bash
 # then, inside the container:
 cmake --preset arm64-android-snapdragon-debug -B build-android .
 cmake --build build-android -j
