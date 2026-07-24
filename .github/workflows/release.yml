@@ -131,13 +131,33 @@ jobs:
           set -euo pipefail
           sha=$(git -C third-party/llama.cpp rev-parse --short=6 HEAD)
           url="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/llama-cpp/libggml-htp-${sha}.zip"
-          if curl -fsSL -o htp-signed.zip "$url"; then
-            unzip -o htp-signed.zip -d sdk-windows-arm64/lib/llama_cpp/
-            signed=true
-          else
-            signed=false
+          signed=false
+          # Stage and verify before touching the SDK: Windows only loads HTP
+          # skels whose catalog carries the Microsoft WHQL signature, so a
+          # wrong object in the bucket (e.g. the pre-WHQL submission zip,
+          # signed by Qualcomm's own cert) must not silently replace the
+          # self-signed build and ship as a "signed" release (#1220).
+          if curl -fsSL -o htp-signed.zip "$url" && unzip -o htp-signed.zip -d htp-staged/; then
+            cat=htp-staged/libggml-htp.cat
+            whql="CN=Microsoft Windows Hardware Compatibility Publisher"
+            if [[ ! -f "$cat" ]] || ! ls htp-staged/libggml-htp-v*.so >/dev/null 2>&1; then
+              echo "::warning::HTP bundle @ ${sha} lacks the catalog or skels; keeping self-signed build."
+            else
+              signer=$(openssl pkcs7 -inform DER -print_certs -in "$cat" | grep 'subject=' || true)
+              if ! grep -qF "$whql" <<<"$signer"; then
+                echo "::warning::HTP catalog @ ${sha} is not WHQL-signed; keeping self-signed build. Signer(s): ${signer}"
+              else
+                # The driver package needs the .inf alongside catalog + skels;
+                # restore it from the submodule when the bundle omits it.
+                if [[ ! -f htp-staged/libggml-htp.inf ]]; then
+                  cp third-party/llama.cpp/ggml/src/ggml-hexagon/libggml-htp.inf htp-staged/
+                fi
+                cp htp-staged/* sdk-windows-arm64/lib/llama_cpp/
+                signed=true
+              fi
+            fi
           fi
-          rm -f htp-signed.zip
+          rm -rf htp-signed.zip htp-staged
           echo "Signed HTP bundle for llama.cpp @ ${sha}: ${signed}"
           echo "signed=${signed}" >> "$GITHUB_OUTPUT"
           echo "llama_sha=${sha}" >> "$GITHUB_OUTPUT"
