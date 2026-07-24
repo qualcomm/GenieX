@@ -32,9 +32,6 @@
 pub fn detect_host_chipset() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        // GPU generation is the primary signal; fall back to the CPU
-        // brand string when the Adreno probe finds nothing (e.g. no
-        // Qualcomm display driver, or a virtual-only display stack).
         windows::detect_gpu_chipset()
             .or_else(|| windows::detect_cpu_brand().and_then(cpu_name_to_chipset_alias))
     }
@@ -63,9 +60,6 @@ pub(crate) fn cpu_name_to_chipset_alias(brand: String) -> Option<String> {
         "X1E" => Some("qualcomm-snapdragon-x-elite".to_string()),
         "X1P" => Some("qualcomm-snapdragon-x-plus-8-core".to_string()),
         "X2E" => Some("qualcomm-snapdragon-x2-elite".to_string()),
-        // AI Hub publishes no dedicated X2 Plus bucket; the X2 Elite
-        // assets are the right ones — same Hexagon NPU generation
-        // (HTP v81), per maintainer guidance on issue #1223.
         "X2P" => Some("qualcomm-snapdragon-x2-elite".to_string()),
         _ => None,
     }
@@ -113,41 +107,28 @@ mod windows {
     const KEY: &str = r"HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0";
     const VALUE: &str = "ProcessorNameString";
 
-    // GUID_DEVCLASS_DISPLAY — the fixed "Display adapters" setup class,
-    // identical on every Windows host (x64 and ARM64 alike). Each
-    // installed adapter is an instance subkey (`\0000`, `\0001`, ...)
-    // underneath it.
     const DISPLAY_CLASS_KEY: &str =
         r"HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
     const MATCHING_DEVICE_ID: &str = "MatchingDeviceId";
     const DRIVER_DESC: &str = "DriverDesc";
 
-    // Adreno GPU generation number -> AI Hub chipset id. Only the Elite
-    // id per generation carries Genie assets on AI Hub — same-generation
-    // Plus / lower-bin parts share the NPU/HTP architecture but have no
-    // separate asset, so they fold into the Elite id. The gen-1 id has no
-    // digit (`x-elite`) while gen-2 does (`x2-elite`), so the mapping is
-    // an explicit table rather than a string built from the number.
+    // The gen-1 id has no digit (`x-elite`) while gen-2 does (`x2-elite`),
+    // so this is an explicit table rather than a string built from the number.
     const GPU_GEN_TO_CHIPSET: &[(u32, &str)] = &[
         (1, "qualcomm-snapdragon-x-elite"),
         (2, "qualcomm-snapdragon-x2-elite"),
     ];
 
-    /// Resolve the host chipset from the Adreno GPU. Two `reg` probes:
-    /// find the display-adapter instance whose `MatchingDeviceId` carries
-    /// `VEN_QCOM`, then read its `DriverDesc` (e.g.
-    /// `Qualcomm(R) Adreno(TM) X2-45 GPU`) and map the `X<gen>-` prefix.
+    /// Resolve the host chipset from the Adreno GPU. Finds the display
+    /// adapter whose `MatchingDeviceId` carries `VEN_QCOM`, reads its
+    /// `DriverDesc` (e.g. `Qualcomm(R) Adreno(TM) X2-45 GPU`), and maps
+    /// the `X<gen>-` prefix.
     pub(super) fn detect_gpu_chipset() -> Option<String> {
         let subkey = query_qualcomm_display_subkey()?;
         let desc = query_driver_desc(&subkey)?;
         adreno_name_to_chipset(&desc).map(str::to_string)
     }
 
-    /// `reg query <display class> /s /v MatchingDeviceId`, then return the
-    /// instance subkey whose value carries `VEN_QCOM`. Instance order is
-    /// install-order, not "physical GPU first" — a host with a remote or
-    /// virtual adapter (RDP, third-party mirror driver) can push the real
-    /// GPU off `\0000` — so we filter by vendor id, never by slot.
     fn query_qualcomm_display_subkey() -> Option<String> {
         let out = Command::new("reg")
             .args(["query", DISPLAY_CLASS_KEY, "/s", "/v", MATCHING_DEVICE_ID])
@@ -170,10 +151,6 @@ mod windows {
         parse_reg_sz(&String::from_utf8_lossy(&out.stdout), DRIVER_DESC)
     }
 
-    /// Scan `reg /s` output, tracking the current instance subkey header
-    /// (`HKEY_...`, always at column 0 while value lines are indented),
-    /// and return the first subkey whose `MatchingDeviceId` contains
-    /// `VEN_QCOM`.
     fn find_qualcomm_subkey(stdout: &str) -> Option<String> {
         let mut current: Option<&str> = None;
         for line in stdout.lines() {
@@ -195,9 +172,6 @@ mod windows {
         None
     }
 
-    /// Pull a single `REG_SZ` value line out of `reg query <key> /v <name>`
-    /// output. Same shape as `parse_reg_query` but parameterised on the
-    /// value name so the GPU probe can reuse it for `DriverDesc`.
     fn parse_reg_sz(stdout: &str, value_name: &str) -> Option<String> {
         for line in stdout.lines() {
             let trimmed = line.trim_start();
@@ -214,7 +188,6 @@ mod windows {
         None
     }
 
-    /// Map an Adreno driver name to a chipset id via its generation.
     fn adreno_name_to_chipset(desc: &str) -> Option<&'static str> {
         let gen = extract_adreno_generation(desc)?;
         GPU_GEN_TO_CHIPSET
@@ -223,12 +196,6 @@ mod windows {
             .map(|(_, c)| *c)
     }
 
-    /// Pull the generation from an Adreno name by returning the first
-    /// bare `X<digits>` token, e.g. `X2-45` -> 2, `X1-85` -> 1 (splitting
-    /// on non-alphanumerics drops the `-<tier>` suffix, so `X2` is a token
-    /// on its own). A CPU-style token such as `XG301062` has a non-digit
-    /// right after `X`, so it never matches — the probe stays safe even
-    /// if handed the wrong string.
     fn extract_adreno_generation(desc: &str) -> Option<u32> {
         for tok in desc.split(|c: char| !c.is_ascii_alphanumeric()) {
             let Some(rest) = tok.strip_prefix(['X', 'x']) else {
@@ -288,12 +255,9 @@ ProcessorNameString    REG_SZ    Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz\r\n
             assert!(parse_reg_query("").is_none());
         }
 
-        // Real 3-adapter fixture from a Snapdragon X2 Plus dev board
-        // (Adreno + Microsoft Remote Display + a third-party mirror
-        // driver), captured via
-        // `reg query {display class} /s /v MatchingDeviceId`. The Adreno
-        // adapter happens to sit at `\0000` here, but the two virtual
-        // ones prove the filter must key on VEN_QCOM, not the slot.
+        // Real 3-adapter fixture from an X2 Plus dev board (Adreno +
+        // Microsoft Remote Display + a third-party mirror driver): the
+        // virtual entries prove the filter must key on VEN_QCOM, not slot.
         const MATCHING_FIXTURE: &str = "\r\n\
 HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0000\r\n    \
 MatchingDeviceId    REG_SZ    ACPI\\VEN_QCOM&DEV_0FF5&REV_0098\r\n\r\n\
@@ -329,9 +293,6 @@ DriverDesc    REG_SZ    Qualcomm(R) Adreno(TM) X2-45 GPU\r\n\r\n";
 
         #[test]
         fn maps_x2_plus_adreno_to_x2_elite() {
-            // Real DriverDesc captured on a Snapdragon X2 Plus device. It
-            // reports an Adreno X2-45 GPU and has no separate AI Hub asset,
-            // so it folds into x2-elite.
             assert_eq!(
                 adreno_name_to_chipset("Qualcomm(R) Adreno(TM) X2-45 GPU"),
                 Some("qualcomm-snapdragon-x2-elite")
@@ -340,9 +301,6 @@ DriverDesc    REG_SZ    Qualcomm(R) Adreno(TM) X2-45 GPU\r\n\r\n";
 
         #[test]
         fn maps_gen1_adreno_variants_to_x_elite() {
-            // Real DriverDesc strings captured on X Elite / X Plus devices.
-            // X1-85 spans X Elite and higher-bin X Plus; X1-45 the lower
-            // bins and base X. All gen-1 parts fold into x-elite.
             for name in [
                 "Qualcomm(R) Adreno(TM) X1-85 GPU",
                 "Qualcomm(R) Adreno(TM) X1-45 GPU",
@@ -363,13 +321,9 @@ DriverDesc    REG_SZ    Qualcomm(R) Adreno(TM) X2-45 GPU\r\n\r\n";
 
         #[test]
         fn ignores_non_adreno_and_cpu_shaped_tokens() {
-            // Non-Qualcomm GPU.
             assert_eq!(extract_adreno_generation("Intel(R) UHD Graphics"), None);
-            // A lone CPU SKU token (letter after X) must not match.
             assert_eq!(extract_adreno_generation("XG301062"), None);
-            // Unknown future generation maps to no chipset yet.
             assert_eq!(adreno_name_to_chipset("Adreno(TM) X9-99 GPU"), None);
-            // A purely virtual adapter name yields nothing.
             assert_eq!(adreno_name_to_chipset("ThirdPartyMirror Device"), None);
         }
     }
@@ -398,11 +352,6 @@ mod linux {
     const SOC0_FAMILY: &str = "/sys/devices/soc0/family";
     const SOC0_MACHINE: &str = "/sys/devices/soc0/machine";
 
-    // Map a Device Tree `qcom,<soc>` suffix to the AI Hub chipset id
-    // that owns the qairt assets for it. Only SoCs currently present
-    // in AI Hub's `platform.json` are listed; unknown SoCs return
-    // `None` so callers keep the existing "pass --chipset explicitly"
-    // error path.
     const SOC_TO_CHIPSET: &[(&str, &str)] = &[
         ("qcs6490", "qualcomm-qcs6490"),
         ("qcs9075", "qualcomm-qcs9075"),
@@ -453,8 +402,6 @@ mod linux {
 
         #[test]
         fn maps_qcs9075_evk_real_fixture() {
-            // Captured from `od -c /sys/firmware/devicetree/base/compatible`
-            // on Qualcomm Linux 1.7 running on a QCS9075 IQ-9075 EVK.
             let bytes = b"qcom,qcs9075-addons-iq-9075-evk\0qcom,qcs9075\0qcom,sa8775p\0";
             assert_eq!(map_compatible(bytes), Some("qualcomm-qcs9075"));
         }
@@ -467,8 +414,6 @@ mod linux {
 
         #[test]
         fn ignores_family_only_compatible() {
-            // A Qualcomm board whose SoC isn't in AI Hub — only the
-            // family row is present. Must fall through.
             assert_eq!(map_compatible(b"qcom,sa8775p\0"), None);
         }
 
@@ -484,14 +429,11 @@ mod linux {
 
         #[test]
         fn does_not_match_prefix_collision() {
-            // `qcs9075foo` is not `qcs9075`; strip_prefix + table
-            // lookup must be exact.
             assert_eq!(map_compatible(b"qcom,qcs9075foo\0"), None);
         }
 
         #[test]
         fn trailing_nul_missing_is_tolerated() {
-            // Final entry without trailing NUL still parses.
             assert_eq!(map_compatible(b"qcom,qcs9075"), Some("qualcomm-qcs9075"));
         }
 
@@ -548,9 +490,6 @@ mod android {
     //! builds) and `"Qualcomm"` (the value documented in AOSP) as the
     //! manufacturer — anything else falls through to `None`.
 
-    // Pure mapping logic — unit-tested on host. Split from the
-    // property probe below so the AI-Hub-facing string contract has
-    // coverage without needing an Android target.
     #[cfg_attr(not(target_os = "android"), allow(dead_code))]
     pub(super) fn map_soc<'a>(manuf: &str, model: &'a str) -> Option<&'a str> {
         let ok = manuf.eq_ignore_ascii_case("QTI") || manuf.eq_ignore_ascii_case("Qualcomm");
@@ -604,7 +543,6 @@ mod android {
 
         #[test]
         fn passes_through_qti_soc_model() {
-            // Captured from a Galaxy S25 (SM-S9310) running One UI 7.
             assert_eq!(map_soc("QTI", "SM8750"), Some("SM8750"));
         }
 
@@ -672,8 +610,6 @@ mod tests {
 
     #[test]
     fn parses_x2_plus_brand_string() {
-        // X2 Plus has no dedicated AI Hub bucket; it must resolve to
-        // the X2 Elite assets (issue #1223).
         let brand = "Snapdragon X2 Plus - X2P64100 - Qualcomm Oryon CPU".to_string();
         assert_eq!(
             cpu_name_to_chipset_alias(brand).as_deref(),
