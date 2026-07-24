@@ -140,6 +140,36 @@ ProcessorNameString    REG_SZ    Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz\r\n
             assert_eq!(brand, "Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz");
         }
 
+        // Captured from QDC job 712745 on Snapdragon X2 Elite (SC8480XP,
+        // Windows 11 build 10.0.28000). Preserves the CRLF-separated layout
+        // and four-space column padding exactly as emitted by `reg query`.
+        #[test]
+        fn parses_qdc_x2_elite_reg_output() {
+            let stdout = "\r\n\
+HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\r\n    \
+ProcessorNameString    REG_SZ    Snapdragon(R) X2 Elite - X2E88100 - Qualcomm Oryon(TM) CPU\r\n\r\n";
+            let brand = parse_reg_query(stdout).expect("parse");
+            assert_eq!(
+                brand,
+                "Snapdragon(R) X2 Elite - X2E88100 - Qualcomm Oryon(TM) CPU"
+            );
+        }
+
+        // Captured from QDC job 712749 on Snapdragon X Plus 8-core (X1P42100,
+        // Windows 11 build 10.0.26100). Note the `Qualcomm(R)` spelling that
+        // the X Elite CRD strings do not have.
+        #[test]
+        fn parses_qdc_x_plus_8core_reg_output() {
+            let stdout = "\r\n\
+HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\r\n    \
+ProcessorNameString    REG_SZ    Snapdragon(R) X Plus - X1P42100 - Qualcomm(R) Oryon(TM) CPU\r\n\r\n";
+            let brand = parse_reg_query(stdout).expect("parse");
+            assert_eq!(
+                brand,
+                "Snapdragon(R) X Plus - X1P42100 - Qualcomm(R) Oryon(TM) CPU"
+            );
+        }
+
         #[test]
         fn returns_none_on_empty_output() {
             assert!(parse_reg_query("").is_none());
@@ -450,6 +480,26 @@ mod tests {
         );
         assert_eq!(
             cpu_name_to_chipset_alias("X1P42100".to_string()).as_deref(),
+            Some("qualcomm-snapdragon-x-plus-8-core")
+        );
+    }
+
+    // Captured from QDC job 712745 on Snapdragon X2 Elite (SC8480XP).
+    #[test]
+    fn parses_qdc_x2_elite_brand_string() {
+        let brand = "Snapdragon(R) X2 Elite - X2E88100 - Qualcomm Oryon(TM) CPU".to_string();
+        assert_eq!(
+            cpu_name_to_chipset_alias(brand).as_deref(),
+            Some("qualcomm-snapdragon-x2-elite")
+        );
+    }
+
+    // Captured from QDC job 712749 on Snapdragon X Plus 8-core (X1P42100).
+    #[test]
+    fn parses_qdc_x_plus_8core_brand_string() {
+        let brand = "Snapdragon(R) X Plus - X1P42100 - Qualcomm(R) Oryon(TM) CPU".to_string();
+        assert_eq!(
+            cpu_name_to_chipset_alias(brand).as_deref(),
             Some("qualcomm-snapdragon-x-plus-8-core")
         );
     }
