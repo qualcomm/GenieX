@@ -10,9 +10,14 @@
 //! module takes a best-effort guess from the host.
 //!
 //! Current coverage:
-//!   * Windows on Snapdragon (X Elite / X Plus / X2 Elite / X2 Plus) —
-//!     parsed from the CPU brand string via a `reg query` probe. This
-//!     is the 95% case for Genie runtime users today.
+//!   * Windows on Snapdragon (X / X2 series) — resolved from the Adreno
+//!     GPU name via a `reg query` probe, with the CPU brand string as a
+//!     fallback. Every part in an X-series generation shares one NPU/HTP
+//!     architecture (so one AI Hub asset id covers the whole generation),
+//!     and the Adreno name carries that generation as a regular `X<gen>-`
+//!     token — so reading the GPU avoids extending a per-SKU CPU table
+//!     for each new part. The CPU brand-string probe (which maps known
+//!     Oryon SKUs, including X2 Plus, to the same ids) is the fallback.
 //!   * Linux on Qualcomm Dragonwing boards (QCS6490 / QCS9075) —
 //!     parsed from `/sys/firmware/devicetree/base/compatible`.
 //!   * Android on Snapdragon — parsed from the `ro.soc.model`
@@ -27,7 +32,11 @@
 pub fn detect_host_chipset() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        windows::detect_cpu_brand().and_then(cpu_name_to_chipset_alias)
+        // GPU generation is the primary signal; fall back to the CPU
+        // brand string when the Adreno probe finds nothing (e.g. no
+        // Qualcomm display driver, or a virtual-only display stack).
+        windows::detect_gpu_chipset()
+            .or_else(|| windows::detect_cpu_brand().and_then(cpu_name_to_chipset_alias))
     }
     #[cfg(target_os = "linux")]
     {
@@ -104,6 +113,136 @@ mod windows {
     const KEY: &str = r"HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0";
     const VALUE: &str = "ProcessorNameString";
 
+    // GUID_DEVCLASS_DISPLAY — the fixed "Display adapters" setup class,
+    // identical on every Windows host (x64 and ARM64 alike). Each
+    // installed adapter is an instance subkey (`\0000`, `\0001`, ...)
+    // underneath it.
+    const DISPLAY_CLASS_KEY: &str =
+        r"HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
+    const MATCHING_DEVICE_ID: &str = "MatchingDeviceId";
+    const DRIVER_DESC: &str = "DriverDesc";
+
+    // Adreno GPU generation number -> AI Hub chipset id. Only the Elite
+    // id per generation carries Genie assets on AI Hub — same-generation
+    // Plus / lower-bin parts share the NPU/HTP architecture but have no
+    // separate asset, so they fold into the Elite id. The gen-1 id has no
+    // digit (`x-elite`) while gen-2 does (`x2-elite`), so the mapping is
+    // an explicit table rather than a string built from the number.
+    const GPU_GEN_TO_CHIPSET: &[(u32, &str)] = &[
+        (1, "qualcomm-snapdragon-x-elite"),
+        (2, "qualcomm-snapdragon-x2-elite"),
+    ];
+
+    /// Resolve the host chipset from the Adreno GPU. Two `reg` probes:
+    /// find the display-adapter instance whose `MatchingDeviceId` carries
+    /// `VEN_QCOM`, then read its `DriverDesc` (e.g.
+    /// `Qualcomm(R) Adreno(TM) X2-45 GPU`) and map the `X<gen>-` prefix.
+    pub(super) fn detect_gpu_chipset() -> Option<String> {
+        let subkey = query_qualcomm_display_subkey()?;
+        let desc = query_driver_desc(&subkey)?;
+        adreno_name_to_chipset(&desc).map(str::to_string)
+    }
+
+    /// `reg query <display class> /s /v MatchingDeviceId`, then return the
+    /// instance subkey whose value carries `VEN_QCOM`. Instance order is
+    /// install-order, not "physical GPU first" — a host with a remote or
+    /// virtual adapter (RDP, third-party mirror driver) can push the real
+    /// GPU off `\0000` — so we filter by vendor id, never by slot.
+    fn query_qualcomm_display_subkey() -> Option<String> {
+        let out = Command::new("reg")
+            .args(["query", DISPLAY_CLASS_KEY, "/s", "/v", MATCHING_DEVICE_ID])
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        find_qualcomm_subkey(&String::from_utf8_lossy(&out.stdout))
+    }
+
+    fn query_driver_desc(subkey: &str) -> Option<String> {
+        let out = Command::new("reg")
+            .args(["query", subkey, "/v", DRIVER_DESC])
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        parse_reg_sz(&String::from_utf8_lossy(&out.stdout), DRIVER_DESC)
+    }
+
+    /// Scan `reg /s` output, tracking the current instance subkey header
+    /// (`HKEY_...`, always at column 0 while value lines are indented),
+    /// and return the first subkey whose `MatchingDeviceId` contains
+    /// `VEN_QCOM`.
+    fn find_qualcomm_subkey(stdout: &str) -> Option<String> {
+        let mut current: Option<&str> = None;
+        for line in stdout.lines() {
+            if line.starts_with("HKEY_") {
+                current = Some(line.trim_end());
+                continue;
+            }
+            let trimmed = line.trim_start();
+            if !trimmed.starts_with(MATCHING_DEVICE_ID) {
+                continue;
+            }
+            let Some((_, value)) = trimmed.split_once("REG_SZ") else {
+                continue;
+            };
+            if value.to_ascii_uppercase().contains("VEN_QCOM") {
+                return current.map(str::to_string);
+            }
+        }
+        None
+    }
+
+    /// Pull a single `REG_SZ` value line out of `reg query <key> /v <name>`
+    /// output. Same shape as `parse_reg_query` but parameterised on the
+    /// value name so the GPU probe can reuse it for `DriverDesc`.
+    fn parse_reg_sz(stdout: &str, value_name: &str) -> Option<String> {
+        for line in stdout.lines() {
+            let trimmed = line.trim_start();
+            if !trimmed.starts_with(value_name) {
+                continue;
+            }
+            if let Some((_, value)) = trimmed.split_once("REG_SZ") {
+                let v = value.trim();
+                if !v.is_empty() {
+                    return Some(v.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    /// Map an Adreno driver name to a chipset id via its generation.
+    fn adreno_name_to_chipset(desc: &str) -> Option<&'static str> {
+        let gen = extract_adreno_generation(desc)?;
+        GPU_GEN_TO_CHIPSET
+            .iter()
+            .find(|(g, _)| *g == gen)
+            .map(|(_, c)| *c)
+    }
+
+    /// Pull the generation from an Adreno name by returning the first
+    /// bare `X<digits>` token, e.g. `X2-45` -> 2, `X1-85` -> 1 (splitting
+    /// on non-alphanumerics drops the `-<tier>` suffix, so `X2` is a token
+    /// on its own). A CPU-style token such as `XG301062` has a non-digit
+    /// right after `X`, so it never matches — the probe stays safe even
+    /// if handed the wrong string.
+    fn extract_adreno_generation(desc: &str) -> Option<u32> {
+        for tok in desc.split(|c: char| !c.is_ascii_alphanumeric()) {
+            let Some(rest) = tok.strip_prefix(['X', 'x']) else {
+                continue;
+            };
+            if !rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit()) {
+                if let Ok(n) = rest.parse::<u32>() {
+                    return Some(n);
+                }
+            }
+        }
+        None
+    }
+
     pub(super) fn detect_cpu_brand() -> Option<String> {
         let out = Command::new("reg")
             .args(["query", KEY, "/v", VALUE])
@@ -147,6 +286,91 @@ ProcessorNameString    REG_SZ    Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz\r\n
         #[test]
         fn returns_none_on_empty_output() {
             assert!(parse_reg_query("").is_none());
+        }
+
+        // Real 3-adapter fixture from a Snapdragon X2 Plus dev board
+        // (Adreno + Microsoft Remote Display + a third-party mirror
+        // driver), captured via
+        // `reg query {display class} /s /v MatchingDeviceId`. The Adreno
+        // adapter happens to sit at `\0000` here, but the two virtual
+        // ones prove the filter must key on VEN_QCOM, not the slot.
+        const MATCHING_FIXTURE: &str = "\r\n\
+HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0000\r\n    \
+MatchingDeviceId    REG_SZ    ACPI\\VEN_QCOM&DEV_0FF5&REV_0098\r\n\r\n\
+HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0001\r\n    \
+MatchingDeviceId    REG_SZ    RdpIdd_IndirectDisplay\r\n\r\n\
+HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0002\r\n    \
+MatchingDeviceId    REG_SZ    Root\\ThirdPartyMirror\r\n\r\n";
+
+        #[test]
+        fn finds_qualcomm_display_subkey_by_vendor_not_slot() {
+            let subkey = find_qualcomm_subkey(MATCHING_FIXTURE).expect("subkey");
+            assert!(subkey.ends_with("\\0000"), "got {subkey}");
+        }
+
+        #[test]
+        fn find_subkey_none_when_only_virtual_adapters() {
+            let stdout = "\
+HKEY_LOCAL_MACHINE\\...\\0000\r\n    MatchingDeviceId    REG_SZ    RdpIdd_IndirectDisplay\r\n\r\n\
+HKEY_LOCAL_MACHINE\\...\\0001\r\n    MatchingDeviceId    REG_SZ    Root\\ThirdPartyMirror\r\n";
+            assert_eq!(find_qualcomm_subkey(stdout), None);
+        }
+
+        #[test]
+        fn parses_driver_desc_value() {
+            let stdout = "\
+HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-...}\\0000\r\n    \
+DriverDesc    REG_SZ    Qualcomm(R) Adreno(TM) X2-45 GPU\r\n\r\n";
+            assert_eq!(
+                parse_reg_sz(stdout, DRIVER_DESC).as_deref(),
+                Some("Qualcomm(R) Adreno(TM) X2-45 GPU")
+            );
+        }
+
+        #[test]
+        fn maps_x2_plus_adreno_to_x2_elite() {
+            // Real DriverDesc captured on a Snapdragon X2 Plus device. It
+            // reports an Adreno X2-45 GPU and has no separate AI Hub asset,
+            // so it folds into x2-elite.
+            assert_eq!(
+                adreno_name_to_chipset("Qualcomm(R) Adreno(TM) X2-45 GPU"),
+                Some("qualcomm-snapdragon-x2-elite")
+            );
+        }
+
+        #[test]
+        fn maps_gen1_adreno_variants_to_x_elite() {
+            // Real DriverDesc strings captured on X Elite / X Plus devices.
+            // X1-85 spans X Elite and higher-bin X Plus; X1-45 the lower
+            // bins and base X. All gen-1 parts fold into x-elite.
+            for name in [
+                "Qualcomm(R) Adreno(TM) X1-85 GPU",
+                "Qualcomm(R) Adreno(TM) X1-45 GPU",
+            ] {
+                assert_eq!(
+                    adreno_name_to_chipset(name),
+                    Some("qualcomm-snapdragon-x-elite"),
+                    "name {name:?}"
+                );
+            }
+        }
+
+        #[test]
+        fn extracts_generation_number() {
+            assert_eq!(extract_adreno_generation("Adreno(TM) X2-45 GPU"), Some(2));
+            assert_eq!(extract_adreno_generation("Adreno(TM) X1-85 GPU"), Some(1));
+        }
+
+        #[test]
+        fn ignores_non_adreno_and_cpu_shaped_tokens() {
+            // Non-Qualcomm GPU.
+            assert_eq!(extract_adreno_generation("Intel(R) UHD Graphics"), None);
+            // A lone CPU SKU token (letter after X) must not match.
+            assert_eq!(extract_adreno_generation("XG301062"), None);
+            // Unknown future generation maps to no chipset yet.
+            assert_eq!(adreno_name_to_chipset("Adreno(TM) X9-99 GPU"), None);
+            // A purely virtual adapter name yields nothing.
+            assert_eq!(adreno_name_to_chipset("ThirdPartyMirror Device"), None);
         }
     }
 }
