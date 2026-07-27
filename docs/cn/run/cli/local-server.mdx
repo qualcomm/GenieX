@@ -165,13 +165,19 @@ usage: CompletionUsage(completion_tokens=58, prompt_tokens=19, total_tokens=77, 
 
 ### **工具调用（Tool calling）**
 
-函数/工具调用使用标准的 OpenAI `tools` schema。服务器会从模型生成的文本中解析工具调用（`<tool_call>…</tool_call>` 标签或 ` ```json ` 代码块——例如 Qwen3 的 chat template 产出的格式），并以 OpenAI `tool_calls` 形式返回。
+函数/工具调用使用标准的 OpenAI `tools` schema。服务器会从模型生成的文本中解析工具调用（`<tool_call>…</tool_call>` 标签或 ` ```json ` 代码块），并以 OpenAI `tool_calls` 形式返回。VLM **也走同一条路径**——模型可以先看图，再决定搜什么、调用工具。
+
+下面的示例用 `qualcomm/Qwen3-VL-4B-Instruct` 演示两步 agentic 回路：(1) VLM 从照片中识别地标并调用 `web_search`；(2) 本地执行搜索并将结果回传，VLM 基于结果生成带依据的回复。
 
 <Note>
 每次助手响应仅解析一个工具调用——暂不支持单次响应中的并行工具调用。
 </Note>
 
-两步往返：(1) 模型返回一条 `tool_calls` 消息；(2) 本地执行工具，将结果作为 `role="tool"` 消息回传给模型，模型基于结果生成最终答案。
+<Note>
+Qwen3-VL 稳定触发工具调用需要注意两点：
+1. 用 system 消息显式说明 `<tool_call>…</tool_call>` 的格式（Qwen3-VL 的 chat template 对该格式的先验没有 Qwen3 纯文本版本那么强）。
+2. 第二轮不再传入 `tools=`，也不要再回传图像——否则 VLM 会重复调用工具，且视觉编码器会对同一张图再跑一次。
+</Note>
 
 ```python python
 import json
@@ -180,57 +186,87 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "get_weather",
-            "description": "Get the current weather in a given city.",
+            "name": "web_search",
+            "description": "Search the web for travel information about a location.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "city": {"type": "string", "description": "City name, e.g. Beijing"},
+                    "query": {"type": "string", "description": "Search query, e.g. 'things to do in Kyoto'"},
                 },
-                "required": ["city"],
+                "required": ["query"],
             },
         },
     }
 ]
 
-def get_weather(city: str) -> dict:
-    # replace this with your real implementation
-    return {"city": city, "temperature_c": 24, "condition": "Sunny"}
+def web_search(query: str) -> list[dict]:
+    # replace this with your real implementation (e.g. duckduckgo-search, Tavily, Bing API)
+    return [
+        {
+            "title": "Kiyomizu-dera Temple - Kyoto Travel Guide",
+            "snippet": "One of Kyoto's most celebrated temples, famed for its wooden stage overlooking cherry and maple trees. Go at sunrise to beat the crowds.",
+            "url": "https://example.com/kiyomizu-dera",
+        },
+        {
+            "title": "Higashiyama District walking route",
+            "snippet": "Cobbled lanes (Sannenzaka, Ninenzaka) connecting Kiyomizu-dera to Yasaka Pagoda; best walked at dusk.",
+            "url": "https://example.com/higashiyama",
+        },
+        {
+            "title": "Best months to visit Kyoto",
+            "snippet": "Late March to early April for cherry blossoms; mid-November for autumn foliage.",
+            "url": "https://example.com/kyoto-seasons",
+        },
+    ]
+
+IMAGE_URL = "https://images.pexels.com/photos/402028/pexels-photo-402028.jpeg?w=1024"
+
+system_prompt = (
+    "You are a travel assistant. Call the web_search tool to look up any location "
+    "the user asks about before answering. Once you receive the tool results, do not "
+    "call the tool again - use them to write a short, friendly reply for the user. "
+    "Emit tool calls in the exact format: "
+    '<tool_call>{"name": "web_search", "arguments": {"query": "<your query>"}}</tool_call>'
+)
 
 messages = [
-    {"role": "user", "content": "What is the weather in Beijing? Use the tool."},
+    {"role": "system", "content": system_prompt},
+    {
+        "role": "user",
+        "content": [
+            {"type": "image_url", "image_url": {"url": IMAGE_URL}},
+            {"type": "text", "text": "Identify the landmark, then call web_search for travel tips about it."},
+        ],
+    },
 ]
 
-# Step 1 — model requests a tool call.
+# 第一步 —— VLM 识别地标并请求调用 web_search。
 first = client.chat.completions.create(
-    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    model="qualcomm/Qwen3-VL-4B-Instruct",
     messages=messages,
     tools=tools,
     tool_choice="auto",
-    max_tokens=256,
+    max_tokens=512,
     extra_body={"enable_think": False},
 )
 call = first.choices[0].message.tool_calls[0]
 print("finish_reason:", first.choices[0].finish_reason)  # -> "tool_calls"
 print("call:", call.function.name, call.function.arguments)
 
-# Step 2 — run the tool, feed the result back.
-result = get_weather(**json.loads(call.function.arguments))
+# 第二步 —— 执行工具，并以纯文本对话把结果回传。
+result = web_search(**json.loads(call.function.arguments))
 
-messages.append(first.choices[0].message)
-messages.append(
-    {
-        "role": "tool",
-        "tool_call_id": call.id,
-        "content": json.dumps(result),
-    }
-)
+followup = [
+    {"role": "system", "content": system_prompt},
+    {"role": "user", "content": "Summarize travel tips using the search results below."},
+    first.choices[0].message,
+    {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)},
+]
 
 final = client.chat.completions.create(
-    model="unsloth/Qwen3-4B-GGUF:Q4_0",
-    messages=messages,
-    tools=tools,
-    max_tokens=128,
+    model="qualcomm/Qwen3-VL-4B-Instruct",
+    messages=followup,
+    max_tokens=256,
     extra_body={"enable_think": False},
 )
 print(final.choices[0].message.content)
@@ -240,8 +276,14 @@ print(final.choices[0].message.content)
 
 ```text
 finish_reason: tool_calls
-call: get_weather {"city": "Beijing"}
-The weather in Beijing is 24°C and sunny.
+call: web_search {"query": "Kiyomizu-dera travel tips"}
+Here's a quick guide to help you make the most of your visit to Kiyomizu-dera in Kyoto:
+
+- **Best Time to Visit**: Go early in the morning (sunrise) to avoid crowds and enjoy the temple's peaceful atmosphere.
+- **Walking Route**: Take the scenic Higashiyama District walk along Sannenzaka and Ninenzaka, which connects to the Yasaka Pagoda — perfect for a relaxing evening stroll.
+- **Seasonal Highlights**: Visit in late March to early April to see cherry blossoms, or mid-November for beautiful autumn foliage.
+
+Enjoy your trip to this iconic temple and surrounding area!
 ```
 
 ## **其他端点**

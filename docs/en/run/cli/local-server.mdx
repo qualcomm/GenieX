@@ -165,13 +165,19 @@ usage: CompletionUsage(completion_tokens=58, prompt_tokens=19, total_tokens=77, 
 
 ### **Tool calling**
 
-Function/tool calling uses the standard OpenAI `tools` schema. The server extracts the tool call from the model's generated text (`<tool_call>…</tool_call>` tags or a fenced ` ```json ` block, produced by chat templates such as Qwen3's) and re-emits it as OpenAI `tool_calls`.
+Function/tool calling uses the standard OpenAI `tools` schema. The server extracts the tool call from the model's generated text (`<tool_call>…</tool_call>` tags or a fenced ` ```json ` block) and re-emits it as OpenAI `tool_calls`. The flow works with **VLMs too** — the model can look at an image, decide what to search for, and call a tool.
+
+The example below walks through a two-step agentic loop with `qualcomm/Qwen3-VL-4B-Instruct`: (1) the VLM identifies a landmark from a photo and calls `web_search`, (2) you execute the search locally and feed the results back so the VLM writes a grounded reply.
 
 <Note>
 Only one tool call per assistant turn is parsed — parallel tool calls in a single response are not supported.
 </Note>
 
-Two-step round trip: (1) the model returns a `tool_calls` message, (2) you execute the tool locally and feed the result back as a `role="tool"` message so the model can produce the final answer.
+<Note>
+Two Qwen3-VL specifics for reliable tool calls:
+1. Prime the model with a system message that spells out the `<tool_call>…</tool_call>` shape (Qwen3-VL's chat template does not enforce it as strongly as Qwen3's text-only template).
+2. On the follow-up turn, drop `tools=` and drop the image content from `messages` — this stops the VLM from re-invoking the tool and avoids re-running the vision encoder on the same image.
+</Note>
 
 ```python python
 import json
@@ -180,57 +186,87 @@ tools = [
     {
         "type": "function",
         "function": {
-            "name": "get_weather",
-            "description": "Get the current weather in a given city.",
+            "name": "web_search",
+            "description": "Search the web for travel information about a location.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "city": {"type": "string", "description": "City name, e.g. Beijing"},
+                    "query": {"type": "string", "description": "Search query, e.g. 'things to do in Kyoto'"},
                 },
-                "required": ["city"],
+                "required": ["query"],
             },
         },
     }
 ]
 
-def get_weather(city: str) -> dict:
-    # replace this with your real implementation
-    return {"city": city, "temperature_c": 24, "condition": "Sunny"}
+def web_search(query: str) -> list[dict]:
+    # replace this with your real implementation (e.g. duckduckgo-search, Tavily, Bing API)
+    return [
+        {
+            "title": "Kiyomizu-dera Temple - Kyoto Travel Guide",
+            "snippet": "One of Kyoto's most celebrated temples, famed for its wooden stage overlooking cherry and maple trees. Go at sunrise to beat the crowds.",
+            "url": "https://example.com/kiyomizu-dera",
+        },
+        {
+            "title": "Higashiyama District walking route",
+            "snippet": "Cobbled lanes (Sannenzaka, Ninenzaka) connecting Kiyomizu-dera to Yasaka Pagoda; best walked at dusk.",
+            "url": "https://example.com/higashiyama",
+        },
+        {
+            "title": "Best months to visit Kyoto",
+            "snippet": "Late March to early April for cherry blossoms; mid-November for autumn foliage.",
+            "url": "https://example.com/kyoto-seasons",
+        },
+    ]
+
+IMAGE_URL = "https://images.pexels.com/photos/402028/pexels-photo-402028.jpeg?w=1024"
+
+system_prompt = (
+    "You are a travel assistant. Call the web_search tool to look up any location "
+    "the user asks about before answering. Once you receive the tool results, do not "
+    "call the tool again - use them to write a short, friendly reply for the user. "
+    "Emit tool calls in the exact format: "
+    '<tool_call>{"name": "web_search", "arguments": {"query": "<your query>"}}</tool_call>'
+)
 
 messages = [
-    {"role": "user", "content": "What is the weather in Beijing? Use the tool."},
+    {"role": "system", "content": system_prompt},
+    {
+        "role": "user",
+        "content": [
+            {"type": "image_url", "image_url": {"url": IMAGE_URL}},
+            {"type": "text", "text": "Identify the landmark, then call web_search for travel tips about it."},
+        ],
+    },
 ]
 
-# Step 1 — model requests a tool call.
+# Step 1 - VLM identifies the landmark and requests a web_search call.
 first = client.chat.completions.create(
-    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    model="qualcomm/Qwen3-VL-4B-Instruct",
     messages=messages,
     tools=tools,
     tool_choice="auto",
-    max_tokens=256,
+    max_tokens=512,
     extra_body={"enable_think": False},
 )
 call = first.choices[0].message.tool_calls[0]
 print("finish_reason:", first.choices[0].finish_reason)  # -> "tool_calls"
 print("call:", call.function.name, call.function.arguments)
 
-# Step 2 — run the tool, feed the result back.
-result = get_weather(**json.loads(call.function.arguments))
+# Step 2 - run the tool, feed the result back as a fresh text-only conversation.
+result = web_search(**json.loads(call.function.arguments))
 
-messages.append(first.choices[0].message)
-messages.append(
-    {
-        "role": "tool",
-        "tool_call_id": call.id,
-        "content": json.dumps(result),
-    }
-)
+followup = [
+    {"role": "system", "content": system_prompt},
+    {"role": "user", "content": "Summarize travel tips using the search results below."},
+    first.choices[0].message,
+    {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)},
+]
 
 final = client.chat.completions.create(
-    model="unsloth/Qwen3-4B-GGUF:Q4_0",
-    messages=messages,
-    tools=tools,
-    max_tokens=128,
+    model="qualcomm/Qwen3-VL-4B-Instruct",
+    messages=followup,
+    max_tokens=256,
     extra_body={"enable_think": False},
 )
 print(final.choices[0].message.content)
@@ -240,8 +276,14 @@ Output:
 
 ```text
 finish_reason: tool_calls
-call: get_weather {"city": "Beijing"}
-The weather in Beijing is 24°C and sunny.
+call: web_search {"query": "Kiyomizu-dera travel tips"}
+Here's a quick guide to help you make the most of your visit to Kiyomizu-dera in Kyoto:
+
+- **Best Time to Visit**: Go early in the morning (sunrise) to avoid crowds and enjoy the temple's peaceful atmosphere.
+- **Walking Route**: Take the scenic Higashiyama District walk along Sannenzaka and Ninenzaka, which connects to the Yasaka Pagoda — perfect for a relaxing evening stroll.
+- **Seasonal Highlights**: Visit in late March to early April to see cherry blossoms, or mid-November for beautiful autumn foliage.
+
+Enjoy your trip to this iconic temple and surrounding area!
 ```
 
 ## **Other endpoints**
