@@ -179,8 +179,12 @@ Qwen3-VL 稳定触发工具调用需要注意两点：
 2. 第二轮不再传入 `tools=`，也不要再回传图像——否则 VLM 会重复调用工具，且视觉编码器会对同一张图再跑一次。
 </Note>
 
+先安装示例使用的搜索库（`pip install ddgs` —— DuckDuckGo，无需 API key）：
+
 ```python python
 import json
+
+from ddgs import DDGS
 
 tools = [
     {
@@ -200,23 +204,9 @@ tools = [
 ]
 
 def web_search(query: str) -> list[dict]:
-    # replace this with your real implementation (e.g. duckduckgo-search, Tavily, Bing API)
     return [
-        {
-            "title": "Kiyomizu-dera Temple - Kyoto Travel Guide",
-            "snippet": "One of Kyoto's most celebrated temples, famed for its wooden stage overlooking cherry and maple trees. Go at sunrise to beat the crowds.",
-            "url": "https://example.com/kiyomizu-dera",
-        },
-        {
-            "title": "Higashiyama District walking route",
-            "snippet": "Cobbled lanes (Sannenzaka, Ninenzaka) connecting Kiyomizu-dera to Yasaka Pagoda; best walked at dusk.",
-            "url": "https://example.com/higashiyama",
-        },
-        {
-            "title": "Best months to visit Kyoto",
-            "snippet": "Late March to early April for cherry blossoms; mid-November for autumn foliage.",
-            "url": "https://example.com/kyoto-seasons",
-        },
+        {"title": r["title"], "snippet": r["body"], "url": r["href"]}
+        for r in DDGS().text(query, max_results=3)
     ]
 
 IMAGE_URL = "https://images.pexels.com/photos/402028/pexels-photo-402028.jpeg?w=1024"
@@ -272,18 +262,28 @@ final = client.chat.completions.create(
 print(final.choices[0].message.content)
 ```
 
-输出：
+输出（依赖 DuckDuckGo 实时结果，具体文字随当天返回内容而变化）：
 
 ```text
 finish_reason: tool_calls
 call: web_search {"query": "Kiyomizu-dera travel tips"}
-Here's a quick guide to help you make the most of your visit to Kiyomizu-dera in Kyoto:
+Here's a quick summary of travel tips for Kiyomizu-dera in Kyoto:
 
-- **Best Time to Visit**: Go early in the morning (sunrise) to avoid crowds and enjoy the temple's peaceful atmosphere.
-- **Walking Route**: Take the scenic Higashiyama District walk along Sannenzaka and Ninenzaka, which connects to the Yasaka Pagoda — perfect for a relaxing evening stroll.
-- **Seasonal Highlights**: Visit in late March to early April to see cherry blossoms, or mid-November for beautiful autumn foliage.
+**1. Best Times to Visit:**
+Early morning (around 7-8 AM) or late afternoon (4-6 PM) are ideal to avoid the crowds.
+Peak hours (11 AM–2 PM) can be very busy, so plan accordingly.
 
-Enjoy your trip to this iconic temple and surrounding area!
+**2. How to Get There:**
+Take the Kiyomizu-dera train or bus from Kyoto Station to the temple.
+The temple is located on a hill with a wooden stage built without nails, and the walkways are accessible, though narrow.
+
+**3. What to See:**
+- The great wooden stage (without nails)
+- Otawa waterfall and its three streams
+- Jishu love shrine
+- The Sannenzaka and Ninenzaka approach streets
+- Night illuminations (best experienced at night)
+...
 ```
 
 ## **其他端点**
