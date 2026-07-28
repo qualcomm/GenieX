@@ -18,10 +18,19 @@ pub struct ModelPaths {
     pub model_type: ModelType,
 }
 
+/// Placeholder key QAIRT (AI Hub / localfs) manifests use for their single
+/// `model_file` entry; the human-meaningful precision (e.g. "W4A16") lives on
+/// the manifest's top-level `Precision` field instead.
+pub(crate) const PRECISION_NA: &str = "N/A";
+
 /// Resolve file paths from a manifest + local base directory + optional quant hint.
 ///
 /// Replicates the logic in cli/server/service/keepalive.go:121-141:
 /// - If `quant` is Some, look up that exact key; error if not downloaded.
+///   The manifest's top-level precision is accepted as an alias for the
+///   [`PRECISION_NA`] entry: listings (`geniex list`, serve `/v1/models`)
+///   surface that precision as the id suffix, so the advertised
+///   `name:precision` must resolve back here (#1242).
 /// - If `quant` is None, prefer the highest-ranked entry in
 ///   [`QUANT_PRIORITY`]; fall back to lexicographic min when none of the
 ///   downloaded quants appear in the priority list.
@@ -34,17 +43,24 @@ pub fn resolve_model_paths(
 
     let (resolved_quant, model_path) = {
         let (q, file_info) = if let Some(q) = quant {
-            let fi = manifest
-                .model_file
-                .get(q)
-                .ok_or_else(|| Error::QuantNotFound(q.to_string(), manifest.name.clone()))?;
+            let (q, fi) = match manifest.model_file.get(q) {
+                Some(fi) => (q.to_string(), fi),
+                None if !manifest.precision.is_empty()
+                    && q.eq_ignore_ascii_case(&manifest.precision) =>
+                {
+                    let fi = manifest.model_file.get(PRECISION_NA).ok_or_else(|| {
+                        Error::QuantNotFound(q.to_string(), manifest.name.clone())
+                    })?;
+                    (PRECISION_NA.to_string(), fi)
+                }
+                None => {
+                    return Err(Error::QuantNotFound(q.to_string(), manifest.name.clone()));
+                }
+            };
             if !fi.downloaded {
-                return Err(Error::QuantNotDownloaded(
-                    q.to_string(),
-                    manifest.name.clone(),
-                ));
+                return Err(Error::QuantNotDownloaded(q, manifest.name.clone()));
             }
-            (q.to_string(), fi)
+            (q, fi)
         } else {
             let downloaded: Vec<&str> = manifest
                 .model_file
@@ -175,5 +191,58 @@ mod tests {
         let m = manifest_with(&[("Q4_0", false), ("Q4_K_M", true), ("Q8_0", true)]);
         let (q, _) = resolve_model_paths(&m, &PathBuf::from("/cache"), None).unwrap();
         assert_eq!(q, "Q4_K_M");
+    }
+
+    /// QAIRT-shaped manifest: single "N/A" model_file entry, real precision on
+    /// the top-level field (what AI Hub / localfs pulls write).
+    fn qairt_manifest(precision: &str, downloaded: bool) -> ModelManifest {
+        let mut m = manifest_with(&[(PRECISION_NA, downloaded)]);
+        m.plugin_id = "qairt".to_string();
+        m.precision = precision.to_string();
+        m
+    }
+
+    // #1242: /v1/models advertises "name:W4A16" (the top-level precision), so
+    // that exact id must resolve.
+    #[test]
+    fn resolve_paths_accepts_top_level_precision_alias() {
+        let m = qairt_manifest("W4A16", true);
+        let (q, paths) = resolve_model_paths(&m, &PathBuf::from("/cache"), Some("W4A16")).unwrap();
+        assert_eq!(q, PRECISION_NA);
+        assert_eq!(
+            paths.model_path,
+            PathBuf::from("/cache").join("model-N/A.gguf")
+        );
+    }
+
+    #[test]
+    fn resolve_paths_precision_alias_is_case_insensitive() {
+        let m = qairt_manifest("W4A16", true);
+        let (q, _) = resolve_model_paths(&m, &PathBuf::from("/cache"), Some("w4a16")).unwrap();
+        assert_eq!(q, PRECISION_NA);
+    }
+
+    #[test]
+    fn resolve_paths_precision_alias_requires_download() {
+        let m = qairt_manifest("W4A16", false);
+        let err = resolve_model_paths(&m, &PathBuf::from("/cache"), Some("W4A16")).unwrap_err();
+        assert!(matches!(err, Error::QuantNotDownloaded(..)), "got {err:?}");
+    }
+
+    #[test]
+    fn resolve_paths_unknown_quant_still_errors() {
+        let m = qairt_manifest("W4A16", true);
+        let err = resolve_model_paths(&m, &PathBuf::from("/cache"), Some("Q4_0")).unwrap_err();
+        assert!(matches!(err, Error::QuantNotFound(..)), "got {err:?}");
+    }
+
+    #[test]
+    fn resolve_paths_exact_key_wins_over_precision_alias() {
+        // A real model_file key equal to the request must resolve directly,
+        // even when the manifest also carries a top-level precision.
+        let mut m = manifest_with(&[("Q4_0", true), (PRECISION_NA, true)]);
+        m.precision = "Q4_0".to_string();
+        let (q, _) = resolve_model_paths(&m, &PathBuf::from("/cache"), Some("Q4_0")).unwrap();
+        assert_eq!(q, "Q4_0");
     }
 }
