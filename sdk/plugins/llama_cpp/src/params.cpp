@@ -175,10 +175,19 @@ common_params_sampling build_sampling_params(const geniex_SamplerConfig* cfg) {
     return s;
 }
 
-std::optional<std::vector<ggml_backend_dev_t>> resolve_devices(const char* device_id) {
+std::optional<std::vector<ggml_backend_dev_t>> resolve_devices(const char* device_id, Device device) {
     std::vector<ggml_backend_dev_t> devices;
     if (!device_id || device_id[0] == '\0') {
-        return devices;  // empty: caller uses the model default
+        // A null llama_model_params::devices makes llama.cpp claim every
+        // registered GPU-type device, initializing backends the run never
+        // uses. For CPU runs that is fatal on Adreno GPUs with pre-3.0
+        // OpenCL drivers (SD 888 / 8 Gen 1): ggml-opencl registers the
+        // device but kernel compilation aborts the process (#1235). Pin
+        // CPU runs to an explicit empty list; hybrid keeps the default.
+        if (device == Device::CPU) {
+            devices.push_back(nullptr);  // list with only the terminator
+        }
+        return devices;
     }
 
     const std::string device_str(device_id);

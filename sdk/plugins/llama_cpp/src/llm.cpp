@@ -61,7 +61,7 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
         }
     }
 
-    auto selection = resolve_devices(input->device_id);
+    auto selection = resolve_devices(input->device_id, device);
     if (!selection) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }

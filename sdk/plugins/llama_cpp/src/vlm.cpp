@@ -43,7 +43,7 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
     const geniex_ModelConfig& config = input->config;
 
     llama_model_params mpar      = build_model_params(config, device);
-    auto               selection = resolve_devices(input->device_id);
+    auto               selection = resolve_devices(input->device_id, device);
     if (!selection) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }

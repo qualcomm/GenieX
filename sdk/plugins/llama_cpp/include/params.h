@@ -21,7 +21,13 @@ namespace geniex {
 // share the same upstream tuning.
 enum class Device { CPU, GPU, NPU };
 
-std::optional<std::vector<ggml_backend_dev_t>> resolve_devices(const char* device_id);
+// Resolve a comma-separated device_id list to ggml devices for
+// llama_model_params::devices. Returns nullopt when names were given but none
+// resolved. An empty vector means "no explicit selection" and the caller
+// leaves llama.cpp's default device list in place — except for CPU runs,
+// which get an explicit empty (null-terminated) list so llama.cpp never
+// initializes GPU backends the run won't use.
+std::optional<std::vector<ggml_backend_dev_t>> resolve_devices(const char* device_id, Device device);
 
 // Reverse-classify a resolved device selection. Mirrors the alias table in
 // sdk/src/device.cpp:
