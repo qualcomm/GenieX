@@ -5,7 +5,7 @@ use std::os::raw::{c_char, c_void};
 use std::path::PathBuf;
 
 use model_manager_core::config::StoreConfig;
-use model_manager_core::manifest_builder::{normalize_quant_tag, ManifestHint};
+use model_manager_core::manifest_builder::ManifestHint;
 use model_manager_core::mapping::{
     aihub_display_name_from_repo, canonicalize_model_name, docker_hub_repo_from_name,
     is_docker_hub_reference,
@@ -276,15 +276,14 @@ pub extern "C" fn geniex_model_pull(input: *const GenieXModelPullInput) -> i32 {
             Err(c) => return c,
         };
 
-        // Thread `quant` into the manifest hint so `pull` only fetches
-        // the requested quantization instead of every GGUF in the repo.
-        // Normalized here so the lookup in `manifest_builder::infer_*`
-        // (against keys produced by `extract_quant`, which upper-cases)
-        // succeeds for bindings that don't normalize themselves. The
-        // untagged-GGUF bucket key is the lower-case "default" sentinel,
-        // so normalization folds its casing rather than blanket
-        // upper-casing (#1202: `pull <repo>:default` failed as "DEFAULT").
-        let quant = unsafe { cstr_to_str(inp.quant) }.map(normalize_quant_tag);
+        // Thread `quant` into the manifest hint so `pull` only fetches the
+        // requested quantization instead of every GGUF in the repo. Upper-
+        // cased here so the lookup in `manifest_builder::infer_*` (against
+        // keys produced by `extract_quant`, which upper-cases) succeeds for
+        // bindings that don't normalize themselves.
+        let quant = unsafe { cstr_to_str(inp.quant) }
+            .filter(|s| !s.is_empty())
+            .map(str::to_ascii_uppercase);
         // -1 (GENIEX_MODEL_TYPE_AUTO) leaves detection to the inferer; 0/1 force
         // the type so the manifest is written correctly in one shot.
         let model_type = match inp.model_type {

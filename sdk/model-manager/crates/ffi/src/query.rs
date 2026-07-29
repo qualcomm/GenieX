@@ -17,7 +17,6 @@ use crate::types::*;
 pub struct GenieXQuantCandidate {
     pub quant: *mut c_char,
     pub size: i64,
-    pub is_default: bool,
 }
 
 /// Result of `geniex_model_query`. Mirrors `geniex_ModelQueryOutput`.
@@ -83,7 +82,6 @@ pub extern "C" fn geniex_model_query(
             .map(|c| GenieXQuantCandidate {
                 quant: str_to_cptr(&c.quant),
                 size: c.size,
-                is_default: c.is_default,
             })
             .collect();
         cands.shrink_to_fit();

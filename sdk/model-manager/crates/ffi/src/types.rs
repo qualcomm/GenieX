@@ -3,11 +3,10 @@
 
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_void};
+use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use model_manager_core::error::Error;
-use model_manager_core::manifest_builder::normalize_quant_tag;
 
 use crate::logging;
 
@@ -72,7 +71,6 @@ pub fn err_to_code(e: &Error) -> i32 {
         Error::HubModelNotFound(_) => GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND,
         Error::QuantNotFound(_, _)
         | Error::QuantNotDownloaded(_, _)
-        | Error::NoDownloadedQuant(_)
         | Error::InvalidModelName(_)
         | Error::InvalidFileName(_) => GENIEX_ERROR_COMMON_INVALID_INPUT,
         // Split HTTP status into actionable buckets; everything else (other
@@ -162,23 +160,16 @@ pub unsafe fn free_cptr(ptr: *mut c_char) {
 /// Canonicalize the `:QUANT` suffix of a model name. Manifest keys are
 /// produced by `extract_quant`, which upper-cases (so `q4_0` -> `Q4_0`);
 /// without matching the lookup side, `pull <repo>:q4_0` fails for callers
-/// (Python, JNI) whose bindings don't already upper-case. The untagged-GGUF
-/// bucket is keyed by the lower-case "default" sentinel, so that spelling
-/// folds down instead of up (#1202). Done here at the FFI boundary so the
-/// invariant is a single point of enforcement.
+/// (Python, JNI) whose bindings don't already upper-case. Done here at
+/// the FFI boundary so the invariant is a single point of enforcement.
 pub fn normalize_quant_suffix(name: &str) -> String {
     match name.rsplit_once(':') {
         Some((base, quant)) if !quant.is_empty() => {
-            format!("{base}:{}", normalize_quant_tag(quant))
+            format!("{base}:{}", quant.to_ascii_uppercase())
         }
         _ => name.to_string(),
     }
 }
-
-// Silence unused warning for c_void import when building without features that
-// use it; pull.rs re-imports c_void directly when it needs it.
-#[allow(dead_code)]
-pub(crate) type VoidPtr = *mut c_void;
 
 #[cfg(test)]
 mod tests {
@@ -243,20 +234,6 @@ mod tests {
         );
         // Trailing colon (no quant) → unchanged.
         assert_eq!(normalize_quant_suffix("Org/Repo:"), "Org/Repo:");
-    }
-
-    #[test]
-    fn normalize_quant_suffix_folds_default_sentinel() {
-        // #1202: the untagged-GGUF bucket is keyed "default" (lower-case);
-        // upper-casing the suffix made `<repo>:default` unmatchable.
-        assert_eq!(
-            normalize_quant_suffix("Qwen/Qwen2-1.5B-Instruct-GGUF:default"),
-            "Qwen/Qwen2-1.5B-Instruct-GGUF:default"
-        );
-        assert_eq!(
-            normalize_quant_suffix("Qwen/Qwen2-1.5B-Instruct-GGUF:DEFAULT"),
-            "Qwen/Qwen2-1.5B-Instruct-GGUF:default"
-        );
     }
 
     #[test]

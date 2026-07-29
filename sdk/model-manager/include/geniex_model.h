@@ -107,7 +107,8 @@ typedef struct {
  * @brief Get resolved file paths for a model.
  *
  * @param model_name  "org/repo" or "org/repo:quant".
- *                    If quant is omitted the first downloaded quantization is used.
+ *                    If quant is omitted the highest-priority downloaded
+ *                    quantization is used (Q4_0 > Q4_K_M > Q8_0 > others).
  * @param out_paths   Populated on success. Call geniex_model_paths_free() when done.
  * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
  */
@@ -253,10 +254,11 @@ typedef struct {
     uint32_t    struct_size;
     const char* model_name; /**< "org/repo" or short alias                    */
     /**
-     * Quantization hint for HuggingFace / AI Hub pulls (NULL for
-     * auto-select). Doubles as the Docker tag or `sha256:<hex>` digest
-     * when `hub == GENIEX_HUB_DOCKER` (or GENIEX_HUB_AUTO resolves to
-     * Docker); NULL or empty then means the `latest` tag.
+     * Quantization filter for HuggingFace / AI Hub pulls. When set only
+     * that quant is fetched; NULL pulls every quant the repo publishes.
+     * Doubles as the Docker tag or `sha256:<hex>` digest when
+     * `hub == GENIEX_HUB_DOCKER` (or GENIEX_HUB_AUTO resolves to Docker);
+     * NULL or empty then means the `latest` tag.
      */
     const char*      quant;
     geniex_HubSource hub;        /**< Use GENIEX_HUB_AUTO for automatic selection  */
@@ -324,9 +326,8 @@ GENIEX_API int32_t geniex_model_pull(const geniex_ModelPullInput* input);
  * `quant` is heap-allocated; freed by geniex_model_query_free().
  */
 typedef struct {
-    char*   quant;      /**< Quantization name, e.g. "Q4_K_M".            */
-    int64_t size;       /**< Size in bytes of the largest file for this quant. */
-    bool    is_default; /**< True for the quant the SDK would auto-select. */
+    char*   quant; /**< Quantization name, e.g. "Q4_K_M".                  */
+    int64_t size;  /**< Size in bytes of the largest file for this quant. */
 } geniex_QuantCandidate;
 
 /**

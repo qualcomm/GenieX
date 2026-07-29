@@ -60,21 +60,8 @@ pub fn install_core_sink() {
 }
 
 #[inline]
-#[allow(dead_code)]
-pub fn trace(msg: &str) {
-    log(GenieXLogLevel::Trace, msg);
-}
-
-#[inline]
-#[allow(dead_code)]
 pub fn debug(msg: &str) {
     log(GenieXLogLevel::Debug, msg);
-}
-
-#[inline]
-#[allow(dead_code)]
-pub fn info(msg: &str) {
-    log(GenieXLogLevel::Info, msg);
 }
 
 #[inline]
