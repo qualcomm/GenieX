@@ -25,8 +25,7 @@ use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
 use crate::manifest_builder::{infer_manifest_from_names, ManifestHint};
 use crate::transport::HttpTransport;
 
-use super::ai_hub::local_transport::LocalFileTransport;
-use super::ai_hub::remote_zip::{fetch_central_directory, Method};
+use super::ai_hub::remote_zip::{fetch_central_directory, LocalFileTransport, Method};
 use super::ai_hub::{classify_from_metadata_json, prepare_flat_entries};
 use super::{BytesSource, FileSpec, ModelSource, Plan};
 

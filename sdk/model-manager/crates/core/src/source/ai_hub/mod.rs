@@ -10,7 +10,6 @@
 //! downloading the multi-GB payload.
 
 pub mod detect;
-pub mod local_transport;
 pub mod manifest;
 pub mod remote_zip;
 pub mod selector;
