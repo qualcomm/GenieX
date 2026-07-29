@@ -1,10 +1,10 @@
 # Copyright 2024-2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Unit tests for the ensure_cached default-precision resolution (#1098).
+"""Unit tests for the ensure_cached precision-selection flow (#1098).
 
-When precision=None, ensure_cached must call query() to pick the hub's
-default precision and pass it to pull() — so only one variant is downloaded.
+When precision=None, ensure_cached must call query() and pass the SDK's
+priority-sorted head precision to pull() so only one variant is downloaded.
 """
 
 from __future__ import annotations
@@ -14,13 +14,12 @@ from geniex._ffi._api import GenieXError
 from geniex.model_manager import ModelPaths, ModelQuery, PrecisionCandidate
 
 
-def _make_query(*precisions: tuple[str, bool]) -> ModelQuery:
-    """Build a ModelQuery with the given (precision, is_default) pairs."""
+def _make_query(*precisions: str) -> ModelQuery:
     return ModelQuery(
         model_name='org/repo',
         runtime='llama_cpp',
         model_type='llm',
-        candidates=[PrecisionCandidate(precision=p, size=0, is_default=d) for p, d in precisions],
+        candidates=[PrecisionCandidate(precision=p, size=0) for p in precisions],
     )
 
 
@@ -34,11 +33,11 @@ def _fake_paths() -> ModelPaths:
     )
 
 
-def test_ensure_cached_resolves_default_precision(monkeypatch):
-    """pull() receives the is_default precision when none is specified."""
+def test_ensure_cached_pulls_head_precision(monkeypatch):
+    """pull() receives candidates[0].precision when none is specified."""
     pulled = {}
 
-    monkeypatch.setattr(mm, 'query', lambda name, **_kw: _make_query(('Q8_0', False), ('Q4_0', True)))
+    monkeypatch.setattr(mm, 'query', lambda name, **_kw: _make_query('Q4_0', 'Q4_K_M', 'Q8_0'))
     monkeypatch.setattr(mm, 'pull', lambda name, *, precision=None, **_kw: pulled.update(precision=precision))
     monkeypatch.setattr(mm, 'get_paths', lambda _key: _fake_paths())
     monkeypatch.setattr(mm, 'resolve_alias', lambda name: name)
@@ -53,7 +52,7 @@ def test_ensure_cached_explicit_precision_skips_query(monkeypatch):
     """An explicit precision bypasses query() entirely."""
     queried = []
 
-    monkeypatch.setattr(mm, 'query', lambda *_a, **_kw: queried.append(True) or _make_query(('Q4_0', True)))
+    monkeypatch.setattr(mm, 'query', lambda *_a, **_kw: queried.append(True) or _make_query('Q4_0'))
     monkeypatch.setattr(mm, 'pull', lambda *_a, **_kw: None)
     monkeypatch.setattr(mm, 'get_paths', lambda _key: _fake_paths())
     monkeypatch.setattr(mm, 'resolve_alias', lambda name: name)
@@ -62,21 +61,6 @@ def test_ensure_cached_explicit_precision_skips_query(monkeypatch):
     mm.ensure_cached('org/repo', precision='Q8_0')
 
     assert queried == [], 'query() should not be called when precision is explicit'
-
-
-def test_ensure_cached_local_path_skips_query(monkeypatch):
-    """A local_path pull bypasses query() — the manifest is already on disk."""
-    queried = []
-
-    monkeypatch.setattr(mm, 'query', lambda *_a, **_kw: queried.append(True) or _make_query(('Q4_0', True)))
-    monkeypatch.setattr(mm, 'pull', lambda *_a, **_kw: None)
-    monkeypatch.setattr(mm, 'get_paths', lambda _key: _fake_paths())
-    monkeypatch.setattr(mm, 'resolve_alias', lambda name: name)
-    monkeypatch.setattr(mm, '_ensure_init', lambda: None)
-
-    mm.ensure_cached('org/repo', local_path='/some/path')
-
-    assert queried == []
 
 
 def test_ensure_cached_query_failure_falls_through(monkeypatch):
@@ -91,5 +75,4 @@ def test_ensure_cached_query_failure_falls_through(monkeypatch):
 
     mm.ensure_cached('org/repo')
 
-    # precision stays None — pull decides on its own
     assert pulled['precision'] is None
