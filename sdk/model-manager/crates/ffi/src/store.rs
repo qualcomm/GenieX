@@ -56,39 +56,25 @@ pub extern "C" fn geniex_model_get_paths(
 ) -> i32 {
     ffi_guard(|| {
         if out_paths.is_null() {
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
         }
-        let name = match unsafe { cstr_to_str(model_name) } {
-            Some(s) => normalize_quant_suffix(s),
-            None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
+        let name = normalize_quant_suffix(unsafe { cstr_to_str(model_name) }?);
+        let store = get_store()?;
+        let (_, paths) = store.get_paths(&name).map_err(|e| report(&e))?;
+        let opt_path = |p: Option<&std::path::PathBuf>| {
+            p.map(|p| str_to_cptr(&p.to_string_lossy()))
+                .unwrap_or(std::ptr::null_mut())
         };
-        let store = match get_store() {
-            Ok(s) => s,
-            Err(c) => return c,
-        };
-        match store.get_paths(&name) {
-            Ok((_, paths)) => {
-                unsafe {
-                    (*out_paths).model_path = str_to_cptr(&paths.model_path.to_string_lossy());
-                    (*out_paths).model_dir = str_to_cptr(&paths.model_dir.to_string_lossy());
-                    (*out_paths).model_name = str_to_cptr(&paths.model_name);
-                    (*out_paths).plugin_id = str_to_cptr(&paths.plugin_id);
-                    (*out_paths).mmproj_path = paths
-                        .mmproj_path
-                        .as_ref()
-                        .map(|p| str_to_cptr(&p.to_string_lossy()))
-                        .unwrap_or(std::ptr::null_mut());
-                    (*out_paths).tokenizer_path = paths
-                        .tokenizer_path
-                        .as_ref()
-                        .map(|p| str_to_cptr(&p.to_string_lossy()))
-                        .unwrap_or(std::ptr::null_mut());
-                    (*out_paths).model_type = to_ffi_type(paths.model_type);
-                }
-                GENIEX_SUCCESS
-            }
-            Err(e) => report(&e),
+        unsafe {
+            (*out_paths).model_path = str_to_cptr(&paths.model_path.to_string_lossy());
+            (*out_paths).model_dir = str_to_cptr(&paths.model_dir.to_string_lossy());
+            (*out_paths).model_name = str_to_cptr(&paths.model_name);
+            (*out_paths).plugin_id = str_to_cptr(&paths.plugin_id);
+            (*out_paths).mmproj_path = opt_path(paths.mmproj_path.as_ref());
+            (*out_paths).tokenizer_path = opt_path(paths.tokenizer_path.as_ref());
+            (*out_paths).model_type = to_ffi_type(paths.model_type);
         }
+        Ok(GENIEX_SUCCESS)
     })
 }
 
@@ -112,39 +98,20 @@ pub unsafe extern "C" fn geniex_model_paths_free(paths: *mut GenieXModelPaths) {
 #[no_mangle]
 pub extern "C" fn geniex_model_remove(model_name: *const c_char) -> i32 {
     ffi_guard(|| {
-        let name = match unsafe { cstr_to_str(model_name) } {
-            Some(s) => normalize_quant_suffix(s),
-            None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
-        };
-        let store = match get_store() {
-            Ok(s) => s,
-            Err(c) => return c,
-        };
-        match store.remove(&name) {
-            Ok(()) => GENIEX_SUCCESS,
-            Err(e) => report(&e),
-        }
+        let name = normalize_quant_suffix(unsafe { cstr_to_str(model_name) }?);
+        get_store()?.remove(&name).map_err(|e| report(&e))?;
+        Ok(GENIEX_SUCCESS)
     })
 }
 
 #[no_mangle]
 pub extern "C" fn geniex_model_clean(removed_count: *mut i32) -> i32 {
     ffi_guard(|| {
-        let store = match get_store() {
-            Ok(s) => s,
-            Err(c) => return c,
-        };
-        match store.clean() {
-            Ok(n) => {
-                if !removed_count.is_null() {
-                    unsafe {
-                        *removed_count = n;
-                    }
-                }
-                GENIEX_SUCCESS
-            }
-            Err(e) => report(&e),
+        let n = get_store()?.clean().map_err(|e| report(&e))?;
+        if !removed_count.is_null() {
+            unsafe { *removed_count = n };
         }
+        Ok(GENIEX_SUCCESS)
     })
 }
 
@@ -157,25 +124,12 @@ pub extern "C" fn geniex_model_get_type(
 ) -> i32 {
     ffi_guard(|| {
         if out_type.is_null() {
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
         }
-        let name = match unsafe { cstr_to_str(model_name) } {
-            Some(s) => s,
-            None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
-        };
-        let store = match get_store() {
-            Ok(s) => s,
-            Err(c) => return c,
-        };
-        match store.get_model_type(name) {
-            Ok(t) => {
-                unsafe {
-                    *out_type = to_ffi_type(t);
-                }
-                GENIEX_SUCCESS
-            }
-            Err(e) => report(&e),
-        }
+        let name = unsafe { cstr_to_str(model_name) }?;
+        let t = get_store()?.get_model_type(name).map_err(|e| report(&e))?;
+        unsafe { *out_type = to_ffi_type(t) };
+        Ok(GENIEX_SUCCESS)
     })
 }
 
@@ -187,22 +141,15 @@ pub extern "C" fn geniex_model_set_type(
     model_type: GenieXModelType,
 ) -> i32 {
     ffi_guard(|| {
-        let name = match unsafe { cstr_to_str(model_name) } {
-            Some(s) => s,
-            None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
-        };
-        let store = match get_store() {
-            Ok(s) => s,
-            Err(c) => return c,
-        };
+        let name = unsafe { cstr_to_str(model_name) }?;
         let t = match model_type {
             GenieXModelType::Llm => ModelType::Llm,
             GenieXModelType::Vlm => ModelType::Vlm,
         };
-        match store.set_model_type(name, t) {
-            Ok(()) => GENIEX_SUCCESS,
-            Err(e) => report(&e),
-        }
+        get_store()?
+            .set_model_type(name, t)
+            .map_err(|e| report(&e))?;
+        Ok(GENIEX_SUCCESS)
     })
 }
 
@@ -230,69 +177,47 @@ pub struct GenieXModelListDetailedOutput {
 pub extern "C" fn geniex_model_list_detailed(output: *mut GenieXModelListDetailedOutput) -> i32 {
     ffi_guard(|| {
         if output.is_null() {
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
         }
-        let store = match get_store() {
-            Ok(s) => s,
-            Err(c) => return c,
-        };
-        match store.list() {
-            Ok(manifests) => {
-                let mut details: Vec<GenieXModelDetail> = manifests
+        let manifests = get_store()?.list().map_err(|e| report(&e))?;
+        let details: Vec<GenieXModelDetail> = manifests
+            .iter()
+            .map(|m| {
+                // QAIRT manifests key model_file under "N/A" and carry the
+                // real precision (e.g. "W4A16") on the top-level field —
+                // surface that to bindings instead of the placeholder.
+                let downloaded: Vec<&str> = m
+                    .model_file
                     .iter()
-                    .map(|m| {
-                        // QAIRT manifests key model_file under "N/A" and carry the
-                        // real precision (e.g. "W4A16") on the top-level field —
-                        // surface that to bindings instead of the placeholder.
-                        let downloaded_quants: Vec<&str> = m
-                            .model_file
-                            .iter()
-                            .filter(|(_, fi)| fi.downloaded)
-                            .map(|(q, _)| q.as_str())
-                            .collect();
-                        let use_top_level = !m.precision.is_empty()
-                            && !downloaded_quants.is_empty()
-                            && downloaded_quants.iter().all(|q| *q == "N/A");
-                        let mut precs: Vec<*mut c_char> = if use_top_level {
-                            vec![str_to_cptr(&m.precision)]
-                        } else {
-                            downloaded_quants.iter().map(|q| str_to_cptr(q)).collect()
-                        };
-                        precs.shrink_to_fit();
-                        let precision_count = precs.len() as i32;
-                        let precisions = if precs.is_empty() {
-                            std::ptr::null_mut()
-                        } else {
-                            precs.as_mut_ptr()
-                        };
-                        std::mem::forget(precs);
-                        GenieXModelDetail {
-                            name: str_to_cptr(&m.name),
-                            model_name: str_to_cptr(&m.model_name),
-                            plugin_id: str_to_cptr(&m.plugin_id),
-                            model_type: to_ffi_type(m.model_type.clone()),
-                            total_size: m.total_size(),
-                            precisions,
-                            precision_count,
-                        }
-                    })
+                    .filter(|(_, fi)| fi.downloaded)
+                    .map(|(q, _)| q.as_str())
                     .collect();
-                details.shrink_to_fit();
-                let count = details.len() as i32;
-                let models = if details.is_empty() {
-                    std::ptr::null_mut()
+                let precs: Vec<*mut c_char> = if !m.precision.is_empty()
+                    && !downloaded.is_empty()
+                    && downloaded.iter().all(|q| *q == "N/A")
+                {
+                    vec![str_to_cptr(&m.precision)]
                 } else {
-                    details.as_mut_ptr()
+                    downloaded.iter().map(|q| str_to_cptr(q)).collect()
                 };
-                std::mem::forget(details);
-                unsafe {
-                    (*output).models = models;
-                    (*output).count = count;
+                let (precisions, precision_count) = into_c_array(precs);
+                GenieXModelDetail {
+                    name: str_to_cptr(&m.name),
+                    model_name: str_to_cptr(&m.model_name),
+                    plugin_id: str_to_cptr(&m.plugin_id),
+                    model_type: to_ffi_type(m.model_type.clone()),
+                    total_size: m.total_size(),
+                    precisions,
+                    precision_count,
                 }
-                GENIEX_SUCCESS
-            }
-            Err(e) => report(&e),
+            })
+            .collect();
+        let (models, count) = into_c_array(details);
+        unsafe {
+            (*output).models = models;
+            (*output).count = count;
         }
+        Ok(GENIEX_SUCCESS)
     })
 }
 
@@ -304,30 +229,17 @@ pub unsafe extern "C" fn geniex_model_list_detailed_free(
         return;
     }
     let o = &mut *output;
-    if !o.models.is_null() {
-        let slice = std::slice::from_raw_parts_mut(o.models, o.count as usize);
-        for d in slice.iter_mut() {
+    if let Some(mut details) = from_c_array(o.models, o.count) {
+        for d in details.iter_mut() {
             free_cptr(d.name);
             free_cptr(d.model_name);
             free_cptr(d.plugin_id);
-            if !d.precisions.is_null() {
-                let precs =
-                    std::slice::from_raw_parts_mut(d.precisions, d.precision_count as usize);
-                for p in precs.iter_mut() {
-                    free_cptr(*p);
+            if let Some(precs) = from_c_array(d.precisions, d.precision_count) {
+                for p in precs {
+                    free_cptr(p);
                 }
-                drop(Vec::from_raw_parts(
-                    d.precisions,
-                    d.precision_count as usize,
-                    d.precision_count as usize,
-                ));
             }
         }
-        drop(Vec::from_raw_parts(
-            o.models,
-            o.count as usize,
-            o.count as usize,
-        ));
     }
     o.models = std::ptr::null_mut();
     o.count = 0;

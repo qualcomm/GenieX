@@ -165,43 +165,37 @@ pub(crate) unsafe fn extract_name_and_intent(
     }
 
     let inp = &*input;
+    let raw_model_name = cstr_to_str(inp.model_name)?;
 
-    let raw_model_name = cstr_to_str(inp.model_name).ok_or(GENIEX_ERROR_COMMON_INVALID_INPUT)?;
-
-    // Docker Hub routing is decided on the *original* string, before the
-    // generic HF/AI-Hub canonicalisation below would discard the
-    // hub-identifying prefix — mirrors docker/model-runner's
-    // `IsHuggingFaceReference(originalReference)` check ahead of its own
-    // name normalisation. `--model-hub docker` (or GENIEX_HUB_DOCKER) works
-    // on a bare "org/repo" too, since the hub is then already unambiguous.
+    // Docker Hub routing is decided on the *original* string, before generic
+    // HF/AI-Hub canonicalisation below would discard the hub-identifying
+    // prefix — mirrors docker/model-runner's `IsHuggingFaceReference` check.
     let use_docker = matches!(inp.hub, GenieXHubSource::Docker)
         || (matches!(inp.hub, GenieXHubSource::Auto) && is_docker_hub_reference(raw_model_name));
     if use_docker {
         let repo = canonicalize_model_name(&docker_hub_repo_from_name(raw_model_name));
-        // `quant` doubles as the Docker tag/digest for this hub (no GGUF
-        // quant filtering happens for Docker pulls); empty means "latest".
+        // `quant` doubles as the Docker tag/digest; empty ⇒ "latest".
         let reference = cstr_to_str(inp.quant)
+            .ok()
             .filter(|s| !s.is_empty())
             .unwrap_or("latest")
             .to_string();
         return Ok((repo.clone(), PullIntent::DockerHub { repo, reference }));
     }
 
-    // Bare names (no '/') are treated as AI Hub model ids and stored under
-    // `qualcomm/<name>`; anything with '/' is passed through.
+    // Bare names (no '/') land under `qualcomm/<name>`.
     let model_name = canonicalize_model_name(raw_model_name);
 
-    // Explicit token wins; env var is the fallback; anonymous otherwise.
     let hf_token = cstr_to_str(inp.hf_token)
+        .ok()
         .map(str::to_string)
         .or_else(StoreConfig::hf_token_from_env);
-    // chipset / display_name are only meaningful for AI Hub; read up front so
-    // both the explicit-AiHub and Auto-→-AiHub paths share them.
     let chipset = cstr_to_str(inp.chipset).unwrap_or("").to_string();
     let explicit_display_name = cstr_to_str(inp.display_name)
+        .ok()
         .map(str::to_string)
         .filter(|s| !s.is_empty());
-    let local_path = cstr_to_str(inp.local_path).map(PathBuf::from);
+    let local_path = cstr_to_str(inp.local_path).ok().map(PathBuf::from);
 
     let intent = build_pull_intent(
         &inp.hub,
@@ -218,18 +212,12 @@ pub(crate) unsafe fn extract_name_and_intent(
 pub extern "C" fn geniex_model_pull(input: *const GenieXModelPullInput) -> i32 {
     ffi_guard(|| {
         if input.is_null() {
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
         }
 
-        let (model_name, intent) =
-            match unsafe { extract_name_and_intent(input, "geniex_model_pull") } {
-                Ok(v) => v,
-                Err(c) => return c,
-            };
+        let (model_name, intent) = unsafe { extract_name_and_intent(input, "geniex_model_pull") }?;
         let inp = unsafe { &*input };
 
-        // Build a Rust closure that re-marshals Rust FileProgress → C array
-        // and invokes the caller's function pointer.
         struct CCallback {
             cb: unsafe extern "C" fn(*const GenieXFileProgress, i32, *mut c_void) -> bool,
             user_data: *mut c_void,
@@ -237,76 +225,60 @@ pub extern "C" fn geniex_model_pull(input: *const GenieXModelPullInput) -> i32 {
         unsafe impl Send for CCallback {}
         unsafe impl Sync for CCallback {}
 
-        let progress_cb: Option<model_manager_core::executor::ProgressCallback> = if let Some(cb) =
-            inp.on_progress
-        {
-            let cc = std::sync::Arc::new(CCallback {
-                cb,
-                user_data: inp.user_data,
+        let progress_cb: Option<model_manager_core::executor::ProgressCallback> =
+            inp.on_progress.map(|cb| {
+                let cc = std::sync::Arc::new(CCallback {
+                    cb,
+                    user_data: inp.user_data,
+                });
+                Box::new(
+                    move |files: &[model_manager_core::executor::FileProgress]| -> bool {
+                        let cstrings: Vec<std::ffi::CString> = files
+                            .iter()
+                            .map(|f| {
+                                std::ffi::CString::new(f.file_name.as_bytes()).unwrap_or_default()
+                            })
+                            .collect();
+                        let ffi_entries: Vec<GenieXFileProgress> = files
+                            .iter()
+                            .zip(cstrings.iter())
+                            .map(|(f, cs)| GenieXFileProgress {
+                                file_name: cs.as_ptr(),
+                                downloaded_bytes: f.downloaded_bytes,
+                                total_bytes: f.total_bytes,
+                            })
+                            .collect();
+                        let result = unsafe {
+                            (cc.cb)(ffi_entries.as_ptr(), ffi_entries.len() as i32, cc.user_data)
+                        };
+                        let _ = cstrings;
+                        result
+                    },
+                ) as model_manager_core::executor::ProgressCallback
             });
-            Some(Box::new(
-                move |files: &[model_manager_core::executor::FileProgress]| -> bool {
-                    let cstrings: Vec<std::ffi::CString> = files
-                        .iter()
-                        .map(|f| std::ffi::CString::new(f.file_name.as_bytes()).unwrap_or_default())
-                        .collect();
-                    let ffi_entries: Vec<GenieXFileProgress> = files
-                        .iter()
-                        .zip(cstrings.iter())
-                        .map(|(f, cs)| GenieXFileProgress {
-                            file_name: cs.as_ptr(),
-                            downloaded_bytes: f.downloaded_bytes,
-                            total_bytes: f.total_bytes,
-                        })
-                        .collect();
 
-                    let result = unsafe {
-                        (cc.cb)(ffi_entries.as_ptr(), ffi_entries.len() as i32, cc.user_data)
-                    };
-                    let _ = cstrings;
-                    result
-                },
-            ))
-        } else {
-            None
-        };
-
-        let store = match get_store() {
-            Ok(s) => s,
-            Err(c) => return c,
-        };
-
-        // Thread `quant` into the manifest hint so `pull` only fetches the
-        // requested quantization instead of every GGUF in the repo. Upper-
-        // cased here so the lookup in `manifest_builder::infer_*` (against
-        // keys produced by `extract_quant`, which upper-cases) succeeds for
-        // bindings that don't normalize themselves.
+        // Upper-cased so lookup against `extract_quant`-produced keys matches
+        // for bindings that don't normalize themselves.
         let quant = unsafe { cstr_to_str(inp.quant) }
+            .ok()
             .filter(|s| !s.is_empty())
             .map(str::to_ascii_uppercase);
-        // -1 (GENIEX_MODEL_TYPE_AUTO) leaves detection to the inferer; 0/1 force
-        // the type so the manifest is written correctly in one shot.
         let model_type = match inp.model_type {
             0 => Some(model_manager_core::manifest::ModelType::Llm),
             1 => Some(model_manager_core::manifest::ModelType::Vlm),
             _ => None,
         };
-        let hint = ManifestHint {
-            quant,
-            model_type,
-            ..ManifestHint::default()
-        };
-
         let req = PullRequest {
             model_name,
             intent,
             on_progress: progress_cb,
-            hint,
+            hint: ManifestHint {
+                quant,
+                model_type,
+                ..ManifestHint::default()
+            },
         };
-
-        match pull_blocking(&runtime_handle(), store, req) {
-            Ok(()) => GENIEX_SUCCESS,
-            Err(e) => report(&e),
-        }
+        pull_blocking(&runtime_handle(), get_store()?, req).map_err(|e| report(&e))?;
+        Ok(GENIEX_SUCCESS)
     })
 }

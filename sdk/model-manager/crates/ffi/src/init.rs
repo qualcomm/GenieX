@@ -62,38 +62,27 @@ pub extern "C" fn geniex_model_init(data_dir: *const c_char) -> i32 {
     ffi_guard(|| {
         logging::install_core_sink();
 
-        let _guard = match INIT_LOCK.lock() {
-            Ok(g) => g,
-            // Mutex is poisoned only if a previous init panicked. Treat
-            // as "try again" — the panic path already logged via ffi_guard.
-            Err(poisoned) => poisoned.into_inner(),
-        };
+        // Poisoned mutex ⇒ a previous init panicked; treat as "try again".
+        let _guard = INIT_LOCK.lock().unwrap_or_else(|p| p.into_inner());
 
         if STORE.get().is_some() {
             logging::warn(
                 "geniex_model_init called after the model manager was already initialized; \
                  call geniex_model_deinit first",
             );
-            return GENIEX_ERROR_COMMON_ALREADY_INITIALIZED;
+            return Err(GENIEX_ERROR_COMMON_ALREADY_INITIALIZED);
         }
-
-        let data_dir_override = unsafe { cstr_to_str(data_dir).map(PathBuf::from) };
 
         let mut cfg = StoreConfig::from_env();
-        if let Some(dir) = data_dir_override {
-            cfg.data_dir = dir;
+        if let Ok(s) = unsafe { cstr_to_str(data_dir) } {
+            cfg.data_dir = PathBuf::from(s);
         }
 
-        let store = match Store::new(cfg) {
-            Ok(s) => s,
-            Err(e) => return report(&e),
-        };
-
-        // Holding INIT_LOCK means no other thread is between the get()
-        // check and set() call, so this always succeeds.
+        let store = Store::new(cfg).map_err(|e| report(&e))?;
+        // INIT_LOCK is held ⇒ this set() never races.
         let _ = STORE.set(store);
         logging::debug("geniex model manager initialized");
-        GENIEX_SUCCESS
+        Ok(GENIEX_SUCCESS)
     })
 }
 

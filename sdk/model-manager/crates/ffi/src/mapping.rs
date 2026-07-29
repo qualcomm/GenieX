@@ -25,20 +25,15 @@ pub extern "C" fn geniex_model_resolve_hub(
 ) -> i32 {
     ffi_guard(|| {
         if out_hub.is_null() {
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
         }
-        let name = match unsafe { cstr_to_str(model_name) } {
-            Some(s) => s,
-            None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
-        };
+        let name = unsafe { cstr_to_str(model_name) }?;
         let resolved = match hub_in {
             GenieXHubSource::Auto if is_docker_hub_reference(name) => GenieXHubSource::Docker,
             other => other,
         };
-        unsafe {
-            *out_hub = resolved;
-        }
-        GENIEX_SUCCESS
+        unsafe { *out_hub = resolved };
+        Ok(GENIEX_SUCCESS)
     })
 }
 
@@ -49,20 +44,11 @@ pub extern "C" fn geniex_model_resolve_alias(
 ) -> i32 {
     ffi_guard(|| {
         if out_full_name.is_null() {
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
         }
-        let alias_str = match unsafe { cstr_to_str(alias) } {
-            Some(s) => s,
-            None => return GENIEX_ERROR_COMMON_INVALID_INPUT,
-        };
-        match resolve_alias(alias_str) {
-            Some(full) => {
-                unsafe {
-                    *out_full_name = str_to_cptr(&full);
-                }
-                GENIEX_SUCCESS
-            }
-            None => GENIEX_ERROR_COMMON_INVALID_INPUT,
-        }
+        let alias_str = unsafe { cstr_to_str(alias) }?;
+        let full = resolve_alias(alias_str).ok_or(GENIEX_ERROR_COMMON_INVALID_INPUT)?;
+        unsafe { *out_full_name = str_to_cptr(&full) };
+        Ok(GENIEX_SUCCESS)
     })
 }
