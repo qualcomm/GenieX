@@ -31,30 +31,11 @@ pub struct ManifestHint {
     pub config_json_bytes: Option<Vec<u8>>,
 }
 
-/// Quantization priority order (earlier = preferred). Prefers the smaller,
-/// faster `Q4_0` first — the historical Go CLI default that all bindings now
-/// share.
-pub(crate) const QUANT_PRIORITY: &[&str] = &["Q4_0", "Q4_K_M", "Q8_0"];
-
-/// Bucket key for GGUFs whose filename carries no recognizable quant tag
-/// (e.g. an untagged FP16 export). Deliberately lower-case: it is a
-/// sentinel, not a real quant tag, and it is user-visible — in the
-/// precision picker, in "available:" error lists, and as a `:default`
-/// pull spec.
-pub const DEFAULT_QUANT: &str = "default";
-
-/// Canonicalize a user-supplied quant so it matches manifest keys: real
-/// tags are upper-cased (keys come from [`extract_quant`], which
-/// upper-cases), while any casing of [`DEFAULT_QUANT`] folds to the
-/// lower-case sentinel. Blanket upper-casing turned `:default` into
-/// `"DEFAULT"`, which no manifest ever keys (#1202).
-pub fn normalize_quant_tag(tag: &str) -> String {
-    if tag.eq_ignore_ascii_case(DEFAULT_QUANT) {
-        DEFAULT_QUANT.to_string()
-    } else {
-        tag.to_ascii_uppercase()
-    }
-}
+/// Quantization priority order (earlier = preferred). Consumed by
+/// [`extract_quant`] as a tiebreaker among composite tags in one filename
+/// and by [`crate::query`] to sort candidates so callers can grab the
+/// head as the recommended pick.
+pub const QUANT_PRIORITY: &[&str] = &["Q4_0", "Q4_K_M", "Q8_0"];
 
 /// Infer a manifest by scanning `src_dir` for model files.
 pub fn infer_manifest_from_dir(
@@ -109,9 +90,8 @@ pub fn infer_manifest_from_names(
             if is_mmproj_filename(&lname) {
                 mmprojs.push(n);
             } else if lname.contains("mtp") {
-                // TODO: MTP draft models can't load standalone; skip for now.
-            } else {
-                let quant = extract_quant(n).unwrap_or_else(|| DEFAULT_QUANT.to_string());
+                // MTP draft models can't load standalone; skip.
+            } else if let Some(quant) = extract_quant(n) {
                 ggufs.entry(quant).or_default().push(n);
             }
         } else if lname.ends_with("tokenizer.json") {
@@ -154,16 +134,7 @@ pub fn infer_manifest_from_names(
     let mut shard_extras: Vec<&String> = Vec::new();
     for (quant, mut files) in ggufs {
         files.sort();
-        let entry = files[0];
-        let entry_size = sizes.get(entry.as_str()).copied().unwrap_or(0);
-        model_file.insert(
-            quant,
-            ModelFileInfo {
-                name: entry.clone(),
-                downloaded: true,
-                size: entry_size,
-            },
-        );
+        model_file.insert(quant, file_info(files[0], sizes));
         shard_extras.extend_from_slice(&files[1..]);
     }
 
@@ -171,55 +142,27 @@ pub fn infer_manifest_from_names(
     let mmproj_file = match mmprojs.len() {
         0 => {
             if onnx_files.len() == 1 {
-                let n = onnx_files[0];
-                ModelFileInfo {
-                    name: n.clone(),
-                    downloaded: true,
-                    size: sizes.get(n.as_str()).copied().unwrap_or(0),
-                }
+                file_info(onnx_files[0], sizes)
             } else if geniex_files.len() == 1 {
-                let n = geniex_files[0];
-                ModelFileInfo {
-                    name: n.clone(),
-                    downloaded: true,
-                    size: sizes.get(n.as_str()).copied().unwrap_or(0),
-                }
+                file_info(geniex_files[0], sizes)
             } else {
                 ModelFileInfo::default()
             }
         }
-        1 => {
-            let n = mmprojs[0];
-            ModelFileInfo {
-                name: n.clone(),
-                downloaded: true,
-                size: sizes.get(n.as_str()).copied().unwrap_or(0),
-            }
-        }
+        1 => file_info(mmprojs[0], sizes),
         _ => {
             let chosen = mmprojs
                 .iter()
                 .max_by_key(|n| sizes.get(n.as_str()).copied().unwrap_or(0))
                 .unwrap();
-            ModelFileInfo {
-                name: (*chosen).clone(),
-                downloaded: true,
-                size: sizes.get(chosen.as_str()).copied().unwrap_or(0),
-            }
+            file_info(chosen, sizes)
         }
     };
 
     // Tokenizer: 0 -> none; 1 -> use; >1 -> error (ambiguous).
     let tokenizer_file = match tokenizers.len() {
         0 => ModelFileInfo::default(),
-        1 => {
-            let n = tokenizers[0];
-            ModelFileInfo {
-                name: n.clone(),
-                downloaded: true,
-                size: sizes.get(n.as_str()).copied().unwrap_or(0),
-            }
-        }
+        1 => file_info(tokenizers[0], sizes),
         _ => {
             return Err(Error::ManifestInferenceFailed(format!(
                 "multiple tokenizer files found: {:?}",
@@ -231,29 +174,14 @@ pub fn infer_manifest_from_names(
     // ExtraFiles: trailing GGUF shards (the entrypoint shard lives in
     // model_file) + all .npy + .geniex not used as mmproj.
     let mut extra_files: Vec<ModelFileInfo> = Vec::new();
-    for n in &shard_extras {
-        extra_files.push(ModelFileInfo {
-            name: (*n).clone(),
-            downloaded: true,
-            size: sizes.get(n.as_str()).copied().unwrap_or(0),
-        });
-    }
-    for n in &npy_files {
-        extra_files.push(ModelFileInfo {
-            name: (*n).clone(),
-            downloaded: true,
-            size: sizes.get(n.as_str()).copied().unwrap_or(0),
-        });
-    }
-    for n in &geniex_files {
-        if mmproj_file.name != **n {
-            extra_files.push(ModelFileInfo {
-                name: (*n).clone(),
-                downloaded: true,
-                size: sizes.get(n.as_str()).copied().unwrap_or(0),
-            });
-        }
-    }
+    extra_files.extend(shard_extras.iter().map(|n| file_info(n, sizes)));
+    extra_files.extend(npy_files.iter().map(|n| file_info(n, sizes)));
+    extra_files.extend(
+        geniex_files
+            .iter()
+            .filter(|n| mmproj_file.name != ***n)
+            .map(|n| file_info(n, sizes)),
+    );
 
     let model_type = infer_model_type(&hint, file_names);
 
@@ -533,6 +461,14 @@ fn is_token_start(bytes: &[u8], i: usize) -> bool {
     matches!(bytes[i - 1], b'-' | b'_' | b'.' | b'/' | b'\\')
 }
 
+fn file_info(name: &str, sizes: &HashMap<String, i64>) -> ModelFileInfo {
+    ModelFileInfo {
+        name: name.to_string(),
+        downloaded: true,
+        size: sizes.get(name).copied().unwrap_or(0),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -724,35 +660,23 @@ mod tests {
     }
 
     #[test]
-    fn normalize_quant_tag_folds_default_and_upper_cases_tags() {
-        assert_eq!(normalize_quant_tag("q4_0"), "Q4_0");
-        assert_eq!(normalize_quant_tag("mxfp4"), "MXFP4");
-        assert_eq!(normalize_quant_tag("default"), DEFAULT_QUANT);
-        assert_eq!(normalize_quant_tag("DEFAULT"), DEFAULT_QUANT);
-        assert_eq!(normalize_quant_tag("Default"), DEFAULT_QUANT);
-    }
-
-    #[test]
-    fn quant_hint_default_selects_untagged_gguf() {
-        // #1202: Qwen/Qwen2-1.5B-Instruct-GGUF ships tagged quants plus an
-        // untagged fp16 export that lands in the "default" bucket. Pulling
-        // `:default` — the exact key the picker and error list advertise —
-        // must select that bucket, not fail with QuantNotFound.
+    fn untagged_gguf_is_silently_dropped() {
+        // Untagged fp16 exports (like Qwen/Qwen2-1.5B-Instruct-GGUF's stray
+        // shard) no longer land in a synthetic bucket — they're excluded from
+        // model_file so callers see only real quant tags.
         let (names, sizes) = sizes_of(&[
             ("qwen2-1_5b-instruct-q4_0.gguf", 1_000_000),
             ("qwen2-1_5b-instruct-fp16.gguf", 3_100_000),
         ]);
-        let hint = ManifestHint {
-            quant: Some(DEFAULT_QUANT.to_string()),
-            ..Default::default()
-        };
-        let m = infer_manifest_from_names("Qwen/Qwen2-1.5B-Instruct-GGUF", &names, &sizes, hint)
-            .unwrap();
+        let m = infer_manifest_from_names(
+            "Qwen/Qwen2-1.5B-Instruct-GGUF",
+            &names,
+            &sizes,
+            ManifestHint::default(),
+        )
+        .unwrap();
         assert_eq!(m.model_file.len(), 1);
-        assert_eq!(
-            m.model_file.get(DEFAULT_QUANT).map(|f| f.name.as_str()),
-            Some("qwen2-1_5b-instruct-fp16.gguf")
-        );
+        assert!(m.model_file.contains_key("Q4_0"));
     }
 
     #[test]

@@ -98,9 +98,3 @@ impl ModelManifest {
         total
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct DownloadInfo {
-    pub total_downloaded: i64,
-    pub total_size: i64,
-}

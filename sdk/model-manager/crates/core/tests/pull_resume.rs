@@ -58,7 +58,7 @@ async fn pull_resumes_after_mid_download_failure() {
     let server = MockServer::start().await;
     let body = make_body(64 * 1024, 0xA5);
     let repo = "test/tiny";
-    let file_name = "weights.gguf";
+    let file_name = "weights-Q4_0.gguf";
 
     let api_body = serde_json::json!({
         "siblings": [{ "rfilename": file_name, "size": body.len() }]

@@ -3,16 +3,27 @@
 
 use std::fs;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
 
 use crate::config::StoreConfig;
 use crate::error::{Error, Result};
 use crate::manifest::{ModelManifest, ModelType};
+use crate::manifest_builder::QUANT_PRIORITY;
 use crate::mapping::canonicalize_model_name;
-use crate::paths::{resolve_model_paths, ModelPaths};
 use crate::validation::{validate_model_name, validate_relative_file};
+
+#[derive(Debug, Clone)]
+pub struct ModelPaths {
+    pub model_path: PathBuf,
+    pub mmproj_path: Option<PathBuf>,
+    pub tokenizer_path: Option<PathBuf>,
+    pub model_dir: PathBuf,
+    pub model_name: String,
+    pub plugin_id: String,
+    pub model_type: ModelType,
+}
 
 pub const MANIFEST_FILE: &str = "geniex.json";
 
@@ -247,6 +258,65 @@ impl Store {
         }
         Ok(self.cfg.model_file_path(name, file))
     }
+}
+
+/// Look up the file paths for one quant of a cached model.
+///
+/// When `quant` is `None` we fall back to the highest-priority downloaded
+/// quant. That fallback is a *cache-side* convenience — it picks among
+/// what's already local, not what a hub offers — and exists because
+/// keepalive / auto-load paths pass bare names.
+pub(crate) fn resolve_model_paths(
+    manifest: &ModelManifest,
+    base_dir: &Path,
+    quant: Option<&str>,
+) -> Result<(String, ModelPaths)> {
+    let quant = match quant {
+        Some(q) => q.to_string(),
+        None => pick_downloaded_by_priority(manifest)?,
+    };
+    let fi = manifest
+        .model_file
+        .get(&quant)
+        .ok_or_else(|| Error::QuantNotFound(quant.clone(), manifest.name.clone()))?;
+    if !fi.downloaded {
+        return Err(Error::QuantNotDownloaded(quant, manifest.name.clone()));
+    }
+    let model_path = base_dir.join(&fi.name);
+    let mmproj_path =
+        (!manifest.mmproj_file.name.is_empty()).then(|| base_dir.join(&manifest.mmproj_file.name));
+    let tokenizer_path = (!manifest.tokenizer_file.name.is_empty())
+        .then(|| base_dir.join(&manifest.tokenizer_file.name));
+    Ok((
+        quant,
+        ModelPaths {
+            model_path,
+            mmproj_path,
+            tokenizer_path,
+            model_dir: base_dir.to_path_buf(),
+            model_name: manifest.model_name.clone(),
+            plugin_id: manifest.plugin_id.clone(),
+            model_type: manifest.model_type.clone(),
+        },
+    ))
+}
+
+fn pick_downloaded_by_priority(manifest: &ModelManifest) -> Result<String> {
+    let downloaded: Vec<&str> = manifest
+        .model_file
+        .iter()
+        .filter(|(_, v)| v.downloaded)
+        .map(|(k, _)| k.as_str())
+        .collect();
+    if downloaded.is_empty() {
+        return Err(Error::ModelNotFound(manifest.name.clone()));
+    }
+    for pref in QUANT_PRIORITY {
+        if let Some(hit) = downloaded.iter().find(|q| **q == *pref) {
+            return Ok((*hit).to_string());
+        }
+    }
+    Ok(downloaded.iter().min().copied().unwrap().to_string())
 }
 
 /// Read and parse `geniex.json` with a hard size cap.

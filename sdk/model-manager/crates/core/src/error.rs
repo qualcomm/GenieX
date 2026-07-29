@@ -25,9 +25,6 @@ pub enum Error {
     #[error("quantization '{0}' exists but is not downloaded for model '{1}'")]
     QuantNotDownloaded(String, String),
 
-    #[error("no downloaded quantization found for model '{0}'")]
-    NoDownloadedQuant(String),
-
     #[error("model manager not initialized; call geniex_model_init() first")]
     NotInitialized,
 

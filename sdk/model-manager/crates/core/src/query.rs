@@ -12,20 +12,21 @@ use std::sync::Arc;
 
 use crate::error::Result;
 use crate::manifest::ModelType;
+use crate::manifest_builder::QUANT_PRIORITY;
 use crate::mapping::canonicalize_model_name;
-use crate::paths::pick_default_quant;
 use crate::pull::{build_source, PullRequest};
 use crate::source::Plan;
 use crate::store::Store;
 use crate::transport::{HttpTransport, ReqwestTransport};
 use crate::validation::validate_model_name;
 
-/// One quantization the source advertises for a model.
+/// One quantization the source advertises for a model. Candidates in
+/// [`ModelQuery::candidates`] are sorted so callers can grab the head as
+/// the recommended pick.
 #[derive(Debug, Clone)]
 pub struct QuantCandidate {
     pub quant: String,
     pub size: i64,
-    pub is_default: bool,
 }
 
 /// Result of a plan-only query against a hub.
@@ -60,14 +61,12 @@ pub fn query_blocking(
 }
 
 fn model_query_from_plan(model_name: String, plan: Plan) -> ModelQuery {
-    let quants: Vec<&str> = plan
-        .manifest
-        .model_file
-        .keys()
-        .map(String::as_str)
-        .collect();
-    let default = (!quants.is_empty()).then(|| pick_default_quant(&quants).to_string());
-
+    let priority_idx = |q: &str| {
+        QUANT_PRIORITY
+            .iter()
+            .position(|p| *p == q)
+            .unwrap_or(usize::MAX)
+    };
     let mut candidates: Vec<QuantCandidate> = plan
         .manifest
         .model_file
@@ -75,10 +74,14 @@ fn model_query_from_plan(model_name: String, plan: Plan) -> ModelQuery {
         .map(|(quant, fi)| QuantCandidate {
             quant: quant.clone(),
             size: fi.size,
-            is_default: Some(quant) == default.as_ref(),
         })
         .collect();
-    candidates.sort_by(|a, b| b.size.cmp(&a.size).then_with(|| a.quant.cmp(&b.quant)));
+    candidates.sort_by(|a, b| {
+        priority_idx(&a.quant)
+            .cmp(&priority_idx(&b.quant))
+            .then_with(|| a.size.cmp(&b.size))
+            .then_with(|| a.quant.cmp(&b.quant))
+    });
 
     ModelQuery {
         model_name,
@@ -124,22 +127,19 @@ mod tests {
     }
 
     #[test]
-    fn marks_priority_default_and_sorts_by_size() {
+    fn sorts_priority_first_then_size() {
+        // Q4_0 → Q4_K_M → Q8_0 by priority; unknown quants after, size-asc.
         let q = model_query_from_plan(
             "Org/Repo".to_string(),
-            plan_with(&[("Q4_0", 900), ("Q4_K_M", 1_000), ("Q8_0", 1_800)]),
+            plan_with(&[
+                ("Q8_0", 1_800),
+                ("Q5_K_M", 1_200),
+                ("Q4_K_M", 1_000),
+                ("Q4_0", 900),
+            ]),
         );
-        // Sorted size-desc.
-        assert_eq!(q.candidates[0].quant, "Q8_0");
-        assert_eq!(q.candidates[2].quant, "Q4_0");
-        // Q4_0 is the priority default even though it is the smallest.
-        let default: Vec<&str> = q
-            .candidates
-            .iter()
-            .filter(|c| c.is_default)
-            .map(|c| c.quant.as_str())
-            .collect();
-        assert_eq!(default, vec!["Q4_0"]);
+        let order: Vec<&str> = q.candidates.iter().map(|c| c.quant.as_str()).collect();
+        assert_eq!(order, vec!["Q4_0", "Q4_K_M", "Q8_0", "Q5_K_M"]);
     }
 
     #[test]
