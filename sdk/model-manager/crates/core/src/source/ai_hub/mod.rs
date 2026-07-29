@@ -10,7 +10,7 @@
 //! downloading the multi-GB payload.
 
 pub mod detect;
-pub mod manifest;
+pub mod dto;
 pub mod remote_zip;
 pub mod selector;
 
@@ -26,7 +26,7 @@ use crate::error::{Error, Result};
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
 use crate::transport::{HttpTransport, ReqwestTransport};
 
-use self::manifest::{
+use self::dto::{
     ChipsetInfo, InfoJson, ManifestModelEntry, ModelReleaseAssets, PlatformInfo, ReleaseManifest,
 };
 use self::remote_zip::{fetch_central_directory, Method, ZipEntry};
@@ -558,7 +558,7 @@ fn classify_ai_hub(info: Option<&InfoJson>, entry: &ManifestModelEntry) -> Model
 
 #[cfg(test)]
 mod tests {
-    use self::manifest::ManifestUrls;
+    use self::dto::ManifestUrls;
     use super::*;
 
     fn entry(id: &str, domain: &str) -> ManifestModelEntry {

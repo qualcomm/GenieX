@@ -17,7 +17,7 @@
 //!   (`PRECISION_FP16` before `PRECISION_W4A16`, etc.). This is a
 //!   best-effort tiebreaker; precision selection is not exposed over FFI.
 
-use super::manifest::{AssetDetails, ModelReleaseAssets, PlatformInfo};
+use super::dto::{AssetDetails, ModelReleaseAssets, PlatformInfo};
 use crate::error::{Error, Result};
 
 /// Runtime string the public bucket uses for Genie-compatible assets.
@@ -162,7 +162,7 @@ impl std::fmt::Display for UnavailableChipset {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::ai_hub::manifest::ChipsetInfo;
+    use crate::source::ai_hub::dto::ChipsetInfo;
 
     fn platform(entries: &[(&str, &[&str])]) -> PlatformInfo {
         PlatformInfo {
