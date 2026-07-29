@@ -478,8 +478,9 @@ func pullModel(ctx context.Context, name string, quant string) error {
 }
 
 // choosePrecision picks a precision from the remote candidates: the only one
-// when there's a single option, otherwise an interactive picker that defaults
-// to the SDK-recommended quant.
+// when there's a single option, otherwise an interactive picker pre-filled
+// with candidates[0] (the SDK sorts by priority, so head is the recommended
+// pick).
 func choosePrecision(candidates []geniex_sdk.PrecisionCandidate) (string, error) {
 	if len(candidates) == 0 {
 		return "", fmt.Errorf("no precision available for this model")
@@ -488,24 +489,17 @@ func choosePrecision(candidates []geniex_sdk.PrecisionCandidate) (string, error)
 		return candidates[0].Precision, nil
 	}
 
-	var defaultQuant string
-	var options []huh.Option[string]
+	options := make([]huh.Option[string], 0, len(candidates))
 	for _, c := range candidates {
-		var sz string
+		sz := "—"
 		if c.Size > 0 {
 			sz = humanize.IBytes(uint64(c.Size))
-		} else {
-			sz = "—"
 		}
 		label := fmt.Sprintf("%-10s [%7s]", c.Precision, sz)
-		if c.IsDefault {
-			label += " (default)"
-			defaultQuant = c.Precision
-		}
 		options = append(options, huh.NewOption(label, c.Precision))
 	}
 
-	chosen := defaultQuant
+	chosen := candidates[0].Precision
 	if err := huh.NewSelect[string]().
 		Title("Choose a precision version to download").
 		Options(options...).
