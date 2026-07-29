@@ -393,7 +393,6 @@ class geniex_QuantCandidate(Structure):
     _fields_ = [
         ('quant', c_char_p),
         ('size', c_int64),
-        ('is_default', c_bool),
     ]
 
 

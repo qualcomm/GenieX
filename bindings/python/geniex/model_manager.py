@@ -102,12 +102,15 @@ class PrecisionCandidate:
 
     precision: str
     size: int
-    is_default: bool
 
 
 @dataclass(frozen=True)
 class ModelQuery:
-    """Result of a plan-only :func:`query`."""
+    """Result of a plan-only :func:`query`.
+
+    ``candidates`` is sorted by SDK priority — grab index 0 for the
+    recommended pick.
+    """
 
     model_name: str
     runtime: str
@@ -359,7 +362,6 @@ def query(
             PrecisionCandidate(
                 precision=out.candidates[i].quant.decode() if out.candidates[i].quant else '',
                 size=out.candidates[i].size,
-                is_default=bool(out.candidates[i].is_default),
             )
             for i in range(out.candidate_count)
         ]
@@ -524,14 +526,14 @@ def ensure_cached(
     except GenieXError:
         full_name = name_part
 
-    # No precision + remote source: resolve the hub default before pulling so
-    # only one variant is downloaded instead of all of them.
+    # No precision + remote source: pick the head of the SDK's priority-
+    # sorted candidate list so only one variant is downloaded instead of
+    # every quant the repo publishes.
     if precision is None and local_path is None:
         try:
             result = query(full_name, hub=hub, hf_token=hf_token)
-            default = next((c.precision for c in result.candidates if c.is_default), None)
-            if default:
-                precision = default
+            if result.candidates:
+                precision = result.candidates[0].precision
         except GenieXError:
             pass  # offline or unsupported hub; let pull decide
 

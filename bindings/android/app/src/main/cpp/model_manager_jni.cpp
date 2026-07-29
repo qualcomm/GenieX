@@ -219,15 +219,11 @@ jobject build_model_detail(JNIEnv* env, const geniex_ModelDetail& d) {
 // Build a com.geniex.sdk.bean.ModelQuery from a geniex_ModelQueryOutput.
 jobject build_model_query(JNIEnv* env, const geniex_ModelQueryOutput& out) {
     jclass       candCls     = env->FindClass("com/geniex/sdk/bean/PrecisionCandidate");
-    jmethodID    candCtor    = env->GetMethodID(candCls, "<init>", "(Ljava/lang/String;JZ)V");
+    jmethodID    candCtor    = env->GetMethodID(candCls, "<init>", "(Ljava/lang/String;J)V");
     jobjectArray jCandidates = env->NewObjectArray(out.candidate_count, candCls, nullptr);
     for (int32_t i = 0; i < out.candidate_count; ++i) {
         jstring jQuant = env->NewStringUTF(out.candidates[i].quant ? out.candidates[i].quant : "");
-        jobject item   = env->NewObject(candCls,
-            candCtor,
-            jQuant,
-            static_cast<jlong>(out.candidates[i].size),
-            static_cast<jboolean>(out.candidates[i].is_default));
+        jobject item   = env->NewObject(candCls, candCtor, jQuant, static_cast<jlong>(out.candidates[i].size));
         env->SetObjectArrayElement(jCandidates, i, item);
         env->DeleteLocalRef(item);
         env->DeleteLocalRef(jQuant);

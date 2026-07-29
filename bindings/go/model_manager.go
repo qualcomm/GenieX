@@ -365,11 +365,12 @@ func ModelGetPaths(name string) (*ModelPaths, error) {
 	}, nil
 }
 
-// PrecisionCandidate mirrors geniex_QuantCandidate.
+// PrecisionCandidate mirrors geniex_QuantCandidate. Candidates in
+// ModelQueryResult.Candidates are sorted by SDK priority — grab the head
+// for the recommended pick.
 type PrecisionCandidate struct {
 	Precision string
 	Size      int64
-	IsDefault bool
 }
 
 // ModelQueryResult mirrors geniex_ModelQueryOutput.
@@ -428,7 +429,6 @@ func ModelQuery(input ModelPullInput) (*ModelQueryResult, error) {
 			result.Candidates[i] = PrecisionCandidate{
 				Precision: C.GoString(c.quant),
 				Size:      int64(c.size),
-				IsDefault: bool(c.is_default),
 			}
 		}
 	}
