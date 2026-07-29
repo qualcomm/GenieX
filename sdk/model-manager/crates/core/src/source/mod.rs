@@ -18,7 +18,6 @@
 pub mod ai_hub;
 pub mod dockerhub;
 pub mod hf;
-pub mod local_kind;
 pub mod localfs;
 
 use std::path::PathBuf;
