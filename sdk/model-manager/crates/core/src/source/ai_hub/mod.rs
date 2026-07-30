@@ -14,7 +14,7 @@ pub mod dto;
 pub mod remote_zip;
 pub mod selector;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};

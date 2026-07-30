@@ -223,17 +223,19 @@ async fn run_one(
     match spec.bytes.clone() {
         BytesSource::Http { url, auth } => {
             download_range_based(
-                &spec.name,
-                spec.size,
-                state,
+                RangeJob {
+                    name: spec.name.clone(),
+                    size_hint: spec.size,
+                    state,
+                    transport,
+                    chunk_sem,
+                    cancel,
+                    url,
+                    auth,
+                    base_offset: 0,
+                    size_provided: spec.size > 0,
+                },
                 dest_dir,
-                transport,
-                chunk_sem,
-                cancel,
-                url,
-                auth,
-                /*base_offset*/ 0,
-                /*size_provided*/ spec.size > 0,
             )
             .await
         }
@@ -245,8 +247,19 @@ async fn run_one(
         } => {
             let size = if len > 0 { len } else { spec.size };
             download_range_based(
-                &spec.name, size, state, dest_dir, transport, chunk_sem, cancel, url, auth, offset,
-                true,
+                RangeJob {
+                    name: spec.name.clone(),
+                    size_hint: size,
+                    state,
+                    transport,
+                    chunk_sem,
+                    cancel,
+                    url,
+                    auth,
+                    base_offset: offset,
+                    size_provided: true,
+                },
+                dest_dir,
             )
             .await
         }
@@ -257,16 +270,18 @@ async fn run_one(
             compressed_len,
         } => {
             download_http_deflate(
-                &spec.name,
-                spec.size,
-                compressed_len,
-                offset,
-                state,
+                DeflateJob {
+                    name: spec.name.clone(),
+                    uncompressed_size: spec.size,
+                    compressed_len,
+                    offset,
+                    state,
+                    transport,
+                    cancel,
+                    url,
+                    auth,
+                },
                 dest_dir,
-                transport,
-                cancel,
-                url,
-                auth,
             )
             .await
         }
@@ -423,24 +438,40 @@ async fn decode_local_deflate(
     Ok(())
 }
 
-/// Chunked parallel download for `Http` and `HttpRange`. The only
-/// difference between them is the `base_offset` added to every range
-/// request: `Http` uses 0, `HttpRange` uses the entry's start inside
-/// the outer zip.
-#[allow(clippy::too_many_arguments)]
-async fn download_range_based(
-    name: &str,
+/// Arguments for [`download_range_based`], grouped so the caller list
+/// stays readable and the two [`BytesSource`] variants that dispatch to
+/// it (`Http`, `HttpRange`) can share one shape.
+struct RangeJob {
+    name: String,
     size_hint: u64,
     state: Arc<FileState>,
-    dest_dir: &Path,
     transport: Arc<dyn HttpTransport>,
     chunk_sem: Arc<Semaphore>,
     cancel: CancellationToken,
     url: url::Url,
     auth: Option<String>,
+    /// Added to every range request. `Http` uses 0; `HttpRange` uses the
+    /// entry's start inside the outer zip.
     base_offset: u64,
+    /// True when `size_hint` is authoritative (e.g. from a zip central
+    /// directory), false when we should HEAD to discover it.
     size_provided: bool,
-) -> Result<()> {
+}
+
+/// Chunked parallel download for `Http` and `HttpRange`.
+async fn download_range_based(job: RangeJob, dest_dir: &Path) -> Result<()> {
+    let RangeJob {
+        name,
+        size_hint,
+        state,
+        transport,
+        chunk_sem,
+        cancel,
+        url,
+        auth,
+        base_offset,
+        size_provided,
+    } = job;
     let size = if size_provided && size_hint > 0 {
         size_hint
     } else {
@@ -449,7 +480,7 @@ async fn download_range_based(
     };
     state.total_bytes.store(size, Ordering::Relaxed);
 
-    let output_path = dest_dir.join(name);
+    let output_path = dest_dir.join(&name);
     let marker_path = PathBuf::from(format!("{}{}", output_path.display(), PROGRESS_SUFFIX));
 
     chunk::preallocate(&output_path, size)?;
@@ -539,27 +570,39 @@ async fn download_range_based(
     Ok(())
 }
 
-/// DEFLATE-decoding download for AI Hub `.bin` shards. Entry-granular
-/// resume: any partial state from a previous crash is discarded and
-/// the whole entry is refetched, because flate2 streams aren't
-/// seekable mid-entry.
-#[allow(clippy::too_many_arguments)]
-async fn download_http_deflate(
-    name: &str,
+/// Arguments for [`download_http_deflate`].
+struct DeflateJob {
+    name: String,
     uncompressed_size: u64,
     compressed_len: u64,
     offset: u64,
     state: Arc<FileState>,
-    dest_dir: &Path,
     transport: Arc<dyn HttpTransport>,
     cancel: CancellationToken,
     url: url::Url,
     auth: Option<String>,
-) -> Result<()> {
+}
+
+/// DEFLATE-decoding download for AI Hub `.bin` shards. Entry-granular
+/// resume: any partial state from a previous crash is discarded and
+/// the whole entry is refetched, because flate2 streams aren't
+/// seekable mid-entry.
+async fn download_http_deflate(job: DeflateJob, dest_dir: &Path) -> Result<()> {
+    let DeflateJob {
+        name,
+        uncompressed_size,
+        compressed_len,
+        offset,
+        state,
+        transport,
+        cancel,
+        url,
+        auth,
+    } = job;
     state
         .total_bytes
         .store(uncompressed_size, Ordering::Relaxed);
-    let output_path = dest_dir.join(name);
+    let output_path = dest_dir.join(&name);
     let marker_path = PathBuf::from(format!("{}{}", output_path.display(), PROGRESS_SUFFIX));
 
     // DEFLATE entries are entry-granular: a 0x01 marker means the file
