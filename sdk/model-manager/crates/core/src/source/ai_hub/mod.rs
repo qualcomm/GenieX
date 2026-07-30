@@ -32,7 +32,7 @@ use self::dto::{
 use self::remote_zip::{fetch_central_directory, Method, ZipEntry};
 use self::selector::{match_asset, UnavailableChipset};
 
-use super::{BytesSource, FileSpec, ModelSource, Plan};
+use super::{basename, BytesSource, FileSpec, ModelSource, Plan};
 
 const MANIFEST_FILENAME: &str = "manifest.json";
 const PLATFORM_FILENAME: &str = "platform.json";
@@ -265,46 +265,18 @@ impl ModelSource for AiHubSource {
         let raw_entries = fetch_central_directory(&self.transport, &download_url).await?;
         let flat_entries = prepare_flat_entries(&raw_entries)?;
 
-        // Lex-first `.bin` matches the Go CLI's `ExtractFlat`, so a
-        // cache populated by either agent is interchangeable.
-        let entrypoint_name = flat_entries
-            .iter()
-            .find(|(name, _)| name.to_ascii_lowercase().ends_with(".bin"))
-            .map(|(name, _)| name.clone())
-            .ok_or_else(|| Error::Hub("no .bin shard in archive".to_string()))?;
+        // Lex-first `.bin` matches the Go CLI's `ExtractFlat`.
+        let (model_file, extra_files) = super::split_entrypoint_and_extras(
+            &flat_entries,
+            || "no .bin shard in archive".to_string(),
+            |e| e.uncompressed_size as i64,
+        )?;
 
         let precision_label = asset
             .precision
             .strip_prefix("PRECISION_")
             .unwrap_or(&asset.precision)
             .to_string();
-
-        // Each bucket holds a single file's own size — sibling sizes live in
-        // extra_files. Aggregating here would double-count via total_size().
-        let entrypoint_size = flat_entries
-            .iter()
-            .find(|(name, _)| name == &entrypoint_name)
-            .map(|(_, e)| e.uncompressed_size as i64)
-            .unwrap_or(0);
-
-        let mut model_file: HashMap<String, ModelFileInfo> = HashMap::new();
-        model_file.insert(
-            "N/A".to_string(),
-            ModelFileInfo {
-                name: entrypoint_name.clone(),
-                downloaded: true,
-                size: entrypoint_size,
-            },
-        );
-        let extra_files: Vec<ModelFileInfo> = flat_entries
-            .iter()
-            .filter(|(name, _)| name != &entrypoint_name)
-            .map(|(name, e)| ModelFileInfo {
-                name: name.clone(),
-                downloaded: true,
-                size: e.uncompressed_size as i64,
-            })
-            .collect();
 
         // `domain` alone cannot distinguish Qwen2.5-VL from text-only
         // LLMs (both report MODEL_DOMAIN_GENERATIVE_AI), so we also
@@ -416,10 +388,6 @@ pub(crate) fn prepare_flat_entries(raw: &[ZipEntry]) -> Result<Vec<(String, ZipE
         out.push((base, e.clone()));
     }
     Ok(out)
-}
-
-fn basename(path: &str) -> String {
-    path.rsplit(['/', '\\']).next().unwrap_or("").to_string()
 }
 
 fn is_macos_metadata(path: &str) -> bool {

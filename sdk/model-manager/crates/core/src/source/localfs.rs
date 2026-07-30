@@ -248,45 +248,14 @@ impl LocalFsSource {
                 self.source_dir.display()
             )));
         }
-        // Lex-first `.bin` mirrors the remote AiHub puller and the Go
-        // CLI's ExtractFlat — a model populated by either path is then
-        // interchangeable on disk.
+        // Lex-first `.bin` mirrors the remote AiHub puller.
         entries.sort_by(|a, b| a.0.cmp(&b.0));
-        let entrypoint = entries
-            .iter()
-            .find(|(n, _)| n.to_ascii_lowercase().ends_with(".bin"))
-            .map(|(n, _)| n.clone())
-            .ok_or_else(|| {
-                Error::Hub(format!(
-                    "AI Hub directory {} has no .bin shard",
-                    self.source_dir.display()
-                ))
-            })?;
-
-        // Each bucket holds a single file's own size; total_size() sums them.
-        let entrypoint_size = entries
-            .iter()
-            .find(|(n, _)| n == &entrypoint)
-            .map(|(_, s)| *s as i64)
-            .unwrap_or(0);
-        let mut model_file: HashMap<String, ModelFileInfo> = HashMap::new();
-        model_file.insert(
-            "N/A".to_string(),
-            ModelFileInfo {
-                name: entrypoint.clone(),
-                downloaded: true,
-                size: entrypoint_size,
-            },
-        );
-        let extra_files: Vec<ModelFileInfo> = entries
-            .iter()
-            .filter(|(n, _)| n != &entrypoint)
-            .map(|(n, s)| ModelFileInfo {
-                name: n.clone(),
-                downloaded: true,
-                size: *s as i64,
-            })
-            .collect();
+        let display = self.source_dir.display().to_string();
+        let (model_file, extra_files) = super::split_entrypoint_and_extras(
+            &entries,
+            || format!("AI Hub directory {display} has no .bin shard"),
+            |s| *s as i64,
+        )?;
 
         let model_type = std::fs::read(self.source_dir.join(AIHUB_METADATA_FILE))
             .ok()
@@ -350,41 +319,12 @@ impl LocalFsSource {
             .or_else(|| self.hint.model_type.clone())
             .unwrap_or(ModelType::Llm);
 
-        let entrypoint = flat
-            .iter()
-            .find(|(name, _)| name.to_ascii_lowercase().ends_with(".bin"))
-            .map(|(name, _)| name.clone())
-            .ok_or_else(|| {
-                Error::Hub(format!(
-                    "AI Hub archive {} has no .bin shard",
-                    zip_path.display()
-                ))
-            })?;
-
-        let entrypoint_size = flat
-            .iter()
-            .find(|(name, _)| name == &entrypoint)
-            .map(|(_, e)| e.uncompressed_size as i64)
-            .unwrap_or(0);
-
-        let mut model_file: HashMap<String, ModelFileInfo> = HashMap::new();
-        model_file.insert(
-            "N/A".to_string(),
-            ModelFileInfo {
-                name: entrypoint.clone(),
-                downloaded: true,
-                size: entrypoint_size,
-            },
-        );
-        let extra_files: Vec<ModelFileInfo> = flat
-            .iter()
-            .filter(|(name, _)| name != &entrypoint)
-            .map(|(name, e)| ModelFileInfo {
-                name: name.clone(),
-                downloaded: true,
-                size: e.uncompressed_size as i64,
-            })
-            .collect();
+        let zip_display = zip_path.display().to_string();
+        let (model_file, extra_files) = super::split_entrypoint_and_extras(
+            &flat,
+            || format!("AI Hub archive {zip_display} has no .bin shard"),
+            |e| e.uncompressed_size as i64,
+        )?;
 
         let manifest = ModelManifest {
             name: self.model_name.clone(),
@@ -805,14 +745,14 @@ mod tests {
         fs::create_dir_all(&safetensors).unwrap();
         fs::write(safetensors.join("config.json"), b"{}").unwrap();
         fs::write(safetensors.join("model.safetensors"), b"x").unwrap();
-        assert!(
-            format!("{}", detect_local_kind(&safetensors).unwrap_err()).contains("safetensors")
-        );
+        assert!(format!("{}", detect_local_kind(&safetensors).unwrap_err()).contains("safetensors"));
 
         let unknown = tmp.path().join("unk");
         fs::create_dir_all(&unknown).unwrap();
         fs::write(unknown.join("readme.txt"), b"hi").unwrap();
         let msg = format!("{}", detect_local_kind(&unknown).unwrap_err());
-        assert!(msg.contains("AI Hub extracted") && msg.contains("HF GGUF") && msg.contains(".zip"));
+        assert!(
+            msg.contains("AI Hub extracted") && msg.contains("HF GGUF") && msg.contains(".zip")
+        );
     }
 }

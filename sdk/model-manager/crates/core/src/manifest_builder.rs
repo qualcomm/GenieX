@@ -8,7 +8,6 @@
 //! pipeline can operate uniformly.
 
 use std::collections::HashMap;
-use std::path::Path;
 
 use serde::Deserialize;
 
@@ -37,40 +36,9 @@ pub struct ManifestHint {
 /// head as the recommended pick.
 pub const QUANT_PRIORITY: &[&str] = &["Q4_0", "Q4_K_M", "Q8_0"];
 
-/// Infer a manifest by scanning `src_dir` for model files.
-pub fn infer_manifest_from_dir(
-    name: &str,
-    src_dir: &Path,
-    hint: ManifestHint,
-) -> Result<ModelManifest> {
-    let mut file_names: Vec<String> = Vec::new();
-    for entry in std::fs::read_dir(src_dir)?.flatten() {
-        let ft = match entry.file_type() {
-            Ok(t) => t,
-            Err(_) => continue,
-        };
-        if !ft.is_file() {
-            continue;
-        }
-        if let Some(n) = entry.file_name().to_str().map(str::to_string) {
-            file_names.push(n);
-        }
-    }
-
-    let mut sizes: HashMap<String, i64> = HashMap::new();
-    for n in &file_names {
-        let size = std::fs::metadata(src_dir.join(n))
-            .map(|m| m.len() as i64)
-            .unwrap_or(0);
-        sizes.insert(n.clone(), size);
-    }
-
-    infer_manifest_from_names(name, &file_names, &sizes, hint)
-}
-
-/// Same logic as [`infer_manifest_from_dir`] but driven by an explicit
-/// file list and size map — useful when the caller already has the remote
-/// listing in hand (e.g. `HfHub::model_info`).
+/// Infer a manifest from an explicit list of filenames + their sizes.
+/// Used when the caller already holds the listing (HF `model_info`,
+/// LocalFS `read_dir`, etc.).
 pub fn infer_manifest_from_names(
     name: &str,
     file_names: &[String],

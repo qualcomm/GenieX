@@ -20,13 +20,58 @@ pub mod dockerhub;
 pub mod hf;
 pub mod localfs;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
 use url::Url;
 
-use crate::error::Result;
-use crate::manifest::ModelManifest;
+use crate::error::{Error, Result};
+use crate::manifest::{ModelFileInfo, ModelManifest};
+
+/// Last path component of `path`, treating both `/` and `\` as separators.
+/// Empty path returns an empty string.
+pub(crate) fn basename(path: &str) -> String {
+    path.rsplit(['/', '\\']).next().unwrap_or("").to_string()
+}
+
+/// Split a flat list of `(name, T)` entries into a `model_file` map keyed
+/// by `"N/A"` (AI Hub / QAIRT layout) and an `extra_files` vec. The
+/// entrypoint is the lex-first entry whose name ends in `.bin`.
+///
+/// `size_of` extracts the on-disk size for each entry (kept generic so
+/// remote `ZipEntry` and local `(name, u64)` tuples both work).
+pub(crate) fn split_entrypoint_and_extras<T>(
+    entries: &[(String, T)],
+    missing_bin_err: impl FnOnce() -> String,
+    size_of: impl Fn(&T) -> i64,
+) -> Result<(HashMap<String, ModelFileInfo>, Vec<ModelFileInfo>)> {
+    let entrypoint_idx = entries
+        .iter()
+        .position(|(name, _)| name.to_ascii_lowercase().ends_with(".bin"))
+        .ok_or_else(|| Error::Hub(missing_bin_err()))?;
+    let (entry_name, entry_val) = &entries[entrypoint_idx];
+    let mut model_file = HashMap::new();
+    model_file.insert(
+        "N/A".to_string(),
+        ModelFileInfo {
+            name: entry_name.clone(),
+            downloaded: true,
+            size: size_of(entry_val),
+        },
+    );
+    let extra_files: Vec<ModelFileInfo> = entries
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| *i != entrypoint_idx)
+        .map(|(_, (name, val))| ModelFileInfo {
+            name: name.clone(),
+            downloaded: true,
+            size: size_of(val),
+        })
+        .collect();
+    Ok((model_file, extra_files))
+}
 
 #[async_trait]
 pub trait ModelSource: Send + Sync {

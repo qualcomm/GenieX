@@ -36,7 +36,7 @@ use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
 use crate::manifest_builder::extract_quant;
 use crate::transport::{build_tls_config, HttpTransport, USER_AGENT};
 
-use super::{BytesSource, FileSpec, ModelSource, Plan};
+use super::{basename, BytesSource, FileSpec, ModelSource, Plan};
 
 pub const DEFAULT_REGISTRY_ENDPOINT: &str = "https://registry-1.docker.io";
 pub const DEFAULT_AUTH_ENDPOINT: &str = "https://auth.docker.io/token";
@@ -537,10 +537,6 @@ fn build_plan(
     };
 
     Ok(Plan { manifest, files })
-}
-
-fn basename(path: &str) -> String {
-    path.rsplit(['/', '\\']).next().unwrap_or(path).to_string()
 }
 
 #[cfg(test)]
