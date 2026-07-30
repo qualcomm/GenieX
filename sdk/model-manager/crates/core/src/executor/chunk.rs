@@ -39,12 +39,6 @@ pub struct ChunkPlan {
     pub chunks: Vec<ChunkRange>,
 }
 
-impl ChunkPlan {
-    pub fn num_chunks(&self) -> usize {
-        self.chunks.len()
-    }
-}
-
 /// Build a chunk plan for `file_size`. A `file_size` of 0 yields a
 /// zero-chunk plan; the caller is responsible for still creating an empty
 /// output file.
@@ -62,7 +56,7 @@ pub fn plan_chunks_with_floor(file_size: u64, min_chunk_size: u64) -> ChunkPlan 
     };
     let mut chunks = Vec::new();
     if file_size > 0 {
-        let n = (file_size + chunk_size - 1) / chunk_size;
+        let n = file_size.div_ceil(chunk_size);
         for i in 0..n {
             let offset = i * chunk_size;
             let len = core::cmp::min(chunk_size, file_size - offset);
@@ -92,7 +86,7 @@ fn effective_min_chunk_size() -> u64 {
 /// if the file is missing or length-mismatched (which signals either a
 /// fresh pull or a chunk-size change since the last attempt).
 pub fn load_or_init_bitmap(marker_path: &Path, plan: &ChunkPlan) -> Result<Vec<u8>> {
-    let expected = plan.num_chunks();
+    let expected = plan.chunks.len();
     match fs::read(marker_path) {
         Ok(buf) if buf.len() == expected => Ok(buf),
         Ok(_) | Err(_) => {
@@ -170,7 +164,7 @@ mod tests {
     #[test]
     fn tiny_file_is_single_chunk() {
         let plan = plan_chunks_with_floor(1024, MIN_CHUNK_SIZE);
-        assert_eq!(plan.num_chunks(), 1);
+        assert_eq!(plan.chunks.len(), 1);
         assert_eq!(plan.chunks[0].offset, 0);
         assert_eq!(plan.chunks[0].len, 1024);
         assert_eq!(plan.chunk_size, MIN_CHUNK_SIZE);
@@ -179,14 +173,14 @@ mod tests {
     #[test]
     fn exact_min_chunk_is_one_chunk() {
         let plan = plan_chunks_with_floor(MIN_CHUNK_SIZE, MIN_CHUNK_SIZE);
-        assert_eq!(plan.num_chunks(), 1);
+        assert_eq!(plan.chunks.len(), 1);
         assert_eq!(plan.chunks[0].len, MIN_CHUNK_SIZE);
     }
 
     #[test]
     fn thirty_two_mib_splits_into_two() {
         let plan = plan_chunks_with_floor(2 * MIN_CHUNK_SIZE, MIN_CHUNK_SIZE);
-        assert_eq!(plan.num_chunks(), 2);
+        assert_eq!(plan.chunks.len(), 2);
         assert_eq!(plan.chunks[0].len, MIN_CHUNK_SIZE);
         assert_eq!(plan.chunks[1].len, MIN_CHUNK_SIZE);
     }
@@ -196,7 +190,7 @@ mod tests {
         // 4 GiB at the default floor → 128 chunks of 32 MiB each.
         let size = 4u64 * 1024 * 1024 * 1024;
         let plan = plan_chunks_with_floor(size, MIN_CHUNK_SIZE);
-        assert_eq!(plan.num_chunks(), MAX_CHUNKS_PER_FILE as usize);
+        assert_eq!(plan.chunks.len(), MAX_CHUNKS_PER_FILE as usize);
         assert_eq!(plan.chunk_size, size / MAX_CHUNKS_PER_FILE);
         assert_eq!(
             plan.chunks.iter().map(|c| c.len).sum::<u64>(),
@@ -209,7 +203,7 @@ mod tests {
     fn last_chunk_takes_the_remainder() {
         let size = MIN_CHUNK_SIZE + 123;
         let plan = plan_chunks_with_floor(size, MIN_CHUNK_SIZE);
-        assert_eq!(plan.num_chunks(), 2);
+        assert_eq!(plan.chunks.len(), 2);
         assert_eq!(plan.chunks[1].len, 123);
         assert_eq!(plan.chunks[1].offset, MIN_CHUNK_SIZE);
     }
@@ -217,7 +211,7 @@ mod tests {
     #[test]
     fn zero_size_yields_no_chunks() {
         let plan = plan_chunks_with_floor(0, MIN_CHUNK_SIZE);
-        assert_eq!(plan.num_chunks(), 0);
+        assert_eq!(plan.chunks.len(), 0);
     }
 
     #[test]

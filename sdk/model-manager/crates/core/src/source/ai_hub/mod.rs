@@ -163,6 +163,37 @@ impl AiHubSource {
             transport,
         }
     }
+
+    /// Fetch and parse the per-model `info.json`. Returns `None` on any
+    /// failure (missing URL, fetch error, malformed JSON), logging a
+    /// warning first — modality classification tolerates absence.
+    async fn fetch_info_json(&self, entry: &ManifestModelEntry, version: &str) -> Option<InfoJson> {
+        if entry.manifest_urls.info.is_empty() {
+            return None;
+        }
+        let cache_path = self
+            .cfg
+            .cache_dir
+            .join("info")
+            .join(format!("{}.json", entry.id));
+        let bytes = fetch_with_cache(
+            &entry.manifest_urls.info,
+            &cache_path,
+            version,
+            self.cfg.skip_cache,
+            &self.transport,
+        )
+        .await
+        .inspect_err(|e| {
+            crate::logging::warn(&format!("aihub info.json fetch for {}: {e}", entry.id));
+        })
+        .ok()?;
+        serde_json::from_slice::<InfoJson>(&bytes)
+            .inspect_err(|e| {
+                crate::logging::warn(&format!("aihub info.json parse for {}: {e}", entry.id));
+            })
+            .ok()
+    }
 }
 
 #[async_trait]
@@ -265,44 +296,11 @@ impl ModelSource for AiHubSource {
             .unwrap_or(&asset.precision)
             .to_string();
 
-        // `domain` alone cannot distinguish Qwen2.5-VL from text-only
-        // LLMs (both report MODEL_DOMAIN_GENERATIVE_AI), so we also
-        // read the per-model info.json. Fetch failure is non-fatal:
-        // `classify_ai_hub` falls back to the domain-only signal and
-        // defaults to LLM if even that is absent.
-        let info: Option<InfoJson> = if entry.manifest_urls.info.is_empty() {
-            None
-        } else {
-            let cache_path = self
-                .cfg
-                .cache_dir
-                .join("info")
-                .join(format!("{}.json", entry.id));
-            match fetch_with_cache(
-                &entry.manifest_urls.info,
-                &cache_path,
-                version,
-                self.cfg.skip_cache,
-                &self.transport,
-            )
-            .await
-            {
-                Ok(bytes) => match serde_json::from_slice::<InfoJson>(&bytes) {
-                    Ok(info) => Some(info),
-                    Err(e) => {
-                        crate::logging::warn(&format!(
-                            "aihub info.json parse for {}: {e}",
-                            entry.id
-                        ));
-                        None
-                    }
-                },
-                Err(e) => {
-                    crate::logging::warn(&format!("aihub info.json fetch for {}: {e}", entry.id));
-                    None
-                }
-            }
-        };
+        // `domain` alone can't distinguish Qwen2.5-VL from text-only LLMs
+        // (both report MODEL_DOMAIN_GENERATIVE_AI), so we also read the
+        // per-model info.json. Failure is non-fatal: `classify_ai_hub`
+        // falls back to the domain-only signal.
+        let info = self.fetch_info_json(entry, version).await;
         let model_type = classify_ai_hub(info.as_ref(), entry);
         let manifest = ModelManifest {
             name: self.model_name.clone(),
