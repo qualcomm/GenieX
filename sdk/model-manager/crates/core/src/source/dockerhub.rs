@@ -416,106 +416,80 @@ fn build_plan(
         )));
     }
 
+    // Add a layer as both a `FileSpec` (byte-level fetch) and the
+    // `ModelFileInfo` the caller stores in the manifest, resolving the
+    // display name from either the OCI filepath annotation or `fallback`.
     let mut files: Vec<FileSpec> = Vec::new();
-    let mut push = |name: String, desc: &Descriptor| -> Result<()> {
+    let mut add_layer = |desc: &Descriptor, fallback: String| -> Result<ModelFileInfo> {
+        let name = if is_layer_per_file {
+            desc.annotations
+                .get(ANNOTATION_FILEPATH)
+                .filter(|fp| !fp.is_empty())
+                .map(|fp| basename(fp))
+                .unwrap_or(fallback)
+        } else {
+            fallback
+        };
         files.push(FileSpec {
-            name,
+            name: name.clone(),
             size: desc.size,
             bytes: BytesSource::Http {
                 url: blob_url(&desc.digest)?,
                 auth: token.clone(),
             },
         });
-        Ok(())
+        Ok(ModelFileInfo {
+            name,
+            downloaded: true,
+            size: desc.size as i64,
+        })
     };
 
-    let layer_name = |desc: &Descriptor, fallback: String| -> String {
-        if is_layer_per_file {
-            if let Some(fp) = desc.annotations.get(ANNOTATION_FILEPATH) {
-                if !fp.is_empty() {
-                    return basename(fp);
-                }
-            }
-        }
-        fallback
-    };
-
-    // GGUF weight(s): single file -> "model.gguf"; multiple -> numbered
-    // shards, matching the Go CLI's `unpackGGUFs` naming exactly so a
-    // cache populated by either agent is interchangeable.
-    let mut model_file: HashMap<String, ModelFileInfo> = HashMap::new();
+    // GGUF weight(s): single -> "model.gguf"; multi -> "model-NNNNN-of-MMMMM.gguf"
+    // (matches the Go CLI's unpackGGUFs naming).
     let mut extra_files: Vec<ModelFileInfo> = Vec::new();
     let n = gguf_layers.len();
-    let mut entrypoint: Option<ModelFileInfo> = None;
-    for (i, desc) in gguf_layers.iter().enumerate() {
+    let mut gguf_entries = gguf_layers.iter().enumerate().map(|(i, desc)| {
         let fallback = if n == 1 {
             "model.gguf".to_string()
         } else {
             format!("model-{:05}-of-{:05}.gguf", i + 1, n)
         };
-        let name = layer_name(desc, fallback);
-        push(name.clone(), desc)?;
-        let info = ModelFileInfo {
-            name,
-            downloaded: true,
-            size: desc.size as i64,
-        };
-        if i == 0 {
-            entrypoint = Some(info);
-        } else {
-            extra_files.push(info);
-        }
+        add_layer(desc, fallback)
+    });
+    let entrypoint = gguf_entries
+        .next()
+        .expect("gguf_layers is non-empty (checked above)")?;
+    for rest in gguf_entries {
+        extra_files.push(rest?);
     }
-    let quant = if !config.quantization.is_empty() {
-        config.quantization.to_ascii_uppercase()
-    } else if let Some(entry) = &entrypoint {
-        extract_quant(&entry.name).unwrap_or_else(|| "DEFAULT".to_string())
-    } else {
-        "DEFAULT".to_string()
-    };
-    model_file.insert(quant, entrypoint.expect("gguf_layers is non-empty"));
 
     let mmproj_file = if let Some(desc) = mmproj_layers.first() {
-        let name = layer_name(desc, "model.mmproj".to_string());
-        push(name.clone(), desc)?;
-        ModelFileInfo {
-            name,
-            downloaded: true,
-            size: desc.size as i64,
-        }
+        add_layer(desc, "model.mmproj".to_string())?
     } else {
         ModelFileInfo::default()
     };
 
-    for desc in &chat_template_layers[..chat_template_layers.len().min(1)] {
-        let name = layer_name(desc, "template.jinja".to_string());
-        push(name.clone(), desc)?;
-        extra_files.push(ModelFileInfo {
-            name,
-            downloaded: true,
-            size: desc.size as i64,
-        });
+    // Docker's OCI convention allows at most one chat template and one license.
+    if let Some(desc) = chat_template_layers.first() {
+        extra_files.push(add_layer(desc, "template.jinja".to_string())?);
     }
-    for desc in &license_layers[..license_layers.len().min(1)] {
-        let name = layer_name(desc, "LICENSE".to_string());
-        push(name.clone(), desc)?;
-        extra_files.push(ModelFileInfo {
-            name,
-            downloaded: true,
-            size: desc.size as i64,
-        });
+    if let Some(desc) = license_layers.first() {
+        extra_files.push(add_layer(desc, "LICENSE".to_string())?);
     }
     for desc in &model_file_layers {
         let short = desc.digest.rsplit(':').next().unwrap_or(&desc.digest);
         let fallback = format!("file-{}", &short[..short.len().min(12)]);
-        let name = layer_name(desc, fallback);
-        push(name.clone(), desc)?;
-        extra_files.push(ModelFileInfo {
-            name,
-            downloaded: true,
-            size: desc.size as i64,
-        });
+        extra_files.push(add_layer(desc, fallback)?);
     }
+
+    let quant = if !config.quantization.is_empty() {
+        config.quantization.to_ascii_uppercase()
+    } else {
+        extract_quant(&entrypoint.name).unwrap_or_else(|| "DEFAULT".to_string())
+    };
+    let mut model_file: HashMap<String, ModelFileInfo> = HashMap::new();
+    model_file.insert(quant, entrypoint);
 
     let model_type = if mmproj_file.downloaded {
         ModelType::Vlm
