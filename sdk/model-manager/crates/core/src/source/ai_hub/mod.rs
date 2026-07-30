@@ -22,7 +22,7 @@ use std::time::{Duration, SystemTime};
 use async_trait::async_trait;
 use url::Url;
 
-use crate::error::{Error, Result};
+use crate::error::{parse_manifest, Error, Result};
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
 use crate::transport::{HttpTransport, ReqwestTransport};
 
@@ -89,10 +89,7 @@ async fn fetch_platform_info(
         transport,
     )
     .await?;
-    serde_json::from_slice(&platform_bytes).map_err(|source| Error::ManifestParse {
-        what: "platform.json",
-        source,
-    })
+    parse_manifest("platform.json", &platform_bytes)
 }
 
 /// List every chipset AI Hub publishes assets for, with its canonical
@@ -184,11 +181,7 @@ impl ModelSource for AiHubSource {
             &self.transport,
         )
         .await?;
-        let release_manifest: ReleaseManifest =
-            serde_json::from_slice(&manifest_bytes).map_err(|source| Error::ManifestParse {
-                what: "manifest.json",
-                source,
-            })?;
+        let release_manifest: ReleaseManifest = parse_manifest("manifest.json", &manifest_bytes)?;
 
         // Match by display_name first, then fall back to the snake_case
         // `id`, so callers can use either "Llama-v3.2-3B-Instruct" or
@@ -220,11 +213,8 @@ impl ModelSource for AiHubSource {
         // release-assets.json is per-model with a URL that rotates each
         // release, so it's fetched uncached.
         let release_assets_bytes = fetch_direct(release_assets_url, &self.transport).await?;
-        let release_assets: ModelReleaseAssets = serde_json::from_slice(&release_assets_bytes)
-            .map_err(|source| Error::ManifestParse {
-                what: "release-assets.json",
-                source,
-            })?;
+        let release_assets: ModelReleaseAssets =
+            parse_manifest("release-assets.json", &release_assets_bytes)?;
 
         let platform = fetch_platform_info(&self.cfg, &self.transport).await?;
 
@@ -253,10 +243,7 @@ impl ModelSource for AiHubSource {
         };
 
         let download_url = Url::parse(&asset.download_url).map_err(|e| {
-            Error::Hub(format!(
-                "invalid asset download_url {:?}: {e}",
-                asset.download_url
-            ))
+            Error::invalid_url(format!("asset download_url {:?}", asset.download_url), e)
         })?;
 
         // Only the ZIP64 footer + central directory are fetched here;
@@ -449,7 +436,7 @@ fn write_cache(path: &Path, data: &[u8]) {
 }
 
 async fn fetch_direct(url: &str, transport: &Arc<dyn HttpTransport>) -> Result<Vec<u8>> {
-    let parsed = Url::parse(url).map_err(|e| Error::Hub(format!("invalid url {url:?}: {e}")))?;
+    let parsed = Url::parse(url).map_err(|e| Error::invalid_url(format!("url {url:?}"), e))?;
     let head = transport.head(&parsed, None).await?;
     if head.size > MAX_INDEX_BYTES {
         return Err(Error::Hub(format!(

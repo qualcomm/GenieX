@@ -72,7 +72,8 @@ pub fn err_to_code(e: &Error) -> i32 {
         Error::QuantNotFound(_, _)
         | Error::QuantNotDownloaded(_, _)
         | Error::InvalidModelName(_)
-        | Error::InvalidFileName(_) => GENIEX_ERROR_COMMON_INVALID_INPUT,
+        | Error::InvalidFileName(_)
+        | Error::InvalidUrl { .. } => GENIEX_ERROR_COMMON_INVALID_INPUT,
         // Split HTTP status into actionable buckets; everything else (other
         // statuses, timeout/DNS/proxy, freeform) stays a generic network error.
         Error::HttpStatus { status, .. } if *status == 401 || *status == 403 => {

@@ -80,6 +80,16 @@ pub enum Error {
     #[error("http error: {0}")]
     Http(String),
 
+    /// URL syntax error. `context` names what was being built
+    /// (`"HF endpoint"`, `"docker manifest url"`, …) so the log line is
+    /// actionable without pattern-matching on the underlying message.
+    #[error("invalid url ({context}): {source}")]
+    InvalidUrl {
+        context: String,
+        #[source]
+        source: url::ParseError,
+    },
+
     #[error("download cancelled")]
     Cancelled,
 
@@ -91,4 +101,22 @@ pub enum Error {
 
     #[error("could not infer manifest from directory: {0}")]
     ManifestInferenceFailed(String),
+}
+
+impl Error {
+    /// Wrap a `url::ParseError` with `context` describing the URL role.
+    pub fn invalid_url(context: impl Into<String>, source: url::ParseError) -> Self {
+        Error::InvalidUrl {
+            context: context.into(),
+            source,
+        }
+    }
+}
+
+/// Parse a serde-JSON document, tagging failures with `what` for log grep.
+pub fn parse_manifest<'a, T: serde::Deserialize<'a>>(
+    what: &'static str,
+    bytes: &'a [u8],
+) -> Result<T> {
+    serde_json::from_slice(bytes).map_err(|source| Error::ManifestParse { what, source })
 }

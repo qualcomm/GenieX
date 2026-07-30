@@ -31,7 +31,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use url::Url;
 
-use crate::error::{Error, Result};
+use crate::error::{parse_manifest, Error, Result};
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
 use crate::manifest_builder::extract_quant;
 use crate::transport::{build_tls_config, HttpTransport, USER_AGENT};
@@ -174,7 +174,7 @@ impl DockerHubSource {
             "{}/v2/{}/manifests/{reference}",
             self.cfg.registry_endpoint, self.repo
         ))
-        .map_err(|e| Error::Hub(format!("invalid docker manifest url: {e}")))?;
+        .map_err(|e| Error::invalid_url("docker manifest url", e))?;
 
         let accept = [
             media::OCI_MANIFEST,
@@ -222,11 +222,7 @@ impl DockerHubSource {
                 bytes.len()
             )));
         }
-        let mut parsed: RegistryManifest =
-            serde_json::from_slice(&bytes).map_err(|source| Error::ManifestParse {
-                what: "docker registry manifest",
-                source,
-            })?;
+        let mut parsed: RegistryManifest = parse_manifest("docker registry manifest", &bytes)?;
         if parsed.media_type.is_empty() {
             parsed.media_type = content_type;
         }
@@ -238,7 +234,7 @@ impl DockerHubSource {
             "{}/v2/{}/blobs/{digest}",
             self.cfg.registry_endpoint, self.repo
         ))
-        .map_err(|e| Error::Hub(format!("invalid docker blob url: {e}")))
+        .map_err(|e| Error::invalid_url("docker blob url", e))
     }
 
     async fn fetch_blob(&self, digest: &str, token: Option<&str>, cap: u64) -> Result<Vec<u8>> {
@@ -293,11 +289,7 @@ impl ModelSource for DockerHubSource {
         let config_bytes = self
             .fetch_blob(&config_desc.digest, token.as_deref(), MAX_CONFIG_BYTES)
             .await?;
-        let config_file: DockerConfigFile =
-            serde_json::from_slice(&config_bytes).map_err(|source| Error::ManifestParse {
-                what: "docker model config",
-                source,
-            })?;
+        let config_file: DockerConfigFile = parse_manifest("docker model config", &config_bytes)?;
 
         let is_layer_per_file = config_desc.media_type == media::CONFIG_V02;
         build_plan(
