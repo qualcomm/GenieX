@@ -83,6 +83,12 @@ jobs:
     with:
       version_tag: ${{ needs.resolve-tag.outputs.tag }}
       upload_artifact: true
+      # Release artifacts must be built from clean state, never assembled from
+      # restored ccache / cargo / ninja-tree caches: actions/cache restores
+      # uniform mtimes, so a restored build tree can defeat ninja's staleness
+      # detection and `cmake --install` then ships outputs compiled from an
+      # older commit under the new tag (see qualcomm/GenieX#1266).
+      hermetic: true
 
   build-android-aar:
     name: build-android-aar

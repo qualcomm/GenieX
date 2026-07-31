@@ -18,6 +18,17 @@ on:
         required: false
         type: string
         default: ""
+      hermetic:
+        description: >-
+          Build from clean state: skip every cross-run cache restore (ccache,
+          cargo target, CMake build tree). Release builds set this so shipped
+          binaries can never be assembled from stale cached outputs — the same
+          uniform-mtime hazard documented on the cargo cache below applies to
+          the ninja build tree, whose cache key hashes only configure inputs,
+          not the C/C++ sources.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -79,6 +90,7 @@ jobs:
           version_tag: ${{ inputs.version_tag }}
 
       - name: Restore ccache
+        if: ${{ !inputs.hermetic }}
         uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/.ccache
@@ -95,6 +107,7 @@ jobs:
       # No restore-keys — a source change forces a clean rebuild instead of a
       # fuzzy restore that would re-trigger the staleness.
       - name: Restore cargo target
+        if: ${{ !inputs.hermetic }}
         uses: actions/cache@v6
         with:
           path: |
@@ -127,6 +140,7 @@ jobs:
       # configure-time inputs; a change there mints a new entry, while
       # restore-keys lets unchanged-config runs reuse the previous tree.
       - name: Restore CMake build dir
+        if: ${{ !inputs.hermetic }}
         uses: actions/cache@v6
         with:
           path: sdk/build-${{ matrix.preset }}
