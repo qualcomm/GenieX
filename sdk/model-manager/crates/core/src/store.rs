@@ -325,7 +325,27 @@ fn read_manifest(path: &std::path::Path) -> Result<ModelManifest> {
     let mut reader = file.take(MANIFEST_MAX_BYTES);
     let mut data = String::new();
     reader.read_to_string(&mut data)?;
-    Ok(serde_json::from_str(&data)?)
+    let mut manifest: ModelManifest = serde_json::from_str(&data)?;
+    if migrate_legacy_qairt_precision(&mut manifest) {
+        if let Ok(rewritten) = serde_json::to_string(&manifest) {
+            let _ = fs::write(path, rewritten);
+        }
+    }
+    Ok(manifest)
+}
+
+// DEPRECATED-COMPAT #1242: rewrite pre-fix QAIRT shape ("N/A" key + top-level Precision) to the new shape.
+fn migrate_legacy_qairt_precision(m: &mut ModelManifest) -> bool {
+    if m.plugin_id != "qairt" || m.precision.is_empty() {
+        return false;
+    }
+    if m.model_file.len() != 1 || !m.model_file.contains_key("N/A") {
+        return false;
+    }
+    let entry = m.model_file.remove("N/A").unwrap();
+    let key = std::mem::take(&mut m.precision);
+    m.model_file.insert(key, entry);
+    true
 }
 
 /// Split "org/repo:quant" into ("org/repo", Some("quant")) or ("org/repo", None).
@@ -546,5 +566,31 @@ mod tests {
         fs::write(dir.join(MANIFEST_FILE), big).unwrap();
         // Size-capped reader will truncate, then JSON parse fails — either way, Err.
         assert!(store.get_manifest("Org/Huge").is_err());
+    }
+
+    #[test]
+    fn legacy_qairt_manifest_migrates_on_read_and_rewrites_disk() {
+        let store = make_store();
+        let dir = store.cfg.model_dir("qualcomm/Legacy");
+        fs::create_dir_all(&dir).unwrap();
+        let legacy = r#"{
+            "Name":"qualcomm/Legacy","ModelName":"legacy","ModelType":"llm",
+            "PluginId":"qairt","Precision":"W4A16",
+            "ModelFile":{"N/A":{"Name":"model-00.bin","Downloaded":true,"Size":10}},
+            "MMProjFile":{"Name":"","Downloaded":false,"Size":0},
+            "TokenizerFile":{"Name":"","Downloaded":false,"Size":0},
+            "ExtraFiles":[]
+        }"#;
+        fs::write(dir.join(MANIFEST_FILE), legacy).unwrap();
+
+        let loaded = store.get_manifest("qualcomm/Legacy").unwrap();
+        assert_eq!(loaded.precision, "");
+        assert!(loaded.model_file.contains_key("W4A16"));
+        assert!(!loaded.model_file.contains_key("N/A"));
+
+        let on_disk = fs::read_to_string(dir.join(MANIFEST_FILE)).unwrap();
+        assert!(on_disk.contains(r#""W4A16":"#), "on-disk: {on_disk}");
+        assert!(!on_disk.contains(r#""N/A""#), "on-disk: {on_disk}");
+        assert!(!on_disk.contains(r#""Precision""#), "on-disk: {on_disk}");
     }
 }

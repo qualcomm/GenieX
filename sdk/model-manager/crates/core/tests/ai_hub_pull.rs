@@ -8,7 +8,7 @@
 //! a DEFLATE tokenizer. Confirms the resulting model directory matches
 //! what the Go CLI's `Store.PullZipAsset` would produce, *without the
 //! zip ever landing on disk*: entrypoint basename in
-//! `ModelFile["N/A"]`, extras populated, plugin_id = `"qairt"`.
+//! `ModelFile[<precision>]`, extras populated, plugin_id = `"qairt"`.
 
 use std::io::Write;
 use std::sync::Arc;
@@ -211,8 +211,8 @@ async fn ai_hub_pull_writes_manifest_and_extracts_flat() {
 
     let mf = store.get_manifest("tests/TestNet").unwrap();
     assert_eq!(mf.plugin_id, "qairt");
-    assert_eq!(mf.precision, "W4A16");
-    let entry = mf.model_file.get("N/A").expect("N/A quant entry");
+    assert_eq!(mf.precision, "");
+    let entry = mf.model_file.get("W4A16").expect("W4A16 quant entry");
     assert_eq!(entry.name, "model-00.bin");
     assert!(entry.downloaded);
     assert!(

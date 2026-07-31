@@ -183,23 +183,13 @@ pub extern "C" fn geniex_model_list_detailed(output: *mut GenieXModelListDetaile
         let details: Vec<GenieXModelDetail> = manifests
             .iter()
             .map(|m| {
-                // QAIRT manifests key model_file under "N/A" and carry the
-                // real precision (e.g. "W4A16") on the top-level field —
-                // surface that to bindings instead of the placeholder.
                 let downloaded: Vec<&str> = m
                     .model_file
                     .iter()
                     .filter(|(_, fi)| fi.downloaded)
                     .map(|(q, _)| q.as_str())
                     .collect();
-                let precs: Vec<*mut c_char> = if !m.precision.is_empty()
-                    && !downloaded.is_empty()
-                    && downloaded.iter().all(|q| *q == "N/A")
-                {
-                    vec![str_to_cptr(&m.precision)]
-                } else {
-                    downloaded.iter().map(|q| str_to_cptr(q)).collect()
-                };
+                let precs: Vec<*mut c_char> = downloaded.iter().map(|q| str_to_cptr(q)).collect();
                 let (precisions, precision_count) = into_c_array(precs);
                 GenieXModelDetail {
                     name: str_to_cptr(&m.name),

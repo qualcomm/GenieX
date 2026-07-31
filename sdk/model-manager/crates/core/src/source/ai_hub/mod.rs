@@ -284,7 +284,7 @@ impl ModelSource for AiHubSource {
         let flat_entries = prepare_flat_entries(&raw_entries)?;
 
         // Lex-first `.bin` matches the Go CLI's `ExtractFlat`.
-        let (model_file, extra_files) = super::split_entrypoint_and_extras(
+        let (mut model_file, extra_files) = super::split_entrypoint_and_extras(
             &flat_entries,
             || "no .bin shard in archive".to_string(),
             |e| e.uncompressed_size as i64,
@@ -295,6 +295,13 @@ impl ModelSource for AiHubSource {
             .strip_prefix("PRECISION_")
             .unwrap_or(&asset.precision)
             .to_string();
+
+        // Key by real precision so /v1/models ids round-trip to /v1/chat/completions (#1242).
+        if !precision_label.is_empty() {
+            if let Some(entry) = model_file.remove("N/A") {
+                model_file.insert(precision_label.clone(), entry);
+            }
+        }
 
         // `domain` alone can't distinguish Qwen2.5-VL from text-only LLMs
         // (both report MODEL_DOMAIN_GENERATIVE_AI), so we also read the
@@ -311,7 +318,7 @@ impl ModelSource for AiHubSource {
             },
             model_type,
             plugin_id: "qairt".to_string(),
-            precision: precision_label,
+            precision: String::new(),
             model_file,
             mmproj_file: ModelFileInfo::default(),
             tokenizer_file: ModelFileInfo::default(),
