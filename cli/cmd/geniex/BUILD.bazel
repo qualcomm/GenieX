@@ -43,6 +43,7 @@ go_library(
 go_cgo_test(
     name = "geniex_test",
     srcs = [
+        "infer_test.go",
         "model_test.go",
         "update_test.go",
     ],

@@ -237,6 +237,23 @@ func loadStopSequences() ([]string, error) {
 	return stopSequences, nil
 }
 
+// modelLoadedLine formats a one-line summary of what the inference session
+// actually got, printed after the model is loaded when --verbose is set. It's
+// a pure helper so tests can pin the output without touching the SDK.
+func modelLoadedLine(runtimeID, deviceID string, ngl, nctx int32) string {
+	parts := []string{
+		fmt.Sprintf("backend=%s", runtimeID),
+		fmt.Sprintf("device=%s", deviceID),
+	}
+	if runtimeID == geniex_sdk.RuntimeLlamaCpp {
+		parts = append(parts,
+			fmt.Sprintf("ngl=%d", ngl),
+			fmt.Sprintf("nctx=%d", nctx),
+		)
+	}
+	return "Model loaded: " + strings.Join(parts, " ")
+}
+
 // resolveModelParams resolves --compute / --ngl / --nctx into the
 // (device_id, ngl, nctx) triple the SDK expects. --ngl (-1 = all) and
 // --nctx are llama_cpp-only; qairt rejects any non-zero value, so both
@@ -332,6 +349,10 @@ func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths) error {
 		return err
 	}
 	defer p.Destroy()
+
+	if verbose {
+		fmt.Println(render.GetTheme().Info.Sprint(modelLoadedLine(paths.RuntimeID, deviceID, nglResolved, nctxResolved)))
+	}
 
 	var history []geniex_sdk.LlmChatMessage
 	if systemPrompt != "" {
@@ -488,6 +509,10 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 		return err
 	}
 	defer p.Destroy()
+
+	if verbose {
+		fmt.Println(render.GetTheme().Info.Sprint(modelLoadedLine(paths.RuntimeID, deviceID, nglResolved, nctxResolved)))
+	}
 
 	caps, _ := p.Capabilities()
 	slog.Debug("VLM capabilities", "vision", caps.SupportsVision, "audio", caps.SupportsAudio)

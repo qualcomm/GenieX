@@ -4,6 +4,8 @@
 package service
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
@@ -68,5 +70,55 @@ func TestResolveModelParam_NonLlamaCppZeroesNCtx(t *testing.T) {
 	}
 	if got.NGpuLayers != 0 {
 		t.Errorf("NGpuLayers = %d, want 0 (SDK zeroes ngl for qairt)", got.NGpuLayers)
+	}
+}
+
+// TestResolveModelParam_QairtGpuEmitsCoercionWarning verifies that when the
+// qairt plugin coerces a non-NPU compute unit to NPU, the SDK warning is
+// printed to the configured sink so serve users can see the redirection.
+func TestResolveModelParam_QairtGpuEmitsCoercionWarning(t *testing.T) {
+	var buf bytes.Buffer
+	restore := SetComputeWarningSinkForTest(&buf)
+	defer restore()
+
+	if _, err := ResolveModelParam(geniex_sdk.RuntimeQairt, "some-model", 0, 0, "gpu", SpecParam{}); err != nil {
+		t.Fatalf("ResolveModelParam: %v", err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, "qairt plugin only supports NPU") {
+		t.Errorf("sink missing coercion warning; got %q", got)
+	}
+}
+
+// TestResolveModelParam_QairtWarningDedupPerRuntimeCompute verifies that repeat
+// requests with the same (runtime, compute) print the warning only once so
+// long-running serve processes are not spammed.
+func TestResolveModelParam_QairtWarningDedupPerRuntimeCompute(t *testing.T) {
+	var buf bytes.Buffer
+	restore := SetComputeWarningSinkForTest(&buf)
+	defer restore()
+
+	for i := 0; i < 3; i++ {
+		if _, err := ResolveModelParam(geniex_sdk.RuntimeQairt, "some-model", 0, 0, "gpu", SpecParam{}); err != nil {
+			t.Fatalf("ResolveModelParam[%d]: %v", i, err)
+		}
+	}
+	if n := strings.Count(buf.String(), "qairt plugin only supports NPU"); n != 1 {
+		t.Errorf("warning printed %d times, want 1 (dedup); output=%q", n, buf.String())
+	}
+}
+
+// TestResolveModelParam_LlamaCppNoCoercionWarning verifies llama_cpp with a
+// resolvable compute unit does not print a coercion warning.
+func TestResolveModelParam_LlamaCppNoCoercionWarning(t *testing.T) {
+	var buf bytes.Buffer
+	restore := SetComputeWarningSinkForTest(&buf)
+	defer restore()
+
+	if _, err := ResolveModelParam(geniex_sdk.RuntimeLlamaCpp, "some-model", 2048, 10, "cpu", SpecParam{}); err != nil {
+		t.Fatalf("ResolveModelParam: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected no output on non-coerced path; got %q", buf.String())
 	}
 }

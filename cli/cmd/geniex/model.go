@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -204,6 +205,8 @@ func list() *cobra.Command {
 		case "csv":
 			return printListCSV(models)
 		}
+		fmt.Println(render.GetTheme().Info.Sprintf("Models cached in %s", modelsRootDir()))
+		fmt.Println()
 		printListTable(models, verbose)
 		return nil
 	}
@@ -474,7 +477,39 @@ func pullModel(ctx context.Context, name string, quant string) error {
 	}
 
 	fmt.Println(render.GetTheme().Success.Sprint("✔  Download success"))
+
+	key := name
+	if quant != "" {
+		key = name + ":" + quant
+	}
+	var location string
+	if paths, err := geniex_sdk.ModelGetPaths(key); err == nil && paths.ModelPath != "" {
+		location = filepath.Dir(paths.ModelPath)
+	}
+	var sizeBytes int64
+	if models, err := geniex_sdk.ModelListDetailed(); err == nil {
+		for _, m := range models {
+			if m.Name == name {
+				sizeBytes = m.TotalSize
+				break
+			}
+		}
+	}
+	if sizeBytes > 0 {
+		fmt.Println(render.GetTheme().Info.Sprintf("   Size:      %s", humanize.IBytes(uint64(sizeBytes))))
+	}
+	if location != "" {
+		fmt.Println(render.GetTheme().Info.Sprintf("   Location:  %s", location))
+	}
+	if quant != "" {
+		fmt.Println(render.GetTheme().Info.Sprintf("   Precision: %s", quant))
+	}
 	return nil
+}
+
+// modelsRootDir returns the directory that holds all cached models.
+func modelsRootDir() string {
+	return filepath.Join(store.Get().DataPath(), "models")
 }
 
 // choosePrecision picks a precision from the remote candidates: the only one

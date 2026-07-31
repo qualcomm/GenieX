@@ -5,6 +5,7 @@ package service
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"reflect"
@@ -13,8 +14,44 @@ import (
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 	"github.com/qualcomm/GenieX/cli/internal/config"
+	"github.com/qualcomm/GenieX/cli/internal/render"
 	"github.com/qualcomm/GenieX/cli/internal/types"
 )
+
+var (
+	computeWarningMu   sync.Mutex
+	computeWarningSink io.Writer = os.Stdout
+	computeWarned      = map[string]struct{}{}
+)
+
+func SetComputeWarningSinkForTest(w io.Writer) func() {
+	computeWarningMu.Lock()
+	prevSink := computeWarningSink
+	computeWarningSink = w
+	prevWarned := computeWarned
+	computeWarned = map[string]struct{}{}
+	computeWarningMu.Unlock()
+
+	return func() {
+		computeWarningMu.Lock()
+		computeWarningSink = prevSink
+		computeWarned = prevWarned
+		computeWarningMu.Unlock()
+	}
+}
+
+func emitComputeCoercionWarning(runtimeID, requestedCompute, warning string) {
+	key := runtimeID + "\x00" + requestedCompute
+	computeWarningMu.Lock()
+	if _, seen := computeWarned[key]; seen {
+		computeWarningMu.Unlock()
+		return
+	}
+	computeWarned[key] = struct{}{}
+	sink := computeWarningSink
+	computeWarningMu.Unlock()
+	fmt.Fprintln(sink, render.GetTheme().Warning.Sprintf("Warning: %s", warning))
+}
 
 // ResolveModelParam turns the (nctx, ngl, compute) knobs into the ModelParam
 // the keep-alive cache keys on. The caller passes already-resolved values (the
@@ -79,6 +116,7 @@ func ResolveModelParam(runtimeID, modelName string, reqNCtx, reqNgl int32, reqCo
 	}
 	if resolved.Warning != "" {
 		slog.Warn("compute unit coerced", "warning", resolved.Warning)
+		emitComputeCoercionWarning(runtimeID, reqCompute, resolved.Warning)
 	}
 
 	mp := types.ModelParam{
