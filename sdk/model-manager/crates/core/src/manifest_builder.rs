@@ -320,10 +320,9 @@ fn is_mmproj_filename(lname: &str) -> bool {
         || stem.contains("_mmproj_")
 }
 
-/// Extract a quant tag like `Q4_K_M`, `Q8_0`, `IQ4_XS`, `TQ1_0`, or `MXFP4`
-/// from a filename. The match is case-insensitive (HF repos publish both
-/// `q4_0` and `Q4_0`); the returned tag is upper-cased so it lines up with
-/// [`QUANT_PRIORITY`]. Returns the highest-priority match if multiple are
+/// Extract a quant tag like `Q4_K_M`, `IQ4_XS`, `TQ1_0`, `MXFP4`, `F16`,
+/// `FP16`, `BF16`, or `I8` from a filename. Case-insensitive; the returned
+/// tag is upper-cased. Returns the highest-priority match if multiple are
 /// present, else the first match, else None.
 pub(crate) fn extract_quant(name: &str) -> Option<String> {
     // Walk the (uppercased, ASCII-only) name token by token. A quant tag
@@ -338,13 +337,19 @@ pub(crate) fn extract_quant(name: &str) -> Option<String> {
             i += 1;
             continue;
         }
-        // Try MXFP-anchored tags first (`MXFP4`, `MXFP4_MOE`) — ggml-org's
-        // gpt-oss GGUFs use them and they don't start with Q.
-        if let Some(end) = scan_token(bytes, i, b"MXFP") {
-            if let Ok(s) = std::str::from_utf8(&bytes[i..end]) {
-                composite.push(s.to_string());
+        // Longer prefixes first so BF16/FP16 don't collapse to F16.
+        let mut matched = false;
+        for prefix in [b"MXFP" as &[u8], b"BF", b"FP", b"F", b"I"] {
+            if let Some(end) = scan_token(bytes, i, prefix) {
+                if let Ok(s) = std::str::from_utf8(&bytes[i..end]) {
+                    composite.push(s.to_string());
+                }
+                i = end;
+                matched = true;
+                break;
             }
-            i = end;
+        }
+        if matched {
             continue;
         }
         // Optional 1-byte prefix used by i-quants (`IQ*`) and ternary
@@ -527,6 +532,47 @@ mod tests {
     }
 
     #[test]
+    fn extract_quant_recognises_float_scalars() {
+        assert_eq!(extract_quant("model-F16.gguf"), Some("F16".to_string()));
+        assert_eq!(extract_quant("model-F32.gguf"), Some("F32".to_string()));
+        assert_eq!(extract_quant("model-F64.gguf"), Some("F64".to_string()));
+        assert_eq!(extract_quant("model-f16.gguf"), Some("F16".to_string()));
+        assert_eq!(extract_quant("model-BF16.gguf"), Some("BF16".to_string()));
+        assert_eq!(extract_quant("model-bf16.gguf"), Some("BF16".to_string()));
+        assert_eq!(
+            extract_quant("qwen2-1_5b-instruct-fp16.gguf"),
+            Some("FP16".to_string())
+        );
+        assert_eq!(extract_quant("model-FP32.gguf"), Some("FP32".to_string()));
+        assert_eq!(
+            extract_quant("model-F32-00001-of-00002.gguf"),
+            Some("F32".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_quant_recognises_integer_scalars() {
+        assert_eq!(extract_quant("model-I8.gguf"), Some("I8".to_string()));
+        assert_eq!(extract_quant("model-I16.gguf"), Some("I16".to_string()));
+        assert_eq!(extract_quant("model-I32.gguf"), Some("I32".to_string()));
+        assert_eq!(extract_quant("model-i64.gguf"), Some("I64".to_string()));
+        // `I` + `Q` must still parse as i-quant, not I<digit>.
+        assert_eq!(
+            extract_quant("model-IQ4_XS.gguf"),
+            Some("IQ4_XS".to_string())
+        );
+        assert_eq!(extract_quant("model-iq1_s.gguf"), Some("IQ1_S".to_string()));
+    }
+
+    #[test]
+    fn extract_quant_anchors_scalars_on_token_boundary() {
+        assert_eq!(extract_quant("aF16.gguf"), None);
+        assert_eq!(extract_quant("aBF16.gguf"), None);
+        assert_eq!(extract_quant("aI8.gguf"), None);
+        assert_eq!(extract_quant("modelI8.gguf"), None);
+    }
+
+    #[test]
     fn is_mmproj_filename_matches_known_layouts() {
         // Standard llama.cpp prefix layout.
         assert!(is_mmproj_filename("mmproj-f16.gguf"));
@@ -628,10 +674,7 @@ mod tests {
     }
 
     #[test]
-    fn untagged_gguf_is_silently_dropped() {
-        // Untagged fp16 exports (like Qwen/Qwen2-1.5B-Instruct-GGUF's stray
-        // shard) no longer land in a synthetic bucket — they're excluded from
-        // model_file so callers see only real quant tags.
+    fn fp16_shard_becomes_its_own_bucket() {
         let (names, sizes) = sizes_of(&[
             ("qwen2-1_5b-instruct-q4_0.gguf", 1_000_000),
             ("qwen2-1_5b-instruct-fp16.gguf", 3_100_000),
@@ -643,8 +686,9 @@ mod tests {
             ManifestHint::default(),
         )
         .unwrap();
-        assert_eq!(m.model_file.len(), 1);
+        assert_eq!(m.model_file.len(), 2);
         assert!(m.model_file.contains_key("Q4_0"));
+        assert!(m.model_file.contains_key("FP16"));
     }
 
     #[test]
