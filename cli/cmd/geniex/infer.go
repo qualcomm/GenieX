@@ -516,9 +516,6 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 
 	caps, _ := p.Capabilities()
 	slog.Debug("VLM capabilities", "vision", caps.SupportsVision, "audio", caps.SupportsAudio)
-	if caps.SupportsAudio {
-		checkAudioDependency()
-	}
 
 	var history []geniex_sdk.VlmChatMessage
 	if systemPrompt != "" {

@@ -51,7 +51,6 @@ func serve() *cobra.Command {
 	viper.BindPFlag("keyfile", serveCmd.Flags().Lookup("keyfile"))
 
 	serveCmd.Run = func(cmd *cobra.Command, args []string) {
-		checkAudioDependency()
 		if err := common.InitSDK(); err != nil {
 			common.PrintError(err)
 			os.Exit(1)
