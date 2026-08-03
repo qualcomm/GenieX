@@ -276,6 +276,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             // prompt_utf8 already has chat template and media markers applied
             mtmd_input_text text;
             text.text          = new_text_portion.c_str();
+            text.text_len      = new_text_portion.length();
             text.add_special   = this->n_past == 0;  // add BOS only on first message
             text.parse_special = true;
 
