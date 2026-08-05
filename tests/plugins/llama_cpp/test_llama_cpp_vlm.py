@@ -36,6 +36,14 @@ def _vlm_prompt(vlm: geniex.GenieXVLM, image_path: str, text: str) -> str:
     )
 
 
+def _vlm_text_prompt(vlm: geniex.GenieXVLM, text: str) -> str:
+    return vlm.tokenizer.apply_chat_template(
+        [{'role': 'user', 'content': [{'type': 'text', 'text': text}]}],
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+
+
 @pytest.mark.parametrize('device_map', ['cpu', 'npu', 'gpu'])
 def test_generate_with_image(llama_cpp_vlm_paths, test_image, device_map):
     with geniex.AutoModelForVision2Seq.from_pretrained(
@@ -55,6 +63,36 @@ def test_generate_with_image(llama_cpp_vlm_paths, test_image, device_map):
         # Tiny VLMs can hit EOS on the first token, so don't assert text is
         # non-empty; the profile object proves a generation step ran.
         assert out.profile is not None
+
+
+def test_text_only_prompt_is_not_truncated(llama_cpp_vlm_paths):
+    # mtmd_tokenize reads mtmd_input_text.text_len rather than strlen(text), so
+    # leaving that field unset cut the prompt at a garbage byte offset before
+    # the model ever saw it. Prompt token counts must follow prompt length; a
+    # stale length collapses both prompts to the same size. The long prompt is
+    # CJK on purpose: bytes far outnumber characters, so any length confusion
+    # in this path shows up there first.
+    with geniex.AutoModelForVision2Seq.from_pretrained(
+        LLAMA_CPP_VLM_MODEL,
+        device_map='cpu',
+    ) as vlm:
+        out_short = vlm.generate(
+            _vlm_text_prompt(vlm, 'Hi.'),
+            max_new_tokens=8,
+            temperature=0.0,
+            seed=42,
+            images=[],
+        )
+        vlm.reset()
+        out_long = vlm.generate(
+            _vlm_text_prompt(vlm, '日本語で自己紹介して下さい。' * 8),
+            max_new_tokens=8,
+            temperature=0.0,
+            seed=42,
+            images=[],
+        )
+        assert out_short.profile.prompt_tokens > 0
+        assert out_long.profile.prompt_tokens >= out_short.profile.prompt_tokens + 20
 
 
 def test_multi_turn_without_reset(llama_cpp_vlm_paths, test_image):
