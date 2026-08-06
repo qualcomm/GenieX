@@ -115,10 +115,10 @@ jobs:
       platforms: '["windows-arm64"]'
       gate_on_changed_files: true
 
-  # TODO(#976): re-enable once _qdc-pytest.yml stops failing on PR check.
+  # TODO(#976): re-enable once _qdc-test.yml stops failing on PR check.
   # test-sdk-qdc:
   #   name: test-sdk-qdc
   #   needs: [build-sdk]
   #   if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-  #   uses: ./.github/workflows/_qdc-pytest.yml
+  #   uses: ./.github/workflows/_qdc-test.yml
   #   secrets: inherit

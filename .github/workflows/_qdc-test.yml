@@ -1,0 +1,76 @@
+name: QDC Test
+
+# One leg per platform; each leg runs the full plugin set (llama_cpp + qairt)
+# in a single on-device pytest invocation. Triggered by tag push (via test.yml)
+# and workflow_dispatch — never on pull_request; PRs only run the unit-test
+# workflow.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: "Platforms to run (comma list). Blank = all (linux,windows)."
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  build-sdk:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/_build-sdk.yml
+    secrets: inherit
+    with:
+      upload_artifact: true
+
+  plan:
+    needs: [build-sdk]
+    if: ${{ !cancelled() && (needs.build-sdk.result == 'success' || needs.build-sdk.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+    steps:
+      - id: set
+        env:
+          PICK: ${{ github.event.inputs.platforms }}
+        run: |
+          set -euo pipefail
+          all='[{"platform":"linux","device":"QCS9075M","artifact":"sdk-linux-arm64"},{"platform":"windows","device":"SC8480XP","artifact":"sdk-windows-arm64"}]'
+          if [ -n "$PICK" ]; then
+            legs=$(jq -cn --arg s "$PICK" --argjson all "$all" \
+              '$s | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0)) as $pick |
+               $all | map(select(.platform as $n | $pick | index($n)))')
+          else
+            legs="$all"
+          fi
+          echo "matrix=$(jq -cn --argjson p "$legs" '{include: $p}')" >> "$GITHUB_OUTPUT"
+
+  qdc:
+    name: ${{ matrix.platform }}
+    needs: [plan]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    env:
+      QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ matrix.artifact }}
+          path: pkg-geniex
+      - uses: ./.github/actions/install-qdc-sdk
+      - run: >
+          python tests/qdc/run_qdc_pytest.py
+          --pkg-dir pkg-geniex
+          --platform "${{ matrix.platform }}"
+          --device "${{ matrix.device }}"

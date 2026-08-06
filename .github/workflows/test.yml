@@ -2,7 +2,7 @@ name: Test
 
 # Top-level test entry point for tag pushes and manual reruns. Builds
 # the SDK on demand, then fans out to _test.yml (test-go, test-python,
-# test-sdk-ci) and _qdc-pytest.yml (test-sdk-qdc) so tag pushes get the
+# test-sdk-ci) and _qdc-test.yml (test-sdk-qdc) so tag pushes get the
 # same coverage PRs do.
 #
 # Independent of release.yml: both fire on the same tag push but as
@@ -10,7 +10,7 @@ name: Test
 # and never gate the publish-* jobs in release.yml.
 #
 # pr-check.yml does NOT call this file; it calls _test.yml /
-# _qdc-pytest.yml directly so the SDK build is shared with the rest of
+# _qdc-test.yml directly so the SDK build is shared with the rest of
 # the PR graph.
 
 on:
@@ -69,5 +69,5 @@ jobs:
   test-sdk-qdc:
     needs: [build-sdk]
     if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
-    uses: ./.github/workflows/_qdc-pytest.yml
+    uses: ./.github/workflows/_qdc-test.yml
     secrets: inherit

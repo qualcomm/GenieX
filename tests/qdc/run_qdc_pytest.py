@@ -1,24 +1,7 @@
 # Copyright 2024-2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Run the SDK model-running pytest suite on a real QDC device.
-
-GitHub runners only run the model-free ``api`` shard — they have no Snapdragon
-hardware. The device-gated cells (``llama_cpp`` / ``qairt`` across every backend)
-run here instead, on a QDC X Elite Windows ARM64 device via the POWERSHELL
-framework (``windows/run_pytest.ps1``):
-
-  - this script packages pkg-geniex + the Python binding + the ``tests/`` tree
-    + the HTP cert into an artifact and submits it;
-  - QDC extracts the artifact under ``C:\\Temp\\TestContent\\`` and runs
-    ``run_pytest.ps1`` there, which bootstraps a portable Python, installs
-    pytest, then runs the suite directly against the windows-arm64 SDK;
-  - the entry script writes the JUnit XML to ``C:\\Temp\\QDC_Logs\\`` and the
-    POWERSHELL framework auto-uploads everything in QDC_Logs for collection.
-
-The QDC submit/poll/collect plumbing is shared with Geniex Bench via
-``sdk/benchmark/qdc/_qdc.py``.
-"""
+"""Run the SDK pytest suite on a real QDC device (Linux QCS9075M / Windows SC8480XP)."""
 
 from __future__ import annotations
 
@@ -44,47 +27,52 @@ except ImportError:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 log = logging.getLogger(__name__)
 
-# tests/conftest.py resolves the VLM sample image relative to the repo root
-# (parents[1] of the conftest), so the artifact must preserve this asset.
+# tests/conftest.py resolves this relative to the repo root, so preserve the path.
 TEST_IMAGE_REL = Path('cli/server/docs/ui/favicon-32x32.png')
 HTP_CERT_REL = Path('.github/certs/hexagon/ggml-htp-v1.cer')
 _IGNORE = shutil.ignore_patterns('__pycache__', '*.pyc', '.venv', '*.egg-info', 'models')
 
-ENTRY_SCRIPT = 'C:\\Temp\\TestContent\\run_pytest.ps1'
 
-
-def build_windows_artifact(pkg_dir: Path, marker: str, tmp: Path) -> Path:
-    """Stage everything QDC's POWERSHELL framework needs to run pytest on X Elite.
-
-    The framework extracts the zip to ``C:\\Temp\\TestContent\\`` and invokes
-    the entry script there; ``run_pytest.ps1`` boots a portable Python and runs
-    pytest against the staged tree directly (no wheel install — sets
-    ``PYTHONPATH=bindings\\python`` and ``GENIEX_LIB_PATH=pkg-geniex\\lib``,
-    matching the windows-arm64 cell in ``.github/workflows/_test.yml``).
-
-    ``marker`` is substituted into the pytest ``-m`` selector so the workflow
-    can split the matrix across two jobs (one per plugin) and stay under
-    QDC's 60-min POWERSHELL device timeout.
-    """
-    stage = tmp / 'stage'
-    stage.mkdir()
+def _stage_common(pkg_dir: Path, stage: Path) -> None:
     shutil.copytree(pkg_dir, stage / 'pkg-geniex')
     shutil.copytree(REPO / 'tests', stage / 'tests', ignore=_IGNORE)
     shutil.copytree(REPO / 'bindings' / 'python', stage / 'bindings' / 'python', ignore=_IGNORE)
-
     img = stage / TEST_IMAGE_REL
     img.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(REPO / TEST_IMAGE_REL, img)
 
-    shutil.copy(REPO / HTP_CERT_REL, stage / 'ggml-htp-v1.cer')
-    # CRLF line endings — QDC's PowerShell parser is friendlier with CRLF.
-    ps = (HERE / 'windows' / 'run_pytest.ps1').read_text().replace('{MARKER}', marker)
-    (stage / 'run_pytest.ps1').write_text(ps, newline='\r\n')
 
+def _build_windows_artifact(pkg_dir: Path, tmp: Path) -> Path:
+    stage = tmp / 'stage'
+    stage.mkdir()
+    _stage_common(pkg_dir, stage)
+    shutil.copy(REPO / HTP_CERT_REL, stage / 'ggml-htp-v1.cer')
+    # CRLF — QDC's PowerShell parser is friendlier with CRLF.
+    (stage / 'run_pytest.ps1').write_text((HERE / 'windows' / 'run_pytest.ps1').read_text(), newline='\r\n')
     return Path(shutil.make_archive(str(tmp / 'artifact'), 'zip', stage))
 
 
-Row = tuple[str, str, str, str]  # (status, name, message, body)
+def _build_linux_artifact(pkg_dir: Path, tmp: Path) -> Path:
+    stage = tmp / 'stage'
+    stage.mkdir()
+    _stage_common(pkg_dir, stage)
+    script_path = stage / 'run_pytest.sh'
+    script_path.write_text((HERE / 'linux' / 'run_pytest.sh').read_text(), newline='\n')
+    script_path.chmod(0o755)
+    return Path(shutil.make_archive(str(tmp / 'artifact'), 'zip', stage))
+
+
+BUILDERS = {
+    'linux': _build_linux_artifact,
+    'windows': _build_windows_artifact,
+}
+ENTRY = {
+    'linux': '/bin/bash /data/local/tmp/TestContent/run_pytest.sh',
+    'windows': 'C:\\Temp\\TestContent\\run_pytest.ps1',
+}
+
+
+Row = tuple[str, str, str, str]
 
 
 def _rows_from_junit(xml: bytes) -> list[Row]:
@@ -108,12 +96,6 @@ def _rows_from_junit(xml: bytes) -> list[Row]:
 
 
 def _longrepr_text(longrepr: object) -> str:
-    """Flatten pytest-reportlog's structured longrepr into printable text.
-
-    pytest-reportlog serialises tracebacks as nested dicts (ReprEntry /
-    ReprTraceback / …). JUnit's <failure> body is already a plain string, so
-    normalise the reportlog form to the same shape before rendering.
-    """
     if not longrepr:
         return ''
     if isinstance(longrepr, str):
@@ -139,10 +121,6 @@ def _longrepr_text(longrepr: object) -> str:
 
 
 def _rows_from_reportlog(data: bytes) -> tuple[list[Row], set[str]]:
-    """Parse pytest-reportlog NDJSON into rows. Also returns the set of nodeids
-    that started but never produced a call-phase report (i.e. the process died
-    mid-test); those need to be surfaced as errored cells.
-    """
     outcomes: dict[str, Row] = {}
     started: set[str] = set()
     for line in data.splitlines():
@@ -170,14 +148,13 @@ def _rows_from_reportlog(data: bytes) -> tuple[list[Row], set[str]]:
                 outcomes[nodeid] = ('PASS', nodeid, '', '')
             elif outcome == 'skipped':
                 outcomes[nodeid] = ('SKIP', nodeid, msg or body, '')
-            else:  # 'failed' / 'error'
+            else:
                 outcomes[nodeid] = ('FAIL', nodeid, msg, body)
     incomplete = started - set(outcomes.keys())
     return list(outcomes.values()), incomplete
 
 
-def _render_summary(rows: list[Row], plugin: str, incomplete: set[str] | None = None) -> tuple[int, str]:
-    """Turn a (status, name, message, body) row list into the CI markdown."""
+def _render_summary(rows: list[Row], label: str, incomplete: set[str] | None = None) -> tuple[int, str]:
     incomplete = incomplete or set()
     for nodeid in sorted(incomplete):
         rows.append(('FAIL', nodeid, 'process aborted before test completed', ''))
@@ -187,9 +164,8 @@ def _render_summary(rows: list[Row], plugin: str, incomplete: set[str] | None = 
     total = passed + failed + skipped
     verdict = 'PASS' if failed == 0 else 'FAIL'
     icon = {'PASS': '✅', 'SKIP': '⏭️', 'FAIL': '❌'}
-    title_suffix = f' — {plugin}' if plugin else ''
     lines = [
-        f'## QDC pytest — X Elite Windows{title_suffix}',
+        f'## QDC Test — {label}',
         '',
         f'**{verdict}** — {passed} passed, {failed} failed, 0 errored, {skipped} skipped (of {total})',
         '',
@@ -204,13 +180,8 @@ def _render_summary(rows: list[Row], plugin: str, incomplete: set[str] | None = 
         else:
             lines.append(f'{icon[status]} `{name}`')
     if fails:
-        # Failure messages can include the full model completion (literal `\n`,
-        # `$`, unbalanced quotes) — render inline and GitHub markdown will
-        # parse `$...$` as LaTeX and break the page. Push everything into a
-        # fenced code block under the per-test <details>; the test name stays
-        # in the <summary> so the failure list above is one tidy line per id.
-        # pytest's JUnit body already starts with the message, so prefer body
-        # and fall back to message — printing both repeats the model output.
+        # Model completions can contain $ / \n / unbalanced quotes; folding into
+        # <details> stops GitHub from rendering $...$ as LaTeX and breaking the page.
         lines += ['', '### Failure details', '']
         for name, msg, body in fails:
             text = (body or msg or '').replace('\\n', '\n').replace('\\t', '\t')
@@ -226,27 +197,13 @@ def _render_summary(rows: list[Row], plugin: str, incomplete: set[str] | None = 
     return (0 if verdict == 'PASS' else 1), '\n'.join(lines) + '\n'
 
 
-def summarise(xml: bytes, plugin: str = '') -> tuple[int, str]:
-    """Parse JUnit XML; return (exit_code, markdown). Non-zero on any failure.
-
-    Lists every cell with its status (like pytest's own per-test output) so it's
-    clear which ran vs skipped, and folds each failure's traceback / each skip's
-    reason in so the device-side detail is visible without re-running on QDC.
-    """
-    return _render_summary(_rows_from_junit(xml), plugin)
+def summarise(xml: bytes, label: str = '') -> tuple[int, str]:
+    return _render_summary(_rows_from_junit(xml), label)
 
 
-def summarise_reportlog(data: bytes, plugin: str = '') -> tuple[int, str]:
-    """Parse pytest-reportlog NDJSON; return (exit_code, markdown).
-
-    The JUnit path is preferred when pytest exits cleanly, but --junitxml only
-    flushes at session end — so a native abort (Fatal Python error / Windows
-    fatal exception) leaves the XML empty. --report-log flushes after every
-    test, so the same rows are reconstructable from its NDJSON as long as the
-    log survived the crash.
-    """
+def summarise_reportlog(data: bytes, label: str = '') -> tuple[int, str]:
     rows, incomplete = _rows_from_reportlog(data)
-    return _render_summary(rows, plugin, incomplete)
+    return _render_summary(rows, label, incomplete)
 
 
 def write_summary(text: str) -> None:
@@ -259,17 +216,8 @@ def write_summary(text: str) -> None:
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument('--pkg-dir', type=Path, required=True)
-    p.add_argument('--device', default='SC8380XP', help='QDC device alias (default: X Elite SC8380XP)')
-    p.add_argument(
-        '--plugin',
-        required=True,
-        help='Label for the matrix leg (used in job_name + summary heading).',
-    )
-    p.add_argument(
-        '--pytest-marker',
-        required=True,
-        help='Pytest -m expression (e.g. "llama_cpp and llm") substituted into the entry script.',
-    )
+    p.add_argument('--platform', required=True, choices=sorted(BUILDERS))
+    p.add_argument('--device', required=True, help='QDC device alias, e.g. QCS9075M / SC8480XP')
     p.add_argument('--job-timeout', type=int, default=10800)
     args = p.parse_args()
 
@@ -279,37 +227,32 @@ def main() -> int:
     if not api_key:
         raise SystemExit('QDC_API_KEY must be set')
 
+    label = f'{args.platform} ({args.device})'
     client = _qdc.make_client(api_key)
     target_id = _qdc.resolve_target(client, args.device)
 
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        zip_path = build_windows_artifact(args.pkg_dir, args.pytest_marker, tmp)
+        zip_path = BUILDERS[args.platform](args.pkg_dir, tmp)
         job_id = _qdc.submit_and_wait(
             client,
             target_id=target_id,
-            job_name=f'geniex-pytest-{args.plugin}-{args.device}',
-            platform='windows',
-            entry_script=ENTRY_SCRIPT,
+            job_name=f'geniex-pytest-{args.platform}-{args.device}',
+            platform=args.platform,
+            entry_script=ENTRY[args.platform],
             zip_path=zip_path,
             timeout=args.job_timeout,
         )
 
-        # JUnit is the clean-exit source of truth; --report-log NDJSON is the
-        # abort-tolerant fallback (see summarise_reportlog).
+        # JUnit is the clean-exit source of truth; --report-log NDJSON survives aborts.
         results = _qdc.download_log_members(
             client, job_id, tmp, lambda n: n in ('device-results.xml', 'device-report.log')
         )
-        # Always pull the device-side logs so the on-device run is visible in CI
-        # regardless of pass/fail. test_dbg.stdout is QDC's full PowerShell
-        # stdout / stderr capture — strictly more complete than our
-        # Start-Transcript harness.log, which buffers and can drop tail bytes
-        # when the framework aborts the process on its 60-min device timeout.
         diag = _qdc.download_log_members(
             client,
             job_id,
             tmp,
-            lambda n: n in ('harness.log', 'test_dbg.stdout', 'test.stdout'),
+            lambda n: n in ('harness.log', 'test_dbg.stdout', 'test.stdout', 'script.log'),
         )
 
     for name, data in diag:
@@ -317,16 +260,13 @@ def main() -> int:
 
     by_name = {name: data for name, data in results}
     if b'</testsuite>' in by_name.get('device-results.xml', b''):
-        code, md = summarise(by_name['device-results.xml'], args.plugin)
+        code, md = summarise(by_name['device-results.xml'], label)
     elif by_name.get('device-report.log'):
-        log.warning('JUnit XML missing or incomplete; reconstructing summary from --report-log NDJSON')
-        code, md = summarise_reportlog(by_name['device-report.log'], args.plugin)
+        log.warning('JUnit XML missing or incomplete; reconstructing from --report-log NDJSON')
+        code, md = summarise_reportlog(by_name['device-report.log'], label)
     else:
         log.error('no JUnit XML or report-log recovered (see device logs above)')
-        write_summary(
-            f'## QDC pytest — X Elite Windows — {args.plugin}\n\n'
-            'No JUnit XML or report-log recovered (see device logs above).\n'
-        )
+        write_summary(f'## QDC Test — {label}\n\nNo JUnit XML or report-log recovered.\n')
         return 1
     write_summary(md)
     return code
