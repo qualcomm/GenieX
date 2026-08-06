@@ -1,7 +1,7 @@
 name: Test
 
 # Top-level test entry point for tag pushes and manual reruns. Builds
-# the SDK on demand, then fans out to _test.yml (test-go, test-python,
+# the SDK on demand, then fans out to _unit-test.yml (test-go, test-python,
 # test-sdk-ci) and _qdc-test.yml (test-sdk-qdc) so tag pushes get the
 # same coverage PRs do.
 #
@@ -9,7 +9,7 @@ name: Test
 # siblings — failures here surface as a red check on the tag commit
 # and never gate the publish-* jobs in release.yml.
 #
-# pr-check.yml does NOT call this file; it calls _test.yml /
+# pr-check.yml does NOT call this file; it calls _unit-test.yml /
 # _qdc-test.yml directly so the SDK build is shared with the rest of
 # the PR graph.
 
@@ -40,7 +40,7 @@ jobs:
   test-go:
     needs: [build-sdk]
     if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
-    uses: ./.github/workflows/_test.yml
+    uses: ./.github/workflows/_unit-test.yml
     secrets: inherit
     with:
       language: go
@@ -49,7 +49,7 @@ jobs:
   test-python:
     needs: [build-sdk]
     if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
-    uses: ./.github/workflows/_test.yml
+    uses: ./.github/workflows/_unit-test.yml
     secrets: inherit
     with:
       language: python
@@ -58,7 +58,7 @@ jobs:
   test-sdk-ci:
     needs: [build-sdk]
     if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
-    uses: ./.github/workflows/_test.yml
+    uses: ./.github/workflows/_unit-test.yml
     secrets: inherit
     with:
       language: sdk

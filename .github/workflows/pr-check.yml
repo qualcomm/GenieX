@@ -85,7 +85,7 @@ jobs:
     name: test-go
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    uses: ./.github/workflows/_test.yml
+    uses: ./.github/workflows/_unit-test.yml
     secrets: inherit
     with:
       language: go
@@ -95,7 +95,7 @@ jobs:
     name: test-python
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    uses: ./.github/workflows/_test.yml
+    uses: ./.github/workflows/_unit-test.yml
     secrets: inherit
     with:
       language: python
@@ -105,7 +105,7 @@ jobs:
     name: test-sdk-ci
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    uses: ./.github/workflows/_test.yml
+    uses: ./.github/workflows/_unit-test.yml
     secrets: inherit
     with:
       language: sdk

@@ -1,4 +1,4 @@
-name: Test (reusable)
+name: Unit Test
 
 # Single reusable test driver. Caller picks the language; matrix fans
 # out across linux-arm64 + windows-arm64. Six call sites total —
