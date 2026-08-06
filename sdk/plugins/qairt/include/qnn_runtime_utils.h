@@ -7,12 +7,16 @@
 #include <windows.h>
 #endif
 
+#include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "external/json.hpp"
 #include "types.h"
 
 namespace geniex::qairt::runtime {
@@ -27,6 +31,74 @@ inline std::optional<std::string> find_optional_file(const std::filesystem::path
         return file_path.string();
     }
     return std::nullopt;
+}
+
+// dsp_arch values the pinned QAIRT release recognizes; keep in step when the
+// QAIRT dependency is bumped.
+inline constexpr std::array<const char*, 6> kRecognizedDspArchs = {"v68", "v69", "v73", "v75", "v79", "v81"};
+
+// Returns a loggable diagnostic when `htp_backend_ext_config.json` contains a
+// dsp_arch outside kRecognizedDspArchs; nullopt otherwise (including a missing
+// or unparseable file — QNN owns those failure modes).
+inline std::optional<std::string> dsp_arch_diagnostic(const std::string& htp_config_path) {
+    if (htp_config_path.empty()) {
+        return std::nullopt;
+    }
+    std::ifstream file(htp_config_path);
+    if (!file.is_open()) {
+        return std::nullopt;
+    }
+    const nlohmann::json root = nlohmann::json::parse(file, nullptr, /*allow_exceptions=*/false);
+    if (root.is_discarded()) {
+        return std::nullopt;
+    }
+
+    // Exporters nest dsp_arch differently, so walk the whole document.
+    std::vector<std::string>           unrecognized;
+    std::vector<const nlohmann::json*> stack{&root};
+    while (!stack.empty()) {
+        const nlohmann::json* node = stack.back();
+        stack.pop_back();
+        if (node->is_object()) {
+            for (auto it = node->begin(); it != node->end(); ++it) {
+                if (it.key() == "dsp_arch" && it.value().is_string()) {
+                    const auto arch  = it.value().get<std::string>();
+                    const bool known = std::find(kRecognizedDspArchs.begin(), kRecognizedDspArchs.end(), arch) !=
+                                       kRecognizedDspArchs.end();
+                    if (!known && std::find(unrecognized.begin(), unrecognized.end(), arch) == unrecognized.end()) {
+                        unrecognized.push_back(arch);
+                    }
+                } else {
+                    stack.push_back(&it.value());
+                }
+            }
+        } else if (node->is_array()) {
+            for (const auto& child : *node) {
+                stack.push_back(&child);
+            }
+        }
+    }
+    if (unrecognized.empty()) {
+        return std::nullopt;
+    }
+
+    std::string offending;
+    for (const auto& arch : unrecognized) {
+        if (!offending.empty()) {
+            offending += ", ";
+        }
+        offending += "'" + arch + "'";
+    }
+    std::string recognized;
+    for (const char* arch : kRecognizedDspArchs) {
+        if (!recognized.empty()) {
+            recognized += ", ";
+        }
+        recognized += arch;
+    }
+    return "htp_backend_ext_config.json specifies dsp_arch " + offending +
+           ", which this QAIRT release does not recognize (recognized values: " + recognized +
+           "). The bundle was likely exported for a newer QAIRT; re-export it for this runtime or update QAIRT.";
 }
 
 // Returns a QnnRuntimeConfig for the given model directory and optional user-supplied

@@ -80,6 +80,12 @@ int32_t QairtLlm::create(const geniex_LlmCreateInput* input) {
 
     GENIEX_LOG_DEBUG("Found {} model shards in {}", model_cfg.model_paths.size(), model_dir.string());
 
+    // An unrecognized dsp_arch fails inside QNN with a bare error 1008 (#1254).
+    const auto dsp_arch_diag = qairt::runtime::dsp_arch_diagnostic(model_cfg.htp_config_path);
+    if (dsp_arch_diag) {
+        GENIEX_LOG_WARN("{}", *dsp_arch_diag);
+    }
+
     // Tokenizer path: an explicit caller override wins over the bundle's own.
     if (input->tokenizer_path && input->tokenizer_path[0] != '\0') {
         model_cfg.tokenizer_path = input->tokenizer_path;
@@ -102,6 +108,11 @@ int32_t QairtLlm::create(const geniex_LlmCreateInput* input) {
     // Create LLMPipeline via the model_id-driven dispatcher
     auto pipe = makeLLMPipeline(runtime_cfg, model_cfg);
     if (!pipe) {
+        if (dsp_arch_diag) {
+            GENIEX_LOG_ERROR(
+                "Failed to create QAIRT LLM pipeline from bundle: {}. {}", model_dir.string(), *dsp_arch_diag);
+            return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
+        }
         GENIEX_LOG_ERROR("Failed to create QAIRT LLM pipeline from bundle: {}", model_dir.string());
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
