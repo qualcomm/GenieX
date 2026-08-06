@@ -7,6 +7,12 @@ name: QDC Test
 
 on:
   workflow_call:
+    inputs:
+      build_sdk:
+        description: "Build the SDK inline (set false when the caller already built it)."
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       platforms:
@@ -21,7 +27,9 @@ permissions:
 
 jobs:
   build-sdk:
-    if: github.event_name == 'workflow_dispatch'
+    # workflow_dispatch always builds; workflow_call opts in via inputs.build_sdk
+    # so callers that already produced the sdk-<platform> artifact don't rebuild.
+    if: github.event_name == 'workflow_dispatch' || inputs.build_sdk
     uses: ./.github/workflows/_build-sdk.yml
     secrets: inherit
     with:
