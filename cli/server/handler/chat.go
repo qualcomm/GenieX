@@ -22,6 +22,7 @@ import (
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 	"github.com/qualcomm/GenieX/cli/internal/config"
+	"github.com/qualcomm/GenieX/cli/internal/thinkfsm"
 	"github.com/qualcomm/GenieX/cli/internal/types"
 	"github.com/qualcomm/GenieX/cli/server/service"
 	"github.com/qualcomm/GenieX/cli/server/utils"
@@ -39,6 +40,9 @@ type ChatCompletionRequest struct {
 	NCtx        int32  `json:"nctx"`
 	Ngl         int32  `json:"ngl"` // 0 = pure CPU, -1 = all layers, N = N layers; defaults to the server --ngl when omitted
 	Compute     string `json:"compute"`
+	// ReasoningFormat: "" / "none" keeps thinking inline in content (default);
+	// "deepseek" / "deepseek-legacy" / "auto" move it to reasoning_content.
+	ReasoningFormat string `json:"reasoning_format"`
 
 	ImageMaxLength int32 `json:"image_max_length"`
 
@@ -266,6 +270,8 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 		return
 	}
 
+	reasoner := newReasoner(param, parseTool)
+
 	if param.Stream {
 		stopGen := false
 		dataCh := make(chan string)
@@ -301,7 +307,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 		finish := func() string { return mapFinishReason(res.ProfileData.StopReason) }
 		includeUsage := param.StreamOptions.IncludeUsage.Value
 		if !parseTool {
-			streamPlainText(c, dataCh, wait, includeUsage, usage, finish)
+			streamPlainText(c, dataCh, wait, includeUsage, usage, finish, reasoner)
 		} else {
 			streamToolCall(c, dataCh, wait, includeUsage, usage, finish)
 		}
@@ -311,8 +317,10 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 		}
 
 	} else {
+		var content, reasoning strings.Builder
 		genOut, err := p.Generate(geniex_sdk.LlmGenerateInput{
 			PromptUTF8: formatted.FormattedText,
+			OnToken:    reasoningSink(reasoner, &content, &reasoning),
 			Config: &geniex_sdk.GenerationConfig{
 				MaxTokens:     int32(param.MaxCompletionTokens.Value),
 				SamplerConfig: samplerConfig,
@@ -326,7 +334,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
-		writeBlockingResponse(c, genOut.FullText, genOut.ProfileData, parseTool)
+		writeBlockingResponse(c, content.String(), reasoning.String(), genOut.ProfileData, parseTool)
 	}
 }
 
@@ -498,6 +506,8 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 		}
 	}
 
+	reasoner := newReasoner(param, parseTool)
+
 	if param.Stream {
 		stopGen := false
 		dataCh := make(chan string)
@@ -537,7 +547,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 		finish := func() string { return mapFinishReason(res.ProfileData.StopReason) }
 		includeUsage := param.StreamOptions.IncludeUsage.Value
 		if !parseTool {
-			streamPlainText(c, dataCh, wait, includeUsage, usage, finish)
+			streamPlainText(c, dataCh, wait, includeUsage, usage, finish, reasoner)
 		} else {
 			streamToolCall(c, dataCh, wait, includeUsage, usage, finish)
 		}
@@ -547,8 +557,10 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 		}
 
 	} else {
+		var content, reasoning strings.Builder
 		genOut, err := p.Generate(geniex_sdk.VlmGenerateInput{
 			PromptUTF8: formatted.FormattedText,
+			OnToken:    reasoningSink(reasoner, &content, &reasoning),
 			Config: &geniex_sdk.GenerationConfig{
 				MaxTokens:      int32(param.MaxCompletionTokens.Value),
 				SamplerConfig:  samplerConfig,
@@ -565,7 +577,62 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
-		writeBlockingResponse(c, genOut.FullText, genOut.ProfileData, parseTool)
+		writeBlockingResponse(c, content.String(), reasoning.String(), genOut.ProfileData, parseTool)
+	}
+}
+
+// =============== reasoning routing ===============
+
+// reasoningSeparated reports whether a reasoning_format moves thinking output
+// into reasoning_content. "" / "none" keep it inline in content (default,
+// back-compatible); everything else (deepseek, deepseek-legacy, auto) separates.
+func reasoningSeparated(format string) bool {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "", "none":
+		return false
+	default:
+		return true
+	}
+}
+
+// newReasoner returns a think-splitter when the request wants thinking moved to
+// reasoning_content, or nil to keep it inline in content (default). Tool-call
+// parsing needs the raw <think>-tagged stream, so it disables separation.
+func newReasoner(param ChatCompletionRequest, parseTool bool) *thinkfsm.Splitter {
+	if parseTool || !reasoningSeparated(param.ReasoningFormat) {
+		return nil
+	}
+	return thinkfsm.New()
+}
+
+// route classifies a generated token. emit is false for consumed markers (the
+// <think> tag itself); otherwise text goes to reasoning_content when reasoning
+// is true, else to content. A nil splitter (separation off) passes every token
+// through as content verbatim, keeping default output byte-identical.
+func route(s *thinkfsm.Splitter, token string) (text string, reasoning, emit bool) {
+	if s == nil {
+		return token, false, true
+	}
+	ev := s.Feed(token)
+	if ev.Consumed {
+		return "", false, false
+	}
+	return ev.Text, ev.Reasoning, true
+}
+
+// reasoningSink returns an OnToken callback that accumulates routed tokens into
+// content and reasoning_content — the non-streaming path only gets the joined
+// text otherwise.
+func reasoningSink(s *thinkfsm.Splitter, content, reasoning *strings.Builder) func(string) bool {
+	return func(token string) bool {
+		if text, isReasoning, emit := route(s, token); emit {
+			if isReasoning {
+				reasoning.WriteString(text)
+			} else {
+				content.WriteString(text)
+			}
+		}
+		return true
 	}
 }
 
@@ -638,11 +705,34 @@ func writeContextLengthExceeded(c *gin.Context, fullText string, profile geniex_
 	})
 }
 
+// blockingMessage mirrors the assistant message but adds reasoning_content,
+// which openai-go's ChatCompletionMessage lacks. Used only when thinking is
+// separated so the default (inline) response stays byte-identical.
+type blockingMessage struct {
+	Role             string `json:"role"`
+	Content          string `json:"content"`
+	ReasoningContent string `json:"reasoning_content,omitempty"`
+}
+
+type blockingChoice struct {
+	Index        int64           `json:"index"`
+	Message      blockingMessage `json:"message"`
+	FinishReason string          `json:"finish_reason"`
+}
+
+type blockingResponse struct {
+	Object  string                 `json:"object"`
+	Choices []blockingChoice       `json:"choices"`
+	Usage   openai.CompletionUsage `json:"usage"`
+}
+
 // writeBlockingResponse emits a non-streaming completion: tool-call response
 // when parseTool matches, content response otherwise (or on parse failure).
-func writeBlockingResponse(c *gin.Context, fullText string, profile geniex_sdk.ProfileData, parseTool bool) {
+// reasoning is non-empty only when the request asked to separate thinking; it
+// is surfaced under message.reasoning_content and never parsed for tool calls.
+func writeBlockingResponse(c *gin.Context, content, reasoning string, profile geniex_sdk.ProfileData, parseTool bool) {
 	if parseTool {
-		toolCall, err := utils.ParseToolCalls(fullText)
+		toolCall, err := utils.ParseToolCalls(content)
 		if err == nil {
 			choice := openai.ChatCompletionChoice{}
 			choice.FinishReason = "tool_calls"
@@ -661,13 +751,30 @@ func writeBlockingResponse(c *gin.Context, fullText string, profile geniex_sdk.P
 		slog.Warn("Tool call parse error, fallback to text", "error", err)
 	}
 
-	choice := openai.ChatCompletionChoice{}
-	choice.FinishReason = mapFinishReason(profile.StopReason)
-	choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
-	choice.Message.Content = fullText
-	c.JSON(http.StatusOK, openai.ChatCompletion{
-		Choices: []openai.ChatCompletionChoice{choice},
-		Usage:   profile2Usage(profile),
+	// Default (no separation): keep the exact openai.ChatCompletion shape.
+	if reasoning == "" {
+		choice := openai.ChatCompletionChoice{}
+		choice.FinishReason = mapFinishReason(profile.StopReason)
+		choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
+		choice.Message.Content = content
+		c.JSON(http.StatusOK, openai.ChatCompletion{
+			Choices: []openai.ChatCompletionChoice{choice},
+			Usage:   profile2Usage(profile),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, blockingResponse{
+		Object: "chat.completion",
+		Choices: []blockingChoice{{
+			Message: blockingMessage{
+				Role:             string(openai.MessageRoleAssistant),
+				Content:          content,
+				ReasoningContent: reasoning,
+			},
+			FinishReason: mapFinishReason(profile.StopReason),
+		}},
+		Usage: profile2Usage(profile),
 	})
 }
 
@@ -687,9 +794,10 @@ type streamFinish func() string
 // give the stream spec-compliant serialization.
 
 type streamDelta struct {
-	Role      string                                          `json:"role,omitempty"`
-	Content   string                                          `json:"content,omitempty"`
-	ToolCalls []openai.ChatCompletionChunkChoiceDeltaToolCall `json:"tool_calls,omitempty"`
+	Role             string                                          `json:"role,omitempty"`
+	Content          string                                          `json:"content,omitempty"`
+	ReasoningContent string                                          `json:"reasoning_content,omitempty"`
+	ToolCalls        []openai.ChatCompletionChunkChoiceDeltaToolCall `json:"tool_calls,omitempty"`
 }
 
 type streamChoice struct {
@@ -715,6 +823,18 @@ func contentChunk(content string) streamChunk {
 	}
 }
 
+// tokenChunk emits a routed token as either a content or a reasoning_content
+// delta.
+func tokenChunk(text string, reasoning bool) streamChunk {
+	delta := streamDelta{Role: string(openai.MessageRoleAssistant)}
+	if reasoning {
+		delta.ReasoningContent = text
+	} else {
+		delta.Content = text
+	}
+	return streamChunk{Object: streamChunkObject, Choices: []streamChoice{{Delta: delta}}}
+}
+
 // finishChunk is the terminal chunk: empty delta, non-null finish_reason.
 func finishChunk(reason string) streamChunk {
 	return streamChunk{
@@ -727,13 +847,16 @@ func usageChunk(u openai.CompletionUsage) streamChunk {
 	return streamChunk{Object: streamChunkObject, Choices: []streamChoice{}, Usage: &u}
 }
 
-// streamPlainText drains dataCh as content chunks, then emits the finishing
-// chunk, optional usage and [DONE].
-func streamPlainText(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, usage streamUsage, finish streamFinish) {
+// streamPlainText drains dataCh, routing each token into content or
+// reasoning_content deltas, then emits the finishing chunk, optional usage and
+// [DONE].
+func streamPlainText(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, usage streamUsage, finish streamFinish, reasoner *thinkfsm.Splitter) {
 	c.Stream(func(w io.Writer) bool {
 		r, ok := <-dataCh
 		if ok {
-			c.SSEvent("", contentChunk(r))
+			if text, reasoning, emit := route(reasoner, r); emit {
+				c.SSEvent("", tokenChunk(text, reasoning))
+			}
 			return true
 		}
 		if err := wait(); err != nil {
