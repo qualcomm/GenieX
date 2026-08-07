@@ -95,6 +95,8 @@ Start the OpenAI-compatible local server. See [Local server](/en/run/cli/local-s
 geniex serve
 ```
 
+To move a thinking model's chain-of-thought out of `message.content` into `message.reasoning_content`, set the per-request `reasoning_format` field — see [Separating reasoning](/en/run/cli/local-server#separating-reasoning-reasoning_content).
+
 ## **Logging**
 
 `--log` is a global flag controlling the CLI's log output. It is equivalent to the `GENIEX_LOG` environment variable and takes precedence over it when both are set.

@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "thinkfsm",
+    srcs = ["thinkfsm.go"],
+    importpath = "github.com/qualcomm/GenieX/cli/internal/thinkfsm",
+    visibility = ["//cli:__subpackages__"],
+)
+
+go_test(
+    name = "thinkfsm_test",
+    srcs = ["thinkfsm_test.go"],
+    embed = [":thinkfsm"],
+)

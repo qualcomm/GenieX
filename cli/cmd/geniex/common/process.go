@@ -18,6 +18,7 @@ import (
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 	"github.com/qualcomm/GenieX/cli/internal/render"
+	"github.com/qualcomm/GenieX/cli/internal/thinkfsm"
 )
 
 var (
@@ -35,8 +36,7 @@ type Processor struct {
 	Run       func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error)
 	Reset     func() error
 
-	fsm      map[[2]any][2]any
-	fsmState int
+	splitter *thinkfsm.Splitter
 }
 
 func (p *Processor) Process() error {
@@ -80,7 +80,7 @@ func (p *Processor) Process() error {
 		spin := render.NewSpinner("encoding...") // merge into fsm
 		spin.Start()
 
-		p.fsmInit()
+		p.splitter = thinkfsm.New()
 		stopGen = false
 		output, profileData, err := p.Run(prompt, images, audios, func(token string) bool {
 			if firstToken {
@@ -190,78 +190,29 @@ func (p *Processor) parseFiles(prompt string) (string, []string, []string, error
 
 // output parse
 
-const (
-	STATE_ASSISTANT = iota // init state
-	STATE_THINK
-	STATE_NORMAL
-
-	STATE_START
-	STATE_CHANNEL
-	STATE_ANALYSIS
-	STATE_FINAL
-	STATE_END
-
-	STATE_GEMMA_CHANNEL
-	STATE_GEMMA_CHANNEL_THOUGHT
-)
-
-func (p *Processor) fsmInit() {
-	thinkStart := func(extraLine bool) func() {
-		return func() {
-			render.GetTheme().Set(render.GetTheme().ThinkOutput)
-			if extraLine {
-				fmt.Print("<think>\n")
-			} else {
-				fmt.Print("<think>")
-			}
-		}
-	}
-	thinkEnd := func(extraLine bool) func() {
-		return func() {
-			if extraLine {
-				fmt.Print("\n</think>\n\n")
-			} else {
-				fmt.Print("</think>")
-			}
-			render.GetTheme().Set(render.GetTheme().ModelOutput)
-		}
-	}
-	p.fsm = map[[2]any][2]any{
-		// normal
-		{STATE_ASSISTANT, "<think>"}: {STATE_THINK, thinkStart(false)},
-		{STATE_THINK, "</think>"}:    {STATE_NORMAL, thinkEnd(false)},
-
-		// gpt-oss
-		{STATE_ASSISTANT, "<|channel|>"}: {STATE_CHANNEL, nil},
-		{STATE_CHANNEL, "analysis"}:      {STATE_ANALYSIS, nil},
-		{STATE_CHANNEL, "final"}:         {STATE_FINAL, nil},
-		{STATE_ANALYSIS, "<|message|>"}:  {STATE_THINK, thinkStart(true)},
-		{STATE_FINAL, "<|message|>"}:     {STATE_NORMAL, nil},
-		{STATE_THINK, "<|end|>"}:         {STATE_END, thinkEnd(true)},
-		{STATE_NORMAL, "<|end|>"}:        {STATE_END, nil},
-		{STATE_END, "<|start|>"}:         {STATE_START, nil},
-		{STATE_START, "assistant"}:       {STATE_ASSISTANT, nil},
-
-		// gemma4
-		{STATE_ASSISTANT, "<|channel>"}:     {STATE_GEMMA_CHANNEL, nil},
-		{STATE_GEMMA_CHANNEL, "thought"}:    {STATE_GEMMA_CHANNEL_THOUGHT, nil},
-		{STATE_GEMMA_CHANNEL_THOUGHT, "\n"}: {STATE_THINK, thinkStart(true)},
-		{STATE_THINK, "<channel|>"}:         {STATE_NORMAL, thinkEnd(true)},
-	}
-	p.fsmState = STATE_ASSISTANT
-}
-
+// fsmEvent routes one generated token through the shared think splitter,
+// decorating reasoning spans with colored <think> tags for the terminal. The
+// server drives the same splitter to fill reasoning_content instead.
 func (p *Processor) fsmEvent(token string) {
-	next, ok := p.fsm[[2]any{p.fsmState, token}]
-	if ok {
-		p.fsmState = next[0].(int)
-		if next[1] != nil {
-			next[1].(func())()
+	ev := p.splitter.Feed(token)
+	switch {
+	case ev.Boundary == thinkfsm.EnterReasoning:
+		render.GetTheme().Set(render.GetTheme().ThinkOutput)
+		if ev.Block {
+			fmt.Print("<think>\n")
+		} else {
+			fmt.Print("<think>")
 		}
-		return
+	case ev.Boundary == thinkfsm.ExitReasoning:
+		if ev.Block {
+			fmt.Print("\n</think>\n\n")
+		} else {
+			fmt.Print("</think>")
+		}
+		render.GetTheme().Set(render.GetTheme().ModelOutput)
+	case !ev.Consumed:
+		fmt.Print(ev.Text)
 	}
-
-	fmt.Print(token)
 }
 
 // print profile data

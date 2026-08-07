@@ -95,6 +95,8 @@ Describe this picture </full/path/to/image.png>
 geniex serve
 ```
 
+要把思考模型的思维链从 `message.content` 移到 `message.reasoning_content`，在单次请求中设置 `reasoning_format` 字段即可——详见[分离推理内容](/cn/run/cli/local-server#分离推理内容reasoning_content)。
+
 ## **日志**
 
 `--log` 是全局标志，控制 CLI 的日志输出。它与 `GENIEX_LOG` 环境变量等效，且当二者同时设置时优先于 `GENIEX_LOG`。
