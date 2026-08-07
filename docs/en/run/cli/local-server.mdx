@@ -163,6 +163,31 @@ finish_reason: stop
 usage: CompletionUsage(completion_tokens=58, prompt_tokens=19, total_tokens=77, ...)
 ```
 
+### **Separating reasoning (reasoning_content)**
+
+By default a thinking model leaves its chain-of-thought inline in `message.content` (`<think>…</think>`), mixed in with the final reply. Pass `reasoning_format="deepseek"` to make the server move the chain-of-thought into the OpenAI-standard `message.reasoning_content` field, leaving `content` clean.
+
+<Note>
+`reasoning_format` is not the same as `enable_think`: `enable_think=False` makes the model **not produce** a chain-of-thought at all, while `reasoning_format="deepseek"` lets it think as usual but **moves** the thinking out of `content`. Values are `none` (default, kept inline) and `deepseek` / `deepseek-legacy` / `auto` (all separate). Tool-call requests ignore this parameter (tool parsing needs the raw tagged text).
+</Note>
+
+```python python
+resp = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=[
+        {"role": "user", "content": "What is 2+2? Answer briefly."},
+    ],
+    max_tokens=128,
+    extra_body={"reasoning_format": "deepseek"},
+)
+
+msg = resp.choices[0].message
+print("reasoning:", msg.model_extra.get("reasoning_content"))
+print("content:", msg.content)
+```
+
+Streaming works the same way — the chain-of-thought arrives as `delta.reasoning_content` deltas and the final reply as `delta.content`.
+
 ### **Tool calling**
 
 Function/tool calling uses the standard OpenAI `tools` schema. The server extracts the tool call from the model's generated text (`<tool_call>…</tool_call>` tags or a fenced ` ```json ` block) and re-emits it as OpenAI `tool_calls`. The flow works with **VLMs too** — the model can look at an image, decide what to search for, and call a tool.
