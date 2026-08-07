@@ -29,8 +29,8 @@ from _quality_data import (
     VLM_QUALITY_TEMPERATURE,
 )
 
-_LLM_BACKENDS = ['cpu', 'npu']
-_VLM_BACKENDS = ['cpu', 'npu']
+_LLM_BACKENDS = ['cpu', 'gpu', 'npu']
+_VLM_BACKENDS = ['cpu', 'gpu', 'npu']
 
 
 def test_model_manager_pull(llama_cpp_llm_paths, llama_cpp_vlm_paths, llama_cpp_mtp_paths):
@@ -80,11 +80,12 @@ def test_llm_multi_turn(llama_cpp_llm_paths, device_map):
 
 
 @pytest.mark.vlm
-def test_vlm_multi_turn(llama_cpp_vlm_paths, test_image):
+@pytest.mark.parametrize('device_map', _VLM_BACKENDS)
+def test_vlm_multi_turn(llama_cpp_vlm_paths, test_image, device_map):
     with geniex.AutoModelForVision2Seq.from_pretrained(
         LLAMA_CPP_VLM_MODEL,
         precision=LLAMA_CPP_VLM_PRECISION,
-        device_map='cpu',
+        device_map=device_map,
     ) as vlm:
         history = [
             {

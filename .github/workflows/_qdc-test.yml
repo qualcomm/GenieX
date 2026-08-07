@@ -45,7 +45,9 @@ jobs:
         if: inputs.gate_on_changed_files
         uses: ./.github/actions/changed-files
         with:
-          include: '^(sdk|third-party|tests/qdc)/|^\.github/workflows/_qdc-test\.yml$'
+          # QDC harness bundles the full tests/ tree onto the device, so any
+          # tests/** change (not just tests/qdc/**) affects the on-device run.
+          include: '^(sdk|third-party|tests)/|^\.github/workflows/_qdc-test\.yml$'
 
       - name: Decide skip
         id: skip

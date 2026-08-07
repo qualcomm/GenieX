@@ -30,7 +30,7 @@ model-manager-pull check that runs first:
 | `test_vlm_quality_keywords`   | Golden-retriever caption must match one of the canonical keywords. |
 | `test_mtp_multi_turn`         | (llama_cpp only) same "Alice" convo with `spec_type='draft-mtp'`.  |
 
-Backends per plugin: `llama_cpp` on `cpu` + `npu`; `qairt` on `npu` only.
+Backends per plugin: `llama_cpp` on `cpu` + `gpu` + `npu`; `qairt` on `npu` only.
 Model-manager pull failures are treated as FAIL, not SKIP, so a broken
 download surfaces as a red CI leg instead of a silent green skip.
 
@@ -44,8 +44,9 @@ The conftest auto-tags items by location and `device_map` value:
 | `llama_cpp`     | items in `tests/test_llama_cpp.py`                       |
 | `qairt`         | items in `tests/test_qairt.py`                           |
 | `device_cpu`    | parametrised with `device_map='cpu'`                     |
+| `device_gpu`    | parametrised with `device_map='gpu'`                     |
 | `device_npu`    | parametrised with `device_map='npu'`                     |
-| `snapdragon`    | any `device_map='npu'` cell (auto-applied)               |
+| `snapdragon`    | any `device_map` in {`gpu`, `npu`} cell (auto-applied)   |
 | `llm` / `vlm`   | applied per-test via `@pytest.mark.llm` / `.vlm`         |
 
 `snapdragon`-marked and `qairt` items skip automatically unless

@@ -33,9 +33,11 @@ QUALITY_IMAGE_PATH = Path(__file__).resolve().parent / 'assets' / 'quality_dog.j
 
 _DEVICE_MARKER = {
     'cpu': 'device_cpu',
+    'gpu': 'device_gpu',
     'npu': 'device_npu',
 }
-_SNAPDRAGON_DEVICES = {'npu'}
+# GPU uses the Snapdragon OpenCL backend, so it needs real hardware just like NPU.
+_SNAPDRAGON_DEVICES = {'gpu', 'npu'}
 
 
 def _is_snapdragon_host() -> bool:
