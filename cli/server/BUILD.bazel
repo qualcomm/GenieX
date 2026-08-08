@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "route.go",
         "server.go",
+        "webui.go",
     ],
     importpath = "github.com/qualcomm/GenieX/cli/server",
     visibility = ["//visibility:public"],
@@ -26,4 +27,5 @@ go_cgo_test(
         "server_test.go",
     ],
     embed = [":server"],
+    deps = ["@com_github_gin_gonic_gin//:gin"],
 )

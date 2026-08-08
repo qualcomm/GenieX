@@ -30,6 +30,8 @@ func serve() *cobra.Command {
 	serveCmd.Flags().String("host", "127.0.0.1:18181", "Default server address (env: GENIEX_HOST)")
 	serveCmd.Flags().String("origins", "*", "Default CORS origins (env: GENIEX_ORIGINS)")
 	serveCmd.Flags().Int("keepalive", 300, "Keepalive seconds (env: GENIEX_KEEPALIVE)")
+	serveCmd.Flags().String("webui-dir", "", "Serve a llama.cpp Web UI static build from this directory (env: GENIEX_WEBUIDIR)")
+	serveCmd.Flags().String("model", "", "Default model for requests that omit model (env: GENIEX_MODEL)")
 	// Model-load defaults applied when a request omits them (llama_cpp only;
 	// per-request body fields still override).
 	serveCmd.Flags().Int32("nctx", 4096, "Default context window size, llama_cpp only (env: GENIEX_NCTX)")
@@ -43,6 +45,8 @@ func serve() *cobra.Command {
 	viper.BindPFlag("host", serveCmd.Flags().Lookup("host"))
 	viper.BindPFlag("origins", serveCmd.Flags().Lookup("origins"))
 	viper.BindPFlag("keepalive", serveCmd.Flags().Lookup("keepalive"))
+	viper.BindPFlag("webuidir", serveCmd.Flags().Lookup("webui-dir"))
+	viper.BindPFlag("model", serveCmd.Flags().Lookup("model"))
 	viper.BindPFlag("nctx", serveCmd.Flags().Lookup("nctx"))
 	viper.BindPFlag("ngl", serveCmd.Flags().Lookup("ngl"))
 	viper.BindPFlag("compute", serveCmd.Flags().Lookup("compute"))

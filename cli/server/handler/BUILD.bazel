@@ -29,4 +29,5 @@ go_cgo_test(
     name = "handler_test",
     srcs = ["package_test.go"],
     embed = [":handler"],
+    deps = ["//bindings/go:geniex_sdk_go"],
 )

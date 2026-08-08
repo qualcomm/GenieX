@@ -43,7 +43,10 @@ func Serve() {
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.Default()
 
-	RegisterRoot(engine)
+	if err := RegisterRoot(engine); err != nil {
+		fmt.Println(render.GetTheme().Error.Sprintf("Web UI configuration error: %v", err))
+		return
+	}
 	RegisterAPIv1(engine)
 	RegisterSwagger(engine)
 

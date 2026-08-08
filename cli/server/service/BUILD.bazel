@@ -4,6 +4,7 @@ load("//scripts:cgo_test.bzl", "go_cgo_test")
 go_library(
     name = "service",
     srcs = [
+        "inference_thread.go",
         "keepalive.go",
         "service.go",
     ],

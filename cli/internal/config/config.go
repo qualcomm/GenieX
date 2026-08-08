@@ -19,6 +19,8 @@ type Config struct {
 	Host      string // Server host and port (default: "127.0.0.1:18181")
 	Origins   string // Allowed CORS origins (default: "*")
 	KeepAlive int64  // Connection keep-alive timeout in seconds (default: 300)
+	WebUIDir  string // Optional llama.cpp Web UI static build directory
+	Model     string // Default model for requests that omit the model field
 	// Model-load defaults applied when a request omits them (llama_cpp only;
 	// per-request body fields still override). Compute is the alias resolved by
 	// the SDK (sdk/src/device.cpp); empty means the SDK's own default.
@@ -40,6 +42,8 @@ func init() {
 	// ENV only param need to set default here
 	viper.SetDefault("hftoken", "") // Default empty token
 	viper.SetDefault("log", "none") // Default log level
+	viper.SetDefault("webuidir", "")
+	viper.SetDefault("model", "")
 
 	viper.SetEnvPrefix("geniex")
 	viper.AutomaticEnv()

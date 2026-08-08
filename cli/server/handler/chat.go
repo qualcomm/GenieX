@@ -36,10 +36,16 @@ type ChatCompletionRequest struct {
 	ChatCompletionNewParams
 	Stream bool `json:"stream"`
 
-	EnableThink bool   `json:"enable_think"`
-	NCtx        int32  `json:"nctx"`
-	Ngl         int32  `json:"ngl"` // 0 = pure CPU, -1 = all layers, N = N layers; defaults to the server --ngl when omitted
-	Compute     string `json:"compute"`
+	EnableThink bool `json:"enable_think"`
+	// llama.cpp Web UI compatibility aliases. The UI uses llama-server's
+	// repeat_penalty name and puts enable_thinking under chat_template_kwargs.
+	RepeatPenalty      *float32 `json:"repeat_penalty"`
+	ChatTemplateKwargs *struct {
+		EnableThinking *bool `json:"enable_thinking"`
+	} `json:"chat_template_kwargs"`
+	NCtx    int32  `json:"nctx"`
+	Ngl     int32  `json:"ngl"` // 0 = pure CPU, -1 = all layers, N = N layers; defaults to the server --ngl when omitted
+	Compute string `json:"compute"`
 
 	ImageMaxLength int32 `json:"image_max_length"`
 
@@ -66,6 +72,7 @@ func defaultChatCompletionRequest() ChatCompletionRequest {
 	return ChatCompletionRequest{
 		ChatCompletionNewParams: ChatCompletionNewParams{
 			MaxCompletionTokens: param.NewOpt[int64](2048),
+			Model:               openai.ChatModel(cfg.Model),
 		},
 		Stream: false,
 
@@ -80,6 +87,18 @@ func defaultChatCompletionRequest() ChatCompletionRequest {
 		GrammarPath:       "",
 		GrammarString:     "",
 		EnableJson:        false,
+	}
+}
+
+func normalizeLlamaWebUIRequest(param *ChatCompletionRequest) {
+	if param.MaxTokens.Valid() {
+		param.MaxCompletionTokens = param.MaxTokens
+	}
+	if param.RepeatPenalty != nil {
+		param.RepetitionPenalty = *param.RepeatPenalty
+	}
+	if param.ChatTemplateKwargs != nil && param.ChatTemplateKwargs.EnableThinking != nil {
+		param.EnableThink = *param.ChatTemplateKwargs.EnableThinking
 	}
 }
 
@@ -101,6 +120,13 @@ func ChatCompletions(c *gin.Context) {
 	if err := c.ShouldBindJSON(&param); err != nil {
 		slog.Error("Failed to bind JSON", "error", err)
 		c.JSON(http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	normalizeLlamaWebUIRequest(&param)
+	if param.Model == "" {
+		c.JSON(http.StatusBadRequest, map[string]any{
+			"error": "model is required; provide it in the request or configure geniex serve --model",
+		})
 		return
 	}
 
@@ -243,11 +269,13 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 
 	samplerConfig := parseSamplerConfig(param)
 
-	p, err := service.KeepAliveGet[geniex_sdk.LLM](
-		string(param.Model),
-		modelParam,
-		c.GetHeader("GenieX-KeepCache") != "true",
-	)
+	p, err := service.RunOnInferenceThreadResult(func() (*geniex_sdk.LLM, error) {
+		return service.KeepAliveGet[geniex_sdk.LLM](
+			string(param.Model),
+			modelParam,
+			c.GetHeader("GenieX-KeepCache") != "true",
+		)
+	})
 	if writeKeepAliveError(c, err) {
 		return
 	}
@@ -256,11 +284,13 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 		return
 	}
 
-	formatted, err := p.ApplyChatTemplate(geniex_sdk.LlmApplyChatTemplateInput{
-		Messages:            messages,
-		Tools:               tools,
-		EnableThink:         param.EnableThink,
-		AddGenerationPrompt: true,
+	formatted, err := service.RunOnInferenceThreadResult(func() (*geniex_sdk.LlmApplyChatTemplateOutput, error) {
+		return p.ApplyChatTemplate(geniex_sdk.LlmApplyChatTemplateInput{
+			Messages:            messages,
+			Tools:               tools,
+			EnableThink:         param.EnableThink,
+			AddGenerationPrompt: true,
+		})
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
@@ -280,31 +310,34 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 		resWg.Add(1)
 		go func() {
 			defer resWg.Done()
-			res, err = p.Generate(geniex_sdk.LlmGenerateInput{
-				PromptUTF8: formatted.FormattedText,
-				OnToken: func(token string) bool {
-					if stopGen {
-						return false
-					}
-					dataCh <- token
-					return true
-				},
-				Config: &geniex_sdk.GenerationConfig{
-					MaxTokens:     int32(param.MaxCompletionTokens.Value),
-					SamplerConfig: samplerConfig,
-				},
+			res, err = service.RunOnInferenceThreadResult(func() (*geniex_sdk.LlmGenerateOutput, error) {
+				return p.Generate(geniex_sdk.LlmGenerateInput{
+					PromptUTF8: formatted.FormattedText,
+					OnToken: func(token string) bool {
+						if stopGen {
+							return false
+						}
+						dataCh <- token
+						return true
+					},
+					Config: &geniex_sdk.GenerationConfig{
+						MaxTokens:     int32(param.MaxCompletionTokens.Value),
+						SamplerConfig: samplerConfig,
+					},
+				})
 			})
 			close(dataCh)
 		}()
 
 		wait := func() error { resWg.Wait(); return err }
 		usage := func() openai.CompletionUsage { return profile2Usage(res.ProfileData) }
+		timings := func() llamaTimings { return profile2Timings(res.ProfileData) }
 		finish := func() string { return mapFinishReason(res.ProfileData.StopReason) }
 		includeUsage := param.StreamOptions.IncludeUsage.Value
 		if !parseTool {
-			streamPlainText(c, dataCh, wait, includeUsage, usage, finish)
+			streamPlainText(c, dataCh, wait, includeUsage, usage, timings, string(param.Model), finish)
 		} else {
-			streamToolCall(c, dataCh, wait, includeUsage, usage, finish)
+			streamToolCall(c, dataCh, wait, includeUsage, usage, timings, string(param.Model), finish)
 		}
 
 		stopGen = true
@@ -312,12 +345,14 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 		}
 
 	} else {
-		genOut, err := p.Generate(geniex_sdk.LlmGenerateInput{
-			PromptUTF8: formatted.FormattedText,
-			Config: &geniex_sdk.GenerationConfig{
-				MaxTokens:     int32(param.MaxCompletionTokens.Value),
-				SamplerConfig: samplerConfig,
-			},
+		genOut, err := service.RunOnInferenceThreadResult(func() (*geniex_sdk.LlmGenerateOutput, error) {
+			return p.Generate(geniex_sdk.LlmGenerateInput{
+				PromptUTF8: formatted.FormattedText,
+				Config: &geniex_sdk.GenerationConfig{
+					MaxTokens:     int32(param.MaxCompletionTokens.Value),
+					SamplerConfig: samplerConfig,
+				},
+			})
 		})
 		if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
 			writeContextLengthExceeded(c, genOut.FullText, genOut.ProfileData)
@@ -327,7 +362,7 @@ func chatCompletionsLLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
-		writeBlockingResponse(c, genOut.FullText, genOut.ProfileData, parseTool)
+		writeBlockingResponse(c, genOut.FullText, genOut.ProfileData, parseTool, string(param.Model))
 	}
 }
 
@@ -465,11 +500,13 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 
 	samplerConfig := parseSamplerConfig(param)
 
-	p, err := service.KeepAliveGet[geniex_sdk.VLM](
-		string(param.Model),
-		modelParam,
-		c.GetHeader("GenieX-KeepCache") != "true",
-	)
+	p, err := service.RunOnInferenceThreadResult(func() (*geniex_sdk.VLM, error) {
+		return service.KeepAliveGet[geniex_sdk.VLM](
+			string(param.Model),
+			modelParam,
+			c.GetHeader("GenieX-KeepCache") != "true",
+		)
+	})
 	if writeKeepAliveError(c, err) {
 		return
 	}
@@ -479,10 +516,12 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 	}
 
 	// Format prompt using VLM chat template
-	formatted, err := p.ApplyChatTemplate(geniex_sdk.VlmApplyChatTemplateInput{
-		Messages:    messages,
-		Tools:       tools,
-		EnableThink: param.EnableThink,
+	formatted, err := service.RunOnInferenceThreadResult(func() (*geniex_sdk.VlmApplyChatTemplateOutput, error) {
+		return p.ApplyChatTemplate(geniex_sdk.VlmApplyChatTemplateInput{
+			Messages:    messages,
+			Tools:       tools,
+			EnableThink: param.EnableThink,
+		})
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
@@ -512,15 +551,48 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 		resWg.Add(1)
 		go func() {
 			defer resWg.Done()
-			res, err = p.Generate(geniex_sdk.VlmGenerateInput{
+			res, err = service.RunOnInferenceThreadResult(func() (*geniex_sdk.VlmGenerateOutput, error) {
+				return p.Generate(geniex_sdk.VlmGenerateInput{
+					PromptUTF8: formatted.FormattedText,
+					OnToken: func(token string) bool {
+						if stopGen {
+							return false
+						}
+						dataCh <- token
+						return true
+					},
+					Config: &geniex_sdk.GenerationConfig{
+						MaxTokens:      int32(param.MaxCompletionTokens.Value),
+						SamplerConfig:  samplerConfig,
+						ImagePaths:     images,
+						AudioPaths:     audios,
+						ImageMaxLength: param.ImageMaxLength,
+					},
+				})
+			})
+
+			close(dataCh)
+		}()
+
+		wait := func() error { resWg.Wait(); return err }
+		usage := func() openai.CompletionUsage { return profile2Usage(res.ProfileData) }
+		timings := func() llamaTimings { return profile2Timings(res.ProfileData) }
+		finish := func() string { return mapFinishReason(res.ProfileData.StopReason) }
+		includeUsage := param.StreamOptions.IncludeUsage.Value
+		if !parseTool {
+			streamPlainText(c, dataCh, wait, includeUsage, usage, timings, string(param.Model), finish)
+		} else {
+			streamToolCall(c, dataCh, wait, includeUsage, usage, timings, string(param.Model), finish)
+		}
+
+		stopGen = true
+		for range dataCh {
+		}
+
+	} else {
+		genOut, err := service.RunOnInferenceThreadResult(func() (*geniex_sdk.VlmGenerateOutput, error) {
+			return p.Generate(geniex_sdk.VlmGenerateInput{
 				PromptUTF8: formatted.FormattedText,
-				OnToken: func(token string) bool {
-					if stopGen {
-						return false
-					}
-					dataCh <- token
-					return true
-				},
 				Config: &geniex_sdk.GenerationConfig{
 					MaxTokens:      int32(param.MaxCompletionTokens.Value),
 					SamplerConfig:  samplerConfig,
@@ -529,34 +601,6 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 					ImageMaxLength: param.ImageMaxLength,
 				},
 			})
-
-			close(dataCh)
-		}()
-
-		wait := func() error { resWg.Wait(); return err }
-		usage := func() openai.CompletionUsage { return profile2Usage(res.ProfileData) }
-		finish := func() string { return mapFinishReason(res.ProfileData.StopReason) }
-		includeUsage := param.StreamOptions.IncludeUsage.Value
-		if !parseTool {
-			streamPlainText(c, dataCh, wait, includeUsage, usage, finish)
-		} else {
-			streamToolCall(c, dataCh, wait, includeUsage, usage, finish)
-		}
-
-		stopGen = true
-		for range dataCh {
-		}
-
-	} else {
-		genOut, err := p.Generate(geniex_sdk.VlmGenerateInput{
-			PromptUTF8: formatted.FormattedText,
-			Config: &geniex_sdk.GenerationConfig{
-				MaxTokens:      int32(param.MaxCompletionTokens.Value),
-				SamplerConfig:  samplerConfig,
-				ImagePaths:     images,
-				AudioPaths:     audios,
-				ImageMaxLength: param.ImageMaxLength,
-			},
 		})
 		if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) && genOut != nil {
 			writeContextLengthExceeded(c, genOut.FullText, genOut.ProfileData)
@@ -566,7 +610,7 @@ func chatCompletionsVLM(c *gin.Context, param ChatCompletionRequest, modelParam 
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
-		writeBlockingResponse(c, genOut.FullText, genOut.ProfileData, parseTool)
+		writeBlockingResponse(c, genOut.FullText, genOut.ProfileData, parseTool, string(param.Model))
 	}
 }
 
@@ -636,12 +680,13 @@ func writeContextLengthExceeded(c *gin.Context, fullText string, profile geniex_
 		},
 		"choices": []openai.ChatCompletionChoice{choice},
 		"usage":   profile2Usage(profile),
+		"timings": profile2Timings(profile),
 	})
 }
 
 // writeBlockingResponse emits a non-streaming completion: tool-call response
 // when parseTool matches, content response otherwise (or on parse failure).
-func writeBlockingResponse(c *gin.Context, fullText string, profile geniex_sdk.ProfileData, parseTool bool) {
+func writeBlockingResponse(c *gin.Context, fullText string, profile geniex_sdk.ProfileData, parseTool bool, model string) {
 	if parseTool {
 		toolCall, err := utils.ParseToolCalls(fullText)
 		if err == nil {
@@ -653,22 +698,36 @@ func writeBlockingResponse(c *gin.Context, fullText string, profile geniex_sdk.P
 				Type:     "function",
 				Function: toolCall,
 			}}
-			c.JSON(http.StatusOK, openai.ChatCompletion{
-				Choices: []openai.ChatCompletionChoice{choice},
-				Usage:   profile2Usage(profile),
+			c.JSON(http.StatusOK, map[string]any{
+				"object":  "chat.completion",
+				"model":   model,
+				"choices": []openai.ChatCompletionChoice{choice},
+				"usage":   profile2Usage(profile),
+				"timings": profile2Timings(profile),
 			})
 			return
 		}
 		slog.Warn("Tool call parse error, fallback to text", "error", err)
 	}
 
-	choice := openai.ChatCompletionChoice{}
-	choice.FinishReason = mapFinishReason(profile.StopReason)
-	choice.Message.Role = constant.Assistant(openai.MessageRoleAssistant)
-	choice.Message.Content = fullText
-	c.JSON(http.StatusOK, openai.ChatCompletion{
-		Choices: []openai.ChatCompletionChoice{choice},
-		Usage:   profile2Usage(profile),
+	reasoning, content := splitGemma4Response(fullText)
+	message := map[string]any{
+		"role":    openai.MessageRoleAssistant,
+		"content": content,
+	}
+	if reasoning != "" {
+		message["reasoning_content"] = reasoning
+	}
+	c.JSON(http.StatusOK, map[string]any{
+		"object": "chat.completion",
+		"model":  model,
+		"choices": []map[string]any{{
+			"index":         0,
+			"finish_reason": mapFinishReason(profile.StopReason),
+			"message":       message,
+		}},
+		"usage":   profile2Usage(profile),
+		"timings": profile2Timings(profile),
 	})
 }
 
@@ -680,6 +739,9 @@ type streamUsage func() openai.CompletionUsage
 // stop_reason to the OpenAI finish_reason vocabulary for the final chunk.
 type streamFinish func() string
 
+// streamTimings exposes the completed SDK profile after generation finishes.
+type streamTimings func() llamaTimings
+
 // The openai-go response structs marshal FinishReason as a plain string, so
 // every chunk carried `"finish_reason": ""` and no terminal chunk was sent.
 // The OpenAI streaming spec requires null on intermediate chunks and
@@ -688,9 +750,10 @@ type streamFinish func() string
 // give the stream spec-compliant serialization.
 
 type streamDelta struct {
-	Role      string                                          `json:"role,omitempty"`
-	Content   string                                          `json:"content,omitempty"`
-	ToolCalls []openai.ChatCompletionChunkChoiceDeltaToolCall `json:"tool_calls,omitempty"`
+	Role             string                                          `json:"role,omitempty"`
+	Content          string                                          `json:"content,omitempty"`
+	ReasoningContent string                                          `json:"reasoning_content,omitempty"`
+	ToolCalls        []openai.ChatCompletionChunkChoiceDeltaToolCall `json:"tool_calls,omitempty"`
 }
 
 type streamChoice struct {
@@ -701,8 +764,10 @@ type streamChoice struct {
 
 type streamChunk struct {
 	Object  string                  `json:"object"`
+	Model   string                  `json:"model,omitempty"`
 	Choices []streamChoice          `json:"choices"`
 	Usage   *openai.CompletionUsage `json:"usage,omitempty"`
+	Timings *llamaTimings           `json:"timings,omitempty"`
 }
 
 const streamChunkObject = "chat.completion.chunk"
@@ -716,11 +781,116 @@ func contentChunk(content string) streamChunk {
 	}
 }
 
+func reasoningChunk(content string) streamChunk {
+	return streamChunk{
+		Object: streamChunkObject,
+		Choices: []streamChoice{{
+			Delta: streamDelta{Role: string(openai.MessageRoleAssistant), ReasoningContent: content},
+		}},
+	}
+}
+
+const (
+	gemma4ReasoningStart = "<|channel>thought"
+	gemma4ReasoningEnd   = "<channel|>"
+)
+
+func splitGemma4Response(fullText string) (reasoning string, content string) {
+	start := strings.Index(fullText, gemma4ReasoningStart)
+	if start < 0 {
+		return "", fullText
+	}
+	reasoningStart := start + len(gemma4ReasoningStart)
+	endRelative := strings.Index(fullText[reasoningStart:], gemma4ReasoningEnd)
+	if endRelative < 0 {
+		return "", fullText
+	}
+	end := reasoningStart + endRelative
+	reasoning = strings.TrimSpace(fullText[reasoningStart:end])
+	content = fullText[end+len(gemma4ReasoningEnd):]
+	return reasoning, content
+}
+
+// gemma4StreamParser mirrors llama.cpp's Gemma 4 reasoning boundary parser
+// for the control-token pieces emitted by the embedded llama_cpp plugin.
+// Non-Gemma output is passed through unchanged.
+type gemma4StreamParser struct {
+	inReasoning     bool
+	trimReasoningLF bool
+	pendingChannel  bool
+}
+
+func (p *gemma4StreamParser) parse(piece string) (streamChunk, bool) {
+	if p.pendingChannel {
+		p.pendingChannel = false
+		if strings.HasPrefix(piece, "thought") {
+			p.inReasoning = true
+			p.trimReasoningLF = true
+			piece = strings.TrimPrefix(piece, "thought")
+		} else {
+			return contentChunk("<|channel>" + piece), true
+		}
+	} else if piece == "<|channel>" {
+		p.pendingChannel = true
+		return streamChunk{}, false
+	}
+
+	if strings.HasPrefix(piece, gemma4ReasoningStart) {
+		p.inReasoning = true
+		p.trimReasoningLF = true
+		piece = strings.TrimPrefix(piece, gemma4ReasoningStart)
+	}
+
+	if p.inReasoning {
+		if idx := strings.Index(piece, gemma4ReasoningEnd); idx >= 0 {
+			reasoning := piece[:idx]
+			p.inReasoning = false
+			p.trimReasoningLF = false
+			remainder := piece[idx+len(gemma4ReasoningEnd):]
+			if reasoning != "" && remainder != "" {
+				return streamChunk{
+					Object: streamChunkObject,
+					Choices: []streamChoice{{Delta: streamDelta{
+						Role:             string(openai.MessageRoleAssistant),
+						ReasoningContent: reasoning,
+						Content:          remainder,
+					}}},
+				}, true
+			}
+			if reasoning != "" {
+				return reasoningChunk(reasoning), true
+			}
+			if remainder != "" {
+				return contentChunk(remainder), true
+			}
+			return streamChunk{}, false
+		}
+		if p.trimReasoningLF {
+			if piece == "" {
+				return streamChunk{}, false
+			}
+			piece = strings.TrimPrefix(piece, "\n")
+			p.trimReasoningLF = false
+		}
+		if piece == "" {
+			return streamChunk{}, false
+		}
+		return reasoningChunk(piece), true
+	}
+
+	if piece == gemma4ReasoningEnd {
+		return streamChunk{}, false
+	}
+	return contentChunk(piece), true
+}
+
 // finishChunk is the terminal chunk: empty delta, non-null finish_reason.
-func finishChunk(reason string) streamChunk {
+func finishChunk(reason string, timings llamaTimings, model string) streamChunk {
 	return streamChunk{
 		Object:  streamChunkObject,
+		Model:   model,
 		Choices: []streamChoice{{FinishReason: &reason}},
+		Timings: &timings,
 	}
 }
 
@@ -730,18 +900,21 @@ func usageChunk(u openai.CompletionUsage) streamChunk {
 
 // streamPlainText drains dataCh as content chunks, then emits the finishing
 // chunk, optional usage and [DONE].
-func streamPlainText(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, usage streamUsage, finish streamFinish) {
+func streamPlainText(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, usage streamUsage, timings streamTimings, model string, finish streamFinish) {
+	parser := gemma4StreamParser{}
 	c.Stream(func(w io.Writer) bool {
 		r, ok := <-dataCh
 		if ok {
-			c.SSEvent("", contentChunk(r))
+			if chunk, emit := parser.parse(r); emit {
+				c.SSEvent("", chunk)
+			}
 			return true
 		}
 		if err := wait(); err != nil {
 			c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return false
 		}
-		c.SSEvent("", finishChunk(finish()))
+		c.SSEvent("", finishChunk(finish(), timings(), model))
 		if includeUsage {
 			c.SSEvent("", usageChunk(usage()))
 		}
@@ -753,7 +926,7 @@ func streamPlainText(c *gin.Context, dataCh <-chan string, wait func() error, in
 // streamToolCall buffers the stream and emits a tool-call chunk once dataCh
 // closes; falls back to a content chunk when parsing fails. Either way the
 // stream ends with a finishing chunk, optional usage and [DONE].
-func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, usage streamUsage, finish streamFinish) {
+func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, usage streamUsage, timings streamTimings, model string, finish streamFinish) {
 	buffer := strings.Builder{}
 	c.Stream(func(w io.Writer) bool {
 		r, ok := <-dataCh
@@ -789,7 +962,7 @@ func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, inc
 				}},
 			})
 		}
-		c.SSEvent("", finishChunk(finishReason))
+		c.SSEvent("", finishChunk(finishReason, timings(), model))
 		if includeUsage {
 			c.SSEvent("", usageChunk(usage()))
 		}
@@ -805,6 +978,33 @@ func profile2Usage(p geniex_sdk.ProfileData) openai.CompletionUsage {
 		CompletionTokens: p.GeneratedTokens,
 		PromptTokens:     p.PromptTokens,
 		TotalTokens:      p.TotalTokens(),
+	}
+}
+
+// llamaTimings is llama-server's timing extension consumed by the upstream
+// Web UI. It is derived from the completed GenieX SDK profile, not wall-clock
+// proxy timing, so the UI and geniex-bench use the same token accounting.
+type llamaTimings struct {
+	PromptN            int64   `json:"prompt_n"`
+	PromptMS           float64 `json:"prompt_ms"`
+	PromptPerSecond    float64 `json:"prompt_per_second"`
+	PredictedN         int64   `json:"predicted_n"`
+	PredictedMS        float64 `json:"predicted_ms"`
+	PredictedPerSecond float64 `json:"predicted_per_second"`
+	TTFTMS             float64 `json:"ttft_ms"`
+	CacheN             int64   `json:"cache_n"`
+}
+
+func profile2Timings(p geniex_sdk.ProfileData) llamaTimings {
+	return llamaTimings{
+		PromptN:            p.PromptTokens,
+		PromptMS:           float64(p.PromptTime) / 1000.0,
+		PromptPerSecond:    p.PrefillSpeed,
+		PredictedN:         p.GeneratedTokens,
+		PredictedMS:        float64(p.DecodeTime) / 1000.0,
+		PredictedPerSecond: p.DecodingSpeed,
+		TTFTMS:             float64(p.TTFT) / 1000.0,
+		CacheN:             0,
 	}
 }
 
