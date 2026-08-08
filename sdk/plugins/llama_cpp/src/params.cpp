@@ -69,19 +69,24 @@ llama_model_params build_model_params(const geniex_ModelConfig& config, Device d
 }
 
 llama_context_params build_context_params(const geniex_ModelConfig& config, int32_t n_ctx_default, Device device) {
+    // Linux/Windows CPU defaults mirror llama-server's common_params. Keep the
+    // existing accelerator-specific values for GPU, NPU, and Android.
     static const uint32_t ubatch_matrix[3][3] = {
-        {2048, 512, 1024},  // Linux
-        {2048, 512, 1024},  // Windows
+        {512, 512, 1024},  // Linux
+        {512, 512, 1024},  // Windows
         {1024, 512, 1024}   // Android
     };
-    static const bool fa_matrix[3][3] = {
-        {true, false, true},  // Linux
-        {true, false, true},  // Windows
-        {true, false, true}   // Android
+    static const llama_flash_attn_type fa_matrix[3][3] = {
+        // Linux
+        {LLAMA_FLASH_ATTN_TYPE_AUTO, LLAMA_FLASH_ATTN_TYPE_DISABLED, LLAMA_FLASH_ATTN_TYPE_ENABLED},
+        // Windows
+        {LLAMA_FLASH_ATTN_TYPE_AUTO, LLAMA_FLASH_ATTN_TYPE_DISABLED, LLAMA_FLASH_ATTN_TYPE_ENABLED},
+        // Android
+        {LLAMA_FLASH_ATTN_TYPE_ENABLED, LLAMA_FLASH_ATTN_TYPE_DISABLED, LLAMA_FLASH_ATTN_TYPE_ENABLED}
     };
 
-    uint32_t ubatch = ubatch_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
-    bool     fa     = fa_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+    uint32_t              ubatch = ubatch_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+    llama_flash_attn_type fa     = fa_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
 
     llama_context_params cpar = llama_context_default_params();
     cpar.n_ctx                = config.n_ctx > 0 ? config.n_ctx : n_ctx_default;
@@ -90,7 +95,11 @@ llama_context_params build_context_params(const geniex_ModelConfig& config, int3
     cpar.n_seq_max            = config.n_seq_max > 0 ? config.n_seq_max : 1;
     cpar.n_threads            = resolve_n_threads(config.n_threads, device);
     cpar.n_threads_batch      = resolve_n_threads(config.n_threads_batch, device);
-    cpar.flash_attn_type      = static_cast<llama_flash_attn_type>(fa);
+    cpar.flash_attn_type      = fa;
+    // Match llama-server's application default. llama_context_default_params()
+    // enables a full-size SWA cache, but common_params disables it so models
+    // such as Gemma 4 retain their intended sliding-window cache size.
+    cpar.swa_full             = false;
     cpar.no_perf              = false;
 
     GENIEX_LOG_INFO(
