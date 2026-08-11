@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: BSD-3-Clause
+
+add_executable(geniex_xray_contract_test xray_contract_test.cpp)
+target_compile_features(geniex_xray_contract_test PRIVATE cxx_std_17)
+target_include_directories(geniex_xray_contract_test PRIVATE
+    "${CMAKE_SOURCE_DIR}/include")
+
+add_test(NAME geniex.xray.contract COMMAND geniex_xray_contract_test)
