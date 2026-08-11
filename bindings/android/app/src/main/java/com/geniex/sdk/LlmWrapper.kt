@@ -48,6 +48,7 @@ class LlmWrapper private constructor(
                 val input = llmCreateInput ?: throw IllegalArgumentException("modelPath required")
                 val wrapper = LlmWrapper(dispatcher)
                 wrapper.handle = wrapper.llm.create(input)
+                check(wrapper.handle != 0L) { "Native LLM creation returned an invalid handle" }
                 Result.success(wrapper)
             } catch (e: Exception) {
                 Result.failure(e)
@@ -123,9 +124,9 @@ class LlmWrapper private constructor(
 
     // Clean up native resources
     fun destroy(): Int {
-        var result = 0
-        if (handle != 0L) {
-            result = llm.destroy(handle)
+        if (handle == 0L) return 0
+        val result = llm.destroy(handle)
+        if (result == 0) {
             handle = 0L
         }
         return result

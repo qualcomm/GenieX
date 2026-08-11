@@ -7,9 +7,8 @@
 //! `cli/internal/model_hub/aihub/selector.go`:
 //!
 //! - Resolve the user-supplied chipset against `platform.json` aliases.
-//! - Filter to assets whose `runtime == RUNTIME_GENIE`. The CLI only
-//!   supports the Genie runtime (LLM / VLM domains); other assets are
-//!   rejected up front.
+//! - Filter to assets whose `runtime == RUNTIME_GENIEX_QAIRT`, matching the
+//!   runtime used to admit models into the Android QAIRT catalog.
 //! - Filter to assets whose canonical chipset matches.
 //! - If multiple precisions survive, pick the lex-first precision string
 //!   for a deterministic default. The Go CLI sorts by enum value, which
@@ -20,9 +19,8 @@
 use super::dto::{AssetDetails, ModelReleaseAssets, PlatformInfo};
 use crate::error::{Error, Result};
 
-/// Runtime string the public bucket uses for Genie-compatible assets.
-/// Matches `qaihm.Runtime_RUNTIME_GENIE`.
-const RUNTIME_GENIE: &str = "RUNTIME_GENIE";
+/// Runtime string the public bucket uses for GenieX QAIRT assets.
+const RUNTIME_GENIEX_QAIRT: &str = "RUNTIME_GENIEX_QAIRT";
 
 /// Domains the SDK currently supports — same subset the Go CLI accepts
 /// in `RuntimeForDomain`.
@@ -80,7 +78,7 @@ pub fn resolve_chipset_display(plat: &PlatformInfo, chipset: &str) -> Option<Str
     None
 }
 
-/// Pick one asset matching `(chipset, RUNTIME_GENIE)`. Returns the list of
+/// Pick one asset matching `(chipset, RUNTIME_GENIEX_QAIRT)`. Returns the list of
 /// supported chipsets (for actionable error messages) when nothing matches.
 pub fn match_asset<'a>(
     ra: &'a ModelReleaseAssets,
@@ -107,7 +105,9 @@ pub fn match_asset<'a>(
     let mut candidates: Vec<&AssetDetails> = ra
         .assets
         .iter()
-        .filter(|a| a.runtime == RUNTIME_GENIE && a.chipset.as_deref() == Some(canonical.as_str()))
+        .filter(|a| {
+            a.runtime == RUNTIME_GENIEX_QAIRT && a.chipset.as_deref() == Some(canonical.as_str())
+        })
         .collect();
 
     if candidates.is_empty() {
@@ -260,13 +260,13 @@ mod tests {
             model_id: "m".into(),
             assets: vec![
                 asset("SD8G3", "RUNTIME_TFLITE", "PRECISION_FP16"),
-                asset("SD8G3", "RUNTIME_GENIE", "PRECISION_W4A16"),
-                asset("Other", "RUNTIME_GENIE", "PRECISION_FP16"),
+                asset("SD8G3", "RUNTIME_GENIEX_QAIRT", "PRECISION_W4A16"),
+                asset("Other", "RUNTIME_GENIEX_QAIRT", "PRECISION_FP16"),
             ],
         };
         let got = match_asset(&ra, &plat, "sm8650").unwrap();
         assert_eq!(got.chipset.as_deref(), Some("SD8G3"));
-        assert_eq!(got.runtime, "RUNTIME_GENIE");
+        assert_eq!(got.runtime, "RUNTIME_GENIEX_QAIRT");
     }
 
     #[test]
@@ -275,8 +275,8 @@ mod tests {
         let ra = ModelReleaseAssets {
             model_id: "m".into(),
             assets: vec![
-                asset("A", "RUNTIME_GENIE", "PRECISION_FP16"),
-                asset("B", "RUNTIME_GENIE", "PRECISION_FP16"),
+                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_FP16"),
+                asset("B", "RUNTIME_GENIEX_QAIRT", "PRECISION_FP16"),
             ],
         };
         let err = match_asset(&ra, &plat, "C").unwrap_err();
@@ -297,7 +297,7 @@ mod tests {
             model_id: "m".into(),
             assets: vec![asset(
                 "qualcomm-snapdragon-x-elite",
-                "RUNTIME_GENIE",
+                "RUNTIME_GENIEX_QAIRT",
                 "PRECISION_FP16",
             )],
         };
@@ -311,8 +311,8 @@ mod tests {
         let ra = ModelReleaseAssets {
             model_id: "m".into(),
             assets: vec![
-                asset("A", "RUNTIME_GENIE", "PRECISION_W4A16"),
-                asset("A", "RUNTIME_GENIE", "PRECISION_FP16"),
+                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_W4A16"),
+                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_FP16"),
             ],
         };
         let picked = match_asset(&ra, &plat, "A").unwrap();

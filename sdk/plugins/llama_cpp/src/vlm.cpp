@@ -20,6 +20,10 @@
 namespace geniex {
 
 LlamaVlm::~LlamaVlm() {
+    if (this->sampler) {
+        common_sampler_free(this->sampler);
+        this->sampler = nullptr;
+    }
     if (this->ctx) {
         llama_free(this->ctx);
         this->ctx = nullptr;
@@ -27,6 +31,10 @@ LlamaVlm::~LlamaVlm() {
     if (this->ctx_vision) {
         mtmd_free(this->ctx_vision);
         this->ctx_vision = nullptr;
+    }
+    if (this->model) {
+        llama_model_free(this->model);
+        this->model = nullptr;
     }
 }
 
