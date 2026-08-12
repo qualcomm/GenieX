@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
@@ -16,8 +17,27 @@
 #include "jni_cb.h"
 #include "jniutils.h"
 
-static std::unordered_map<void*, std::atomic<bool>*> g_stopFlags;
-static std::mutex                                    g_stopFlagsMutex;
+struct HandleState {
+    std::mutex                         operation_mutex;
+    std::mutex                         stop_mutex;
+    std::shared_ptr<std::atomic<bool>> stop_flag;
+    std::atomic<bool>                  closing{false};
+};
+
+static std::unordered_map<void*, std::shared_ptr<HandleState>> g_handleStates;
+static std::mutex                                              g_handleStatesMutex;
+
+static std::shared_ptr<HandleState> get_handle_state(void* handle) {
+    std::lock_guard<std::mutex> lock(g_handleStatesMutex);
+    auto                        it = g_handleStates.find(handle);
+    return it == g_handleStates.end() ? nullptr : it->second;
+}
+
+static void request_stop(const std::shared_ptr<HandleState>& state) {
+    if (!state) return;
+    std::lock_guard<std::mutex> lock(state->stop_mutex);
+    if (state->stop_flag) state->stop_flag->store(true);
+}
 
 using namespace jniutils;
 using namespace geniex_android_sdk;
@@ -25,11 +45,13 @@ using namespace geniex_android_sdk;
 // JNI: create
 extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Vlm_create(JNIEnv* env, jobject, jobject vlmCreateInputObj) {
     try {
+        clear_jni_cstr_pool();
         LOGi("[JNI] [create] Java_com_geniex_sdk_jni_Vlm_create ");
         geniex_VlmCreateInput create_input = extract_vlm_create_input(env, vlmCreateInputObj);
         LOGi("[JNI] [create] plugin_id = %s", create_input.plugin_id ? create_input.plugin_id : "(null)");
         geniex_VLM* handle = nullptr;
         int32_t     result = geniex_vlm_create(&create_input, &handle);
+        clear_jni_cstr_pool();
 
         if (result != GENIEX_SUCCESS || !handle) {
             LOGe("[JNI] create() failed, error code: %d", result);
@@ -38,10 +60,16 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Vlm_create(JNIEnv* en
             return 0;
         }
 
+        {
+            std::lock_guard<std::mutex> lock(g_handleStatesMutex);
+            g_handleStates[handle] = std::make_shared<HandleState>();
+        }
+
         LOGi("[JNI] create() geniex_vlm_create returned handle=%p", handle);
         return reinterpret_cast<jlong>(handle);
 
     } catch (const std::exception& e) {
+        clear_jni_cstr_pool();
         LOGe("[JNI] create() exception: %s", e.what());
         return 0;
     }
@@ -51,7 +79,19 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Vlm_create(JNIEnv* en
 extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Vlm_destroy(JNIEnv*, jobject, jlong handle) {
     LOGd("[JNI] destroy() called, handle=%p", (void*)handle);
     if (handle) {
+        void* h     = reinterpret_cast<void*>(handle);
+        auto  state = get_handle_state(h);
+        if (state) {
+            state->closing.store(true);
+            request_stop(state);
+        }
+        std::unique_lock<std::mutex> operation_lock;
+        if (state) operation_lock = std::unique_lock<std::mutex>(state->operation_mutex);
         int32_t result = geniex_vlm_destroy(reinterpret_cast<geniex_VLM*>(handle));
+        {
+            std::lock_guard<std::mutex> lock(g_handleStatesMutex);
+            g_handleStates.erase(h);
+        }
         if (result != GENIEX_SUCCESS) {
             LOGe("[JNI] destroy() failed, error code: %d", result);
         }
@@ -67,6 +107,10 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Vlm_reset(JNIEnv* env,
         throw_runtime_exception(env, "VLM reset failed: invalid handle");
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
+    auto state = get_handle_state((void*)handle);
+    if (!state || state->closing.load()) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
+    std::lock_guard<std::mutex> lock(state->operation_mutex);
+    if (state->closing.load()) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     int32_t result = geniex_vlm_reset(reinterpret_cast<geniex_VLM*>(handle));
     if (result != GENIEX_SUCCESS) {
         LOGe("[JNI] reset() failed, error code: %d", result);
@@ -78,6 +122,16 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Vlm_reset(JNIEnv* env,
 extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_getCapabilities(JNIEnv* env, jobject, jlong handle) {
     if (!handle) {
         throw_runtime_exception(env, "VLM getCapabilities failed: invalid handle");
+        return nullptr;
+    }
+    auto state = get_handle_state((void*)handle);
+    if (!state) {
+        throw_runtime_exception(env, "VLM getCapabilities failed: invalid handle");
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> lock(state->operation_mutex);
+    if (state->closing.load()) {
+        throw_runtime_exception(env, "VLM getCapabilities failed: handle is closing");
         return nullptr;
     }
     geniex_VlmCapabilities caps{};
@@ -98,18 +152,29 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_getCapabilities
 extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_generate(
     JNIEnv* env, jobject /*thiz*/, jlong handle, jstring prompt, jobject configObj, jobject callback) {
     try {
-        void* h = (void*)handle;
-
-        std::atomic<bool>* stop_flag = nullptr;
-        if (callback) {
-            std::lock_guard<std::mutex> lock(g_stopFlagsMutex);
-            if (g_stopFlags.count(h)) delete g_stopFlags[h];
-            g_stopFlags[h] = new std::atomic<bool>(false);
-            stop_flag      = g_stopFlags[h];
+        void* h     = (void*)handle;
+        auto  state = get_handle_state(h);
+        if (!state) {
+            throw_runtime_exception(env, "VLM generate failed: invalid handle");
+            return nullptr;
         }
 
-        std::string             cprompt = jstring2str(env, prompt);
-        geniex_GenerationConfig cfg     = extract_generation_config(env, configObj);
+        std::unique_lock<std::mutex> operation_lock(state->operation_mutex);
+        if (state->closing.load()) {
+            throw_runtime_exception(env, "VLM generate failed: handle is closing");
+            return nullptr;
+        }
+
+        std::shared_ptr<std::atomic<bool>> stop_flag;
+        if (callback) {
+            stop_flag = std::make_shared<std::atomic<bool>>(false);
+            std::lock_guard<std::mutex> lock(state->stop_mutex);
+            state->stop_flag = stop_flag;
+        }
+
+        std::string                           cprompt = jstring2str(env, prompt);
+        geniex_GenerationConfig               cfg     = extract_generation_config(env, configObj);
+        std::unique_ptr<geniex_SamplerConfig> sampler_config(cfg.sampler_config);
 
         geniex_VlmGenerateInput  input  = {};
         geniex_VlmGenerateOutput output = {};
@@ -124,11 +189,10 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_generate(
                     "(Ljava/lang/String;)Z",
                     /* onComplete*/ "onComplete",
                     "(Lcom/geniex/sdk/bean/LlmGenerateResult;)V",
-                    stop_flag,
+                    stop_flag.get(),
                     &cbCtx)) {
-                std::lock_guard<std::mutex> lock(g_stopFlagsMutex);
-                delete g_stopFlags[h];
-                g_stopFlags.erase(h);
+                std::lock_guard<std::mutex> lock(state->stop_mutex);
+                state->stop_flag.reset();
                 return nullptr;
             }
             input.on_token = [](const char* token, void* user) -> bool {
@@ -141,9 +205,9 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_generate(
 
         if (ret < 0 || !output.full_text) {
             if (callback) {
-                std::lock_guard<std::mutex> lock(g_stopFlagsMutex);
-                delete g_stopFlags[h];
-                g_stopFlags.erase(h);
+                jni_cb_dispose(env, &cbCtx);
+                std::lock_guard<std::mutex> lock(state->stop_mutex);
+                if (state->stop_flag == stop_flag) state->stop_flag.reset();
             }
             throw_runtime_exception(
                 env, "VLM generate failed: %s", geniex_get_error_message(static_cast<geniex_ErrorCode>(ret)));
@@ -168,9 +232,8 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_generate(
             jni_cb_dispose(env, &cbCtx);
 
             {
-                std::lock_guard<std::mutex> lock(g_stopFlagsMutex);
-                delete g_stopFlags[h];
-                g_stopFlags.erase(h);
+                std::lock_guard<std::mutex> lock(state->stop_mutex);
+                if (state->stop_flag == stop_flag) state->stop_flag.reset();
             }
 
             free(output.full_text);
@@ -187,6 +250,17 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_generate(
 
 extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_applyChatTemplate(
     JNIEnv* env, jobject /*thiz*/, jlong handle, jobjectArray jmessages, jstring jtools, jboolean jEnableThinking) {
+    auto state = get_handle_state((void*)handle);
+    if (!state) {
+        throw_runtime_exception(env, "VLM applyChatTemplate failed: invalid handle");
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> lock(state->operation_mutex);
+    if (state->closing.load()) {
+        throw_runtime_exception(env, "VLM applyChatTemplate failed: handle is closing");
+        return nullptr;
+    }
+
     clear_jni_cstr_pool();
     auto msgs = extract_vlm_chat_messages(env, jmessages);
 
@@ -232,9 +306,7 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_applyChatTempla
 }
 
 extern "C" JNIEXPORT void JNICALL Java_com_geniex_sdk_jni_Vlm_stopStream(JNIEnv*, jobject, jlong handle) {
-    void*                       h = (void*)handle;
-    std::lock_guard<std::mutex> lock(g_stopFlagsMutex);
-    if (g_stopFlags.count(h)) g_stopFlags[h]->store(true);
+    request_stop(get_handle_state((void*)handle));
 }
 
 // Extract media paths from VlmChatMessage contents

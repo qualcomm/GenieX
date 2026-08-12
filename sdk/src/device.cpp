@@ -54,6 +54,14 @@ bool is_known_alias(const std::string& s) {
     return s == kAliasCPU || s == kAliasGPU || s == kAliasNPU || s == kAliasHybrid;
 }
 
+geniex_RouteId route_id(const std::string& alias) {
+    if (alias == kAliasCPU) return GENIEX_ROUTE_CPU;
+    if (alias == kAliasGPU) return GENIEX_ROUTE_GPU;
+    if (alias == kAliasNPU) return GENIEX_ROUTE_NPU;
+    if (alias == kAliasHybrid) return GENIEX_ROUTE_HYBRID;
+    return GENIEX_ROUTE_AUTO;
+}
+
 }  // namespace
 
 int32_t geniex_resolve_device(const geniex_ResolveDeviceInput* input, geniex_ResolveDeviceOutput* output) {
@@ -66,6 +74,8 @@ int32_t geniex_resolve_device(const geniex_ResolveDeviceInput* input, geniex_Res
     output->device_id = nullptr;
     output->ngl       = input->ngl_default;
     output->warning   = nullptr;
+    output->requested_route = GENIEX_ROUTE_AUTO;
+    output->selected_route  = GENIEX_ROUTE_AUTO;
 
     if (!input->plugin_id) {
         GENIEX_LOG_ERROR("geniex_resolve_device: plugin_id is null");
@@ -74,6 +84,7 @@ int32_t geniex_resolve_device(const geniex_ResolveDeviceInput* input, geniex_Res
 
     const std::string plugin = input->plugin_id;
     std::string       alias  = to_lower_trim(input->mode);
+    output->requested_route = route_id(alias);
 
     if (!alias.empty() && alias != kAliasAuto && !is_known_alias(alias)) {
         GENIEX_LOG_ERROR("geniex_resolve_device: invalid device mode '{}'", alias);
@@ -85,14 +96,14 @@ int32_t geniex_resolve_device(const geniex_ResolveDeviceInput* input, geniex_Res
     if (alias.empty() || alias == kAliasAuto) {
         alias = kAliasNPU;
     }
+    output->selected_route = route_id(alias);
 
-    // QAIRT is NPU-only and rejects any non-zero n_gpu_layers, so force
-    // ngl to 0. Non-npu aliases are coerced with a warning, not an error.
+    // QAIRT is NPU-only. Reject incompatible requests: route changes must
+    // never be a silent or warning-only fallback.
     if (plugin == kPluginQairt) {
         if (alias != kAliasNPU) {
-            std::string msg =
-                "qairt plugin only supports NPU inference; ignoring device='" + alias + "' and running on NPU";
-            output->warning = portable_strdup(msg.c_str());
+            GENIEX_LOG_ERROR("qairt plugin does not support requested route '{}'", alias);
+            return GENIEX_ERROR_COMMON_INVALID_DEVICE;
         }
         output->device_id = portable_strdup(kDeviceQairtNPU);
         output->ngl       = 0;

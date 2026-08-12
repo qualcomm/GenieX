@@ -1509,8 +1509,9 @@ static void json_field_i64(FILE* f, const char* k, int64_t v, bool last) {
     fprintf(f, "    \"%s\": %lld%s", k, (long long)v, last ? "\n" : ",\n");
 }
 
-static void write_json(const options_t* o, const char* device_id, int32_t ngl, int64_t model_size_bytes,
-    const run_result_t* runs, const agg_t* a) {
+static void write_json(const options_t* o, const char* device_id, int32_t ngl,
+    geniex_RouteId requested_route, geniex_RouteId selected_route,
+    int64_t model_size_bytes, const run_result_t* runs, const agg_t* a) {
     FILE* f = fopen(o->output_json, "w");
     if (!f) {
         fprintf(stderr, "ERROR: cannot open %s for write\n", o->output_json);
@@ -1522,6 +1523,8 @@ static void write_json(const options_t* o, const char* device_id, int32_t ngl, i
     json_field_str(f, "plugin", o->plugin, false);
     json_field_str(f, "device", o->device, false);
     json_field_str(f, "device_id", device_id, false);
+    json_field_i64(f, "requested_route_id", requested_route, false);
+    json_field_i64(f, "selected_route_id", selected_route, false);
     json_field_str(f, "model_path", o->model_path, false);
     json_field_i64(f, "model_size_bytes", model_size_bytes, false);
     json_field_str(f, "qairt_version", geniex_get_plugin_version("qairt"), false);
@@ -1872,6 +1875,9 @@ static int run_one_cell(options_t* o) {
     }
     const char* device_id = o->device_id ? o->device_id : rout.device_id;
     int32_t     ngl       = rout.ngl;
+    geniex_RouteId requested_route = rout.requested_route;
+    geniex_RouteId selected_route =
+        o->device_id ? GENIEX_ROUTE_EXPLICIT : rout.selected_route;
     /* --n-gpu-layers overrides the resolved value. */
     if (o->ngl_override >= 0) {
         ngl = o->ngl_override;
@@ -1936,7 +1942,9 @@ static int run_one_cell(options_t* o) {
 
     int64_t model_size_bytes = compute_model_size(o->model_path);
 
-    if (o->output_json) write_json(o, device_id, ngl, model_size_bytes, runs, &a);
+    if (o->output_json)
+        write_json(o, device_id, ngl, requested_route, selected_route,
+            model_size_bytes, runs, &a);
     if (o->output_md) write_md_row(o, ngl, model_size_bytes, &a);
 
     free(runs);

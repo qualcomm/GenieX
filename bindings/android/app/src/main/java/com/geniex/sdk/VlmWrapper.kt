@@ -69,6 +69,7 @@ private constructor(
                                         ?: throw IllegalArgumentException("modelPath required")
                         val wrapper = VlmWrapper(dispatcher)
                         wrapper.handle = wrapper.vlm.create(input)
+                        check(wrapper.handle != 0L) { "Native VLM creation returned an invalid handle" }
                         Result.success(wrapper)
                     } catch (e: Exception) {
                         Result.failure(e)
@@ -174,9 +175,9 @@ private constructor(
 
     /** Destroys the native VLM instance and clears the handle. */
     fun destroy(): Int {
-        var result = 0
-        if (handle != 0L) {
-            result = vlm.destroy(handle)
+        if (handle == 0L) return 0
+        val result = vlm.destroy(handle)
+        if (result == 0) {
             handle = 0L
         }
         return result

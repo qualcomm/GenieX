@@ -305,20 +305,29 @@ typedef struct {
  * llama_cpp gpu / npu / hybrid pass `ngl_default` through unchanged (a
  * negative value means "all layers" to llama.cpp).
  *
- * `warning` is non-NULL when the alias was coerced (e.g. qairt only has
- * an NPU device, so cpu/gpu/hybrid fall back to NPU with a warning).
- * Callers should surface the warning and continue — geniex_resolve_device
- * never returns an error for coerced modes.
+ * `warning` is reserved for causal, non-route-changing notices.
+ * Route changes are never warning-only fallbacks. In particular, qairt
+ * rejects cpu/gpu/hybrid because it supports only NPU.
  *
- * An error (GENIEX_ERROR_COMMON_INVALID_DEVICE) is returned only when
- * `mode` is a non-empty, non-"auto" string that is not one of the
- * documented aliases. Both `device_id` and `warning` are heap-allocated;
+ * GENIEX_ERROR_COMMON_INVALID_DEVICE is returned when `mode` is unknown
+ * or incompatible with the selected plugin. Both `device_id` and `warning` are heap-allocated;
  * call `geniex_free` on each non-NULL pointer when done.
  */
+typedef enum {
+    GENIEX_ROUTE_AUTO = 0,
+    GENIEX_ROUTE_CPU,
+    GENIEX_ROUTE_GPU,
+    GENIEX_ROUTE_NPU,
+    GENIEX_ROUTE_HYBRID,
+    GENIEX_ROUTE_EXPLICIT
+} geniex_RouteId;
+
 typedef struct {
     char*   device_id; /**< Resolved device id; may be NULL (caller must free with geniex_free) */
     int32_t ngl;       /**< Resolved n_gpu_layers */
-    char*   warning;   /**< Optional coercion warning; may be NULL (caller must free with geniex_free) */
+    char*   warning;   /**< Optional causal warning; may be NULL (caller must free with geniex_free) */
+    geniex_RouteId requested_route; /**< Normalized user request */
+    geniex_RouteId selected_route;  /**< Route selected by the resolver */
 } geniex_ResolveDeviceOutput;
 
 /**
@@ -334,8 +343,8 @@ typedef struct {
  *                    `device_id` / `warning` may be heap-allocated and
  *                    must be freed by the caller with `geniex_free`.
  *
- * @return GENIEX_SUCCESS on success (including coerced aliases, where
- *         `warning` is populated). Returns GENIEX_ERROR_COMMON_INVALID_INPUT
+ * @return GENIEX_SUCCESS when the requested route is supported. Returns
+ *         GENIEX_ERROR_COMMON_INVALID_INPUT
  *         if `input` / `output` / `input->plugin_id` is NULL, or
  *         GENIEX_ERROR_COMMON_INVALID_DEVICE if `mode` is a non-empty
  *         string that is not a documented alias.

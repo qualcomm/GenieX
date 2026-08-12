@@ -33,12 +33,14 @@ std::string jstring2str(JNIEnv* env, jstring jstr);
 struct ResolvedDevice {
     std::string device_id;
     int32_t     ngl = -1;
-    std::string warning;  // non-empty when the alias was coerced
+    std::string warning;
+    geniex_RouteId requested_route = GENIEX_ROUTE_AUTO;
+    geniex_RouteId selected_route  = GENIEX_ROUTE_AUTO;
 };
 
 /**
  * Thin wrapper over the SDK's `geniex_resolve_device`. The alias table
- * (cpu / gpu / npu / hybrid, qairt coercion) lives in
+ * (cpu / gpu / npu / hybrid, including fail-closed compatibility) lives in
  * `sdk/src/device.cpp` — this helper just marshals the result into
  * Android-local types so the 8 JNI call sites stay stable.
  *

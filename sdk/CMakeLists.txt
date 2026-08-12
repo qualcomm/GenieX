@@ -122,7 +122,10 @@ add_custom_target(model_manager_build ALL
     VERBATIM
 )
 
-enable_testing()
+include(CTest)
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
 
 # ===============================================================================
 # Third-party patches

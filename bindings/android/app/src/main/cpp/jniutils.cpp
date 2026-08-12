@@ -56,8 +56,8 @@ ResolvedDevice resolve_device(
     geniex_ResolveDeviceOutput out{};
     int32_t                    rc = geniex_resolve_device(&in, &out);
     if (rc != GENIEX_SUCCESS) {
-        LOGe("[JNI] geniex_resolve_device failed (rc=%d), falling back to empty device", rc);
-        return r;
+        LOGe("[JNI] geniex_resolve_device failed closed (rc=%d)", rc);
+        throw std::runtime_error("device route resolution failed");
     }
 
     if (out.device_id) {
@@ -70,6 +70,8 @@ ResolvedDevice resolve_device(
         geniex_free(out.warning);
     }
     r.ngl = out.ngl;
+    r.requested_route = out.requested_route;
+    r.selected_route  = out.selected_route;
     return r;
 }
 
