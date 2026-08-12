@@ -1,0 +1,254 @@
+diff --git a/tools/mtmd/CMakeLists.txt b/tools/mtmd/CMakeLists.txt
+index 18a8288ba..da0a77d53 100644
+--- a/tools/mtmd/CMakeLists.txt
++++ b/tools/mtmd/CMakeLists.txt
+@@ -40,6 +40,7 @@ add_library(mtmd
+             models/internvl.cpp
+             models/kimivl.cpp
+             models/kimik25.cpp
++            models/locateanything.cpp
+             models/nemotron-v2-vl.cpp
+             models/llama4.cpp
+             models/llava.cpp
+diff --git a/tools/mtmd/clip-impl.h b/tools/mtmd/clip-impl.h
+index 092041138..e01a31f3e 100644
+--- a/tools/mtmd/clip-impl.h
++++ b/tools/mtmd/clip-impl.h
+@@ -399,6 +399,7 @@ enum projector_type {
+     PROJECTOR_TYPE_MINIMAX_M3,
+     PROJECTOR_TYPE_GRANITE4_VISION,
+     PROJECTOR_TYPE_MIMO_AUDIO,
++    PROJECTOR_TYPE_LOCATEANYTHING,
+     PROJECTOR_TYPE_UNKNOWN,
+ };
+ 
+@@ -455,6 +456,7 @@ static std::map<projector_type, std::string> PROJECTOR_TYPE_NAMES = {
+     { PROJECTOR_TYPE_MINIMAX_M3,        "minimax_m3"},
+     { PROJECTOR_TYPE_GRANITE4_VISION,   "granite4_vision"},
+     { PROJECTOR_TYPE_MIMO_AUDIO,        "mimo_audio"},
++    { PROJECTOR_TYPE_LOCATEANYTHING,    "locateanything"},
+ };
+ 
+ static projector_type clip_projector_type_from_string(const std::string & str) {
+diff --git a/tools/mtmd/clip-model.h b/tools/mtmd/clip-model.h
+index 8dc875497..e0dbb9630 100644
+--- a/tools/mtmd/clip-model.h
++++ b/tools/mtmd/clip-model.h
+@@ -63,6 +63,7 @@ struct clip_hparams {
+     int32_t image_max_pixels = -1;
+     resize_algo image_resize_algo = RESIZE_ALGO_BICUBIC;
+     pad_style image_resize_pad = PAD_CEIL; // padding style when resizing
++    bool image_resize_round_up = false; // ceil the dynamic target size instead of rounding to nearest
+     std::array<uint8_t, 3> image_pad_color = {0, 0, 0};
+ 
+     // (preprocessor) for llava-uhd style models
+diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
+index 04614b93b..2e9d1d4cf 100644
+--- a/tools/mtmd/clip.cpp
++++ b/tools/mtmd/clip.cpp
+@@ -973,6 +973,10 @@ static std::unique_ptr<clip_graph> clip_get_graph_builder(clip_ctx * ctx, const
+             {
+                 builder = std::make_unique<clip_graph_kimik25>(ctx, img);
+             } break;
++        case PROJECTOR_TYPE_LOCATEANYTHING:
++            {
++                builder = std::make_unique<clip_graph_locateanything>(ctx, img);
++            } break;
+         case PROJECTOR_TYPE_COGVLM:
+             {
+                 builder = std::make_unique<clip_graph_cogvlm>(ctx, img);
+@@ -1434,6 +1438,26 @@ struct clip_model_loader {
+                             hparams.set_limit_image_tokens(2, 4096);
+                         }
+                     } break;
++                case PROJECTOR_TYPE_LOCATEANYTHING:
++                    {
++                        // HF processor: Pillow bicubic, no letterbox, target size ceiled to patch*merge
++                        hparams.image_resize_algo = RESIZE_ALGO_BICUBIC_PILLOW;
++                        hparams.image_resize_pad  = PAD_NONE;
++                        hparams.image_resize_round_up = true;
++                        hparams.rope_theta = 10000.0f;
++                        get_u32(KEY_PROJ_SCALE_FACTOR, hparams.n_merge, false);
++
++                        int min_pixels = 0, max_pixels = 0;
++                        get_u32(KEY_IMAGE_MIN_PIXELS, min_pixels, false);
++                        get_u32(KEY_IMAGE_MAX_PIXELS, max_pixels, false);
++                        if (min_pixels > 0 && max_pixels > 0) {
++                            hparams.image_min_pixels = min_pixels;
++                            hparams.image_max_pixels = max_pixels;
++                        } else {
++                            hparams.set_limit_image_tokens(4, 25600);
++                        }
++                        hparams.set_warmup_n_tokens(32*32); // avoid OOM on warmup
++                    } break;
+                 case PROJECTOR_TYPE_GEMMA3:
+                     {
+                         // default value (used by all model sizes in gemma 3 family)
+@@ -2398,6 +2422,7 @@ struct clip_model_loader {
+             case PROJECTOR_TYPE_KIMIVL:
+             case PROJECTOR_TYPE_PADDLEOCR:
+             case PROJECTOR_TYPE_KIMIK25:
++            case PROJECTOR_TYPE_LOCATEANYTHING:
+                 {
+                     model.mm_input_norm_w = get_tensor(TN_MM_INP_NORM);
+                     model.mm_input_norm_b = get_tensor(TN_MM_INP_NORM_B);
+@@ -3524,6 +3549,7 @@ int clip_n_output_tokens(const clip_ctx * ctx, const clip_image_f32 * img) {
+         case PROJECTOR_TYPE_LFM2:
+         case PROJECTOR_TYPE_KIMIVL:
+         case PROJECTOR_TYPE_KIMIK25:
++        case PROJECTOR_TYPE_LOCATEANYTHING:
+             {
+                 // dynamic size
+                 int out_patch_size = params.patch_size * ctx->model.hparams.n_merge;
+@@ -4217,6 +4243,7 @@ bool clip_image_batch_encode(clip_ctx * ctx, int n_threads, const clip_image_f32
+         case PROJECTOR_TYPE_PIXTRAL:
+         case PROJECTOR_TYPE_KIMIVL:
+         case PROJECTOR_TYPE_KIMIK25:
++        case PROJECTOR_TYPE_LOCATEANYTHING:
+         case PROJECTOR_TYPE_LIGHTONOCR:
+             {
+                 // set the 2D positions
+@@ -4822,6 +4849,7 @@ int clip_n_mmproj_embd(const struct clip_ctx * ctx) {
+         case PROJECTOR_TYPE_KIMIVL:
+         case PROJECTOR_TYPE_PADDLEOCR:
+         case PROJECTOR_TYPE_KIMIK25:
++        case PROJECTOR_TYPE_LOCATEANYTHING:
+         case PROJECTOR_TYPE_YASA2:
+             return ctx->model.mm_2_w->ne[1];
+         case PROJECTOR_TYPE_HUNYUANVL:
+diff --git a/tools/mtmd/models/locateanything.cpp b/tools/mtmd/models/locateanything.cpp
+new file mode 100644
+index 000000000..6c50ec3fa
+--- /dev/null
++++ b/tools/mtmd/models/locateanything.cpp
+@@ -0,0 +1,60 @@
++#include "models.h"
++
++// MoonViT-SO-400M encoder shared with Kimi-K2.5; only the connector differs:
++// an Eagle MLP whose LayerNorm runs over the merged 4608-dim feature instead
++// of the pre-merge 1152-dim sub-tokens.
++ggml_cgraph * clip_graph_locateanything::build() {
++    ggml_tensor * pos_h = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_patches);
++    ggml_set_name(pos_h, "pos_h");
++    ggml_set_input(pos_h);
++
++    ggml_tensor * pos_w = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, n_patches);
++    ggml_set_name(pos_w, "pos_w");
++    ggml_set_input(pos_w);
++
++    ggml_tensor * learned_pos_embd = resize_position_embeddings_3d(GGML_SCALE_MODE_BICUBIC);
++
++    // Q/K are permuted to split RoPE format during conversion
++    auto add_pos = [&](ggml_tensor * cur, const clip_layer &) {
++        cur = build_rope_2d(ctx0, cur, pos_w, pos_h, hparams.rope_theta, false);
++        return cur;
++    };
++
++    ggml_tensor * inp = build_inp();
++    inp = ggml_add(ctx0, inp, learned_pos_embd);
++
++    ggml_tensor * cur = build_vit(
++                            inp, n_patches,
++                            NORM_TYPE_NORMAL,
++                            hparams.ffn_op,
++                            nullptr,
++                            add_pos);
++
++    cb(cur, "vit_out", -1);
++
++    {
++        // patch_merger
++        const int scale_factor = model.hparams.n_merge;
++        cur = build_patch_merge_permute(cur, scale_factor);
++
++        // projection norm over the whole merged feature
++        cur = ggml_norm(ctx0, cur, hparams.eps);
++        cur = ggml_mul(ctx0, cur, model.mm_input_norm_w);
++        cur = ggml_add(ctx0, cur, model.mm_input_norm_b);
++        cb(cur, "proj_inp_normed", -1);
++
++        // projection mlp
++        cur = build_ffn(cur,
++            model.mm_1_w, model.mm_1_b,
++            nullptr, nullptr,
++            model.mm_2_w, model.mm_2_b,
++            FFN_GELU,
++            -1);
++
++        cb(cur, "proj_out", -1);
++    }
++
++    ggml_build_forward_expand(gf, cur);
++
++    return gf;
++}
+diff --git a/tools/mtmd/models/models.h b/tools/mtmd/models/models.h
+index caed438ec..7ee337782 100644
+--- a/tools/mtmd/models/models.h
++++ b/tools/mtmd/models/models.h
+@@ -222,6 +222,12 @@ struct clip_graph_kimik25 : clip_graph {
+     ggml_tensor * resize_position_embeddings_3d(uint32_t interpolation_mode);
+ };
+ 
++// MoonViT encoder shared with Kimi-K2.5; only the projection norm differs
++struct clip_graph_locateanything : clip_graph_kimik25 {
++    clip_graph_locateanything(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph_kimik25(ctx, img) {}
++    ggml_cgraph * build() override;
++};
++
+ struct clip_graph_exaone4_5 : clip_graph {
+     clip_graph_exaone4_5(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph(ctx, img) {}
+     ggml_cgraph * build() override;
+diff --git a/tools/mtmd/mtmd-image.cpp b/tools/mtmd/mtmd-image.cpp
+index 36cd463b2..62e78368d 100644
+--- a/tools/mtmd/mtmd-image.cpp
++++ b/tools/mtmd/mtmd-image.cpp
+@@ -158,7 +158,7 @@ struct img_tool {
+     // calculate the size of the **resized** image, while preserving the aspect ratio
+     // the calculated size will have min_pixels <= W*H <= max_pixels
+     // this is referred as "smart_resize" in transformers code
+-    static clip_image_size calc_size_preserved_ratio(const clip_image_size & inp_size, const int align_size, const int min_pixels, const int max_pixels) {
++    static clip_image_size calc_size_preserved_ratio(const clip_image_size & inp_size, const int align_size, const int min_pixels, const int max_pixels, bool round_up = false) {
+         GGML_ASSERT(align_size > 0);
+         const int width  = inp_size.width;
+         const int height = inp_size.height;
+@@ -167,9 +167,8 @@ struct img_tool {
+         auto ceil_by_factor  = [f = align_size](float x) { return static_cast<int>(std::ceil(x / static_cast<float>(f))) * f; };
+         auto floor_by_factor = [f = align_size](float x) { return static_cast<int>(std::floor(x / static_cast<float>(f))) * f; };
+ 
+-        // always align up first
+-        int h_bar = std::max(align_size, round_by_factor(height));
+-        int w_bar = std::max(align_size, round_by_factor(width));
++        int h_bar = std::max(align_size, round_up ? ceil_by_factor(height) : round_by_factor(height));
++        int w_bar = std::max(align_size, round_up ? ceil_by_factor(width)  : round_by_factor(width));
+ 
+         if (h_bar * w_bar > max_pixels) {
+             const auto beta = std::sqrt(static_cast<float>(height * width) / max_pixels);
+@@ -899,7 +898,8 @@ mtmd_image_preproc_out mtmd_image_preprocessor_dyn_size::preprocess(const clip_i
+         original_size,
+         hparams.patch_size * cur_merge,
+         hparams.image_min_pixels,
+-        hparams.image_max_pixels);
++        hparams.image_max_pixels,
++        hparams.image_resize_round_up);
+     img_tool::resize(img, resized_image, target_size,
+                         hparams.image_resize_algo,
+                         hparams.image_resize_pad,
+diff --git a/tools/mtmd/mtmd.cpp b/tools/mtmd/mtmd.cpp
+index 6e61cf3e5..3badd781e 100644
+--- a/tools/mtmd/mtmd.cpp
++++ b/tools/mtmd/mtmd.cpp
+@@ -575,6 +575,13 @@ struct mtmd_context {
+                     }
+                     image_preproc = std::make_unique<mtmd_image_preprocessor_dyn_size>(ctx_v);
+                 } break;
++            case PROJECTOR_TYPE_LOCATEANYTHING:
++                {
++                    // <img> ... (image embeddings) ... </img>
++                    img_beg = "<img>";
++                    img_end = "</img>";
++                    image_preproc = std::make_unique<mtmd_image_preprocessor_dyn_size>(ctx_v);
++                } break;
+             case PROJECTOR_TYPE_LIGHTONOCR:
+                 {
+                     // <|im_start|> ... (image embeddings) ... <|im_end|>

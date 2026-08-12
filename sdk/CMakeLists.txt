@@ -143,11 +143,15 @@ enable_testing()
 #   compiler crash: kernel_cpy_f32_f32_pack's min(ne00, get_local_size(0))
 #   emits an IMINrr with two constant-class operands, which the driver's
 #   instruction validator rejects (NumConstRegsError). See GenieX #1250.
+# * llama-mtmd-locateanything-projector.patch adds the "locateanything" mmproj
+#   projector (NVIDIA EAGLE VLMs, e.g. LocateAnything-3B) — port of upstream
+#   llama.cpp PR #24749; drop on the next submodule bump. See GenieX #1241.
 if(GENIEX_PLUGIN_LLAMA_CPP)
     set(_LLAMA_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/../third-party/llama.cpp")
     set(_LLAMA_PATCHES
         "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-release-sessions.patch"
-        "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-opencl-adreno-cpy-constreg.patch")
+        "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-opencl-adreno-cpy-constreg.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-mtmd-locateanything-projector.patch")
     find_package(Git QUIET REQUIRED)
     foreach(_LLAMA_PATCH ${_LLAMA_PATCHES})
         if(EXISTS "${_LLAMA_PATCH}")
