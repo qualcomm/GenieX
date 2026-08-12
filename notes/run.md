@@ -106,6 +106,31 @@ Warning: qairt plugin only supports NPU inference; ignoring device='cpu' and run
 
 QAIRT models need a `geniex.json` to work. See the [granite4_micro example](https://huggingface.co/yichqian/geniex-qairt-models/blob/main/granite4_micro/geniex.json).
 
+### HTP multicore (qairt)
+
+By default a QAIRT model executes on **one** NSP core. The knob is the bundle's
+`htp_backend_ext_config.json`: geniex-qairt counts the `devices[].cores` entries
+and, when more than one is listed, sets
+`QNN_HTP_GRAPH_CONFIG_OPTION_NUM_CORES` on every loaded graph
+(`ModelConfig::num_cores` in the plugin; see
+[geniex-qairt docs § HTP Backend Config and Multicore Execution](../third-party/geniex-qairt/docs/README.md#5-htp-backend-config-and-multicore-execution)).
+
+What you can and cannot change at load time:
+
+- **Load time**: the `NUM_CORES` graph config, per-core `perf_profile`, and
+  `rpc_control_latency` — all read from the JSON when the model loads.
+- **Generation time**: graph partitioning baked into the context binaries.
+  Binaries compiled single-core may not speed up (or may reject the config)
+  even when more cores are requested.
+
+At init the runtime logs the device-reported core count and the effective core
+count (`GENIEX_LOG=info`), warns and clamps when the JSON requests more cores
+than the SoC exposes, and warns without failing when the driver reports
+multicore unavailable (QNN verbose trace: `Error code 1000 ... key = 304` /
+`Multicore support is unavailable`). Most current Snapdragon mobile/compute
+SoCs expose a single NSP core; multi-NSP parts (e.g. certain automotive SoCs)
+report `numCores > 1` in QNN platform info.
+
 ### Build and run locally
 
 ```bash
