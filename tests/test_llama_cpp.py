@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import platform
 from pathlib import Path
 
 import geniex
@@ -180,8 +181,20 @@ def test_vlm_quality_keywords(llama_cpp_vlm_paths, quality_image, device_map):
         )
 
 
+_WINDOWS_ARM64 = platform.system() == 'Windows' and platform.machine().lower() == 'arm64'
+
+
 @pytest.mark.llm
 @pytest.mark.parametrize('device_map', ['npu'])
+@pytest.mark.skipif(
+    _WINDOWS_ARM64,
+    reason=(
+        'Windows-on-Snapdragon MTP aborts under sequenced pytest runs: '
+        'ggml-hexagon flush_pending -> dspqueue_read fails 0x0d after the '
+        'preceding LLM/VLM tests recycle HTP sessions. Standalone MTP runs '
+        'clean; investigation in the llama.cpp plugin HTP lifecycle.'
+    ),
+)
 def test_mtp_multi_turn(llama_cpp_mtp_paths, device_map):
     # Local paths route through model_name= so the model-manager sees the
     # catalogue id; positional-arg would push the path into resolved_name and
