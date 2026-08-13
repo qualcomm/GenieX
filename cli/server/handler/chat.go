@@ -4,7 +4,9 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -30,6 +32,11 @@ type ChatCompletionRequest struct {
 	ChatCompletionNewParams
 	Stream bool `json:"stream"`
 
+	// openai-go can classify the standard named-function tool_choice object as
+	// its allowed_tools union variant. Retain the raw bounded field so the
+	// OpenAI-compatible named-function shape can be decoded strictly.
+	rawToolChoice json.RawMessage
+
 	EnableThink bool   `json:"enable_think"`
 	NCtx        int32  `json:"nctx"`
 	Ngl         int32  `json:"ngl"` // 0 = pure CPU, -1 = all layers, N = N layers; defaults to the server --ngl when omitted
@@ -50,6 +57,23 @@ type ChatCompletionRequest struct {
 	SpecNMax       int32   `json:"spec_n_max"`
 	SpecNMin       int32   `json:"spec_n_min"`
 	SpecPMin       float32 `json:"spec_p_min"`
+}
+
+func (r *ChatCompletionRequest) UnmarshalJSON(data []byte) error {
+	type requestAlias ChatCompletionRequest
+	decoded := requestAlias(*r)
+	if err := sonic.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var envelope struct {
+		ToolChoice json.RawMessage `json:"tool_choice"`
+	}
+	if err := sonic.Unmarshal(data, &envelope); err != nil {
+		return err
+	}
+	*r = ChatCompletionRequest(decoded)
+	r.rawToolChoice = append(r.rawToolChoice[:0], envelope.ToolChoice...)
+	return nil
 }
 
 func defaultChatCompletionRequest() ChatCompletionRequest {
@@ -168,17 +192,29 @@ type generateFn func(prompt string, onToken func(string) bool) (geniex_sdk.Profi
 
 // prepareFn holds the only LLM/VLM-specific work: apply the chat template, then
 // return the formatted prompt and a generateFn.
-type prepareFn[T, M any] func(p *T, messages M, param ChatCompletionRequest, tools string, sampler *geniex_sdk.SamplerConfig) (prompt string, gen generateFn, err error)
+type prepareFn[T, M any] func(p *T, messages M, param ChatCompletionRequest, tools string, policy toolSelectionPolicy, sampler *geniex_sdk.SamplerConfig) (prompt string, gen generateFn, err error)
 
-func prepareLLM(p *geniex_sdk.LLM, messages []geniex_sdk.LlmChatMessage, param ChatCompletionRequest, tools string, sampler *geniex_sdk.SamplerConfig) (string, generateFn, error) {
+func prepareLLM(p *geniex_sdk.LLM, messages []geniex_sdk.LlmChatMessage, param ChatCompletionRequest, tools string, policy toolSelectionPolicy, sampler *geniex_sdk.SamplerConfig) (string, generateFn, error) {
+	messages = applyLlmToolSelectionDirective(messages, policy)
 	formatted, err := p.ApplyChatTemplate(geniex_sdk.LlmApplyChatTemplateInput{
 		Messages:            messages,
 		Tools:               tools,
+		ToolChoice:          policy.templateToolChoice(),
 		EnableThink:         param.EnableThink,
 		AddGenerationPrompt: true,
 	})
 	if err != nil {
 		return "", nil, err
+	}
+	if policy.explicit() {
+		if formatted.Grammar == "" {
+			return "", nil, errors.New("active chat template did not provide a required-tool grammar")
+		}
+		requiredGrammar, err := strictRequiredToolGrammar(formatted.Grammar)
+		if err != nil {
+			return "", nil, err
+		}
+		sampler.GrammarString = requiredGrammar
 	}
 	gen := func(prompt string, onToken func(string) bool) (geniex_sdk.ProfileData, string, error) {
 		out, err := p.Generate(geniex_sdk.LlmGenerateInput{
@@ -197,7 +233,8 @@ func prepareLLM(p *geniex_sdk.LLM, messages []geniex_sdk.LlmChatMessage, param C
 	return formatted.FormattedText, gen, nil
 }
 
-func prepareVLM(p *geniex_sdk.VLM, messages []geniex_sdk.VlmChatMessage, param ChatCompletionRequest, tools string, sampler *geniex_sdk.SamplerConfig) (string, generateFn, error) {
+func prepareVLM(p *geniex_sdk.VLM, messages []geniex_sdk.VlmChatMessage, param ChatCompletionRequest, tools string, policy toolSelectionPolicy, sampler *geniex_sdk.SamplerConfig) (string, generateFn, error) {
+	messages = applyVlmToolSelectionDirective(messages, policy)
 	formatted, err := p.ApplyChatTemplate(geniex_sdk.VlmApplyChatTemplateInput{
 		Messages:    messages,
 		Tools:       tools,
@@ -221,7 +258,7 @@ func prepareVLM(p *geniex_sdk.VLM, messages []geniex_sdk.VlmChatMessage, param C
 			PromptUTF8: prompt,
 			OnToken:    onToken,
 			Config: &geniex_sdk.GenerationConfig{
-				MaxTokens:      int32(param.MaxCompletionTokens.Value),
+				MaxTokens:     int32(param.MaxCompletionTokens.Value),
 				SamplerConfig: sampler,
 				ImagePaths:    images,
 				AudioPaths:    audios,
@@ -238,7 +275,7 @@ func prepareVLM(p *geniex_sdk.VLM, messages []geniex_sdk.VlmChatMessage, param C
 // runChat is the shared flow wrapping the type-specific prepareFn.
 func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam types.ModelParam, messages M, prepare prepareFn[T, M]) {
 	// ---- prepare: parse tools, load the model, apply the chat template ----
-	parseTool, tools, err := parseTools(param)
+	toolPolicy, tools, err := parseTools(param)
 	if err != nil {
 		slog.Error("Failed to parse tools", "error", err)
 		c.JSON(http.StatusBadRequest, map[string]any{"error": err.Error()})
@@ -268,7 +305,7 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		FrequencyPenalty:  float32(param.FrequencyPenalty.Value),
 		Seed:              int32(param.Seed.Value),
 	}
-	prompt, gen, err := prepare(p, messages, param, tools, sampler)
+	prompt, gen, err := prepare(p, messages, param, tools, toolPolicy, sampler)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
@@ -301,8 +338,8 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 
 		wait := func() error { wg.Wait(); return genErr }
 		includeUsage := param.StreamOptions.IncludeUsage.Value
-		if parseTool {
-			streamToolCall(c, dataCh, wait, includeUsage, &profile)
+		if toolPolicy.parseResponse() {
+			streamToolCall(c, dataCh, wait, includeUsage, &profile, toolPolicy)
 		} else {
 			class := tokenClass(plainClass)
 			if reasoningSeparated(param.ReasoningFormat) {
@@ -318,7 +355,7 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		// blocking
 		var content, reasoning strings.Builder
 		class := tokenClass(plainClass)
-		if !parseTool && reasoningSeparated(param.ReasoningFormat) {
+		if !toolPolicy.parseResponse() && reasoningSeparated(param.ReasoningFormat) {
 			class = reasoningClass()
 		}
 		profile, fullText, err := gen(prompt, sink(class, &content, &reasoning))
@@ -330,14 +367,181 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
-		writeBlockingResponse(c, content.String(), reasoning.String(), profile, parseTool)
+		writeBlockingResponse(c, content.String(), reasoning.String(), profile, toolPolicy)
 	}
 }
 
-func parseTools(param ChatCompletionRequest) (bool, string, error) {
-	if len(param.Tools) == 0 {
-		return false, "", nil
+type toolSelectionMode string
+
+const (
+	toolSelectionNone     toolSelectionMode = "none"
+	toolSelectionAuto     toolSelectionMode = "auto"
+	toolSelectionRequired toolSelectionMode = "required"
+	toolSelectionNamed    toolSelectionMode = "named"
+)
+
+const (
+	requiredToolCallParseFailedCode = "required_tool_call_parse_failed"
+	requiredToolCallParseFailedText = "the explicitly selected tool was not emitted or could not be parsed"
+)
+
+type toolSelectionPolicy struct {
+	mode         toolSelectionMode
+	namedTool    string
+	allowedTools []string
+}
+
+func (p toolSelectionPolicy) parseResponse() bool {
+	return p.mode == toolSelectionAuto || p.mode == toolSelectionRequired || p.mode == toolSelectionNamed
+}
+
+func (p toolSelectionPolicy) explicit() bool {
+	return p.mode == toolSelectionRequired || p.mode == toolSelectionNamed
+}
+
+func (p toolSelectionPolicy) templateToolChoice() string {
+	if p.explicit() {
+		// Named selection has already filtered the supplied list to exactly one
+		// function, so llama.cpp required mode enforces that selected name.
+		return string(toolSelectionRequired)
 	}
-	tools, err := sonic.MarshalString(param.Tools)
-	return true, tools, err
+	return string(p.mode)
+}
+
+func strictRequiredToolGrammar(grammar string) (string, error) {
+	const permissiveRoot = "root ::= start message* scan-to-toolcall tool-call"
+	const requiredRoot = "root ::= start tool-call"
+	if !strings.Contains(grammar, permissiveRoot) {
+		return "", errors.New("active chat template does not expose the expected required-tool grammar root")
+	}
+	return strings.Replace(grammar, permissiveRoot, requiredRoot, 1), nil
+}
+
+func (p toolSelectionPolicy) accepts(name string) bool {
+	for _, allowed := range p.allowedTools {
+		if name == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+func (p toolSelectionPolicy) directive() string {
+	switch p.mode {
+	case toolSelectionRequired:
+		return "API tool selection requirement: call exactly one of the provided functions before answering. " +
+			"Emit only the tool call with its arguments; do not emit planning prose or a final answer."
+	case toolSelectionNamed:
+		return fmt.Sprintf(
+			"API tool selection requirement: call the function %q before answering. "+
+				"Emit only that tool call with its arguments; do not emit planning prose or a final answer.",
+			p.namedTool,
+		)
+	default:
+		return ""
+	}
+}
+
+func applyLlmToolSelectionDirective(messages []geniex_sdk.LlmChatMessage, policy toolSelectionPolicy) []geniex_sdk.LlmChatMessage {
+	directive := policy.directive()
+	if directive == "" {
+		return messages
+	}
+	result := make([]geniex_sdk.LlmChatMessage, 0, len(messages)+1)
+	result = append(result, geniex_sdk.LlmChatMessage{Role: "system", Content: directive})
+	return append(result, messages...)
+}
+
+func applyVlmToolSelectionDirective(messages []geniex_sdk.VlmChatMessage, policy toolSelectionPolicy) []geniex_sdk.VlmChatMessage {
+	directive := policy.directive()
+	if directive == "" {
+		return messages
+	}
+	result := make([]geniex_sdk.VlmChatMessage, 0, len(messages)+1)
+	result = append(result, geniex_sdk.VlmChatMessage{
+		Role:     "system",
+		Contents: []geniex_sdk.VlmContent{{Type: geniex_sdk.VlmContentTypeText, Text: directive}},
+	})
+	return append(result, messages...)
+}
+
+func parseTools(param ChatCompletionRequest) (toolSelectionPolicy, string, error) {
+	policy := toolSelectionPolicy{mode: toolSelectionAuto}
+	selectedTools := param.Tools
+
+	switch {
+	case len(param.rawToolChoice) > 0 && strings.HasPrefix(strings.TrimSpace(string(param.rawToolChoice)), "{"):
+		var named struct {
+			Type     string `json:"type"`
+			Function struct {
+				Name string `json:"name"`
+			} `json:"function"`
+		}
+		if err := sonic.Unmarshal(param.rawToolChoice, &named); err != nil {
+			return policy, "", fmt.Errorf("invalid named tool_choice: %w", err)
+		}
+		if named.Type != "function" || named.Function.Name == "" {
+			return policy, "", errors.New("only named function tool_choice is supported")
+		}
+		policy.mode = toolSelectionNamed
+		policy.namedTool = named.Function.Name
+		selectedTools = nil
+		for _, tool := range param.Tools {
+			function := tool.GetFunction()
+			if function != nil && function.Name == policy.namedTool {
+				selectedTools = append(selectedTools, tool)
+			}
+		}
+		if len(selectedTools) != 1 {
+			return policy, "", fmt.Errorf("named tool_choice references unknown function %q", policy.namedTool)
+		}
+	case param.ToolChoice.OfAuto.Valid():
+		switch param.ToolChoice.OfAuto.Value {
+		case "", "auto":
+			policy.mode = toolSelectionAuto
+		case "none":
+			policy.mode = toolSelectionNone
+		case "required":
+			policy.mode = toolSelectionRequired
+		default:
+			return policy, "", fmt.Errorf("unsupported tool_choice %q", param.ToolChoice.OfAuto.Value)
+		}
+	case param.ToolChoice.OfFunctionToolChoice != nil:
+		policy.mode = toolSelectionNamed
+		policy.namedTool = param.ToolChoice.OfFunctionToolChoice.Function.Name
+		if policy.namedTool == "" {
+			return policy, "", errors.New("named tool_choice requires a function name")
+		}
+		selectedTools = nil
+		for _, tool := range param.Tools {
+			function := tool.GetFunction()
+			if function != nil && function.Name == policy.namedTool {
+				selectedTools = append(selectedTools, tool)
+			}
+		}
+		if len(selectedTools) != 1 {
+			return policy, "", fmt.Errorf("named tool_choice references unknown function %q", policy.namedTool)
+		}
+	case param.ToolChoice.OfAllowedTools != nil || param.ToolChoice.OfCustomToolChoice != nil:
+		return policy, "", errors.New("only function tool_choice is supported")
+	}
+
+	if len(param.Tools) == 0 {
+		if policy.explicit() {
+			return policy, "", errors.New("explicit tool_choice requires at least one function tool")
+		}
+		return toolSelectionPolicy{mode: toolSelectionNone}, "", nil
+	}
+	if policy.mode == toolSelectionNone {
+		return policy, "", nil
+	}
+	for _, tool := range selectedTools {
+		function := tool.GetFunction()
+		if function == nil || function.Name == "" {
+			return policy, "", errors.New("only named function tools are supported")
+		}
+		policy.allowedTools = append(policy.allowedTools, function.Name)
+	}
+	tools, err := sonic.MarshalString(selectedTools)
+	return policy, tools, err
 }

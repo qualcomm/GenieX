@@ -14,7 +14,6 @@ import (
 	"github.com/openai/openai-go/v3"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
-	"github.com/qualcomm/GenieX/cli/server/utils"
 )
 
 // Local types so finish_reason serializes as null on intermediate chunks and a
@@ -113,7 +112,7 @@ func streamPlainText(c *gin.Context, dataCh <-chan string, wait func() error, in
 
 // Buffers the whole stream, then emits one tool-call chunk (or a content chunk
 // on parse failure).
-func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, profile *geniex_sdk.ProfileData) {
+func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, profile *geniex_sdk.ProfileData, policy toolSelectionPolicy) {
 	buffer := strings.Builder{}
 	c.Stream(func(w io.Writer) bool {
 		r, ok := <-dataCh
@@ -127,8 +126,14 @@ func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, inc
 			return false
 		}
 		finishReason := "tool_calls"
-		toolCall, err := utils.ParseToolCalls(buffer.String())
+		toolCall, err := parseSelectedToolCall(buffer.String(), policy)
 		if err != nil {
+			if policy.explicit() {
+				slog.Warn("Required tool call parse failed", "error", err, "tool_choice", policy.mode)
+				c.SSEvent("", requiredToolError())
+				c.SSEvent("", "[DONE]")
+				return false
+			}
 			slog.Warn("Tool call parse error, fallback to text", "error", err)
 			finishReason = mapFinishReason(profile.StopReason)
 			c.SSEvent("", contentChunk(buffer.String()))

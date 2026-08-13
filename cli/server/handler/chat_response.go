@@ -83,9 +83,30 @@ type blockingResponse struct {
 	Usage   openai.CompletionUsage `json:"usage"`
 }
 
-func writeBlockingResponse(c *gin.Context, content, reasoning string, profile geniex_sdk.ProfileData, parseTool bool) {
-	if parseTool {
-		toolCall, err := utils.ParseToolCalls(content)
+func parseSelectedToolCall(content string, policy toolSelectionPolicy) (openai.ChatCompletionMessageFunctionToolCallFunction, error) {
+	toolCall, err := utils.ParseToolCalls(content)
+	if err != nil {
+		return toolCall, err
+	}
+	if !policy.accepts(toolCall.Name) {
+		return openai.ChatCompletionMessageFunctionToolCallFunction{}, fmt.Errorf("model selected unavailable function %q", toolCall.Name)
+	}
+	return toolCall, nil
+}
+
+func requiredToolError() map[string]any {
+	return map[string]any{
+		"error": map[string]any{
+			"message": requiredToolCallParseFailedText,
+			"type":    "invalid_model_response",
+			"code":    requiredToolCallParseFailedCode,
+		},
+	}
+}
+
+func writeBlockingResponse(c *gin.Context, content, reasoning string, profile geniex_sdk.ProfileData, policy toolSelectionPolicy) {
+	if policy.parseResponse() {
+		toolCall, err := parseSelectedToolCall(content, policy)
 		if err == nil {
 			choice := openai.ChatCompletionChoice{
 				FinishReason: "tool_calls",
@@ -102,6 +123,11 @@ func writeBlockingResponse(c *gin.Context, content, reasoning string, profile ge
 				Choices: []openai.ChatCompletionChoice{choice},
 				Usage:   profile2Usage(profile),
 			})
+			return
+		}
+		if policy.explicit() {
+			slog.Warn("Required tool call parse failed", "error", err, "tool_choice", policy.mode)
+			c.JSON(http.StatusBadGateway, requiredToolError())
 			return
 		}
 		slog.Warn("Tool call parse error, fallback to text", "error", err)

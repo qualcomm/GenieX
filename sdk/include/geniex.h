@@ -512,6 +512,7 @@ typedef struct {
     geniex_LlmChatMessage* messages;              /** Array of chat messages */
     int32_t                message_count;         /** Number of messages */
     const char*            tools;                 /** Tool JSON string (optional, can be NULL) */
+    const char*            tool_choice;           /** OpenAI tool choice: auto, required, or none */
     bool                   enable_thinking;       /** Enable thinking */
     bool                   add_generation_prompt; /** Add generation prompt */
 } geniex_LlmApplyChatTemplateInput;
@@ -519,6 +520,7 @@ typedef struct {
 /** Output structure for applying chat template */
 typedef struct {
     char* formatted_text; /** Formatted chat text (caller must free with geniex_free) */
+    char* grammar;        /** Generated grammar for required tool selection (optional) */
 } geniex_LlmApplyChatTemplateOutput;
 
 /**
