@@ -5,6 +5,7 @@ package handler
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/openai/openai-go/v3"
@@ -54,6 +55,45 @@ func TestCompletionStop(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := completionStop(tt.stop); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("completionStop() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStopScanner(t *testing.T) {
+	run := func(s *stopScanner, tokens []string) (string, bool) {
+		var out strings.Builder
+		for _, tok := range tokens {
+			emit, matched := s.feed(tok)
+			out.WriteString(emit)
+			if matched {
+				return out.String(), true
+			}
+		}
+		out.WriteString(s.flush())
+		return out.String(), false
+	}
+
+	tests := []struct {
+		name    string
+		stops   []string
+		tokens  []string
+		want    string
+		matched bool
+	}{
+		{"no match", []string{"<|endoftext|>"}, []string{"hello", " world"}, "hello world", false},
+		{"match inside one token", []string{"<fim_middle>"}, []string{"a)<fim_middle>tail"}, "a)", true},
+		{"match spanning tokens", []string{"<fim_middle>"}, []string{"done<fim_", "middle>rest"}, "done", true},
+		{"earliest stop wins", []string{"</code>", "<fim_"}, []string{"x<fim_</code>"}, "x", true},
+		{"stop at start", []string{"\n\n"}, []string{"\n\n", "more"}, "", true},
+		{"empty stops pass through", []string{""}, []string{"abc"}, "abc", false},
+		{"held tail flushed at end", []string{"<|endoftext|>"}, []string{"end<|endo"}, "end<|endo", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, matched := run(newStopScanner(tt.stops), tt.tokens)
+			if got != tt.want || matched != tt.matched {
+				t.Errorf("feed() = %q, %v, want %q, %v", got, matched, tt.want, tt.matched)
 			}
 		})
 	}

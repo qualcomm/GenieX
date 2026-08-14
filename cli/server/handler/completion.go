@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -78,6 +79,60 @@ func completionStop(u openai.CompletionNewParamsStopUnion) []string {
 		return []string{u.OfString.Value}
 	}
 	return u.OfStringArray
+}
+
+// stopScanner enforces stop sequences host-side for plugins that reject them
+// (qairt): it scans the streamed tokens for a match, holding back the longest
+// tail that could still start one so a match spanning tokens never leaks out.
+type stopScanner struct {
+	stops   []string
+	hold    int
+	pending string
+	matched bool
+}
+
+func newStopScanner(stops []string) *stopScanner {
+	s := &stopScanner{}
+	for _, stop := range stops {
+		if stop == "" {
+			continue
+		}
+		s.stops = append(s.stops, stop)
+		if len(stop)-1 > s.hold {
+			s.hold = len(stop) - 1
+		}
+	}
+	return s
+}
+
+// feed returns the text that is safe to emit. Once matched is true the text
+// up to the match has been returned and generation should be cancelled.
+func (s *stopScanner) feed(token string) (emit string, matched bool) {
+	s.pending += token
+	cut := -1
+	for _, stop := range s.stops {
+		if i := strings.Index(s.pending, stop); i >= 0 && (cut < 0 || i < cut) {
+			cut = i
+		}
+	}
+	if cut >= 0 {
+		s.matched = true
+		return s.pending[:cut], true
+	}
+	if safe := len(s.pending) - s.hold; safe > 0 {
+		emit, s.pending = s.pending[:safe], s.pending[safe:]
+	}
+	return emit, false
+}
+
+// flush returns any held-back text once generation ends without a match.
+func (s *stopScanner) flush() string {
+	if s.matched {
+		return ""
+	}
+	pending := s.pending
+	s.pending = ""
+	return pending
 }
 
 func completionUnsupported(p CompletionNewParams) error {
@@ -174,6 +229,13 @@ func Completions(c *gin.Context) {
 			Seed:              int32(req.Seed.Value),
 		},
 	}
+	// The qairt plugin rejects stop sequences (PARAM_NOT_SUPPORTED), so for
+	// non-llama_cpp runtimes enforce them host-side instead of forwarding them.
+	var scanner *stopScanner
+	if len(genConfig.Stop) > 0 && paths.RuntimeID != geniex_sdk.RuntimeLlamaCpp {
+		scanner = newStopScanner(genConfig.Stop)
+		genConfig.Stop = nil
+	}
 	echo := ""
 	if req.Echo.Valid() && req.Echo.Value {
 		echo = prompt
@@ -200,14 +262,26 @@ func Completions(c *gin.Context) {
 					if stopGen.Load() {
 						return false
 					}
-					dataCh <- token
-					return true
+					if scanner == nil {
+						dataCh <- token
+						return true
+					}
+					emit, matched := scanner.feed(token)
+					if emit != "" {
+						dataCh <- emit
+					}
+					return !matched
 				},
 				Config: genConfig,
 			})
 			genErr = err
 			if out != nil {
 				profile = out.ProfileData
+			}
+			if scanner != nil && genErr == nil {
+				if tail := scanner.flush(); tail != "" {
+					dataCh <- tail
+				}
 			}
 			close(dataCh)
 		}()
@@ -220,10 +294,23 @@ func Completions(c *gin.Context) {
 		}
 	} else {
 		// blocking
-		out, err := p.Generate(geniex_sdk.LlmGenerateInput{
+		input := geniex_sdk.LlmGenerateInput{
 			PromptUTF8: prompt,
 			Config:     genConfig,
-		})
+		}
+		var text strings.Builder
+		if scanner != nil {
+			input.OnToken = func(token string) bool {
+				emit, matched := scanner.feed(token)
+				text.WriteString(emit)
+				return !matched
+			}
+		}
+		out, err := p.Generate(input)
+		if scanner != nil && out != nil {
+			text.WriteString(scanner.flush())
+			out.FullText = text.String()
+		}
 		if errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
 			writeCompletionContextLengthExceeded(c, echo+out.FullText, out.ProfileData)
 			return
