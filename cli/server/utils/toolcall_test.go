@@ -152,6 +152,41 @@ func TestParseToolCalls(t *testing.T) {
 			wantArgs: `{"q": "x"}`,
 		},
 		{
+			name:     "Gemma 4 native knowledge call",
+			resp:     `<|tool_call>call:search_knowledge{query:<|"|>低負擔白肉選擇<|"|>}<tool_call|>`,
+			wantName: "search_knowledge",
+			wantArgs: `{"query":"低負擔白肉選擇"}`,
+		},
+		{
+			name:     "Gemma 4 native call after reasoning",
+			resp:     "<|channel>thought\n需要查詢。<channel|><|tool_call>call:search_knowledge{query:<|\"|>香烤 雞肉<|\"|>}<tool_call|>",
+			wantName: "search_knowledge",
+			wantArgs: `{"query":"香烤 雞肉"}`,
+		},
+		{
+			name:     "Gemma 4 native empty arguments",
+			resp:     `<|tool_call>call:empty_args{}<tool_call|>`,
+			wantName: "empty_args",
+			wantArgs: `{}`,
+		},
+		{
+			name:     "Gemma 4 native nested JSON-equivalent arguments",
+			resp:     `<|tool_call>call:set_config{config:{theme:<|"|>dark<|"|>,count:3},enabled:true,todos:[<|"|>one<|"|>,<|"|>two<|"|>]}<tool_call|>`,
+			wantName: "set_config",
+			wantArgs: `{"config":{"theme":"dark","count":3},"enabled":true,"todos":["one","two"]}`,
+		},
+		{
+			name:     "malformed Gemma 4 call skips to later valid native call",
+			resp:     `<|tool_call>call:bad{query:<|"|>unterminated}<tool_call|><|tool_call>call:good{query:<|"|>valid<|"|>}<tool_call|>`,
+			wantName: "good",
+			wantArgs: `{"query":"valid"}`,
+		},
+		{
+			name:      "malformed Gemma 4 call fails closed",
+			resp:      `<|tool_call>call:bad{query:<|"|>unterminated}<tool_call|>`,
+			wantError: true,
+		},
+		{
 			name:      "no json object",
 			resp:      "just some plain text without any call",
 			wantError: true,

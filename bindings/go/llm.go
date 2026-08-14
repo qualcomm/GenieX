@@ -158,6 +158,7 @@ func freeLlmChatMessages(cPtr *C.geniex_LlmChatMessage, count C.int32_t) {
 type LlmApplyChatTemplateInput struct {
 	Messages            []LlmChatMessage
 	Tools               string
+	ToolChoice          string
 	EnableThink         bool
 	AddGenerationPrompt bool
 }
@@ -166,6 +167,7 @@ func (lati LlmApplyChatTemplateInput) toCPtr() *C.geniex_LlmApplyChatTemplateInp
 	cPtr := (*C.geniex_LlmApplyChatTemplateInput)(cMalloc(C.sizeof_geniex_LlmApplyChatTemplateInput))
 	*cPtr = C.geniex_LlmApplyChatTemplateInput{
 		tools:                 cStringIfSet(lati.Tools),
+		tool_choice:           cStringIfSet(lati.ToolChoice),
 		enable_thinking:       C.bool(lati.EnableThink),
 		add_generation_prompt: C.bool(lati.AddGenerationPrompt),
 	}
@@ -179,18 +181,23 @@ func freeLlmApplyChatTemplateInput(cPtr *C.geniex_LlmApplyChatTemplateInput) {
 	}
 	freeLlmChatMessages(cPtr.messages, cPtr.message_count)
 	cFreeIfSet(unsafe.Pointer(cPtr.tools))
+	cFreeIfSet(unsafe.Pointer(cPtr.tool_choice))
 	C.free(unsafe.Pointer(cPtr))
 }
 
 type LlmApplyChatTemplateOutput struct {
 	FormattedText string
+	Grammar       string
 }
 
 func newLlmApplyChatTemplateOutputFromCPtr(c *C.geniex_LlmApplyChatTemplateOutput) LlmApplyChatTemplateOutput {
 	if c == nil {
 		return LlmApplyChatTemplateOutput{}
 	}
-	return LlmApplyChatTemplateOutput{FormattedText: C.GoString(c.formatted_text)}
+	return LlmApplyChatTemplateOutput{
+		FormattedText: C.GoString(c.formatted_text),
+		Grammar:       C.GoString(c.grammar),
+	}
 }
 
 func freeLlmApplyChatTemplateOutput(cPtr *C.geniex_LlmApplyChatTemplateOutput) {
@@ -198,6 +205,7 @@ func freeLlmApplyChatTemplateOutput(cPtr *C.geniex_LlmApplyChatTemplateOutput) {
 		return
 	}
 	free(unsafe.Pointer(cPtr.formatted_text))
+	free(unsafe.Pointer(cPtr.grammar))
 }
 
 type LLM struct {

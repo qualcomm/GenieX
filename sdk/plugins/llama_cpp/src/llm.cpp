@@ -208,6 +208,10 @@ int32_t LlamaLlm::apply_chat_template(
         inputs.tools = common_chat_tools_parse_oaicompat(nlohmann::ordered_json::parse(std::string(input->tools)));
     }
 
+    if (input->tool_choice && strlen(input->tool_choice) > 0) {
+        inputs.tool_choice = common_chat_tool_choice_parse_oaicompat(input->tool_choice);
+    }
+
     inputs.enable_thinking = input->enable_thinking;
 
     // Apply chat template
@@ -216,6 +220,14 @@ int32_t LlamaLlm::apply_chat_template(
     output->formatted_text = strdup(result.prompt.c_str());
     if (!output->formatted_text) {
         return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;  // error: memory allocation failed
+    }
+    if (!result.grammar.empty()) {
+        output->grammar = strdup(result.grammar.c_str());
+        if (!output->grammar) {
+            free(output->formatted_text);
+            output->formatted_text = nullptr;
+            return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
+        }
     }
     return GENIEX_SUCCESS;
 }
