@@ -215,12 +215,6 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
     bool has_input_ids = input->input_ids != nullptr && input->input_ids_count > 0;
 
-    // Reject llama.cpp-only parameters that have no meaning in the QAIRT plugin
-    if (input->config && input->config->stop && input->config->stop_count > 0) {
-        GENIEX_LOG_ERROR("--stop / --stop-file (stop sequences) is not supported by the qairt plugin");
-        return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
-    }
-
     if (!has_input_ids && !input->prompt_utf8) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
     // Map geniex_GenerationConfig -> geniex::GenerationConfig
@@ -228,6 +222,18 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     if (input->config) {
         gen_cfg.max_tokens = input->config->max_tokens > 0 ? input->config->max_tokens : 512;
         qairt::apply_sampler_config(input->config->sampler_config, gen_cfg, bundle_sampler_);
+
+        // Stop sequences are handled natively by the pipeline's generateTokens
+        // (byte-level matching across tokens, mirroring llama_cpp).
+        gen_cfg.stop_sequences.clear();
+        if (input->config->stop && input->config->stop_count > 0) {
+            gen_cfg.stop_sequences.reserve(static_cast<std::size_t>(input->config->stop_count));
+            for (int32_t i = 0; i < input->config->stop_count; ++i) {
+                if (input->config->stop[i]) {
+                    gen_cfg.stop_sequences.emplace_back(input->config->stop[i]);
+                }
+            }
+        }
 
         // Opt-in ring-buffer context eviction. llama_cpp
         // ignores this field (it always context-shifts).
@@ -273,6 +279,8 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         output->profile_data.stop_reason = "user";
     } else if (result.stop_reason == "length") {
         output->profile_data.stop_reason = "length";
+    } else if (result.stop_reason == "stop_sequence") {
+        output->profile_data.stop_reason = "stop_sequence";
     } else if (result.stop_reason == "context_length") {
         output->profile_data.stop_reason = "length";
         GENIEX_LOG_WARN("QAIRT generate: context length exceeded (partial result populated)");
