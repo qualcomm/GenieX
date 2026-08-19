@@ -161,13 +161,54 @@ fn read_latest_version_cache(path: &Path, ttl: Duration) -> Option<Vec<u8>> {
 }
 
 /// Normalize `latest.txt`'s bare `0.61.0` body into the `v0.61.0` form the
-/// `releases/{version}/...` path segment expects. `None` for empty content.
+/// `releases/{version}/...` path segment expects. `None` when the body is
+/// empty, non-UTF-8, or doesn't look like a version (an HTML error page
+/// served with 200 from a proxy, a stray changelog, etc.) — the caller
+/// then falls back to the pinned default rather than blindly embedding
+/// garbage in the release URL.
 fn parse_latest_version(bytes: &[u8]) -> Option<String> {
     let text = std::str::from_utf8(bytes)
         .ok()?
         .trim()
         .trim_start_matches('v');
-    (!text.is_empty()).then(|| format!("v{text}"))
+    if !is_version_like(text) {
+        return None;
+    }
+    Some(format!("v{text}"))
+}
+
+/// At least two dot-separated numeric segments (`MAJOR.MINOR`, typically
+/// `MAJOR.MINOR.PATCH`), optionally followed by a `-prerelease` or
+/// `+build` suffix from SemVer's identifier alphabet (`[A-Za-z0-9.-]`).
+/// Rejects HTML, changelogs, multi-line content, and other free-form text
+/// so a bad `latest.txt` doesn't end up spliced into a release URL.
+fn is_version_like(s: &str) -> bool {
+    let (main, suffix) = s
+        .find(['-', '+'])
+        .map(|i| (&s[..i], Some(&s[i + 1..])))
+        .unwrap_or((s, None));
+
+    let mut segments = 0usize;
+    for part in main.split('.') {
+        if part.is_empty() || !part.bytes().all(|b| b.is_ascii_digit()) {
+            return false;
+        }
+        segments += 1;
+    }
+    if segments < 2 {
+        return false;
+    }
+
+    if let Some(suffix) = suffix {
+        if suffix.is_empty()
+            || !suffix
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+        {
+            return false;
+        }
+    }
+    true
 }
 
 /// The `os.ostype` values this build runs on; `None` means "don't filter".
@@ -1084,5 +1125,47 @@ mod tests {
             )),
             vec!["dual"]
         );
+    }
+
+    #[test]
+    fn parse_latest_version_accepts_common_shapes() {
+        assert_eq!(parse_latest_version(b"0.61.0"), Some("v0.61.0".into()));
+        assert_eq!(parse_latest_version(b"v0.61.0"), Some("v0.61.0".into()));
+        assert_eq!(parse_latest_version(b"0.61.0\n"), Some("v0.61.0".into()));
+        assert_eq!(parse_latest_version(b"  0.61.0  "), Some("v0.61.0".into()));
+        // Two-segment and four-segment both look like versions.
+        assert_eq!(parse_latest_version(b"1.0"), Some("v1.0".into()));
+        assert_eq!(parse_latest_version(b"1.2.3.4"), Some("v1.2.3.4".into()));
+        // SemVer pre-release / build suffixes.
+        assert_eq!(
+            parse_latest_version(b"0.61.0-rc1"),
+            Some("v0.61.0-rc1".into())
+        );
+        assert_eq!(
+            parse_latest_version(b"0.61.0+build.5"),
+            Some("v0.61.0+build.5".into())
+        );
+    }
+
+    #[test]
+    fn parse_latest_version_rejects_non_versions() {
+        // Empty / whitespace-only.
+        assert_eq!(parse_latest_version(b""), None);
+        assert_eq!(parse_latest_version(b"   \n"), None);
+        // Non-UTF-8.
+        assert_eq!(parse_latest_version(&[0xff, 0xfe, 0xfd]), None);
+        // HTML error page served as 200 by a proxy.
+        assert_eq!(
+            parse_latest_version(b"<!doctype html><html>404 not found</html>"),
+            None
+        );
+        // Free-form text (e.g. a stray changelog uploaded by mistake).
+        assert_eq!(parse_latest_version(b"Release notes for 0.61.0"), None);
+        // Single segment isn't enough to look like a version.
+        assert_eq!(parse_latest_version(b"1"), None);
+        // Trailing dot / empty segment.
+        assert_eq!(parse_latest_version(b"1.0."), None);
+        // Multi-line — after trim, still has an internal newline.
+        assert_eq!(parse_latest_version(b"0.61.0\nextra"), None);
     }
 }

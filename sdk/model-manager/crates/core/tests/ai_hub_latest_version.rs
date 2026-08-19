@@ -150,3 +150,25 @@ async fn second_call_reuses_disk_cache_instead_of_refetching() {
     let second = resolve_ai_hub_version(&endpoint, cache_dir.path()).await;
     assert_eq!(second, "v0.61.0");
 }
+
+// Reveal-gap probe: what happens when `latest.txt` is served but its body
+// is not a version string at all — an HTML error page, a redirect body, an
+// S3 XML error accidentally cached as 200, etc. Contract-wise this should
+// fall back to the pinned default just like the empty/404 cases above.
+#[tokio::test]
+async fn falls_back_when_pointer_body_is_malformed() {
+    let _g = unset_override();
+    let server = MockServer::start().await;
+    mount_latest_txt(
+        &server,
+        b"<!doctype html><html>404 not found</html>\n".to_vec(),
+        None,
+    )
+    .await;
+
+    let cache_dir = tempdir().unwrap();
+    let endpoint = format!("{}/qai-hub-models", server.uri());
+    let version = resolve_ai_hub_version(&endpoint, cache_dir.path()).await;
+
+    assert_eq!(version, StoreConfig::ai_hub_version_fallback());
+}
