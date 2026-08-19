@@ -128,6 +128,12 @@ int32_t QairtVlm::create(const geniex_VlmCreateInput* input) {
     has_vision_encoder_        = !vision_cfg.model_paths.empty();
     vision_cfg.htp_config_path = llm_cfg.htp_config_path;
 
+    // An unrecognized dsp_arch fails inside QNN with a bare error 1008 (#1254).
+    const auto dsp_arch_diag = qairt::runtime::dsp_arch_diagnostic(llm_cfg.htp_config_path);
+    if (dsp_arch_diag) {
+        GENIEX_LOG_WARN("{}", *dsp_arch_diag);
+    }
+
     // ── Build VLMConfig and create pipeline ───────────────────────────────────
     VLMConfig vlm_cfg{};
     vlm_cfg.llm_config    = std::move(llm_cfg);
@@ -137,6 +143,11 @@ int32_t QairtVlm::create(const geniex_VlmCreateInput* input) {
     // the matching VLM family factory (currently qwen2_5_vl_*).
     auto pipe = makeVLMPipeline(runtime_cfg, vlm_cfg);
     if (!pipe) {
+        if (dsp_arch_diag) {
+            GENIEX_LOG_ERROR(
+                "Failed to create QAIRT VLM pipeline from bundle: {}. {}", model_dir.string(), *dsp_arch_diag);
+            return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
+        }
         GENIEX_LOG_ERROR("Failed to create QAIRT VLM pipeline from bundle: {}", model_dir.string());
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
