@@ -114,8 +114,11 @@ pub async fn resolve_ai_hub_version(endpoint: &str, cache_dir: &Path) -> String 
         return pinned;
     }
 
+    // `latest.txt` content *is* the version, so there's no embedded
+    // version field to cross-check the way manifest/platform JSON does
+    // — the mtime + TTL check from `read_cache_fresh` is all we need.
     let cache_path = cache_dir.join(LATEST_VERSION_FILENAME);
-    if let Some(bytes) = read_latest_version_cache(&cache_path, CACHE_TTL) {
+    if let Some(bytes) = read_cache_fresh(&cache_path, CACHE_TTL) {
         if let Some(v) = parse_latest_version(&bytes) {
             return v;
         }
@@ -148,17 +151,6 @@ pub async fn resolve_ai_hub_version(endpoint: &str, cache_dir: &Path) -> String 
     }
 }
 
-/// mtime-only cache check for `latest.txt`: unlike manifest/platform
-/// ([`read_cache`]), this file's content *is* the version, so there's no
-/// embedded version field to cross-check — freshness is purely TTL-based.
-fn read_latest_version_cache(path: &Path, ttl: Duration) -> Option<Vec<u8>> {
-    let meta = std::fs::metadata(path).ok()?;
-    let mtime = meta.modified().ok()?;
-    if SystemTime::now().duration_since(mtime).ok()? > ttl {
-        return None;
-    }
-    std::fs::read(path).ok()
-}
 
 /// Normalize `latest.txt`'s bare `0.61.0` body into the `v0.61.0` form the
 /// `releases/{version}/...` path segment expects. `None` when the body is
@@ -650,16 +642,26 @@ async fn fetch_with_cache(
     Ok(bytes)
 }
 
-/// Return cached bytes if the file is within `ttl` and stamped with the
-/// requested `version`, so a release bump invalidates stale caches before
-/// the TTL elapses. Any I/O or parse error is a cache miss.
-fn read_cache(path: &Path, version: &str, ttl: Duration) -> Option<Vec<u8>> {
+/// Return cached bytes when the file's mtime is still within `ttl`. Pure
+/// filesystem check — no content parsing, no version stamp comparison —
+/// so it's the right fit for `latest.txt`, whose body *is* the version
+/// and carries no self-identifying field to cross-check. Also used as
+/// the freshness precheck inside [`read_cache`] before it validates the
+/// embedded version stamp.
+fn read_cache_fresh(path: &Path, ttl: Duration) -> Option<Vec<u8>> {
     let meta = std::fs::metadata(path).ok()?;
     let mtime = meta.modified().ok()?;
     if SystemTime::now().duration_since(mtime).ok()? > ttl {
         return None;
     }
-    let bytes = std::fs::read(path).ok()?;
+    std::fs::read(path).ok()
+}
+
+/// Return cached bytes if the file is within `ttl` and stamped with the
+/// requested `version`, so a release bump invalidates stale caches before
+/// the TTL elapses. Any I/O or parse error is a cache miss.
+fn read_cache(path: &Path, version: &str, ttl: Duration) -> Option<Vec<u8>> {
+    let bytes = read_cache_fresh(path, ttl)?;
     // manifest.json stamps `version`; platform.json / info.json use
     // `aihm_version`. Both omit the leading `v` the config carries.
     let doc: serde_json::Value = serde_json::from_slice(&bytes).ok()?;
