@@ -480,6 +480,16 @@ func ModelLastErrorMessage() string {
 	return C.GoString(C.geniex_model_last_error_message())
 }
 
+// ModelLastWarningMessage returns an actionable user-facing warning from the
+// most recent geniex_model_* call on this goroutine's OS thread, or "" if
+// nothing was flagged. Populated even on a successful call — e.g. the AI Hub
+// release pointer was unreachable so the pinned fallback version was used.
+// Callers should surface this to the end user (stderr, dialog, log) rather
+// than silently discarding it.
+func ModelLastWarningMessage() string {
+	return C.GoString(C.geniex_model_last_warning_message())
+}
+
 // modelError wraps an FFI error code with the SDK's detailed last-error message
 // (e.g. "quantization 'Q2_K' not found for model 'org/repo'") when available,
 // while keeping the underlying SDKError matchable via errors.Is / errors.As.

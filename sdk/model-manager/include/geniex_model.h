@@ -74,6 +74,25 @@ GENIEX_API int32_t geniex_model_deinit(void);
  */
 GENIEX_API const char* geniex_model_last_error_message(void);
 
+/**
+ * @brief Actionable user-facing warning from the most recent geniex_model_*
+ *        call on the calling thread, or NULL.
+ *
+ * Unlike geniex_model_last_error_message, this slot is populated even on a
+ * successful call — e.g. the AI Hub release pointer (`releases/latest.txt`)
+ * was unreachable so the pinned fallback version was used and newly-released
+ * models may be missing. Bindings are expected to surface a non-NULL value
+ * to the end user (stderr / dialog / log), not silently discard it.
+ *
+ * The slot is cleared at the start of every geniex_model_* call, so a
+ * non-NULL return here always describes the call that just returned.
+ *
+ * @return A NUL-terminated, library-owned string (do NOT free) valid until
+ *         the next geniex_model_* call on this thread, or NULL if the call
+ *         had nothing to warn about.
+ */
+GENIEX_API const char* geniex_model_last_warning_message(void);
+
 /* ============================================================
  *  Model type
  * ============================================================ */

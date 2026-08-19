@@ -124,11 +124,20 @@ pub async fn resolve_ai_hub_version(endpoint: &str, cache_dir: &Path) -> String 
         }
     }
 
+    // The three fallback arms below share one user-facing message — the
+    // exact failure mode (transport init / network / malformed body) is
+    // developer-facing detail that stays in `logging::warn`.
+    let user_msg = |fallback: &str| {
+        format!("AI Hub version discovery failed, using pinned fallback {fallback}")
+    };
+
     let transport: Arc<dyn HttpTransport> = match ReqwestTransport::new() {
         Ok(t) => Arc::new(t),
         Err(e) => {
+            let fallback = StoreConfig::ai_hub_version_fallback();
             crate::logging::warn(&format!("aihub latest.txt transport init: {e}"));
-            return StoreConfig::ai_hub_version_fallback();
+            crate::user_warning::emit(&user_msg(&fallback));
+            return fallback;
         }
     };
 
@@ -140,13 +149,17 @@ pub async fn resolve_ai_hub_version(endpoint: &str, cache_dir: &Path) -> String 
                 v
             }
             None => {
+                let fallback = StoreConfig::ai_hub_version_fallback();
                 crate::logging::warn(&format!("aihub latest.txt at {url} is empty/malformed"));
-                StoreConfig::ai_hub_version_fallback()
+                crate::user_warning::emit(&user_msg(&fallback));
+                fallback
             }
         },
         Err(e) => {
+            let fallback = StoreConfig::ai_hub_version_fallback();
             crate::logging::warn(&format!("aihub latest.txt fetch from {url}: {e}"));
-            StoreConfig::ai_hub_version_fallback()
+            crate::user_warning::emit(&user_msg(&fallback));
+            fallback
         }
     }
 }

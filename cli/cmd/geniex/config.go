@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
+	"github.com/qualcomm/GenieX/cli/cmd/geniex/common"
 	"github.com/qualcomm/GenieX/cli/internal/render"
 	"github.com/qualcomm/GenieX/cli/internal/store"
 )
@@ -133,6 +134,7 @@ func ensureChipset() (string, error) {
 // and returned to the caller.
 func pickChipset() (string, error) {
 	chipsets, err := geniex_sdk.ModelListChipsets()
+	common.FlushSDKWarning()
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch chipset list: %w", err)
 	}
@@ -142,6 +144,7 @@ func pickChipset() (string, error) {
 
 	// Probe the host so we can preselect its chipset; failure is non-fatal.
 	detected, _ := geniex_sdk.ModelDetectChipset(false)
+	common.FlushSDKWarning()
 
 	// matches reports whether the detected chipset is c's name or an alias.
 	matches := func(c geniex_sdk.ChipsetInfo) bool {

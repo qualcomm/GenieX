@@ -27,6 +27,7 @@ if(WIN32)
         geniex_model_init
         geniex_model_deinit
         geniex_model_last_error_message
+        geniex_model_last_warning_message
         geniex_model_pull
         geniex_model_remove
         geniex_model_clean

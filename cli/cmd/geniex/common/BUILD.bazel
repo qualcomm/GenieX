@@ -11,6 +11,7 @@ go_library(
         "process.go",
         "repl.go",
         "sdk.go",
+        "sdk_warning.go",
         "util_linux.go",
         "util_windows.go",
     ],

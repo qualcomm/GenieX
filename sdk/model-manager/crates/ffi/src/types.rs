@@ -15,6 +15,14 @@ thread_local! {
     /// live CString so `geniex_model_last_error_message` can hand out a stable
     /// pointer valid until the next failing call.
     static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
+
+    /// Actionable user-facing warning from the most recent geniex_model_*
+    /// call on this thread. Unlike `LAST_ERROR` this is set even on a
+    /// successful call — e.g. AI Hub release pointer unreachable so the
+    /// pinned fallback version was used. The FFI-installed sink in
+    /// `install_user_warning_sink()` funnels `core::user_warning::emit`
+    /// into this slot.
+    static LAST_WARNING: RefCell<Option<CString>> = const { RefCell::new(None) };
 }
 
 fn set_last_error(msg: &str) {
@@ -26,6 +34,15 @@ fn clear_last_error() {
     LAST_ERROR.with(|slot| *slot.borrow_mut() = None);
 }
 
+pub(crate) fn set_last_warning(msg: &str) {
+    let c = CString::new(msg).unwrap_or_default();
+    LAST_WARNING.with(|slot| *slot.borrow_mut() = Some(c));
+}
+
+fn clear_last_warning() {
+    LAST_WARNING.with(|slot| *slot.borrow_mut() = None);
+}
+
 /// Return the calling thread's last recorded error message, or NULL.
 /// Library-owned; valid until the next failing geniex_model_* call.
 #[no_mangle]
@@ -35,6 +52,24 @@ pub extern "C" fn geniex_model_last_error_message() -> *const c_char {
             .as_ref()
             .map_or(std::ptr::null(), |c| c.as_ptr())
     })
+}
+
+/// Return this thread's last user-facing warning message, or NULL. The
+/// slot is cleared at the start of every geniex_model_* call, so a
+/// non-NULL value here always describes the call that just returned.
+#[no_mangle]
+pub extern "C" fn geniex_model_last_warning_message() -> *const c_char {
+    LAST_WARNING.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .map_or(std::ptr::null(), |c| c.as_ptr())
+    })
+}
+
+/// Route `core::user_warning::emit` into this thread's LAST_WARNING slot.
+/// Called once from `geniex_model_init` alongside `install_core_sink`.
+pub fn install_user_warning_sink() {
+    model_manager_core::user_warning::set_sink(set_last_warning);
 }
 
 /// Error codes mirroring geniex_ErrorCode from geniex.h.
@@ -120,9 +155,11 @@ where
     F: FnOnce() -> Result<i32, i32>,
 {
     // Clear any message left by a prior call on this thread so
-    // geniex_model_last_error_message only ever reflects THIS call's outcome
-    // (set again by report() / the panic arm below on failure).
+    // geniex_model_last_error_message / _last_warning_message only ever
+    // reflect THIS call's outcome (error is set again by report() / the
+    // panic arm below; warning is set by the core sink during the call).
     clear_last_error();
+    clear_last_warning();
     match catch_unwind(AssertUnwindSafe(f)) {
         Ok(Ok(code)) | Ok(Err(code)) => code,
         Err(payload) => {

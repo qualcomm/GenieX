@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
+	"github.com/qualcomm/GenieX/cli/cmd/geniex/common"
 	"github.com/qualcomm/GenieX/cli/internal/render"
 	"github.com/qualcomm/GenieX/cli/internal/store"
 )
@@ -359,6 +360,7 @@ func listHubCmd() *cobra.Command {
 				chipset = c
 			}
 			models, err := geniex_sdk.ModelListHub(chipset)
+			common.FlushSDKWarning()
 			if err != nil {
 				return err
 			}
@@ -476,6 +478,7 @@ func pullModel(ctx context.Context, name string, quant string) error {
 		spin.Start()
 		q, err := geniex_sdk.ModelQuery(in)
 		spin.Stop()
+		common.FlushSDKWarning()
 		if err != nil {
 			return err
 		}
@@ -506,18 +509,23 @@ func pullModel(ctx context.Context, name string, quant string) error {
 		return ctx.Err() == nil
 	}
 
-	if err := geniex_sdk.ModelPull(in); err != nil {
-		if bar != nil {
+	pullErr := geniex_sdk.ModelPull(in)
+	if bar != nil {
+		if pullErr != nil {
 			bar.Clear()
+		} else {
+			bar.Exit()
 		}
+	}
+	// Flush AFTER the progress bar so its final redraw doesn't overwrite
+	// the warning line. Deduped against any earlier query-time warning.
+	common.FlushSDKWarning()
+	if pullErr != nil {
 		if ctx.Err() != nil {
 			fmt.Println(render.GetTheme().Warning.Sprint("✗  Download cancelled"))
 			return nil
 		}
-		return err
-	}
-	if bar != nil {
-		bar.Exit()
+		return pullErr
 	}
 
 	if t, err := geniex_sdk.ModelGetType(name); err == nil {

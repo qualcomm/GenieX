@@ -13,6 +13,7 @@ pub mod query;
 pub mod source;
 pub mod store;
 pub mod transport;
+pub mod user_warning;
 
 mod resume;
 mod validation;
