@@ -261,6 +261,11 @@ jobs:
           name: android-aar
           path: .
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-aar-cpu
+          path: .
+
       - name: Package artifacts and write SHA256 sidecars
         run: |
           set -euo pipefail
@@ -268,6 +273,7 @@ jobs:
 
           mv geniex-cli-setup.exe "geniex-cli-setup-windows-arm64-${RELEASE_TAG}.exe"
           mv geniex-android-aar.aar "geniex-android-aar-${RELEASE_TAG}.aar"
+          mv geniex-android-aar-cpu.aar "geniex-android-aar-cpu-${RELEASE_TAG}.aar"
 
           mv geniex-*.tar.gz "geniex-pysdist-${RELEASE_TAG}.tar.gz"
           mv geniex_llama_cpp-*.tar.gz "geniex-pysdist-llama_cpp-${RELEASE_TAG}.tar.gz"

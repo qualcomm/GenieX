@@ -50,6 +50,11 @@ jobs:
             runner: ubuntu-latest
             preset: arm64-android-snapdragon-release
             container_image: docker.io/qualcomm/geniex-toolchain-android:v0.1.0
+          # minSdk 27 still admits armv8.0 phones, which trap on armv8.7. See #1217.
+          - platform: android-arm64-cpu
+            runner: ubuntu-latest
+            preset: arm64-android-cpu-release
+            container_image: docker.io/qualcomm/geniex-toolchain-android:v0.1.0
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
 

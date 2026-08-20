@@ -14,6 +14,19 @@ permissions:
 
 jobs:
   build:
+    name: ${{ matrix.variant }}
+    # The gradle project is variant-agnostic: it copies whatever lib/ subdirs
+    # sdk/pkg-geniex ships, so the CPU-only package just yields fewer jniLibs. #1217
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: default
+            sdk_artifact: sdk-android-arm64
+            tag_suffix: ""
+          - variant: cpu
+            sdk_artifact: sdk-android-arm64-cpu
+            tag_suffix: "-cpu"
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -32,7 +45,7 @@ jobs:
       - name: Download Android SDK package
         uses: actions/download-artifact@v8
         with:
-          name: sdk-android-arm64
+          name: ${{ matrix.sdk_artifact }}
           path: sdk/pkg-geniex
 
       - name: Set up JDK 17
@@ -74,20 +87,23 @@ jobs:
 
       - name: Collect AAR
         id: aar
+        env:
+          TAG_SUFFIX: ${{ matrix.tag_suffix }}
         shell: bash
         run: |
           set -euo pipefail
           src="bindings/android/app/build/outputs/aar/app-release.aar"
           [ -f "$src" ] || { echo "::error::AAR not found at $src"; exit 1; }
           mkdir -p dist-aar
-          cp "$src" dist-aar/geniex-android-aar.aar
-          echo "path=dist-aar/geniex-android-aar.aar" >> "$GITHUB_OUTPUT"
+          out="dist-aar/geniex-android-aar${TAG_SUFFIX}.aar"
+          cp "$src" "$out"
+          echo "path=$out" >> "$GITHUB_OUTPUT"
 
       - name: Upload AAR artifact
         if: inputs.upload_artifact
         uses: actions/upload-artifact@v7
         with:
-          name: android-aar
-          path: dist-aar/geniex-android-aar.aar
+          name: android-aar${{ matrix.tag_suffix }}
+          path: ${{ steps.aar.outputs.path }}
           if-no-files-found: error
           retention-days: 1
