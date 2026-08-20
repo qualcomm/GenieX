@@ -99,7 +99,21 @@ import Feedback from "/snippets/page-feedback.mdx";
     cat /proc/cpuinfo | grep Features          # 相同特性，内核使用的名称
     ```
 
-    若缺少这些特性，该设备无法运行当前版本。请带上以上输出到 [GitHub Issues](https://github.com/qualcomm/GenieX/issues) 或 Slack 反馈。
+    若缺少这些特性，请改用 **CPU-only（仅 CPU）** 版本：它以纯 `armv8.0-a`（不带任何 ISA 扩展）编译，只包含 CPU 推理（不含 QAIRT/NPU、OpenCL/GPU、Hexagon），速度也相应更慢——缺少 `dotprod`/`fp16` 时 ggml 会退回 fp32 量化内核。所有渠道都需要显式指定，不做自动探测：
+
+    ```bash bash
+    curl -fsSL https://raw.githubusercontent.com/qualcomm/GenieX/main/cli/release/linux/install.sh | sh -s -- --cpu-only
+    ```
+
+    | 渠道 | 如何选中 CPU-only 版本 |
+    | --- | --- |
+    | `install.sh` | `--cpu-only` |
+    | `pip install geniex` | `GENIEX_SDK_VARIANT=cpu` |
+    | Docker | `-cpu` tag —— `docker.io/qualcomm/geniex:latest-cpu` |
+
+    `geniex-qairt` 没有 CPU-only 版本：QAIRT 需要 NPU，而这类板子并没有。请改用 `geniex-llama-cpp`（或 `geniex` 元包，它会在这类板子上自动去掉 QAIRT 后端）。
+
+    若 CPU-only 版本仍然失败，请带上以上输出到 [GitHub Issues](https://github.com/qualcomm/GenieX/issues) 或 Slack 反馈。
   </Accordion>
 </AccordionGroup>
 

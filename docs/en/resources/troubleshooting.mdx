@@ -113,7 +113,21 @@ import Feedback from "/snippets/page-feedback.mdx";
     cat /proc/cpuinfo | grep Features          # same features, under the kernel's names
     ```
 
-    If those features are absent, the device can't run the current build. Report it in [GitHub Issues](https://github.com/qualcomm/GenieX/issues) or Slack with the output above.
+    If those features are absent, install the **CPU-only** build instead. It is compiled for plain `armv8.0-a` with no ISA extensions, ships CPU inference only (no QAIRT/NPU, no OpenCL/GPU, no Hexagon), and is correspondingly slower — ggml falls back to its fp32 quant kernels without `dotprod`/`fp16`. Every channel asks for it explicitly; nothing is auto-detected:
+
+    ```bash bash
+    curl -fsSL https://raw.githubusercontent.com/qualcomm/GenieX/main/cli/release/linux/install.sh | sh -s -- --cpu-only
+    ```
+
+    | Channel | How to select the CPU-only build |
+    | --- | --- |
+    | `install.sh` | `--cpu-only` |
+    | `pip install geniex` | `GENIEX_SDK_VARIANT=cpu` |
+    | Docker | the `-cpu` tag — `docker.io/qualcomm/geniex:latest-cpu` |
+
+    `geniex-qairt` has no CPU-only build at all: QAIRT needs an NPU, and these boards have none. Use `geniex-llama-cpp` (or the `geniex` meta package, which drops the QAIRT backend automatically on such a board).
+
+    If the CPU-only build still fails, report it in [GitHub Issues](https://github.com/qualcomm/GenieX/issues) or Slack with the output above.
   </Accordion>
 </AccordionGroup>
 

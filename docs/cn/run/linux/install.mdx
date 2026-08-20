@@ -40,6 +40,10 @@ docker pull "$IMAGE"
   若 `docker login` 失败或 `docker pull` 返回 `permission denied ... /var/run/docker.sock`，参见[故障排查 → Linux](/cn/resources/troubleshooting#linux) 了解凭据与 `docker` 组的修复方法。
 </Note>
 
+<Note>
+  **基线 ARMv8.0 板子** —— 部分无 NPU 的 Dragonwing IoT SoC 跑不了默认的 ARMv8.2 镜像，这类板子请在 tag 后加上 `-cpu`：`docker.io/qualcomm/geniex:latest-cpu`。该镜像仅支持 CPU 推理，既不需要 `--privileged`，也不需要下面的 `/usr/lib` 挂载。
+</Note>
+
 ### **交互式运行**
 
 进入容器内交互式 shell：

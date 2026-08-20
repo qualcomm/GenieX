@@ -40,6 +40,10 @@ docker pull "$IMAGE"
   If `docker login` fails or `docker pull` returns `permission denied ... /var/run/docker.sock`, see [Troubleshooting → Linux](/en/resources/troubleshooting#linux) for the credential and `docker` group fixes.
 </Note>
 
+<Note>
+  **Baseline ARMv8.0 boards** — some NPU-less Dragonwing IoT SoCs cannot run the default ARMv8.2 image; append `-cpu` to the tag for those: `docker.io/qualcomm/geniex:latest-cpu`. That image is CPU-only and needs neither `--privileged` nor the `/usr/lib` mount below.
+</Note>
+
 ### **Run interactively**
 
 Drop into an interactive shell inside the container:
