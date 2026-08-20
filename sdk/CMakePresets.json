@@ -85,6 +85,24 @@
       }
     },
     {
+      "name": "arm64-android-cpu",
+      "hidden": true,
+      "architecture": {
+        "value": "arm64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x86_64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "ANDROID_ABI": "arm64-v8a",
+        "ANDROID_PLATFORM": "android-31",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm64-android-llvm-cpu.cmake",
+        "PREBUILT_LIB_DIR": "android_aarch64"
+      }
+    },
+    {
       "name": "arm64-linux-snapdragon",
       "hidden": true,
       "architecture": {
@@ -139,6 +157,14 @@
       "inherits": ["arm64-android-snapdragon", "snapdragon", "release", "base"]
     },
     {
+      "name": "arm64-android-cpu-debug",
+      "inherits": ["arm64-android-cpu", "cpu-only", "debug", "base"]
+    },
+    {
+      "name": "arm64-android-cpu-release",
+      "inherits": ["arm64-android-cpu", "cpu-only", "release", "base"]
+    },
+    {
       "name": "arm64-linux-snapdragon-debug",
       "inherits": ["arm64-linux-snapdragon", "snapdragon", "debug", "base"]
     },
@@ -179,6 +205,16 @@
     {
       "name": "arm64-android-snapdragon-release",
       "configurePreset": "arm64-android-snapdragon-release",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-android-cpu-debug",
+      "configurePreset": "arm64-android-cpu-debug",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-android-cpu-release",
+      "configurePreset": "arm64-android-cpu-release",
       "jobs": 0
     },
     {
