@@ -149,6 +149,12 @@ import Feedback from "/snippets/page-feedback.mdx";
   <Accordion title="`nGpuLayers` or `nCtx` rejected on Qualcomm AI Engine Direct">
     Qualcomm AI Hub Models are compiled with fixed KV cache and context length. Leave both `nGpuLayers` and `nCtx` at their defaults; tune `max_tokens` and `enable_thinking` instead.
   </Accordion>
+
+  <Accordion title="Init fails with 'this device's CPU lacks features required by geniex'">
+    The same startup guard as on Linux. The default AAR is compiled for **armv8.7-a** with the `fp16`, `dotprod`, and `i8mm` extensions, but `minSdk` 27 still admits phones that predate them, so `geniex_init` returns `NOT_SUPPORTED` instead of crashing with a raw `SIGILL` partway through a run.
+
+    Ship the **CPU-only** AAR on those devices — `geniex-android-aar-cpu-<tag>.aar` from the [release assets](https://github.com/qualcomm/GenieX/releases). It is compiled for plain `armv8.0-a` with no ISA extensions, ships CPU inference only (no Qualcomm AI Engine Direct, no OpenCL, no Hexagon), and is correspondingly slower. Otherwise it is a drop-in replacement: same `com.geniex.sdk` namespace and API. Only the default AAR is published to Maven Central.
+  </Accordion>
 </AccordionGroup>
 
 ## **Still stuck?**

@@ -135,6 +135,12 @@ import Feedback from "/snippets/page-feedback.mdx";
   <Accordion title="Qualcomm AI Engine Direct 拒绝 `nGpuLayers` 或 `nCtx`">
     Qualcomm AI Hub 模型在编译期固化了 KV 缓存与上下文长度。请保持 `nGpuLayers` 与 `nCtx` 为默认值，改用 `max_tokens` 与 `enable_thinking` 调节。
   </Accordion>
+
+  <Accordion title="初始化报 'this device's CPU lacks features required by geniex'">
+    与 Linux 上同一处启动检查。默认 AAR 按 **armv8.7-a** 编译，带 `fp16`、`dotprod`、`i8mm` 扩展，而 `minSdk` 27 仍覆盖早于这些扩展的机型，因此 `geniex_init` 直接返回 `NOT_SUPPORTED`，而不是在运行中途以裸 `SIGILL` 崩溃。
+
+    这类设备请改用 **CPU-only** AAR——[release 资产](https://github.com/qualcomm/GenieX/releases)中的 `geniex-android-aar-cpu-<tag>.aar`。它按纯 `armv8.0-a` 编译、不带任何 ISA 扩展，只提供 CPU 推理（无 Qualcomm AI Engine Direct、无 OpenCL、无 Hexagon），因而相应更慢。除此之外可直接替换：`com.geniex.sdk` 命名空间与 API 完全一致。Maven Central 上只发布默认 AAR。
+  </Accordion>
 </AccordionGroup>
 
 ## **仍有问题？**
