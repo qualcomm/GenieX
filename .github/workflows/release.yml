@@ -233,6 +233,21 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
+          name: sdk-linux-amd64-cpu
+          path: sdk-linux-amd64-cpu
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: sdk-windows-arm64-cpu
+          path: sdk-windows-arm64-cpu
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: sdk-windows-amd64-cpu
+          path: sdk-windows-amd64-cpu
+
+      - uses: actions/download-artifact@v8
+        with:
           name: sdk-android-arm64
           path: sdk-android-arm64
 
@@ -306,7 +321,11 @@ jobs:
           fi
           zip -r "geniex-sdk-windows-arm64-${RELEASE_TAG}${sdk_suffix}.zip" sdk-windows-arm64
           zip -r "geniex-sdk-linux-arm64-${RELEASE_TAG}.zip" sdk-linux-arm64
+          # No sdk_suffix on the CPU-only zips: GGML_HEXAGON is off, so no HTP to sign.
           zip -r "geniex-sdk-linux-arm64-cpu-${RELEASE_TAG}.zip" sdk-linux-arm64-cpu
+          zip -r "geniex-sdk-linux-amd64-cpu-${RELEASE_TAG}.zip" sdk-linux-amd64-cpu
+          zip -r "geniex-sdk-windows-arm64-cpu-${RELEASE_TAG}.zip" sdk-windows-arm64-cpu
+          zip -r "geniex-sdk-windows-amd64-cpu-${RELEASE_TAG}.zip" sdk-windows-amd64-cpu
 
           # Package standalone geniex-bench archives (bin + runtime libs).
           for plat in linux-arm64 windows-arm64 android-arm64; do
@@ -332,7 +351,9 @@ jobs:
             rm -rf "${bench_dir}"
           done
 
-          rm -rf sdk-windows-arm64 sdk-linux-arm64 sdk-linux-arm64-cpu sdk-android-arm64 cli-linux-arm64 cli-linux-arm64-cpu to-sign
+          rm -rf sdk-windows-arm64 sdk-windows-arm64-cpu sdk-windows-amd64-cpu \
+                 sdk-linux-arm64 sdk-linux-arm64-cpu sdk-linux-amd64-cpu \
+                 sdk-android-arm64 cli-linux-arm64 cli-linux-arm64-cpu to-sign
 
           shopt -s nullglob
           files=(*.zip *.exe *.tar.gz *.cer *.aar install-*.sh)
