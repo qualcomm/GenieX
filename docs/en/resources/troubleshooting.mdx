@@ -129,6 +129,16 @@ import Feedback from "/snippets/page-feedback.mdx";
 
     If the CPU-only build still fails, report it in [GitHub Issues](https://github.com/qualcomm/GenieX/issues) or Slack with the output above.
   </Accordion>
+
+  <Accordion title="Same error on an x86 machine">
+    x86 builds are CPU-only by definition — there is no Hexagon or Qualcomm AI Engine Direct backend for them — so `pip install geniex` picks one with no flag needed. There is no x86 CLI; the SDK is the only x86 artifact.
+
+    The x86 SDK requires **AVX2**, so chips that predate Haswell (2013) and Atom-derived Celeron/Pentium N parts stop at the same startup guard, and there is no lower-baseline x86 build to fall back to.
+
+    ```bash bash
+    grep -o '\bavx2\b' /proc/cpuinfo | head -1   # prints avx2 if supported
+    ```
+  </Accordion>
 </AccordionGroup>
 
 ## **Android**

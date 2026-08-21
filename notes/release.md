@@ -9,7 +9,7 @@ git tag v1.2.3 && git push origin v1.2.3
 - Tags containing `-` are drafts (and push the sdist to TestPyPI).
 - Bare `vX.Y.Z` tags publish immediately (and push the sdist to production PyPI).
 - Assets: `geniex-sdk-{linux,windows}-arm64-<tag>.zip`, `geniex-cli-linux-arm64-<tag>.tar.gz`, `geniex-cli-setup-windows-arm64-<tag>.exe`, `geniex-android-aar-<tag>.aar`, `geniex-bench-{linux,windows,android}-arm64-<tag>.{tar.gz,zip}`, `geniex-pysdist{,-llama_cpp,-qairt}-<tag>.tar.gz`, and per-file `.sha256` sidecars.
-- The CPU-only variant ([#1217](https://github.com/qualcomm/GenieX/issues/1217)) adds a `-cpu` infix on the Linux and Android assets: `geniex-{sdk,cli}-linux-arm64-cpu-<tag>.*` and `geniex-android-aar-cpu-<tag>.aar`. Docker mirrors it as the `-cpu` tag; Maven Central publishes only the default AAR. No `geniex-bench` archive: on Linux the SDK zip already ships `bin/geniex-bench`, and no device in the benchmark fleet needs a CPU-only build.
+- The CPU-only variant ([#1217](https://github.com/qualcomm/GenieX/issues/1217)) carries a `-cpu` infix: `geniex-sdk-{linux,windows}-{arm64,amd64}-cpu-<tag>.zip`, `geniex-cli-linux-arm64-cpu-<tag>.tar.gz`, and `geniex-android-aar-cpu-<tag>.aar`. Only `linux-arm64-cpu` ships a CLI — the other three are **SDK zips only**, consumed by `pip` (`GENIEX_SDK_VARIANT=cpu`) or downloaded by hand. amd64 has no non-CPU-only build at all, since x86 has neither Hexagon nor QAIRT. Docker mirrors the `linux-arm64` variant as the `-cpu` tag; Maven Central publishes only the default AAR. No `geniex-bench` archives: the SDK zip already ships `bin/geniex-bench`, and no device in the benchmark fleet needs a CPU-only build.
 - Re-running the same tag via **Actions → Release → Run workflow** is safe **as long as you set "Use workflow from" to the tag** (Tags tab in the dropdown). Dispatching from `main` is rejected by `resolve-tag` so the workflow never builds a tag against the wrong commit.
 - S3 mirror at `s3://qaihub-public-assets/qai-hub-geniex/` — see [§ S3 mirror & manifest](#s3-mirror--manifest) below.
 
@@ -93,6 +93,9 @@ All objects live directly under the prefix — no `<tag>/` subdirectories. The `
 | `geniex-sdk-windows-arm64-<tag>.zip(.sha256)`       | every tag   | default     | Windows SDK                                                                                                                  |
 | `geniex-sdk-linux-arm64-<tag>.zip(.sha256)`         | every tag   | default     | Linux SDK                                                                                                                    |
 | `geniex-sdk-linux-arm64-cpu-<tag>.zip(.sha256)`     | every tag   | default     | CPU-only Linux SDK, fetched by `GENIEX_SDK_VARIANT=cpu`                                                                      |
+| `geniex-sdk-linux-amd64-cpu-<tag>.zip(.sha256)`     | every tag   | default     | CPU-only x86 Linux SDK (the only amd64 build)                                                                                |
+| `geniex-sdk-windows-arm64-cpu-<tag>.zip(.sha256)`   | every tag   | default     | CPU-only Windows SDK, fetched by `GENIEX_SDK_VARIANT=cpu`                                                                    |
+| `geniex-sdk-windows-amd64-cpu-<tag>.zip(.sha256)`   | every tag   | default     | CPU-only x86 Windows SDK (the only amd64 build)                                                                              |
 | `geniex-cli-setup-windows-arm64-<tag>.exe(.sha256)` | every tag   | default     | Windows CLI installer (versioned)                                                                                            |
 | `geniex-cli-linux-arm64-<tag>.tar.gz(.sha256)`      | every tag   | default     | Linux CLI archive (versioned)                                                                                                |
 | `geniex-cli-linux-arm64-cpu-<tag>.tar.gz(.sha256)`  | every tag   | default     | CPU-only Linux CLI archive (versioned)                                                                                       |
@@ -167,7 +170,7 @@ S3 publishing runs in the geniex repo (the IAM role's OIDC trust only allows `qc
 
 The per-tag manifest is byte-stable across workflow re-runs of the same tag — `released_at` is preserved from the first publish, so clients can cache it forever.
 
-The CPU-only objects are on S3 but deliberately **absent from the manifest**: their metadata would be identical to the default build's, so a `kind`/`platform`/`arch` lookup could hand a normal Snapdragon device the slow artifact. Nothing discovers them that way anyway — `install.sh --cpu-only` and `GENIEX_SDK_VARIANT=cpu` both build the URL from the naming convention.
+The CPU-only objects are on S3 but deliberately **absent from the manifest**: their metadata would be identical to the default build's, so a `kind`/`platform`/`arch` lookup could hand a normal Snapdragon device the slow artifact. Nothing discovers them that way anyway — `install.sh` and `GENIEX_SDK_VARIANT=cpu` both build the URL from the naming convention. The amd64 SDK zips are excluded for the same reason; nothing needs them there either, since amd64 ships no CLI and therefore never runs `geniex update`.
 
 ## Hexagon HTP signing
 
