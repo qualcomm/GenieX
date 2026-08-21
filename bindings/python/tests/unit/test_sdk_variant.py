@@ -62,11 +62,30 @@ def test_unknown_variant_is_rejected(fetcher, monkeypatch):
         fetcher._detect_platform()
 
 
-def test_the_variant_is_linux_arm64_only(fetcher, monkeypatch):
+def test_windows_arm64_honours_the_variant(fetcher, monkeypatch):
     fetcher.sys.platform = 'win32'
     monkeypatch.setattr(fetcher, 'platform', types.SimpleNamespace(machine=lambda: 'ARM64'))
     monkeypatch.setenv(fetcher._VARIANT_ENV, 'cpu')
-    assert fetcher._detect_platform() == 'windows-arm64'
+    assert fetcher._detect_platform() == 'windows-arm64-cpu'
+
+
+@pytest.mark.parametrize(
+    ('sys_platform', 'machine', 'expected'),
+    [
+        ('linux', 'x86_64', 'linux-amd64-cpu'),
+        ('win32', 'AMD64', 'windows-amd64-cpu'),
+    ],
+)
+def test_amd64_is_cpu_only_without_asking(fetcher, monkeypatch, sys_platform, machine, expected):
+    fetcher.sys.platform = sys_platform
+    monkeypatch.setattr(fetcher, 'platform', types.SimpleNamespace(machine=lambda: machine))
+    assert fetcher._detect_platform() == expected
+
+
+def test_amd64_does_not_double_suffix(fetcher, monkeypatch):
+    monkeypatch.setattr(fetcher, 'platform', types.SimpleNamespace(machine=lambda: 'x86_64'))
+    monkeypatch.setenv(fetcher._VARIANT_ENV, 'cpu')
+    assert fetcher._detect_platform() == 'linux-amd64-cpu'
 
 
 def test_meta_sdist_drops_qairt(fetcher, monkeypatch, staged, tmp_path):
