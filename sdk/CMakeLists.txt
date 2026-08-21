@@ -190,3 +190,9 @@ add_subdirectory(./plugins)
 if(GENIEX_BENCHMARK)
     add_subdirectory(./benchmark)
 endif()
+
+# ggml resolves its x86 ISA options while ./plugins is configured, and scopes the
+# flags to its own targets, so ml.cpp never sees __AVX2__ and has to be told. #1217
+if(GGML_AVX2)
+    target_compile_definitions(geniex PRIVATE GENIEX_X86_AVX2)
+endif()

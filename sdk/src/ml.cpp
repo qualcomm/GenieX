@@ -34,6 +34,32 @@ static bool cpu_features_supported() {
     unsigned long need = HWCAP_ATOMICS | HWCAP_ASIMDRDM | HWCAP_ASIMDDP | HWCAP_FPHP | HWCAP_ASIMDHP | HWCAP_CRC32;
     return (getauxval(AT_HWCAP) & need) == need;
 }
+
+// GENIEX_X86_AVX2 tracks ggml's own GGML_AVX2 (see sdk/CMakeLists.txt) instead of
+// naming features here, so a baseline build needs no check. AVX2 stands in for the
+// tier: no x86 part ships it without FMA/F16C/BMI2. GENIEX_CPU_ONLY does not lower
+// the x86 baseline the way it lowers the arm one, so it does not disable this.
+#elif (defined(__x86_64__) || defined(_M_X64)) && defined(GENIEX_X86_AVX2)
+// clang-cl defines _MSC_VER too, so test for the builtin first — every x86 build
+// we ship uses clang or gcc. The CPUID fallback is for a real MSVC build.
+#if defined(__GNUC__) || defined(__clang__)
+static bool cpu_features_supported() { return __builtin_cpu_supports("avx2"); }
+#else
+#include <immintrin.h>
+#include <intrin.h>
+
+static bool cpu_features_supported() {
+    int regs[4];
+    __cpuid(regs, 0);
+    if (regs[0] < 7) return false;  // AVX2 lives in leaf 7
+    __cpuidex(regs, 1, 0);
+    // AVX state is unusable unless the OS enabled it too (OSXSAVE + XCR0 SSE|YMM).
+    if (!(regs[2] & (1 << 27)) || (_xgetbv(0) & 0x6) != 0x6) return false;
+    __cpuidex(regs, 7, 0);
+    return (regs[1] & (1 << 5)) != 0;
+}
+#endif
+
 #else
 static bool cpu_features_supported() { return true; }
 #endif
