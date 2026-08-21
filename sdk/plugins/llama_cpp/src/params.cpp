@@ -3,12 +3,14 @@
 
 #include "params.h"
 
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <sstream>
 #include <string>
 #include <thread>
 
+#include "common.h"
 #include "logging.h"
 
 namespace geniex {
@@ -37,18 +39,7 @@ Device classify_device(const char* device_id, int n_gpu_layers) {
     return Device::CPU;  // UNKOWN treat as CPU
 }
 
-int resolve_n_threads(int requested, Device device) {
-    static const int cpu_threads      = static_cast<int32_t>(std::thread::hardware_concurrency());
-    static const int cpu_matrix[3][3] = {
-        {cpu_threads, 6, 6},  // Linux
-        {cpu_threads, 6, 6},  // Windows
-        {6, 6, 6}             // Android
-    };
-
-    if (requested > 0) return requested;
-
-    return cpu_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
-}
+int resolve_n_threads(int requested) { return requested > 0 ? requested : common_cpu_get_num_math(); }
 
 llama_model_params build_model_params(const geniex_ModelConfig& config, Device device) {
     static const bool mmap_matrix[3][3] = {
@@ -89,8 +80,8 @@ llama_context_params build_context_params(const geniex_ModelConfig& config, int3
     cpar.n_batch              = config.n_batch > 0 ? config.n_batch : 2048;
     cpar.n_ubatch             = config.n_ubatch > 0 ? config.n_ubatch : ubatch;
     cpar.n_seq_max            = config.n_seq_max > 0 ? config.n_seq_max : 1;
-    cpar.n_threads            = resolve_n_threads(config.n_threads, device);
-    cpar.n_threads_batch      = resolve_n_threads(config.n_threads_batch, device);
+    cpar.n_threads            = resolve_n_threads(config.n_threads);
+    cpar.n_threads_batch      = resolve_n_threads(config.n_threads_batch);
     cpar.flash_attn_type      = static_cast<llama_flash_attn_type>(fa);
     cpar.no_perf              = false;
 
@@ -122,13 +113,19 @@ ggml_threadpool_params build_threadpool_params(int n_threads, Device device) {
         {1000, 1000, 1000}  // Android
     };
 
-    int      reserved_cores = 2;
-    uint32_t poll           = poll_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
-    bool     pin            = pin_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+    uint32_t poll = poll_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+    bool     pin  = pin_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
 
     ggml_threadpool_params tpp = ggml_threadpool_params_default(n_threads);
 
     if (pin) {
+        // Leave up to 2 cores free for the OS/other work, but only if n_threads leaves
+        // that slack; n_threads can now reach hardware_concurrency() (see
+        // resolve_n_threads), and reserving cores on top of an already-full thread
+        // count would either pin past the real core count or oversubscribe the
+        // remaining ones.
+        int hw_threads     = static_cast<int>(std::thread::hardware_concurrency());
+        int reserved_cores = hw_threads > 0 ? std::max(0, std::min(2, hw_threads - n_threads)) : 2;
         for (int i = 0; i < n_threads; ++i) {
             tpp.cpumask[reserved_cores + i] = true;
         }
