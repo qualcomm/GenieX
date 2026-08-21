@@ -135,6 +135,41 @@
       }
     },
     {
+      "name": "arm64-windows-cpu",
+      "hidden": true,
+      "generator": "Ninja",
+      "architecture": {
+        "value": "arm64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm64-windows-llvm-cpu.cmake",
+        "PREBUILT_LIB_DIR": "windows_aarch64"
+      }
+    },
+    {
+      "name": "amd64-windows-cpu",
+      "hidden": true,
+      "description": "clang-cl matches the arm64 Windows toolchain. It is set here rather than in a toolchain file on purpose: a toolchain file sets CMAKE_SYSTEM_NAME, which makes CMake report cross-compiling and drops ggml's AVX2 (INS_ENB).",
+      "generator": "Ninja",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER": "clang-cl"
+      }
+    },
+    {
       "name": "default",
       "displayName": "Default (SDK Release)",
       "description": "Build SDK in Release mode with standard options",
@@ -179,6 +214,30 @@
     {
       "name": "arm64-linux-cpu-release",
       "inherits": ["arm64-linux-cpu", "cpu-only", "release", "base"]
+    },
+    {
+      "name": "arm64-windows-cpu-debug",
+      "inherits": ["arm64-windows-cpu", "cpu-only", "debug", "base"]
+    },
+    {
+      "name": "arm64-windows-cpu-release",
+      "inherits": ["arm64-windows-cpu", "cpu-only", "release", "base"]
+    },
+    {
+      "name": "amd64-linux-cpu-debug",
+      "inherits": ["cpu-only", "debug", "base"]
+    },
+    {
+      "name": "amd64-linux-cpu-release",
+      "inherits": ["cpu-only", "release", "base"]
+    },
+    {
+      "name": "amd64-windows-cpu-debug",
+      "inherits": ["amd64-windows-cpu", "cpu-only", "debug", "base"]
+    },
+    {
+      "name": "amd64-windows-cpu-release",
+      "inherits": ["amd64-windows-cpu", "cpu-only", "release", "base"]
     }
   ],
   "buildPresets": [
@@ -235,6 +294,36 @@
     {
       "name": "arm64-linux-cpu-release",
       "configurePreset": "arm64-linux-cpu-release",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-windows-cpu-debug",
+      "configurePreset": "arm64-windows-cpu-debug",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-windows-cpu-release",
+      "configurePreset": "arm64-windows-cpu-release",
+      "jobs": 0
+    },
+    {
+      "name": "amd64-linux-cpu-debug",
+      "configurePreset": "amd64-linux-cpu-debug",
+      "jobs": 0
+    },
+    {
+      "name": "amd64-linux-cpu-release",
+      "configurePreset": "amd64-linux-cpu-release",
+      "jobs": 0
+    },
+    {
+      "name": "amd64-windows-cpu-debug",
+      "configurePreset": "amd64-windows-cpu-debug",
+      "jobs": 0
+    },
+    {
+      "name": "amd64-windows-cpu-release",
+      "configurePreset": "amd64-windows-cpu-release",
       "jobs": 0
     }
   ]
