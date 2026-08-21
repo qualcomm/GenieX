@@ -37,6 +37,19 @@ jobs:
           - platform: windows-arm64
             runner: windows-11-arm
             preset: arm64-windows-snapdragon-release
+            vcvars_arch: arm64
+            snapdragon: true
+          # Parity with the linux/android CPU-only builds; Windows on ARM itself
+          # requires armv8.1, so no known device needs this. See #1217.
+          - platform: windows-arm64-cpu
+            runner: windows-11-arm
+            preset: arm64-windows-cpu-release
+            vcvars_arch: arm64
+          # x86 has no Hexagon or QAIRT, so CPU-only is its only shape. See #1217.
+          - platform: windows-amd64-cpu
+            runner: windows-latest
+            preset: amd64-windows-cpu-release
+            vcvars_arch: x64
           - platform: linux-arm64
             runner: ubuntu-latest
             preset: arm64-linux-snapdragon-release
@@ -45,6 +58,12 @@ jobs:
           - platform: linux-arm64-cpu
             runner: ubuntu-latest
             preset: arm64-linux-cpu-release
+            container_image: docker.io/qualcomm/geniex-toolchain-linux:v0.1.0
+          # Native build in the same image — it carries build-essential and the
+          # host Rust target alongside the aarch64 cross toolchain.
+          - platform: linux-amd64-cpu
+            runner: ubuntu-latest
+            preset: amd64-linux-cpu-release
             container_image: docker.io/qualcomm/geniex-toolchain-linux:v0.1.0
           - platform: android-arm64
             runner: ubuntu-latest
@@ -60,7 +79,7 @@ jobs:
 
     steps:
       - name: Configure Windows Git
-        if: matrix.platform == 'windows-arm64'
+        if: startsWith(matrix.platform, 'windows')
         shell: cmd
         run: |
           echo C:\Program Files\Git\bin>>%GITHUB_PATH%
@@ -126,8 +145,8 @@ jobs:
         run: |
           set -eu
           case "${{ matrix.platform }}" in
-            windows-arm64) tag="winarm64-img-${ImageVersion:-unknown}" ;;
-            *)             tag="container-${CONTAINER_IMAGE##*:}" ;;
+            windows-*) tag="win-img-${ImageVersion:-unknown}" ;;
+            *)         tag="container-${CONTAINER_IMAGE##*:}" ;;
           esac
           echo "tag=$tag" >>"$GITHUB_OUTPUT"
           echo "Toolchain tag for cache: $tag"
@@ -160,12 +179,12 @@ jobs:
       # Linux/Android ccache lives in the toolchain container; host just
       # owns the dir so actions/cache can persist it.
       - name: Prepare ccache dir (Linux/Android)
-        if: matrix.platform != 'windows-arm64'
+        if: ${{ !startsWith(matrix.platform, 'windows') }}
         shell: bash
         run: mkdir -p "${{ github.workspace }}/.ccache"
 
       - name: Install and configure ccache (Windows)
-        if: matrix.platform == 'windows-arm64'
+        if: startsWith(matrix.platform, 'windows')
         shell: powershell
         run: |
           if (-not (Get-Command ccache -ErrorAction SilentlyContinue)) {
@@ -184,11 +203,11 @@ jobs:
           ccache --max-size=5G
 
       - name: Setup Snapdragon SDKs
-        if: matrix.platform == 'windows-arm64'
+        if: matrix.snapdragon
         uses: ./.github/actions/setup-snapdragon-sdks
 
       - name: Configure HTP signing cert
-        if: matrix.platform == 'windows-arm64'
+        if: matrix.snapdragon
         shell: powershell
         env:
           HEXAGON_HTP_CERT_PFX: ${{ secrets.HEXAGON_HTP_CERT_PFX }}
@@ -203,8 +222,8 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "HEXAGON_HTP_CERT=$dst"
           Write-Host "HEXAGON_HTP_CERT=$dst"
 
-      - name: Build SDK (cross-compile in toolchain container)
-        if: matrix.platform != 'windows-arm64'
+      - name: Build SDK (in toolchain container)
+        if: ${{ !startsWith(matrix.platform, 'windows') }}
         shell: bash
         env:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
@@ -244,11 +263,13 @@ jobs:
             '
 
       - name: Setup VS toolchain (Windows)
-        if: matrix.platform == 'windows-arm64'
+        if: startsWith(matrix.platform, 'windows')
         uses: ./.github/actions/setup-vcvars
+        with:
+          arch: ${{ matrix.vcvars_arch }}
 
       - name: Build SDK (Windows)
-        if: matrix.platform == 'windows-arm64'
+        if: startsWith(matrix.platform, 'windows')
         shell: powershell
         env:
           GENIEX_VERSION: ${{ steps.version.outputs.version }}
@@ -288,12 +309,12 @@ jobs:
       # On Linux/Android ccache runs inside the container; only the on-disk
       # size is visible from the host. Never fail the job on a stats read.
       - name: ccache stats (Linux/Android)
-        if: matrix.platform != 'windows-arm64'
+        if: ${{ !startsWith(matrix.platform, 'windows') }}
         shell: bash
         run: du -sh "${{ github.workspace }}/.ccache" 2>/dev/null || true
 
       - name: ccache stats (Windows)
-        if: matrix.platform == 'windows-arm64'
+        if: startsWith(matrix.platform, 'windows')
         shell: powershell
         run: ccache --show-stats --verbose; $true
 
