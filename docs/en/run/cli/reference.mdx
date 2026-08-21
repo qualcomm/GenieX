@@ -185,6 +185,28 @@ The context window (`--nctx`) is how much the model can hold at once. When a con
   - Add `--sliding-window` to keep chatting past the limit: the oldest context above a small anchored prefix is evicted instead of erroring.
   - For a genuinely larger window, pull a bundle compiled for a longer context from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/). See [Qualcomm AI Engine Direct runtime constraints](/en/get-started/platforms#runtime-constraints).
 
+## **`geniex-bench`**
+
+`geniex-bench` is a standalone benchmark binary — separate from the `geniex` CLI — that measures TTFT, prefill speed, and decode speed directly against the GenieX C API. It ships as a pre-built archive for Windows ARM64 and Linux ARM64.
+
+See the [Benchmarking tutorial](/en/tutorials/benchmarking) for download instructions and a full walkthrough. Quick reference:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--plugin` | — | `llama_cpp` \| `qairt`. Required. |
+| `--device` | `auto` | `cpu` \| `gpu` \| `npu` \| `hybrid`. |
+| `-m` / `--model` | — | Local path (`.gguf` or bundle dir) or model-manager id (`org/repo[:quant]`). Required. |
+| `-p` | `512` | Random-token prefill length. |
+| `-n` / `--n-gen` | `128` | Tokens to generate per run. |
+| `-r` | `5` | Measured repetitions. |
+| `--warmup` | `1` | Warmup runs (not counted in stats). |
+| `--temperature` | `0.0` | Sampling temperature. `0.0` = deterministic (greedy). |
+| `--seed` | `42` | Random seed for prefill token generation. |
+| `--output-json` | — | Write per-cell JSON with aggregated stats to this path. |
+| `--matrix-file` | — | TSV file (`cell_id`, `plugin`, `device`, `model`) to run multiple cells in one session. |
+| `--output-json-dir` | — | Output directory for matrix-mode JSON files. |
+| `--accuracy` | — | Print generated text instead of timing (1 run, no warmup). Pair with `--prompt-file`. |
+
 ## **Utility commands**
 
 | Command | Description | Example |

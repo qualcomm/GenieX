@@ -1,0 +1,258 @@
+---
+title: "Benchmarking with geniex-bench"
+description: "Measure prefill and decode throughput on Windows ARM64 and Linux ARM64 with geniex-bench."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+`geniex-bench` measures raw inference throughput — TTFT, prefill speed, and decode speed — on real Snapdragon hardware. It is a standalone binary with no CLI dependency: download the archive, extract, and run.
+
+## **Prerequisites**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    - Snapdragon X Elite or X2 Elite device running Windows ARM64. See [Supported platforms](/en/get-started/platforms).
+    - PowerShell (any version).
+    - A pulled model. Run `geniex pull` first, or let `geniex-bench` download on first use via `--mm-data-dir`.
+  </Tab>
+  <Tab title="Linux ARM64">
+    - Qualcomm Dragonwing IQ-9075 or IQ-8275 device running Ubuntu ARM64.
+    - The same Qualcomm driver libraries required by the GenieX CLI. If you already have `geniex` installed, these are present. Otherwise install them first:
+
+      ```bash bash
+      sudo apt-get install -y qcom-adreno1 qcom-fastrpc1 libqnn1
+      ```
+
+    - A pulled model, or a Hugging Face / AI Hub model id that `geniex-bench` can download automatically.
+  </Tab>
+</Tabs>
+
+## **Step 1: Download and extract**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    Open PowerShell and run:
+
+    ```powershell windows
+    Invoke-WebRequest `
+      https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-windows-arm64.zip `
+      -OutFile bench.zip
+    Expand-Archive bench.zip -DestinationPath bench
+    ```
+
+    Verify the binary starts:
+
+    ```powershell windows
+    .\bench\bin\geniex-bench.exe --help
+    ```
+  </Tab>
+  <Tab title="Linux ARM64">
+    ```bash bash
+    curl -fsSL \
+      https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-linux-arm64.tar.gz \
+      | tar xz
+    ```
+
+    Verify:
+
+    ```bash bash
+    ./geniex-bench-linux-arm64-*/bin/geniex-bench --help
+    ```
+
+    Set up the library path for the session (the binary needs the bundled `.so` files):
+
+    ```bash bash
+    BENCH_DIR=$(ls -d geniex-bench-linux-arm64-*)
+    export LD_LIBRARY_PATH="$BENCH_DIR/lib:$BENCH_DIR/lib/llama_cpp${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export GENIEX_PLUGIN_PATH="$BENCH_DIR/lib"
+    BENCH="$BENCH_DIR/bin/geniex-bench"
+    ```
+  </Tab>
+</Tabs>
+
+<Note>To pin a specific version, replace the URL with a versioned one — see [Pinning a version](#pinning-a-version).</Note>
+
+## **Step 2: Run your first benchmark**
+
+The minimum required flags are `--plugin`, `--device`, and `-m`. The model argument accepts either a local path or a model-manager id (downloaded automatically on first use):
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ```powershell windows
+    .\bench\bin\geniex-bench.exe `
+      --plugin llama_cpp --device npu `
+      -m bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+    ```
+
+    Output:
+
+    ```text
+    [ok  ] cell  plugin=llama_cpp  device=npu  ngl=999  ttft=349.2ms  prefill=60.2tps  decode=21.8tps  gen=128 tok
+    ```
+  </Tab>
+  <Tab title="Linux ARM64">
+    ```bash bash
+    "$BENCH" \
+      --plugin llama_cpp --device npu \
+      -m bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+    ```
+
+    Output:
+
+    ```text
+    [ok  ] cell  plugin=llama_cpp  device=npu  ngl=999  ttft=358.4ms  prefill=58.7tps  decode=20.1tps  gen=128 tok
+    ```
+  </Tab>
+</Tabs>
+
+By default `geniex-bench` runs **1 warmup + 5 measured repetitions** with 512 random input tokens and generates 128 tokens at temperature 0.0 (deterministic). Numbers are aggregated as median ± stdev across the 5 runs.
+
+## **Step 3: Compare compute backends**
+
+Run the same model with `--device cpu`, `--device npu`, and `--device hybrid` to find the fastest path for your workload.
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ```powershell windows
+    $BENCH = ".\bench\bin\geniex-bench.exe"
+    $MODEL = "bartowski/Qwen_Qwen3-1.7B-GGUF:Q4_0"
+
+    & $BENCH --plugin llama_cpp --device cpu    -m $MODEL
+    & $BENCH --plugin llama_cpp --device npu    -m $MODEL
+    & $BENCH --plugin llama_cpp --device hybrid -m $MODEL
+    ```
+
+    Example output (Snapdragon X Elite, Q4_0):
+
+    ```text
+    [ok  ] cell  plugin=llama_cpp  device=cpu     ngl=0    ttft=476.2ms  prefill=25.3tps  decode=18.5tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=npu     ngl=999  ttft=340.1ms  prefill=62.8tps  decode=23.1tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=hybrid  ngl=999  ttft=198.4ms  prefill=91.5tps  decode=27.4tps  gen=128 tok
+    ```
+  </Tab>
+  <Tab title="Linux ARM64">
+    ```bash bash
+    MODEL="bartowski/Qwen_Qwen3-1.7B-GGUF:Q4_0"
+
+    "$BENCH" --plugin llama_cpp --device cpu    -m "$MODEL"
+    "$BENCH" --plugin llama_cpp --device npu    -m "$MODEL"
+    "$BENCH" --plugin llama_cpp --device hybrid -m "$MODEL"
+    ```
+
+    Example output (Dragonwing IQ-9075, Q4_0):
+
+    ```text
+    [ok  ] cell  plugin=llama_cpp  device=cpu     ngl=0    ttft=512.3ms  prefill=21.4tps  decode=15.2tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=npu     ngl=999  ttft=395.1ms  prefill=53.2tps  decode=18.8tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=hybrid  ngl=999  ttft=241.7ms  prefill=78.3tps  decode=22.6tps  gen=128 tok
+    ```
+  </Tab>
+</Tabs>
+
+**Which backend to pick:**
+
+| Device | Best for |
+|---|---|
+| `hybrid` | Fastest on llama_cpp models — the per-tensor scheduler assigns each op to HTP or CPU based on what each backend handles best. Default recommendation. |
+| `npu` | Pins to a single HTP session, useful when you need deterministic compute-unit layout. Slower prefill than `hybrid` on most models. |
+| `cpu` | Baseline; useful for comparison and on models that don't benefit from NPU offload. |
+| `gpu` | OpenCL path; use when comparing GPU vs NPU on llama_cpp models. |
+
+<Note>Qualcomm AI Hub Models (`--plugin qairt`) run on NPU only — `--device cpu`, `gpu`, or `hybrid` are silently coerced to `npu`.</Note>
+
+## **Reading the numbers**
+
+Every `[ok  ]` line reports three metrics:
+
+| Metric | What it measures |
+|---|---|
+| `ttft` | Time to first token — from the start of the `geniex infer` call to the first sampled output token. On a VLM run this includes the media encoder, so it is **not** directly comparable to a text-only TTFT. |
+| `prefill` (tok/s) | How fast the model processed the input (prompt) tokens. Higher is better. |
+| `decode` (tok/s) | Token generation speed — each token in the output adds one step here. This is the number users perceive as "typing speed" in a chat interface. |
+
+`ttft` and `prefill` are dominated by parallelism (batch work on NPU/GPU); `decode` is dominated by memory bandwidth (one token at a time, every weight read once per step). On Snapdragon, `hybrid` closes the gap between the two phases by routing each op to its best backend.
+
+For `--plugin qairt`, `prompt_tokens` and `prefill_tps` are reported over the padded length (`ceil(n / 128) × 128`) because the QAIRT engine pads input ids to 128-token chunks. This is expected — the padded count reflects the work the engine actually performed.
+
+## **Comparing models fairly**
+
+Hold these variables constant when comparing two models or configs:
+
+| What to fix | Flag | Default |
+|---|---|---|
+| Context size | `-c` / `--ctx-size` | 512 random tokens |
+| Generated tokens | `-n` / `--n-gen` | 128 |
+| Sampling temperature | `--temperature` | 0.0 |
+| Random seed | `--seed` | 42 |
+| Repetitions | `-r` | 5 |
+| Warmup runs | `--warmup` | 1 |
+
+The defaults are already set for reproducible comparisons (temperature 0.0, seed 42, 5 measured repetitions). Change any of them with care — a higher `-n` captures more of the decode curve, while a higher `-c` tests the model under a longer context.
+
+**Common mistakes:**
+
+- Comparing a `Q4_0` run against a `Q8_0` run. The larger file has more weight data to load per decode step, so it will be slower regardless of compute backend.
+- Comparing `--device cpu` (which uses `ngl=0`) against `--device npu` (which uses `ngl=-1`, all layers offloaded). If you want a pure CPU baseline, always use `--device cpu`.
+- Forgetting to re-run after a model pull. The first run includes download time in wallclock but not in the reported `ttft` / `prefill` / `decode` numbers (which are measured inside the engine), so the numbers are still valid — but the full session is slower.
+
+## **Saving results to JSON**
+
+Add `--output-json` to write a machine-readable report:
+
+```bash bash
+"$BENCH" --plugin llama_cpp --device hybrid \
+  -m bartowski/Qwen_Qwen3-1.7B-GGUF:Q4_0 \
+  --output-json results/qwen3-1.7b-hybrid.json \
+  --cell-id Qwen3-1.7B-llama_cpp-hybrid
+```
+
+The JSON includes per-run timing and aggregated stats (median / min / max / mean / stdev):
+
+```json
+{
+  "schema_version": "2",
+  "cell_id": "Qwen3-1.7B-llama_cpp-hybrid",
+  "plugin": "llama_cpp",
+  "device": "hybrid",
+  "agg": {
+    "ttft_ms":     {"median": 198.4, "min": 191.2, "max": 204.1, "mean": 197.9, "stdev": 5.1},
+    "prefill_tps": {"median": 91.5,  "min": 89.3,  "max": 94.2,  "mean": 91.1,  "stdev": 2.0},
+    "decode_tps":  {"median": 27.4,  "min": 26.8,  "max": 28.1,  "mean": 27.3,  "stdev": 0.5}
+  }
+}
+```
+
+## **Running a model matrix**
+
+To sweep multiple `(model, device)` combinations in a single session — amortising the plugin init cost — use `--matrix-file`:
+
+```bash bash
+cat > matrix.tsv <<'EOF'
+Qwen3-0.6B-cpu	llama_cpp	cpu	bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+Qwen3-0.6B-npu	llama_cpp	npu	bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+Qwen3-0.6B-hybrid	llama_cpp	hybrid	bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+Qwen3-4B-qairt	qairt	npu	qualcomm/qwen3_4b
+EOF
+
+"$BENCH" --matrix-file matrix.tsv --output-json-dir results/
+```
+
+Column order: `cell_id`, `plugin`, `device`, `model_path_or_id`. Each row produces one JSON file in `--output-json-dir`.
+
+## **Pinning a version**
+
+The URLs above always resolve to the latest stable release. To pin a specific version, replace the filename with a versioned one (e.g. `v0.3.19`):
+
+| Platform | Versioned URL |
+|---|---|
+| Windows ARM64 | `https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-windows-arm64-v0.3.19.zip` |
+| Linux ARM64 | `https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-linux-arm64-v0.3.19.tar.gz` |
+
+## **Next steps**
+
+- [CLI reference](/en/run/cli/reference) — `geniex infer` flags and the `--compute` aliases.
+- [Platforms & runtimes](/en/get-started/platforms) — which chipsets and runtimes are supported.
+
+<br />
+
+<Feedback />

@@ -96,6 +96,7 @@
             "group": "Tutorials",
             "icon": "graduation-cap",
             "pages": [
+              "en/tutorials/benchmarking",
               "en/tutorials/speculative-decoding-mtp",
               "en/tutorials/audio-input"
             ]
@@ -162,6 +163,13 @@
                   "cn/run/android/api-reference"
                 ]
               }
+            ]
+          },
+          {
+            "group": "教程",
+            "icon": "graduation-cap",
+            "pages": [
+              "cn/tutorials/benchmarking"
             ]
           },
           {
