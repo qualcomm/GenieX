@@ -160,9 +160,17 @@ func Completions(c *gin.Context) {
 		return
 	}
 
+	// qairt rejects any generate call that carries stop sequences at all
+	// (sdk/plugins/qairt/src/llm.cpp:219: "--stop / --stop-file (stop
+	// sequences) is not supported by the qairt plugin"). Enforce them host
+	// side instead of forwarding them: withhold Stop from the plugin config
+	// and match the generated text against the requested stop strings as it
+	// comes in, via a stopMatcher.
+	stopSequences := completionStop(req.Stop)
+	hostStop := paths.RuntimeID == geniex_sdk.RuntimeQairt && len(stopSequences) > 0
+
 	genConfig := &geniex_sdk.GenerationConfig{
 		MaxTokens: int32(req.MaxTokens.Value),
-		Stop:      completionStop(req.Stop),
 		SamplerConfig: &geniex_sdk.SamplerConfig{
 			Temperature:       float32(req.Temperature.Value),
 			TopP:              float32(req.TopP.Value),
@@ -173,6 +181,9 @@ func Completions(c *gin.Context) {
 			FrequencyPenalty:  float32(req.FrequencyPenalty.Value),
 			Seed:              int32(req.Seed.Value),
 		},
+	}
+	if !hostStop {
+		genConfig.Stop = stopSequences
 	}
 	echo := ""
 	if req.Echo.Valid() && req.Echo.Value {
@@ -191,6 +202,11 @@ func Completions(c *gin.Context) {
 			wg      sync.WaitGroup
 		)
 
+		var matcher *stopMatcher
+		if hostStop {
+			matcher = newStopMatcher(stopSequences)
+		}
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -200,8 +216,15 @@ func Completions(c *gin.Context) {
 					if stopGen.Load() {
 						return false
 					}
-					dataCh <- token
-					return true
+					if matcher == nil {
+						dataCh <- token
+						return true
+					}
+					safe, stopped := matcher.feed(token)
+					if safe != "" {
+						dataCh <- safe
+					}
+					return !stopped
 				},
 				Config: genConfig,
 			})
@@ -220,10 +243,23 @@ func Completions(c *gin.Context) {
 		}
 	} else {
 		// blocking
-		out, err := p.Generate(geniex_sdk.LlmGenerateInput{
+		input := geniex_sdk.LlmGenerateInput{
 			PromptUTF8: prompt,
 			Config:     genConfig,
-		})
+		}
+		var text string
+		if hostStop {
+			// No streaming consumer to feed here — the matcher's only job is
+			// to spot the stop sequence and cancel generation early via the
+			// OnToken return value, same as the streaming path.
+			matcher := newStopMatcher(stopSequences)
+			input.OnToken = func(token string) bool {
+				safe, stopped := matcher.feed(token)
+				text += safe
+				return !stopped
+			}
+		}
+		out, err := p.Generate(input)
 		// A prompt that never fit is a client error (400). A window exhausted
 		// mid-generation is a normal truncated completion (finish_reason=length),
 		// so it falls through to the regular response below.
@@ -235,7 +271,10 @@ func Completions(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
-		writeCompletionResponse(c, echo+out.FullText, out.ProfileData)
+		if !hostStop {
+			text = out.FullText
+		}
+		writeCompletionResponse(c, echo+text, out.ProfileData)
 	}
 }
 
