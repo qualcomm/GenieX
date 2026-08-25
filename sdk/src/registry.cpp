@@ -1,8 +1,6 @@
 // Copyright (c) 2024-2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-
-
 #if defined(_WIN32)
 #include <windows.h>
 #else
@@ -57,8 +55,8 @@ int detectQnnApiMinor(const std::filesystem::path& qnn_lib_root) {
     };
     for (const auto& hdr : candidates) {
         if (!fs::exists(hdr, ec)) continue;
-        std::ifstream f(hdr);
-        std::string   line;
+        std::ifstream    f(hdr);
+        std::string      line;
         const std::regex re(R"(#define\s+QNN_API_VERSION_MINOR\s+(\d+))");
         while (std::getline(f, line)) {
             std::smatch m;
@@ -102,11 +100,13 @@ std::string selectQairtVariant() {
 #endif
     if (qnn_lib_root.empty()) return "";
 
-    const int minor = detectQnnApiMinor(qnn_lib_root);
+    const int         minor   = detectQnnApiMinor(qnn_lib_root);
     const std::string variant = qairtVariantForMinor(minor);
     if (variant.empty()) {
-        GENIEX_LOG_WARN("GENIEX_QNN_LIB set but QNN_API_VERSION_MINOR not found under {}; "
-                        "no qairt variant selected", qnn_lib_root.u8string());
+        GENIEX_LOG_WARN(
+            "GENIEX_QNN_LIB set but QNN_API_VERSION_MINOR not found under {}; "
+            "no qairt variant selected",
+            qnn_lib_root.u8string());
     } else {
         GENIEX_LOG_INFO("GENIEX_QNN_LIB QNN API minor {} -> loading plugin variant {}", minor, variant);
     }
