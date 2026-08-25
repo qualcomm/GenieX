@@ -12,7 +12,9 @@ go_library(
     deps = [
         "//bindings/go:geniex_sdk_go",
         "//cli/internal/config",
-        "//cli/internal/types",
+        "//cli/internal/render",
+        "//cli/server/middleware",
+        "//cli/server/types",
     ],
 )
 
@@ -22,6 +24,7 @@ go_cgo_test(
     embed = [":service"],
     deps = [
         "//bindings/go:geniex_sdk_go",
+        "//cli/server/middleware",
         "@com_github_spf13_viper//:viper",
     ],
 )

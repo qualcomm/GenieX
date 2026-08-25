@@ -5,17 +5,25 @@ go_library(
     name = "handler",
     srcs = [
         "chat.go",
+        "chat_messages.go",
+        "chat_response.go",
+        "chat_stream.go",
+        "chat_token.go",
+        "completion.go",
+        "logits.go",
         "model.go",
     ],
     importpath = "github.com/qualcomm/GenieX/cli/server/handler",
     visibility = ["//visibility:public"],
     deps = [
         "//bindings/go:geniex_sdk_go",
-        "//cli/internal/types",
+        "//cli/internal/config",
+        "//cli/internal/store",
+        "//cli/internal/thinkfsm",
         "//cli/server/service",
+        "//cli/server/types",
         "//cli/server/utils",
         "@com_github_bytedance_sonic//:sonic",
-        "@com_github_bytedance_sonic//ast",
         "@com_github_gin_gonic_gin//:gin",
         "@com_github_openai_openai_go_v3//:openai-go",
         "@com_github_openai_openai_go_v3//packages/param",
@@ -25,6 +33,9 @@ go_library(
 
 go_cgo_test(
     name = "handler_test",
-    srcs = ["package_test.go"],
+    srcs = [
+        "chat_test.go",
+        "completion_test.go",
+    ],
     embed = [":handler"],
 )

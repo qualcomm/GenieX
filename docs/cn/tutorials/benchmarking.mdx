@@ -1,0 +1,258 @@
+---
+title: "使用 geniex-bench 进行性能基准测试"
+description: "在 Windows ARM64 和 Linux ARM64 上使用 geniex-bench 测量 prefill 和 decode 吞吐量。"
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+`geniex-bench` 用于测量原始推理吞吐量——TTFT、prefill 速度和 decode 速度——在真实骁龙硬件上运行。它是一个独立二进制文件，无需安装 GenieX CLI：下载压缩包、解压即可运行。
+
+## **前提条件**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    - 骁龙 X Elite 或 X2 Elite 设备，运行 Windows ARM64。参见[支持的平台](/cn/get-started/platforms)。
+    - PowerShell（任意版本）。
+    - 已下载的模型。可先运行 `geniex pull`，也可通过 `--mm-data-dir` 让 `geniex-bench` 在首次使用时自动下载。
+  </Tab>
+  <Tab title="Linux ARM64">
+    - 运行 Ubuntu ARM64 的 Qualcomm Dragonwing IQ-9075 或 IQ-8275 设备。
+    - GenieX CLI 所需的 Qualcomm 驱动库。若已安装 `geniex`，这些库已存在。否则先安装：
+
+      ```bash bash
+      sudo apt-get install -y qcom-adreno1 qcom-fastrpc1 libqnn1
+      ```
+
+    - 已下载的模型，或可供 `geniex-bench` 自动下载的 Hugging Face / AI Hub 模型 id。
+  </Tab>
+</Tabs>
+
+## **第一步：下载并解压**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    打开 PowerShell 并运行：
+
+    ```powershell windows
+    Invoke-WebRequest `
+      https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-windows-arm64.zip `
+      -OutFile bench.zip
+    Expand-Archive bench.zip -DestinationPath bench
+    ```
+
+    验证二进制文件可正常启动：
+
+    ```powershell windows
+    .\bench\bin\geniex-bench.exe --help
+    ```
+  </Tab>
+  <Tab title="Linux ARM64">
+    ```bash bash
+    curl -fsSL \
+      https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-linux-arm64.tar.gz \
+      | tar xz
+    ```
+
+    验证：
+
+    ```bash bash
+    ./geniex-bench-linux-arm64-*/bin/geniex-bench --help
+    ```
+
+    为当前 session 配置库路径（二进制文件依赖压缩包中的 `.so` 文件）：
+
+    ```bash bash
+    BENCH_DIR=$(ls -d geniex-bench-linux-arm64-*)
+    export LD_LIBRARY_PATH="$BENCH_DIR/lib:$BENCH_DIR/lib/llama_cpp${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export GENIEX_PLUGIN_PATH="$BENCH_DIR/lib"
+    BENCH="$BENCH_DIR/bin/geniex-bench"
+    ```
+  </Tab>
+</Tabs>
+
+<Note>若需固定到特定版本，可替换 URL 中的文件名——参见[固定版本](#固定版本)。</Note>
+
+## **第二步：运行首次基准测试**
+
+最少需要 `--plugin`、`--device` 和 `-m` 三个参数。模型参数支持本地路径或模型管理器 id（首次使用时自动下载）：
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ```powershell windows
+    .\bench\bin\geniex-bench.exe `
+      --plugin llama_cpp --device npu `
+      -m bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+    ```
+
+    输出：
+
+    ```text
+    [ok  ] cell  plugin=llama_cpp  device=npu  ngl=999  ttft=349.2ms  prefill=60.2tps  decode=21.8tps  gen=128 tok
+    ```
+  </Tab>
+  <Tab title="Linux ARM64">
+    ```bash bash
+    "$BENCH" \
+      --plugin llama_cpp --device npu \
+      -m bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+    ```
+
+    输出：
+
+    ```text
+    [ok  ] cell  plugin=llama_cpp  device=npu  ngl=999  ttft=358.4ms  prefill=58.7tps  decode=20.1tps  gen=128 tok
+    ```
+  </Tab>
+</Tabs>
+
+默认情况下，`geniex-bench` 运行 **1 次预热 + 5 次正式测量**，使用 512 个随机输入 token，生成 128 个 token，温度为 0.0（确定性输出）。数字为 5 次运行的中位数 ± 标准差。
+
+## **第三步：对比计算后端**
+
+使用 `--device cpu`、`--device npu` 和 `--device hybrid` 分别测试同一模型，以找到最适合你工作负载的路径。
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ```powershell windows
+    $BENCH = ".\bench\bin\geniex-bench.exe"
+    $MODEL = "bartowski/Qwen_Qwen3-1.7B-GGUF:Q4_0"
+
+    & $BENCH --plugin llama_cpp --device cpu    -m $MODEL
+    & $BENCH --plugin llama_cpp --device npu    -m $MODEL
+    & $BENCH --plugin llama_cpp --device hybrid -m $MODEL
+    ```
+
+    示例输出（骁龙 X Elite，Q4_0）：
+
+    ```text
+    [ok  ] cell  plugin=llama_cpp  device=cpu     ngl=0    ttft=476.2ms  prefill=25.3tps  decode=18.5tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=npu     ngl=999  ttft=340.1ms  prefill=62.8tps  decode=23.1tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=hybrid  ngl=999  ttft=198.4ms  prefill=91.5tps  decode=27.4tps  gen=128 tok
+    ```
+  </Tab>
+  <Tab title="Linux ARM64">
+    ```bash bash
+    MODEL="bartowski/Qwen_Qwen3-1.7B-GGUF:Q4_0"
+
+    "$BENCH" --plugin llama_cpp --device cpu    -m "$MODEL"
+    "$BENCH" --plugin llama_cpp --device npu    -m "$MODEL"
+    "$BENCH" --plugin llama_cpp --device hybrid -m "$MODEL"
+    ```
+
+    示例输出（Dragonwing IQ-9075，Q4_0）：
+
+    ```text
+    [ok  ] cell  plugin=llama_cpp  device=cpu     ngl=0    ttft=512.3ms  prefill=21.4tps  decode=15.2tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=npu     ngl=999  ttft=395.1ms  prefill=53.2tps  decode=18.8tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=hybrid  ngl=999  ttft=241.7ms  prefill=78.3tps  decode=22.6tps  gen=128 tok
+    ```
+  </Tab>
+</Tabs>
+
+**如何选择后端：**
+
+| 设备 | 适用场景 |
+|---|---|
+| `hybrid` | llama_cpp 模型最快——逐 tensor 调度器将每个算子分配给 HTP 或 CPU，根据各后端的最优支持自动选择。推荐默认选项。 |
+| `npu` | 固定到单个 HTP session，适用于需要确定性计算单元布局的场景。大多数模型的 prefill 速度慢于 `hybrid`。 |
+| `cpu` | 基准参考；适用于比较和不适合 NPU offload 的模型。 |
+| `gpu` | OpenCL 路径；适用于在 llama_cpp 模型上对比 GPU 与 NPU 的性能。 |
+
+<Note>Qualcomm AI Hub 模型（`--plugin qairt`）仅支持 NPU——`--device cpu`、`gpu` 或 `hybrid` 会被静默转换为 `npu`。</Note>
+
+## **解读测试结果**
+
+每行 `[ok  ]` 输出包含三个指标：
+
+| 指标 | 含义 |
+|---|---|
+| `ttft` | Time to first token（首 token 延迟）——从推理开始到第一个采样输出 token 的时间。VLM 推理中此值包含媒体编码器时间，因此**不可直接与纯文本的 TTFT 比较**。 |
+| `prefill`（tok/s） | 模型处理输入（提示词）token 的速度，越高越好。 |
+| `decode`（tok/s） | token 生成速度——输出中每个 token 对应一步。这是用户在聊天界面感知到的"打字速度"。 |
+
+`ttft` 和 `prefill` 主要受并行度影响（NPU/GPU 上的批量计算）；`decode` 主要受内存带宽影响（每次一个 token，每步读取全部权重）。在骁龙上，`hybrid` 通过将每个算子路由到最优后端来缩小两个阶段之间的差距。
+
+对于 `--plugin qairt`，`prompt_tokens` 和 `prefill_tps` 基于补齐后的长度（`ceil(n / 128) × 128`）计算，因为 QAIRT 引擎会将输入 id 补齐到 128 token 的 prefill 块。这是预期行为——补齐后的计数反映了引擎实际执行的工作量。
+
+## **公平对比模型**
+
+对比两个模型或配置时，应保持以下变量不变：
+
+| 需固定的参数 | 标志 | 默认值 |
+|---|---|---|
+| 上下文大小 | `-c` / `--ctx-size` | 512 个随机 token |
+| 生成 token 数 | `-n` / `--n-gen` | 128 |
+| 采样温度 | `--temperature` | 0.0 |
+| 随机种子 | `--seed` | 42 |
+| 测量次数 | `-r` | 5 |
+| 预热次数 | `--warmup` | 1 |
+
+默认值已针对可重现比较进行了优化（温度 0.0、种子 42、5 次测量）。如需调整，请谨慎操作——更大的 `-n` 可以更好地反映 decode 曲线，而更大的 `-c` 可以测试模型在更长上下文下的性能。
+
+**常见错误：**
+
+- 将 `Q4_0` 结果与 `Q8_0` 结果进行比较。较大的文件每个 decode 步骤需要加载更多权重数据，因此速度更慢，与计算后端无关。
+- 将 `--device cpu`（`ngl=0`）与 `--device npu`（`ngl=-1`，全部 layer offload）进行比较。如需纯 CPU 基准，始终使用 `--device cpu`。
+- 首次运行后忘记重新运行。第一次运行包含模型下载时间（仅影响挂钟时间，不影响报告中的 `ttft` / `prefill` / `decode` 数字，这些数字在引擎内部测量）。
+
+## **将结果保存为 JSON**
+
+添加 `--output-json` 以写入机器可读的报告：
+
+```bash bash
+"$BENCH" --plugin llama_cpp --device hybrid \
+  -m bartowski/Qwen_Qwen3-1.7B-GGUF:Q4_0 \
+  --output-json results/qwen3-1.7b-hybrid.json \
+  --cell-id Qwen3-1.7B-llama_cpp-hybrid
+```
+
+JSON 包含每次运行的计时数据和聚合统计（中位数/最小值/最大值/均值/标准差）：
+
+```json
+{
+  "schema_version": "2",
+  "cell_id": "Qwen3-1.7B-llama_cpp-hybrid",
+  "plugin": "llama_cpp",
+  "device": "hybrid",
+  "agg": {
+    "ttft_ms":     {"median": 198.4, "min": 191.2, "max": 204.1, "mean": 197.9, "stdev": 5.1},
+    "prefill_tps": {"median": 91.5,  "min": 89.3,  "max": 94.2,  "mean": 91.1,  "stdev": 2.0},
+    "decode_tps":  {"median": 27.4,  "min": 26.8,  "max": 28.1,  "mean": 27.3,  "stdev": 0.5}
+  }
+}
+```
+
+## **运行模型矩阵**
+
+若要在单个 session 中扫描多个 `(模型, 设备)` 组合——分摊插件初始化开销——可使用 `--matrix-file`：
+
+```bash bash
+cat > matrix.tsv <<'EOF'
+Qwen3-0.6B-cpu	llama_cpp	cpu	bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+Qwen3-0.6B-npu	llama_cpp	npu	bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+Qwen3-0.6B-hybrid	llama_cpp	hybrid	bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+Qwen3-4B-qairt	qairt	npu	qualcomm/qwen3_4b
+EOF
+
+"$BENCH" --matrix-file matrix.tsv --output-json-dir results/
+```
+
+列顺序：`cell_id`、`plugin`、`device`、`model_path_or_id`。每行在 `--output-json-dir` 中生成一个 JSON 文件。
+
+## **固定版本**
+
+上方 URL 始终指向最新稳定版本。如需固定特定版本，可替换文件名中的版本号（例如 `v0.3.19`）：
+
+| 平台 | 版本化 URL |
+|---|---|
+| Windows ARM64 | `https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-windows-arm64-v0.3.19.zip` |
+| Linux ARM64 | `https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-linux-arm64-v0.3.19.tar.gz` |
+
+## **下一步**
+
+- [CLI 参考](/cn/run/cli/reference) — `geniex infer` 标志和 `--compute` 别名。
+- [平台与运行时](/cn/get-started/platforms) — 支持的芯片组和运行时。
+
+<br />
+
+<Feedback />

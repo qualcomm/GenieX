@@ -7,7 +7,6 @@
 #include <windows.h>
 #endif
 
-#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <optional>
@@ -44,21 +43,9 @@ inline std::filesystem::path read_env_path(const char* name_utf8, const wchar_t*
 #endif  // _WIN32
 }
 
-inline std::vector<std::string> collect_bin_files(const std::filesystem::path& dir) {
-    std::vector<std::string> bins;
-    if (!std::filesystem::exists(dir) || !std::filesystem::is_directory(dir)) {
-        return bins;
-    }
-
-    for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".bin") {
-            bins.push_back(entry.path().string());
-        }
-    }
-
-    std::sort(bins.begin(), bins.end());
-    return bins;
-}
+// NOTE: no `collect_bin_files()` helper here on purpose. Context-binary shards must
+// come from genie_config.json's `ctx-bins` via the core's `modelConfigFromDirectory()`,
+// never from a `*.bin` glob: bundles also ship CPU-side payloads as `.bin`.
 
 inline std::optional<std::string> find_optional_file(const std::filesystem::path& dir, const char* filename) {
     const auto file_path = dir / filename;

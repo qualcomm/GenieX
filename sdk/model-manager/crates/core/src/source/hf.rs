@@ -37,7 +37,8 @@ pub struct HfSource {
 impl HfSource {
     pub fn new(repo: String, token: Option<String>, hint: ManifestHint) -> Result<Self> {
         let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
-        Self::with_endpoint_and_transport(repo, DEFAULT_HF_ENDPOINT, token, transport, hint)
+        let endpoint = crate::config::StoreConfig::hf_endpoint();
+        Self::with_endpoint_and_transport(repo, &endpoint, token, transport, hint)
     }
 
     /// Escape hatch for tests / alternate endpoints / shared transports.
@@ -49,7 +50,7 @@ impl HfSource {
         hint: ManifestHint,
     ) -> Result<Self> {
         let endpoint = Url::parse(endpoint)
-            .map_err(|e| Error::Hub(format!("invalid HF endpoint {endpoint}: {e}")))?;
+            .map_err(|e| Error::invalid_url(format!("HF endpoint {endpoint}"), e))?;
         Ok(Self {
             repo,
             endpoint,
@@ -62,13 +63,13 @@ impl HfSource {
     fn api_url(&self) -> Result<Url> {
         self.endpoint
             .join(&format!("api/models/{}?blobs=true", self.repo))
-            .map_err(|e| Error::Hub(format!("join api url for {}: {e}", self.repo)))
+            .map_err(|e| Error::invalid_url(format!("HF api for {}", self.repo), e))
     }
 
     fn file_url(&self, name: &str) -> Result<Url> {
         self.endpoint
             .join(&format!("{}/resolve/main/{name}", self.repo))
-            .map_err(|e| Error::Hub(format!("join resolve url for {}/{name}: {e}", self.repo)))
+            .map_err(|e| Error::invalid_url(format!("HF file {}/{name}", self.repo), e))
     }
 
     async fn fetch_small(&self, url: &Url, limit: u64) -> Result<Vec<u8>> {

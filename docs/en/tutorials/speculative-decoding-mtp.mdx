@@ -1,0 +1,114 @@
+---
+title: "Speculative decoding with MTP"
+description: "Speed up decoding with a Multi-Token Prediction draft model, in the GenieX CLI and the local server."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+Speculative decoding speeds up a large model without changing what it produces. A cheap **draft** proposes several tokens ahead, the large **target** verifies them all in one forward pass, and the accepted prefix is committed at once. Because verification costs one pass no matter how many tokens it checks, accepted tokens after the first are nearly free — and the output stays identical to what the target would have generated alone.
+
+**MTP (Multi-Token Prediction)** is the strongest variant. Instead of a separately-trained small model whose guesses drift from the target's, MTP uses prediction heads trained *alongside* the target that read its own hidden states, so proposals come from the same distribution the target samples from.
+
+<Note>Speculative decoding is **`llama_cpp`-only** and **text-only**. On the `qairt` runtime these settings are ignored with a warning. If you enable it on a multimodal model, GenieX runs the LLM path and drops image / audio content with a warning.</Note>
+
+## **Step 1: Pull the model pair**
+
+MTP needs a draft trained against **the exact target** you're running — an arbitrary small GGUF can't be substituted, and a mismatched pair fails at load time.
+
+| Role | Model |
+|---|---|
+| **Target** | `google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0` |
+| **Draft** | `RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0` |
+
+```bash
+geniex pull google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0
+geniex pull RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0
+```
+
+Both models are resident at once, so plan for roughly 20 GB of free disk and enough RAM to hold the pair.
+
+## **Step 2: Run it with `geniex infer`**
+
+Three new flags turn it on — the type, the draft model, and how far ahead to draft:
+
+```bash
+geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 --spec-type draft-mtp --draft-model RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0 --draft-tokens 3
+```
+
+| Flag | Default | Effect |
+|---|---|---|
+| `--spec-type` | *(off)* | Set to `draft-mtp` to enable MTP. |
+| `--draft-model` | — | Catalogue name `org/repo[:precision]` or a local GGUF path. Required by `draft-mtp`. |
+| `--draft-tokens` | `3` | Max draft tokens per verification step. |
+| `--draft-min` | `0` | Min draft tokens per step. `0` = llama.cpp default. |
+| `--draft-p-min` | `0` | Draft stops proposing below this confidence. `0` = llama.cpp default. |
+
+When speculation is active, the profiling block gains a `draft accept` line — accepted draft tokens over total proposed. That line is your confirmation it engaged:
+
+```text
+decode speed:   56.4 tok/s
+stop reason:    eos
+draft accept:   14/75 (18.7%)
+```
+
+Setup failure is non-fatal: if the draft context can't be built, GenieX logs `speculative decoding setup failed; falling back to plain decoding` and continues at normal speed.
+
+## **Step 3: Use it on the local server**
+
+Start the server, then send the MTP fields on the request body — speculation is configured **per request**, so `geniex serve` has no `--spec-type` flag.
+
+```bash
+geniex serve
+```
+
+`POST /v1/chat/completions` takes the same three settings as `spec_*` fields. Everything else is the standard OpenAI-compatible body:
+
+```json Request body {8-10}
+{
+  "model": "google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Hello! Briefly introduce yourself."
+    }
+  ],
+  "spec_type": "draft-mtp",
+  "spec_draft_model": "RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0",
+  "spec_n_max": 3,
+  "nctx": 8192,
+  "max_completion_tokens": 2048,
+  "temperature": 0.8,
+  "top_p": 0.95,
+  "stream": false
+}
+```
+
+The three highlighted fields are the only additions. `spec_type` is what enables MTP; `spec_draft_model` names the draft you pulled in Step 1; `spec_n_max` is `--draft-tokens` under another name. `spec_n_min` and `spec_p_min` are accepted too, matching `--draft-min` and `--draft-p-min`.
+
+Paste this straight into the built-in Swagger UI at `http://127.0.0.1:18181` to try it — see [Local server](/en/run/cli/local-server) for the full API.
+
+<Warning>**The server never auto-downloads a draft model.** Unlike `geniex infer`, it only uses what's already cached, so a missing draft errors mid-request — complete [Step 1](#step-1-pull-the-model-pair) first.</Warning>
+
+<Note>The `spec_*` fields are part of the model cache key, so changing any of them rebuilds the model on the next request. Keep them stable across a run.</Note>
+
+## **Spreading across multiple HTP cores**
+
+On devices with multiple DSP subsystems (e.g. Snapdragon X2 Elite with four HTP cores), you can spread the workload by passing a comma-separated device list to `--compute`. Set `GGML_HEXAGON_NDEV` to the number of device IDs so the Hexagon backend opens all of them:
+
+```bash
+GGML_HEXAGON_NDEV=4 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 \
+  --compute HTP0,HTP1,HTP2,HTP3 \
+  --spec-type draft-mtp \
+  --draft-model RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0
+```
+
+<Note>The device list bypasses the `npu` / `hybrid` aliases — `npu` pins `HTP0` alone, while a comma-separated list distributes across all named cores. `qairt` models coerce a device list to NPU with a warning.</Note>
+
+## **Next steps**
+
+- [CLI reference](/en/run/cli/reference) — every `geniex infer` flag.
+- [Local server](/en/run/cli/local-server) — the full OpenAI-compatible API.
+
+<br />
+
+<Feedback />

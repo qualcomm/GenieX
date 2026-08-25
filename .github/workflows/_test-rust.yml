@@ -1,0 +1,60 @@
+name: Test Rust
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: model-manager
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Resolve Rust file list
+        id: files
+        uses: ./.github/actions/changed-files
+        with:
+          include: '^sdk/model-manager/.*\.(rs|toml)$|^sdk/model-manager/Cargo\.lock$'
+
+      # dtolnay/rust-toolchain isn't on the org allowlist, so rustup.
+      - name: Install Rust stable
+        if: steps.files.outputs.any == 'true'
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          cargo --version
+          rustc --version
+
+      # Restore-keys are safe here: this job produces no downstream artifact,
+      # so an mtime-fuzzy hit at worst re-runs a passing test suite.
+      - name: Restore cargo cache
+        if: steps.files.outputs.any == 'true'
+        uses: actions/cache@v6
+        with:
+          path: |
+            sdk/model-manager/target
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-test-rust-${{ hashFiles('sdk/model-manager/Cargo.lock') }}
+          restore-keys: cargo-test-rust-
+
+      - name: cargo test
+        if: steps.files.outputs.any == 'true'
+        env:
+          CARGO_TERM_COLOR: always
+          RUST_BACKTRACE: 1
+        run: |
+          cargo test \
+            --manifest-path sdk/model-manager/Cargo.toml \
+            --workspace \
+            --locked

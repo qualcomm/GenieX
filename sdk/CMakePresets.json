@@ -28,6 +28,7 @@
         "GENIEX_PLUGIN_LLAMA_CPP": "ON",
         "GGML_HEXAGON": "ON",
         "GGML_OPENCL": "ON",
+        "GGML_OPENMP": "OFF",
         "GENIEX_PLUGIN_QAIRT": "ON",
         "GENIEX_BENCHMARK": "ON",
         "CMAKE_PREFIX_PATH": "$env{OPENCL_SDK_ROOT}",
@@ -35,6 +36,19 @@
         "HEXAGON_TOOLS_ROOT": "$env{HEXAGON_TOOLS_ROOT}",
         "HEXAGON_HTP_CERT": "$env{HEXAGON_HTP_CERT}",
         "WINDOWS_SDK_BIN": "$env{WINDOWS_SDK_BIN}"
+      }
+    },
+    {
+      "name": "cpu-only",
+      "hidden": true,
+      "cacheVariables": {
+        "GENIEX_PLUGIN_LLAMA_CPP": "ON",
+        "GENIEX_PLUGIN_QAIRT": "OFF",
+        "GGML_HEXAGON": "OFF",
+        "GGML_OPENCL": "OFF",
+        "GGML_OPENMP": "OFF",
+        "GENIEX_BENCHMARK": "ON",
+        "GENIEX_CPU_ONLY": "ON"
       }
     },
     {
@@ -73,6 +87,24 @@
       }
     },
     {
+      "name": "arm64-android-cpu",
+      "hidden": true,
+      "architecture": {
+        "value": "arm64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x86_64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "ANDROID_ABI": "arm64-v8a",
+        "ANDROID_PLATFORM": "android-31",
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm64-android-llvm-cpu.cmake",
+        "PREBUILT_LIB_DIR": "android_aarch64"
+      }
+    },
+    {
       "name": "arm64-linux-snapdragon",
       "hidden": true,
       "architecture": {
@@ -85,6 +117,22 @@
       },
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm64-linux-gnu.cmake",
+        "PREBUILT_LIB_DIR": "linux_aarch64"
+      }
+    },
+    {
+      "name": "arm64-linux-cpu",
+      "hidden": true,
+      "architecture": {
+        "value": "arm64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x86_64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm64-linux-gnu-cpu.cmake",
         "PREBUILT_LIB_DIR": "linux_aarch64"
       }
     },
@@ -111,12 +159,28 @@
       "inherits": ["arm64-android-snapdragon", "snapdragon", "release", "base"]
     },
     {
+      "name": "arm64-android-cpu-debug",
+      "inherits": ["arm64-android-cpu", "cpu-only", "debug", "base"]
+    },
+    {
+      "name": "arm64-android-cpu-release",
+      "inherits": ["arm64-android-cpu", "cpu-only", "release", "base"]
+    },
+    {
       "name": "arm64-linux-snapdragon-debug",
       "inherits": ["arm64-linux-snapdragon", "snapdragon", "debug", "base"]
     },
     {
       "name": "arm64-linux-snapdragon-release",
       "inherits": ["arm64-linux-snapdragon", "snapdragon", "release", "base"]
+    },
+    {
+      "name": "arm64-linux-cpu-debug",
+      "inherits": ["arm64-linux-cpu", "cpu-only", "debug", "base"]
+    },
+    {
+      "name": "arm64-linux-cpu-release",
+      "inherits": ["arm64-linux-cpu", "cpu-only", "release", "base"]
     }
   ],
   "buildPresets": [
@@ -146,6 +210,16 @@
       "jobs": 0
     },
     {
+      "name": "arm64-android-cpu-debug",
+      "configurePreset": "arm64-android-cpu-debug",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-android-cpu-release",
+      "configurePreset": "arm64-android-cpu-release",
+      "jobs": 0
+    },
+    {
       "name": "arm64-linux-snapdragon-debug",
       "configurePreset": "arm64-linux-snapdragon-debug",
       "jobs": 0
@@ -153,6 +227,16 @@
     {
       "name": "arm64-linux-snapdragon-release",
       "configurePreset": "arm64-linux-snapdragon-release",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-linux-cpu-debug",
+      "configurePreset": "arm64-linux-cpu-debug",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-linux-cpu-release",
+      "configurePreset": "arm64-linux-cpu-release",
       "jobs": 0
     }
   ]

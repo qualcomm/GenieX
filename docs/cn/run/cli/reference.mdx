@@ -71,6 +71,13 @@ geniex infer unsloth/Qwen3.5-0.8B-GGUF --compute cpu
 geniex infer ai-hub-models/Qwen3-4B --compute npu
 ```
 
+```bash
+# 显式设备列表——分散到多个 HTP 核心（仅限 llama.cpp + 多 DSP 设备）
+GGML_HEXAGON_NDEV=4 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 --compute HTP0,HTP1,HTP2,HTP3
+```
+
+<Note>将 `GGML_HEXAGON_NDEV` 设置为与 `--compute` 中设备 ID 数量一致。`qairt` 模型会将设备列表强制转为 NPU 并输出警告。性能数据参见 [MTP 教程](/en/tutorials/speculative-decoding-mtp#spreading-across-multiple-htp-cores)。</Note>
+
 <Warning>Qualcomm AI Hub 模型仅在 NPU 上运行。使用 `--compute cpu` 或 `--compute gpu` 会返回错误。</Warning>
 
 ### **`geniex infer` — VLM**
@@ -94,6 +101,25 @@ Describe this picture </full/path/to/image.png>
 ```bash
 geniex serve
 ```
+
+要把思考模型的思维链从 `message.content` 移到 `message.reasoning_content`，在单次请求中设置 `reasoning_format` 字段即可——详见[分离推理内容](/cn/run/cli/local-server#分离推理内容reasoning_content)。
+
+## **日志**
+
+`--log` 是全局标志，控制 CLI 的日志输出。它与 `GENIEX_LOG` 环境变量等效，且当二者同时设置时优先于 `GENIEX_LOG`。
+
+```bash
+geniex --log debug list
+```
+
+| 取值 | 输出内容 |
+|---|---|
+| `none` | 无输出（**CLI 默认**） |
+| `error` | 仅错误 |
+| `warn` | 警告 + 错误 |
+| `info` | 信息 + 警告 + 错误 |
+| `debug` | 调试 + 信息 + 警告 + 错误 |
+| `trace` | 全部输出 |
 
 ## **配置标志**
 
@@ -123,13 +149,28 @@ geniex serve
 
 | 标志 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `-n`, `--ngl` | int | `999` | 卸载到 GPU 的层数。 |
+| `-n`, `--ngl` | int | `-1` | 卸载到 GPU/NPU 的层数，`-1` = 全部（仅 llama_cpp）。 |
 | `--nctx` | int | `4096` | 上下文窗口大小（最大输入 + 输出 token 数）。 |
 | `--max-tokens` | int | `2048` | 每次响应生成的最大 token 数。 |
 | `--stop` | string[] | — | 停止序列（可多次指定）。 |
 | `--stop-file` | string | — | 包含停止序列的文件（每行一个）。 |
 | `--think` / `--think=false` | bool | `true` | 启用或禁用推理模型的思考模式。 |
 | `-s`, `--system-prompt` | string | — | 设置模型行为的系统提示。 |
+| `--sliding-window` | — | `false` | （仅 `qairt`）当上下文长度超限时，驱逐锚定前缀之外最旧的上下文，而不是报错，从而让对话继续。 |
+
+### 增大上下文长度
+
+上下文窗口（`--nctx`）是模型一次能容纳的内容上限。当对话增长超过该上限时会报 *context length exceeded* 错误。如何增大取决于运行时：
+
+- **llama.cpp (GGUF)：** `--nctx <N>` 可在运行时抬升窗口，上限为模型训练时的最大值。窗口越大，占用的 KV 缓存内存越多。
+
+  ```bash
+  geniex infer unsloth/Qwen3-8B-GGUF --nctx 8192
+  ```
+
+- **Qualcomm AI Engine Direct (NPU)：** 上下文长度**固化在编译好的模型包中**，运行时无法抬升——`--nctx` 不生效。可改用：
+  - 加 `--sliding-window` 以在超限后继续对话：驱逐锚定前缀之外最旧的上下文，而不是报错。
+  - 如需真正更大的窗口，请从 [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) 获取按更长上下文编译的模型包。参见 [Qualcomm AI Engine Direct 运行环境限制](/cn/get-started/platforms#运行环境限制)。
 
 ## **实用命令**
 

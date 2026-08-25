@@ -23,34 +23,37 @@ const (
 	LogLevelError string = "error"
 )
 
-func ApplyLogLevel() {
-	options := tint.Options{AddSource: true}
-
-	if os.Getenv("NO_COLOR") == "1" {
-		options.NoColor = true
-	}
-
+// ApplySlog configures slog from the resolved log level, without touching the
+// SDK callback. Safe to call before flags are parsed.
+func ApplySlog() {
 	level := config.Get().Log
-
-	switch level {
-	case LogLevelNone:
-		geniex_sdk.SetLog(false)
+	if level == LogLevelNone {
 		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil)))
 		return
-	case LogLevelTrace:
-		options.Level = slog.LevelDebug
-		slog.SetDefault(slog.New(tint.NewHandler(os.Stderr, &options)))
-		return
-	case LogLevelDebug:
-		options.Level = slog.LevelDebug
-	case LogLevelInfo:
-		options.Level = slog.LevelInfo
-	case LogLevelWarn:
-		options.Level = slog.LevelWarn
-	case LogLevelError:
-		options.Level = slog.LevelError
 	}
 
-	geniex_sdk.SetLog(true)
+	options := tint.Options{
+		AddSource: true,
+		Level:     slogLevels[level],
+		NoColor:   os.Getenv("NO_COLOR") == "1",
+	}
 	slog.SetDefault(slog.New(tint.NewHandler(os.Stderr, &options)))
+}
+
+// ApplyLogLevel runs after flags are parsed; the only place that sets the SDK
+// callback. trace keeps the SDK's native handler; other levels forward to slog.
+func ApplyLogLevel() {
+	ApplySlog()
+
+	if level := config.Get().Log; level != LogLevelTrace {
+		geniex_sdk.SetLog(level != LogLevelNone)
+	}
+}
+
+var slogLevels = map[string]slog.Level{
+	LogLevelTrace: slog.LevelDebug,
+	LogLevelDebug: slog.LevelDebug,
+	LogLevelInfo:  slog.LevelInfo,
+	LogLevelWarn:  slog.LevelWarn,
+	LogLevelError: slog.LevelError,
 }

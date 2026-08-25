@@ -13,9 +13,8 @@ namespace geniex {
 
 class QairtLlm : public ILlm {
     std::unique_ptr<LLMPipeline> pipeline_;
-    bool                         enable_thinking_ = false;
 
-    // Bundle's `dialog.sampler` defaults; parsed once at create_impl().
+    // Bundle's `dialog.sampler` defaults; parsed once at create().
     ParsedSamplerConfig bundle_sampler_;
 
     bool is_first_turn_ = true;
@@ -23,7 +22,7 @@ class QairtLlm : public ILlm {
    public:
     virtual ~QairtLlm() override;
 
-    virtual int32_t create_impl(const geniex_LlmCreateInput*) override;
+    virtual int32_t create(const geniex_LlmCreateInput*) override;
 
     virtual int32_t reset() override;
 
@@ -36,6 +35,8 @@ class QairtLlm : public ILlm {
     virtual int32_t generate(const geniex_LlmGenerateInput*, geniex_LlmGenerateOutput*) override;
 
     virtual int32_t get_model_info(geniex_LlmModelInfo*) override;
+
+    virtual int32_t forward_logits(const geniex_LlmForwardLogitsInput*, geniex_LlmForwardLogitsOutput*) override;
 };
 
 }  // namespace geniex

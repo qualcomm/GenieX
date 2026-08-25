@@ -1,27 +1,7 @@
 # Copyright 2024-2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Install-time SDK fetcher.
-
-Invoked from setup.py during wheel assembly. Pulls the SDK libs matching the
-current platform + release tag and stages them under ``geniex/lib/`` so
-package-data picks them up.
-
-The fetcher accepts a ``backends`` set ⊆ ``{'llama-cpp', 'qairt'}`` and only
-extracts the corresponding plugin subtree (plus the always-required core
-``geniex.dll`` / ``libgeniex.so``). It first attempts HTTP Range requests
-against the published SDK zip — only the relevant slice is downloaded — and
-falls back to a full download when the server can't fulfil ``Range:``.
-
-By default the fetcher tries the public S3 mirror first and falls back to the
-GitHub Release asset. Set ``GENIEX_SDK_DOWNLOAD_URL`` to pin a single source
-(internal mirror, ``file://`` path, etc.) — that disables the inter-source
-fallback but range/full fallback within the chosen source still applies.
-
-Skipped when:
-  - geniex/lib/ already exists (cached / pre-staged build)
-  - GENIEX_SKIP_SDK_DOWNLOAD=1 is set
-"""
+"""Install-time SDK fetcher — invoked from setup.py during wheel assembly."""
 
 from __future__ import annotations
 
@@ -47,43 +27,47 @@ Backend = Literal['llama-cpp', 'qairt']
 DEFAULT_BASE_URL = 'https://github.com/qualcomm/GenieX/releases/download'
 DEFAULT_S3_BASE_URL = 'https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex'
 
-# (sys.platform, platform.machine().lower()) -> release asset platform triple.
 PLATFORM_MAP = {
     ('win32', 'arm64'): 'windows-arm64',
     ('linux', 'aarch64'): 'linux-arm64',
     ('linux', 'arm64'): 'linux-arm64',
 }
 
-_CORE_LIB_NAMES = ('geniex.dll', 'libgeniex.so', 'libgeniex.dylib')
+# Baseline armv8.0 boards (unoq) can't run the default linux-arm64 SDK, so CI
+# publishes a CPU-only one. Picking it is explicit. See GenieX #1217.
+_CPU_SUFFIX = '-cpu'
+_VARIANT_ENV = 'GENIEX_SDK_VARIANT'
 
-_BACKEND_DIRS = {
-    'llama-cpp': 'llama_cpp',
-    'qairt': 'qairt',
-}
+_CORE_LIB_NAMES = ('geniex.dll', 'libgeniex.so', 'libgeniex.dylib')
+_BACKEND_DIRS = {'llama-cpp': 'llama_cpp', 'qairt': 'qairt'}
 
 _EOCD_SIG = b'PK\x05\x06'
 _CD_SIG = b'PK\x01\x02'
 _LFH_SIG = b'PK\x03\x04'
 _EOCD_FIXED = 22
-_EOCD_MAX_COMMENT = 0xFFFF
-_CD_HDR_FIXED = 46
 _LFH_FIXED = 30
 _ZIP64_U16 = 0xFFFF
 _ZIP64_U32 = 0xFFFFFFFF
+_SUFFIX_PROBE = 262144
 
 
 class _RangeNotSupported(Exception):
-    """Server didn't honor a ``Range:`` request — fall back to full download."""
+    pass
 
 
 class _ZIP64NotSupported(Exception):
-    """Encountered a ZIP64-encoded field; the range-fetch path doesn't implement
-    the ZIP64 extensions yet, so we fall back to a full download."""
+    pass
 
 
 def _detect_platform() -> str:
     key = (sys.platform, platform.machine().lower())
     plat = PLATFORM_MAP.get(key)
+    if plat == 'linux-arm64':
+        variant = os.environ.get(_VARIANT_ENV, '').strip().lower()
+        if variant == 'cpu':
+            plat += _CPU_SUFFIX
+        elif variant not in ('', 'default'):
+            raise RuntimeError(f'{_VARIANT_ENV}={variant!r} is not one of: default, cpu')
     if plat is None:
         raise RuntimeError(
             f'Unsupported platform {key} for prebuilt geniex SDK.\n'
@@ -96,11 +80,74 @@ def _detect_platform() -> str:
     return plat
 
 
+_tty_out = None
+
+
+def _tty():
+    global _tty_out
+    if _tty_out is None:
+        try:
+            name = 'CONOUT$' if sys.platform == 'win32' else '/dev/tty'
+            _tty_out = open(name, 'w', encoding='utf-8', errors='replace', buffering=1)
+        except OSError:
+            _tty_out = sys.stderr
+    return _tty_out
+
+
 def _try_download(url: str) -> bytes | None:
-    """Fetch `url`; return bytes on success or None on network/HTTP failure."""
     try:
         with urllib.request.urlopen(url) as resp:
             return resp.read()
+    except (urllib.error.URLError, TimeoutError) as exc:
+        print(f'[geniex] source unavailable: {url} ({exc})', file=sys.stderr)
+        return None
+
+
+def _stream_with_progress(resp, label: str) -> bytes:
+    total = int(resp.headers.get('Content-Length') or 0)
+    data = bytearray()
+    try:
+        from tqdm import tqdm
+
+        with tqdm(
+            total=total or None,
+            unit='B',
+            unit_scale=True,
+            desc=f'[geniex] {label}',
+            file=_tty(),
+        ) as bar:
+            for chunk in iter(lambda: resp.read(65536), b''):
+                data.extend(chunk)
+                bar.update(len(chunk))
+    except ImportError:
+        downloaded = 0
+        for chunk in iter(lambda: resp.read(65536), b''):
+            data.extend(chunk)
+            downloaded += len(chunk)
+            if total:
+                pct = downloaded * 100 // total
+                print(
+                    f'\r[geniex] {label}: {downloaded / 1048576:.1f}/{total / 1048576:.1f} MB ({pct}%)',
+                    end='',
+                    flush=True,
+                    file=_tty(),
+                )
+            else:
+                print(
+                    f'\r[geniex] {label}: {downloaded / 1048576:.1f} MB',
+                    end='',
+                    flush=True,
+                    file=_tty(),
+                )
+        if downloaded:
+            print(file=_tty())
+    return bytes(data)
+
+
+def _download_with_progress(url: str, label: str) -> bytes | None:
+    try:
+        with urllib.request.urlopen(url) as resp:
+            return _stream_with_progress(resp, label)
     except (urllib.error.URLError, TimeoutError) as exc:
         print(f'[geniex] source unavailable: {url} ({exc})', file=sys.stderr)
         return None
@@ -111,70 +158,48 @@ def _file_url_to_path(url: str) -> Path:
     return Path(urllib.request.url2pathname(parsed.path))
 
 
-def _fetch_range(url: str, start: int, end: int, *, exact: bool = True) -> bytes:
-    """Inclusive byte range ``[start, end]``.
-
-    With ``exact=True`` (default) the response must equal ``end - start + 1``
-    bytes — used when both bounds came from the central directory. With
-    ``exact=False`` the server may legitimately truncate the tail past
-    end-of-resource; the caller is expected to validate via in-band
-    structure (e.g. CRC32 of an extracted entry).
-
-    Raises ``_RangeNotSupported`` when the server returns 200 (whole body)
-    instead of 206.
-    """
-    expected = end - start + 1
+def _fetch(
+    url: str,
+    start: int,
+    end: int | None,
+    *,
+    exact: bool = True,
+    label: str | None = None,
+) -> tuple[bytes, int]:
     if url.startswith('file://'):
         path = _file_url_to_path(url)
+        total = path.stat().st_size
+        if end is None:
+            begin = max(0, total - start)
+            expected = total - begin
+        else:
+            begin = start
+            expected = end - start + 1
         with path.open('rb') as fh:
-            fh.seek(start)
+            fh.seek(begin)
             data = fh.read(expected)
         if exact and len(data) != expected:
             raise RuntimeError(f'{url}: short read {len(data)} != {expected}')
-        return data
-    req = urllib.request.Request(url, headers={'Range': f'bytes={start}-{end}'})
+        return data, total
+
+    rng = f'bytes=-{start}' if end is None else f'bytes={start}-{end}'
+    expected = None if end is None else end - start + 1
+    req = urllib.request.Request(url, headers={'Range': rng})
     try:
         with urllib.request.urlopen(req) as resp:
             if resp.status != 206:
                 raise _RangeNotSupported(f'{url}: status {resp.status} for Range request')
-            data = resp.read()
+            cr = resp.headers.get('Content-Range', '')
+            tail = cr.rsplit('/', 1)[-1] if '/' in cr else ''
+            if not tail.isdigit():
+                raise _RangeNotSupported(f'{url}: 206 without parseable Content-Range')
+            total = int(tail)
+            data = _stream_with_progress(resp, label) if label else resp.read()
     except urllib.error.HTTPError as exc:
         raise _RangeNotSupported(f'{url}: HTTP {exc.code} on Range request') from exc
-    if exact and len(data) != expected:
+    if exact and expected is not None and len(data) != expected:
         raise RuntimeError(f'{url}: short read {len(data)} != {expected}')
-    return data
-
-
-def _fetch_suffix(url: str, n: int) -> tuple[bytes, int]:
-    """Fetch the last ``n`` bytes of ``url`` and return ``(data, total_size)``.
-
-    Uses an HTTP suffix range (``bytes=-n``) so the server's ``Content-Range``
-    header gives us the resource's full length in the same response — saves
-    a separate HEAD/probe round-trip.
-    """
-    if url.startswith('file://'):
-        path = _file_url_to_path(url)
-        total = path.stat().st_size
-        start = max(0, total - n)
-        with path.open('rb') as fh:
-            fh.seek(start)
-            data = fh.read(total - start)
-        return data, total
-    req = urllib.request.Request(url, headers={'Range': f'bytes=-{n}'})
-    try:
-        with urllib.request.urlopen(req) as resp:
-            if resp.status != 206:
-                raise _RangeNotSupported(f'{url}: status {resp.status} for suffix Range request')
-            data = resp.read()
-            cr = resp.headers.get('Content-Range', '')
-            if '/' not in cr:
-                raise _RangeNotSupported(f'{url}: 206 without parseable Content-Range')
-            tail = cr.rsplit('/', 1)[-1]
-            if not tail.isdigit():
-                raise _RangeNotSupported(f'{url}: non-numeric total in Content-Range: {cr}')
-            return data, int(tail)
-    except urllib.error.HTTPError as exc:
-        raise _RangeNotSupported(f'{url}: HTTP {exc.code} on suffix Range request') from exc
+    return data, total
 
 
 @dataclass(slots=True)
@@ -189,7 +214,6 @@ class _CDEntry:
 def _parse_central_directory(cd_bytes: bytes) -> list[_CDEntry]:
     fmt = '<4s6H3L5H2L'
     fixed = struct.calcsize(fmt)
-    assert fixed == _CD_HDR_FIXED
     entries: list[_CDEntry] = []
     pos = 0
     n = len(cd_bytes)
@@ -223,11 +247,6 @@ def _parse_central_directory(cd_bytes: bytes) -> list[_CDEntry]:
 
 
 def _classify_entry(filename: str, backends: frozenset[Backend]) -> str | None:
-    """Relative path under ``lib/`` for entries to keep, ``None`` otherwise.
-
-    SDK zip entries look like ``sdk-<platform>/lib/...``. The ``lib`` segment
-    anchors classification.
-    """
     parts = filename.split('/')
     try:
         idx = parts.index('lib')
@@ -251,19 +270,12 @@ def _classify_entry(filename: str, backends: frozenset[Backend]) -> str | None:
     return None
 
 
-def _extract_entry(zip_url: str, entry: _CDEntry, dst: Path) -> None:
-    # Pull the local file header and the compressed payload in one ranged
-    # GET — they're contiguous on disk, so a single round-trip works as long
-    # as we know an upper bound on the variable-length header fields. The
-    # zip spec caps name and extra at 65535 bytes each; in practice they
-    # are tens of bytes for SDK assets, but the upper bound keeps us correct.
-    span_start = entry.local_header_offset
-    span_end = span_start + _LFH_FIXED + 2 * 0xFFFF + entry.compressed_size - 1
-    blob = _fetch_range(zip_url, span_start, span_end, exact=False)
-    if blob[:4] != _LFH_SIG:
+def _write_entry(entry: _CDEntry, blob: bytes, span_start: int, dst: Path) -> None:
+    off = entry.local_header_offset - span_start
+    if blob[off : off + 4] != _LFH_SIG:
         raise RuntimeError(f'{entry.filename}: bad local file header signature')
-    fn_len, ex_len = struct.unpack('<HH', blob[26:30])
-    payload_off = _LFH_FIXED + fn_len + ex_len
+    fn_len, ex_len = struct.unpack('<HH', blob[off + 26 : off + 30])
+    payload_off = off + _LFH_FIXED + fn_len + ex_len
     raw = blob[payload_off : payload_off + entry.compressed_size]
     if len(raw) != entry.compressed_size:
         raise RuntimeError(f'{entry.filename}: short payload {len(raw)} != {entry.compressed_size}')
@@ -279,36 +291,48 @@ def _extract_entry(zip_url: str, entry: _CDEntry, dst: Path) -> None:
     dst.write_bytes(data)
 
 
-def _range_fetch(zip_url: str, lib_dir: Path, backends: frozenset[Backend]) -> int:
-    head_size = _EOCD_FIXED + _EOCD_MAX_COMMENT
-    eocd_chunk, total = _fetch_suffix(zip_url, head_size)
+def _range_fetch(zip_url: str, lib_dir: Path, backends: frozenset[Backend], label: str) -> int:
+    suffix, total = _fetch(zip_url, _SUFFIX_PROBE, None, exact=False)
     if total <= 0:
         raise _RangeNotSupported(f'{zip_url}: empty resource')
-    eocd_pos = eocd_chunk.rfind(_EOCD_SIG)
+    eocd_pos = suffix.rfind(_EOCD_SIG)
     if eocd_pos == -1:
         raise RuntimeError(f'{zip_url}: end-of-central-directory record not found')
     (_sig, _disk, _disk_cd, entries_disk, total_entries, cd_size, cd_offset, _cm_len) = struct.unpack(
-        '<4s4H2LH', eocd_chunk[eocd_pos : eocd_pos + _EOCD_FIXED]
+        '<4s4H2LH', suffix[eocd_pos : eocd_pos + _EOCD_FIXED]
     )
     if entries_disk == _ZIP64_U16 or total_entries == _ZIP64_U16 or cd_size == _ZIP64_U32 or cd_offset == _ZIP64_U32:
         raise _ZIP64NotSupported('ZIP64 archive — range path unimplemented')
 
-    cd_bytes = _fetch_range(zip_url, cd_offset, cd_offset + cd_size - 1)
+    suffix_start = total - len(suffix)
+    if cd_offset >= suffix_start:
+        cd_rel = cd_offset - suffix_start
+        cd_bytes = suffix[cd_rel : cd_rel + cd_size]
+    else:
+        cd_bytes, _ = _fetch(zip_url, cd_offset, cd_offset + cd_size - 1)
     entries = _parse_central_directory(cd_bytes)
 
-    extracted = 0
-    found_core = False
+    selected: list[tuple[_CDEntry, str]] = []
     for entry in entries:
         rel = _classify_entry(entry.filename, backends)
-        if rel is None:
-            continue
-        if rel in _CORE_LIB_NAMES:
-            found_core = True
-        _extract_entry(zip_url, entry, lib_dir / rel)
-        extracted += 1
-    if not found_core:
+        if rel is not None:
+            selected.append((entry, rel))
+    if not any(rel in _CORE_LIB_NAMES for _, rel in selected):
         raise RuntimeError(f'{zip_url}: no core libgeniex/geniex.dll entry in central directory')
-    return extracted
+
+    span_start = min(e.local_header_offset for e, _ in selected)
+    last = max(selected, key=lambda p: p[0].local_header_offset)[0]
+    span_end = min(
+        last.local_header_offset + _LFH_FIXED + 2 * _ZIP64_U16 + last.compressed_size - 1,
+        cd_offset - 1,
+    )
+    if span_start >= suffix_start:
+        blob = suffix[span_start - suffix_start : span_end - suffix_start + 1]
+    else:
+        blob, _ = _fetch(zip_url, span_start, span_end, exact=False, label=label)
+    for entry, rel in selected:
+        _write_entry(entry, blob, span_start, lib_dir / rel)
+    return len(selected)
 
 
 def _full_extract(zip_bytes: bytes, lib_dir: Path, backends: frozenset[Backend]) -> int:
@@ -339,23 +363,12 @@ def fetch(
     *,
     backends: Iterable[Backend] = ('llama-cpp', 'qairt'),
 ) -> None:
-    """Populate ``pkg_dir/lib/`` with SDK libs for the requested ``backends``.
-
-    ``backends`` ⊆ ``{'llama-cpp', 'qairt'}``. The core shared library
-    (``geniex.dll`` / ``libgeniex.so`` / ``libgeniex.dylib``) is always
-    pulled — backends only control which plugin subtree is staged.
-
-    Pulls just the relevant slice via HTTP Range when the source supports it
-    and falls back to a full download otherwise. SHA256 sidecar verification
-    applies to the full-download fallback path; the range path relies on
-    per-entry CRC32 from the authenticated central directory.
-    """
     lib_dir = pkg_dir / 'lib'
     if lib_dir.exists() and any(lib_dir.iterdir()):
-        print(f'[geniex] {lib_dir} already populated, skipping SDK download.')
+        print(f'[geniex] {lib_dir} already populated, skipping SDK download.', file=_tty())
         return
     if os.environ.get('GENIEX_SKIP_SDK_DOWNLOAD'):
-        print('[geniex] GENIEX_SKIP_SDK_DOWNLOAD set, skipping SDK download.')
+        print('[geniex] GENIEX_SKIP_SDK_DOWNLOAD set, skipping SDK download.', file=_tty())
         return
 
     backend_set = frozenset(backends)
@@ -364,15 +377,25 @@ def fetch(
         raise ValueError(f'unknown backends: {sorted(unknown)}; expected subset of {sorted(_BACKEND_DIRS)}')
 
     plat = _detect_platform()
+    if plat.endswith(_CPU_SUFFIX) and 'qairt' in backend_set:
+        # Better to drop the backend than stage an empty qairt/ that fails later.
+        if backend_set == {'qairt'}:
+            raise RuntimeError(
+                f'{_VARIANT_ENV}=cpu selects the CPU-only SDK, which has no QAIRT\n'
+                'backend — those boards have no NPU. Install llama.cpp instead:\n'
+                '  pip install geniex-llama-cpp'
+            )
+        backend_set -= {'qairt'}
+        print(
+            '[geniex] the CPU-only SDK has no QAIRT backend; installing llama.cpp only.',
+            file=_tty(),
+        )
     asset = f'geniex-sdk-{plat}-{release_tag}.zip'
 
     override = os.environ.get('GENIEX_SDK_DOWNLOAD_URL')
     if override:
         sources = [('override', override.rstrip('/'))]
     else:
-        # S3 mirror is flat: every release asset sits directly under
-        # qai-hub-geniex/, with the <tag> already in the filename. GitHub
-        # Releases are inherently per-tag, so that path keeps /{release_tag}.
         sources = [
             ('s3', DEFAULT_S3_BASE_URL),
             ('github', f'{DEFAULT_BASE_URL}/{release_tag}'),
@@ -394,22 +417,13 @@ def _try_one_source(
     backends: frozenset[Backend],
     errors: list[str],
 ) -> bool:
-    """Try one (mirror, asset) pair: range path first, then full-download fallback.
-
-    Appends to ``errors`` on every failure mode and returns ``False`` so the
-    outer loop can move on to the next source. Returns ``True`` after
-    successfully populating ``lib_dir``.
-    """
     sha_url = f'{zip_url}.sha256'
-    print(f'[geniex] Trying {name}: {zip_url}')
+    print(f'\n[geniex] Trying {name}: {zip_url}', file=_tty())
 
     sha_bytes = _try_download(sha_url)
-    # GENIEX_SDK_DOWNLOAD_URL is an explicit user opt-in to a specific source
-    # (typically a file:// path or internal mirror) where the operator may
-    # have staged only the .zip. Treat a missing sidecar as best-effort: the
-    # range path validates each entry via CRC32 in-band, and the full-zip
-    # fallback proceeds without sha verification. Public defaults still
-    # hard-fail so unattended pip installs never silently skip the check.
+    # Public defaults hard-fail without sidecar so unattended installs never
+    # silently skip the integrity check. Override mode is opt-in and may
+    # point at a staging path that only carries the .zip.
     if sha_bytes is None:
         if name != 'override':
             errors.append(f'{sha_url}: download failed')
@@ -422,11 +436,12 @@ def _try_one_source(
     else:
         want_sha = sha_bytes.decode().strip().split()[0]
 
+    label = zip_url.rsplit('/', 1)[-1]
     lib_dir.mkdir(parents=True, exist_ok=True)
     try:
-        count = _range_fetch(zip_url, lib_dir, backends)
+        count = _range_fetch(zip_url, lib_dir, backends, label)
     except (_RangeNotSupported, _ZIP64NotSupported) as exc:
-        print(f'[geniex] Range fetch unavailable on {name} ({exc}); falling back to full download.')
+        print(f'[geniex] Range fetch unavailable on {name} ({exc}); falling back to full download.', file=_tty())
         shutil.rmtree(lib_dir, ignore_errors=True)
         lib_dir.mkdir(parents=True, exist_ok=True)
     except (urllib.error.URLError, TimeoutError, RuntimeError) as exc:
@@ -434,11 +449,11 @@ def _try_one_source(
         shutil.rmtree(lib_dir, ignore_errors=True)
         return False
     else:
-        print(f'[geniex] Range-fetched {count} entries from {name}: {zip_url}')
-        print(f'[geniex] SDK libs installed at {lib_dir}')
+        print(f'[geniex] Range-fetched {count} entries from {name}: {zip_url}', file=_tty())
+        print(f'[geniex] SDK libs installed at {lib_dir}', file=_tty())
         return True
 
-    zip_bytes = _try_download(zip_url)
+    zip_bytes = _download_with_progress(zip_url, label)
     if zip_bytes is None:
         errors.append(f'{zip_url}: download failed')
         return False
@@ -453,6 +468,6 @@ def _try_one_source(
         errors.append(f'{zip_url} (full): {exc}')
         shutil.rmtree(lib_dir, ignore_errors=True)
         return False
-    print(f'[geniex] Full-zip extracted {count} entries from {name}: {zip_url}')
-    print(f'[geniex] SDK libs installed at {lib_dir}')
+    print(f'[geniex] Full-zip extracted {count} entries from {name}: {zip_url}', file=_tty())
+    print(f'[geniex] SDK libs installed at {lib_dir}', file=_tty())
     return True

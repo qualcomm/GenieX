@@ -18,6 +18,7 @@ use model_manager_core::store::Store;
 
 const TINY_REPO: &str = "ggml-org/tiny-llamas";
 const QWEN3_REPO: &str = "ggml-org/Qwen3-0.6B-GGUF";
+const QWEN2_FP16_REPO: &str = "Qwen/Qwen2-1.5B-Instruct-GGUF";
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
@@ -83,6 +84,41 @@ async fn end_to_end_pull_qwen3_q4_0() {
     assert!(
         fname.to_lowercase().contains("q4_0"),
         "expected Q4_0 file, got {fname}"
+    );
+}
+
+/// `Qwen/Qwen2-1.5B-Instruct-GGUF` ships a `fp16` shard alongside its Q*
+/// shards. Regression for the customer report on #1339. Pulls ~3.1 GB.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore]
+async fn end_to_end_pull_qwen2_fp16() {
+    let tmp = tempfile::tempdir().expect("tmpdir");
+    let cfg = StoreConfig::new(tmp.path().to_path_buf());
+    let store = Store::new(cfg).expect("store init");
+
+    let req = PullRequest {
+        model_name: QWEN2_FP16_REPO.to_string(),
+        intent: PullIntent::HuggingFace {
+            repo: QWEN2_FP16_REPO.to_string(),
+            token: None,
+        },
+        on_progress: None,
+        hint: ManifestHint {
+            quant: Some("FP16".to_string()),
+            ..Default::default()
+        },
+    };
+    pull(&store, req).await.expect("pull failed");
+
+    let (resolved, paths) = store
+        .get_paths(&format!("{QWEN2_FP16_REPO}:FP16"))
+        .expect("get_paths after pull failed");
+    assert_eq!(resolved, "FP16");
+    assert!(paths.model_path.exists(), "model file missing: {paths:?}");
+    let fname = paths.model_path.file_name().unwrap().to_string_lossy();
+    assert!(
+        fname.to_lowercase().contains("fp16"),
+        "expected fp16 file, got {fname}"
     );
 }
 

@@ -23,7 +23,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B-GGUF",     # HF repo id of a GGUF model, or a local .gguf path
     device_map="auto",          # "auto" | "cpu" | "gpu" | "npu" | "hybrid"
                                 # | "<runtime>" | "<runtime>:<compute-unit>"
-                                # auto -> hybrid for llama_cpp, npu for qairt
+                                # auto -> npu for both llama_cpp and qairt
 )
 
 messages = [{"role": "user", "content": "What is 2+2?"}]
@@ -112,6 +112,62 @@ for chunk in streamer:
     print(chunk, end="", flush=True)
 
 model.close()
+```
+
+## **Audio inference (GGUF)**
+
+Audio input runs on the **llama.cpp** backend with an audio-capable model — its mmproj must carry a conformer encoder. `google/gemma-4-E2B-it-qat-q4_0-gguf` is one such model. Load it with `AutoModelForVision2Seq`, then pass file paths to `generate(images=[...], audios=[...])` — a single call can carry both.
+
+<Warning>Audio input runs on the **llama.cpp** backend only. QAIRT bundles report `capabilities()['audio'] == False` and raise `GenieXError(-201201): Multimodal generation failed` if given audio.</Warning>
+
+Download a sample clip and photo:
+
+```bash
+curl -L -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/master/samples/jfk.wav
+curl -L -o landmark.jpg "https://images.pexels.com/photos/402028/pexels-photo-402028.jpeg?w=1024"
+```
+
+Then run inference:
+
+```python
+import os
+from geniex import AutoModelForVision2Seq
+
+image_path = os.path.abspath("landmark.jpg")
+audio_path = os.path.abspath("jfk.wav")
+
+model = AutoModelForVision2Seq.from_pretrained(
+    "google/gemma-4-E2B-it-qat-q4_0-gguf",  # GGUF VLM with an audio mmproj
+    device_map="npu",                       # audio runs on npu / gpu / cpu, not qairt
+)
+# capabilities() confirms the loaded mmproj handles audio.
+print(model.capabilities())  # -> {'vision': True, 'audio': True}
+
+messages = [{
+    "role": "user",
+    "content": [
+        {"type": "image", "image": image_path},
+        {"type": "audio", "audio": audio_path},
+        {"type": "text", "text": "Describe the image, then transcribe the audio."},
+    ],
+}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
+
+output = model.generate(prompt, images=[image_path], audios=[audio_path], max_new_tokens=256)
+print(output.text)
+
+model.close()
+```
+
+Output (verified on `device_map="npu"`, Snapdragon X Elite):
+
+```text
+A photograph captures a stunning landscape featuring a traditional Japanese temple ... framed by softer, muted blue and green mountains under a clear, pale sky.
+
+**Audio Transcription:**
+"And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
 ```
 
 ## **Jupyter notebook walkthrough**

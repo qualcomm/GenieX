@@ -36,12 +36,17 @@ if(WIN32)
         geniex_model_set_type
         geniex_model_list_detailed
         geniex_model_list_detailed_free
+        geniex_model_get_detailed
+        geniex_model_detail_free
         geniex_model_query
         geniex_model_query_free
         geniex_model_resolve_alias
+        geniex_model_resolve_hub
         geniex_model_list_chipsets
         geniex_model_list_chipsets_free
-        geniex_model_detect_chipset)
+        geniex_model_detect_chipset
+        geniex_model_list_hub
+        geniex_model_list_hub_free)
     target_link_libraries(geniex PRIVATE "${RUST_MODEL_LIB}")
     foreach(_sym ${GENIEX_MODEL_FFI_SYMBOLS})
         target_link_options(geniex PRIVATE
@@ -76,18 +81,6 @@ target_include_directories(geniex PUBLIC
 )
 install(FILES "${CMAKE_SOURCE_DIR}/model-manager/include/geniex_model.h"
     DESTINATION include)
-
-if(GENIEX_BENCHMARK)
-    add_executable(test_model_manager
-        "${CMAKE_SOURCE_DIR}/model-manager/tests/test_model_manager.c"
-    )
-    target_include_directories(test_model_manager PRIVATE
-        ${COMMON_INCLUDE}
-        "${CMAKE_SOURCE_DIR}/model-manager/include"
-    )
-    target_link_libraries(test_model_manager PRIVATE geniex)
-    add_test(NAME test_model_manager COMMAND test_model_manager)
-endif()
 
 install(TARGETS geniex
     LIBRARY DESTINATION lib

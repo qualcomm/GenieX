@@ -55,7 +55,7 @@ const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(60);
 const DEFAULT_RETRIES: u32 = 3;
 const DEFAULT_RETRY_BACKOFF: Duration = Duration::from_secs(1);
-const USER_AGENT: &str = concat!("geniex-model-manager/", env!("CARGO_PKG_VERSION"));
+pub(crate) const USER_AGENT: &str = concat!("geniex-model-manager/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug, Clone, Default)]
 pub struct TransportConfig {
@@ -121,7 +121,7 @@ impl ReqwestTransport {
 /// the Android binding does not perform, so it would panic on first TLS
 /// handshake (#1065). Fall back to the bundled Mozilla `webpki-roots`
 /// there — we lose system-store CAs (corporate MITM) on Android only.
-fn build_tls_config() -> Result<rustls::ClientConfig> {
+pub(crate) fn build_tls_config() -> Result<rustls::ClientConfig> {
     // The ring crypto provider must be installed once per process before
     // any rustls config is built; a second install is a harmless no-op.
     static PROVIDER_INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();

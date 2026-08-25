@@ -5,22 +5,16 @@
 //!
 //! Given a `source_dir` (or a local archive file), reads its layout and
 //! produces a [`Plan`] whose [`BytesSource`]s point at on-disk bytes.
-//! Three layouts are recognised by [`local_kind::detect`]:
+//! Three layouts are recognised by [`detect_local_kind`]:
 //!
-//! - HF GGUF directory — existing path: read shipped `geniex.json` if
-//!   present, else infer via [`infer_manifest_from_names`]. Files emit
-//!   as [`BytesSource::Local`].
-//! - AI Hub extracted directory — `metadata.json` + `.bin` shards.
-//!   Plugin id is forced to `qairt`, modality comes from
-//!   [`classify_from_metadata_json`], lex-first `.bin` is the
-//!   entrypoint. Mirrors what the remote AI Hub source produces.
-//! - AI Hub local `.zip` — feed the existing
-//!   [`fetch_central_directory`] parser through a [`LocalFileTransport`]
-//!   adapter, then emit [`BytesSource::LocalRange`] for STORED entries
-//!   and [`BytesSource::LocalDeflate`] for DEFLATE entries.
+//! - HF GGUF directory
+//! - AI Hub extracted directory (`metadata.json` + `.bin` shards)
+//! - AI Hub local `.zip`
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::ffi::OsStr;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -31,16 +25,99 @@ use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
 use crate::manifest_builder::{infer_manifest_from_names, ManifestHint};
 use crate::transport::HttpTransport;
 
-use super::ai_hub::local_transport::LocalFileTransport;
-use super::ai_hub::remote_zip::{fetch_central_directory, Method};
+use super::ai_hub::remote_zip::{fetch_central_directory, LocalFileTransport, Method};
 use super::ai_hub::{classify_from_metadata_json, prepare_flat_entries};
-use super::local_kind::{detect, LocalKind};
 use super::{BytesSource, FileSpec, ModelSource, Plan};
 
 const MANIFEST_FILE: &str = "geniex.json";
 const CONFIG_FILE: &str = "config.json";
 const AIHUB_METADATA_FILE: &str = "metadata.json";
 const QAIRT_PLUGIN_ID: &str = "qairt";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LocalKind {
+    HfGguf,
+    AiHubExtracted,
+    AiHubZip,
+}
+
+/// Inspect `path` and decide which loader to dispatch to. Returns
+/// [`Error::Hub`] with an actionable message when nothing matches.
+fn detect_local_kind(path: &Path) -> Result<LocalKind> {
+    let meta = fs::metadata(path).map_err(|e| {
+        Error::Hub(format!(
+            "local path {} is not accessible: {e}",
+            path.display()
+        ))
+    })?;
+
+    if meta.is_file() {
+        if has_extension(path, "zip") {
+            return Ok(LocalKind::AiHubZip);
+        }
+        return Err(Error::Hub(format!(
+            "local path {} is a file but not a .zip; expected an AI Hub archive or a directory",
+            path.display()
+        )));
+    }
+    if !meta.is_dir() {
+        return Err(Error::Hub(format!(
+            "local path {} is neither a regular file nor a directory",
+            path.display()
+        )));
+    }
+
+    let mut has_bin = false;
+    let mut has_metadata = false;
+    let mut has_gguf = false;
+    let mut has_safetensors = false;
+    for entry in fs::read_dir(path)?.flatten() {
+        let Ok(ft) = entry.file_type() else { continue };
+        if !ft.is_file() {
+            continue;
+        }
+        let Some(name) = entry.file_name().to_str().map(str::to_ascii_lowercase) else {
+            continue;
+        };
+        if name == AIHUB_METADATA_FILE {
+            has_metadata = true;
+        } else if name.ends_with(".bin") {
+            has_bin = true;
+        } else if name.ends_with(".gguf") {
+            has_gguf = true;
+        } else if name.ends_with(".safetensors") {
+            has_safetensors = true;
+        }
+    }
+
+    if has_metadata && has_bin {
+        return Ok(LocalKind::AiHubExtracted);
+    }
+    if has_gguf {
+        return Ok(LocalKind::HfGguf);
+    }
+    if has_safetensors {
+        return Err(Error::Hub(format!(
+            "local path {} looks like a HuggingFace safetensors snapshot, \
+             which is not supported as a local pull source yet",
+            path.display()
+        )));
+    }
+    Err(Error::Hub(format!(
+        "local path {} did not match any known layout: \
+         expected a directory with *.gguf (HF GGUF), \
+         a directory with metadata.json + *.bin (AI Hub extracted), \
+         or a .zip file (AI Hub archive)",
+        path.display()
+    )))
+}
+
+fn has_extension(path: &Path, ext: &str) -> bool {
+    path.extension()
+        .and_then(OsStr::to_str)
+        .map(|e| e.eq_ignore_ascii_case(ext))
+        .unwrap_or(false)
+}
 
 pub struct LocalFsSource {
     source_dir: PathBuf,
@@ -61,7 +138,7 @@ impl LocalFsSource {
 #[async_trait]
 impl ModelSource for LocalFsSource {
     async fn plan(&self) -> Result<Plan> {
-        match detect(&self.source_dir)? {
+        match detect_local_kind(&self.source_dir)? {
             LocalKind::HfGguf => self.plan_hf_gguf(),
             LocalKind::AiHubExtracted => self.plan_ai_hub_extracted(),
             LocalKind::AiHubZip => self.plan_ai_hub_zip().await,
@@ -171,45 +248,14 @@ impl LocalFsSource {
                 self.source_dir.display()
             )));
         }
-        // Lex-first `.bin` mirrors the remote AiHub puller and the Go
-        // CLI's ExtractFlat — a model populated by either path is then
-        // interchangeable on disk.
+        // Lex-first `.bin` mirrors the remote AiHub puller.
         entries.sort_by(|a, b| a.0.cmp(&b.0));
-        let entrypoint = entries
-            .iter()
-            .find(|(n, _)| n.to_ascii_lowercase().ends_with(".bin"))
-            .map(|(n, _)| n.clone())
-            .ok_or_else(|| {
-                Error::Hub(format!(
-                    "AI Hub directory {} has no .bin shard",
-                    self.source_dir.display()
-                ))
-            })?;
-
-        // Each bucket holds a single file's own size; total_size() sums them.
-        let entrypoint_size = entries
-            .iter()
-            .find(|(n, _)| n == &entrypoint)
-            .map(|(_, s)| *s as i64)
-            .unwrap_or(0);
-        let mut model_file: HashMap<String, ModelFileInfo> = HashMap::new();
-        model_file.insert(
-            "N/A".to_string(),
-            ModelFileInfo {
-                name: entrypoint.clone(),
-                downloaded: true,
-                size: entrypoint_size,
-            },
-        );
-        let extra_files: Vec<ModelFileInfo> = entries
-            .iter()
-            .filter(|(n, _)| n != &entrypoint)
-            .map(|(n, s)| ModelFileInfo {
-                name: n.clone(),
-                downloaded: true,
-                size: *s as i64,
-            })
-            .collect();
+        let display = self.source_dir.display().to_string();
+        let (model_file, extra_files) = super::split_entrypoint_and_extras(
+            &entries,
+            || format!("AI Hub directory {display} has no .bin shard"),
+            |s| *s as i64,
+        )?;
 
         let model_type = std::fs::read(self.source_dir.join(AIHUB_METADATA_FILE))
             .ok()
@@ -273,41 +319,12 @@ impl LocalFsSource {
             .or_else(|| self.hint.model_type.clone())
             .unwrap_or(ModelType::Llm);
 
-        let entrypoint = flat
-            .iter()
-            .find(|(name, _)| name.to_ascii_lowercase().ends_with(".bin"))
-            .map(|(name, _)| name.clone())
-            .ok_or_else(|| {
-                Error::Hub(format!(
-                    "AI Hub archive {} has no .bin shard",
-                    zip_path.display()
-                ))
-            })?;
-
-        let entrypoint_size = flat
-            .iter()
-            .find(|(name, _)| name == &entrypoint)
-            .map(|(_, e)| e.uncompressed_size as i64)
-            .unwrap_or(0);
-
-        let mut model_file: HashMap<String, ModelFileInfo> = HashMap::new();
-        model_file.insert(
-            "N/A".to_string(),
-            ModelFileInfo {
-                name: entrypoint.clone(),
-                downloaded: true,
-                size: entrypoint_size,
-            },
-        );
-        let extra_files: Vec<ModelFileInfo> = flat
-            .iter()
-            .filter(|(name, _)| name != &entrypoint)
-            .map(|(name, e)| ModelFileInfo {
-                name: name.clone(),
-                downloaded: true,
-                size: e.uncompressed_size as i64,
-            })
-            .collect();
+        let zip_display = zip_path.display().to_string();
+        let (model_file, extra_files) = super::split_entrypoint_and_extras(
+            &flat,
+            || format!("AI Hub archive {zip_display} has no .bin shard"),
+            |e| e.uncompressed_size as i64,
+        )?;
 
         let manifest = ModelManifest {
             name: self.model_name.clone(),
@@ -680,5 +697,62 @@ mod tests {
         let err = src.plan().await.unwrap_err();
         let msg = format!("{err}");
         assert!(msg.contains("safetensors"), "msg: {msg}");
+    }
+
+    // ---------------- detect_local_kind ----------------
+
+    #[test]
+    fn detect_local_kind_covers_layouts() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let zip = tmp.path().join("model.zip");
+        fs::write(&zip, b"PK\x03\x04").unwrap();
+        assert_eq!(detect_local_kind(&zip).unwrap(), LocalKind::AiHubZip);
+
+        let zip_upper = tmp.path().join("Model.ZIP");
+        fs::write(&zip_upper, b"x").unwrap();
+        assert_eq!(detect_local_kind(&zip_upper).unwrap(), LocalKind::AiHubZip);
+
+        let aihub = tmp.path().join("aihub");
+        fs::create_dir_all(&aihub).unwrap();
+        fs::write(aihub.join("metadata.json"), b"{}").unwrap();
+        fs::write(aihub.join("weights_part_1.bin"), b"x").unwrap();
+        // AI Hub wins even with a sibling GGUF.
+        fs::write(aihub.join("extra.gguf"), b"y").unwrap();
+        assert_eq!(
+            detect_local_kind(&aihub).unwrap(),
+            LocalKind::AiHubExtracted
+        );
+
+        let gguf = tmp.path().join("gguf");
+        fs::create_dir_all(&gguf).unwrap();
+        fs::write(gguf.join("model-Q4_K_M.gguf"), b"x").unwrap();
+        assert_eq!(detect_local_kind(&gguf).unwrap(), LocalKind::HfGguf);
+    }
+
+    #[test]
+    fn detect_local_kind_error_messages_are_actionable() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let missing = detect_local_kind(Path::new("/nonexistent/path/12345xyz")).unwrap_err();
+        assert!(format!("{missing}").contains("not accessible"));
+
+        let non_zip = tmp.path().join("model.tar.gz");
+        fs::write(&non_zip, b"x").unwrap();
+        assert!(format!("{}", detect_local_kind(&non_zip).unwrap_err()).contains("not a .zip"));
+
+        let safetensors = tmp.path().join("st");
+        fs::create_dir_all(&safetensors).unwrap();
+        fs::write(safetensors.join("config.json"), b"{}").unwrap();
+        fs::write(safetensors.join("model.safetensors"), b"x").unwrap();
+        assert!(format!("{}", detect_local_kind(&safetensors).unwrap_err()).contains("safetensors"));
+
+        let unknown = tmp.path().join("unk");
+        fs::create_dir_all(&unknown).unwrap();
+        fs::write(unknown.join("readme.txt"), b"hi").unwrap();
+        let msg = format!("{}", detect_local_kind(&unknown).unwrap_err());
+        assert!(
+            msg.contains("AI Hub extracted") && msg.contains("HF GGUF") && msg.contains(".zip")
+        );
     }
 }

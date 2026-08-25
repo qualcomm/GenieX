@@ -57,11 +57,14 @@ func ParseModelType(s string) (ModelType, bool) {
 	}
 }
 
-// SplitNamePrecision splits "name[:precision]" into (name, precision),
-// upper-casing the precision. A pasted HuggingFace URL prefix is stripped first
-// so its scheme colon isn't mistaken for the precision separator. Bare names are
-// canonicalized by the SDK; this only handles the URL strip + ':' split so
-// callers can pass name and precision to the FFI separately.
+// SplitNamePrecision splits "name[:precision]" into (name, precision). A pasted
+// HuggingFace URL prefix is stripped first so its scheme colon isn't mistaken
+// for the precision separator. Name canonicalization, precision case-folding
+// (GGUF quant labels are matched upper-cased), and hub routing all happen in
+// the SDK across the FFI boundary — including Docker Hub, where the suffix is a
+// case-sensitive registry tag the SDK deliberately leaves untouched. This only
+// does the URL strip + ':' split so callers can pass the two to the FFI
+// separately.
 func SplitNamePrecision(arg string) (string, string) {
 	arg = strings.TrimPrefix(arg, "https://huggingface.co/")
 	arg = strings.TrimPrefix(arg, "http://huggingface.co/")
@@ -69,7 +72,7 @@ func SplitNamePrecision(arg string) (string, string) {
 	if !found || precision == "" {
 		return name, ""
 	}
-	return name, strings.ToUpper(precision)
+	return name, precision
 }
 
 // HubSource mirrors geniex_HubSource.
@@ -81,8 +84,23 @@ const (
 	HubModelScope  HubSource = C.GENIEX_HUB_MODELSCOPE
 	HubAIHub       HubSource = C.GENIEX_HUB_AIHUB
 	HubVolces      HubSource = C.GENIEX_HUB_VOLCES
+	HubDocker      HubSource = C.GENIEX_HUB_DOCKER
 	HubLocalFS     HubSource = C.GENIEX_HUB_LOCALFS
 )
+
+// ResolveHub reports the hub a pull/query will actually use for name given the
+// requested hub. HubAuto resolves to HubDocker when name carries a Docker Hub
+// prefix (docker.io/…); every other input is returned unchanged. The prefix
+// table lives in the SDK, so callers must not re-derive it. No network I/O.
+func ResolveHub(name string, hub HubSource) (HubSource, error) {
+	cName := cStringIfSet(name)
+	defer cFreeIfSet(unsafe.Pointer(cName))
+	var out C.geniex_HubSource
+	if res := C.geniex_model_resolve_hub(cName, C.geniex_HubSource(hub), &out); res != C.GENIEX_SUCCESS {
+		return hub, modelError(res)
+	}
+	return HubSource(out), nil
+}
 
 // FileProgress mirrors geniex_FileProgress.
 type FileProgress struct {
@@ -221,16 +239,36 @@ func ModelListDetailed() ([]ModelDetail, error) {
 	models := unsafe.Slice(out.models, int(out.count))
 	result := make([]ModelDetail, out.count)
 	for i, m := range models {
-		result[i] = ModelDetail{
-			Name:       C.GoString(m.name),
-			ModelName:  C.GoString(m.model_name),
-			RuntimeID:  C.GoString(m.plugin_id),
-			ModelType:  ModelType(m.model_type),
-			TotalSize:  int64(m.total_size),
-			Precisions: cCharArrayToSlice(m.precisions, m.precision_count),
-		}
+		result[i] = goModelDetail(m)
 	}
 	return result, nil
+}
+
+// ModelGetDetailed returns one cached model's metadata without listing the
+// whole store. name takes the same loose forms as ModelGetPaths: a bare AI Hub
+// id is canonicalized to "qualcomm/<id>" in the SDK, and any ":precision"
+// suffix is ignored since the detail covers every downloaded precision.
+func ModelGetDetailed(name string) (*ModelDetail, error) {
+	cName := C.CString(name)
+	defer C.free(unsafe.Pointer(cName))
+	var out C.geniex_ModelDetail
+	if res := C.geniex_model_get_detailed(cName, &out); res != C.GENIEX_SUCCESS {
+		return nil, modelError(res)
+	}
+	defer C.geniex_model_detail_free(&out)
+	d := goModelDetail(out)
+	return &d, nil
+}
+
+func goModelDetail(m C.geniex_ModelDetail) ModelDetail {
+	return ModelDetail{
+		Name:       C.GoString(m.name),
+		ModelName:  C.GoString(m.model_name),
+		RuntimeID:  C.GoString(m.plugin_id),
+		ModelType:  ModelType(m.model_type),
+		TotalSize:  int64(m.total_size),
+		Precisions: cCharArrayToSlice(m.precisions, m.precision_count),
+	}
 }
 
 // ChipsetInfo mirrors geniex_ChipsetInfo.
@@ -262,11 +300,15 @@ func ModelListChipsets() ([]ChipsetInfo, error) {
 	return result, nil
 }
 
-// ModelDetectChipset probes the current host for its chipset via a local
-// detector (no network). Returns "" when the platform can't be probed.
-func ModelDetectChipset() (string, error) {
+// ModelDetectChipset probes the host chipset. offline=true stays local (returns
+// the canonical id); else it may hit the network. Returns "" when not probeable.
+func ModelDetectChipset(offline bool) (string, error) {
+	var cOffline C.int32_t
+	if offline {
+		cOffline = 1
+	}
 	var out *C.char
-	if res := C.geniex_model_detect_chipset(&out); res != C.GENIEX_SUCCESS {
+	if res := C.geniex_model_detect_chipset(cOffline, &out); res != C.GENIEX_SUCCESS {
 		return "", modelError(res)
 	}
 	if out == nil {
@@ -274,6 +316,41 @@ func ModelDetectChipset() (string, error) {
 	}
 	defer free(unsafe.Pointer(out))
 	return C.GoString(out), nil
+}
+
+// HubModel is one Qualcomm AI Hub model geniex can run (qairt / NPU).
+type HubModel struct {
+	Name      string // Pullable name, e.g. "qualcomm/Qwen3-4B".
+	ModelType ModelType
+	Chipsets  []string
+}
+
+// ModelListHub lists Qualcomm AI Hub models with a qairt asset, sorted by name.
+// chipset restricts results to a canonical chipset id; "" lists every model.
+// Detecting the host chipset is the caller's job (see ModelDetectChipset).
+func ModelListHub(chipset string) ([]HubModel, error) {
+	cChipset := cStringIfSet(chipset)
+	defer cFreeIfSet(unsafe.Pointer(cChipset))
+
+	var out C.geniex_HubModelList
+	if res := C.geniex_model_list_hub(cChipset, &out); res != C.GENIEX_SUCCESS {
+		return nil, modelError(res)
+	}
+	defer C.geniex_model_list_hub_free(&out)
+
+	if out.models == nil || out.count == 0 {
+		return nil, nil
+	}
+	models := unsafe.Slice(out.models, int(out.count))
+	result := make([]HubModel, out.count)
+	for i, m := range models {
+		result[i] = HubModel{
+			Name:      C.GoString(m.name),
+			ModelType: ModelType(m.model_type),
+			Chipsets:  cCharArrayToSlice(m.chipsets, m.chipset_count),
+		}
+	}
+	return result, nil
 }
 
 // ModelRemove deletes a cached model ("org/repo" or "org/repo:precision").
@@ -347,11 +424,12 @@ func ModelGetPaths(name string) (*ModelPaths, error) {
 	}, nil
 }
 
-// PrecisionCandidate mirrors geniex_QuantCandidate.
+// PrecisionCandidate mirrors geniex_QuantCandidate. Candidates in
+// ModelQueryResult.Candidates are sorted by SDK priority — grab the head
+// for the recommended pick.
 type PrecisionCandidate struct {
 	Precision string
 	Size      int64
-	IsDefault bool
 }
 
 // ModelQueryResult mirrors geniex_ModelQueryOutput.
@@ -410,7 +488,6 @@ func ModelQuery(input ModelPullInput) (*ModelQueryResult, error) {
 			result.Candidates[i] = PrecisionCandidate{
 				Precision: C.GoString(c.quant),
 				Size:      int64(c.size),
-				IsDefault: bool(c.is_default),
 			}
 		}
 	}

@@ -79,4 +79,3 @@ runs:
         echo "version=${version}" >> "$GITHUB_OUTPUT"
         echo "python_version=${python_version}" >> "$GITHUB_OUTPUT"
         echo "is_prerelease=${is_prerelease}" >> "$GITHUB_OUTPUT"
-        echo "VERSION=${version}" >> "$GITHUB_ENV"

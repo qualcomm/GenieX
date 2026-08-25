@@ -21,8 +21,6 @@ namespace geniex_android_sdk {
 
 void throw_runtime_exception(JNIEnv* env, const char* _Nonnull format, ...);
 
-jobject create_java_profile_data(JNIEnv* env, geniex_ProfileData data);
-
 bool check_jni_exception(JNIEnv* env, const char* where);
 
 const char* getStringField(JNIEnv* env, jclass cls, jobject inputObj, const char* fieldName);

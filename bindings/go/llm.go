@@ -28,7 +28,6 @@ const (
 )
 
 type LlmCreateInput struct {
-	ModelName     string
 	ModelPath     string
 	TokenizerPath string
 	Config        ModelConfig
@@ -39,7 +38,6 @@ type LlmCreateInput struct {
 func (lci LlmCreateInput) toCPtr() *C.geniex_LlmCreateInput {
 	cPtr := (*C.geniex_LlmCreateInput)(cMalloc(C.sizeof_geniex_LlmCreateInput))
 	*cPtr = C.geniex_LlmCreateInput{
-		model_name:     cStringIfSet(lci.ModelName),
 		model_path:     cStringIfSet(lci.ModelPath),
 		tokenizer_path: cStringIfSet(lci.TokenizerPath),
 		plugin_id:      cStringIfSet(lci.RuntimeID),
@@ -53,7 +51,6 @@ func freeLlmCreateInput(cPtr *C.geniex_LlmCreateInput) {
 	if cPtr == nil {
 		return
 	}
-	cFreeIfSet(unsafe.Pointer(cPtr.model_name))
 	cFreeIfSet(unsafe.Pointer(cPtr.model_path))
 	cFreeIfSet(unsafe.Pointer(cPtr.tokenizer_path))
 	cFreeIfSet(unsafe.Pointer(cPtr.plugin_id))
@@ -266,6 +263,78 @@ func (l *LLM) GetModelInfo() (LlmModelInfo, error) {
 		BosToken:  int32(cInfo.bos_token),
 		AddBos:    cInfo.add_bos != 0,
 	}, nil
+}
+
+// ForwardLogitsResult holds one prefill-only forward pass. Logits is row-major
+// [NRows, RowWidth]. When TopN is 0, RowWidth == VocabSize and TokenIDs is nil
+// (column index is the token id). When TopN > 0, RowWidth == min(TopN, VocabSize),
+// each row holds its top logits sorted descending, and TokenIDs is the matching
+// [NRows, RowWidth] token ids.
+type ForwardLogitsResult struct {
+	Logits    []float32
+	TokenIDs  []int32
+	NRows     int
+	RowWidth  int
+	VocabSize int
+}
+
+// ForwardLogits runs a single non-autoregressive forward pass over inputIDs.
+// When allPositions is false NRows is 1 (the last token's row); when true it is
+// len(inputIDs). topN > 0 reduces each row to its top-N logits (with matching
+// token ids); topN == 0 returns the full vocabulary per row. The caller owns any
+// special tokens; none are added.
+func (l *LLM) ForwardLogits(inputIDs []int32, allPositions bool, topN int) (ForwardLogitsResult, error) {
+	if l.ptr == nil {
+		return ForwardLogitsResult{}, SDKError(-1)
+	}
+	if len(inputIDs) == 0 {
+		return ForwardLogitsResult{}, SDKError(-100001) // GENIEX_ERROR_COMMON_INVALID_INPUT
+	}
+
+	n := len(inputIDs)
+	raw := cMalloc(C.size_t(n) * C.size_t(unsafe.Sizeof(C.int32_t(0))))
+	defer C.free(raw)
+	ids := unsafe.Slice((*C.int32_t)(raw), n)
+	for i, id := range inputIDs {
+		ids[i] = C.int32_t(id)
+	}
+
+	cInput := C.geniex_LlmForwardLogitsInput{
+		input_ids:       (*C.int32_t)(raw),
+		input_ids_count: C.int32_t(n),
+		all_positions:   C.bool(allPositions),
+		top_n:           C.int32_t(topN),
+	}
+
+	var cOutput C.geniex_LlmForwardLogitsOutput
+	res := C.geniex_llm_forward_logits(l.ptr, &cInput, &cOutput)
+	if res < 0 {
+		return ForwardLogitsResult{}, SDKError(res)
+	}
+	defer C.geniex_free(unsafe.Pointer(cOutput.logits))
+	defer C.geniex_free(unsafe.Pointer(cOutput.token_ids))
+
+	out := ForwardLogitsResult{
+		NRows:     int(cOutput.n_rows),
+		RowWidth:  int(cOutput.row_width),
+		VocabSize: int(cOutput.vocab_size),
+	}
+	total := out.NRows * out.RowWidth
+	if total > 0 && cOutput.logits != nil {
+		out.Logits = make([]float32, total)
+		src := unsafe.Slice((*C.float)(cOutput.logits), total)
+		for i := 0; i < total; i++ {
+			out.Logits[i] = float32(src[i])
+		}
+	}
+	if total > 0 && cOutput.token_ids != nil {
+		out.TokenIDs = make([]int32, total)
+		src := unsafe.Slice((*C.int32_t)(cOutput.token_ids), total)
+		for i := 0; i < total; i++ {
+			out.TokenIDs[i] = int32(src[i])
+		}
+	}
+	return out, nil
 }
 
 type LlmSaveKVCacheInput struct {

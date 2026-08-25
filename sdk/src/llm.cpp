@@ -1,8 +1,11 @@
 // Copyright (c) 2024-2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
+#include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <vector>
 
 #include "geniex.h"
 #include "logging.h"
@@ -168,6 +171,80 @@ int32_t geniex_llm_get_model_info(geniex_LLM* h, geniex_LlmModelInfo* output) {
         return backend->get_model_info(output);
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("llm get_model_info error: {}", e.what());
+        return GENIEX_ERROR_COMMON_UNKNOWN;
+    }
+}
+
+// Reduce full-vocab row-major logits to the top-N per row (descending logit),
+// writing new logits/token_ids buffers. Selection mirrors the O(vocab * top_n)
+// partial scan the benchmark used before this moved into the SDK. Frees the
+// plugin's full-vocab buffer and repoints output at the reduced buffers.
+static int32_t reduce_forward_logits_top_n(geniex_LlmForwardLogitsOutput* output, int32_t top_n) {
+    const int32_t n_rows     = output->n_rows;
+    const int32_t vocab_size = output->vocab_size;
+    const int32_t row_width  = top_n < vocab_size ? top_n : vocab_size;
+
+    float*            red_logits = static_cast<float*>(std::malloc((size_t)n_rows * row_width * sizeof(float)));
+    int32_t*          red_ids    = static_cast<int32_t*>(std::malloc((size_t)n_rows * row_width * sizeof(int32_t)));
+    std::vector<char> taken(vocab_size);
+    if (!red_logits || !red_ids) {
+        std::free(red_logits);
+        std::free(red_ids);
+        return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
+    }
+
+    for (int32_t r = 0; r < n_rows; ++r) {
+        const float* row = output->logits + (size_t)r * vocab_size;
+        std::fill(taken.begin(), taken.end(), 0);
+        for (int32_t k = 0; k < row_width; ++k) {
+            int32_t best = -1;
+            for (int32_t v = 0; v < vocab_size; ++v) {
+                if (taken[v]) continue;
+                if (best < 0 || row[v] > row[best]) best = v;
+            }
+            taken[best]                           = 1;
+            red_logits[(size_t)r * row_width + k] = row[best];
+            red_ids[(size_t)r * row_width + k]    = best;
+        }
+    }
+
+    std::free(output->logits);
+    output->logits    = red_logits;
+    output->token_ids = red_ids;
+    output->row_width = row_width;
+    return GENIEX_SUCCESS;
+}
+
+int32_t geniex_llm_forward_logits(
+    geniex_LLM* h, const geniex_LlmForwardLogitsInput* input, geniex_LlmForwardLogitsOutput* output) {
+    GENIEX_LOG_TRACE("llm forward_logits");
+
+    if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    if (!input->input_ids || input->input_ids_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    if (input->top_n < 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    std::memset(output, 0, sizeof(*output));
+
+    // No UTF-8 callback wrapping here: this path returns raw floats, not decoded text.
+    try {
+        auto backend = reinterpret_cast<ILlm*>(h);
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
+
+        // Plugins always produce full-vocab logits; the bridge does the top-N
+        // reduction so both backends share one implementation.
+        int32_t rc = backend->forward_logits(input, output);
+        if (rc != GENIEX_SUCCESS) return rc;
+
+        output->row_width = output->vocab_size;
+        if (input->top_n > 0 && output->vocab_size > 0) {
+            rc = reduce_forward_logits_top_n(output, input->top_n);
+            if (rc != GENIEX_SUCCESS) {
+                std::free(output->logits);
+                std::memset(output, 0, sizeof(*output));
+            }
+        }
+        return rc;
+    } catch (const std::exception& e) {
+        GENIEX_LOG_ERROR("llm forward_logits error: {}", e.what());
         return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }

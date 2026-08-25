@@ -14,12 +14,15 @@ from ._ffi._lib import load_library
 from ._ffi._types import (
     GENIEX_HUB_AIHUB,
     GENIEX_HUB_AUTO,
+    GENIEX_HUB_DOCKER,
     GENIEX_HUB_HUGGINGFACE,
     GENIEX_HUB_LOCALFS,
     GENIEX_MODEL_TYPE_LLM,
     GENIEX_MODEL_TYPE_VLM,
     geniex_ChipsetList,
     geniex_download_progress_cb,
+    geniex_HubModelList,
+    geniex_ModelDetail,
     geniex_ModelListDetailedOutput,
     geniex_ModelPaths,
     geniex_ModelPullInput,
@@ -38,6 +41,7 @@ __all__ = [
     'pull',
     'list_models',
     'list_detailed',
+    'get_detailed',
     'last_error_message',
     'query',
     'remove',
@@ -50,6 +54,8 @@ __all__ = [
     'ChipsetInfo',
     'list_chipsets',
     'detect_chipset',
+    'HubModel',
+    'list_hub_models',
 ]
 
 
@@ -96,17 +102,29 @@ class ChipsetInfo:
 
 
 @dataclass(frozen=True)
+class HubModel:
+    """One Qualcomm AI Hub model geniex can run (qairt / NPU)."""
+
+    name: str  # Pullable name, e.g. "qualcomm/Qwen3-4B".
+    model_type: str  # "llm" or "vlm"
+    chipsets: list[str]
+
+
+@dataclass(frozen=True)
 class PrecisionCandidate:
     """One precision advertised by a hub for a model."""
 
     precision: str
     size: int
-    is_default: bool
 
 
 @dataclass(frozen=True)
 class ModelQuery:
-    """Result of a plan-only :func:`query`."""
+    """Result of a plan-only :func:`query`.
+
+    ``candidates`` is sorted by SDK priority — grab index 0 for the
+    recommended pick.
+    """
 
     model_name: str
     runtime: str
@@ -132,6 +150,8 @@ _HUB_MAP = {
     'hf': GENIEX_HUB_HUGGINGFACE,
     'huggingface': GENIEX_HUB_HUGGINGFACE,
     'aihub': GENIEX_HUB_AIHUB,
+    'docker': GENIEX_HUB_DOCKER,
+    'dockerhub': GENIEX_HUB_DOCKER,
     'localfs': GENIEX_HUB_LOCALFS,
     'local': GENIEX_HUB_LOCALFS,
 }
@@ -221,7 +241,7 @@ def pull(
     Args:
         model_name: ``org/repo``, ``org/repo:precision``, or a short alias.
         precision: Optional precision hint (e.g. ``"Q4_K_M"``).
-        hub: ``"auto" | "hf" | "aihub" | "localfs"`` or a raw enum int.
+        hub: ``"auto" | "hf" | "aihub" | "docker" | "localfs"`` or a raw enum int.
         local_path: Required when ``hub == "localfs"``.
         hf_token: HuggingFace bearer token; falls back to ``GENIEX_HFTOKEN``.
         chipset: AI Hub target chipset; auto-detected on Windows-on-Snapdragon.
@@ -304,22 +324,39 @@ def list_detailed() -> list[ModelDetail]:
     out = geniex_ModelListDetailedOutput()
     _check(lib.geniex_model_list_detailed(byref(out)))
     try:
-        models = []
-        for i in range(out.count):
-            d = out.models[i]
-            models.append(
-                ModelDetail(
-                    name=d.name.decode() if d.name else '',
-                    model_name=d.model_name.decode() if d.model_name else '',
-                    runtime=d.plugin_id.decode() if d.plugin_id else '',
-                    model_type=_type_str(d.model_type),
-                    total_size=d.total_size,
-                    precisions=[d.precisions[j].decode() for j in range(d.precision_count)],
-                )
-            )
-        return models
+        return [_model_detail(out.models[i]) for i in range(out.count)]
     finally:
         lib.geniex_model_list_detailed_free(byref(out))
+
+
+def get_detailed(name: str) -> ModelDetail:
+    """Return one cached model's metadata, without listing the whole store.
+
+    ``name`` takes the same loose forms as :func:`get_paths`: a bare AI Hub id
+    is canonicalized to ``qualcomm/<id>`` by the SDK, and any ``:<precision>``
+    suffix is ignored since the detail covers every downloaded precision.
+
+    Raises :class:`GenieXError` if the model is not cached.
+    """
+    _ensure_init()
+    lib = load_library()
+    out = geniex_ModelDetail()
+    _check(lib.geniex_model_get_detailed(name.encode(), byref(out)))
+    try:
+        return _model_detail(out)
+    finally:
+        lib.geniex_model_detail_free(byref(out))
+
+
+def _model_detail(d: geniex_ModelDetail) -> ModelDetail:
+    return ModelDetail(
+        name=d.name.decode() if d.name else '',
+        model_name=d.model_name.decode() if d.model_name else '',
+        runtime=d.plugin_id.decode() if d.plugin_id else '',
+        model_type=_type_str(d.model_type),
+        total_size=d.total_size,
+        precisions=[d.precisions[j].decode() for j in range(d.precision_count)],
+    )
 
 
 def query(
@@ -356,7 +393,6 @@ def query(
             PrecisionCandidate(
                 precision=out.candidates[i].quant.decode() if out.candidates[i].quant else '',
                 size=out.candidates[i].size,
-                is_default=bool(out.candidates[i].is_default),
             )
             for i in range(out.candidate_count)
         ]
@@ -443,6 +479,20 @@ def resolve_alias(alias: str) -> str:
         lib.geniex_free(out)
 
 
+def resolve_effective_hub(model_name: str, hub: str | int = 'auto') -> int:
+    """Return the hub enum a pull/query will actually use for ``model_name``.
+
+    ``"auto"`` resolves to Docker Hub when the name carries a Docker Hub prefix
+    (``docker.io/…``); every other hub is returned unchanged. The prefix table
+    lives in the SDK, so callers must not re-derive it. No network I/O.
+    """
+    _ensure_init()
+    lib = load_library()
+    out = c_int32()
+    _check(lib.geniex_model_resolve_hub(model_name.encode(), _resolve_hub(hub), byref(out)))
+    return out.value
+
+
 def list_chipsets() -> list[ChipsetInfo]:
     """List every chipset Qualcomm AI Hub supports, with aliases.
 
@@ -467,21 +517,48 @@ def list_chipsets() -> list[ChipsetInfo]:
         lib.geniex_model_list_chipsets_free(byref(out))
 
 
-def detect_chipset() -> str | None:
-    """Detect the current host's chipset via a local probe (no network).
-
-    Returns ``None`` when the platform cannot be probed.
+def detect_chipset(offline: bool = False) -> str | None:
+    """Detect the host chipset. ``offline`` stays local (canonical id); else it
+    may hit the network. Returns ``None`` when not probeable.
     """
     _ensure_init()
     lib = load_library()
     out = c_char_p()
-    _check(lib.geniex_model_detect_chipset(byref(out)))
+    _check(lib.geniex_model_detect_chipset(c_int32(1 if offline else 0), byref(out)))
     if not out.value:
         return None
     try:
         return out.value.decode()
     finally:
         lib.geniex_free(out)
+
+
+def list_hub_models(chipset: str | None = None) -> list[HubModel]:
+    """List Qualcomm AI Hub models with a qairt (NPU) build, sorted by name.
+
+    ``chipset`` restricts results to a canonical chipset id; ``None`` lists
+    every model. Detecting the host chipset is the caller's job (see
+    :func:`detect_chipset`). Sourced from ``manifest.json`` (cached 24h); the
+    first call may hit the network.
+    """
+    _ensure_init()
+    lib = load_library()
+    out = geniex_HubModelList()
+    _check(lib.geniex_model_list_hub(chipset.encode() if chipset else None, byref(out)))
+    try:
+        models = []
+        for i in range(out.count):
+            m = out.models[i]
+            models.append(
+                HubModel(
+                    name=m.name.decode() if m.name else '',
+                    model_type=_type_str(m.model_type),
+                    chipsets=[m.chipsets[j].decode() for j in range(m.chipset_count)],
+                )
+            )
+        return models
+    finally:
+        lib.geniex_model_list_hub_free(byref(out))
 
 
 def ensure_cached(
@@ -507,14 +584,14 @@ def ensure_cached(
     except GenieXError:
         full_name = name_part
 
-    # No precision + remote source: resolve the hub default before pulling so
-    # only one variant is downloaded instead of all of them.
+    # No precision + remote source: pick the head of the SDK's priority-
+    # sorted candidate list so only one variant is downloaded instead of
+    # every quant the repo publishes.
     if precision is None and local_path is None:
         try:
             result = query(full_name, hub=hub, hf_token=hf_token)
-            default = next((c.precision for c in result.candidates if c.is_default), None)
-            if default:
-                precision = default
+            if result.candidates:
+                precision = result.candidates[0].precision
         except GenieXError:
             pass  # offline or unsupported hub; let pull decide
 

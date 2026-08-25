@@ -33,8 +33,14 @@ const char* geniex_get_error_message(const geniex_ErrorCode error_code) {
             return "Memory allocation failed";
         case GENIEX_ERROR_COMMON_FILE_NOT_FOUND:
             return "File not found or inaccessible";
+        case GENIEX_ERROR_COMMON_NETWORK:
+            return "Network failure (timeout, bad status, DNS, proxy, ...)";
+        case GENIEX_ERROR_COMMON_CANCELLED:
+            return "Operation cancelled by caller";
         case GENIEX_ERROR_COMMON_NOT_INITIALIZED:
             return "Library not initialized";
+        case GENIEX_ERROR_COMMON_ALREADY_INITIALIZED:
+            return "Library already initialized; deinit first";
         case GENIEX_ERROR_COMMON_AUTH:
             return "Hub rejected request; authentication required";
         case GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND:
@@ -45,6 +51,10 @@ const char* geniex_get_error_message(const geniex_ErrorCode error_code) {
             return "Hub server error";
         case GENIEX_ERROR_COMMON_NOT_SUPPORTED:
             return "Operation not supported";
+        case GENIEX_ERROR_COMMON_MANIFEST_PARSE:
+            return "Failed to parse a manifest / index document";
+        case GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE:
+            return "Requested chipset not available for this model";
         case GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED:
             return "Parameter not supported by this plugin";
         case GENIEX_ERROR_COMMON_MODEL_LOAD:
@@ -55,11 +65,6 @@ const char* geniex_get_error_message(const geniex_ErrorCode error_code) {
             return "Plugin loading failed";
         case GENIEX_ERROR_COMMON_PLUGIN_INVALID:
             return "Invalid plugin";
-        case GENIEX_ERROR_COMMON_LICENSE_INVALID:
-            return "Invalid license";
-        case GENIEX_ERROR_COMMON_LICENSE_EXPIRED:
-            return "License expired";
-
             /* ===== LLM ERRORS (200xxx) ===== */
         case GENIEX_ERROR_LLM_TOKENIZATION_FAILED:
             return "Tokenization failed";

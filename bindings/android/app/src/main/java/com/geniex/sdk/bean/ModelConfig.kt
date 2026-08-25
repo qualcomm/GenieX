@@ -23,13 +23,13 @@ data class ModelConfig(
     var nSeqMax: Int = 1,
 
     /**
-     * Number of layers to offload to GPU / NPU. The JNI layer overrides
-     * this when [InputPluginBase.compute_unit] is [ComputeUnitValue.CPU] (forces
-     * 0) or [ComputeUnitValue.HYBRID] (forces 999). For [ComputeUnitValue.GPU]
-     * and [ComputeUnitValue.NPU] the caller's value is used as-is; set it
-     * to 999 to offload every layer.
+     * Number of layers to offload to GPU / NPU; -1 (the default) means all
+     * layers, which llama.cpp interprets natively. The JNI layer forces 0
+     * when [InputPluginBase.compute_unit] is [ComputeUnitValue.CPU] (and for
+     * qairt, which ignores it). For [ComputeUnitValue.GPU] / [ComputeUnitValue.NPU]
+     * / [ComputeUnitValue.HYBRID] the caller's value passes through.
      */
-    var nGpuLayers: Int = 0,
+    var nGpuLayers: Int = -1,
 
     /** Path to the chat template file (optional) */
     val chat_template_path: String = "",
@@ -37,11 +37,19 @@ data class ModelConfig(
     /** Content of the chat template file (optional) */
     val chat_template_content: String = "",
 
-    /** Maximum number of tokens to generate */
-    val max_tokens: Int = 2048,
+    /** Speculative decoding type(s), comma-separated (llama_cpp only; "" / "none" = disabled).
+     *  Draft models: "draft-mtp","draft-eagle3","draft-simple". Self-speculative: "ngram-*". */
+    val spec_type: String = "",
 
-    /** Enable "thinking" mode for more detailed reasoning */
-    val enable_thinking: Boolean = false,
+    /** Draft GGUF for draft-* spec types ("" for ngram-* or when disabled) */
+    val spec_draft_model: String = "",
 
-    val verbose: Boolean = false,
+    /** Max draft tokens per step (0 = plugin default of 3) */
+    val spec_n_max: Int = 0,
+
+    /** Min draft tokens per step (0 = llama.cpp default) */
+    val spec_n_min: Int = 0,
+
+    /** Min greedy draft probability (0 = llama.cpp default) */
+    val spec_p_min: Float = 0.0f,
 )

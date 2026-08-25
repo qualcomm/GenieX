@@ -37,14 +37,15 @@ go_library(
         "@com_github_spf13_viper//:viper",
         "@org_golang_x_mod//semver",
         "@org_golang_x_sync//errgroup",
+        "@org_golang_x_term//:term",
     ],
 )
 
 go_cgo_test(
     name = "geniex_test",
     srcs = [
+        "infer_test.go",
         "model_test.go",
-        "update_test.go",
     ],
     embed = [":geniex_lib"],
     gotags = [
@@ -53,7 +54,6 @@ go_cgo_test(
     ],
     deps = [
         "//cli/internal/testutil",
-        "//cli/internal/types",
     ],
 )
 

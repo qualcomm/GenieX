@@ -1,0 +1,30 @@
+{
+  "models": {
+    "llama_cpp_llm": {
+      "id": "unsloth/Qwen3-4B-GGUF",
+      "precision": "Q4_0"
+    },
+    "llama_cpp_vlm": {
+      "id": "unsloth/gemma-4-E2B-it-GGUF",
+      "precision": "Q4_0"
+    },
+    "llama_cpp_mtp_target": {
+      "id": "google/gemma-4-26B-A4B-it-qat-q4_0-gguf",
+      "precision": "Q4_0"
+    },
+    "llama_cpp_mtp_draft": {
+      "id": "RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf",
+      "precision": "Q4_0"
+    },
+    "qairt_llm": {
+      "id": "qualcomm/Qwen3-4B",
+      "precision": null,
+      "env_override": "GENIEX_QAIRT_MODEL"
+    },
+    "qairt_vlm": {
+      "id": "qualcomm/Qwen2.5-VL-7B-Instruct",
+      "precision": null,
+      "env_override": "GENIEX_QAIRT_VLM_MODEL"
+    }
+  }
+}

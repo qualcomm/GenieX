@@ -8,7 +8,8 @@ git tag v1.2.3 && git push origin v1.2.3
 
 - Tags containing `-` are drafts (and push the sdist to TestPyPI).
 - Bare `vX.Y.Z` tags publish immediately (and push the sdist to production PyPI).
-- Assets: `geniex-sdk-{linux,windows}-arm64-<tag>.zip`, `geniex-cli-linux-arm64-<tag>.tar.gz`, `geniex-cli-setup-windows-arm64-<tag>.exe`, `*.whl`, `*.aar`, and per-file `.sha256` sidecars.
+- Assets: `geniex-sdk-{linux,windows}-arm64-<tag>.zip`, `geniex-cli-linux-arm64-<tag>.tar.gz`, `geniex-cli-setup-windows-arm64-<tag>.exe`, `geniex-android-aar-<tag>.aar`, `geniex-bench-{linux,windows,android}-arm64-<tag>.{tar.gz,zip}`, `geniex-pysdist{,-llama_cpp,-qairt}-<tag>.tar.gz`, and per-file `.sha256` sidecars.
+- The CPU-only variant ([#1217](https://github.com/qualcomm/GenieX/issues/1217)) adds a `-cpu` infix on the Linux and Android assets: `geniex-{sdk,cli}-linux-arm64-cpu-<tag>.*` and `geniex-android-aar-cpu-<tag>.aar`. Docker mirrors it as the `-cpu` tag; Maven Central publishes only the default AAR. No `geniex-bench` archive: on Linux the SDK zip already ships `bin/geniex-bench`, and no device in the benchmark fleet needs a CPU-only build.
 - Re-running the same tag via **Actions → Release → Run workflow** is safe **as long as you set "Use workflow from" to the tag** (Tags tab in the dropdown). Dispatching from `main` is rejected by `resolve-tag` so the workflow never builds a tag against the wrong commit.
 - S3 mirror at `s3://qaihub-public-assets/qai-hub-geniex/` — see [§ S3 mirror & manifest](#s3-mirror--manifest) below.
 
@@ -20,11 +21,11 @@ Tags follow [SemVer 2.0](https://semver.org/) with a `v` prefix: `vX.Y.Z` for st
 
 ### Digits
 
-| Bump        | Meaning                                                       | Example triggers                                                                                |
-|-------------|---------------------------------------------------------------|-------------------------------------------------------------------------------------------------|
-| MAJOR (`X`) | Breaking change to any public surface. Consumers must adapt.  | CLI flag removed/renamed, SDK header signature changed, Python API removed, config key renamed. |
-| MINOR (`Y`) | Backwards-compatible feature addition.                        | New runtime, new model support, new CLI subcommand, new SDK function.                           |
-| PATCH (`Z`) | Backwards-compatible fix or cleanup.                          | Bug fix, dependency bump, doc/CI-only change, internal refactor.                                |
+| Bump        | Meaning                                                      | Example triggers                                                                                |
+| ----------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| MAJOR (`X`) | Breaking change to any public surface. Consumers must adapt. | CLI flag removed/renamed, SDK header signature changed, Python API removed, config key renamed. |
+| MINOR (`Y`) | Backwards-compatible feature addition.                       | New runtime, new model support, new CLI subcommand, new SDK function.                           |
+| PATCH (`Z`) | Backwards-compatible fix or cleanup.                         | Bug fix, dependency bump, doc/CI-only change, internal refactor.                                |
 
 **Pre-1.0 rule.** The project is still pre-1.0 (`X = 0`). Do **not** bump MAJOR while private/unreleased — keep `X = 0`. Breaking changes bump **MINOR** (`0.Y → 0.(Y+1)`, resetting `Z` to 0) and must be flagged in the release notes. The project graduates to `X = 1` only on first public release.
 
@@ -32,12 +33,12 @@ Tags follow [SemVer 2.0](https://semver.org/) with a `v` prefix: `vX.Y.Z` for st
 
 Pre-release channels communicate how ready a build is. Ordering: `alpha < beta < rc < stable`.
 
-| Channel   | Purpose                                                        | Allowed branch         | Still allowed to change       |
-|-----------|----------------------------------------------------------------|------------------------|-------------------------------|
-| `alpha.n` | Share in-progress builds; feature shape may still move.        | feature branch or main | Anything, including breaking. |
-| `beta.n`  | Feature-complete for the target `X.Y.Z`; seeking feedback.     | `main`                 | Bug fixes and polish only.    |
-| `rc.n`    | Release candidate — "will ship unless we find a bug".          | `main`                 | Bug fixes only.               |
-| stable    | Published release.                                             | `main`                 | Nothing — cut a new bump.     |
+| Channel   | Purpose                                                    | Allowed branch         | Still allowed to change       |
+| --------- | ---------------------------------------------------------- | ---------------------- | ----------------------------- |
+| `alpha.n` | Share in-progress builds; feature shape may still move.    | feature branch or main | Anything, including breaking. |
+| `beta.n`  | Feature-complete for the target `X.Y.Z`; seeking feedback. | `main`                 | Bug fixes and polish only.    |
+| `rc.n`    | Release candidate — "will ship unless we find a bug".      | `main`                 | Bug fixes only.               |
+| stable    | Published release.                                         | `main`                 | Nothing — cut a new bump.     |
 
 Rules:
 
@@ -57,12 +58,14 @@ This is the algorithm `/release` follows. Apply in order.
    ```
 
    Don't use `git describe` — it only looks at HEAD's ancestor chain and will miss stable tags cut on side branches. If the command prints nothing, target `v0.1.0` and skip to step 3.
+
 2. **Pick the target `X.Y.Z`** from `git log v0.A.B..HEAD --format="%h %s" --stat` (subject + touched files in one pass; run `git show <sha>` only if that's still ambiguous):
    - any commit with a breaking change → `v0.(A+1).0` (while `X = 0`, breaking bumps MINOR);
    - else any feature commit → `v0.(A+1).0`;
    - else → `v0.A.(B+1)`.
 
    Read both subjects and diffs when the subject is ambiguous — Conventional-Commits prefixes (`feat:`, `fix:`, `feat!:`) are a hint, not a contract; the repo does not enforce them.
+
 3. **Pick the channel** by cycle position for that target:
    - first tag toward a new target, on a feature branch → `alpha.1`;
    - first tag toward a new target, on `main` → `rc.1` (skip beta unless explicitly requested; most cycles go straight to rc);
@@ -85,19 +88,23 @@ A subset of every release is mirrored to `s3://qaihub-public-assets/qai-hub-geni
 
 All objects live directly under the prefix — no `<tag>/` subdirectories. The `<tag>` in each filename disambiguates versions.
 
-| Object | Per tag? | Cache | Purpose |
-|---|---|---|---|
-| `geniex-sdk-windows-arm64-<tag>.zip(.sha256)` | every tag | default | Windows SDK |
-| `geniex-sdk-linux-arm64-<tag>.zip(.sha256)` | every tag | default | Linux SDK |
-| `geniex-cli-setup-windows-arm64-<tag>.exe(.sha256)` | every tag | default | Windows CLI installer (versioned) |
-| `geniex-cli-linux-arm64-<tag>.tar.gz(.sha256)` | every tag | default | Linux CLI archive (versioned) |
-| `install-<tag>.sh(.sha256)` | every tag | default | Linux install script (versioned, pinned via `--version`) |
-| `geniex-cli.exe` | stable only | `no-cache` | Mutable pointer to latest stable Windows installer |
-| `geniex-cli-linux-arm64.tar.gz(.sha256)` | stable only | `no-cache` | Mutable pointer consumed by `install.sh` |
-| `install.sh` | stable only | `no-cache` | Mutable install script — `curl ... \| sh` entrypoint |
-| `manifest-<tag>.json` | every tag | `immutable` | Per-tag asset listing |
-| `index.json` | every tag | `no-cache` | Full version catalogue |
-| `latest.json` | stable only | `no-cache` | Pointer to the latest stable manifest |
+| Object                                              | Per tag?    | Cache       | Purpose                                                                                                                      |
+| --------------------------------------------------- | ----------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `geniex-sdk-windows-arm64-<tag>.zip(.sha256)`       | every tag   | default     | Windows SDK                                                                                                                  |
+| `geniex-sdk-linux-arm64-<tag>.zip(.sha256)`         | every tag   | default     | Linux SDK                                                                                                                    |
+| `geniex-sdk-linux-arm64-cpu-<tag>.zip(.sha256)`     | every tag   | default     | CPU-only Linux SDK, fetched by `GENIEX_SDK_VARIANT=cpu`                                                                      |
+| `geniex-cli-setup-windows-arm64-<tag>.exe(.sha256)` | every tag   | default     | Windows CLI installer (versioned)                                                                                            |
+| `geniex-cli-linux-arm64-<tag>.tar.gz(.sha256)`      | every tag   | default     | Linux CLI archive (versioned)                                                                                                |
+| `geniex-cli-linux-arm64-cpu-<tag>.tar.gz(.sha256)`  | every tag   | default     | CPU-only Linux CLI archive (versioned)                                                                                       |
+| `install-<tag>.sh(.sha256)`                         | every tag   | default     | Linux install script (versioned, pinned via `--version`)                                                                     |
+| `geniex-cli.exe`                                    | stable only | `no-cache`  | Mutable pointer to latest stable Windows installer                                                                           |
+| `geniex-cli-linux-arm64.tar.gz(.sha256)`            | stable only | `no-cache`  | Mutable pointer consumed by `install.sh`                                                                                     |
+| `geniex-cli-linux-arm64-cpu.tar.gz(.sha256)`        | stable only | `no-cache`  | Mutable pointer consumed by `install.sh --cpu-only`                                                                          |
+| `install.sh`                                        | stable only | `no-cache`  | Mutable install script — `curl ... \| sh` entrypoint                                                                         |
+| `manifest-<tag>.json`                               | every tag   | `immutable` | Per-tag asset listing                                                                                                        |
+| `index.json`                                        | every tag   | `no-cache`  | Full version catalogue                                                                                                       |
+| `latest.json`                                       | stable only | `no-cache`  | Pointer to the latest stable manifest                                                                                        |
+| `windows-signed.txt`                                | stable only | `no-cache`  | Code-signing gate for the latest Windows installer — see [§ Windows installer signing gate](#windows-installer-signing-gate) |
 
 Other assets (AAR, sdist, HTP cert/to-sign zips) ship via GitHub Releases / Maven Central / PyPI (stable) / TestPyPI (prerelease) only — not via S3.
 
@@ -116,8 +123,18 @@ S3 publishing runs in the geniex repo (the IAM role's OIDC trust only allows `qc
     "latest_stable": "v0.1.5",
     "latest_prerelease": "v0.1.6-rc.2",
     "versions": [
-      { "tag": "v0.1.6-rc.2", "is_prerelease": true,  "released_at": "...", "manifest": "manifest-v0.1.6-rc.2.json" },
-      { "tag": "v0.1.5",      "is_prerelease": false, "released_at": "...", "manifest": "manifest-v0.1.5.json" }
+      {
+        "tag": "v0.1.6-rc.2",
+        "is_prerelease": true,
+        "released_at": "...",
+        "manifest": "manifest-v0.1.6-rc.2.json"
+      },
+      {
+        "tag": "v0.1.5",
+        "is_prerelease": false,
+        "released_at": "...",
+        "manifest": "manifest-v0.1.5.json"
+      }
     ]
   }
   ```
@@ -135,7 +152,7 @@ S3 publishing runs in the geniex repo (the IAM role's OIDC trust only allows `qc
     "assets": [
       {
         "name": "geniex-sdk-windows-arm64-v0.1.5.zip",
-        "url":  "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-sdk-windows-arm64-v0.1.5.zip",
+        "url": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-sdk-windows-arm64-v0.1.5.zip",
         "size": 123456789,
         "sha256": "...",
         "kind": "sdk",
@@ -150,18 +167,48 @@ S3 publishing runs in the geniex repo (the IAM role's OIDC trust only allows `qc
 
 The per-tag manifest is byte-stable across workflow re-runs of the same tag — `released_at` is preserved from the first publish, so clients can cache it forever.
 
+The CPU-only objects are on S3 but deliberately **absent from the manifest**: their metadata would be identical to the default build's, so a `kind`/`platform`/`arch` lookup could hand a normal Snapdragon device the slow artifact. Nothing discovers them that way anyway — `install.sh --cpu-only` and `GENIEX_SDK_VARIANT=cpu` both build the URL from the naming convention.
+
 ## Hexagon HTP signing
 
-The Windows ARM64 SDK ships `libggml-htp.cat` plus `libggml-htp-v{68,69,73,75,79,81}.so` — Windows refuses to load them unsigned. Release CI runs an `overlay-htp` job **before** `build-cli` that `curl`s `s3://qaihub-public-assets/llama-cpp/libggml-htp-<sha>.zip`, where `<sha>` is the `third-party/llama.cpp` short SHA. Both the installer and the SDK zip end up with the same HTP files:
+The Windows ARM64 SDK ships `libggml-htp.cat` plus `libggml-htp-v{73,75,79,81}.so` — Windows refuses to load them unsigned. Release CI runs an `overlay-htp` job **before** `build-cli` that sparse-checks-out `sdk/signed-htp/libggml-htp-<sha>.zip` from the `chore/signed-htp-lfs-store` branch of `qcom-ai-hub/geniex` (LFS-tracked), where `<sha>` is the `third-party/llama.cpp` short SHA. Both the installer and the SDK zip end up with the same HTP files:
 
 - **Hit** — overlay the Microsoft-signed files into the SDK artifact; `build-cli` packages them into the installer; release normally.
 - **Miss** — keep the self-signed build. The SDK name gets a `-selfsigned` suffix, and the release also carries `ggml-htp-v1.cer` (users import it) and `libggml-htp-to-sign-<sha>.zip` (operators submit it for signing).
 
-The S3 bundle must contain exactly these eight files at the zip root: `libggml-htp.cat`, `libggml-htp.inf`, and `libggml-htp-v{68,69,73,75,79,81}.so`.
+The signed bundle must contain exactly these six files at the zip root: `libggml-htp.cat`, `libggml-htp.inf`, and `libggml-htp-v{73,75,79,81}.so`.
+
+The cross-repo checkout reuses `secrets.GH_PAT` (already scoped for cross-repo access to `qcom-ai-hub/geniex` — see `publish-s3` below). If CI reports `signed=false` but the bundle is on `chore/signed-htp-lfs-store`, first check that `GH_PAT` has not expired.
 
 ### Promoting self-signed → Microsoft-signed
 
 1. Download `libggml-htp-to-sign-<sha>.zip` from the draft release.
 2. Submit for Microsoft signing.
-3. Upload the result to `s3://qaihub-public-assets/llama-cpp/libggml-htp-<sha>.zip`.
+   a. Put the `.cat` `.inf` and all `.so` files into `ATT\libggml-htp\` in samba;
+   b. Submit Jenkins pipeline, fill path with `\path\to\ATT`, other field use default or first param.
+   c. Get signed files from `ATT\Glymur\01000\ExtractedDrivers`.
+   d. Repack the signed files (without `.inf`) into a zip with the same layout at the root.
+3. Commit the result to `qcom-ai-hub/geniex` at `sdk/signed-htp/libggml-htp-<sha>.zip` on the `chore/signed-htp-lfs-store` branch — `git lfs install` locally, push the zip directly, or open a PR against that branch and squash-merge.
 4. Re-run the Release workflow for the same tag.
+
+## Windows installer signing gate
+
+The Windows installer is published before it is Authenticode-signed, so `geniex update` gates on `windows-signed.txt` to avoid pushing an unsigned build. On Windows, once a newer version is found, the updater GETs this file (see [`cli/cmd/geniex/update.go`](../cli/cmd/geniex/update.go), `isWindowsSigned`): contents `true` → proceed with the download; anything else or missing → treat as up-to-date and skip.
+
+Release-side: upload `windows-signed.txt` with `true` after the latest stable installer is signed; set it back to a non-`true` value before publishing the next, not-yet-signed installer.
+
+# Check List
+
+- make sure `libggml-htp` is signed, if not, see [§ Hexagon HTP signing](#hexagon-htp-signing) above
+  - trigger an alpha version tag with `llama.cpp` bump up.
+  - follow [Promoting self-signed → Microsoft-signed](#promoting-self-signed--microsoft-signed)
+- trigger a rc version tag on `main`, and check below model
+  - `unsloth/Qwen3-0.6B-GGUF` and `unsloth/Qwen3.5-0.8B-GGUF` on `cpu` / `gpu` / `npu`
+  - `qualcomm/Qwen3-4B` and `qualcomm/Qwen3-VL-4B-Instruct`
+  - test `llama_cpp` npu on qualcomm pc
+- create a offical release tag on same commit
+- signed windows installer
+  - send unsigned installer to wido team
+  - replace installer on s3
+  - update sha256
+  - update `windows-signed.txt` to true, see [§ Windows installer signing gate](#windows-installer-signing-gate)

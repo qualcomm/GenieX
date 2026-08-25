@@ -187,7 +187,7 @@ async fn resume_skips_completed_chunks() {
     let out = dest.join("f.bin");
     std::fs::write(&out, body.clone()).unwrap();
     let plan = chunklib::plan_chunks(body.len() as u64);
-    let mut bitmap = vec![0u8; plan.num_chunks()];
+    let mut bitmap = vec![0u8; plan.chunks.len()];
     bitmap[0] = 0x01;
     bitmap[2] = 0x01;
     std::fs::write(dest.join("f.bin.progress"), &bitmap).unwrap();

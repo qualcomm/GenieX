@@ -11,6 +11,22 @@ on:
         description: "Model names from bench-models.json, comma-separated (blank = all)"
         type: string
         default: ""
+      compute:
+        description: "Compute units to run per model, comma-separated: cpu/gpu/npu/hybrid (blank = every unit declared on the model)"
+        type: string
+        default: ""
+      ctx:
+        description: "Context sizes, comma-separated (blank = 512,1024,4096)"
+        type: string
+        default: ""
+      pp:
+        description: "Prefill token counts, comma-separated matching ctx (blank = ctx-tg per cell)"
+        type: string
+        default: ""
+      tg:
+        description: "Decode token counts, comma-separated matching ctx (blank = 128 per cell)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -29,6 +45,7 @@ jobs:
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
       devices: ${{ steps.set.outputs.devices }}
+      excludes: ${{ steps.set.outputs.excludes }}
     steps:
       - uses: actions/checkout@v7
       - id: set
@@ -48,45 +65,59 @@ jobs:
           fi
           echo "devices=$devices" >> "$GITHUB_OUTPUT"
 
+          # Catalog-only rows (empty `devices`) are never dispatched.
           if [ -n "$PICK_MODEL" ]; then
             matrix=$(jq -c --arg s "$PICK_MODEL" '
               ($s | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0))) as $pick
               | map(select(.name as $n | $pick | index($n)))
+              | map(select(.devices != []))
             ' "$MODELS_FILE")
             picked_n=$(jq 'length' <<<"$matrix")
             want_n=$(jq -n --arg s "$PICK_MODEL" \
               '$s | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0)) | length')
             if [ "$picked_n" != "$want_n" ]; then
-              echo "::error::model input has unknown name(s): $PICK_MODEL"
-              echo "::error::available: $(jq -r '.[].name' "$MODELS_FILE" | paste -sd, -)"
+              echo "::error::model input has unknown or catalog-only name(s): $PICK_MODEL"
+              echo "::error::available: $(jq -r '.[] | select(.devices != []) | .name' "$MODELS_FILE" | paste -sd, -)"
               exit 1
             fi
           else
-            matrix=$(jq -c . "$MODELS_FILE")
+            matrix=$(jq -c '[.[] | select(.devices != [])]' "$MODELS_FILE")
           fi
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+          # Spec-decoding rows only run on SC8480XP; drop the other combos.
+          excludes=$(jq -c -n --argjson devices "$devices" --argjson models "$matrix" '
+            [ $devices[] as $d | $models[] as $m
+              | select(($m.spec // null) != null and $d != "SC8480XP")
+              | {device: $d, model: {name: $m.name}}
+            ]
+          ')
+          echo "excludes=$excludes" >> "$GITHUB_OUTPUT"
 
   bench:
     name: ${{ matrix.device }} · ${{ matrix.model.plugin }} · ${{ matrix.model.name }}
     needs: [build-sdk, load-models]
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 355 # just under the GitHub-hosted 6h job hard cap
     strategy:
       fail-fast: false
       max-parallel: 4
       matrix:
         device: ${{ fromJson(needs.load-models.outputs.devices) }}
         model: ${{ fromJson(needs.load-models.outputs.matrix) }}
+        exclude: ${{ fromJson(needs.load-models.outputs.excludes) }}
     env:
       QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - id: sdk
+        env:
+          DEVICE: ${{ matrix.device }}
         run: |
-          case "${{ matrix.device }}" in
+          case "$DEVICE" in
             SM*)         echo "name=sdk-android-arm64" ;;
             SC*|CRD*|X*) echo "name=sdk-windows-arm64" ;;
             *)           echo "name=sdk-linux-arm64" ;;
@@ -96,12 +127,23 @@ jobs:
           name: ${{ steps.sdk.outputs.name }}
           path: pkg-geniex
       - uses: ./.github/actions/install-qdc-sdk
-      - run: |
+      - env:
+          DEVICE: ${{ matrix.device }}
+          MODEL_NAME: ${{ matrix.model.name }}
+          COMPUTE: ${{ github.event.inputs.compute }}
+          CTX: ${{ github.event.inputs.ctx }}
+          PP: ${{ github.event.inputs.pp }}
+          TG: ${{ github.event.inputs.tg }}
+        run: |
           python sdk/benchmark/qdc/run_qdc_jobs.py \
             --pkg-dir pkg-geniex \
-            --device "${{ matrix.device }}" \
-            --model-name "${{ matrix.model.name }}" \
-            --cells-out "${{ matrix.device }}-${{ matrix.model.name }}.json"
+            --device "$DEVICE" \
+            --model-name "$MODEL_NAME" \
+            --compute "$COMPUTE" \
+            --ctx "$CTX" \
+            --pp "$PP" \
+            --tg "$TG" \
+            --cells-out "$DEVICE-$MODEL_NAME.json"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -119,14 +161,16 @@ jobs:
         device: ${{ fromJson(needs.load-models.outputs.devices) }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
       - uses: actions/download-artifact@v8
         with:
           pattern: bench-cells-${{ matrix.device }}-*
           path: cells
-      - run: |
+      - env:
+          DEVICE: ${{ matrix.device }}
+        run: |
           python sdk/benchmark/qdc/run_qdc_jobs.py \
-            --device "${{ matrix.device }}" \
+            --device "$DEVICE" \
             --render-dir cells

@@ -37,11 +37,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="默认运行环境是哪个？">
-    如果不传计算单元：
-    - `llama_cpp` 默认 `hybrid`（HTP + CPU 按张量调度——骁龙上的快速路径）。
-    - `qairt` 默认 `npu`。
-
-    部分模型会覆盖默认值——例如 `gpt-oss` 在 `llama_cpp` 下回退到 `npu`。
+    如果不传计算单元，`llama_cpp` 与 `qairt` 都默认 `npu`。llama_cpp 若想用更快的 HTP + CPU 按张量调度路径，显式传入 `hybrid`。
   </Accordion>
 
   <Accordion title="应该选哪种精度（量化）？">

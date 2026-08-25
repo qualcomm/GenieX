@@ -7,22 +7,41 @@
 //! `cli/internal/model_hub/aihub/selector.go`:
 //!
 //! - Resolve the user-supplied chipset against `platform.json` aliases.
-//! - Filter to assets whose `runtime == RUNTIME_GENIE`. The CLI only
-//!   supports the Genie runtime (LLM / VLM domains); other assets are
-//!   rejected up front.
+//! - Filter to assets whose `runtime` is one of [`QAIRT_RUNTIMES`]. The
+//!   SDK only runs QAIRT (NPU) archives through this source; other assets
+//!   (ONNX, TFLite, QNN_DLC, llama.cpp GGUF) are rejected up front.
 //! - Filter to assets whose canonical chipset matches.
-//! - If multiple precisions survive, pick the lex-first precision string
-//!   for a deterministic default. The Go CLI sorts by enum value, which
-//!   produces the same order for the common precisions we see in practice
-//!   (`PRECISION_FP16` before `PRECISION_W4A16`, etc.). This is a
-//!   best-effort tiebreaker; precision selection is not exposed over FFI.
+//! - If multiple assets survive, prefer the newer `RUNTIME_GENIEX_QAIRT`
+//!   entry, then pick the lex-first precision string for a deterministic
+//!   default. Best-effort tiebreaker; precision is not exposed over FFI.
 
-use super::manifest::{AssetDetails, ModelReleaseAssets, PlatformInfo};
+use super::dto::{AssetDetails, ModelReleaseAssets, PlatformInfo};
 use crate::error::{Error, Result};
 
-/// Runtime string the public bucket uses for Genie-compatible assets.
-/// Matches `qaihm.Runtime_RUNTIME_GENIE`.
-const RUNTIME_GENIE: &str = "RUNTIME_GENIE";
+/// Runtime strings the public bucket uses for QAIRT (NPU) assets, in
+/// preference order.
+///
+/// AI Hub is mid-migration from the legacy `RUNTIME_GENIE` enum to the
+/// namespaced `RUNTIME_GENIEX_QAIRT`. Most models publish both, but neither
+/// alone is sufficient (bucket v0.60.0): `Gemma-4-E4B-it` ships only the
+/// new name, `Phi-3.5-Mini-Instruct` only the legacy one. Chipset coverage
+/// can also differ between the two for the same model, so both are kept as
+/// match candidates rather than picking one per model.
+const QAIRT_RUNTIMES: &[&str] = &["RUNTIME_GENIEX_QAIRT", "RUNTIME_GENIE"];
+
+/// Rank of `runtime` within [`QAIRT_RUNTIMES`] for the preference sort;
+/// non-QAIRT runtimes sort last (they're filtered out before this runs).
+fn runtime_rank(runtime: &str) -> usize {
+    QAIRT_RUNTIMES
+        .iter()
+        .position(|r| *r == runtime)
+        .unwrap_or(QAIRT_RUNTIMES.len())
+}
+
+/// Whether `runtime` names a QAIRT archive this source can install.
+pub fn is_qairt_runtime(runtime: &str) -> bool {
+    QAIRT_RUNTIMES.contains(&runtime)
+}
 
 /// Domains the SDK currently supports — same subset the Go CLI accepts
 /// in `RuntimeForDomain`.
@@ -80,7 +99,7 @@ pub fn resolve_chipset_display(plat: &PlatformInfo, chipset: &str) -> Option<Str
     None
 }
 
-/// Pick one asset matching `(chipset, RUNTIME_GENIE)`. Returns the list of
+/// Pick one asset matching `(chipset, QAIRT runtime)`. Returns the list of
 /// supported chipsets (for actionable error messages) when nothing matches.
 pub fn match_asset<'a>(
     ra: &'a ModelReleaseAssets,
@@ -107,7 +126,9 @@ pub fn match_asset<'a>(
     let mut candidates: Vec<&AssetDetails> = ra
         .assets
         .iter()
-        .filter(|a| a.runtime == RUNTIME_GENIE && a.chipset.as_deref() == Some(canonical.as_str()))
+        .filter(|a| {
+            is_qairt_runtime(&a.runtime) && a.chipset.as_deref() == Some(canonical.as_str())
+        })
         .collect();
 
     if candidates.is_empty() {
@@ -117,18 +138,28 @@ pub fn match_asset<'a>(
         });
     }
 
-    // Deterministic tiebreak when multiple precisions match.
-    candidates.sort_by(|a, b| a.precision.cmp(&b.precision));
+    // Prefer the newer runtime, then tiebreak on precision so the pick is
+    // deterministic when a model publishes the same chipset under both.
+    candidates.sort_by(|a, b| {
+        runtime_rank(&a.runtime)
+            .cmp(&runtime_rank(&b.runtime))
+            .then_with(|| a.precision.cmp(&b.precision))
+    });
     Ok(candidates[0])
 }
 
-/// Collect the chipsets a model ships assets for, rendered as the
-/// reference device names callers see in `list_supported_chipsets` (so
-/// error messages match the picker). Falls back to the canonical id when
-/// `platform.json` has no reference device for it.
+/// Collect the chipsets a model ships *installable* (QAIRT) assets for,
+/// rendered as the reference device names callers see in
+/// `list_supported_chipsets` (so error messages match the picker). Falls
+/// back to the canonical id when `platform.json` has no reference device
+/// for it.
+///
+/// Only accepted runtimes are counted: listing every chipset in
+/// `release-assets.json` regardless of runtime produced self-contradictory
+/// errors that named the very chipset the caller had just requested.
 fn collect_chipsets(ra: &ModelReleaseAssets, plat: &PlatformInfo) -> Vec<String> {
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    for a in &ra.assets {
+    for a in ra.assets.iter().filter(|a| is_qairt_runtime(&a.runtime)) {
         if let Some(cs) = a.chipset.as_deref() {
             let display = plat
                 .chipsets
@@ -162,7 +193,7 @@ impl std::fmt::Display for UnavailableChipset {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::ai_hub::manifest::ChipsetInfo;
+    use crate::source::ai_hub::dto::ChipsetInfo;
 
     fn platform(entries: &[(&str, &[&str])]) -> PlatformInfo {
         PlatformInfo {
@@ -174,6 +205,7 @@ mod tests {
                     aliases: aliases.iter().map(|a| (*a).to_string()).collect(),
                 })
                 .collect(),
+            devices: Vec::new(),
         }
     }
 
@@ -185,6 +217,7 @@ mod tests {
                 reference_device: "Snapdragon X Elite CRD".to_string(),
                 aliases: vec![],
             }],
+            devices: Vec::new(),
         };
         assert_eq!(
             resolve_chipset(&plat, "snapdragon x elite crd").unwrap(),
@@ -210,6 +243,7 @@ mod tests {
                 reference_device: "Snapdragon X Elite CRD".to_string(),
                 aliases: vec!["x1e80100".to_string()],
             }],
+            devices: Vec::new(),
         };
         // canonical id, alias, and reference name all map to the reference name.
         for input in [
@@ -257,13 +291,80 @@ mod tests {
             model_id: "m".into(),
             assets: vec![
                 asset("SD8G3", "RUNTIME_TFLITE", "PRECISION_FP16"),
-                asset("SD8G3", "RUNTIME_GENIE", "PRECISION_W4A16"),
-                asset("Other", "RUNTIME_GENIE", "PRECISION_FP16"),
+                asset("SD8G3", "RUNTIME_GENIEX_QAIRT", "PRECISION_W4A16"),
+                asset("Other", "RUNTIME_GENIEX_QAIRT", "PRECISION_FP16"),
             ],
         };
         let got = match_asset(&ra, &plat, "sm8650").unwrap();
         assert_eq!(got.chipset.as_deref(), Some("SD8G3"));
+        assert_eq!(got.runtime, "RUNTIME_GENIEX_QAIRT");
+    }
+
+    /// `Gemma-4-E4B-it` (bucket v0.60.0) publishes only
+    /// `RUNTIME_GENIEX_QAIRT`; matching the legacy name alone made it
+    /// undownloadable on every supported chipset.
+    #[test]
+    fn matches_geniex_qairt_only_model() {
+        let plat = platform(&[("qualcomm-snapdragon-x-elite", &["x1e80100"])]);
+        let ra = ModelReleaseAssets {
+            model_id: "gemma_4_e4b_it".into(),
+            assets: vec![asset(
+                "qualcomm-snapdragon-x-elite",
+                "RUNTIME_GENIEX_QAIRT",
+                "PRECISION_W4A16",
+            )],
+        };
+        let got = match_asset(&ra, &plat, "x1e80100").unwrap();
+        assert_eq!(got.runtime, "RUNTIME_GENIEX_QAIRT");
+    }
+
+    /// `Phi-3.5-Mini-Instruct` (bucket v0.60.0) still ships only the legacy
+    /// `RUNTIME_GENIE` enum, so dropping it would regress that model.
+    #[test]
+    fn matches_legacy_genie_only_model() {
+        let plat = platform(&[("qualcomm-snapdragon-x-elite", &["x1e80100"])]);
+        let ra = ModelReleaseAssets {
+            model_id: "phi_3_5_mini_instruct".into(),
+            assets: vec![asset(
+                "qualcomm-snapdragon-x-elite",
+                "RUNTIME_GENIE",
+                "PRECISION_W4A16",
+            )],
+        };
+        let got = match_asset(&ra, &plat, "x1e80100").unwrap();
         assert_eq!(got.runtime, "RUNTIME_GENIE");
+    }
+
+    /// When a model dual-publishes the same chipset the newer runtime wins,
+    /// even though `RUNTIME_GENIE` sorts first alphabetically.
+    #[test]
+    fn prefers_geniex_qairt_over_legacy_genie() {
+        let plat = platform(&[("A", &[])]);
+        let ra = ModelReleaseAssets {
+            model_id: "m".into(),
+            assets: vec![
+                asset("A", "RUNTIME_GENIE", "PRECISION_W4A16"),
+                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_W4A16"),
+            ],
+        };
+        let got = match_asset(&ra, &plat, "A").unwrap();
+        assert_eq!(got.runtime, "RUNTIME_GENIEX_QAIRT");
+    }
+
+    /// Non-QAIRT assets must not leak into the "supported chipsets" hint,
+    /// or the error can name a chipset with no installable QAIRT archive.
+    #[test]
+    fn available_excludes_non_qairt_runtimes() {
+        let plat = platform(&[("A", &[]), ("B", &[])]);
+        let ra = ModelReleaseAssets {
+            model_id: "m".into(),
+            assets: vec![
+                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_W4A16"),
+                asset("B", "RUNTIME_TFLITE", "PRECISION_FP16"),
+            ],
+        };
+        let err = match_asset(&ra, &plat, "C").unwrap_err();
+        assert_eq!(err.available, vec!["A".to_string()]);
     }
 
     #[test]
@@ -272,7 +373,7 @@ mod tests {
         let ra = ModelReleaseAssets {
             model_id: "m".into(),
             assets: vec![
-                asset("A", "RUNTIME_GENIE", "PRECISION_FP16"),
+                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_FP16"),
                 asset("B", "RUNTIME_GENIE", "PRECISION_FP16"),
             ],
         };
@@ -288,12 +389,13 @@ mod tests {
                 reference_device: "Snapdragon X Elite CRD".to_string(),
                 aliases: vec![],
             }],
+            devices: Vec::new(),
         };
         let ra = ModelReleaseAssets {
             model_id: "m".into(),
             assets: vec![asset(
                 "qualcomm-snapdragon-x-elite",
-                "RUNTIME_GENIE",
+                "RUNTIME_GENIEX_QAIRT",
                 "PRECISION_FP16",
             )],
         };
@@ -307,8 +409,8 @@ mod tests {
         let ra = ModelReleaseAssets {
             model_id: "m".into(),
             assets: vec![
-                asset("A", "RUNTIME_GENIE", "PRECISION_W4A16"),
-                asset("A", "RUNTIME_GENIE", "PRECISION_FP16"),
+                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_W4A16"),
+                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_FP16"),
             ],
         };
         let picked = match_asset(&ra, &plat, "A").unwrap();

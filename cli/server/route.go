@@ -35,13 +35,12 @@ func RegisterAPIv1(r *gin.Engine) {
 
 	g.Use(middleware.CORS, middleware.GIL)
 
-	// ==== legacy ====
-	g.POST("/completions", func(c *gin.Context) {
-		c.JSON(http.StatusGone, map[string]any{"error": "this endpoint is deprecated, please use /chat/completions instead"})
-	})
-
 	// ==== openai compatible ====
+	g.POST("/completions", handler.Completions)
 	g.POST("/chat/completions", handler.ChatCompletions)
+
+	// ==== raw logits (prefill-only forward pass; not OpenAI generative logprobs) ====
+	g.POST("/logits", handler.ForwardLogits)
 
 	// ==== model management ====
 	g.GET("/models/*model", handler.RetrieveModel)

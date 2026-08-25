@@ -11,14 +11,6 @@
 #define portable_strdup strdup
 #endif
 
-// keep geniex_plugin link openssl
-#ifdef GENIEX_VALIDATION
-#include "openssl/crypto.h"
-#include "openssl/ssl.h"
-void* _ssl_dummy    = (void*)SSL_CTX_get_options;
-void* _crypto_dummy = (void*)OpenSSL_version;
-#endif
-
 #include <cstdlib>
 #include <iostream>
 
@@ -29,6 +21,21 @@ void* _crypto_dummy = (void*)OpenSSL_version;
 
 #ifdef _WIN32
 #include <windows.h>
+#endif
+
+// Baseline armv8.0 boards (e.g. unoq) lack the armv8.2 features this build bakes
+// in, so bail cleanly instead of SIGILL. Keep in sync with -march; the CPU-only
+// build has nothing to check. See #1217.
+#if defined(__linux__) && defined(__aarch64__) && !defined(GENIEX_CPU_ONLY)
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+
+static bool cpu_features_supported() {
+    unsigned long need = HWCAP_ATOMICS | HWCAP_ASIMDRDM | HWCAP_ASIMDDP | HWCAP_FPHP | HWCAP_ASIMDHP | HWCAP_CRC32;
+    return (getauxval(AT_HWCAP) & need) == need;
+}
+#else
+static bool cpu_features_supported() { return true; }
 #endif
 
 using namespace geniex;
@@ -72,6 +79,15 @@ int32_t geniex_init(void) {
 #endif
 
     GENIEX_LOG_DEBUG("initializing ml");
+
+    // Bail before scan_plugins loads a backend built with armv8.2 instructions
+    // this CPU can't run, which would otherwise SIGILL deep in inference.
+    if (!cpu_features_supported()) {
+        GENIEX_LOG_ERROR(
+            "this device's CPU lacks features required by geniex; "
+            "running would crash with an illegal instruction");
+        return GENIEX_ERROR_COMMON_NOT_SUPPORTED;
+    }
 
     try {
         Registry::instance().scan_plugins();

@@ -45,7 +45,11 @@ On-device, all platforms perform the same work:
 2. Invoke `geniex-bench --matrix-file <tsv> --output-json-dir <out> --chipset <chip>`.
 3. The benchmark binary (`sdk/benchmark/benchmark.c`) runs each cell:
    1 warmup + 3 measured repetitions, writing a per-cell JSON with aggregated
-   stats (median / stdev / min / max for TTFT, prefill tok/s, decode tok/s).
+   stats (median / stdev / min / max for TTFT, prefill tok/s, decode tok/s;
+   median-only for `media_ms`, non-zero on VLM cells).
+   For VLM cells `prefill_tps` is the full prefill (text + media tokens); only
+   the encoder time is split out into `media_ms` — see
+   [run.md § Performance metrics](run.md#performance-metrics).
 4. Results land in `QDC_logs/results/` which QDC auto-collects.
 
 ## 3. Result collection & bench report rendering
@@ -75,8 +79,11 @@ Example output:
 - **Matrix-driven** — model x device pairs run in parallel on QDC.
 - **Platform isolation** — differences are confined to artifact-building and entry
   scripts; the on-device benchmark binary and JSON schema are shared.
-- **Common per-cell JSON schema** — every platform produces the same v2 schema,
-  so the aggregator renders uniformly regardless of origin.
+- **Common per-cell JSON schema** — every platform produces the same schema
+  (`schema_version` `4`), so the aggregator renders uniformly regardless of
+  origin. v4 added the `media_us` per-run encoder time and its `media_ms` agg
+  median. On a VLM run `prompt_tokens` counts text + media tokens, so
+  `prefill_tps` reflects the full prefill.
 
 ## Downloading geniex-bench
 
@@ -117,3 +124,43 @@ Expand-Archive bench.zip -DestinationPath .
 
 Each archive contains `bin/geniex-bench` (or `.exe`) plus `lib/` with all
 required runtime shared libraries (libgeniex, llama_cpp plugin, qairt plugin).
+
+### Raw logits mode (`--logits`)
+
+For on-target accuracy metrics (perplexity, MMLU, MMMU), `--logits` runs a
+single prefill-only forward pass (`geniex_llm_forward_logits`, no decode loop)
+over `-p N` random token ids and writes every position's logits row
+(`[n_tokens, vocab]`) to the JSON report. Bypasses the timing machinery
+entirely (`--warmup` / `-r` / `-n` are ignored).
+
+```bash
+geniex-bench --plugin llama_cpp --device npu -m <model> --logits -p 128 \
+  --logits-top-n 20 --output-json logits.json
+```
+
+The report keeps only the top-N `[token_id, logit]` pairs per row
+(`--logits-top-n`, default 20) so the all-positions output stays small; the JSON
+records `top_n` and `truncated_to_top_n` so a consumer never mistakes it for
+the full vocabulary. Input is random ids only — the forward-logits API takes
+`input_ids` and the bench tool has no tokenizer, so `--prompt-file` is rejected
+with `--logits`. Both `llama_cpp` and `qairt` backends support it.
+
+The JSON report (`schema_version` `logits-1`) carries shape metadata plus
+`rows`, one row per emitted position, each a top-N array of `[token_id, logit]`
+pairs sorted by descending logit:
+
+```json
+{
+  "schema_version": "logits-1",
+  "n_prompt": 128,
+  "all_positions": true,
+  "n_rows": 128,
+  "vocab_size": 151936,
+  "top_n": 20,
+  "truncated_to_top_n": true,
+  "rows": [
+    [[9, 6.950917], [1479, 6.472050], ...],
+    ...
+  ]
+}
+```

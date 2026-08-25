@@ -1,21 +1,22 @@
 name: Test
 
-# Top-level test entry point for tag pushes and manual reruns. Builds
-# the SDK on demand, then fans out to _test.yml (test-go, test-python,
-# test-sdk-ci) and _qdc-pytest.yml (test-sdk-qdc) so tag pushes get the
-# same coverage PRs do.
+# Top-level test entry point for tag pushes and manual reruns. Builds the SDK
+# once, then fans out to _unit-test.yml (test-go, test-python, test-sdk-ci) and
+# _qdc-test.yml (test-sdk-qdc). Tag pushes get the same coverage as PR check.
 #
-# Independent of release.yml: both fire on the same tag push but as
-# siblings — failures here surface as a red check on the tag commit
-# and never gate the publish-* jobs in release.yml.
+# Independent of release.yml: both fire on the same tag push as siblings —
+# failures here surface on the tag commit and never gate release.yml's
+# publish-* jobs.
 #
-# pr-check.yml does NOT call this file; it calls _test.yml /
-# _qdc-pytest.yml directly so the SDK build is shared with the rest of
-# the PR graph.
+# pr-check.yml calls _unit-test.yml / _qdc-test.yml directly so it can share
+# its own build-sdk artifact instead of triggering this workflow.
 
 on:
   push:
     tags:
+      # Coarse glob; the `gate` job below applies a SemVer regex so alpha /
+      # dev / feature-branch v-tags don't trigger the full test matrix.
+      # Mirrors release.yml.
       - "v*"
   workflow_dispatch:
     inputs:
@@ -30,7 +31,32 @@ permissions:
   packages: read
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "push" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rc\.(0|[1-9][0-9]*))?$ ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Tag $TAG is not a release / rc tag; skipping test.yml"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build-sdk:
+    needs: [gate]
+    if: needs.gate.outputs.run == 'true'
     uses: ./.github/workflows/_build-sdk.yml
     secrets: inherit
     with:
@@ -39,8 +65,8 @@ jobs:
 
   test-go:
     needs: [build-sdk]
-    if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
-    uses: ./.github/workflows/_test.yml
+    if: ${{ !cancelled() && needs.build-sdk.result == 'success' }}
+    uses: ./.github/workflows/_unit-test.yml
     secrets: inherit
     with:
       language: go
@@ -48,8 +74,8 @@ jobs:
 
   test-python:
     needs: [build-sdk]
-    if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
-    uses: ./.github/workflows/_test.yml
+    if: ${{ !cancelled() && needs.build-sdk.result == 'success' }}
+    uses: ./.github/workflows/_unit-test.yml
     secrets: inherit
     with:
       language: python
@@ -57,8 +83,8 @@ jobs:
 
   test-sdk-ci:
     needs: [build-sdk]
-    if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
-    uses: ./.github/workflows/_test.yml
+    if: ${{ !cancelled() && needs.build-sdk.result == 'success' }}
+    uses: ./.github/workflows/_unit-test.yml
     secrets: inherit
     with:
       language: sdk
@@ -68,6 +94,8 @@ jobs:
 
   test-sdk-qdc:
     needs: [build-sdk]
-    if: ${{ !cancelled() && needs.build-sdk.result != 'failure' }}
-    uses: ./.github/workflows/_qdc-pytest.yml
+    if: ${{ !cancelled() && needs.build-sdk.result == 'success' }}
+    uses: ./.github/workflows/_qdc-test.yml
     secrets: inherit
+    with:
+      gate_on_changed_files: false

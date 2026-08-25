@@ -38,7 +38,8 @@ func RootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			cmd.SilenceErrors = true
+			// Re-apply now that --log is parsed; the main() call only saw GENIEX_LOG.
+			common.ApplyLogLevel()
 
 			subCmd := cmd.CalledAs()
 
@@ -55,7 +56,11 @@ func RootCmd() *cobra.Command {
 			}
 
 			if !skipUpdate {
-				notifyUpdate()
+				// `update` fetches and prints the latest version itself; the
+				// cached notify banner would be redundant and possibly stale.
+				if subCmd != "update" {
+					notifyUpdate()
+				}
 				// skip network probe for quick commands
 				if !slices.Contains([]string{
 					"geniex",
@@ -78,6 +83,8 @@ func RootCmd() *cobra.Command {
 	}
 	rootCmd.PersistentFlags().StringVarP(&dataDir, "data-dir", "", "", "Custom data directory (env: GENIEX_DATADIR)")
 	viper.BindPFlag("datadir", rootCmd.PersistentFlags().Lookup("data-dir"))
+	rootCmd.PersistentFlags().String("log", "none", "Log level: none, error, warn, info, debug, trace (env: GENIEX_LOG)")
+	viper.BindPFlag("log", rootCmd.PersistentFlags().Lookup("log"))
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "", false, "Enable verbose output")
 	rootCmd.PersistentFlags().BoolVarP(&skipUpdate, "skip-update", "", false, "Skip checking for updates")
 	rootCmd.PersistentFlags().BoolVarP(&testMode, "test-mode", "", false, "Enable test mode")
@@ -122,8 +129,9 @@ func checkAudioDependency() {
 
 // main is the entry point that executes the root command.
 func main() {
-	// log
-	common.ApplyLogLevel()
+	// Honor GENIEX_LOG for early logs; the SDK callback is set later once --log
+	// is parsed. Setting it here (default "none") would null its built-in handler.
+	common.ApplySlog()
 	common.EnableUTF8Console()
 
 	cmd := RootCmd()

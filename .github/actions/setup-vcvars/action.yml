@@ -18,8 +18,10 @@ runs:
     - name: Discover VS toolchain paths
       if: runner.os == 'Windows'
       shell: powershell
-      run: |
-        $arch = "${{ inputs.arch }}"
+      env:
+        ARCH: ${{ inputs.arch }}
+      run: | # zizmor: ignore[github-env] exported paths are discovered on-disk (Get-ChildItem), not attacker-controlled
+        $arch = $env:ARCH
 
         # Prefer arch-native vcvarsARCH.bat; fall back to vcvarsall.bat <arch>.
         $vcvars = Get-ChildItem "C:\Program Files*\Microsoft Visual Studio\*\*\VC\Auxiliary\Build\vcvars$arch.bat" -ErrorAction SilentlyContinue |

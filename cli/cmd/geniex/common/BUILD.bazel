@@ -10,6 +10,7 @@ go_library(
         "log.go",
         "process.go",
         "repl.go",
+        "sdk.go",
         "util_linux.go",
         "util_windows.go",
     ],
@@ -21,6 +22,7 @@ go_library(
         "//cli/internal/readline",
         "//cli/internal/render",
         "//cli/internal/store",
+        "//cli/internal/thinkfsm",
         "@com_github_bytedance_sonic//:sonic",
         "@com_github_lmittmann_tint//:tint",
     ] + select({
@@ -39,6 +41,9 @@ go_library(
 
 go_cgo_test(
     name = "common_test",
-    srcs = ["process_test.go"],
+    srcs = [
+        "error_test.go",
+        "process_test.go",
+    ],
     embed = [":common"],
 )

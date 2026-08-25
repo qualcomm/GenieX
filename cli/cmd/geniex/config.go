@@ -68,7 +68,9 @@ func configGetCmd() *cobra.Command {
 			// The chipset key falls back to host autodetection when unset,
 			// reporting "unknown" if the host cannot be probed.
 			if key == store.ConfigKeyChipset && value == "" {
-				value = resolveChipset()
+				if value = store.Get().ResolveChipset(false); value == "" {
+					value = "unknown"
+				}
 			}
 			// Other unset keys print nothing so the output is easy to use in
 			// scripts (e.g. `$(geniex config get chipset)`).
@@ -115,14 +117,14 @@ func configSetCmd() *cobra.Command {
 	}
 }
 
-// resolveChipset returns the host's autodetected chipset, or "unknown" when the
-// host cannot be probed. Used as the fallback for the unset "chipset" key.
-func resolveChipset() string {
-	detected, err := geniex_sdk.ModelDetectChipset()
-	if err != nil || detected == "" {
-		return "unknown"
+// ensureChipset resolves a chipset: configured value, then host probe, then an
+// interactive picker (which persists the choice).
+func ensureChipset() (string, error) {
+	if c := store.Get().ResolveChipset(false); c != "" {
+		return c, nil
 	}
-	return detected
+	fmt.Println(render.GetTheme().Info.Sprint("No chipset configured. Please select your chipset first."))
+	return pickChipset()
 }
 
 // pickChipset lists the chipsets Qualcomm AI Hub supports and lets the user
@@ -139,7 +141,7 @@ func pickChipset() (string, error) {
 	}
 
 	// Probe the host so we can preselect its chipset; failure is non-fatal.
-	detected, _ := geniex_sdk.ModelDetectChipset()
+	detected, _ := geniex_sdk.ModelDetectChipset(false)
 
 	// matches reports whether the detected chipset is c's name or an alias.
 	matches := func(c geniex_sdk.ChipsetInfo) bool {
@@ -198,7 +200,9 @@ func configListCmd() *cobra.Command {
 			for _, key := range keys {
 				value := cfg[key]
 				if key == store.ConfigKeyChipset && value == "" {
-					value = resolveChipset()
+					if value = store.Get().ResolveChipset(false); value == "" {
+						value = "unknown"
+					}
 				}
 				fmt.Println(render.GetTheme().Info.Sprintf("%s: %s", key, value))
 			}

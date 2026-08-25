@@ -26,9 +26,9 @@ interface InputPluginBase {
  * - [NPU]    — pinned single HTP session (`HTP0`). Deterministic but
  *              slower than [HYBRID] on LLM workloads.
  * - [HYBRID] — `llama_cpp` per-tensor HTP+CPU scheduler. Leaves
- *              `compute_unit` empty and forces `nGpuLayers = 999`; the
- *              fast path on Snapdragon. No-op for `qairt`, which has
- *              only an NPU compute unit.
+ *              `compute_unit` empty and passes `nGpuLayers` through
+ *              (-1 = all layers); the fast path on Snapdragon. No-op for
+ *              `qairt`, which has only an NPU compute unit.
  */
 enum class ComputeUnitValue(val value: String?) {
     /** Pure CPU inference. */

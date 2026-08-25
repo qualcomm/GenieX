@@ -24,12 +24,15 @@ def _format_us(us: int) -> str:
 @dataclass(repr=False)
 class ProfileData:
     ttft: int = 0
+    media_time: int = 0
     prompt_time: int = 0
     decode_time: int = 0
     prompt_tokens: int = 0
     generated_tokens: int = 0
     prefill_speed: float = 0.0
     decode_speed: float = 0.0
+    draft_n_total: int = 0
+    draft_n_accepted: int = 0
     stop_reason: str | None = None
     backend: str | None = None
     device: str | None = None
@@ -41,12 +44,15 @@ class ProfileData:
         stop = c.stop_reason.decode() if c.stop_reason else None
         return cls(
             ttft=c.ttft,
+            media_time=c.media_time,
             prompt_time=c.prompt_time,
             decode_time=c.decode_time,
             prompt_tokens=c.prompt_tokens,
             generated_tokens=c.generated_tokens,
             prefill_speed=c.prefill_speed,
             decode_speed=c.decoding_speed,
+            draft_n_total=c.draft_n_total,
+            draft_n_accepted=c.draft_n_accepted,
             stop_reason=stop,
         )
 
@@ -54,6 +60,7 @@ class ProfileData:
         return (
             f'ProfileData('
             f'ttft={_format_us(self.ttft)}, '
+            f'media_time={_format_us(self.media_time)}, '
             f'prompt_time={_format_us(self.prompt_time)}, '
             f'decode_time={_format_us(self.decode_time)}, '
             f'prompt_tokens={self.prompt_tokens} tok, '

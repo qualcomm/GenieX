@@ -3,7 +3,7 @@
 
 use std::cell::RefCell;
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_void};
+use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use model_manager_core::error::Error;
@@ -71,9 +71,9 @@ pub fn err_to_code(e: &Error) -> i32 {
         Error::HubModelNotFound(_) => GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND,
         Error::QuantNotFound(_, _)
         | Error::QuantNotDownloaded(_, _)
-        | Error::NoDownloadedQuant(_)
         | Error::InvalidModelName(_)
-        | Error::InvalidFileName(_) => GENIEX_ERROR_COMMON_INVALID_INPUT,
+        | Error::InvalidFileName(_)
+        | Error::InvalidUrl { .. } => GENIEX_ERROR_COMMON_INVALID_INPUT,
         // Split HTTP status into actionable buckets; everything else (other
         // statuses, timeout/DNS/proxy, freeform) stays a generic network error.
         Error::HttpStatus { status, .. } if *status == 401 || *status == 403 => {
@@ -110,25 +110,27 @@ pub fn report(e: &Error) -> i32 {
 }
 
 /// Wrap an FFI entry point so panics can't cross the C boundary.
-/// Any panic is logged and converted to `GENIEX_ERROR_COMMON_UNKNOWN`.
+///
+/// The body returns `Result<i32, i32>`: `Ok(code)` (usually `GENIEX_SUCCESS`)
+/// is returned as-is, `Err(code)` is returned as-is — this lets bodies use
+/// `?` on `cstr_to_str` / `get_store` / etc. Any panic is logged and
+/// converted to `GENIEX_ERROR_COMMON_UNKNOWN`.
 pub fn ffi_guard<F>(f: F) -> i32
 where
-    F: FnOnce() -> i32,
+    F: FnOnce() -> Result<i32, i32>,
 {
     // Clear any message left by a prior call on this thread so
     // geniex_model_last_error_message only ever reflects THIS call's outcome
     // (set again by report() / the panic arm below on failure).
     clear_last_error();
     match catch_unwind(AssertUnwindSafe(f)) {
-        Ok(code) => code,
+        Ok(Ok(code)) | Ok(Err(code)) => code,
         Err(payload) => {
-            let msg = if let Some(s) = payload.downcast_ref::<&'static str>() {
-                (*s).to_string()
-            } else if let Some(s) = payload.downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "panic in FFI boundary".to_string()
-            };
+            let msg = payload
+                .downcast_ref::<&'static str>()
+                .map(|s| (*s).to_string())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "panic in FFI boundary".to_string());
             logging::error(&format!("panic caught at FFI boundary: {msg}"));
             set_last_error(&msg);
             GENIEX_ERROR_COMMON_UNKNOWN
@@ -136,13 +138,19 @@ where
     }
 }
 
-/// Convert a raw C string pointer to a &str. Returns None if ptr is null or invalid UTF-8.
-pub unsafe fn cstr_to_str<'a>(ptr: *const c_char) -> Option<&'a str> {
+/// Convert a raw C string pointer to a `&str`. `Err(INVALID_INPUT)` if
+/// the pointer is null or the bytes aren't UTF-8.
+///
+/// # Safety
+/// `ptr` must be null or point to a NUL-terminated C string valid for
+/// the lifetime `'a`.
+pub unsafe fn cstr_to_str<'a>(ptr: *const c_char) -> Result<&'a str, i32> {
     if ptr.is_null() {
-        None
-    } else {
-        CStr::from_ptr(ptr).to_str().ok()
+        return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
     }
+    CStr::from_ptr(ptr)
+        .to_str()
+        .map_err(|_| GENIEX_ERROR_COMMON_INVALID_INPUT)
 }
 
 /// Allocate a CString from a Rust &str and return its raw pointer.
@@ -158,11 +166,38 @@ pub unsafe fn free_cptr(ptr: *mut c_char) {
     }
 }
 
-/// Upper-case the `:QUANT` suffix of a model name. Manifest keys are
+/// Hand ownership of `v` off to C: shrink, forget, and hand back `(ptr, len)`.
+/// Empty vec becomes `(null_mut, 0)`. Every geniex_model_*_free must reclaim
+/// via [`from_c_array`] with the same `(T, len)`.
+pub fn into_c_array<T>(mut v: Vec<T>) -> (*mut T, i32) {
+    v.shrink_to_fit();
+    let len = v.len() as i32;
+    if v.is_empty() {
+        return (std::ptr::null_mut(), 0);
+    }
+    let ptr = v.as_mut_ptr();
+    std::mem::forget(v);
+    (ptr, len)
+}
+
+/// Reclaim a Vec previously handed to C by [`into_c_array`].
+///
+/// # Safety
+/// `ptr` must either be null, or come from [`into_c_array`] with the same
+/// `T` and matching `count`; the caller must guarantee it isn't freed twice.
+pub unsafe fn from_c_array<T>(ptr: *mut T, count: i32) -> Option<Vec<T>> {
+    if ptr.is_null() {
+        return None;
+    }
+    let len = count as usize;
+    Some(Vec::from_raw_parts(ptr, len, len))
+}
+
+/// Canonicalize the `:QUANT` suffix of a model name. Manifest keys are
 /// produced by `extract_quant`, which upper-cases (so `q4_0` -> `Q4_0`);
 /// without matching the lookup side, `pull <repo>:q4_0` fails for callers
-/// (Python, JNI) whose bindings don't already upper-case. Done here at the
-/// FFI boundary so the invariant is a single point of enforcement.
+/// (Python, JNI) whose bindings don't already upper-case. Done here at
+/// the FFI boundary so the invariant is a single point of enforcement.
 pub fn normalize_quant_suffix(name: &str) -> String {
     match name.rsplit_once(':') {
         Some((base, quant)) if !quant.is_empty() => {
@@ -171,11 +206,6 @@ pub fn normalize_quant_suffix(name: &str) -> String {
         _ => name.to_string(),
     }
 }
-
-// Silence unused warning for c_void import when building without features that
-// use it; pull.rs re-imports c_void directly when it needs it.
-#[allow(dead_code)]
-pub(crate) type VoidPtr = *mut c_void;
 
 #[cfg(test)]
 mod tests {

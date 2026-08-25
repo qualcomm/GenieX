@@ -1,6 +1,7 @@
 package com.geniex.sdk.jni
 
 import com.geniex.sdk.bean.ChipsetInfo
+import com.geniex.sdk.bean.HubModel
 import com.geniex.sdk.bean.ModelDetail
 import com.geniex.sdk.bean.ModelPaths
 import com.geniex.sdk.bean.ModelPullInput
@@ -43,6 +44,15 @@ internal class ModelManager {
     external fun listDetailed(): Array<ModelDetail>
 
     /**
+     * One cached model's metadata, without listing the whole store.
+     * [modelName] takes the same loose forms as [getPaths]: a bare AI Hub id is
+     * canonicalized to `qualcomm/<id>`, and any `:<precision>` suffix is
+     * ignored since the detail covers every downloaded precision.
+     * @return `null` if the model is not cached.
+     */
+    external fun getDetailed(modelName: String): ModelDetail?
+
+    /**
      * Resolve a model's remote candidate quantizations without downloading.
      * @return `null` if the model cannot be planned.
      */
@@ -73,6 +83,12 @@ internal class ModelManager {
     /** Chipsets Qualcomm AI Hub supports, with aliases (sourced from platform.json). */
     external fun listChipsets(): Array<ChipsetInfo>
 
-    /** Detect the host chipset via a local probe. @return `null` if not probeable. */
-    external fun detectChipset(): String?
+    /** Detect the host chipset. [offline] stays local; else may hit the network. @return `null` if not probeable. */
+    external fun detectChipset(offline: Boolean): String?
+
+    /**
+     * AI Hub models with a qairt (NPU) build, sorted by name (from manifest.json).
+     * @param chipset canonical chipset id to filter by, or null to list every model.
+     */
+    external fun listHubModels(chipset: String?): Array<HubModel>
 }

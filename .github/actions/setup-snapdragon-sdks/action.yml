@@ -9,25 +9,32 @@ inputs:
   hexagon-version:
     description: "Hexagon SDK version"
     required: false
-    default: "6.4.0.2"
+    default: "6.6.0.0"
   hexagon-tools-version:
     description: "Hexagon tools version under $HEXAGON_SDK_ROOT/tools/HEXAGON_Tools"
     required: false
-    default: "19.0.04"
+    default: "19.0.07"
 
 runs:
   using: "composite"
   steps:
     - name: Install OpenCL and Hexagon SDKs
       shell: powershell
-      run: |
+      env:
+        OPENCL_VERSION: ${{ inputs.opencl-version }}
+        HEXAGON_VERSION: ${{ inputs.hexagon-version }}
+        HEXAGON_TOOLS_VERSION: ${{ inputs.hexagon-tools-version }}
+      run: | # zizmor: ignore[github-env] exported paths are discovered on-disk (Get-ChildItem), not attacker-controlled
         $ErrorActionPreference = "Stop"
 
-        $openclRoot  = "C:\Qualcomm\OpenCL_SDK\${{ inputs.opencl-version }}"
-        $hexagonRoot = "C:\Qualcomm\Hexagon_SDK\${{ inputs.hexagon-version }}"
+        $openclVersion  = $env:OPENCL_VERSION
+        $hexagonVersion = $env:HEXAGON_VERSION
 
-        $openclUrl  = "https://github.com/snapdragon-toolchain/opencl-sdk/releases/download/v${{ inputs.opencl-version }}/adreno-opencl-sdk-v${{ inputs.opencl-version }}-arm64-wos.tar.xz"
-        $hexagonUrl = "https://github.com/snapdragon-toolchain/hexagon-sdk/releases/download/v${{ inputs.hexagon-version }}/hexagon-sdk-v${{ inputs.hexagon-version }}-arm64-wos.tar.xz"
+        $openclRoot  = "C:\Qualcomm\OpenCL_SDK\$openclVersion"
+        $hexagonRoot = "C:\Qualcomm\Hexagon_SDK\$hexagonVersion"
+
+        $openclUrl  = "https://github.com/snapdragon-toolchain/opencl-sdk/releases/download/v$openclVersion/adreno-opencl-sdk-v$openclVersion-arm64-wos.tar.xz"
+        $hexagonUrl = "https://github.com/snapdragon-toolchain/hexagon-sdk/releases/download/v$hexagonVersion/hexagon-sdk-v$hexagonVersion-arm64-wos.tar.xz"
 
         function Install-Tarball($url, $target) {
           if (Test-Path $target) {
@@ -160,7 +167,7 @@ runs:
           throw "Windows SDK arm64 bin directory not found under C:\Program Files (x86)\Windows Kits\10\bin\"
         }
 
-        $hexagonToolsRoot = Join-Path $hexagonRoot "tools\HEXAGON_Tools\${{ inputs.hexagon-tools-version }}"
+        $hexagonToolsRoot = Join-Path $hexagonRoot "tools\HEXAGON_Tools\$env:HEXAGON_TOOLS_VERSION"
         if (-not (Test-Path $hexagonToolsRoot)) {
           throw "HEXAGON_TOOLS_ROOT not found: $hexagonToolsRoot"
         }

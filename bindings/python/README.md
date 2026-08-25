@@ -130,10 +130,10 @@ Friendly aliases accepted by `device_map`:
 | `cpu`    | empty `device_id`, `ngl=0`         | `NPU` + warning   | Pure CPU for `llama_cpp`. QAIRT is NPU-only; other aliases are coerced with a stderr warning (no hard error).        |
 | `gpu`    | `GPUOpenCL`                        | `NPU` + warning   | Adreno via `ggml-opencl`.                                                                                            |
 | `npu`    | `HTP0`                             | `NPU`             | Pinned single-session HTP. Deterministic; slower than `hybrid` on LLMs (~30% TTFT).                                  |
-| `hybrid` | empty `device_id`, `ngl=999`       | `NPU` + warning   | llama.cpp's per-tensor HTP+CPU scheduler — the fast path on Snapdragon. Used as the default when `device_map="auto"`. |
+| `hybrid` | empty `device_id`, `ngl=-1`        | `NPU` + warning   | llama.cpp's per-tensor HTP+CPU scheduler — the fast path on Snapdragon.                                              |
 
-`device_map="auto"` (the default) picks `hybrid` for `llama_cpp` and
-`npu` for `qairt`. When the model was pulled via `geniex.model_manager`
+`device_map="auto"` (the default) picks `npu` for both `llama_cpp` and
+`qairt`. When the model was pulled via `geniex.model_manager`
 the manifest already records its plugin, so a bare alias binds to that
 plugin — `device_map="npu"` on a cached llama_cpp model resolves to
 `llama_cpp:HTP0`, not qairt. Pass a concrete id as

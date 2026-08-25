@@ -4,10 +4,13 @@
 package main
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
+	"github.com/qualcomm/GenieX/cli/cmd/geniex/common"
 	"github.com/qualcomm/GenieX/cli/server"
 )
 
@@ -30,8 +33,8 @@ func serve() *cobra.Command {
 	// Model-load defaults applied when a request omits them (llama_cpp only;
 	// per-request body fields still override).
 	serveCmd.Flags().Int32("nctx", 4096, "Default context window size, llama_cpp only (env: GENIEX_NCTX)")
-	serveCmd.Flags().Int32("ngl", 999, "Default layers to offload to gpu/npu, llama_cpp only (env: GENIEX_NGL)")
-	serveCmd.Flags().String("compute", "", "Default compute unit: cpu, gpu, npu, or hybrid (env: GENIEX_COMPUTE)")
+	serveCmd.Flags().Int32P("ngl", "n", -1, "Default layers to offload to gpu/npu, -1 = all, llama_cpp only (env: GENIEX_NGL)")
+	serveCmd.Flags().StringP("compute", "c", "", "Default compute unit: cpu, gpu, npu, or hybrid (env: GENIEX_COMPUTE)")
 	// HTTPS / TLS flags
 	serveCmd.Flags().Bool("https", false, "Enable HTTPS/TLS (env: GENIEX_HTTPS)")
 	serveCmd.Flags().String("certfile", "cert.pem", "TLS certificate file path (env: GENIEX_CERTFILE)")
@@ -49,7 +52,10 @@ func serve() *cobra.Command {
 
 	serveCmd.Run = func(cmd *cobra.Command, args []string) {
 		checkAudioDependency()
-		geniex_sdk.Init()
+		if err := common.InitSDK(); err != nil {
+			common.PrintError(err)
+			os.Exit(1)
+		}
 
 		server.Serve()
 

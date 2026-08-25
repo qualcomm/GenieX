@@ -44,33 +44,36 @@ func ListModels(c *gin.Context) {
 func RetrieveModel(c *gin.Context) {
 	name, quant := geniex_sdk.SplitNamePrecision(strings.TrimPrefix(c.Param("model"), "/"))
 
-	models, err := geniex_sdk.ModelListDetailed()
+	// ModelGetDetailed canonicalizes the name in the SDK, so an alias form the
+	// store never records under (a bare AI Hub id) still resolves.
+	m, err := geniex_sdk.ModelGetDetailed(name)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		if geniex_sdk.IsModelNotFound(err) {
+			c.JSON(http.StatusNotFound, nil)
+		} else {
+			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		}
 		return
 	}
-
-	idx := slices.IndexFunc(models, func(m geniex_sdk.ModelDetail) bool { return m.Name == name })
-	if idx < 0 {
-		c.JSON(http.StatusNotFound, nil)
-		return
-	}
-	m := models[idx]
 
 	if quant == "" {
-		precisions := slices.Clone(m.Precisions)
-		slices.Sort(precisions)
+		precisions := slices.Sorted(slices.Values(m.Precisions))
 		if len(precisions) == 0 {
 			c.JSON(http.StatusNotFound, nil)
 			return
 		}
 		quant = precisions[0]
-	} else if !slices.Contains(m.Precisions, quant) {
+	} else if i := slices.IndexFunc(m.Precisions, func(p string) bool {
+		return strings.EqualFold(p, quant)
+	}); i < 0 {
 		c.JSON(http.StatusNotFound, nil)
 		return
+	} else {
+		// echo the precision as the store spells it, not as the caller cased it
+		quant = m.Precisions[i]
 	}
 
-	id := name
+	id := m.Name
 	if quant != geniex_sdk.PrecisionNA {
 		id += ":" + quant
 	}

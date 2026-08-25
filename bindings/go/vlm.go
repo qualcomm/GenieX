@@ -20,7 +20,6 @@ import (
 // LCOV_EXCL_START
 
 type VlmCreateInput struct {
-	ModelName     string
 	ModelPath     string
 	MmprojPath    string
 	TokenizerPath string
@@ -32,7 +31,6 @@ type VlmCreateInput struct {
 func (vci VlmCreateInput) toCPtr() *C.geniex_VlmCreateInput {
 	cPtr := (*C.geniex_VlmCreateInput)(cMalloc(C.sizeof_geniex_VlmCreateInput))
 	*cPtr = C.geniex_VlmCreateInput{
-		model_name:     cStringIfSet(vci.ModelName),
 		model_path:     cStringIfSet(vci.ModelPath),
 		mmproj_path:    cStringIfSet(vci.MmprojPath),
 		tokenizer_path: cStringIfSet(vci.TokenizerPath),
@@ -47,7 +45,6 @@ func freeVlmCreateInput(cPtr *C.geniex_VlmCreateInput) {
 	if cPtr == nil {
 		return
 	}
-	cFreeIfSet(unsafe.Pointer(cPtr.model_name))
 	cFreeIfSet(unsafe.Pointer(cPtr.model_path))
 	cFreeIfSet(unsafe.Pointer(cPtr.mmproj_path))
 	cFreeIfSet(unsafe.Pointer(cPtr.tokenizer_path))

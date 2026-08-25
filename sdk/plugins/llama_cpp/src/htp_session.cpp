@@ -31,17 +31,20 @@ void reacquire_before_load() {
 
 bool htp_backend_present() { return ggml_backend_reg_by_name("HTP") != nullptr; }
 
+void release_sessions_if_idle() {
+    if (g_htp_refcount.load(std::memory_order_acquire) != 0) return;
+    call_htp_proc("ggml_backend_hexagon_release_sessions", "Releasing HTP sessions for foreign-plugin handoff");
+}
+
 void SessionGuard::mark_htp() {
     if (uses_htp_) return;
     uses_htp_ = true;
     g_htp_refcount.fetch_add(1, std::memory_order_acq_rel);
 }
 
-void SessionGuard::release_if_last() {
+void SessionGuard::release_ref() {
     if (!uses_htp_) return;
-    if (g_htp_refcount.fetch_sub(1, std::memory_order_acq_rel) != 1) return;
-    call_htp_proc(
-        "ggml_backend_hexagon_release_sessions", "Releasing HTP sessions on last llama.cpp HTP handle destroy");
+    g_htp_refcount.fetch_sub(1, std::memory_order_acq_rel);
 }
 
 }  // namespace geniex::htp

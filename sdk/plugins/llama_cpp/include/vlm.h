@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "chat.h"
 #include "htp_session.h"
 #include "mtmd.h"
@@ -28,9 +30,11 @@ class LlamaVlm : public IVlm {
     bool supports_vision = false;
     bool supports_audio  = false;
 
-    // Conversation state tracking
-    int32_t n_past              = 0;
-    int32_t global_n_past_chars = 0;  // Track character position in prompt text (not tokens)
+    // Append-only KV reuse: skip the common prefix + last generation, feed only
+    // the rest. Recurrent models can't roll back, so we never re-feed old tokens.
+    int32_t     n_past = 0;
+    std::string past_prompt;  // last turn's full prompt
+    std::string past_gen;     // last turn's generated text
 
     // Tracks whether this instance pinned an HTP session; releases on last handoff.
     htp::SessionGuard htp_guard_;
@@ -38,7 +42,7 @@ class LlamaVlm : public IVlm {
    public:
     ~LlamaVlm() override;
 
-    virtual int32_t create_impl(const geniex_VlmCreateInput* input) override;
+    virtual int32_t create(const geniex_VlmCreateInput* input) override;
 
     virtual int32_t reset() override;
 

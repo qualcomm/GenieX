@@ -23,7 +23,7 @@ model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-0.6B-GGUF",     # HF repo id of a GGUF model, or a local .gguf path
     device_map="auto",          # "auto" | "cpu" | "gpu" | "npu" | "hybrid"
                                 # | "<runtime>" | "<runtime>:<compute-unit>"
-                                # auto -> hybrid for llama_cpp, npu for qairt
+                                # auto -> npu for both llama_cpp and qairt
 )
 
 messages = [{"role": "user", "content": "What is 2+2?"}]

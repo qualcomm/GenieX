@@ -116,47 +116,107 @@ def resolve_model_url(m: dict, device: str) -> str | None:
     return m.get("url")
 
 
+def _resolve_draft_model_id(models: list[dict], draft_name: str) -> str:
+    for m in models:
+        if m["name"] == draft_name:
+            return m["model_id"]
+    raise SystemExit(f"draft model {draft_name!r} not found in bench-models.json")
+
+
 def model_rows(models: list[dict], device: str) -> list[str]:
     """One pipe-delimited row per model, consumed by the device-side run
     scripts. Schema:
 
         name | plugin | csv_devices | model_id | vlm | image
+             | spec_type | draft_model_id | draft_tokens
 
-    The host passes the chipset slug as a single shared --chipset flag to
-    geniex-bench; the model-manager hub auto-routes "qualcomm/*" to
-    AI Hub and everything else to HuggingFace, so per-row hub overrides
-    aren't needed. mmproj/tokenizer paths come back from get_paths.
-
+    Trailing three fields carry spec-decoding params or empty strings so
+    every script parses the same column count. Entries with empty
+    ``devices`` are catalog-only (e.g. spec draft models) and skipped.
     Rows for AI Hub models whose chipset isn't advertised are dropped
     upfront so the device doesn't waste time on a guaranteed-fail pull."""
     rows = []
     for m in models:
         if "model_id" not in m:
             raise SystemExit(f"{m['name']}: missing model_id in bench-models.json")
+        if not m["devices"]:
+            continue
         if m.get("hub") == "aihub" and not _aihub_chipset_supported(m, device):
             log.warning("no %s asset for %s, skipping", device, m["name"])
             continue
         vlm = "1" if m.get("vlm") else ""
         image = "1" if m.get("image") else ""
+        spec = m.get("spec") or {}
+        spec_type = spec.get("type", "")
+        draft_id = _resolve_draft_model_id(models, spec["draft"]) if spec else ""
+        draft_tokens = str(spec.get("n_max", "")) if spec else ""
         rows.append(
             f"{m['name']}|{m['plugin']}|{','.join(m['devices'])}|{m['model_id']}"
-            f"|{vlm}|{image}"
+            f"|{vlm}|{image}|{spec_type}|{draft_id}|{draft_tokens}"
         )
     return rows
 
 
+DEFAULT_CTX = [512, 1024, 4096]
+DEFAULT_TG_PER_CELL = 128
+
+
+def _parse_int_list(s: str) -> list[int]:
+    return [int(x.strip()) for x in s.split(",") if x.strip()]
+
+
+def resolve_sweep(
+    ctx_arg: str, pp_arg: str, tg_arg: str
+) -> tuple[list[int], list[int], list[int]]:
+    """Turn the workflow's raw --ctx/--pp/--tg strings into three parallel
+    int lists of equal length. Empty --ctx picks {512, 1024, 4096}; empty
+    --tg picks 128 per cell; empty --pp derives ctx-tg per cell."""
+    ctx = _parse_int_list(ctx_arg) or list(DEFAULT_CTX)
+    tg = _parse_int_list(tg_arg) or [DEFAULT_TG_PER_CELL] * len(ctx)
+    pp = _parse_int_list(pp_arg) or [c - t for c, t in zip(ctx, tg)]
+    if len(pp) != len(ctx) or len(tg) != len(ctx):
+        raise SystemExit(f"--ctx/--pp/--tg length mismatch: ctx={ctx} pp={pp} tg={tg}")
+    if any(p < 1 for p in pp):
+        raise SystemExit(
+            f"derived pp has non-positive value: pp={pp} (ctx={ctx}, tg={tg})"
+        )
+    return ctx, pp, tg
+
+
+def _sweep_placeholders(ctx: list[int], pp: list[int], tg: list[int]) -> dict[str, str]:
+    """Comma-separated sweep lists shared by both bash and PowerShell templates
+    (both parse the same string form)."""
+    return {
+        "{CTX_LIST}": ",".join(map(str, ctx)),
+        "{PP_LIST}": ",".join(map(str, pp)),
+        "{TG_LIST}": ",".join(map(str, tg)),
+    }
+
+
+def _apply_substitutions(text: str, subs: dict[str, str]) -> str:
+    for k, v in subs.items():
+        text = text.replace(k, v)
+    return text
+
+
 def build_linux_artifact(
-    pkg_dir: Path, models: list[dict], device: str, tmp: Path
+    pkg_dir: Path,
+    models: list[dict],
+    device: str,
+    tmp: Path,
+    ctx: list[int],
+    pp: list[int],
+    tg: list[int],
 ) -> Path:
     stage = tmp / "stage"
     shutil.copytree(pkg_dir, stage / "pkg-geniex")
 
-    script = (
-        (HERE / "linux" / "run_linux.sh")
-        .read_text()
-        .replace("{MODELS}", "\n".join(model_rows(models, device)))
-        .replace("{CHIPSET}", CHIPSET.get(device, ""))
-    )
+    subs = {
+        "{MODELS}": "\n".join(model_rows(models, device)),
+        "{CHIPSET}": CHIPSET.get(device, ""),
+        **_sweep_placeholders(ctx, pp, tg),
+    }
+    script = _apply_substitutions((HERE / "linux" / "run_linux.sh").read_text(), subs)
     script_path = stage / "run_linux.sh"
     script_path.write_text(script, newline="\n")
     script_path.chmod(0o755)
@@ -168,16 +228,24 @@ def build_linux_artifact(
 
 
 def build_windows_artifact(
-    pkg_dir: Path, models: list[dict], device: str, tmp: Path
+    pkg_dir: Path,
+    models: list[dict],
+    device: str,
+    tmp: Path,
+    ctx: list[int],
+    pp: list[int],
+    tg: list[int],
 ) -> Path:
     stage = tmp / "stage"
     shutil.copytree(pkg_dir, stage / "pkg-geniex")
 
-    script = (
-        (HERE / "windows" / "run_windows.ps1")
-        .read_text()
-        .replace("{MODELS}", "\n".join(model_rows(models, device)))
-        .replace("{CHIPSET}", CHIPSET.get(device, ""))
+    subs = {
+        "{MODELS}": "\n".join(model_rows(models, device)),
+        "{CHIPSET}": CHIPSET.get(device, ""),
+        **_sweep_placeholders(ctx, pp, tg),
+    }
+    script = _apply_substitutions(
+        (HERE / "windows" / "run_windows.ps1").read_text(), subs
     )
     (stage / "run_windows.ps1").write_text(script, newline="\r\n")
 
@@ -191,7 +259,13 @@ def build_windows_artifact(
 
 
 def build_android_artifact(
-    pkg_dir: Path, models: list[dict], device: str, tmp: Path
+    pkg_dir: Path,
+    models: list[dict],
+    device: str,
+    tmp: Path,
+    ctx: list[int],
+    pp: list[int],
+    tg: list[int],
 ) -> Path:
     # Phones lack python3/curl, so the appium pytest harness on the QDC host
     # fetches+extracts each model and adb-pushes it, then runs geniex-bench
@@ -221,11 +295,36 @@ BUILDERS = {
 }
 
 
-def download_cells(client, job_id: str, tmp: Path) -> list[dict]:
+def download_cells(
+    client, job_id: str, tmp: Path, model_names: list[str] | None = None
+) -> list[dict]:
+    """Return the cell JSONs QDC collected for ``job_id``.
+
+    QDC reuses physical hosts across jobs, so the log archive can carry
+    stale cell files from earlier sessions in addition to what this job
+    actually produced. When ``model_names`` is given, we keep only cells
+    whose ``cell_id`` starts with one of those names — cell_id is
+    ``{model}-{plugin}-{device}-c{ctx}`` on the device side, so a name
+    prefix is enough to disambiguate."""
     members = _qdc.download_log_members(
         client, job_id, tmp, lambda n: n.endswith(".json")
     )
     cells = [json.loads(data) for _, data in members]
+    if model_names:
+        prefixes = tuple(f"{n}-" for n in model_names)
+        kept, dropped = [], []
+        for c in cells:
+            (
+                kept if str(c.get("cell_id", "")).startswith(prefixes) else dropped
+            ).append(c)
+        if dropped:
+            log.warning(
+                "dropping %d stale cell(s) not in %s: %s",
+                len(dropped),
+                model_names,
+                [c.get("cell_id") for c in dropped],
+            )
+        cells = kept
     return sorted(cells, key=lambda c: c["cell_id"])
 
 
@@ -311,6 +410,76 @@ def _details_block(
     return lines
 
 
+def _is_spec_cell(c: dict) -> bool:
+    return bool((c.get("params") or {}).get("spec_type"))
+
+
+def _render_mtp_table(cells: list[dict], models: list[dict] | None) -> list[str]:
+    """Pair each spec cell with its no-spec baseline on (target model_id,
+    device, ctx). Emits nothing when no spec cells are present."""
+    if not models:
+        return []
+    spec_entries = [m for m in models if m.get("spec")]
+    if not spec_entries:
+        return []
+    by_name_key: dict[str, dict[tuple[str, int], dict]] = {}
+    for c in cells:
+        by_name_key.setdefault(_model_label(c), {})[
+            (c["device"], _ctx_from_cell(c))
+        ] = c
+    rows: list[str] = []
+    for spec_m in spec_entries:
+        baseline = next(
+            (
+                m
+                for m in models
+                if m["model_id"] == spec_m["model_id"]
+                and not m.get("spec")
+                and m.get("devices")
+            ),
+            None,
+        )
+        draft_m = next(
+            (m for m in models if m["name"] == spec_m["spec"]["draft"]), None
+        )
+        spec_cells = by_name_key.get(spec_m["name"], {})
+        base_cells = by_name_key.get(baseline["name"], {}) if baseline else {}
+        for (dev, ctx), sc in sorted(spec_cells.items()):
+            agg = sc.get("agg") or {}
+            s_dec = (agg.get("decode_tps") or {}).get("median")
+            bc = base_cells.get((dev, ctx))
+            b_dec = (
+                ((bc.get("agg") or {}).get("decode_tps") or {}).get("median")
+                if bc
+                else None
+            )
+            uplift = f"{s_dec / b_dec:.2f}x" if s_dec and b_dec else "-"
+            p_med = (agg.get("prompt_tokens") or {}).get("median")
+            g_med = (agg.get("gen_tokens") or {}).get("median")
+            test = (
+                f"pp{int(p_med)}+tg{int(g_med)}"
+                if p_med is not None and g_med is not None
+                else "-"
+            )
+            rows.append(
+                f"| {spec_m['name']} | {draft_m['name'] if draft_m else '-'} | "
+                f"{dev} | {ctx} | {test} | "
+                f"{_fmt_med_sd(agg, 'decode_tps')} | "
+                f"{_fmt_med_sd((bc or {}).get('agg') or {}, 'decode_tps')} | "
+                f"{uplift} |"
+            )
+    if not rows:
+        return []
+    return [
+        "",
+        "## MTP (speculative decoding)",
+        "",
+        "| Target | Draft | Device | Ctx | Test | Decode (mtp) | Decode (baseline) | Uplift |",
+        "|--------|-------|--------|----:|------|-------------:|------------------:|-------:|",
+        *rows,
+    ]
+
+
 def render(
     cells: list[dict],
     device: str,
@@ -320,11 +489,13 @@ def render(
     lines = [f"## QDC Bench — {device} — {label}", ""]
     lines += _details_block(cells, device, label, models)
     lines += [
-        "| Model | Backend | Device | Ctx | ngl | Test | TTFT (ms) | Prefill (tok/s) | Decode (tok/s) |",
-        "|-------|---------|--------|----:|----:|------|----------:|----------------:|---------------:|",
+        "| Model | Backend | Device | Ctx | ngl | Test | TTFT (ms) | Media enc (ms) | Prefill (tok/s) | Decode (tok/s) |",
+        "|-------|---------|--------|----:|----:|------|----------:|---------------:|----------------:|---------------:|",
     ]
     sort_key = lambda c: (_model_label(c), c["plugin"], c["device"], _ctx_from_cell(c))  # noqa: E731
     for c in sorted(cells, key=sort_key):
+        if _is_spec_cell(c):
+            continue
         agg = c.get("agg") or {}
         params = c.get("params") or {}
         model = _model_label(c)
@@ -334,16 +505,19 @@ def render(
         ctx_s = str(ctx) if ctx else "-"
         p_med = (agg.get("prompt_tokens") or {}).get("median")
         g_med = (agg.get("gen_tokens") or {}).get("median")
-        test = (
-            f"pp{int(p_med)}+tg{int(g_med)}"
-            if p_med is not None and g_med is not None
-            else "-"
-        )
+        menc_med = (agg.get("media_ms") or {}).get("median")
+        has_media = menc_med is not None and menc_med > 0
+        if p_med is not None and g_med is not None:
+            test = f"pp{int(p_med)}+tg{int(g_med)}"
+        else:
+            test = "-"
+        media_enc = f"{menc_med:.1f}" if has_media and menc_med is not None else "-"
         lines.append(
             f"| {model} | {c['plugin']} | {c['device']} | {ctx_s} | {ngl} | {test} | "
-            f"{_fmt_med_sd(agg, 'ttft_ms')} | {_fmt_med_sd(agg, 'prefill_tps')} | "
+            f"{_fmt_med_sd(agg, 'ttft_ms')} | {media_enc} | {_fmt_med_sd(agg, 'prefill_tps')} | "
             f"{_fmt_med_sd(agg, 'decode_tps')} |"
         )
+    lines += _render_mtp_table(cells, models)
     return "\n".join(lines) + "\n"
 
 
@@ -388,9 +562,36 @@ def main() -> int:
     p.add_argument("--device", default="QCS9075M")
     p.add_argument("--models-file", type=Path, default=HERE / "bench-models.json")
     p.add_argument("--model-name", help="run only this model from --models-file")
+    p.add_argument(
+        "--compute",
+        default="",
+        help="comma-separated compute filter (cpu/gpu/npu/hybrid); "
+        "empty keeps every compute unit declared on the model",
+    )
+    p.add_argument(
+        "--ctx",
+        default="",
+        help="comma-separated ctx sizes (empty = 512,1024,4096)",
+    )
+    p.add_argument(
+        "--pp",
+        default="",
+        help="comma-separated prefill lengths matching --ctx (empty = ctx-tg per cell)",
+    )
+    p.add_argument(
+        "--tg",
+        default="",
+        help="comma-separated decode lengths matching --ctx (empty = 128 per cell)",
+    )
     p.add_argument("--cells-out", type=Path, help="write the per-cell JSON list here")
     p.add_argument("--render-dir", type=Path, help="render mode: aggregate JSON here")
-    p.add_argument("--job-timeout", type=int, default=7200)
+    p.add_argument(
+        "--job-timeout",
+        type=int,
+        default=19800,
+        help="host poll and QDC reservation seconds; default 330 min leaves "
+        "headroom for log upload under the GitHub-hosted 6h job cap",
+    )
     args = p.parse_args()
 
     if args.render_dir:
@@ -408,17 +609,57 @@ def main() -> int:
     if platform not in BUILDERS:
         raise SystemExit(f"{platform} not implemented yet")
 
-    models = json.loads(args.models_file.read_text())
+    all_models = json.loads(args.models_file.read_text())
     if args.model_name:
-        models = [m for m in models if m["name"] == args.model_name]
+        models = [m for m in all_models if m["name"] == args.model_name]
         if not models:
             raise SystemExit(f"model {args.model_name!r} not in {args.models_file}")
+        # Pull in every spec.draft dependency so _resolve_draft_model_id can
+        # still find it after --model-name has trimmed the list to one row.
+        needed = {m["spec"]["draft"] for m in models if m.get("spec")}
+        for name in needed - {m["name"] for m in models}:
+            entry = next((m for m in all_models if m["name"] == name), None)
+            if entry is None:
+                raise SystemExit(f"draft {name!r} not in {args.models_file}")
+            models.append(entry)
+    else:
+        models = all_models
+
+    compute_pick = [c.strip() for c in args.compute.split(",") if c.strip()]
+    if compute_pick:
+        kept = []
+        for m in models:
+            devs = [d for d in m["devices"] if d in compute_pick]
+            if not devs:
+                log.warning(
+                    "%s declares %s, none match --compute=%s, skipping",
+                    m["name"],
+                    m["devices"],
+                    compute_pick,
+                )
+                continue
+            kept.append({**m, "devices": devs})
+        models = kept
+        if not models:
+            raise SystemExit(
+                f"no model in {args.models_file} runs any of --compute={compute_pick}"
+            )
+    ctx_arg = args.ctx
+    if not ctx_arg:
+        active = [m for m in models if m.get("devices")]
+        if len(active) == 1 and active[0].get("ctx"):
+            ctx_arg = ",".join(str(x) for x in active[0]["ctx"])
+    ctx_list, pp_list, tg_list = resolve_sweep(ctx_arg, args.pp, args.tg)
+    log.info("sweep: ctx=%s pp=%s tg=%s", ctx_list, pp_list, tg_list)
+
     client = _qdc.make_client(api_key)
     target_id = _qdc.resolve_target(client, args.device)
 
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        zip_path = BUILDERS[platform](args.pkg_dir, models, args.device, tmp)
+        zip_path = BUILDERS[platform](
+            args.pkg_dir, models, args.device, tmp, ctx_list, pp_list, tg_list
+        )
         job_id = _qdc.submit_and_wait(
             client,
             target_id=target_id,
@@ -428,7 +669,18 @@ def main() -> int:
             zip_path=zip_path,
             timeout=args.job_timeout,
         )
-        cells = download_cells(client, job_id, tmp)
+        cells = download_cells(
+            client, job_id, tmp, model_names=[m["name"] for m in models]
+        )
+        if not cells:
+            for name, data in _qdc.download_log_members(
+                client, job_id, tmp, lambda n: n.endswith((".log", ".stdout", ".txt"))
+            ):
+                print(f"===== QDC log: {name} =====")
+                try:
+                    print(data.decode("utf-8", errors="replace"))
+                except Exception as e:
+                    print(f"[decode failed: {e}]")
 
     if args.cells_out:
         args.cells_out.write_text(json.dumps(cells))

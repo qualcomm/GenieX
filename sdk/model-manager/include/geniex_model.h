@@ -107,7 +107,8 @@ typedef struct {
  * @brief Get resolved file paths for a model.
  *
  * @param model_name  "org/repo" or "org/repo:quant".
- *                    If quant is omitted the first downloaded quantization is used.
+ *                    If quant is omitted the highest-priority downloaded
+ *                    quantization is used (Q4_0 > Q4_K_M > Q8_0 > others).
  * @param out_paths   Populated on success. Call geniex_model_paths_free() when done.
  * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
  */
@@ -124,7 +125,8 @@ GENIEX_API void geniex_model_paths_free(geniex_ModelPaths* paths);
  * @brief Detailed metadata for one cached model.
  *
  * All non-NULL char* fields (and the `precisions` array) are heap-allocated;
- * free the enclosing output with geniex_model_list_detailed_free().
+ * free the enclosing output with geniex_model_list_detailed_free(), or a
+ * standalone detail with geniex_model_detail_free().
  */
 typedef struct {
     char*            name;       /**< "org/repo".                          */
@@ -152,6 +154,27 @@ GENIEX_API int32_t geniex_model_list_detailed(geniex_ModelListDetailedOutput* ou
 GENIEX_API void geniex_model_list_detailed_free(geniex_ModelListDetailedOutput* output);
 
 /**
+ * @brief Look up one cached model's metadata, without listing the whole store.
+ *
+ * The single-model counterpart of geniex_model_list_detailed(): it reads that
+ * model's manifest directly instead of walking every cached model. @p
+ * model_name takes the same loose forms as geniex_model_get_paths() — a bare
+ * name is canonicalized to `qualcomm/<name>`, and any `:<quant>` suffix is
+ * ignored, since the detail covers every downloaded precision. Like the
+ * listing, a model with an in-progress pull is reported as not cached.
+ *
+ * @param model_name  "org/repo", a bare AI Hub id, or a HuggingFace URL, each
+ *                    with an optional ":<quant>" suffix.
+ * @param out         Populated on success. Call geniex_model_detail_free() when done.
+ * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode
+ *         (GENIEX_ERROR_COMMON_FILE_NOT_FOUND when the model is not cached).
+ */
+GENIEX_API int32_t geniex_model_get_detailed(const char* model_name, geniex_ModelDetail* out);
+
+/** Free one detail's strings + precisions array, then zero the struct. */
+GENIEX_API void geniex_model_detail_free(geniex_ModelDetail* detail);
+
+/**
  * @brief Delete a cached model from disk.
  * @param model_name  "org/repo" format.
  * @return GENIEX_SUCCESS, or GENIEX_ERROR_COMMON_FILE_NOT_FOUND if not cached.
@@ -167,7 +190,8 @@ GENIEX_API int32_t geniex_model_clean(int32_t* removed_count);
 
 /**
  * @brief Get the model type of a cached model.
- * @param model_name  "org/repo" format.
+ * @param model_name  "org/repo", a bare AI Hub id, or a HuggingFace URL, each
+ *                    with an optional ":<quant>" suffix that is ignored.
  * @param out_type    Set on success.
  * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
  */
@@ -191,6 +215,14 @@ typedef enum {
     GENIEX_HUB_MODELSCOPE  = 2, /**< ModelScope (mainland China preferred) */
     GENIEX_HUB_AIHUB       = 3, /**< Qualcomm AI Hub qairt assets         */
     GENIEX_HUB_VOLCES      = 4, /**< Volces TOS (mainland China preferred) */
+    /**
+     * Docker Registry HTTP API V2 — e.g. models published under
+     * https://hub.docker.com/u/ai (`ai/gemma3`, `ai/smollm2`, ...).
+     * GENIEX_HUB_AUTO also resolves here when `model_name` carries an
+     * explicit `docker.io/`, `index.docker.io/`, or
+     * `https://hub.docker.com/r/` prefix.
+     */
+    GENIEX_HUB_DOCKER = 5,
     /**
      * Local filesystem — not a real hub. The value 127 (0x7F) keeps it
      * well separated from real hub identifiers so future additions won't
@@ -242,9 +274,16 @@ typedef struct {
      * Returns GENIEX_ERROR_COMMON_INVALID_INPUT if struct_size is zero
      * or not a recognised version.
      */
-    uint32_t         struct_size;
-    const char*      model_name; /**< "org/repo" or short alias                    */
-    const char*      quant;      /**< Quantization hint. NULL for auto-select      */
+    uint32_t    struct_size;
+    const char* model_name; /**< "org/repo" or short alias                    */
+    /**
+     * Quantization filter for HuggingFace / AI Hub pulls. When set only
+     * that quant is fetched; NULL pulls every quant the repo publishes.
+     * Doubles as the Docker tag or `sha256:<hex>` digest when
+     * `hub == GENIEX_HUB_DOCKER` (or GENIEX_HUB_AUTO resolves to Docker);
+     * NULL or empty then means the `latest` tag.
+     */
+    const char*      quant;
     geniex_HubSource hub;        /**< Use GENIEX_HUB_AUTO for automatic selection  */
     geniex_Path      local_path; /**< Required only when hub == GENIEX_HUB_LOCALFS */
     /**
@@ -261,7 +300,7 @@ typedef struct {
      *
      * NULL or an empty string asks the SDK to auto-detect the host
      * chipset. Detection currently works on Windows-on-Snapdragon
-     * (X Elite / X Plus / X2 Elite); on other hosts an auto-detect
+     * (X Elite / X Plus / X2 Elite / X2 Plus); on other hosts an auto-detect
      * request fails with GENIEX_ERROR_COMMON_INVALID_INPUT and the
      * caller must pass a chipset explicitly.
      */
@@ -310,9 +349,8 @@ GENIEX_API int32_t geniex_model_pull(const geniex_ModelPullInput* input);
  * `quant` is heap-allocated; freed by geniex_model_query_free().
  */
 typedef struct {
-    char*   quant;      /**< Quantization name, e.g. "Q4_K_M".            */
-    int64_t size;       /**< Size in bytes of the largest file for this quant. */
-    bool    is_default; /**< True for the quant the SDK would auto-select. */
+    char*   quant; /**< Quantization name, e.g. "Q4_K_M".                  */
+    int64_t size;  /**< Size in bytes of the largest file for this quant. */
 } geniex_QuantCandidate;
 
 /**
@@ -364,6 +402,26 @@ GENIEX_API void geniex_model_query_free(geniex_ModelQueryOutput* out);
  */
 GENIEX_API int32_t geniex_model_resolve_alias(const char* alias, char** out_full_name);
 
+/**
+ * @brief Resolve the hub a pull/query would actually use for @p model_name.
+ *
+ * An explicit @p hub_in other than GENIEX_HUB_AUTO is returned unchanged.
+ * GENIEX_HUB_AUTO resolves to GENIEX_HUB_DOCKER when @p model_name carries a
+ * Docker Hub prefix (`docker.io/`, `index.docker.io/`,
+ * `https://hub.docker.com/r/`, …); otherwise it stays GENIEX_HUB_AUTO.
+ *
+ * Lets a binding branch on the effective hub — e.g. skip the GGUF precision
+ * picker for Docker Hub, whose `:<tag>` is a registry reference, not a quant —
+ * without duplicating the prefix table the SDK owns. No network I/O.
+ *
+ * @param model_name  "org/repo", a short alias, or a prefixed reference.
+ * @param hub_in      The caller's requested hub (GENIEX_HUB_AUTO to auto-detect).
+ * @param out_hub     Set to the effective hub on success.
+ * @return GENIEX_SUCCESS, or GENIEX_ERROR_COMMON_INVALID_INPUT if
+ *         @p model_name or @p out_hub is NULL.
+ */
+GENIEX_API int32_t geniex_model_resolve_hub(const char* model_name, geniex_HubSource hub_in, geniex_HubSource* out_hub);
+
 /* ============================================================
  *  Chipset
  * ============================================================ */
@@ -403,23 +461,67 @@ GENIEX_API void geniex_model_list_chipsets_free(geniex_ChipsetList* out);
 /**
  * @brief Detect the chipset of the current host.
  *
- * Probes the host (Windows-on-Snapdragon X Elite / X Plus / X2 Elite, Linux
+ * Probes the host (Windows-on-Snapdragon X Elite / X Plus / X2 Elite / X2 Plus, Linux
  * on Qualcomm Dragonwing boards QCS6490 / QCS9075, Android on Snapdragon via
- * `ro.soc.model`), then resolves the raw id to the AI Hub reference device
- * name (e.g. "Snapdragon X Elite CRD") — the same name geniex_model_list_chipsets
- * surfaces and the picker stores. Resolution reads platform.json (24h on-disk
- * cache), so the first call may hit the network; it falls back to the raw
- * detected id when the catalogue is unavailable or has no entry for it.
+ * `ro.soc.model`) for its raw canonical chipset id (e.g. "qualcomm-qcs6490").
+ *
+ * When `offline` is 0, the raw id is then resolved to the AI Hub reference
+ * device name (e.g. "Snapdragon X Elite CRD") — the same name
+ * geniex_model_list_chipsets surfaces and the picker stores — by reading
+ * platform.json (24h on-disk cache), so that call may hit the network; it falls
+ * back to the raw id when the catalogue is unavailable or has no entry for it.
+ * Pass a non-zero `offline` to skip that translation entirely and return the
+ * raw canonical id from a purely local probe (never touches the network).
  *
  * The returned value is accepted by geniex_model_pull's `chipset` field.
  *
+ * @param offline      Non-zero: local probe only, return the raw canonical id.
+ *                     Zero: also translate to the reference-device name online.
  * @param out_chipset  Set to a heap-allocated string on success, or NULL when
  *                     the host cannot be probed on this platform. Free a
  *                     non-NULL value with geniex_free().
  * @return GENIEX_SUCCESS (even when *out_chipset is NULL), or a negative
  *         geniex_ErrorCode on a hard failure (e.g. NULL out_chipset).
  */
-GENIEX_API int32_t geniex_model_detect_chipset(char** out_chipset);
+GENIEX_API int32_t geniex_model_detect_chipset(int32_t offline, char** out_chipset);
+
+/* ============================================================
+ *  Hub model catalogue
+ * ============================================================ */
+
+/**
+ * @brief One Qualcomm AI Hub model geniex can run (qairt / NPU).
+ *
+ * `name` and the `chipsets` array are heap-allocated; free the enclosing
+ * list with geniex_model_list_hub_free().
+ */
+typedef struct {
+    char*            name;          /**< Pullable name, e.g. "qualcomm/Qwen3-4B". */
+    geniex_ModelType model_type;    /**< LLM or VLM.                              */
+    char**           chipsets;      /**< Canonical chipset ids the model runs on. */
+    int32_t          chipset_count; /**< Length of `chipsets`.                    */
+} geniex_HubModelInfo;
+
+typedef struct {
+    geniex_HubModelInfo* models;
+    int32_t              count;
+} geniex_HubModelList;
+
+/**
+ * @brief List Qualcomm AI Hub models with a qairt (NPU) asset, sorted by name.
+ *
+ * Sourced from the remote `manifest.json` (cached 24h); may hit the network.
+ *
+ * @param chipset  Canonical chipset id to filter by, or NULL to list every
+ *                 model. Detecting the host chipset is the caller's job — see
+ *                 geniex_model_detect_chipset().
+ * @param out  Populated on success. Call geniex_model_list_hub_free() when done.
+ * @return GENIEX_SUCCESS, or a negative geniex_ErrorCode.
+ */
+GENIEX_API int32_t geniex_model_list_hub(const char* chipset, geniex_HubModelList* out);
+
+/** Free every model's name + chipsets array, then zero the struct. */
+GENIEX_API void geniex_model_list_hub_free(geniex_HubModelList* out);
 
 #ifdef __cplusplus
 } /* extern "C" */

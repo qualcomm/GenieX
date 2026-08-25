@@ -51,9 +51,9 @@ pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/
 pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple geniex-qairt
 
 # From GitHub Release (canonical) — pick the distribution you need
-pip install https://github.com/qualcomm/GenieX/releases/download/v0.0.3-alpha.1/geniex-0.0.3a1.tar.gz
-pip install https://github.com/qualcomm/GenieX/releases/download/v0.0.3-alpha.1/geniex_llama_cpp-0.0.3a1.tar.gz
-pip install https://github.com/qualcomm/GenieX/releases/download/v0.0.3-alpha.1/geniex_qairt-0.0.3a1.tar.gz
+pip install https://github.com/qualcomm/GenieX/releases/download/v0.0.3-alpha.1/geniex-pysdist-v0.0.3-alpha.1.tar.gz
+pip install https://github.com/qualcomm/GenieX/releases/download/v0.0.3-alpha.1/geniex-pysdist-llama_cpp-v0.0.3-alpha.1.tar.gz
+pip install https://github.com/qualcomm/GenieX/releases/download/v0.0.3-alpha.1/geniex-pysdist-qairt-v0.0.3-alpha.1.tar.gz
 ```
 
 ### Supported platforms (automatic SDK download)

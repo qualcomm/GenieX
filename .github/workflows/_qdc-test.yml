@@ -1,0 +1,103 @@
+name: QDC Test
+
+# On-device pytest, one leg per platform. Callers supply the sdk-<platform>
+# artifacts; this workflow never builds. Called by test.yml (tag / dispatch)
+# and pr-check.yml (change-gated).
+
+on:
+  workflow_call:
+    inputs:
+      gate_on_changed_files:
+        description: "Skip the cell when no files match the QDC path filter."
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  qdc:
+    name: ${{ matrix.platform }} (${{ matrix.device }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            device: QCS9075M
+            artifact: sdk-linux-arm64
+          - platform: windows
+            device: SC8480XP
+            artifact: sdk-windows-arm64
+          - platform: android
+            device: SM8850
+            artifact: sdk-android-arm64
+    env:
+      QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Resolve changed files
+        id: files
+        if: inputs.gate_on_changed_files
+        uses: ./.github/actions/changed-files
+        with:
+          # QDC harness bundles the full tests/ tree onto the device, so any
+          # tests/** change (not just tests/qdc/**) affects the on-device run.
+          include: '^(sdk|third-party|tests)/|^\.github/workflows/_qdc-test\.yml$'
+
+      - name: Decide skip
+        id: skip
+        shell: bash
+        env:
+          GATE: ${{ inputs.gate_on_changed_files }}
+          ANY: ${{ steps.files.outputs.any }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          if [ "$GATE" = "true" ] && [ "$ANY" != "true" ]; then
+            echo "No QDC-relevant path changes — skipping $PLATFORM"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v7
+        if: steps.skip.outputs.skip != 'true'
+        with:
+          python-version: "3.11"
+
+      - uses: actions/download-artifact@v8
+        if: steps.skip.outputs.skip != 'true'
+        with:
+          name: ${{ matrix.artifact }}
+          path: pkg-geniex
+
+      - uses: ./.github/actions/install-qdc-sdk
+        if: steps.skip.outputs.skip != 'true'
+
+      - if: steps.skip.outputs.skip != 'true'
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          DEVICE: ${{ matrix.device }}
+        run: >
+          python tests/qdc/run_qdc_pytest.py
+          --pkg-dir pkg-geniex
+          --platform "$PLATFORM"
+          --device "$DEVICE"
+          --logs-dir qdc-logs
+
+      - name: Upload QDC device logs
+        if: always() && steps.skip.outputs.skip != 'true' && hashFiles('qdc-logs/**') != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: qdc-logs-${{ matrix.platform }}-${{ matrix.device }}
+          path: qdc-logs/
+          retention-days: 7
+          if-no-files-found: ignore

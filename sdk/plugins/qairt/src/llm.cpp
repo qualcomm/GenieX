@@ -3,9 +3,11 @@
 
 #include "llm.h"
 
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -38,12 +40,10 @@ constexpr const char* kDefaultSystemPrompt = "You are a helpful AI assistant.";
 
 QairtLlm::~QairtLlm() = default;
 
-int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
+int32_t QairtLlm::create(const geniex_LlmCreateInput* input) {
     if (!input || !input->model_path) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
-
-    enable_thinking_ = input->config.enable_thinking;
 
     // Reject llama.cpp-only parameters that have no meaning in the QAIRT plugin
     if (input->config.n_gpu_layers != 0) {
@@ -63,24 +63,24 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
 
     QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(model_dir);
 
-    // Discover .bin model shards
-    auto bin_shards = qairt::runtime::collect_bin_files(model_dir);
-    if (bin_shards.empty()) {
-        GENIEX_LOG_ERROR("No .bin model shards found in: {}", model_dir.string());
+    // Bundle layout comes from the QAIRT core: `modelConfigFromDirectory` reads
+    // genie_config.json's `dialog.engine.model.binary.ctx-bins` and takes only
+    // those files, in order, as context-binary shards. Do not glob `*.bin` —
+    // bundles also ship CPU-side payloads as `.bin` (e.g. Gemma4's embedding
+    // LUTs), which QNN cannot deserialize as context binaries.
+    ModelConfig model_cfg{};
+    try {
+        model_cfg = modelConfigFromDirectory(model_dir);
+    } catch (const std::exception& e) {
+        GENIEX_LOG_ERROR("Failed to resolve QAIRT bundle layout in {}: {}", model_dir.string(), e.what());
         return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
 
-    GENIEX_LOG_DEBUG("Found {} model shards in {}", bin_shards.size(), model_dir.string());
+    GENIEX_LOG_DEBUG("Found {} model shards in {}", model_cfg.model_paths.size(), model_dir.string());
 
-    // Build ModelConfig
-    ModelConfig model_cfg{};
-    model_cfg.model_paths = std::move(bin_shards);
-
-    // Tokenizer path
+    // Tokenizer path: an explicit caller override wins over the bundle's own.
     if (input->tokenizer_path && input->tokenizer_path[0] != '\0') {
         model_cfg.tokenizer_path = input->tokenizer_path;
-    } else {
-        model_cfg.tokenizer_path = qairt::runtime::find_optional_file(model_dir, "tokenizer.json").value_or("");
     }
     if (model_cfg.tokenizer_path.empty()) {
         GENIEX_LOG_ERROR("tokenizer.json not found in: {}", model_dir.string());
@@ -92,10 +92,6 @@ int32_t QairtLlm::create_impl(const geniex_LlmCreateInput* input) {
     if (!model_cfg.embedding_path) {
         model_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
     }
-
-    // HTP backend config
-    model_cfg.htp_config_path =
-        qairt::runtime::find_optional_file(model_dir, "htp_backend_ext_config.json").value_or("");
 
     // Forecast-prefix KV cache only needed for SSD models; non-SSD models leave this nullopt.
     model_cfg.forecast_prefix_path =
@@ -197,7 +193,7 @@ int32_t QairtLlm::apply_chat_template(
     if (is_first_turn_ && input->tools && input->tools[0] != '\0') {
         opts.tools_json = input->tools;
     }
-    opts.enable_thinking = input->enable_thinking || enable_thinking_;
+    opts.enable_thinking = input->enable_thinking;
 
     std::string formatted;
     try {
@@ -232,8 +228,14 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     if (input->config) {
         gen_cfg.max_tokens = input->config->max_tokens > 0 ? input->config->max_tokens : 512;
         qairt::apply_sampler_config(input->config->sampler_config, gen_cfg, bundle_sampler_);
+
+        // Opt-in ring-buffer context eviction. llama_cpp
+        // ignores this field (it always context-shifts).
+        gen_cfg.sliding_window = input->config->sliding_window;
+        if (input->config->sliding_window_n_keep > 0) {
+            gen_cfg.sliding_window_n_keep = input->config->sliding_window_n_keep;
+        }
     }
-    gen_cfg.thinking_mode = enable_thinking_;
 
     // Wrap token callback
     std::function<bool(const char*)> on_token_fn;
@@ -258,13 +260,14 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
     // Profile data (convert ms -> us)
     output->profile_data.ttft             = static_cast<int64_t>(result.ttft_ms * 1000.0);
+    output->profile_data.media_time       = 0;                          // text-only
     output->profile_data.prompt_time      = output->profile_data.ttft;  // approximate
     output->profile_data.decode_time      = static_cast<int64_t>(result.decode_ms * 1000.0);
     output->profile_data.prompt_tokens    = result.prompt_tokens;
     output->profile_data.generated_tokens = result.generated_tokens;
-    output->profile_data.decoding_speed   = result.tokens_per_second;
     output->profile_data.prefill_speed =
         result.prompt_tokens > 0 && result.ttft_ms > 0.0 ? result.prompt_tokens / (result.ttft_ms / 1000.0) : 0.0;
+    output->profile_data.decoding_speed = result.tokens_per_second;
 
     // Stop Reason
     if (result.stop_reason == "user") {
@@ -275,6 +278,10 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         output->profile_data.stop_reason = "length";
         GENIEX_LOG_WARN("QAIRT generate: context length exceeded (partial result populated)");
         return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+    } else if (result.stop_reason == "prompt_too_long") {
+        output->profile_data.stop_reason = "length";
+        GENIEX_LOG_WARN("QAIRT generate: prompt exceeds max context length");
+        return GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG;
     } else if (result.stop_reason == "error") {
         output->profile_data.stop_reason = "eos";
         GENIEX_LOG_ERROR("QAIRT generate failed during prompt processing (empty result)");
@@ -295,6 +302,38 @@ int32_t QairtLlm::get_model_info(geniex_LlmModelInfo* output) {
     output->vocab_size = static_cast<int32_t>(vocab_size);
     output->bos_token  = pipeline_->bosTokenId();
     output->add_bos    = output->bos_token >= 0 ? 1 : 0;
+    return GENIEX_SUCCESS;
+}
+
+int32_t QairtLlm::forward_logits(const geniex_LlmForwardLogitsInput* input, geniex_LlmForwardLogitsOutput* output) {
+    if (!pipeline_) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
+    if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    if (!input->input_ids || input->input_ids_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+
+    std::vector<int32_t> input_ids(input->input_ids, input->input_ids + input->input_ids_count);
+
+    std::vector<float> logits;
+    try {
+        logits = pipeline_->forwardLogits(input_ids, input->all_positions);
+    } catch (const ContextLengthExceededError& e) {
+        GENIEX_LOG_WARN("QAIRT forward_logits: context length exceeded: {}", e.what());
+        return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+    } catch (const std::invalid_argument& e) {
+        GENIEX_LOG_ERROR("QAIRT forward_logits: invalid input: {}", e.what());
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    }
+
+    const size_t vocab_size = pipeline_->vocabSize();
+    if (vocab_size == 0 || logits.empty()) return GENIEX_ERROR_LLM_GENERATION_FAILED;
+
+    // malloc so the caller can release with geniex_free() (which calls free()).
+    float* buf = static_cast<float*>(std::malloc(logits.size() * sizeof(float)));
+    if (!buf) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
+    std::memcpy(buf, logits.data(), logits.size() * sizeof(float));
+
+    output->logits     = buf;
+    output->vocab_size = static_cast<int32_t>(vocab_size);
+    output->n_rows     = static_cast<int32_t>(logits.size() / vocab_size);
     return GENIEX_SUCCESS;
 }
 

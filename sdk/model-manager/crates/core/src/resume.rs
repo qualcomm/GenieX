@@ -25,20 +25,21 @@ pub const PROGRESS_SUFFIX: &str = ".progress";
 pub fn filter_pending<'a>(files: &'a [FileSpec], dest_dir: &Path) -> Vec<FileSpec> {
     files
         .iter()
-        .filter(|f| needs_fetch(&f.name, dest_dir))
+        .filter(|f| needs_fetch(f, dest_dir))
         .cloned()
         .collect()
 }
 
-fn needs_fetch(name: &str, dest_dir: &Path) -> bool {
+fn needs_fetch(spec: &FileSpec, dest_dir: &Path) -> bool {
+    let name = &spec.name;
     if name.is_empty() {
         return false;
     }
     let marker = dest_dir.join(format!("{name}{PROGRESS_SUFFIX}"));
     let output = dest_dir.join(name);
-    // Legacy published state (file present, no marker): treat as done.
     if !marker.exists() && output.exists() {
-        return false;
+        let on_disk = std::fs::metadata(&output).map(|m| m.len()).unwrap_or(0);
+        return on_disk != spec.size;
     }
     if let Ok(data) = std::fs::read(&marker) {
         // Non-empty, all-0x01 bitmap means every chunk already
@@ -98,5 +99,13 @@ mod tests {
         std::fs::write(tmp.path().join("a.gguf"), b"xxxxxxxxxx").unwrap();
         let pending = filter_pending(&[local_spec("a.gguf")], tmp.path());
         assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn refetches_truncated_file_without_marker() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("a.gguf"), b"xxxxx").unwrap();
+        let pending = filter_pending(&[local_spec("a.gguf")], tmp.path());
+        assert_eq!(pending.len(), 1);
     }
 }

@@ -33,6 +33,10 @@ BUNDLE=$TC/pkg-geniex
 PROMPTS=$TC/prompts
 
 mkdir -p "$LOG" "$OUT" "$MM_CACHE"
+# QDC reuses the same physical host across jobs, so $OUT can hold stale cell
+# JSON files from earlier sessions. Wipe them so log-upload can't ship them
+# back and pollute this job's cell set.
+rm -f "$OUT"/*.json 2>/dev/null || true
 exec > "$LOG/script.log" 2>&1
 date -u
 uname -a
@@ -44,24 +48,31 @@ export GENIEX_PLUGIN_PATH="$BUNDLE/lib"
 
 IMG=$TC/test.png
 
-for ctx in 512 1024 4096; do
+# Sweep dimensions come from workflow inputs (with defaults filled host-side).
+# CTX / PP / TG are parallel arrays of equal length.
+IFS=',' read -ra CTX_ARR <<< "{CTX_LIST}"
+IFS=',' read -ra PP_ARR  <<< "{PP_LIST}"
+IFS=',' read -ra TG_ARR  <<< "{TG_LIST}"
+
+for ctx in "${CTX_ARR[@]}"; do
   : > "/data/local/tmp/matrix-llama-${ctx}.tsv"
   : > "/data/local/tmp/matrix-qairt-${ctx}.tsv"
 done
 
-while IFS='|' read -r name plugin devs model_id vlm image; do
+while IFS='|' read -r name plugin devs model_id vlm image _spec_type _draft_id _draft_tokens; do
   [ -z "$name" ] && continue
   echo "=== plan $name id=$model_id ==="
-  imgpath=""
-  [ "$image" = "1" ] && imgpath="$IMG"
   case "$plugin" in
     qairt)     bucket=qairt ;;
     llama_cpp) bucket=llama ;;
     *) echo "WARN: unknown plugin $plugin in $name, skipping"; continue ;;
   esac
+  [ "$bucket" != "qairt" ] && { vlm=""; image=""; }
+  imgpath=""
+  [ "$image" = "1" ] && imgpath="$IMG"
   IFS=','
   for d in $devs; do
-    for ctx in 512 1024 4096; do
+    for ctx in "${CTX_ARR[@]}"; do
       # Columns 5/6 (tokenizer/mmproj) intentionally blank: the model
       # manager fills both from the resolved manifest.
       printf '%s-%s-%s-c%s\t%s\t%s\t%s\t\t\t%s\t%s\n' \
@@ -74,24 +85,27 @@ done <<'EOF'
 {MODELS}
 EOF
 
-for ctx in 512 1024 4096; do
+for i in "${!CTX_ARR[@]}"; do
+  ctx="${CTX_ARR[$i]}"
+  pp="${PP_ARR[$i]}"
+  tg="${TG_ARR[$i]}"
   llama_tsv="/data/local/tmp/matrix-llama-${ctx}.tsv"
   qairt_tsv="/data/local/tmp/matrix-qairt-${ctx}.tsv"
 
   if [ -s "$llama_tsv" ]; then
-    echo "=== matrix llama_cpp ctx=$ctx (random-ids prefill) ==="
+    echo "=== matrix llama_cpp ctx=$ctx pp=$pp tg=$tg (random-ids prefill) ==="
     cat "$llama_tsv"
     ./bin/geniex-bench --matrix-file "$llama_tsv" --output-json-dir "$OUT" -r 3 \
-      -c "$ctx" -p "$ctx" \
+      -c "$ctx" -p "$pp" -n "$tg" \
       --mm-data-dir "$MM_CACHE" --chipset "{CHIPSET}"
     echo "rc=$?  ($(ls "$OUT" | wc -l) cell json files so far)"
   fi
 
   if [ -s "$qairt_tsv" ]; then
-    echo "=== matrix qairt ctx=$ctx (prompt-file) ==="
+    echo "=== matrix qairt ctx=$ctx tg=$tg (prompt-file) ==="
     cat "$qairt_tsv"
     ./bin/geniex-bench --matrix-file "$qairt_tsv" --output-json-dir "$OUT" -r 3 \
-      -c "$ctx" --prompt-file "$PROMPTS/sample_prompt_${ctx}.txt" \
+      -c "$ctx" -n "$tg" --prompt-file "$PROMPTS/sample_prompt_${ctx}.txt" \
       --mm-data-dir "$MM_CACHE" --chipset "{CHIPSET}"
     echo "rc=$?  ($(ls "$OUT" | wc -l) cell json files so far)"
   fi

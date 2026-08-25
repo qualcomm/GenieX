@@ -25,27 +25,29 @@ jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data);
 std::string jstring2str(JNIEnv* env, jstring jstr);
 
 /**
- * Result of resolving a (plugin_id, device_id_alias) pair. When
- * `ngl_override` is non-negative it must be copied into the caller's
- * `geniex_ModelConfig.n_gpu_layers` to match the alias semantics
- * (e.g. "cpu" -> 0, "hybrid" -> 999).
+ * Result of resolving a (plugin_id, device_id_alias) pair. `ngl` is the
+ * resolved n_gpu_layers to copy into `geniex_ModelConfig.n_gpu_layers`
+ * (cpu / qairt -> 0; gpu / npu / hybrid pass the caller's value through,
+ * -1 = all layers).
  */
 struct ResolvedDevice {
     std::string device_id;
-    int32_t     ngl_override = -1;  // <0 = leave caller's value untouched
-    std::string warning;            // non-empty when the alias was coerced
+    int32_t     ngl = -1;
+    std::string warning;  // non-empty when the alias was coerced
 };
 
 /**
  * Thin wrapper over the SDK's `geniex_resolve_device`. The alias table
- * (cpu / gpu / npu / hybrid, model-specific overrides, qairt coercion)
- * lives in `sdk/src/device.cpp` — this helper just marshals the result
- * into Android-local types so the 8 JNI call sites stay stable.
+ * (cpu / gpu / npu / hybrid, qairt coercion) lives in
+ * `sdk/src/device.cpp` — this helper just marshals the result into
+ * Android-local types so the 8 JNI call sites stay stable.
  *
- * `model_name` may be null when unknown; it's only consulted for
- * model-specific default overrides.
+ * `model_name` may be null when unknown; it is currently unused by the
+ * resolver and reserved for future model-specific defaults. `ngl_default`
+ * is the caller's n_gpu_layers, passed through for gpu / npu / hybrid.
  */
-ResolvedDevice resolve_device(const char* plugin_id, const char* model_name, const std::string& raw_device_id);
+ResolvedDevice resolve_device(
+    const char* plugin_id, const char* model_name, const std::string& raw_device_id, int32_t ngl_default);
 
 const char* hold_c_str(const std::string& s);
 

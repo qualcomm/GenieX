@@ -4,6 +4,8 @@
 #include "llm.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -20,13 +22,16 @@
 namespace geniex {
 
 LlamaLlm::~LlamaLlm() {
+    if (spec) common_speculative_free(spec);
     if (sampler) common_sampler_free(sampler);
+    if (draft_ctx) llama_free(draft_ctx);
+    if (draft_model) llama_model_free(draft_model);
     if (ctx) llama_free(ctx);
     if (model) llama_model_free(model);
     // pools_ frees its threadpools in its own destructor, after ctx is freed.
 }
 
-int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
+int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
     if (!input || !input->model_path) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
@@ -38,8 +43,15 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     // MoE override + null terminator; must outlive the load_from_file call below.
     llama_model_tensor_buft_override tensor_overrides[2];
 
-    // FIX: HTP backend patch
-    { htp::reacquire_before_load(); }
+    // FIX: HTP backend patch — reacquire whenever the HTP backend is present
+    // in the ggml registry, regardless of the current target device. Any load
+    // walks the registry's device list, and a stale session pointer left from
+    // a prior release_sessions crashes the load even on cpu / gpu targets.
+    {
+        if (htp::htp_backend_present()) {
+            htp::reacquire_before_load();
+        }
+    }
 
     // FIX: gpt oss offload patch
     {
@@ -61,6 +73,8 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
         }
     }
 
+    // Resolve the compute-unit alias to a devices[] list for llama.cpp; must
+    // outlive mpar (mpar.devices points into selection's buffer).
     auto selection = resolve_devices(input->device_id);
     if (!selection) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
@@ -81,7 +95,11 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
 
-    llama_context_params cpar = build_context_params(config, /*n_ctx_default=*/4096, device);
+    // Parse the speculative config before the target context: a drafting target
+    // needs its rollback snapshots and per-draft logits rows sized up front.
+    std::optional<common_params_speculative> spar = build_speculative_params(config);
+
+    llama_context_params cpar = build_context_params(config, /*n_ctx_default=*/4096, device, spar ? &*spar : nullptr);
     this->ctx                 = llama_init_from_model(this->model, cpar);
     if (!this->ctx) {
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
@@ -92,6 +110,16 @@ int32_t LlamaLlm::create_impl(const geniex_LlmCreateInput* input) {
     int32_t                tp_ret    = this->pools_.attach(this->ctx, tpp_main, tpp_batch);
     if (tp_ret != GENIEX_SUCCESS) {
         return tp_ret;
+    }
+
+    // Speculative decoding: optional, keyed on a non-empty spec_type ("none" also
+    // disables). Failure is non-fatal — we log and fall back to plain decoding.
+    if (spar) {
+        int32_t spec_ret = setup_speculative(config, device, input->device_id, *spar);
+        if (spec_ret != GENIEX_SUCCESS) {
+            GENIEX_LOG_WARN("speculative decoding setup failed; falling back to plain decoding");
+            teardown_speculative();
+        }
     }
 
     // Load chat template if path is provided
@@ -263,7 +291,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
             GENIEX_LOG_INFO("prefix match: n_past_global rollback to: {}", this->n_past_global);
         } else {
             // match in kvcache, need rollback
-            llama_memory_seq_rm(mem, 0, match_len, this->n_past - match_len);
+            llama_memory_seq_rm(mem, 0, match_len, -1);
             this->n_past        = match_len;
             this->n_past_global = match_len;
             GENIEX_LOG_INFO("prefix match: n_past_global rollback to: {}", this->n_past_global);
@@ -303,20 +331,38 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         return n_discard;
     };
 
-    // Decode one batch (caller chunks long inputs) and advance n_past.
-    auto process = [&](const llama_token* tokens, int n_tokens) -> int32_t {
-        llama_batch batch = llama_batch_get_one(const_cast<llama_token*>(tokens), n_tokens);
-        // decode returns 1 when the batch does not fit; slide on demand and retry rather than gating on
-        // n_past >= n_ctx, which never trips for SWA models (physical KV fills before n_past reaches n_ctx).
-        int rc = llama_decode(this->ctx, batch);
-        while (rc == 1 && can_shift && slide_window(n_tokens) > 0) {
+    const bool spec_prefill = this->spec != nullptr && (this->draft_ctx != nullptr);
+
+    // Decode one batch (caller chunks long inputs) and advance n_past. overflow_err
+    // is returned when the context is exhausted even after shifting, letting the
+    // caller distinguish a too-long prompt (prefill) from a full window (decode).
+    auto process = [&](const llama_token* tokens, int n_tokens, int32_t overflow_err) -> int32_t {
+        int rc;
+        if (spec_prefill) {
+            llama_batch batch = llama_batch_init(n_tokens, /*embd=*/0, /*n_seq_max=*/1);
+            for (int i = 0; i < n_tokens; ++i) {
+                common_batch_add(batch, tokens[i], this->n_past + i, {0}, /*logits=*/i == n_tokens - 1);
+            }
             rc = llama_decode(this->ctx, batch);
+            while (rc == 1 && can_shift && slide_window(n_tokens) > 0) {
+                rc = llama_decode(this->ctx, batch);
+            }
+            if (rc == 0 && !common_speculative_process(this->spec, batch)) {
+                rc = -1;
+            }
+            llama_batch_free(batch);
+        } else {
+            llama_batch batch = llama_batch_get_one(const_cast<llama_token*>(tokens), n_tokens);
+            rc                = llama_decode(this->ctx, batch);
+            while (rc == 1 && can_shift && slide_window(n_tokens) > 0) {
+                rc = llama_decode(this->ctx, batch);
+            }
         }
         switch (rc) {
             case 0:
                 break;
             case 1:
-                return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+                return overflow_err;
             default:
                 return GENIEX_ERROR_LLM_GENERATION_FAILED;
         }
@@ -330,9 +376,13 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         common_sampler_accept(this->sampler, id, /* accept_grammar= */ false);
     }
 
+    // A context overflow during prefill means the prompt itself doesn't fit,
+    // even after any context shift (or the model can't shift at all); during
+    // decode it means the window filled up mid-generation. Distinct causes, so
+    // process() reports the one matching the phase.
     for (int i = 0; i < (int)embd_inp.size() && res == GENIEX_SUCCESS; i += n_batch) {
         int n_eval = std::min(n_batch, (int)embd_inp.size() - i);
-        res        = process(embd_inp.data() + i, n_eval);
+        res        = process(embd_inp.data() + i, n_eval, GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG);
     }
 
     profiler.prompt_end();
@@ -345,54 +395,61 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     std::vector<llama_token> generated_tokens;
     std::stringstream        full_text;
 
-    while (res == GENIEX_SUCCESS && (int)generated_tokens.size() < cfg.max_tokens) {
-        llama_token id = common_sampler_sample(this->sampler, this->ctx, -1);
-        common_sampler_accept(this->sampler, id, /* accept_grammar= */ true);
-
-        // Record TTFT on first token generation
+    // Emit one sampled token: records TTFT, applies EOS / stop-sequence / user
+    // callback checks, and appends to the output. Returns false when generation
+    // should stop (the stop reason is set on the profiler). Shared by the plain
+    // and speculative decode loops.
+    auto emit = [&](llama_token id) -> bool {
         if (!first_token_generated) {
             profiler.record_ttft();
             first_token_generated = true;
-            GENIEX_LOG_DEBUG("First token generated, TTFT recorded");
         }
 
-        // Check EOS token
         if (llama_vocab_is_eog(vocab, id)) {
-            GENIEX_LOG_DEBUG("EOS token generated, stopping generation");
             profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_EOS);
-            break;
+            return false;
         }
 
-        // Convert token to string
         char token_buf[64];
         int  n = llama_token_to_piece(vocab, id, token_buf, sizeof(token_buf) - 1, 0, this->allow_special_tokens);
         if (n < 0) {
             res = GENIEX_ERROR_LLM_GENERATION_FAILED;
-            break;
+            return false;
         }
         token_buf[n] = '\0';
 
-        // Check stop sequences
         const bool stop_matched = std::any_of(
             cfg.stop, cfg.stop + cfg.stop_count, [&](const char* s) { return s && strcmp(token_buf, s) == 0; });
         if (stop_matched) {
-            GENIEX_LOG_DEBUG("Stop sequence matched");
             profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_STOP_SEQUENCE);
-            break;
+            return false;
         }
 
         generated_tokens.push_back(id);
 
-        // Call the callback directly (UTF-8 validation is now handled at bridge
-        // level)
         if (input->on_token && !input->on_token(token_buf, input->user_data)) {
             GENIEX_LOG_WARN("User callback requested stop during token generation");
             profiler.set_stop_reason(common::StopReason::GENIEX_STOP_REASON_USER);
-            break;
+            return false;
         }
         full_text << token_buf;
+        return true;
+    };
 
-        res = process(&id, 1);
+    if (this->spec) {
+        auto n_generated = [&]() { return (int)generated_tokens.size(); };
+        res              = decode_speculative(cfg, prompt_ids, emit, n_generated, profiler);
+    } else {
+        while (res == GENIEX_SUCCESS && (int)generated_tokens.size() < cfg.max_tokens) {
+            llama_token id = common_sampler_sample(this->sampler, this->ctx, -1);
+            common_sampler_accept(this->sampler, id, /* accept_grammar= */ true);
+
+            if (!emit(id)) {
+                break;
+            }
+
+            res = process(&id, 1, GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH);
+        }
     }
 
     // update output and profiler data
@@ -424,10 +481,205 @@ int32_t LlamaLlm::get_model_info(geniex_LlmModelInfo* output) {
     output->add_bos          = llama_vocab_get_add_bos(vocab) ? 1 : 0;
     return GENIEX_SUCCESS;
 }
+
+int32_t LlamaLlm::forward_logits(const geniex_LlmForwardLogitsInput* input, geniex_LlmForwardLogitsOutput* output) {
+    if (!this->ctx || !this->model) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
+    if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    if (!input->input_ids || input->input_ids_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+
+    const llama_vocab* vocab   = llama_model_get_vocab(this->model);
+    const int          n_vocab = llama_vocab_n_tokens(vocab);
+    const int          n_ctx   = llama_n_ctx(this->ctx);
+    const int          n_batch = llama_n_batch(this->ctx);
+    const int          n_tok   = input->input_ids_count;
+
+    for (int i = 0; i < n_tok; i++) {
+        if (input->input_ids[i] < 0 || input->input_ids[i] >= n_vocab) {
+            GENIEX_LOG_ERROR("forward_logits: token ID out of range: {}", input->input_ids[i]);
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
+    }
+    if (n_tok > n_ctx) {
+        GENIEX_LOG_WARN("forward_logits: input ({}) exceeds context length ({})", n_tok, n_ctx);
+        return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+    }
+
+    // Fresh KV in, clean KV out: result depends only on input_ids and
+    // generate()'s prefix-cache/KV state is left undisturbed.
+    this->reset();
+
+    const bool         all_positions = input->all_positions;
+    std::vector<float> all_logits;
+    all_logits.reserve(static_cast<size_t>(all_positions ? n_tok : 1) * n_vocab);
+
+    int32_t     rc    = GENIEX_SUCCESS;
+    llama_batch batch = llama_batch_init(n_batch, 0, 1);
+    for (int start = 0; start < n_tok; start += n_batch) {
+        const int n    = std::min(n_batch, n_tok - start);
+        batch.n_tokens = n;
+        for (int j = 0; j < n; j++) {
+            const int abs_pos  = start + j;
+            batch.token[j]     = input->input_ids[abs_pos];
+            batch.pos[j]       = abs_pos;
+            batch.n_seq_id[j]  = 1;
+            batch.seq_id[j][0] = 0;
+            // Always emit the last token's row; emit every position when requested.
+            batch.logits[j] = (all_positions || abs_pos == n_tok - 1) ? 1 : 0;
+        }
+
+        if (llama_decode(this->ctx, batch) != 0) {
+            GENIEX_LOG_ERROR("forward_logits: llama_decode failed");
+            rc = GENIEX_ERROR_LLM_GENERATION_FAILED;
+            break;
+        }
+
+        // Extract logits for this chunk before the next decode overwrites them.
+        for (int j = 0; j < n; j++) {
+            if (!batch.logits[j]) continue;
+            const float* row = llama_get_logits_ith(this->ctx, j);
+            if (!row) {
+                rc = GENIEX_ERROR_LLM_GENERATION_FAILED;
+                break;
+            }
+            all_logits.insert(all_logits.end(), row, row + n_vocab);
+        }
+        if (rc != GENIEX_SUCCESS) break;
+    }
+    llama_batch_free(batch);
+
+    // Leave the KV cache clean regardless of outcome.
+    this->reset();
+
+    if (rc != GENIEX_SUCCESS) return rc;
+
+    // malloc so the caller can release with geniex_free() (which calls free()).
+    float* buf = static_cast<float*>(malloc(all_logits.size() * sizeof(float)));
+    if (!buf) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
+    memcpy(buf, all_logits.data(), all_logits.size() * sizeof(float));
+
+    output->logits     = buf;
+    output->vocab_size = n_vocab;
+    output->n_rows     = all_positions ? n_tok : 1;
+    return GENIEX_SUCCESS;
+}
 }  // namespace geniex
 
 // Private
 namespace geniex {
+
+// Speculative (MTP) decode loop. Each step the MTP head drafts up to spec_n_max
+// tokens, the target verifies them in one batch, and the accepted prefix is
+// committed at once. Mirrors llama.cpp's speculative-simple accounting for a
+// single sequence. Assumes the whole prompt was already prefilled on this->ctx
+// and this->n_past is the number of prefilled tokens.
+//
+// id_last is the running committed token that is not yet in the KV cache. It is
+// re-decoded (with the drafts) each step and emitted at the top of the next
+// step, so every produced token is emitted exactly once.
+//
+// Partial acceptance relies on plain KV-tail removal (llama_memory_seq_rm),
+// which the CPU/GPU/HTP memory backends we target support; the checkpoint dance
+// the server uses for recurrent contexts is intentionally omitted.
+int32_t LlamaLlm::decode_speculative(const geniex_GenerationConfig& cfg, const std::vector<llama_token>& prompt_ids,
+    const std::function<bool(llama_token)>& emit, const std::function<int()>& n_generated, common::Profiler& profiler) {
+    const llama_seq_id seq_id  = 0;
+    auto*              mem_tgt = llama_get_memory(this->ctx);
+    // ngram-* types are self-speculative and leave draft_ctx null.
+    auto* mem_dft = this->draft_ctx ? llama_get_memory(this->draft_ctx) : nullptr;
+
+    // Local view of the committed tokens the drafter reads; grows as we accept.
+    std::vector<llama_token> prompt = prompt_ids;
+
+    common_speculative_begin(this->spec, seq_id, prompt);
+
+    // Sample the first token from the prefill; keep it separate as id_last.
+    llama_token id_last = common_sampler_sample(this->sampler, this->ctx, -1);
+    common_sampler_accept(this->sampler, id_last, /* accept_grammar= */ true);
+
+    llama_batch batch = llama_batch_init(this->spec_n_max + 1, /*embd=*/0, /*n_seq_max=*/1);
+
+    int64_t                  draft_n_total    = 0;
+    int64_t                  draft_n_accepted = 0;
+    int32_t                  res              = GENIEX_SUCCESS;
+    bool                     stop             = false;
+    std::vector<llama_token> draft;
+
+    while (!stop && res == GENIEX_SUCCESS && n_generated() < cfg.max_tokens) {
+        // Emit the running committed token (always valid: sampled by the target).
+        if (!emit(id_last)) {
+            break;
+        }
+
+        // Draft the tokens that (probably) follow id_last.
+        draft.clear();
+        common_speculative_get_draft_params(this->spec, seq_id) = {
+            /* .drafting = */ true,
+            /* .n_max    = */ this->spec_n_max,
+            /* .n_past   = */ this->n_past,
+            /* .id_last  = */ id_last,
+            /* .prompt   = */ &prompt,
+            /* .result   = */ &draft,
+        };
+        common_speculative_draft(this->spec);
+        draft_n_total += (int64_t)draft.size();
+
+        // Verification batch: [id_last, draft0, draft1, ...], all needing logits.
+        common_batch_clear(batch);
+        llama_pos pos = this->n_past;
+        common_batch_add(batch, id_last, pos++, {seq_id}, /*logits=*/true);
+        for (llama_token t : draft) {
+            common_batch_add(batch, t, pos++, {seq_id}, /*logits=*/true);
+        }
+
+        if (llama_decode(this->ctx, batch) != 0 || !common_speculative_process(this->spec, batch)) {
+            res = GENIEX_ERROR_LLM_GENERATION_FAILED;
+            break;
+        }
+
+        // Accept the longest draft prefix the target agrees with. ids always has
+        // at least one entry (the target's own next token); ids.size()-1 drafts
+        // were accepted.
+        std::vector<llama_token> ids      = common_sampler_sample_and_accept_n(this->sampler, this->ctx, draft);
+        const size_t             n_accept = ids.size() - 1;
+        draft_n_accepted += (int64_t)n_accept;
+        // Only notify the speculator when it actually drafted this step.
+        // ngram-* often return an empty draft (no history match yet), which
+        // leaves impl_last[seq_id] unset — calling _accept then trips
+        // GGML_ASSERT(impl) in common_speculative_accept.
+        if (!draft.empty()) {
+            common_speculative_accept(this->spec, seq_id, (uint16_t)n_accept);
+        }
+
+        // Commit id_last + accepted drafts. Emit the accepted drafts now; the
+        // last id becomes the next id_last, emitted at the top of the next step.
+        prompt.push_back(id_last);
+        for (size_t i = 0; i < n_accept; ++i) {
+            if (!emit(ids[i])) {
+                stop = true;
+                break;
+            }
+            prompt.push_back(ids[i]);
+        }
+        this->n_past += (int)n_accept + 1;
+
+        // Drop any rejected draft tail from both KV caches. Nothing to drop when
+        // the target agreed with the whole draft, and seq_rm is not free on the
+        // HTP backend, so skip it then — same guard as the server's n_rollback.
+        if (n_accept < draft.size()) {
+            llama_memory_seq_rm(mem_tgt, seq_id, this->n_past, -1);
+            if (mem_dft) {
+                llama_memory_seq_rm(mem_dft, seq_id, this->n_past, -1);
+            }
+        }
+
+        id_last = ids.back();
+    }
+
+    llama_batch_free(batch);
+
+    profiler.set_draft_stats(draft_n_total, draft_n_accepted);
+    return res;
+}
 
 void LlamaLlm::set_sampler(const geniex_SamplerConfig* cfg) {
     if (this->sampler) {
@@ -436,6 +688,82 @@ void LlamaLlm::set_sampler(const geniex_SamplerConfig* cfg) {
     }
     common_params_sampling s = build_sampling_params(cfg);
     this->sampler            = common_sampler_init(this->model, s);
+}
+
+void LlamaLlm::teardown_speculative() {
+    if (this->spec) {
+        common_speculative_free(this->spec);
+        this->spec = nullptr;
+    }
+    if (this->draft_ctx) {
+        llama_free(this->draft_ctx);
+        this->draft_ctx = nullptr;
+    }
+    if (this->draft_model) {
+        llama_model_free(this->draft_model);
+        this->draft_model = nullptr;
+    }
+    this->spec_n_max = 0;
+}
+
+int32_t LlamaLlm::setup_speculative(
+    const geniex_ModelConfig& config, Device device, const char* device_id, common_params_speculative& spar) {
+    const bool needs_draft = std::any_of(spar.types.begin(), spar.types.end(), [](common_speculative_type t) {
+        return t == COMMON_SPECULATIVE_TYPE_DRAFT_MTP || t == COMMON_SPECULATIVE_TYPE_DRAFT_EAGLE3 ||
+               t == COMMON_SPECULATIVE_TYPE_DRAFT_SIMPLE;
+    });
+    const bool is_mtp =
+        std::find(spar.types.begin(), spar.types.end(), COMMON_SPECULATIVE_TYPE_DRAFT_MTP) != spar.types.end();
+
+    spar.draft.ctx_tgt = this->ctx;
+    this->spec_n_max   = spar.draft.n_max;
+
+    if (needs_draft) {
+        if (!config.spec_draft_model || config.spec_draft_model[0] == '\0') {
+            GENIEX_LOG_ERROR("--spec-type '{}' requires a draft model (--draft-model)", config.spec_type);
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
+
+        llama_model_params dmpar     = build_model_params(config, device);
+        auto               selection = resolve_devices(device_id);
+        if (selection && !selection->empty()) {
+            dmpar.devices = selection->data();
+        }
+
+        this->draft_model = llama_model_load_from_file(config.spec_draft_model, dmpar);
+        if (!this->draft_model) {
+            GENIEX_LOG_ERROR("failed to load draft model: {}", config.spec_draft_model);
+            return GENIEX_ERROR_COMMON_MODEL_LOAD;
+        }
+
+        // Mirrors common_base_params_to_speculative: the draft context inherits
+        // the target's params verbatim; only the MTP wiring, the disabled
+        // rollback and the single-output limits differ.
+        llama_context_params dcpar = build_context_params(config, /*n_ctx_default=*/4096, device);
+        if (is_mtp) {
+            dcpar.ctx_type = LLAMA_CONTEXT_TYPE_MTP;
+        }
+        dcpar.ctx_other             = this->ctx;
+        dcpar.n_rs_seq              = 0;
+        dcpar.n_outputs_max         = dcpar.n_seq_max;
+        dcpar.n_outputs_max_per_seq = 1;
+
+        this->draft_ctx = llama_init_from_model(this->draft_model, dcpar);
+        if (!this->draft_ctx) {
+            GENIEX_LOG_ERROR("failed to create draft context");
+            return GENIEX_ERROR_COMMON_MODEL_LOAD;
+        }
+        spar.draft.ctx_dft = this->draft_ctx;
+    }
+
+    this->spec = common_speculative_init(spar, /*n_seq=*/1);
+    if (!this->spec) {
+        GENIEX_LOG_ERROR("failed to initialize speculative context");
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
+    }
+
+    GENIEX_LOG_INFO("speculative decoding enabled: type={}, n_max={}", config.spec_type, this->spec_n_max);
+    return GENIEX_SUCCESS;
 }
 
 }  // namespace geniex

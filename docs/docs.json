@@ -11,11 +11,6 @@
   "styling": {
     "codeblocks": "dark"
   },
-  "integrations": {
-    "mixpanel": {
-      "projectToken": "c6b9c6db0dc18d2cafe5c9926f87ae93"
-    }
-  },
   "topbarLinks": [
     {
       "type": "github",
@@ -98,6 +93,15 @@
             ]
           },
           {
+            "group": "Tutorials",
+            "icon": "graduation-cap",
+            "pages": [
+              "en/tutorials/benchmarking",
+              "en/tutorials/speculative-decoding-mtp",
+              "en/tutorials/audio-input"
+            ]
+          },
+          {
             "group": "Resources",
             "icon": "circle-question",
             "pages": [
@@ -159,6 +163,13 @@
                   "cn/run/android/api-reference"
                 ]
               }
+            ]
+          },
+          {
+            "group": "教程",
+            "icon": "graduation-cap",
+            "pages": [
+              "cn/tutorials/benchmarking"
             ]
           },
           {

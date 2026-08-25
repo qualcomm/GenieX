@@ -3,12 +3,17 @@
 
 #pragma once
 
+#include <functional>
 #include <optional>
+#include <vector>
 
 #include "htp_session.h"
 #include "llama.h"
+#include "params.h"
 #include "plugin/ILlm.h"
+#include "profiler.h"
 #include "sampling.h"
+#include "speculative.h"
 #include "threadpool.h"
 
 namespace geniex {
@@ -19,6 +24,13 @@ class LlamaLlm : public ILlm {
     common_sampler*            sampler = nullptr;
     Threadpools                pools_;
     std::optional<std::string> chat_template_str = std::nullopt;
+
+    // Speculative decoding. spec is non-null when enabled; draft_model/draft_ctx
+    // are null for self-speculative (ngram-*) types that need no draft model.
+    llama_model*        draft_model = nullptr;
+    llama_context*      draft_ctx   = nullptr;
+    common_speculative* spec        = nullptr;
+    int32_t             spec_n_max  = 0;
 
     int                      n_past_global = 0;
     int                      n_past        = 0;   // for context shifting
@@ -32,7 +44,7 @@ class LlamaLlm : public ILlm {
    public:
     virtual ~LlamaLlm() override;
 
-    virtual int32_t create_impl(const geniex_LlmCreateInput*) override;
+    virtual int32_t create(const geniex_LlmCreateInput*) override;
 
     virtual int32_t reset() override;
 
@@ -46,8 +58,17 @@ class LlamaLlm : public ILlm {
 
     virtual int32_t get_model_info(geniex_LlmModelInfo*) override;
 
+    virtual int32_t forward_logits(const geniex_LlmForwardLogitsInput*, geniex_LlmForwardLogitsOutput*) override;
+
    private:
     void set_sampler(const geniex_SamplerConfig* cfg);
+
+    int32_t setup_speculative(
+        const geniex_ModelConfig& config, Device device, const char* device_id, common_params_speculative& spar);
+    void    teardown_speculative();
+    int32_t decode_speculative(const geniex_GenerationConfig& cfg, const std::vector<llama_token>& prompt_ids,
+        const std::function<bool(llama_token)>& emit, const std::function<int()>& n_generated,
+        ::common::Profiler& profiler);
 };
 
 }  // namespace geniex

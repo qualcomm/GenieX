@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 mod chipset;
+mod hub_models;
 mod init;
 mod logging;
 mod mapping;

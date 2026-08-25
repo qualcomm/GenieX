@@ -9,13 +9,31 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var lock sync.Mutex
+// GILock serializes all API requests. The keep-alive sweeper shares it so a
+// model is only freed while no request is in flight, never mid-generation
+// (#1322).
+var GILock sync.Mutex
+
+// pendingRelease runs when the request releases the GIL; guarded by GILock,
+// reset per request. See RunOnRelease.
+var pendingRelease func()
 
 func GIL(c *gin.Context) {
-	// Block and wait for lock instead of immediately failing
-	// This prevents 429 errors when requests queue up briefly
-	lock.Lock()
-	defer lock.Unlock()
+	// Block rather than fail so briefly queued requests don't 429.
+	GILock.Lock()
+	pendingRelease = nil
+	defer func() {
+		if pendingRelease != nil {
+			pendingRelease()
+		}
+		GILock.Unlock()
+	}()
 
 	c.Next()
+}
+
+// RunOnRelease schedules f to run when the current request releases the GIL.
+// Caller holds GILock (i.e. runs inside a request handler).
+func RunOnRelease(f func()) {
+	pendingRelease = f
 }

@@ -94,12 +94,12 @@ func freeResolveDeviceOutput(c *C.geniex_ResolveDeviceOutput) {
 // concrete (DeviceID, Ngl) pair the runtimes expect. See `geniex_resolve_device`
 // in the C API for alias semantics — the SDK is the single source of truth.
 //
-// ModelName may be empty if the caller doesn't know it; it's only consulted
-// for model-specific default overrides (e.g. llama_cpp gpt-oss → npu).
+// ModelName may be empty if the caller doesn't know it; it's currently
+// unused by the resolver and reserved for future model-specific defaults.
 //
-// A non-nil error means ComputeUnit was a non-empty unknown alias; the SDK
-// returned GENIEX_ERROR_COMMON_INVALID_DEVICE. Warning is non-empty when the
-// alias was coerced (e.g. qairt ↦ NPU regardless of user input).
+// A non-nil error means ComputeUnit was neither a known alias nor a valid
+// device list; the SDK returned GENIEX_ERROR_COMMON_INVALID_DEVICE. Warning is
+// non-empty when the value was coerced (e.g. qairt ↦ NPU regardless of user input).
 func ResolveDevice(input ResolveDeviceInput) (*ResolveDeviceOutput, error) {
 	cInput := input.toCPtr()
 	defer freeResolveDeviceInput(cInput)
@@ -108,7 +108,7 @@ func ResolveDevice(input ResolveDeviceInput) (*ResolveDeviceOutput, error) {
 	res := C.geniex_resolve_device(cInput, &cOutput)
 	if res != C.GENIEX_SUCCESS {
 		if res == C.GENIEX_ERROR_COMMON_INVALID_DEVICE {
-			return nil, fmt.Errorf("invalid compute unit %q, must be one of: cpu, gpu, npu, hybrid", input.ComputeUnit)
+			return nil, fmt.Errorf("invalid compute unit %q, must be one of: cpu, gpu, npu, hybrid, or a device list like HTP0,HTP1", input.ComputeUnit)
 		}
 		return nil, SDKError(res)
 	}

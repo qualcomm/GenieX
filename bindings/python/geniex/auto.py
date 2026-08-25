@@ -63,7 +63,9 @@ def resolve_device_map(
     ``"<runtime>:<compute-unit>"``.
 
     ``ngl_override`` is ``None`` unless the alias forces a specific
-    ``n_gpu_layers`` (``cpu`` → 0, ``hybrid`` → 999).
+    ``n_gpu_layers`` (only ``cpu`` → 0). gpu / npu / hybrid pass no
+    explicit ngl, so the resolver returns -1 (all layers) and this
+    surfaces as ``None``; callers keep their own default.
     """
     if not device_map or device_map == 'auto':
         runtimes = get_runtime_list()
@@ -206,7 +208,7 @@ def _reject_gguf_on_qairt(model_path: str, plugin_id: str | None, device_map: st
 
 
 # AutoModelFor*.from_pretrained factory defaults; not user overrides, so coerce silently.
-_QAIRT_SILENT_NGL = 999
+_QAIRT_SILENT_NGL = -1
 _QAIRT_SILENT_NCTX = 0
 
 
@@ -219,14 +221,25 @@ def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **
             _logger.warning('qairt runtime does not consume n_ctx=%d; forcing 0', n_ctx)
             n_ctx = 0
     cfg = geniex_ModelConfig(n_ctx=n_ctx, n_gpu_layers=n_gpu_layers)
-    _int_fields = {'n_threads', 'n_threads_batch', 'n_batch', 'n_ubatch', 'n_seq_max', 'max_tokens'}
-    _bool_fields = {'enable_thinking', 'verbose'}
-    _str_fields = {'chat_template_path', 'chat_template_content', 'system_prompt'}
+    _int_fields = {
+        'n_threads',
+        'n_threads_batch',
+        'n_batch',
+        'n_ubatch',
+        'n_seq_max',
+        'spec_n_max',
+        'spec_n_min',
+    }
+    _bool_fields = {'enable_thinking'}
+    _float_fields = {'spec_p_min'}
+    _str_fields = {'chat_template_path', 'chat_template_content', 'spec_type', 'spec_draft_model'}
     for k, v in kwargs.items():
         if k in _int_fields:
             setattr(cfg, k, int(v))
         elif k in _bool_fields:
             setattr(cfg, k, bool(v))
+        elif k in _float_fields:
+            setattr(cfg, k, float(v))
         elif k in _str_fields and v is not None:
             setattr(cfg, k, v.encode())
     return cfg
@@ -304,19 +317,15 @@ def _is_vlm(mmproj_path: str | None, cache_key: str, model_path: str | None = No
 
 
 def _create_vlm_handle(
-    resolved_name: str,
     model_path: str,
     mmproj_path: str | None,
     tokenizer_path: str | None,
     plugin_id: str | None,
     device_id: str | None,
     config: geniex_ModelConfig,
-    license_id: str | None,
-    license_key: str | None,
     meta: dict | None = None,
 ) -> GenieXVLM:
     inp = geniex_VlmCreateInput(
-        model_name=resolved_name.encode(),
         model_path=model_path.encode(),
         config=config,
     )
@@ -328,10 +337,6 @@ def _create_vlm_handle(
         inp.plugin_id = plugin_id.encode()
     if device_id:
         inp.device_id = device_id.encode()
-    if license_id:
-        inp.license_id = license_id.encode()
-    if license_key:
-        inp.license_key = license_key.encode()
 
     handle = c_void_p()
     lib = load_library()
@@ -351,11 +356,9 @@ class AutoModelForCausalLM:
         precision: str | None = None,
         device_map: str = 'auto',
         n_ctx: int = 0,
-        n_gpu_layers: int = 999,
+        n_gpu_layers: int = -1,
         mmproj_path: str | None = None,
         tokenizer_path: str | None = None,
-        license_id: str | None = None,
-        license_key: str | None = None,
         hf_token: str | None = None,
         progress: ProgressCallback | bool | None = None,
         **kwargs,
@@ -365,9 +368,7 @@ class AutoModelForCausalLM:
         ``model_name`` is **optional**. The QAIRT plugin no longer needs it —
         it dispatches by reading ``metadata.json`` from the bundle. Pass it
         only if you want to register a local-path bundle in the geniex cache
-        (so it shows up in ``geniex list`` and survives across runs), or to
-        provide a hint to ``geniex_resolve_device`` for the gpt-oss
-        llama_cpp device-default override.
+        (so it shows up in ``geniex list`` and survives across runs).
 
         When the model is detected as multimodal (e.g. phi4_multimodal,
         qwen3.5-vl, gemma4), a :class:`GenieXVLM` is returned instead.
@@ -398,22 +399,26 @@ class AutoModelForCausalLM:
         }
 
         resolved_mmproj = mmproj_path or _mmproj
-        if _is_vlm(resolved_mmproj, model_name or model_name_or_path, model_path):
+        spec_type = kwargs.get('spec_type', '')
+        is_vlm = _is_vlm(resolved_mmproj, model_name or model_name_or_path, model_path)
+        if is_vlm and spec_type:
+            print(
+                'Warning: spec_type set on a VLM-classified model; '
+                'running the LLM path, image / audio inputs will be ignored'
+            )
+            is_vlm = False
+        if is_vlm:
             return _create_vlm_handle(
-                resolved_name,
                 model_path,
                 resolved_mmproj,
                 tokenizer_path or _tok,
                 plugin_id,
                 device_id,
                 config,
-                license_id,
-                license_key,
                 meta=meta,
             )
 
         inp = geniex_LlmCreateInput(
-            model_name=resolved_name.encode(),
             model_path=model_path.encode(),
             config=config,
         )
@@ -423,10 +428,6 @@ class AutoModelForCausalLM:
             inp.plugin_id = plugin_id.encode()
         if device_id:
             inp.device_id = device_id.encode()
-        if license_id:
-            inp.license_id = license_id.encode()
-        if license_key:
-            inp.license_key = license_key.encode()
 
         handle = c_void_p()
         lib = load_library()
@@ -446,11 +447,9 @@ class AutoModelForVision2Seq:
         precision: str | None = None,
         device_map: str = 'auto',
         n_ctx: int = 0,
-        n_gpu_layers: int = 999,
+        n_gpu_layers: int = -1,
         mmproj_path: str | None = None,
         tokenizer_path: str | None = None,
-        license_id: str | None = None,
-        license_key: str | None = None,
         hf_token: str | None = None,
         progress: ProgressCallback | bool | None = None,
         **kwargs,
@@ -488,14 +487,11 @@ class AutoModelForVision2Seq:
         }
 
         return _create_vlm_handle(
-            resolved_name,
             model_path,
             mmproj_path or _mmproj,
             resolved_tok_path,
             plugin_id,
             device_id,
             config,
-            license_id,
-            license_key,
             meta=meta,
         )

@@ -34,7 +34,7 @@ module.exports = async ({ github, context, core }) => {
   const htpNote =
     HTP_SIGNED === "true"
       ? `## Hexagon HTP\n\nMicrosoft-signed HTP catalog (llama.cpp @ \`${LLAMA_SHA}\`). No cert import required on Windows on Snapdragon.`
-      : `## Hexagon HTP\n\nSelf-signed HTP catalog (llama.cpp @ \`${LLAMA_SHA}\`). End users must enable test signing and import \`ggml-htp-v1.cer\` per [notes/run.md](../blob/${VERSION}/notes/run.md).\n\nOperators: ship \`libggml-htp-to-sign-${LLAMA_SHA}.zip\` to the signing pipeline, then upload the signed result as \`libggml-htp-${LLAMA_SHA}.zip\` to \`s3://qaihub-public-assets/llama-cpp/\` and re-run this release.`;
+      : `## Hexagon HTP\n\nSelf-signed HTP catalog (llama.cpp @ \`${LLAMA_SHA}\`). End users: import \`ggml-htp-v1.cer\` per [notes/run.md](../blob/${VERSION}/notes/run.md). Operators: promote per [notes/release.md § Hexagon HTP signing](../blob/${VERSION}/notes/release.md#hexagon-htp-signing).`;
 
   let release;
   for await (const res of github.paginate.iterator(
@@ -46,7 +46,7 @@ module.exports = async ({ github, context, core }) => {
   }
 
   // Merge htpNote into the release body, replacing any stale HTP section from a
-  // prior run (e.g. self-signed → Microsoft-signed once the S3 bundle lands).
+  // prior run (e.g. self-signed → Microsoft-signed once the signed bundle lands).
   const mergeHtpNote = (body) => {
     const base = (body || "").replace(/## Hexagon HTP[\s\S]*$/m, "").trimEnd();
     return base ? `${base}\n\n${htpNote}` : htpNote;

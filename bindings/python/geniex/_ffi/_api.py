@@ -14,6 +14,7 @@ from ._types import (
     geniex_GetDeviceListInput,
     geniex_GetDeviceListOutput,
     geniex_GetPluginListOutput,
+    geniex_HubModelList,
     geniex_KvCacheLoadInput,
     geniex_KvCacheLoadOutput,
     geniex_KvCacheSaveInput,
@@ -21,9 +22,12 @@ from ._types import (
     geniex_LlmApplyChatTemplateInput,
     geniex_LlmApplyChatTemplateOutput,
     geniex_LlmCreateInput,
+    geniex_LlmForwardLogitsInput,
+    geniex_LlmForwardLogitsOutput,
     geniex_LlmGenerateInput,
     geniex_LlmGenerateOutput,
     geniex_LlmModelInfo,
+    geniex_ModelDetail,
     geniex_ModelListDetailedOutput,
     geniex_ModelPaths,
     geniex_ModelPullInput,
@@ -184,6 +188,13 @@ def _bind_all() -> None:
     lib.geniex_llm_get_model_info.argtypes = [c_void_p, POINTER(geniex_LlmModelInfo)]
     lib.geniex_llm_get_model_info.restype = c_int32
 
+    lib.geniex_llm_forward_logits.argtypes = [
+        c_void_p,
+        POINTER(geniex_LlmForwardLogitsInput),
+        POINTER(geniex_LlmForwardLogitsOutput),
+    ]
+    lib.geniex_llm_forward_logits.restype = c_int32
+
     lib.geniex_llm_apply_chat_template.argtypes = [
         c_void_p,
         POINTER(geniex_LlmApplyChatTemplateInput),
@@ -265,6 +276,12 @@ def _bind_all() -> None:
     lib.geniex_model_list_detailed_free.argtypes = [POINTER(geniex_ModelListDetailedOutput)]
     lib.geniex_model_list_detailed_free.restype = None
 
+    lib.geniex_model_get_detailed.argtypes = [c_char_p, POINTER(geniex_ModelDetail)]
+    lib.geniex_model_get_detailed.restype = c_int32
+
+    lib.geniex_model_detail_free.argtypes = [POINTER(geniex_ModelDetail)]
+    lib.geniex_model_detail_free.restype = None
+
     lib.geniex_model_query.argtypes = [
         POINTER(geniex_ModelPullInput),
         POINTER(geniex_ModelQueryOutput),
@@ -277,14 +294,23 @@ def _bind_all() -> None:
     lib.geniex_model_resolve_alias.argtypes = [c_char_p, POINTER(c_char_p)]
     lib.geniex_model_resolve_alias.restype = c_int32
 
+    lib.geniex_model_resolve_hub.argtypes = [c_char_p, c_int32, POINTER(c_int32)]
+    lib.geniex_model_resolve_hub.restype = c_int32
+
     lib.geniex_model_list_chipsets.argtypes = [POINTER(geniex_ChipsetList)]
     lib.geniex_model_list_chipsets.restype = c_int32
 
     lib.geniex_model_list_chipsets_free.argtypes = [POINTER(geniex_ChipsetList)]
     lib.geniex_model_list_chipsets_free.restype = None
 
-    lib.geniex_model_detect_chipset.argtypes = [POINTER(c_char_p)]
+    lib.geniex_model_detect_chipset.argtypes = [c_int32, POINTER(c_char_p)]
     lib.geniex_model_detect_chipset.restype = c_int32
+
+    lib.geniex_model_list_hub.argtypes = [c_char_p, POINTER(geniex_HubModelList)]
+    lib.geniex_model_list_hub.restype = c_int32
+
+    lib.geniex_model_list_hub_free.argtypes = [POINTER(geniex_HubModelList)]
+    lib.geniex_model_list_hub_free.restype = None
 
 
 _bound = False

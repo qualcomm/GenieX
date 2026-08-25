@@ -57,6 +57,13 @@ jobs:
     with:
       upload_artifact: true
 
+  test-rust:
+    name: test-rust
+    needs: [lint]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_test-rust.yml
+    secrets: inherit
+
   build-cli:
     name: build-cli
     needs: [build-sdk]
@@ -85,7 +92,7 @@ jobs:
     name: test-go
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    uses: ./.github/workflows/_test.yml
+    uses: ./.github/workflows/_unit-test.yml
     secrets: inherit
     with:
       language: go
@@ -95,7 +102,7 @@ jobs:
     name: test-python
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    uses: ./.github/workflows/_test.yml
+    uses: ./.github/workflows/_unit-test.yml
     secrets: inherit
     with:
       language: python
@@ -105,7 +112,7 @@ jobs:
     name: test-sdk-ci
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    uses: ./.github/workflows/_test.yml
+    uses: ./.github/workflows/_unit-test.yml
     secrets: inherit
     with:
       language: sdk
@@ -115,10 +122,11 @@ jobs:
       platforms: '["windows-arm64"]'
       gate_on_changed_files: true
 
-  # TODO(#976): re-enable once _qdc-pytest.yml stops failing on PR check.
-  # test-sdk-qdc:
-  #   name: test-sdk-qdc
-  #   needs: [build-sdk]
-  #   if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-  #   uses: ./.github/workflows/_qdc-pytest.yml
-  #   secrets: inherit
+  test-sdk-qdc:
+    name: test-sdk-qdc
+    needs: [build-sdk]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    uses: ./.github/workflows/_qdc-test.yml
+    secrets: inherit
+    with:
+      gate_on_changed_files: true

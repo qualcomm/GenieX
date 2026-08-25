@@ -7,18 +7,42 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 The Linux Docker path runs through a container image built for Linux ARM64 with NPU access (Dragonwing QCS9075 and similar IoT platforms).
 
+<Note>
+  This is the containerized path. If you'd rather install `geniex` directly on the host without Docker, see [CLI Install → Linux ARM64 (Native)](/en/run/cli/install).
+</Note>
+
 ### **Prerequisites**
 
 - Linux ARM64 host with Docker installed — if you don't have Docker yet, follow [Docker's Ubuntu install guide](https://docs.docker.com/engine/install/ubuntu/).
 - Dragonwing IoT chipset — see [Supported platforms](/en/get-started/platforms).
+- Credentials with read access to one of the registries below.
+
+### **Install host dependencies**
+
+The container reaches the NPU through the host's Qualcomm driver libraries, mounted in via `-v /usr/lib:/opt/qcom-lib:ro`. Install them **on the host** before `docker run` — follow [CLI Install → Install host dependencies](/en/run/cli/install#install-host-dependencies).
+
 ### **Pull the image**
 
-The image is published on [Docker Hub](https://hub.docker.com/r/qualcomm/geniex):
+The image is published to two registries — pick whichever you have access to and set `IMAGE` accordingly, then pull:
 
 ```bash bash
-docker pull qualcomm/geniex:latest
+# Option A — Docker Hub (public, no login required):
+IMAGE=docker.io/qualcomm/geniex:latest
+
+# Option B — Qualcomm Container Registry:
+docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
+IMAGE=docker-registry.qualcomm.com/qcom-ai-hub/geniex-cli:latest
+
+docker pull "$IMAGE"
 ```
 
+<Note>
+  If `docker login` fails or `docker pull` returns `permission denied ... /var/run/docker.sock`, see [Troubleshooting → Linux](/en/resources/troubleshooting#linux) for the credential and `docker` group fixes.
+</Note>
+
+<Note>
+  **Baseline ARMv8.0 boards** — some NPU-less Dragonwing IoT SoCs cannot run the default ARMv8.2 image; append `-cpu` to the tag for those: `docker.io/qualcomm/geniex:latest-cpu`. That image is CPU-only and needs neither `--privileged` nor the `/usr/lib` mount below.
+</Note>
 
 ### **Run interactively**
 
@@ -28,7 +52,7 @@ Drop into an interactive shell inside the container:
 docker run -it --rm --privileged \
   -v "$PWD/data:/data" \
   -v /usr/lib:/opt/qcom-lib:ro \
-  qualcomm/geniex:latest
+  "$IMAGE"
 ```
 
 ### **Verify**

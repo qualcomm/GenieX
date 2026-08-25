@@ -39,6 +39,9 @@ class PluginFactory {
 
     Plugin*         get_instance();  // return raw pointer, but internal manage lifecycle
     const PluginId& get_plugin_id() const { return plugin_id; }
+
+    // Cached instance without constructing one; nullptr if never instantiated.
+    Plugin* peek_cached() const { return cached_plugin.get(); }
 };
 
 class PluginLoadException : public std::exception {};
@@ -50,9 +53,20 @@ class Registry {
     mutable std::unordered_map<PluginId, std::unique_ptr<PluginFactory>> plugins;
     mutable std::vector<std::string>                                     failed_plugins;
     mutable std::mutex                                                   mutex;
+    PluginId                                                             last_dispatched_id;
 
     Registry()  = default;
     ~Registry() = default;
+
+    // Callees must not re-enter Registry — mutex is held.
+    void notify_foreign_plugins_locked(const PluginId& incoming_id) {
+        for (auto& [id, factory] : plugins) {
+            if (id == incoming_id) continue;
+            if (Plugin* p = factory->peek_cached()) {
+                p->on_foreign_plugin_load();
+            }
+        }
+    }
 
    public:
     static Registry& instance();
@@ -80,6 +94,11 @@ class Registry {
             }
             throw PluginNotFoundException();
         }
+
+        if (!last_dispatched_id.empty() && last_dispatched_id != plugin_id) {
+            notify_foreign_plugins_locked(plugin_id);
+        }
+        last_dispatched_id = plugin_id;
 
         Plugin* plugin = it->second->get_instance();
         if constexpr (std::is_same_v<M, Plugin>) {

@@ -26,7 +26,7 @@ def test_qairt_coerces_user_n_ctx_with_warning(caplog):
 
 def test_qairt_factory_defaults_pass_through_silently(caplog):
     with caplog.at_level(logging.WARNING, logger='geniex'):
-        cfg = _build_model_config(PLUGIN_QAIRT, n_ctx=0, n_gpu_layers=999)
+        cfg = _build_model_config(PLUGIN_QAIRT, n_ctx=0, n_gpu_layers=-1)
     assert cfg.n_gpu_layers == 0
     assert cfg.n_ctx == 0
     assert caplog.records == []

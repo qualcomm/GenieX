@@ -101,8 +101,9 @@ jobs:
       version_tag: ${{ needs.resolve-tag.outputs.tag }}
       upload_artifact: true
 
-  # Overlay the Microsoft-signed HTP bundle from S3 if available; otherwise
-  # the Windows SDK stays self-signed and gets marked as such downstream.
+  # Overlay the Microsoft-signed HTP bundle from qcom-ai-hub/geniex LFS if
+  # available; otherwise the Windows SDK stays self-signed and gets marked
+  # as such downstream.
   overlay-htp:
     name: overlay-htp (windows-arm64)
     runs-on: ubuntu-latest
@@ -120,24 +121,42 @@ jobs:
       - name: Init llama.cpp submodule
         run: git submodule update --init --depth=1 third-party/llama.cpp
 
+      - name: Fetch signed HTP index from qcom-ai-hub/geniex
+        uses: actions/checkout@v7
+        with:
+          repository: qcom-ai-hub/geniex
+          ref: chore/signed-htp-lfs-store
+          lfs: false
+          path: signed-htp-src
+          sparse-checkout: sdk/signed-htp
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+          token: ${{ secrets.GH_PAT }}
+          fetch-depth: 1
+
       - uses: actions/download-artifact@v8
         with:
           name: sdk-windows-arm64
           path: sdk-windows-arm64
 
-      - name: Overlay Microsoft-signed HTP bundle from S3 (if available)
+      - name: Overlay Microsoft-signed HTP bundle from LFS (if available)
         id: htp
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
           set -euo pipefail
           sha=$(git -C third-party/llama.cpp rev-parse --short=6 HEAD)
-          url="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/llama-cpp/libggml-htp-${sha}.zip"
-          if curl -fsSL -o htp-signed.zip "$url"; then
-            unzip -o htp-signed.zip -d sdk-windows-arm64/lib/llama_cpp/
+          src="signed-htp-src/sdk/signed-htp/libggml-htp-${sha}.zip"
+          if [[ -f "$src" ]]; then
+            git -C signed-htp-src remote set-url origin \
+              "https://x-access-token:${GH_PAT}@github.com/qcom-ai-hub/geniex.git"
+            git -C signed-htp-src lfs install --local
+            git -C signed-htp-src lfs pull --include "sdk/signed-htp/libggml-htp-${sha}.zip"
+            unzip -o "$src" -d sdk-windows-arm64/lib/llama_cpp/
             signed=true
           else
             signed=false
           fi
-          rm -f htp-signed.zip
           echo "Signed HTP bundle for llama.cpp @ ${sha}: ${signed}"
           echo "signed=${signed}" >> "$GITHUB_OUTPUT"
           echo "llama_sha=${sha}" >> "$GITHUB_OUTPUT"
@@ -209,6 +228,11 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
+          name: sdk-linux-arm64-cpu
+          path: sdk-linux-arm64-cpu
+
+      - uses: actions/download-artifact@v8
+        with:
           name: sdk-android-arm64
           path: sdk-android-arm64
 
@@ -224,12 +248,22 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
+          name: cli-linux-arm64-cpu
+          path: cli-linux-arm64-cpu/
+
+      - uses: actions/download-artifact@v8
+        with:
           name: python-sdist
           path: .
 
       - uses: actions/download-artifact@v8
         with:
           name: android-aar
+          path: .
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-aar-cpu
           path: .
 
       - name: Package artifacts and write SHA256 sidecars
@@ -239,13 +273,20 @@ jobs:
 
           mv geniex-cli-setup.exe "geniex-cli-setup-windows-arm64-${RELEASE_TAG}.exe"
           mv geniex-android-aar.aar "geniex-android-aar-${RELEASE_TAG}.aar"
+          mv geniex-android-aar-cpu.aar "geniex-android-aar-cpu-${RELEASE_TAG}.aar"
 
-          staged="geniex-cli-linux-arm64-${RELEASE_TAG}"
-          mkdir -p "${staged}"
-          unzip -q cli-linux-arm64/artifact.zip -d "${staged}"
-          chmod +x "${staged}/geniex"
-          tar -czf "${staged}.tar.gz" "${staged}"
-          rm -rf "${staged}"
+          mv geniex-*.tar.gz "geniex-pysdist-${RELEASE_TAG}.tar.gz"
+          mv geniex_llama_cpp-*.tar.gz "geniex-pysdist-llama_cpp-${RELEASE_TAG}.tar.gz"
+          mv geniex_qairt-*.tar.gz "geniex-pysdist-qairt-${RELEASE_TAG}.tar.gz"
+
+          for plat in linux-arm64 linux-arm64-cpu; do
+            staged="geniex-cli-${plat}-${RELEASE_TAG}"
+            mkdir -p "${staged}"
+            unzip -q "cli-${plat}/artifact.zip" -d "${staged}"
+            chmod +x "${staged}/geniex"
+            tar -czf "${staged}.tar.gz" "${staged}"
+            rm -rf "${staged}"
+          done
 
           # Stage the install script as a versioned release asset so users can
           # pin to a specific tag's script — the mutable install.sh pointer is
@@ -265,6 +306,7 @@ jobs:
           fi
           zip -r "geniex-sdk-windows-arm64-${RELEASE_TAG}${sdk_suffix}.zip" sdk-windows-arm64
           zip -r "geniex-sdk-linux-arm64-${RELEASE_TAG}.zip" sdk-linux-arm64
+          zip -r "geniex-sdk-linux-arm64-cpu-${RELEASE_TAG}.zip" sdk-linux-arm64-cpu
 
           # Package standalone geniex-bench archives (bin + runtime libs).
           for plat in linux-arm64 windows-arm64 android-arm64; do
@@ -290,7 +332,7 @@ jobs:
             rm -rf "${bench_dir}"
           done
 
-          rm -rf sdk-windows-arm64 sdk-linux-arm64 sdk-android-arm64 cli-linux-arm64 to-sign
+          rm -rf sdk-windows-arm64 sdk-linux-arm64 sdk-linux-arm64-cpu sdk-android-arm64 cli-linux-arm64 cli-linux-arm64-cpu to-sign
 
           shopt -s nullglob
           files=(*.zip *.exe *.tar.gz *.cer *.aar install-*.sh)
@@ -423,6 +465,9 @@ jobs:
     if: needs.resolve-tag.outputs.is_prerelease == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      # OIDC token for TestPyPI Trusted Publishing — no API token needed.
+      id-token: write
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -430,14 +475,11 @@ jobs:
           path: dist/
 
       - name: Publish sdist to TestPyPI
-        uses: pypa/gh-action-pypi-publish@v1.14.0
+        uses: pypa/gh-action-pypi-publish@v1.14.2
         with:
           repository-url: https://test.pypi.org/legacy/
-          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
           packages-dir: dist/
           skip-existing: true
-          # API-token auth, not Trusted Publishing — attestations are a no-op.
-          attestations: false
 
   # Stable (bare vX.Y.Z) tags publish to production PyPI.
   publish-pypi:
@@ -456,7 +498,7 @@ jobs:
           path: dist/
 
       - name: Publish sdist to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.14.0
+        uses: pypa/gh-action-pypi-publish@v1.14.2
         with:
           packages-dir: dist/
           skip-existing: true

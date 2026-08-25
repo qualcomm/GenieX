@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -20,25 +21,32 @@ import (
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 	"github.com/qualcomm/GenieX/cli/cmd/geniex/common"
+	"github.com/qualcomm/GenieX/cli/internal/config"
 	"github.com/qualcomm/GenieX/cli/internal/record"
 	"github.com/qualcomm/GenieX/cli/internal/render"
+	"github.com/qualcomm/GenieX/cli/internal/store"
 )
 
 var (
 	// disableStream *bool // reuse in run.go
-	ngl            int32
-	nctx           int32
-	maxTokens      int32
-	stop           []string
-	stopFile       string
-	imageMaxLength int32
-	enableThink    bool
-	prompt         []string
-	tokenFile      string
-	input          string
-	systemPrompt   string
-	computeUnit    string
-	qnnLib         string
+	ngl           int32
+	nctx          int32
+	maxTokens     int32
+	stop          []string
+	stopFile      string
+	enableThink   bool
+	prompt        []string
+	tokenFile     string
+	input         string
+	systemPrompt  string
+	computeUnit   string
+	qnnLib        string
+	slidingWindow bool
+	specType      string
+	draftModel    string
+	draftTokens   int32
+	draftMin      int32
+	draftPMin     float32
 
 	// sampler config
 	temperature       float32
@@ -51,7 +59,6 @@ var (
 	seed              int32
 	grammarPath       string
 	grammarString     string
-	enableJson        bool
 )
 
 // NOTE: flagset use same flag name will be ignored, but usage is different, so we keep them in different flagset
@@ -69,16 +76,15 @@ var (
 		samplerFlags.Int32VarP(&seed, "seed", "", 0, "random seed")
 		samplerFlags.StringVarP(&grammarPath, "grammar-path", "", "", "path to grammar file")
 		samplerFlags.StringVarP(&grammarString, "grammar-string", "", "", "grammar in string format")
-		samplerFlags.BoolVarP(&enableJson, "enable-json", "", false, "enable json output")
 		return samplerFlags
 	}()
 	llmFlags = func() *pflag.FlagSet {
 		llmFlags := pflag.NewFlagSet("LLM/VLM Model", pflag.ExitOnError)
 		llmFlags.SortFlags = false
-		llmFlags.StringVarP(&computeUnit, "compute", "c", "", "compute unit to run on: cpu, gpu, npu, or hybrid (default: hybrid for llama_cpp, npu for qairt)")
+		llmFlags.StringVarP(&computeUnit, "compute", "c", "", "compute unit to run on: cpu, gpu, npu, hybrid, or an explicit device list like HTP0,HTP1,HTP2,HTP3 (llama_cpp only) (default: npu)")
 		llmFlags.StringVarP(&qnnLib, "qnn-lib", "", "", "path to the QAIRT SDK providing the QNN libraries (qairt only; sets GENIEX_QNN_LIB; REQUIRED — no QNN libs are bundled; the matching plugin ABI variant is selected automatically)")
-		llmFlags.Int32VarP(&ngl, "ngl", "n", 0, "number of layers to offload to gpu/npu (llama_cpp only, default 999)")
-		llmFlags.Int32VarP(&nctx, "nctx", "", 0, "context window size (llama_cpp only, default 4096)")
+		llmFlags.Int32VarP(&ngl, "ngl", "n", -1, "number of layers to offload to gpu/npu, -1 = all (llama_cpp only)")
+		llmFlags.Int32VarP(&nctx, "nctx", "", 4096, "context window size; raise to extend context (llama_cpp only)")
 		llmFlags.Int32VarP(&maxTokens, "max-tokens", "", 2048, "max tokens")
 		llmFlags.StringArrayVarP(&stop, "stop", "", nil, "stop sequences (llama_cpp only)")
 		llmFlags.StringVarP(&stopFile, "stop-file", "", "", "file containing stop sequences (llama_cpp only)")
@@ -87,13 +93,18 @@ var (
 		llmFlags.StringVarP(&input, "input", "i", "", "prompt txt file")
 		llmFlags.StringArrayVarP(&prompt, "prompt", "p", nil, "pass prompt")
 		llmFlags.StringVarP(&tokenFile, "token-file", "t", "", "path to token file (space-separated token IDs) (llama_cpp only)")
+		llmFlags.BoolVarP(&slidingWindow, "sliding-window", "", false, "evict oldest context on overflow instead of erroring (qairt only)")
+		llmFlags.StringVarP(&specType, "spec-type", "", "", "speculative decoding type(s), comma-separated: draft-mtp,draft-eagle3,draft-simple,ngram-simple,ngram-map-k,ngram-map-k4v,ngram-mod,ngram-cache (llama_cpp only)")
+		llmFlags.StringVarP(&draftModel, "draft-model", "", "", "draft/MTP model for draft-* spec types: catalogue name or local GGUF path (llama_cpp only)")
+		llmFlags.Int32VarP(&draftTokens, "draft-tokens", "", 3, "max draft tokens per step for speculative decoding (llama_cpp only)")
+		llmFlags.Int32VarP(&draftMin, "draft-min", "", 0, "min draft tokens per step (0 = llama.cpp default) (llama_cpp only)")
+		llmFlags.Float32VarP(&draftPMin, "draft-p-min", "", 0.0, "min greedy draft probability (0 = llama.cpp default) (llama_cpp only)")
 		return llmFlags
 	}()
 	vlmFlags = func() *pflag.FlagSet {
 		vlmFlags := pflag.NewFlagSet("VLM Specific", pflag.ExitOnError)
 		vlmFlags.SortFlags = false
 		vlmFlags.StringArrayVarP(&prompt, "prompt", "p", nil, "pass prompt")
-		vlmFlags.Int32VarP(&imageMaxLength, "image-max-length", "", 512, "max image length")
 		return vlmFlags
 	}()
 	flagGroups = []*pflag.FlagSet{
@@ -106,7 +117,7 @@ func infer() *cobra.Command {
 		GroupID: "inference",
 		Use:     "infer <model-name>[:<precision>]",
 		Short:   "Infer with a model",
-		Long:    "Run inference with a specified model. The model must be downloaded and cached locally. Append ':<precision>' to pick a specific precision; otherwise you'll be prompted to choose one.",
+		Long:    "Run inference with a specified model. The model must be downloaded and cached locally. Append ':<precision>' to pick a specific precision; otherwise you'll be prompted to choose one when several are cached.",
 	}
 
 	inferCmd.Args = cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs)
@@ -119,6 +130,14 @@ func infer() *cobra.Command {
 	inferCmd.RunE = func(cmd *cobra.Command, args []string) error {
 		name, precision := geniex_sdk.SplitNamePrecision(args[0])
 
+		if precision == "" {
+			chosen, err := pickCachedPrecision(name)
+			if err != nil {
+				return err
+			}
+			precision = chosen
+		}
+
 		paths, err := ensureModelAvailable(cmd.Context(), name, precision)
 		if err != nil {
 			return err
@@ -127,17 +146,34 @@ func infer() *cobra.Command {
 		// --qnn-lib is a convenience wrapper over the GENIEX_QNN_LIB env var the qairt
 		// plugin reads at model-load time. Exporting it here means both the LLM and VLM
 		// paths (and any binding that shares this process) pick it up uniformly.
+		// Must precede InitSDK(), which is where the plugin variant gets selected.
 		if qnnLib != "" {
 			if err := os.Setenv("GENIEX_QNN_LIB", qnnLib); err != nil {
 				return fmt.Errorf("failed to set GENIEX_QNN_LIB: %w", err)
 			}
 		}
 
-		geniex_sdk.Init()
+		if err := common.InitSDK(); err != nil {
+			return err
+		}
 
-		switch paths.ModelType {
+		// Host-aware default (e.g. RB3 Gen 2 → cpu) before resolution, so the
+		// --verbose line and any server request see the same alias.
+		var overridden bool
+		if computeUnit, overridden = config.ComputeDefault(computeUnit, store.Get().ResolveChipset(true)); overridden {
+			fmt.Println(render.GetTheme().Info.Sprintf("Defaulting to --compute %s for this device; pass --compute to override.", computeUnit))
+		}
+
+		effectiveType := paths.ModelType
+		if effectiveType == geniex_sdk.ModelTypeVLM && specType != "" {
+			fmt.Println(render.GetTheme().Warning.Sprintf(
+				"Warning: --spec-type set on a VLM-classified model; running the LLM path, image / audio inputs will be ignored"))
+			effectiveType = geniex_sdk.ModelTypeLLM
+		}
+
+		switch effectiveType {
 		case geniex_sdk.ModelTypeLLM:
-			err = inferLLM(paths)
+			err = inferLLM(cmd.Context(), paths)
 		case geniex_sdk.ModelTypeVLM:
 			err = inferVLM(paths)
 		default:
@@ -161,6 +197,9 @@ func ensureModelAvailable(ctx context.Context, name, quant string) (*geniex_sdk.
 	key := name
 	if quant != "" {
 		key = name + ":" + quant
+		if err := checkPrecisionDownloaded(name, quant); err != nil {
+			return nil, err
+		}
 	}
 	paths, err := geniex_sdk.ModelGetPaths(key)
 	if geniex_sdk.IsModelNotFound(err) {
@@ -171,6 +210,82 @@ func ensureModelAvailable(ctx context.Context, name, quant string) (*geniex_sdk.
 		paths, err = geniex_sdk.ModelGetPaths(key)
 	}
 	return paths, err
+}
+
+// checkPrecisionDownloaded reports ErrPrecisionNotFound when a cached model has
+// no such precision, so the sentinel's hint (list / pull / drop the suffix)
+// reaches the user instead of the SDK's generic invalid-input error. A model
+// that isn't cached at all passes: the caller pulls it.
+func checkPrecisionDownloaded(name, quant string) error {
+	m, err := geniex_sdk.ModelGetDetailed(name)
+	if err != nil {
+		return nil
+	}
+	precisions := downloadedPrecisions(*m, true)
+	// Nothing to match against (a runtime like qairt reports only N/A), so let
+	// the SDK judge the key.
+	if len(precisions) == 0 {
+		return nil
+	}
+	// GGUF quant labels are matched case-insensitively by the SDK.
+	if slices.ContainsFunc(precisions, func(p string) bool { return strings.EqualFold(p, quant) }) {
+		return nil
+	}
+	return fmt.Errorf("%w: %s has %s, not %q",
+		common.ErrPrecisionNotFound, name, strings.Join(precisions, ", "), quant)
+}
+
+// pickCachedPrecision asks which of a cached model's downloaded precisions to
+// run, returning "" when there is nothing to disambiguate.
+func pickCachedPrecision(name string) (string, error) {
+	m, err := geniex_sdk.ModelGetDetailed(name)
+	if err != nil {
+		return "", nil
+	}
+	precisions := downloadedPrecisions(*m, true)
+	if len(precisions) < 2 {
+		return "", nil
+	}
+
+	// ModelGetPaths on the bare name resolves the SDK's own pick; choosePrecision
+	// pre-selects the head, so that pick has to land there.
+	def, err := geniex_sdk.ModelGetPaths(name)
+	if err != nil {
+		return "", err
+	}
+	// Size is left unset: ModelDetail.TotalSize aggregates every downloaded
+	// precision, and the SDK does not expose the per-precision figure its
+	// manifest already holds.
+	candidates := make([]geniex_sdk.PrecisionCandidate, len(precisions))
+	head := 0
+	for i, p := range precisions {
+		candidates[i].Precision = p
+		mp, err := geniex_sdk.ModelGetPaths(name + ":" + p)
+		if err != nil {
+			continue
+		}
+		if mp.ModelPath == def.ModelPath {
+			head = i
+		}
+	}
+	candidates[0], candidates[head] = candidates[head], candidates[0]
+
+	return choosePrecision("Select a precision from local folder", candidates)
+}
+
+// resolveDraftModel maps a --draft-model value to a GGUF path the SDK can load.
+// An existing local file is used as-is; anything else is treated as a catalogue
+// name and resolved (pulling if needed) like the main model.
+func resolveDraftModel(ctx context.Context, draft string) (string, error) {
+	if _, err := os.Stat(draft); err == nil {
+		return draft, nil
+	}
+	name, precision := geniex_sdk.SplitNamePrecision(draft)
+	paths, err := ensureModelAvailable(ctx, name, precision)
+	if err != nil {
+		return "", fmt.Errorf("resolve draft model %q: %w", draft, err)
+	}
+	return paths.ModelPath, nil
 }
 
 func getPromptOrInput() (string, error) {
@@ -219,20 +334,36 @@ func loadStopSequences() ([]string, error) {
 	return stopSequences, nil
 }
 
+// modelLoadedLine summarizes the loaded session for --verbose. compute echoes
+// the user alias, not the SDK's device_id (cpu/hybrid resolve to an empty one).
+// Mirrors geniex_resolve_device: empty/"auto" and qairt → npu.
+func modelLoadedLine(runtimeID, computeUnit string, ngl, nctx int32) string {
+	computeUnit = strings.ToLower(strings.TrimSpace(computeUnit))
+	if runtimeID == geniex_sdk.RuntimeQairt || computeUnit == "" || computeUnit == "auto" {
+		computeUnit = geniex_sdk.ComputeUnitNPU
+	}
+	parts := []string{
+		fmt.Sprintf("runtime=%s", runtimeID),
+		fmt.Sprintf("compute=%s", computeUnit),
+	}
+	if runtimeID == geniex_sdk.RuntimeLlamaCpp {
+		parts = append(parts,
+			fmt.Sprintf("ngl=%d", ngl),
+			fmt.Sprintf("nctx=%d", nctx),
+		)
+	}
+	return "Model loaded: " + strings.Join(parts, " ")
+}
+
 // resolveModelParams resolves --compute / --ngl / --nctx into the
-// (device_id, ngl, nctx) triple the SDK expects. For llama_cpp, unset
-// --ngl / --nctx fall back to 999 / 4096; other runtimes keep 0 so their
-// param-guard isn't tripped by the flag default. Compute-unit alias mapping
-// is delegated to geniex_resolve_device (sdk/src/device.cpp).
+// (device_id, ngl, nctx) triple the SDK expects. --ngl (-1 = all) and
+// --nctx are llama_cpp-only; qairt rejects any non-zero value, so both
+// are zeroed for it (the SDK also forces ngl to 0). Compute-unit alias
+// mapping is delegated to geniex_resolve_device (sdk/src/device.cpp).
 func resolveModelParams(runtimeID, modelName string) (deviceID string, resolvedNgl, resolvedNctx int32, err error) {
 	resolvedNgl, resolvedNctx = ngl, nctx
-	if runtimeID == geniex_sdk.RuntimeLlamaCpp {
-		if !llmFlags.Changed("ngl") {
-			resolvedNgl = 999
-		}
-		if !llmFlags.Changed("nctx") {
-			resolvedNctx = 4096
-		}
+	if runtimeID != geniex_sdk.RuntimeLlamaCpp {
+		resolvedNctx = 0
 	}
 
 	resolved, err := geniex_sdk.ResolveDevice(geniex_sdk.ResolveDeviceInput{
@@ -252,7 +383,7 @@ func resolveModelParams(runtimeID, modelName string) (deviceID string, resolvedN
 	return
 }
 
-func inferLLM(paths *geniex_sdk.ModelPaths) error {
+func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths) error {
 	samplerConfig := &geniex_sdk.SamplerConfig{
 		Temperature:       temperature,
 		TopP:              topP,
@@ -264,7 +395,6 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 		Seed:              seed,
 		GrammarPath:       grammarPath,
 		GrammarString:     grammarString,
-		EnableJson:        enableJson,
 	}
 	stopSequences, err := loadStopSequences()
 	if err != nil {
@@ -276,17 +406,40 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 		return err
 	}
 
+	// Speculative decoding is llama_cpp-only; ignore the spec flags for other runtimes.
+	resolvedSpecType := specType
+	specDraftModel := draftModel
+	if paths.RuntimeID != geniex_sdk.RuntimeLlamaCpp {
+		if resolvedSpecType != "" || specDraftModel != "" {
+			fmt.Println(render.GetTheme().Warning.Sprintf(
+				"Warning: speculative decoding is only supported by llama_cpp; ignoring for runtime %s", paths.RuntimeID))
+		}
+		resolvedSpecType = ""
+		specDraftModel = ""
+	} else if specDraftModel != "" {
+		// A draft model may be a local GGUF path or a catalogue name (resolved
+		// and pulled like the main model).
+		specDraftModel, err = resolveDraftModel(ctx, specDraftModel)
+		if err != nil {
+			return err
+		}
+	}
+
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
 
 	p, err := geniex_sdk.NewLLM(geniex_sdk.LlmCreateInput{
-		ModelName: paths.ModelName,
 		ModelPath: paths.ModelPath,
 		RuntimeID: paths.RuntimeID,
 		DeviceID:  deviceID,
 		Config: geniex_sdk.ModelConfig{
-			NCtx:       nctxResolved,
-			NGpuLayers: nglResolved,
+			NCtx:           nctxResolved,
+			NGpuLayers:     nglResolved,
+			SpecType:       resolvedSpecType,
+			SpecDraftModel: specDraftModel,
+			SpecNMax:       draftTokens,
+			SpecNMin:       draftMin,
+			SpecPMin:       draftPMin,
 		},
 	})
 	spin.Stop()
@@ -295,6 +448,10 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 		return err
 	}
 	defer p.Destroy()
+
+	if verbose {
+		fmt.Println(render.GetTheme().Info.Sprint(modelLoadedLine(paths.RuntimeID, computeUnit, nglResolved, nctxResolved)))
+	}
 
 	var history []geniex_sdk.LlmChatMessage
 	if systemPrompt != "" {
@@ -340,6 +497,7 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 					Config: &geniex_sdk.GenerationConfig{
 						MaxTokens:     maxTokens,
 						SamplerConfig: samplerConfig,
+						SlidingWindow: slidingWindow,
 					},
 				})
 				if err != nil {
@@ -368,6 +526,7 @@ func inferLLM(paths *geniex_sdk.ModelPaths) error {
 						MaxTokens:     maxTokens,
 						Stop:          stopSequences,
 						SamplerConfig: samplerConfig,
+						SlidingWindow: slidingWindow,
 					},
 				})
 
@@ -417,7 +576,6 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 		Seed:              seed,
 		GrammarPath:       grammarPath,
 		GrammarString:     grammarString,
-		EnableJson:        enableJson,
 	}
 	stopSequences, err := loadStopSequences()
 	if err != nil {
@@ -432,7 +590,6 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
 	p, err := geniex_sdk.NewVLM(geniex_sdk.VlmCreateInput{
-		ModelName:  paths.ModelName,
 		ModelPath:  paths.ModelPath,
 		MmprojPath: paths.MmprojPath,
 		RuntimeID:  paths.RuntimeID,
@@ -450,11 +607,19 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 	}
 	defer p.Destroy()
 
+	if verbose {
+		fmt.Println(render.GetTheme().Info.Sprint(modelLoadedLine(paths.RuntimeID, computeUnit, nglResolved, nctxResolved)))
+	}
+
 	caps, _ := p.Capabilities()
 	slog.Debug("VLM capabilities", "vision", caps.SupportsVision, "audio", caps.SupportsAudio)
 	if caps.SupportsAudio {
 		checkAudioDependency()
 	}
+
+	// Warn once per unsupported modality; feeding an audio path to a
+	// vision-only model corrupts the run (the pipeline has no audio encoder).
+	warnedAudio, warnedImage := false, false
 
 	var history []geniex_sdk.VlmChatMessage
 	if systemPrompt != "" {
@@ -473,6 +638,21 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 			return err
 		},
 		Run: func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
+			if len(audios) > 0 && !caps.SupportsAudio {
+				if !warnedAudio {
+					fmt.Println(render.GetTheme().Warning.Sprint("Warning: this model does not support audio; ignoring audio input."))
+					warnedAudio = true
+				}
+				audios = nil
+			}
+			if len(images) > 0 && !caps.SupportsVision {
+				if !warnedImage {
+					fmt.Println(render.GetTheme().Warning.Sprint("Warning: this model does not support images; ignoring image input."))
+					warnedImage = true
+				}
+				images = nil
+			}
+
 			msg := geniex_sdk.VlmChatMessage{Role: geniex_sdk.VlmRoleUser}
 			msg.Contents = append(msg.Contents, geniex_sdk.VlmContent{Type: geniex_sdk.VlmContentTypeText, Text: prompt})
 			for _, image := range images {
@@ -496,12 +676,11 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 				PromptUTF8: tmplOut.FormattedText,
 				OnToken:    onToken,
 				Config: &geniex_sdk.GenerationConfig{
-					MaxTokens:      maxTokens,
-					Stop:           stopSequences,
-					SamplerConfig:  samplerConfig,
-					ImagePaths:     images,
-					ImageMaxLength: imageMaxLength,
-					AudioPaths:     audios,
+					MaxTokens:     maxTokens,
+					Stop:          stopSequences,
+					SamplerConfig: samplerConfig,
+					ImagePaths:    images,
+					AudioPaths:    audios,
 				},
 			})
 			if err != nil {

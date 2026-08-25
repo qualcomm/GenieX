@@ -33,6 +33,7 @@ const (
 - Redownload the model.
 - Verify your system meets the model's requirements.
 - Check your NPU / GPU driver version and update it if it's out of date.
+- Re-run with '--log debug' (or higher) to see the underlying load failure.
 - See help in our discord or slack.`
 
 	hintPluginLoad = `⚠️ Oops. Runtime failed to load.
@@ -47,7 +48,19 @@ const (
 - This model may not be compatible with your system. Try another model.
 - See help in our discord or slack.`
 
-	hintContextLength = `Context length exceeded, please start a new conversation.`
+	hintPromptTooLong = `⚠️ Prompt too long — the input alone is longer than the context window.
+
+👉 Try these:
+- Shorten the prompt (or the conversation history) so it fits the window.
+- llama_cpp: raise the window with '--nctx <N>' (default 4096), up to the model's trained max. Larger windows use more memory.
+- qairt: the window is fixed at compile time and can't be raised at runtime. Add '--sliding-window' to evict the oldest context, or pull a bundle built for a longer context.`
+
+	hintContextLength = `⚠️ Context length exceeded — the conversation outgrew the context window.
+
+👉 Try these:
+- llama_cpp: raise the window with '--nctx <N>' (default 4096), up to the model's trained max. Larger windows use more memory.
+- qairt: the window is fixed at compile time and can't be raised at runtime. Add '--sliding-window' to keep chatting by evicting the oldest context, or pull a bundle built for a longer context.
+- Or start a new conversation to clear the history.`
 
 	hintHubUnreachable = `⚠️ Unable to reach the model hub while resolving metadata.
 
@@ -90,6 +103,14 @@ Possible causes: network timeout, corporate proxy, or firewall.
 - Run 'geniex list' to see what's been downloaded for this model.
 - Run 'geniex pull <model>:<precision>' to download it.
 - Drop the ':<precision>' suffix to be prompted from what's already downloaded.`
+
+	hintCPUUnsupported = `⚠️ This device is missing CPU features that geniex requires, so it cannot run here.
+
+👉 Try these:
+- On a baseline ARMv8.0 board, install the CPU-only build instead: re-run the
+  installer with '--cpu-only'.
+- Otherwise run geniex on a newer device that meets the CPU requirements.
+- If you believe this device should be supported, report it in our discord or slack with the output of 'uname -m' and 'cat /proc/cpuinfo'.`
 )
 
 // CLI-side sentinels. SDK sentinels live in bindings/go. Producers wrap with
@@ -101,6 +122,11 @@ var (
 	// ErrPrecisionNotFound: the user-specified precision is missing from
 	// the model's local manifest (or listed but not downloaded).
 	ErrPrecisionNotFound = errors.New("precision not found")
+	// ErrCPUUnsupported: geniex_init reported the CPU lacks a required
+	// feature. The SDK returns the generic NOT_SUPPORTED code for this, so
+	// callers wrap it here to get a CPU-specific hint distinct from the
+	// unsupported-model-type case.
+	ErrCPUUnsupported = errors.New("cpu feature unsupported")
 )
 
 var errorHints = []struct {
@@ -112,6 +138,7 @@ var errorHints = []struct {
 	{geniex_sdk.ErrCommonModelLoad, hintModelLoad},
 	{geniex_sdk.ErrCommonPluginLoad, hintPluginLoad},
 	{geniex_sdk.ErrCommonPluginInvalid, hintPluginInvalid},
+	{geniex_sdk.ErrLlmGenerationPromptTooLong, hintPromptTooLong},
 	{geniex_sdk.ErrLlmTokenizationContextLength, hintContextLength},
 	{geniex_sdk.ErrCommonAuth, hintHubAuthRequired},
 	{geniex_sdk.ErrCommonHubModelNotFound, hintModelNotFound},
@@ -120,6 +147,7 @@ var errorHints = []struct {
 	{geniex_sdk.ErrCommonNetwork, hintHubUnreachable},
 	{ErrServerUnreachable, hintServerUnreachable},
 	{ErrPrecisionNotFound, hintPrecisionNotFound},
+	{ErrCPUUnsupported, hintCPUUnsupported},
 }
 
 // PrintError renders err for the user on stderr in the theme's error style

@@ -22,6 +22,7 @@ ISSUE_URL="https://github.com/qualcomm/GenieX/issues"
 VERSION=""
 PREFIX=""
 QUIET=0
+CPU_ONLY=0
 
 usage() {
     cat <<EOF
@@ -33,6 +34,8 @@ Options:
   --version vX.Y.Z   Install a specific release (default: latest stable)
   --prefix DIR       Install to DIR (default: /usr/local/lib/geniex when root,
                      \${XDG_DATA_HOME:-\$HOME/.local/share}/geniex otherwise)
+  --cpu-only         Install the CPU-only armv8.0-a build, for baseline ARMv8.0
+                     boards that cannot run the default armv8.2 build
   -q, --quiet        Suppress non-error output
   -h, --help         Show this help
 
@@ -112,6 +115,10 @@ while [ $# -gt 0 ]; do
             PREFIX="${1#*=}"
             shift
             ;;
+        --cpu-only)
+            CPU_ONLY=1
+            shift
+            ;;
         -q|--quiet)
             QUIET=1
             shift
@@ -146,6 +153,13 @@ case "$arch" in
         exit 1
         ;;
 esac
+
+# Baseline armv8.0 boards (unoq) can't run the default armv8.2-a build; opting
+# into the CPU-only one is explicit. See GenieX issue #1217.
+if [ "$CPU_ONLY" -eq 1 ]; then
+    ASSET_STEM="${ASSET_STEM}-cpu"
+    say "Installing the CPU-only build. NPU and GPU inference are not available."
+fi
 
 # Snapdragon EVKs and most Linux container images log in as root, so installing
 # under $HOME/.local would leave geniex hidden under /root/.local/bin. Default
@@ -267,10 +281,13 @@ fi
 rm -rf "${PREFIX}.old"
 
 # Symlink bare-name fastrpc libs into the prefix so the bundled QNN HTP stub
-# can find them via the LD_LIBRARY_PATH the launcher sets
-say "Linking host NPU libraries"
-resolve_host_lib libcdsprpc.so
-resolve_host_lib libadsprpc.so
+# can find them via the LD_LIBRARY_PATH the launcher sets. The CPU-only build
+# ships no QAIRT/HTP plugin.
+if [ "$CPU_ONLY" -eq 0 ]; then
+    say "Linking host NPU libraries"
+    resolve_host_lib libcdsprpc.so
+    resolve_host_lib libadsprpc.so
+fi
 
 # Launcher wrapper instead of a bare symlink: the binary is built without
 # an $ORIGIN rpath, so it can't find sibling libgeniex.so / plugins unless

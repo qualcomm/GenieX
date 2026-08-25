@@ -37,16 +37,31 @@ impl StoreConfig {
         std::env::var("GENIEX_HFTOKEN").ok()
     }
 
+    pub fn hf_endpoint() -> String {
+        match std::env::var("HF_ENDPOINT") {
+            Ok(v) if !v.trim().is_empty() => v.trim().trim_end_matches('/').to_string(),
+            _ => crate::source::hf::DEFAULT_HF_ENDPOINT.to_string(),
+        }
+    }
+
     /// AI Hub public assets base URL. Mirrors the Go CLI's
     /// `DefaultAIHubBaseURL`; override via `GENIEX_AIHUBBASEURL`.
     pub fn ai_hub_base_url() -> String {
         std::env::var("GENIEX_AIHUBBASEURL").unwrap_or_else(|_| DEFAULT_AI_HUB_BASE_URL.to_string())
     }
 
-    /// Pinned aihm release version the SDK consumes. The public bucket has
-    /// no `latest` alias; override via `GENIEX_AIHUBVERSION`.
-    pub fn ai_hub_version() -> String {
-        std::env::var("GENIEX_AIHUBVERSION").unwrap_or_else(|_| DEFAULT_AI_HUB_VERSION.to_string())
+    /// Explicit AIHM version pin. When set, skips `releases/latest/`.
+    pub fn ai_hub_version_override() -> Option<String> {
+        std::env::var("GENIEX_AIHUBVERSION")
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+    }
+
+    /// Fallback release directory when `releases/latest/` is unavailable.
+    /// Bump opportunistically as AIHM ships newer releases.
+    pub fn ai_hub_version_fallback() -> String {
+        DEFAULT_AI_HUB_VERSION.to_string()
     }
 
     /// Cache directory for AI Hub index JSONs. Matches the Go CLI layout
@@ -72,12 +87,65 @@ impl StoreConfig {
 const DEFAULT_AI_HUB_BASE_URL: &str =
     "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models";
 
-/// Mirrors `cli/internal/config/config.go:DefaultAIHubVersion`.
-const DEFAULT_AI_HUB_VERSION: &str = "v0.57.0";
+/// Fallback for [`StoreConfig::ai_hub_version_fallback`].
+const DEFAULT_AI_HUB_VERSION: &str = "v0.60.0";
 
 fn default_data_dir() -> PathBuf {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
     PathBuf::from(home).join(".cache").join("geniex")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::source::hf::DEFAULT_HF_ENDPOINT;
+
+    struct EnvGuard {
+        key: &'static str,
+        prev: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let prev = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            Self { key, prev }
+        }
+        fn unset(key: &'static str) -> Self {
+            let prev = std::env::var(key).ok();
+            std::env::remove_var(key);
+            Self { key, prev }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    #[test]
+    fn hf_endpoint_covers_unset_custom_and_trailing_slash() {
+        {
+            let _g = EnvGuard::unset("HF_ENDPOINT");
+            assert_eq!(StoreConfig::hf_endpoint(), DEFAULT_HF_ENDPOINT);
+        }
+        {
+            let _g = EnvGuard::set("HF_ENDPOINT", "https://hf-mirror.com");
+            assert_eq!(StoreConfig::hf_endpoint(), "https://hf-mirror.com");
+        }
+        {
+            let _g = EnvGuard::set("HF_ENDPOINT", "https://hf-mirror.com/");
+            assert_eq!(StoreConfig::hf_endpoint(), "https://hf-mirror.com");
+        }
+        {
+            let _g = EnvGuard::set("HF_ENDPOINT", "  ");
+            assert_eq!(StoreConfig::hf_endpoint(), DEFAULT_HF_ENDPOINT);
+        }
+    }
 }

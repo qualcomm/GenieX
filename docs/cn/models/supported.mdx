@@ -205,9 +205,8 @@ Hugging Face 上的部分模型是**受限模型（gated）**——你需要在 
     val llm = LlmWrapper.builder()
         .llmCreateInput(
             LlmCreateInput(
-                model_name = paths.model_name,
                 model_path = paths.model_path,
-                config     = ModelConfig(max_tokens = 2048, enable_thinking = false),
+                config     = ModelConfig(),
                 runtime_id  = "qairt",
                 compute_unit  = null,   // qairt 仅支持 NPU
             )
@@ -251,7 +250,7 @@ Hugging Face 上的部分模型是**受限模型（gated）**——你需要在 
 
     model = AutoModelForCausalLM.from_pretrained(
         r"C:\models\my-model\model.gguf",   # 本地 .gguf 文件路径
-        device_map="auto",                  # auto -> llama_cpp 使用 hybrid
+        device_map="auto",                  # auto -> llama_cpp 使用 npu
     )
     ```
 
@@ -280,7 +279,6 @@ Hugging Face 上的部分模型是**受限模型（gated）**——你需要在 
     val llm = LlmWrapper.builder()
         .llmCreateInput(
             LlmCreateInput(
-                model_name = paths.model_name,
                 model_path = paths.model_path,
                 config     = ModelConfig(nCtx = 4096),
                 runtime_id  = "llama_cpp",

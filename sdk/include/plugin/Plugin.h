@@ -26,6 +26,11 @@ class Plugin {
     }
     virtual ILlm* create_llm() { return nullptr; }
     virtual IVlm* create_vlm() { return nullptr; }
+
+    // Called on every already-cached plugin when Registry dispatches to a
+    // plugin with a different id, so the yielding side can release process-
+    // wide resources (e.g. HTP FastRPC channels) that would collide.
+    virtual void on_foreign_plugin_load() {}
 };
 
 }  // namespace geniex

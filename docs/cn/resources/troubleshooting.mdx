@@ -31,6 +31,15 @@ import Feedback from "/snippets/page-feedback.mdx";
   <Accordion title="`--compute cpu` 或 `--compute gpu` 在 Qualcomm AI Hub 模型上报错">
     Qualcomm AI Engine Direct 仅支持 NPU。请使用 `--compute npu`（或省略该标志——`npu` 是 `qairt` 的默认值）。如需在 CPU/GPU 上运行，改用 [llama.cpp 运行环境](/cn/get-started/platforms#llamacpp)的 GGUF 模型。
   </Accordion>
+
+  <Accordion title="长对话中出现 `Context length exceeded`">
+    对话增长超过了上下文窗口（`--nctx`，默认 4096）。
+
+    - **llama.cpp (GGUF)：** 可在运行时抬升，例如 `geniex infer <model> --nctx 8192`，上限为模型训练时的最大值。窗口越大占用内存越多。
+    - **Qualcomm AI Engine Direct (NPU)：** 窗口固化在编译好的模型包中，`--nctx` 不生效。加 `--sliding-window` 以继续对话（驱逐最旧的上下文），或获取按更长上下文编译的模型包。
+
+    参见[增大上下文长度](/cn/run/cli/reference#增大上下文长度)。
+  </Accordion>
 </AccordionGroup>
 
 ## **服务器**
@@ -55,66 +64,56 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="`docker pull` 报权限错误 / 未授权">
-    将当前用户加入 `docker` 组后重新登录：
+    需要同时满足两点：
 
-    ```bash bash
-    sudo usermod -aG docker $USER
-    ```
-  </Accordion>
+    1. **镜像仓库登录。** Docker Hub（`docker.io/qualcomm/geniex`）是公开的，无需登录。Qualcomm Container Registry 则需先登录：
 
-  <Accordion title="`geniex` install.sh 报缺少共享库">
-    在全新的 Ubuntu 24.04 ARM64 主机（例如 IQ9075 EVK）上，`install.sh`——以及 Docker 场景下的预检脚本 `check.sh` / 容器入口脚本 `entrypoint.sh`——会检查 `libCB.so.1`、`libOpenCL_adreno.so.1`、`libcdsprpc.so.1.0.0`、`libgsl.so.1`、`libllvm-*.so.1`、`libpropertyvault.so.0.0.0`、`libdmabufheap.so.0.0.0`，以及 Debian 的 `libatomic1` / `libglib2.0-0` 等库。请在**宿主机**上分两步安装——如果当前在 geniex 容器内，请先 `exit`。
+       ```bash bash
+       # Qualcomm Container Registry:
+       docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
+       ```
 
-    **1. 标准 APT 包**
+       出现 `Login Succeeded` 即成功。
 
-    满足 `geniex` 安装器报告的 `libatomic1` 与 `libglib2.0-0` 依赖，并提供通用 OpenCL ICD loader：
+    2. **加入 docker 用户组。** 若 `docker pull` 返回 `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`，说明当前用户不在 `docker` 组：
 
-    ```bash bash
-    sudo apt update
-    sudo apt install -y \
-      libatomic1 \
-      libglib2.0-0 \
-      ocl-icd-libopencl1
-    ```
+       ```bash bash
+       sudo usermod -aG docker $USER
+       newgrp docker        # apply the new group in the current shell
+       ```
 
-    <Note>`ocl-icd-libopencl1` 会在下一步被 `qcom-adreno1` 替换。</Note>
-
-    **2. 高通驱动包（来自 `ubuntu-qcom-iot` PPA）**
-
-    提供 `geniex` 所需的高通专有库：
-
-    | Missing library | Provided by |
-    | --- | --- |
-    | `libOpenCL_adreno.so.1`, `libCB.so.1`, `libadreno_utils.so.1`, `libgsl.so.1`, `libllvm-*.so.1` | `qcom-adreno1` |
-    | `libdmabufheap.so.0.0.0` | `qcom-libdmabufheap` *(auto-dep of `qcom-adreno1`)* |
-    | `libpropertyvault.so.0.0.0` | `qcom-property-vault` *(auto-dep of `qcom-adreno1`)* |
-    | `libcdsprpc.so.1.0.0` | `qcom-fastrpc1` |
-
-    ```bash bash
-    sudo apt-get install -y qcom-adreno1 qcom-fastrpc1
-    ```
-
-    PPA（`ppa:ubuntu-qcom-iot/qcom-ppa`）在 IQ9075 EVK Ubuntu 镜像中已预配置。`qcom-adreno1` 会自动拉入 `qcom-libdmabufheap` 与 `qcom-property-vault`。
-
-    完成后在裸机上重新运行 `install.sh`，或重启容器来验证；"Linking host NPU libraries" 步骤即可成功。若裸机上 `libcdsprpc.so` / `libadsprpc.so` 软链接仍缺失，请重新运行 `install.sh` 重建。
+       然后重新执行拉取。
   </Accordion>
 
   <Accordion title="容器内可加载模型但推理报 `Failed to create device: 14001`">
-    容器无法访问 NPU。确认 `docker run` 带 `--privileged` 与 `/usr/lib` 挂载，并且主机已安装高通驱动包（`qcom-adreno1`、`qcom-fastrpc1`）——参见上面的缺少共享库条目。
+    容器无法访问 NPU。确认 `docker run` 带 `--privileged` 与 `/usr/lib` 挂载，并且主机已安装高通驱动包（`qcom-adreno1`、`qcom-fastrpc1`）——参见 [Linux 安装 → 安装宿主机依赖](/cn/run/linux/install#安装宿主机依赖)。
   </Accordion>
 
-  <Accordion title="`--compute npu` 报 `SDKError(Invalid input parameters or handle)` / `Device 'HTP0' not found`">
-    llama.cpp 的 Hexagon 后端 `dlopen` 的是**无版本号**的 `libcdsprpc.so`，而 `qcom-fastrpc1` 只提供 `libcdsprpc.so.1`。裸机上 `install.sh` 会创建该软链接；若你直接部署 release tarball（没有 `install.sh`），请手动创建：
+  <Accordion title="`geniex` 启动即退出并提示 'device is missing CPU features geniex requires'">
+    aarch64 Linux 版本以 **armv8.2-a** 编译，启用了 `fp16`、`dotprod`、`lse`（原子指令）与 `rdm` 扩展。基线 armv8.0 的板子（部分无 NPU 的 Dragonwing IoT SoC）不实现这些指令，因此 `geniex` 会在启动时给出明确错误并退出，而不是在运行中途抛出原始的 `SIGILL: illegal instruction`。
+
+    该检查是全局的：所有后端都需要这些指令，因此把 `--compute` 切到 `cpu`、`gpu` 或 `npu` 都无济于事。查看你的 CPU 报告了哪些特性：
 
     ```bash bash
-    sudo ln -sf /usr/lib/aarch64-linux-gnu/libcdsprpc.so.1 /usr/lib/aarch64-linux-gnu/libcdsprpc.so
-    sudo ln -sf /usr/lib/aarch64-linux-gnu/libadsprpc.so.1 /usr/lib/aarch64-linux-gnu/libadsprpc.so
-    sudo ldconfig
+    LD_SHOW_AUXV=1 /bin/true | grep AT_HWCAP   # 查找 atomics、asimdrdm、asimddp、fphp、asimdhp
+    cat /proc/cpuinfo | grep Features          # 相同特性，内核使用的名称
     ```
-  </Accordion>
 
-  <Accordion title="`--compute hybrid` 能运行但只有 CPU 速度（静默回退到 CPU）">
-    若 Hexagon 驱动无法加载（见上一条），`hybrid` 仍会输出正确结果——只是全部跑在 CPU 上，因此失败是静默的。用 `GGML_HEX_VERBOSE=1` 运行以确认 NPU 确实生效；你应能看到 `Hexagon Arch version vNN` 及 `libggml-htp-vNN.so` 会话。若没有这些日志，说明已回退到 CPU。
+    若缺少这些特性，请改用 **CPU-only（仅 CPU）** 版本：它以纯 `armv8.0-a`（不带任何 ISA 扩展）编译，只包含 CPU 推理（不含 QAIRT/NPU、OpenCL/GPU、Hexagon），速度也相应更慢——缺少 `dotprod`/`fp16` 时 ggml 会退回 fp32 量化内核。所有渠道都需要显式指定，不做自动探测：
+
+    ```bash bash
+    curl -fsSL https://raw.githubusercontent.com/qualcomm/GenieX/main/cli/release/linux/install.sh | sh -s -- --cpu-only
+    ```
+
+    | 渠道 | 如何选中 CPU-only 版本 |
+    | --- | --- |
+    | `install.sh` | `--cpu-only` |
+    | `pip install geniex` | `GENIEX_SDK_VARIANT=cpu` |
+    | Docker | `-cpu` tag —— `docker.io/qualcomm/geniex:latest-cpu` |
+
+    `geniex-qairt` 没有 CPU-only 版本：QAIRT 需要 NPU，而这类板子并没有。请改用 `geniex-llama-cpp`（或 `geniex` 元包，它会在这类板子上自动去掉 QAIRT 后端）。
+
+    若 CPU-only 版本仍然失败，请带上以上输出到 [GitHub Issues](https://github.com/qualcomm/GenieX/issues) 或 Slack 反馈。
   </Accordion>
 </AccordionGroup>
 
@@ -135,6 +134,12 @@ import Feedback from "/snippets/page-feedback.mdx";
 
   <Accordion title="Qualcomm AI Engine Direct 拒绝 `nGpuLayers` 或 `nCtx`">
     Qualcomm AI Hub 模型在编译期固化了 KV 缓存与上下文长度。请保持 `nGpuLayers` 与 `nCtx` 为默认值，改用 `max_tokens` 与 `enable_thinking` 调节。
+  </Accordion>
+
+  <Accordion title="初始化报 'this device's CPU lacks features required by geniex'">
+    与 Linux 上同一处启动检查。默认 AAR 按 **armv8.7-a** 编译，带 `fp16`、`dotprod`、`i8mm` 扩展，而 `minSdk` 27 仍覆盖早于这些扩展的机型，因此 `geniex_init` 直接返回 `NOT_SUPPORTED`，而不是在运行中途以裸 `SIGILL` 崩溃。
+
+    这类设备请改用 **CPU-only** AAR——[release 资产](https://github.com/qualcomm/GenieX/releases)中的 `geniex-android-aar-cpu-<tag>.aar`。它按纯 `armv8.0-a` 编译、不带任何 ISA 扩展，只提供 CPU 推理（无 Qualcomm AI Engine Direct、无 OpenCL、无 Hexagon），因而相应更慢。除此之外可直接替换：`com.geniex.sdk` 命名空间与 API 完全一致。Maven Central 上只发布默认 AAR。
   </Accordion>
 </AccordionGroup>
 

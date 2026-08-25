@@ -8,19 +8,42 @@ Command-line interface for running AI models locally on **Qualcomm** chipsets. I
 
 | Value   | Emits                                    |
 |---------|------------------------------------------|
-| `none`  | nothing                                  |
+| `none`  | nothing (**CLI default**)                |
 | `error` | errors only                              |
 | `warn`  | warnings + errors                        |
-| `info`  | info + warnings + errors (**default**)   |
+| `info`  | info + warnings + errors                 |
 | `debug` | debug + info + warnings + errors         |
-| `trace` | everything (requires a debug build)      |
+| `trace` | everything                               |
 
 ```bash
 export GENIEX_LOG="debug"          # bash / zsh
 $env:GENIEX_LOG="debug"            # PowerShell
 ```
 
+The `--log` flag is equivalent and takes precedence over `GENIEX_LOG` when both are set:
+
+```bash
+geniex --log debug list
+```
+
 `NO_COLOR=1` disables ANSI colors.
+
+### Sliding window (qairt only)
+
+The `qairt` backend has a fixed context length (e.g. 4096 tokens). By default, once the accumulated
+conversation history plus a new prompt exceeds it, `geniex infer` returns an out-of-context error and
+the session cannot continue.
+
+Pass `--sliding-window` to opt into evicting the oldest tokens (above a small anchored prefix) instead,
+letting the conversation continue past the context limit:
+
+```bash
+geniex infer <model> --sliding-window
+```
+
+This sets `sliding_window: true` on the generation config for every `generate()` call; `llama_cpp`
+ignores it (it always context-shifts). Without the flag, exceeding the context length still returns
+the original error — the feature is strictly opt-in.
 
 ### Model pull
 

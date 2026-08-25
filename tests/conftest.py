@@ -1,13 +1,7 @@
 # Copyright 2024-2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Top-level pytest fixtures for the SDK end-to-end suite.
-
-Tests drive the SDK exclusively through the public ``geniex`` Python
-binding so the suite doubles as a public-surface contract check. The
-fixtures here own runtime init, model caching, and host gating shared
-across ``tests/api``, ``tests/plugins/llama_cpp`` and ``tests/plugins/qairt``.
-"""
+"""Top-level pytest fixtures for the SDK end-to-end suite."""
 
 from __future__ import annotations
 
@@ -23,7 +17,12 @@ from geniex import model_manager as _mm
 from _models import (
     LLAMA_CPP_LLM_MODEL,
     LLAMA_CPP_LLM_PRECISION,
+    LLAMA_CPP_MTP_DRAFT_MODEL,
+    LLAMA_CPP_MTP_DRAFT_PRECISION,
+    LLAMA_CPP_MTP_TARGET_MODEL,
+    LLAMA_CPP_MTP_TARGET_PRECISION,
     LLAMA_CPP_VLM_MODEL,
+    LLAMA_CPP_VLM_PRECISION,
     QAIRT_LLM_MODEL,
     QAIRT_VLM_MODEL,
 )
@@ -36,9 +35,9 @@ _DEVICE_MARKER = {
     'cpu': 'device_cpu',
     'gpu': 'device_gpu',
     'npu': 'device_npu',
-    'hybrid': 'device_hybrid',
 }
-_SNAPDRAGON_DEVICES = {'gpu', 'npu', 'hybrid'}
+# GPU uses the Snapdragon OpenCL backend, so it needs real hardware just like NPU.
+_SNAPDRAGON_DEVICES = {'gpu', 'npu'}
 
 
 def _is_snapdragon_host() -> bool:
@@ -57,24 +56,23 @@ def device_tests_enabled() -> bool:
     return bool(os.environ.get('GENIEX_DEVICE_TEST'))
 
 
-def pytest_collection_modifyitems(config, items):
-    """Auto-tag generation matrix items.
+_PLUGIN_MARKERS = {'llama_cpp', 'qairt'}
 
-    Items parametrised with ``device_map`` pick up the matching ``device_*``
-    marker; items under ``tests/plugins/<plugin>/`` get the plugin marker so
-    a single ``-m "qairt"`` selects everything for that plugin without
-    per-test boilerplate.
-    """
+
+def pytest_collection_modifyitems(config, items):
     for item in items:
         try:
             rel = Path(item.fspath).resolve().relative_to(_REPO_ROOT)
         except ValueError:
             continue
         parts = rel.parts
-        if len(parts) >= 3 and parts[0] == 'tests' and parts[1] == 'plugins':
-            item.add_marker(getattr(pytest.mark, parts[2]))
-        if len(parts) >= 2 and parts[0] == 'tests' and parts[1] == 'api':
-            item.add_marker(pytest.mark.api)
+        # tests/test_<name>.py -> derive marker from the filename stem.
+        if len(parts) == 2 and parts[0] == 'tests' and parts[1].startswith('test_'):
+            stem = parts[1][len('test_') : -len('.py')]
+            if stem in _PLUGIN_MARKERS:
+                item.add_marker(getattr(pytest.mark, stem))
+            elif stem == 'api':
+                item.add_marker(pytest.mark.api)
 
         device_map = item.callspec.params.get('device_map') if hasattr(item, 'callspec') else None
         if isinstance(device_map, str):
@@ -86,13 +84,15 @@ def pytest_collection_modifyitems(config, items):
 
 
 def pytest_runtest_setup(item):
-    """Skip device-gated items unless we are actually on supported hardware."""
     markers = {m.name for m in item.iter_markers()}
     if 'snapdragon' in markers or 'qairt' in markers:
         if not device_tests_enabled():
             pytest.skip('set GENIEX_DEVICE_TEST=1 to run device-gated tests')
         if not _is_snapdragon_host():
             pytest.skip('device-gated tests require a Snapdragon host')
+    device_map = item.callspec.params.get('device_map') if hasattr(item, 'callspec') else None
+    if device_map == 'gpu' and hasattr(sys, 'getandroidapilevel'):
+        pytest.skip('llama_cpp opencl backend aborts on Adreno / Android')
 
 
 @pytest.fixture(scope='session')
@@ -103,36 +103,34 @@ def geniex_session():
     geniex.deinit()
 
 
+# Model-manager pull failures raise, not skip — a broken hub is a real regression.
 @pytest.fixture(scope='session')
 def llama_cpp_llm_paths(geniex_session):
-    try:
-        return _mm.ensure_cached(LLAMA_CPP_LLM_MODEL, precision=LLAMA_CPP_LLM_PRECISION, hub='hf')
-    except geniex.GenieXError as e:
-        pytest.skip(f'could not pull {LLAMA_CPP_LLM_MODEL}: {e}')
+    return _mm.ensure_cached(LLAMA_CPP_LLM_MODEL, precision=LLAMA_CPP_LLM_PRECISION, hub='hf')
+
+
+@pytest.fixture(scope='session')
+def llama_cpp_mtp_paths(geniex_session):
+    if hasattr(sys, 'getandroidapilevel'):
+        pytest.skip('MTP target+draft (2×27B) exceeds mobile RAM')
+    target = _mm.ensure_cached(LLAMA_CPP_MTP_TARGET_MODEL, precision=LLAMA_CPP_MTP_TARGET_PRECISION, hub='hf')
+    draft = _mm.ensure_cached(LLAMA_CPP_MTP_DRAFT_MODEL, precision=LLAMA_CPP_MTP_DRAFT_PRECISION, hub='hf')
+    return {'target': target, 'draft': draft}
 
 
 @pytest.fixture(scope='session')
 def llama_cpp_vlm_paths(geniex_session):
-    try:
-        return _mm.ensure_cached(LLAMA_CPP_VLM_MODEL, hub='hf')
-    except geniex.GenieXError as e:
-        pytest.skip(f'could not pull {LLAMA_CPP_VLM_MODEL}: {e}')
+    return _mm.ensure_cached(LLAMA_CPP_VLM_MODEL, precision=LLAMA_CPP_VLM_PRECISION, hub='hf')
 
 
 @pytest.fixture(scope='session')
 def qairt_llm_paths(geniex_session):
-    try:
-        return _mm.ensure_cached(QAIRT_LLM_MODEL)
-    except geniex.GenieXError as e:
-        pytest.skip(f'could not pull {QAIRT_LLM_MODEL}: {e}')
+    return _mm.ensure_cached(QAIRT_LLM_MODEL)
 
 
 @pytest.fixture(scope='session')
 def qairt_vlm_paths(geniex_session):
-    try:
-        return _mm.ensure_cached(QAIRT_VLM_MODEL)
-    except geniex.GenieXError as e:
-        pytest.skip(f'could not pull {QAIRT_VLM_MODEL}: {e}')
+    return _mm.ensure_cached(QAIRT_VLM_MODEL)
 
 
 @pytest.fixture(scope='session')
@@ -144,9 +142,6 @@ def test_image() -> str:
 
 @pytest.fixture(scope='session')
 def quality_image() -> str:
-    # Real photographic image (golden retriever) shipped under tests/assets/.
-    # Used by VLM keyword-quality tests; the favicon `test_image` is too small
-    # for any meaningful caption to land on dog/grass/animal vocabulary.
     if not QUALITY_IMAGE_PATH.is_file():
         pytest.skip(f'quality image missing: {QUALITY_IMAGE_PATH}')
     return str(QUALITY_IMAGE_PATH)

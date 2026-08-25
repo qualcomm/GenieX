@@ -11,15 +11,45 @@ GenieX runs exclusively on Qualcomm Snapdragon — no x86 or non-Snapdragon ARM 
 
 GenieX is supported across three Snapdragon families — compute, mobile, and IoT — covering Windows ARM64, Android, and Linux ARM64.
 
+### Supported chipsets
+
+These are the chipsets GenieX is validated on. Each row lists the **SoC identifier** you'd see from auto-detection, and the **AI Hub chipset id** used when pulling Qualcomm AI Hub Models.
+
+| Family | Chipset | SoC id | AI Hub chipset id |
+|---|---|---|---|
+| **Compute** *(Windows ARM64 / Copilot+ PC)* | **Snapdragon® X Elite** | `X1E*` | `qualcomm-snapdragon-x-elite` |
+| | **Snapdragon® X2 Elite** | `X2E*` | `qualcomm-snapdragon-x2-elite` |
+| **Mobile** *(Android)* | **Snapdragon® 8 Elite** | `SM8750` | `qualcomm-snapdragon-8-elite` |
+| | **Snapdragon® 8 Elite Gen 5** | `SM8850` | resolved from `SM8850` *(see note)* |
+| **IoT** *(Linux ARM64 — cameras, robotics, industrial)* | **Qualcomm® Dragonwing™ IQ-9075** | `QCS9075` | `qualcomm-qcs9075` |
+| | **Qualcomm® Dragonwing™ IQ-8275** | `QCS8275` | `qualcomm-qcs8275` |
+
+<Note>
+**Chipset vs. SoC id.** Snapdragon X-series parts are identified by their Oryon CPU SKU (`X1E80100`, `X2E80100`, …); every part within a generation shares one NPU architecture, so **all X Elite SKUs map to the same AI Hub asset** — including the X Plus and X2 Plus parts. Android reports its SoC through `ro.soc.model`, and Dragonwing boards through the device tree.
+
+On Android, GenieX passes the SoC id (e.g. `SM8850`) straight to Qualcomm AI Hub, which resolves it through its own alias table — GenieX deliberately keeps no second mapping. Pass the **SoC id**, not an AI Hub chipset name, and the right asset is selected. Variant suffixes are not exposed by `ro.soc.model`: a Galaxy S25 reports `SM8750`, not `SM8750-AC` (the alias for `qualcomm-snapdragon-8-elite-for-galaxy`), so pass the chipset explicitly if you need the variant asset.
+</Note>
+
+GenieX **auto-detects the chipset** on Windows on Snapdragon, Dragonwing Linux, and Android. Check what it found, or set it explicitly:
+
+```bash
+geniex config get chipset          # show the detected (or configured) chipset
+geniex config set chipset          # launch an interactive picker
+```
+
+<Warning>**Android requires an explicit chipset** for Qualcomm AI Hub pulls — auto-detect via `ro.soc.model` covers the CLI/SDK path, but the Android SDK needs `ModelPullInput.chipset` set to `"SM8750"` or `"SM8850"`. See [Android API reference](/en/run/android/api-reference#modelpullinput).</Warning>
+
+### Interfaces per OS
+
 | OS | Interfaces |
 |---|---|
 | **Windows ARM64** *(Compute / Copilot+ PC)* | <ul><li>[CLI](/en/run/cli/quickstart)</li><li>[Python SDK](/en/run/python/quickstart)</li><li>[Local server](/en/run/cli/local-server)</li></ul> |
 | **Android** *(Mobile)* | <ul><li>[Android SDK](/en/run/android/quickstart) (Kotlin, Maven Central)</li></ul> |
-| **Linux ARM64** *(Dragonwing IoT — cameras, robotics, industrial)* | <ul><li>[Native install](/en/run/cli/install)</li><li>[Docker](/en/run/linux/install)</li></ul> |
+| **Linux ARM64** *(Dragonwing IoT)* | <ul><li>[Native install](/en/run/cli/install)</li><li>[Docker](/en/run/linux/install)</li></ul> |
 
-For the full list of supported chipsets, see the [Qualcomm AI Hub device list](https://workbench.aihub.qualcomm.com/docs/hub/devices.html).
+The chipsets above are the validated set. GenieX may run on other Snapdragon parts within the same families — for everything Qualcomm AI Hub can compile for, see the [Qualcomm AI Hub device list](https://workbench.aihub.qualcomm.com/docs/hub/devices.html).
 
-<Tip>**No device on hand?** Sign in to [Qualcomm Developer Cloud (QDC)](https://qdc.qualcomm.com/) for remote sessions on Snapdragon X, 8 Elite, and Dragonwing QCS9075. See the [QDC walkthrough in the FAQ](/en/resources/faq#qdc-qualcomm-device-cloud).</Tip>
+<Tip>**No device on hand?** Sign in to [Qualcomm Developer Cloud (QDC)](https://qdc.qualcomm.com/) for remote sessions on Snapdragon X Elite / X2 Elite, Snapdragon 8 Elite / 8 Elite Gen 5, and Dragonwing IQ-9075. See the [QDC walkthrough in the FAQ](/en/resources/faq#qdc-qualcomm-device-cloud).</Tip>
 
 ## **GenieX runtimes**
 
@@ -45,10 +75,10 @@ If you don't pass a compute unit:
 
 | Runtime | Default compute unit |
 |---|---|
-| `llama_cpp` | `hybrid` (HTP + CPU per-tensor scheduling — the fast path on Snapdragon) |
+| `llama_cpp` | `npu` (pinned to `HTP0`) |
 | `qairt` | `npu` |
 
-Some model families override this — for example, `gpt-oss` falls back to `npu` on `llama_cpp` because it can't run on the hybrid path.
+For llama.cpp's HTP + CPU per-tensor scheduling (the faster path on Snapdragon), pass `hybrid` explicitly.
 
 ---
 
@@ -62,10 +92,10 @@ The `llama_cpp` runtime executes **any GGUF model** through llama.cpp with Qualc
 
 | Alias | Effect |
 |---|---|
-| `npu` | Pin to Hexagon NPU (`HTP0`). Best NPU-only path. |
+| `npu` *(default)* | Pin to Hexagon NPU (`HTP0`). Best NPU-only path. |
 | `gpu` | Adreno GPU via OpenCL. |
 | `cpu` | Pure CPU. Forces `nGpuLayers = 0`. |
-| `hybrid` *(default)* | Empty `device_id` + `n_gpu_layers=999` — llama.cpp's per-tensor HTP+CPU scheduler. **The fast path on Snapdragon.** |
+| `hybrid` | Empty `device_id` + `n_gpu_layers=-1` (all layers) — llama.cpp's per-tensor HTP+CPU scheduler. **The fast path on Snapdragon.** |
 
 The precision you pick at `geniex pull` time also determines where the model lands — see [Precisions (Quantizations) Supported](/en/models/supported#precisions-quantizations-supported).
 

@@ -45,10 +45,10 @@ GenieX 内置两种运行环境，让你在同一套 SDK 中同时获得**广泛
 
 | 运行环境 | 默认计算单元 |
 |---|---|
-| `llama_cpp` | `hybrid`（HTP + CPU 按张量调度——骁龙上的快速路径） |
+| `llama_cpp` | `npu`（固定到 `HTP0`） |
 | `qairt` | `npu` |
 
-部分模型系列会覆盖该默认值——例如 `gpt-oss` 在 `llama_cpp` 下会回退到 `npu`，因为它无法在 hybrid 路径上运行。
+如需 llama.cpp 的 HTP + CPU 按张量调度（骁龙上更快的路径），显式传入 `hybrid`。
 
 ---
 
@@ -62,10 +62,10 @@ GenieX 内置两种运行环境，让你在同一套 SDK 中同时获得**广泛
 
 | 别名 | 行为 |
 |---|---|
-| `npu` | 固定到 Hexagon NPU（`HTP0`）。最佳 NPU 独占路径。 |
+| `npu` *(默认)* | 固定到 Hexagon NPU（`HTP0`）。最佳 NPU 独占路径。 |
 | `gpu` | 通过 OpenCL 使用 Adreno GPU。 |
 | `cpu` | 纯 CPU。强制 `nGpuLayers = 0`。 |
-| `hybrid` *(默认)* | 空 `device_id` + `n_gpu_layers=999`——llama.cpp 的 HTP+CPU 按张量调度。**骁龙上的快速路径。** |
+| `hybrid` | 空 `device_id` + `n_gpu_layers=-1`（全部层）——llama.cpp 的 HTP+CPU 按张量调度。**骁龙上的快速路径。** |
 
 `geniex pull` 时选择的精度也会决定模型最终落到哪里运行——详见[支持的精度（量化）](/cn/models/supported#支持的精度量化)。
 

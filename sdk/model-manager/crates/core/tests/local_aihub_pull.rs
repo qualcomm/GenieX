@@ -6,9 +6,9 @@
 //! Two flows are exercised: pulling from an already-extracted directory
 //! (lex-first `.bin` + metadata.json + extras), and pulling from a `.zip`
 //! containing a STORED `.bin` shard, a STORED `metadata.json`, and a
-//! DEFLATE tokenizer. The on-disk layout produced by either path must
-//! match what the AI Hub remote source produces: `model_file["N/A"]`
-//! holds the entrypoint basename, the rest go into `extra_files`, and
+//! DEFLATE tokenizer. Local pulls don't carry a precision label (no AI Hub
+//! asset metadata), so `model_file["N/A"]` holds the entrypoint basename
+//! as a placeholder, the rest go into `extra_files`, and
 //! `plugin_id == "qairt"`.
 
 use std::io::Write;

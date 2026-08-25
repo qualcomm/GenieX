@@ -32,14 +32,15 @@ geniex_token_callback = CFUNCTYPE(c_bool, c_char_p, c_void_p)
 class geniex_ProfileData(Structure):
     _fields_ = [
         ('ttft', c_int64),
+        ('media_time', c_int64),
         ('prompt_time', c_int64),
         ('decode_time', c_int64),
         ('prompt_tokens', c_int64),
         ('generated_tokens', c_int64),
-        ('audio_duration', c_int64),
         ('prefill_speed', c_double),
         ('decoding_speed', c_double),
-        ('real_time_factor', c_double),
+        ('draft_n_total', c_int64),
+        ('draft_n_accepted', c_int64),
         ('stop_reason', c_char_p),
     ]
 
@@ -61,7 +62,6 @@ class geniex_SamplerConfig(Structure):
         ('seed', c_int32),
         ('grammar_path', c_char_p),
         ('grammar_string', c_char_p),
-        ('enable_json', c_bool),
     ]
 
 
@@ -75,13 +75,13 @@ class geniex_GenerationConfig(Structure):
         ('max_tokens', c_int32),
         ('stop', POINTER(c_char_p)),
         ('stop_count', c_int32),
-        ('n_past', c_int32),
         ('sampler_config', POINTER(geniex_SamplerConfig)),
         ('image_paths', POINTER(c_char_p)),
         ('image_count', c_int32),
-        ('image_max_length', c_int32),
         ('audio_paths', POINTER(c_char_p)),
         ('audio_count', c_int32),
+        ('sliding_window', c_bool),
+        ('sliding_window_n_keep', c_int32),
     ]
 
 
@@ -101,12 +101,11 @@ class geniex_ModelConfig(Structure):
         ('n_gpu_layers', c_int32),
         ('chat_template_path', c_char_p),
         ('chat_template_content', c_char_p),
-        ('system_prompt', c_char_p),
-        ('enable_sampling', c_bool),
-        ('grammar_str', c_char_p),
-        ('max_tokens', c_int32),
-        ('enable_thinking', c_bool),
-        ('verbose', c_bool),
+        ('spec_type', c_char_p),
+        ('spec_draft_model', c_char_p),
+        ('spec_n_max', c_int32),
+        ('spec_n_min', c_int32),
+        ('spec_p_min', c_float),
     ]
 
 
@@ -138,14 +137,11 @@ class geniex_KvCacheLoadOutput(Structure):
 
 class geniex_LlmCreateInput(Structure):
     _fields_ = [
-        ('model_name', c_char_p),
         ('model_path', c_char_p),
         ('tokenizer_path', c_char_p),
         ('config', geniex_ModelConfig),
         ('plugin_id', c_char_p),
         ('device_id', c_char_p),
-        ('license_id', c_char_p),
-        ('license_key', c_char_p),
     ]
 
 
@@ -172,7 +168,25 @@ class geniex_LlmModelInfo(Structure):
         ('vocab_size', c_int32),
         ('bos_token', c_int32),
         ('add_bos', c_int32),
-        ('reserved0', c_int32),
+    ]
+
+
+class geniex_LlmForwardLogitsInput(Structure):
+    _fields_ = [
+        ('input_ids', POINTER(c_int32)),
+        ('input_ids_count', c_int32),
+        ('all_positions', c_bool),
+        ('top_n', c_int32),  # 0: full vocab per row. >0: keep only the top-N logits per row.
+    ]
+
+
+class geniex_LlmForwardLogitsOutput(Structure):
+    _fields_ = [
+        ('logits', POINTER(c_float)),  # caller frees with geniex_free
+        ('token_ids', POINTER(c_int32)),  # NULL when top_n == 0; else [n_rows, row_width]; caller frees
+        ('n_rows', c_int32),
+        ('row_width', c_int32),  # top_n > 0 ? min(top_n, vocab_size) : vocab_size
+        ('vocab_size', c_int32),
     ]
 
 
@@ -219,15 +233,12 @@ class geniex_VlmChatMessage(Structure):
 
 class geniex_VlmCreateInput(Structure):
     _fields_ = [
-        ('model_name', c_char_p),
         ('model_path', c_char_p),
         ('mmproj_path', c_char_p),
         ('config', geniex_ModelConfig),
         ('plugin_id', c_char_p),
         ('device_id', c_char_p),
         ('tokenizer_path', c_char_p),
-        ('license_id', c_char_p),
-        ('license_key', c_char_p),
     ]
 
 
@@ -323,6 +334,7 @@ GENIEX_HUB_HUGGINGFACE = 1
 GENIEX_HUB_MODELSCOPE = 2
 GENIEX_HUB_AIHUB = 3
 GENIEX_HUB_VOLCES = 4
+GENIEX_HUB_DOCKER = 5
 GENIEX_HUB_LOCALFS = 127
 
 
@@ -394,7 +406,6 @@ class geniex_QuantCandidate(Structure):
     _fields_ = [
         ('quant', c_char_p),
         ('size', c_int64),
-        ('is_default', c_bool),
     ]
 
 
@@ -419,5 +430,21 @@ class geniex_ChipsetInfo(Structure):
 class geniex_ChipsetList(Structure):
     _fields_ = [
         ('chipsets', POINTER(geniex_ChipsetInfo)),
+        ('count', c_int32),
+    ]
+
+
+class geniex_HubModelInfo(Structure):
+    _fields_ = [
+        ('name', c_char_p),
+        ('model_type', c_int32),
+        ('chipsets', POINTER(c_char_p)),
+        ('chipset_count', c_int32),
+    ]
+
+
+class geniex_HubModelList(Structure):
+    _fields_ = [
+        ('models', POINTER(geniex_HubModelInfo)),
         ('count', c_int32),
     ]

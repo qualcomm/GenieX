@@ -98,9 +98,26 @@ geniex serve
 
 ![响应体展示 200 成功响应及 VLM 对图像的描述](/Images/server/curl-5.png)
 
+## **POST /v1/completions**
+
+对 `prompt` 生成原始续写，不套用聊天模板 —— 提示词会原样传给模型。适用于自行构造完整提示词的客户端，例如编辑器的 fill-in-the-middle（FIM）代码补全：把模型的 FIM 标记直接写进 `prompt`。仅支持 LLM 模型。
+
+```json Example Value
+{
+  "model": "unsloth/Qwen2.5-Coder-3B-GGUF:Q4_0",
+  "prompt": "<|fim_prefix|>def fibonacci(n):\n    <|fim_suffix|>\n    return a<|fim_middle|>",
+  "max_tokens": 64,
+  "temperature": 0.2,
+  "stop": ["<|endoftext|>"],
+  "stream": false
+}
+```
+
+响应中的 `choices[0].text` 即原始补全内容，可直接插入光标处。`stream`、`stop`、`echo` 及采样参数（`temperature`、`top_p`、`top_k`、`min_p`、`repetition_penalty`、`seed`）与 `/v1/chat/completions` 行为一致；不支持 `suffix` —— 请改用模型的 FIM 标记把后缀编码进 `prompt`。
+
 ## **Python 客户端（OpenAI SDK）**
 
-由于服务器使用 OpenAI 协议，可直接将官方 `openai` Python 客户端指向本地端点，复用任意已有的 OpenAI 代码。先通过 `pip install openai` 安装，然后：
+由于服务器使用 OpenAI 协议，可直接将官方 `openai` Python 客户端指向本地端点，复用任意已有的 OpenAI 代码。先通过 `pip install openai` 安装，然后创建 client：
 
 ```python python
 from openai import OpenAI
@@ -109,9 +126,17 @@ client = OpenAI(
     base_url="http://127.0.0.1:18181/v1",
     api_key="geniex",  # any non-empty string; the server does not check it
 )
+```
 
+下面的示例都复用此 `client`。请把 `model` 替换为已拉取的模型；可选的 `:<precision>` 后缀（例如 `Q4_0`、`Q4_K_M`、`Q8_0`）选择量化变体——`Q4_0` 推荐用于 Hexagon NPU 上的 llama.cpp。详见[支持的精度（量化）](/cn/models/supported#支持的精度量化)。
+
+### **流式（Streaming）**
+
+按 delta 到达顺序逐段打印：
+
+```python python
 stream = client.chat.completions.create(
-    model="unsloth/Qwen3-4B-GGUF:Q4_0",  # org/repo[:precision] — Q4_0 has the best Hexagon NPU support
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
     messages=[
         {"role": "user", "content": "Hello! Briefly introduce yourself."},
     ],
@@ -127,9 +152,181 @@ for chunk in stream:
 print()
 ```
 
+### **Chat completion（非流式）**
+
+单次请求、单次响应，不启用流式——标准的 OpenAI `chat.completions.create` 形式。`enable_think=False` 关闭 Qwen3 默认的 `<think>…</think>` 推理前缀，让回复内容更干净。
+
+```python python
+resp = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=[
+        {"role": "user", "content": "Hello! Briefly introduce yourself."},
+    ],
+    max_tokens=128,
+    temperature=0.7,
+    extra_body={"enable_think": False},
+)
+
+print(resp.choices[0].message.content)
+print("finish_reason:", resp.choices[0].finish_reason)
+print("usage:", resp.usage)
+```
+
+输出：
+
+```text
+Hello! I'm Qwen, a large language model developed by Alibaba Cloud. I can help with a wide range of tasks, including answering questions, writing articles, creating stories, and more. I'm here to assist you in any way I can! How can I help you today?
+finish_reason: stop
+usage: CompletionUsage(completion_tokens=58, prompt_tokens=19, total_tokens=77, ...)
+```
+
+### **分离推理内容（reasoning_content）**
+
+思考模型默认会把思维链原样保留在 `message.content`（`<think>…</think>`），与最终回复混在一起。传入 `reasoning_format="deepseek"` 可让服务器把思维链拆到 OpenAI 标准的 `message.reasoning_content` 字段，`content` 只保留干净的回复。
+
 <Note>
-请将 `model` 替换为已经拉取的模型。可选的 `:<precision>` 后缀用于选择精度（量化）变体（例如 `Q4_0`、`Q4_K_M`、`Q8_0`），`Q4_0` 推荐用于 Hexagon NPU 上的 llama.cpp。详见[支持的精度（量化）](/cn/models/supported#支持的精度量化)。
+`reasoning_format` 与 `enable_think` 是两件事：`enable_think=False` 让模型**不产生**思维链；`reasoning_format="deepseek"` 让模型照常思考，但把思维链**移出** `content`。取值 `none`（默认）保持原样内联，`deepseek` / `deepseek-legacy` / `auto` 均触发分离。工具调用请求会忽略该参数（工具解析需要原始带标签的文本）。
 </Note>
+
+```python python
+resp = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=[
+        {"role": "user", "content": "What is 2+2? Answer briefly."},
+    ],
+    max_tokens=128,
+    extra_body={"reasoning_format": "deepseek"},
+)
+
+msg = resp.choices[0].message
+print("reasoning:", msg.model_extra.get("reasoning_content"))
+print("content:", msg.content)
+```
+
+流式响应同理——思维链以 `delta.reasoning_content` 增量返回，最终回复以 `delta.content` 返回。
+
+### **工具调用（Tool calling）**
+
+函数/工具调用使用标准的 OpenAI `tools` schema。服务器会从模型生成的文本中解析工具调用（`<tool_call>…</tool_call>` 标签或 ` ```json ` 代码块），并以 OpenAI `tool_calls` 形式返回。VLM **也走同一条路径**——模型可以先看图，再决定搜什么、调用工具。
+
+下面的示例用 `qualcomm/Qwen3-VL-4B-Instruct` 演示两步 agentic 回路：(1) VLM 从照片中识别地标并调用 `web_search`；(2) 本地执行搜索并将结果回传，VLM 基于结果生成带依据的回复。
+
+<Note>
+每次助手响应仅解析一个工具调用——暂不支持单次响应中的并行工具调用。
+</Note>
+
+<Note>
+Qwen3-VL 稳定触发工具调用需要注意两点：
+1. 用 system 消息显式说明 `<tool_call>…</tool_call>` 的格式（Qwen3-VL 的 chat template 对该格式的先验没有 Qwen3 纯文本版本那么强）。
+2. 第二轮不再传入 `tools=`，也不要再回传图像——否则 VLM 会重复调用工具，且视觉编码器会对同一张图再跑一次。
+</Note>
+
+先安装示例使用的搜索库（`pip install ddgs` —— DuckDuckGo，无需 API key）：
+
+```python python
+import json
+
+from ddgs import DDGS
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Search the web for travel information about a location.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query, e.g. 'things to do in Kyoto'"},
+                },
+                "required": ["query"],
+            },
+        },
+    }
+]
+
+def web_search(query: str) -> list[dict]:
+    return [
+        {"title": r["title"], "snippet": r["body"], "url": r["href"]}
+        for r in DDGS().text(query, max_results=3)
+    ]
+
+IMAGE_URL = "https://images.pexels.com/photos/402028/pexels-photo-402028.jpeg?w=1024"
+
+system_prompt = (
+    "You are a travel assistant. Call the web_search tool to look up any location "
+    "the user asks about before answering. Once you receive the tool results, do not "
+    "call the tool again - use them to write a short, friendly reply for the user. "
+    "Emit tool calls in the exact format: "
+    '<tool_call>{"name": "web_search", "arguments": {"query": "<your query>"}}</tool_call>'
+)
+
+messages = [
+    {"role": "system", "content": system_prompt},
+    {
+        "role": "user",
+        "content": [
+            {"type": "image_url", "image_url": {"url": IMAGE_URL}},
+            {"type": "text", "text": "Identify the landmark, then call web_search for travel tips about it."},
+        ],
+    },
+]
+
+# 第一步 —— VLM 识别地标并请求调用 web_search。
+first = client.chat.completions.create(
+    model="qualcomm/Qwen3-VL-4B-Instruct",
+    messages=messages,
+    tools=tools,
+    tool_choice="auto",
+    max_tokens=512,
+    extra_body={"enable_think": False},
+)
+call = first.choices[0].message.tool_calls[0]
+print("finish_reason:", first.choices[0].finish_reason)  # -> "tool_calls"
+print("call:", call.function.name, call.function.arguments)
+
+# 第二步 —— 执行工具，并以纯文本对话把结果回传。
+result = web_search(**json.loads(call.function.arguments))
+
+followup = [
+    {"role": "system", "content": system_prompt},
+    {"role": "user", "content": "Summarize travel tips using the search results below."},
+    first.choices[0].message,
+    {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)},
+]
+
+final = client.chat.completions.create(
+    model="qualcomm/Qwen3-VL-4B-Instruct",
+    messages=followup,
+    max_tokens=256,
+    extra_body={"enable_think": False},
+)
+print(final.choices[0].message.content)
+```
+
+输出（依赖 DuckDuckGo 实时结果，具体文字随当天返回内容而变化）：
+
+```text
+finish_reason: tool_calls
+call: web_search {"query": "Kiyomizu-dera travel tips"}
+Here's a quick summary of travel tips for Kiyomizu-dera in Kyoto:
+
+**1. Best Times to Visit:**
+Early morning (around 7-8 AM) or late afternoon (4-6 PM) are ideal to avoid the crowds.
+Peak hours (11 AM–2 PM) can be very busy, so plan accordingly.
+
+**2. How to Get There:**
+Take the Kiyomizu-dera train or bus from Kyoto Station to the temple.
+The temple is located on a hill with a wooden stage built without nails, and the walkways are accessible, though narrow.
+
+**3. What to See:**
+- The great wooden stage (without nails)
+- Otawa waterfall and its three streams
+- Jishu love shrine
+- The Sannenzaka and Ninenzaka approach streets
+- Night illuminations (best experienced at night)
+...
+```
 
 ## **其他端点**
 

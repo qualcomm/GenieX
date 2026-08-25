@@ -28,6 +28,7 @@ class _TqdmProgress:
             if bar is None:
                 bar = tqdm(
                     total=f.total_bytes if f.total_bytes > 0 else None,
+                    initial=f.downloaded_bytes,
                     unit='B',
                     unit_scale=True,
                     unit_divisor=1024,

@@ -7,17 +7,42 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 Linux Docker 路径通过 Linux ARM64 容器镜像运行，并支持 NPU 访问（适用于跃龙 QCS9075 等 IoT 平台）。
 
+<Note>
+  这是容器化路径。若你更希望在宿主机上直接安装 `geniex` 而不使用 Docker，请参见 [CLI 安装 → Linux ARM64 (Native)](/cn/run/cli/install)。
+</Note>
+
 ### **前置条件**
 
 - 安装了 Docker 的 Linux ARM64 主机——若尚未安装 Docker，请参照 [Docker 的 Ubuntu 安装指南](https://docs.docker.com/engine/install/ubuntu/)。
 - 跃龙 IoT 芯片——详见[支持的平台](/cn/get-started/platforms)。
+- 拥有以下任一镜像仓库读权限的凭据。
+
+### **安装宿主机依赖**
+
+容器通过 `-v /usr/lib:/opt/qcom-lib:ro` 挂载的宿主机高通驱动库来访问 NPU。请在执行 `docker run` **之前**，在**宿主机**上安装这些库——参见 [CLI 安装 → 安装宿主机依赖](/cn/run/cli/install#安装宿主机依赖)。
+
 ### **拉取镜像**
 
-镜像发布在 [Docker Hub](https://hub.docker.com/r/qualcomm/geniex)：
+镜像同时发布到两个仓库——选择你有权限的一个，设置 `IMAGE` 后再拉取：
 
 ```bash bash
-docker pull qualcomm/geniex:latest
+# Option A — Docker Hub (公开，无需登录):
+IMAGE=docker.io/qualcomm/geniex:latest
+
+# Option B — Qualcomm Container Registry:
+docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
+IMAGE=docker-registry.qualcomm.com/qcom-ai-hub/geniex-cli:latest
+
+docker pull "$IMAGE"
 ```
+
+<Note>
+  若 `docker login` 失败或 `docker pull` 返回 `permission denied ... /var/run/docker.sock`，参见[故障排查 → Linux](/cn/resources/troubleshooting#linux) 了解凭据与 `docker` 组的修复方法。
+</Note>
+
+<Note>
+  **基线 ARMv8.0 板子** —— 部分无 NPU 的 Dragonwing IoT SoC 跑不了默认的 ARMv8.2 镜像，这类板子请在 tag 后加上 `-cpu`：`docker.io/qualcomm/geniex:latest-cpu`。该镜像仅支持 CPU 推理，既不需要 `--privileged`，也不需要下面的 `/usr/lib` 挂载。
+</Note>
 
 ### **交互式运行**
 
@@ -27,7 +52,7 @@ docker pull qualcomm/geniex:latest
 docker run -it --rm --privileged \
   -v "$PWD/data:/data" \
   -v /usr/lib:/opt/qcom-lib:ro \
-  qualcomm/geniex:latest
+  "$IMAGE"
 ```
 
 ### **验证**

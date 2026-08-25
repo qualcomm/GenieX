@@ -10,6 +10,16 @@ There are two places to get models, matching GenieX's two [runtimes](/en/get-sta
 - **[Qualcomm AI Hub](https://aihub.qualcomm.com/models/)** — pre-compiled bundles for Qualcomm AI Engine Direct, plus curated GGUF models for llama.cpp.
 - **[Hugging Face](https://huggingface.co/models?library=gguf)** — any GGUF model for llama.cpp. See [Run a GGUF model from Hugging Face](#run-a-gguf-model-from-hugging-face).
 
+## **Input modalities**
+
+| Modality | Supported by | Notes |
+|---|---|---|
+| Text | LLM, VLM | Every model. |
+| Image | VLM | Any VLM (QAIRT bundle or GGUF with an image mmproj). |
+| Audio | VLM (llama.cpp only) | A GGUF VLM whose mmproj carries a conformer encoder — e.g. `google/gemma-4-E2B-it-qat-q4_0-gguf`. QAIRT bundles do not support audio. See the [audio input tutorial](/en/tutorials/audio-input). |
+
+A single VLM turn can mix text, image, and audio. See the [audio input tutorial](/en/tutorials/audio-input) for verified CLI, server, and Python examples.
+
 ## **Run a Qualcomm AI Hub Model**
 
 For a model in the `ai-hub-models/*` namespace, just `geniex infer` it:
@@ -205,9 +215,8 @@ Bundles outside the `ai-hub-models/*` namespace — whether self-converted from 
     val llm = LlmWrapper.builder()
         .llmCreateInput(
             LlmCreateInput(
-                model_name = paths.model_name,
                 model_path = paths.model_path,
-                config     = ModelConfig(max_tokens = 2048, enable_thinking = false),
+                config     = ModelConfig(),
                 runtime_id  = "qairt",
                 compute_unit  = null,   // qairt is NPU-only
             )
@@ -251,7 +260,7 @@ A local GGUF model is a directory (or file) holding your `.gguf` weights — sid
 
     model = AutoModelForCausalLM.from_pretrained(
         r"C:\models\my-model\model.gguf",   # path to a local .gguf file
-        device_map="auto",                  # auto -> hybrid for llama_cpp
+        device_map="auto",                  # auto -> npu for llama_cpp
     )
     ```
 
@@ -280,7 +289,6 @@ A local GGUF model is a directory (or file) holding your `.gguf` weights — sid
     val llm = LlmWrapper.builder()
         .llmCreateInput(
             LlmCreateInput(
-                model_name = paths.model_name,
                 model_path = paths.model_path,
                 config     = ModelConfig(nCtx = 4096),
                 runtime_id  = "llama_cpp",

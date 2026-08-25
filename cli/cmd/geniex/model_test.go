@@ -113,3 +113,37 @@ func TestPrintListCSV(t *testing.T) {
 		}
 	}
 }
+
+func TestSkipDownloaded(t *testing.T) {
+	candidates := []geniex_sdk.PrecisionCandidate{
+		{Precision: "Q4_0", Size: 100},
+		{Precision: "Q4_K_M", Size: 200},
+		{Precision: "Q8_0", Size: 300},
+	}
+	tests := []struct {
+		name   string
+		cached []string
+		want   []string
+	}{
+		{"nothing cached keeps every candidate", nil, []string{"Q4_0", "Q4_K_M", "Q8_0"}},
+		{"cached precision is dropped", []string{"Q4_0"}, []string{"Q4_K_M", "Q8_0"}},
+		{"matching is case-insensitive", []string{"q4_k_m"}, []string{"Q4_0", "Q8_0"}},
+		{"all cached leaves nothing to pull", []string{"Q8_0", "Q4_0", "Q4_K_M"}, nil},
+		{"a cached precision the remote lost is ignored", []string{"Q2_K"}, []string{"Q4_0", "Q4_K_M", "Q8_0"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := skipDownloaded(candidates, tt.cached)
+			var names []string
+			for _, c := range got {
+				names = append(names, c.Precision)
+			}
+			if !slices.Equal(names, tt.want) {
+				t.Errorf("skipDownloaded(%v) = %v, want %v", tt.cached, names, tt.want)
+			}
+			if len(candidates) != 3 {
+				t.Errorf("input mutated: %v", candidates)
+			}
+		})
+	}
+}

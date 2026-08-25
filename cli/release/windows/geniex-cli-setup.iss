@@ -68,19 +68,23 @@ begin
   if not RegQueryStringValue(HKCU, UninstallKey, 'UninstallString', UninstallString) then
     Exit;
 
-  if MsgBox('Existing version detected.'#13#10 +
+  { Bare MsgBox still renders (hidden) under /VERYSILENT and deadlocks setup;
+    SuppressibleMsgBox returns Default in silent mode. }
+  if SuppressibleMsgBox('Existing version detected.'#13#10 +
             'Please uninstall the existing version first.'#13#10#13#10 +
-            'Uninstall now?', mbConfirmation, MB_YESNO) <> IDYES then
+            'Uninstall now?', mbConfirmation, MB_YESNO, IDYES) <> IDYES then
   begin
-    MsgBox('Installation aborted.', mbInformation, MB_OK);
+    SuppressibleMsgBox('Installation aborted.', mbInformation, MB_OK, IDOK);
     Result := False;
     Exit;
   end;
 
-  if (not Exec(RemoveQuotes(UninstallString), '/SILENT', '', SW_SHOW, ewWaitUntilTerminated, ResultCode))
+  { /SUPPRESSMSGBOXES is required — /VERYSILENT alone does not silence the
+    old uninstaller's own MsgBox calls. }
+  if (not Exec(RemoveQuotes(UninstallString), '/VERYSILENT /NORESTART /SUPPRESSMSGBOXES', '', SW_HIDE, ewWaitUntilTerminated, ResultCode))
      or (ResultCode <> 0) then
   begin
-    MsgBox(Format('Uninstall failed (ErrCode: %d).', [ResultCode]), mbError, MB_OK);
+    SuppressibleMsgBox(Format('Uninstall failed (ErrCode: %d).', [ResultCode]), mbError, MB_OK, IDOK);
     Result := False;
     Exit;
   end;
@@ -90,7 +94,7 @@ begin
   begin
     if Waited >= 30000 then
     begin
-      MsgBox('Timed out waiting for the previous version to finish uninstalling.', mbError, MB_OK);
+      SuppressibleMsgBox('Timed out waiting for the previous version to finish uninstalling.', mbError, MB_OK, IDOK);
       Result := False;
       Exit;
     end;

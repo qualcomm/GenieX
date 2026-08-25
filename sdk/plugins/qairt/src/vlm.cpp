@@ -15,9 +15,10 @@
 #define portable_strdup strdup
 #endif
 
-#include "dispatch.h"             // provided by geniex-qairt/models/
-#include "geniex-proc/types.h"    // ChatMessage, MMContent, Role::, Modality::
-#include "llm/llm_spec_loader.h"  // parseGenieSamplerConfig
+#include "dispatch.h"               // provided by geniex-qairt/models/
+#include "geniex-proc/tokenizer.h"  // ApplyChatTemplateOptions
+#include "geniex-proc/types.h"      // ChatMessage, MMContent, Role::, Modality::
+#include "llm/llm_spec_loader.h"    // parseGenieSamplerConfig
 #include "logging.h"
 #include "path_utils.h"
 #include "pipeline/vlm_pipeline.h"
@@ -37,12 +38,10 @@ constexpr const char* kDefaultSystemPrompt = "You are a helpful AI assistant.";
 
 QairtVlm::~QairtVlm() = default;
 
-int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
+int32_t QairtVlm::create(const geniex_VlmCreateInput* input) {
     if (!input || !input->model_path) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
-
-    enable_thinking_ = input->config.enable_thinking;
 
     // Reject llama.cpp-only parameters that have no meaning in the QAIRT plugin
     if (input->config.n_gpu_layers != 0) {
@@ -71,32 +70,39 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
     }
 
     // ── LLM config ────────────────────────────────────────────────────────────
+    // Bundle layout comes from the core's `ctx-bins` handling, not a `*.bin` glob.
+    // See the note in llm.cpp.
     ModelConfig llm_cfg{};
-
-    auto bin_shards = qairt::runtime::collect_bin_files(model_dir);
-    if (!resolved_vision_bin.empty()) {
-        const fs::path vision_path(resolved_vision_bin);
-        bin_shards.erase(std::remove_if(bin_shards.begin(),
-                             bin_shards.end(),
-                             [&](const std::string& p) {
-                                 std::error_code ec;
-                                 if (fs::equivalent(fs::path(p), vision_path, ec)) return true;
-                                 return fs::path(p).filename() == vision_path.filename();
-                             }),
-            bin_shards.end());
+    try {
+        llm_cfg = modelConfigFromDirectory(model_dir);
+    } catch (const std::exception& e) {
+        GENIEX_LOG_ERROR("Failed to resolve QAIRT bundle layout in {}: {}", model_dir.string(), e.what());
+        return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
-    if (bin_shards.empty()) {
+
+    // The vision encoder is driven as its own graph, so keep it out of the LLM
+    // shard list even if ctx-bins lists it.
+    if (!resolved_vision_bin.empty()) {
+        auto&          shards = llm_cfg.model_paths;
+        const fs::path vision_path(resolved_vision_bin);
+        shards.erase(std::remove_if(shards.begin(),
+                         shards.end(),
+                         [&](const std::string& p) {
+                             std::error_code ec;
+                             if (fs::equivalent(fs::path(p), vision_path, ec)) return true;
+                             return fs::path(p).filename() == vision_path.filename();
+                         }),
+            shards.end());
+    }
+    if (llm_cfg.model_paths.empty()) {
         GENIEX_LOG_ERROR("No .bin LLM shards found in: {}", model_dir.string());
         return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
-    GENIEX_LOG_DEBUG("Found {} LLM shards in {}", bin_shards.size(), model_dir.string());
-    llm_cfg.model_paths = std::move(bin_shards);
+    GENIEX_LOG_DEBUG("Found {} LLM shards in {}", llm_cfg.model_paths.size(), model_dir.string());
 
-    // Tokenizer
+    // Tokenizer: an explicit caller override wins over the bundle's own.
     if (input->tokenizer_path && input->tokenizer_path[0] != '\0') {
         llm_cfg.tokenizer_path = input->tokenizer_path;
-    } else {
-        llm_cfg.tokenizer_path = qairt::runtime::find_optional_file(model_dir, "tokenizer.json").value_or("");
     }
     if (llm_cfg.tokenizer_path.empty()) {
         GENIEX_LOG_ERROR("tokenizer.json not found in: {}", model_dir.string());
@@ -108,7 +114,7 @@ int32_t QairtVlm::create_impl(const geniex_VlmCreateInput* input) {
     if (!llm_cfg.embedding_path) {
         llm_cfg.embedding_path = qairt::runtime::find_optional_file(model_dir, "embed_tokens.npy");
     }
-    llm_cfg.htp_config_path = qairt::runtime::find_optional_file(model_dir, "htp_backend_ext_config.json").value_or("");
+    // htp_config_path is already resolved by modelConfigFromDirectory.
 
     // ── Vision encoder config ─────────────────────────────────────────────────
     ModelConfig vision_cfg{};
@@ -229,7 +235,21 @@ int32_t QairtVlm::apply_chat_template(
     // Record pending size — committed to history_size_ only after a successful generate().
     pending_history_size_ = messages.size();
 
-    std::string formatted = pipeline_->applyChatTemplate(new_messages, /*add_generation_prompt=*/true);
+    // Tools are injected on the first turn only, matching the LLM path.
+    ApplyChatTemplateOptions opts;
+    opts.add_generation_prompt = true;
+    if (history_size_ == 0 && input->tools && input->tools[0] != '\0') {
+        opts.tools_json = input->tools;
+    }
+    opts.enable_thinking = input->enable_thinking;
+
+    std::string formatted;
+    try {
+        formatted = pipeline_->applyChatTemplate(new_messages, opts);
+    } catch (const std::exception& e) {
+        GENIEX_LOG_ERROR("applyChatTemplate failed: {}", e.what());
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    }
 
     output->formatted_text = portable_strdup(formatted.c_str());
     if (!output->formatted_text) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
@@ -259,7 +279,6 @@ int32_t QairtVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
         gen_cfg.max_tokens = input->config->max_tokens > 0 ? input->config->max_tokens : 512;
         qairt::apply_sampler_config(input->config->sampler_config, gen_cfg, bundle_sampler_);
     }
-    gen_cfg.thinking_mode = enable_thinking_;
 
     // Wrap token callback
     std::function<bool(const char*)> on_token_fn;
@@ -279,16 +298,21 @@ int32_t QairtVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     output->full_text = portable_strdup(result.full_text.c_str());
     if (!output->full_text) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
 
-    // Profile data (convert ms → µs to match geniex_ProfileData convention)
+    // Profile data (ms → µs). media_time is the encoder only; the media-token
+    // prefill stays in prompt_time, derived as ttft − encoder since QAIRT exposes
+    // no separate prefill number. When the encoder dominates ttft the subtraction
+    // clamps to 0, so prefill_speed reports 0 (unknown) rather than a bogus rate.
+    const int64_t media_us  = static_cast<int64_t>(result.media_ms * 1000.0);
+    const int64_t prompt_us = std::max<int64_t>(static_cast<int64_t>(result.ttft_ms * 1000.0) - media_us, 0);
+
     output->profile_data.ttft             = static_cast<int64_t>(result.ttft_ms * 1000.0);
-    output->profile_data.prompt_time      = output->profile_data.ttft;
+    output->profile_data.media_time       = media_us;
+    output->profile_data.prompt_time      = prompt_us;
     output->profile_data.decode_time      = static_cast<int64_t>(result.decode_ms * 1000.0);
     output->profile_data.prompt_tokens    = result.prompt_tokens;
     output->profile_data.generated_tokens = result.generated_tokens;
+    output->profile_data.prefill_speed    = prompt_us > 0 ? result.prompt_tokens / (prompt_us / 1e6) : 0.0;
     output->profile_data.decoding_speed   = result.tokens_per_second;
-    output->profile_data.prefill_speed    = (result.prompt_tokens > 0 && result.ttft_ms > 0.0)
-                                                ? static_cast<double>(result.prompt_tokens) / (result.ttft_ms / 1000.0)
-                                                : 0.0;
 
     // Stop Reason
     if (result.stop_reason == "user") {
@@ -299,6 +323,10 @@ int32_t QairtVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
         output->profile_data.stop_reason = "length";
         GENIEX_LOG_WARN("QAIRT VLM generate: context length exceeded (partial result populated)");
         return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+    } else if (result.stop_reason == "prompt_too_long") {
+        output->profile_data.stop_reason = "length";
+        GENIEX_LOG_WARN("QAIRT VLM generate: prompt exceeds max context length");
+        return GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG;
     } else if (result.stop_reason == "error") {
         output->profile_data.stop_reason = "eos";
         GENIEX_LOG_ERROR("QAIRT VLM generate failed during prompt processing (empty result)");

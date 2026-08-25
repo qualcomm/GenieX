@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 
 	"github.com/bytedance/sonic"
+
+	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 )
 
 // Known configuration keys. The set is intentionally small and explicit so
@@ -108,4 +110,15 @@ func (s *Store) ConfigSet(key, value string) error {
 // ConfigList returns a snapshot of all persisted configuration entries.
 func (s *Store) ConfigList() (map[string]string, error) {
 	return s.loadConfig()
+}
+
+// ResolveChipset resolves the host chipset without prompting: the configured
+// "chipset" key wins, else a host probe, else "". Pass offline=true on the
+// infer / serve path so the probe never touches the network.
+func (s *Store) ResolveChipset(offline bool) string {
+	if c, _, err := s.ConfigGet(ConfigKeyChipset); err == nil && c != "" {
+		return c
+	}
+	detected, _ := geniex_sdk.ModelDetectChipset(offline)
+	return detected
 }

@@ -37,11 +37,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="Which runtime is the default?">
-    If you don't pass a compute unit:
-    - `llama_cpp` defaults to `hybrid` (HTP + CPU per-tensor scheduler — the fast path on Snapdragon).
-    - `qairt` defaults to `npu`.
-
-    Some models override this — e.g. `gpt-oss` falls back to `npu` on `llama_cpp`.
+    If you don't pass a compute unit, both `llama_cpp` and `qairt` default to `npu`. For llama_cpp's faster HTP + CPU per-tensor scheduler path, pass `hybrid` explicitly.
   </Accordion>
 
   <Accordion title="Which precision (quantization) should I pick?">

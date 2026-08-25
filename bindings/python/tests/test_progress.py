@@ -57,6 +57,22 @@ def test_tqdm_progress_creates_bar_per_file():
     assert p._bars == {}
 
 
+def test_tqdm_progress_seeds_initial_from_downloaded():
+    p = _progress._TqdmProgress()
+    try:
+        # Resuming a partial download: the first callback already reports a
+        # large downloaded count. tqdm's rate must exclude those pre-existing
+        # bytes, so the bar is seeded with initial=downloaded_bytes.
+        p([FileProgress('a.gguf', 800, 1000)])
+        bar = p._bars['a.gguf']
+        assert bar.format_dict['initial'] == 800
+        assert bar.n == 800
+        p([FileProgress('a.gguf', 850, 1000)])
+        assert bar.n == 850
+    finally:
+        p.finish()
+
+
 def test_tqdm_progress_updates_existing_bar():
     p = _progress._TqdmProgress()
     try:

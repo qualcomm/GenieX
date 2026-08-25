@@ -68,6 +68,46 @@ pub fn aihub_display_name_from_repo(model_name: &str) -> Option<&str> {
     }
 }
 
+/// URL-ish prefixes that unambiguously mark a reference as Docker Hub
+/// rather than a HuggingFace "org/repo" name that happens to share the
+/// same shape (an HF org could, in principle, be named `ai`). Checked
+/// against the *original* user input, mirroring the
+/// `https://huggingface.co/` strip above — never inferred from a bare
+/// "org/repo" name, since unlike the AI Hub orgs there's no dedicated
+/// namespace we can claim outright.
+const DOCKER_HUB_PREFIXES: &[&str] = &[
+    "docker.io/",
+    "index.docker.io/",
+    "registry-1.docker.io/",
+    "https://hub.docker.com/r/",
+    "http://hub.docker.com/r/",
+    "hub.docker.com/r/",
+];
+
+/// True when `name` carries one of [`DOCKER_HUB_PREFIXES`]. Used to
+/// route `--model-hub auto` pulls to Docker Hub without the caller
+/// passing `--model-hub docker` explicitly.
+pub fn is_docker_hub_reference(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    DOCKER_HUB_PREFIXES.iter().any(|p| lower.starts_with(p))
+}
+
+/// Strip a recognised Docker Hub / registry prefix, returning the bare
+/// "org/repo" Docker reference (e.g. `"docker.io/ai/gemma3"` ->
+/// `"ai/gemma3"`). A name with no recognised prefix is returned
+/// unchanged, so this is also safe to call when the hub was selected
+/// explicitly via `--model-hub docker` and the user passed a bare
+/// `"ai/gemma3"`.
+pub fn docker_hub_repo_from_name(name: &str) -> String {
+    let lower = name.to_ascii_lowercase();
+    for p in DOCKER_HUB_PREFIXES {
+        if lower.starts_with(p) {
+            return name[p.len()..].to_string();
+        }
+    }
+    name.to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,6 +210,39 @@ mod tests {
             canonicalize_model_name("http://huggingface.co/bartowski/Foo"),
             "bartowski/Foo"
         );
+    }
+
+    #[test]
+    fn docker_hub_reference_requires_explicit_prefix() {
+        assert!(is_docker_hub_reference("docker.io/ai/gemma3"));
+        assert!(is_docker_hub_reference("DOCKER.IO/ai/gemma3"));
+        assert!(is_docker_hub_reference("index.docker.io/ai/gemma3"));
+        assert!(is_docker_hub_reference(
+            "https://hub.docker.com/r/ai/gemma3"
+        ));
+        // Bare "org/repo" is never auto-routed to Docker Hub — it's
+        // indistinguishable from a HuggingFace repo of the same shape.
+        assert!(!is_docker_hub_reference("ai/gemma3"));
+        assert!(!is_docker_hub_reference("ggml-org/Qwen3-1.7B-GGUF"));
+    }
+
+    #[test]
+    fn docker_hub_repo_from_name_strips_known_prefixes() {
+        assert_eq!(
+            docker_hub_repo_from_name("docker.io/ai/gemma3"),
+            "ai/gemma3"
+        );
+        assert_eq!(
+            docker_hub_repo_from_name("index.docker.io/ai/gemma3"),
+            "ai/gemma3"
+        );
+        assert_eq!(
+            docker_hub_repo_from_name("https://hub.docker.com/r/ai/gemma3"),
+            "ai/gemma3"
+        );
+        // No recognised prefix: passed through unchanged (explicit
+        // --model-hub docker with a bare "org/repo").
+        assert_eq!(docker_hub_repo_from_name("ai/gemma3"), "ai/gemma3");
     }
 
     #[test]

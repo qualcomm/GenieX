@@ -162,17 +162,15 @@ struct fmt::formatter<geniex_ProfileData> {
     auto           format(const geniex_ProfileData& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "ProfileData(ttft: {} us, prompt_time: {} us, decode_time: {} us, prompt_tokens: {}, "
-                      "generated_tokens: {}, audio_duration: {} us, prefill_speed: {} tokens/s, decoding_speed: {} "
-                      "tokens/s, real_time_factor: {}, stop_reason: {})",
+                      "generated_tokens: {}, prefill_speed: {} tokens/s, decoding_speed: {} "
+                      "tokens/s, stop_reason: {})",
             lp(p.ttft),
             lp(p.prompt_time),
             lp(p.decode_time),
             lp(p.prompt_tokens),
             lp(p.generated_tokens),
-            lp(p.audio_duration),
             lp(p.prefill_speed),
             lp(p.decoding_speed),
-            lp(p.real_time_factor),
             lp(p.stop_reason));
     }
 };
@@ -184,7 +182,7 @@ struct fmt::formatter<geniex_SamplerConfig> {
         return fmt::format_to(ctx.out(),
             "SamplerConfig(temperature: {}, top_p: {}, top_k: {}, min_p: {}, repetition_penalty: {}, presence_penalty: "
                       "{}, "
-                      "frequency_penalty: {}, seed: {}, grammar_path: {}, grammar_string: {}, enable_json: {})",
+                      "frequency_penalty: {}, seed: {}, grammar_path: {}, grammar_string: {})",
             lp(p.temperature),
             lp(p.top_p),
             lp(p.top_k),
@@ -194,8 +192,7 @@ struct fmt::formatter<geniex_SamplerConfig> {
             lp(p.frequency_penalty),
             lp(p.seed),
             lp(p.grammar_path),
-            lp(p.grammar_string),
-            lp(p.enable_json));
+            lp(p.grammar_string));
     }
 };
 
@@ -204,17 +201,15 @@ struct fmt::formatter<geniex_GenerationConfig> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
     auto           format(const geniex_GenerationConfig& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
-            "GenerationConfig(max_tokens: {}, stop_count: {}, n_past: {}, sampler_config: {}, image_paths: {}, "
-                      "image_count: {}, audio_paths: {}, audio_count: {}, image_max_length: {})",
+            "GenerationConfig(max_tokens: {}, stop_count: {}, sampler_config: {}, image_paths: {}, "
+                      "image_count: {}, audio_paths: {}, audio_count: {})",
             lp(p.max_tokens),
             lp(p.stop_count),
-            lp(p.n_past),
             lp(p.sampler_config),
             lp(fmt::ptr(p.image_paths)),
             lp(p.image_count),
             lp(fmt::ptr(p.audio_paths)),
-            lp(p.audio_count),
-            lp(p.image_max_length));
+            lp(p.audio_count));
     }
 };
 
@@ -225,9 +220,7 @@ struct fmt::formatter<geniex_ModelConfig> {
         return fmt::format_to(ctx.out(),
             "ModelConfig(n_ctx: {}, n_threads: {}, n_threads_batch: {}, n_batch: {}, n_ubatch: {}, n_seq_max: {}, "
                       "n_gpu_layers: {}, "
-                      "chat_template_path: {}, chat_template_content: {}, system_prompt: {}, enable_sampling: {}, grammar_str: "
-                      "{}, max_tokens: {}, "
-                      "enable_thinking: {}, verbose: {})",
+                      "chat_template_path: {}, chat_template_content: {})",
             lp(p.n_ctx),
             lp(p.n_threads),
             lp(p.n_threads_batch),
@@ -236,13 +229,7 @@ struct fmt::formatter<geniex_ModelConfig> {
             lp(p.n_seq_max),
             lp(p.n_gpu_layers),
             lp(p.chat_template_path),
-            lp(p.chat_template_content),
-            lp(p.system_prompt),
-            lp(p.enable_sampling),
-            lp(p.grammar_str),
-            lp(p.max_tokens),
-            lp(p.enable_thinking),
-            lp(p.verbose));
+            lp(p.chat_template_content));
     }
 };
 
@@ -341,17 +328,14 @@ struct fmt::formatter<geniex_VlmCreateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
     auto           format(const geniex_VlmCreateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
-            "VlmCreateInput(model_name: {}, model_path: {}, mmproj_path: {}, config: {}, plugin_id: {}, device_id: {}, "
-                      "tokenizer_path: {}, license_id: {}, license_key: {})",
-            lp(p.model_name),
+            "VlmCreateInput(model_path: {}, mmproj_path: {}, config: {}, plugin_id: {}, device_id: {}, "
+                      "tokenizer_path: {})",
             lp(p.model_path),
             lp(p.mmproj_path),
             lp(p.config),
             lp(p.plugin_id),
             lp(p.device_id),
-            lp(p.tokenizer_path),
-            lp(p.license_id),
-            lp(p.license_key));
+            lp(p.tokenizer_path));
     }
 };
 

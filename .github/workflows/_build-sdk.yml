@@ -47,11 +47,21 @@ jobs:
             preset: arm64-linux-snapdragon-release
             container_image: docker.io/qualcomm/geniex-toolchain-linux:v0.1.0
             qairt_qnn_versions: "2.45 2.47 2.48"
+          # NPU-less Dragonwing IoT boards (unoq) can't run armv8.2. See #1217.
+          - platform: linux-arm64-cpu
+            runner: ubuntu-latest
+            preset: arm64-linux-cpu-release
+            container_image: docker.io/qualcomm/geniex-toolchain-linux:v0.1.0
           - platform: android-arm64
             runner: ubuntu-latest
             preset: arm64-android-snapdragon-release
             container_image: docker.io/qualcomm/geniex-toolchain-android:v0.1.0
             qairt_qnn_versions: "2.45 2.47 2.48"
+          # minSdk 27 still admits armv8.0 phones, which trap on armv8.7. See #1217.
+          - platform: android-arm64-cpu
+            runner: ubuntu-latest
+            preset: arm64-android-cpu-release
+            container_image: docker.io/qualcomm/geniex-toolchain-android:v0.1.0
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
 
@@ -163,7 +173,7 @@ jobs:
       # Linux/Android ccache lives in the toolchain container; host just
       # owns the dir so actions/cache can persist it.
       - name: Prepare ccache dir (Linux/Android)
-        if: matrix.platform == 'linux-arm64' || matrix.platform == 'android-arm64'
+        if: matrix.platform != 'windows-arm64'
         shell: bash
         run: mkdir -p "${{ github.workspace }}/.ccache"
 
@@ -198,7 +208,8 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           if (-not $env:HEXAGON_HTP_CERT_PFX) {
-            throw "HEXAGON_HTP_CERT_PFX secret is empty; set it to the base64 of the HTP .pfx."
+            Write-Warning "HEXAGON_HTP_CERT_PFX secret is unavailable (expected on fork PRs); building unsigned HTP skels."
+            exit 0
           }
           $dst = "$env:RUNNER_TEMP\ggml-htp-v1.pfx"
           [IO.File]::WriteAllBytes($dst, [Convert]::FromBase64String($env:HEXAGON_HTP_CERT_PFX))
@@ -305,8 +316,13 @@ jobs:
               $verFlag  = ""
             }
 
+            # Pass the cert path explicitly: GGML_HEXAGON_HTP_CERT is a cached
+            # PATH, so a restored build dir keeps a prior run's value and an
+            # empty env alone won't clear it — on a fork PR (no secret) that
+            # leaves signing on and signtool fails on the missing .pfx.
             cmake -S sdk --preset $env:PRESET -B $BuildDir --log-level=VERBOSE `
               "-DGENIEX_VERSION=$env:GENIEX_VERSION" $verFlag `
+              "-DGGML_HEXAGON_HTP_CERT=$env:HEXAGON_HTP_CERT" `
               -DCMAKE_C_COMPILER_LAUNCHER=ccache `
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
             if ($LASTEXITCODE -ne 0) { throw "cmake configure failed ($ver): $LASTEXITCODE" }
@@ -321,7 +337,7 @@ jobs:
       # On Linux/Android ccache runs inside the container; only the on-disk
       # size is visible from the host. Never fail the job on a stats read.
       - name: ccache stats (Linux/Android)
-        if: matrix.platform == 'linux-arm64' || matrix.platform == 'android-arm64'
+        if: matrix.platform != 'windows-arm64'
         shell: bash
         run: du -sh "${{ github.workspace }}/.ccache" 2>/dev/null || true
 

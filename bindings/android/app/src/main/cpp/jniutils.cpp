@@ -40,15 +40,18 @@ std::string jstring2str(JNIEnv* env, jstring jstr) {
 // Thin wrapper over the SDK's geniex_resolve_device. The SDK owns the
 // alias table — we just marshal strings and translate the output into
 // the Android-local ResolvedDevice struct so the 8 JNI call sites keep
-// their existing shape.
-ResolvedDevice resolve_device(const char* plugin_id, const char* model_name, const std::string& raw) {
+// their existing shape. `ngl_default` is the caller's n_gpu_layers, which
+// the SDK passes through for gpu/npu/hybrid (-1 = all layers) and forces
+// to 0 for cpu/qairt.
+ResolvedDevice resolve_device(
+    const char* plugin_id, const char* model_name, const std::string& raw, int32_t ngl_default) {
     ResolvedDevice r;
 
     geniex_ResolveDeviceInput in{};
     in.plugin_id   = plugin_id;
     in.model_name  = model_name;
     in.mode        = raw.empty() ? nullptr : raw.c_str();
-    in.ngl_default = -1;  // sentinel: "no override" unless the SDK forces one
+    in.ngl_default = ngl_default;
 
     geniex_ResolveDeviceOutput out{};
     int32_t                    rc = geniex_resolve_device(&in, &out);
@@ -66,8 +69,7 @@ ResolvedDevice resolve_device(const char* plugin_id, const char* model_name, con
         LOGi("[JNI] resolve_device: %s", r.warning.c_str());
         geniex_free(out.warning);
     }
-    // Preserve the "-1 means no override" contract downstream relies on.
-    if (out.ngl != -1) r.ngl_override = out.ngl;
+    r.ngl = out.ngl;
     return r;
 }
 
@@ -113,11 +115,8 @@ geniex_GenerationConfig extract_generation_config(JNIEnv* env, jobject configObj
     if (!configObj) return cfg;
     jclass cls = env->GetObjectClass(configObj);
 
-    // ----------- mas\x token -----------
+    // ----------- max token -----------
     cfg.max_tokens = env->GetIntField(configObj, env->GetFieldID(cls, "maxTokens", "I"));
-
-    jfieldID nPastId = env->GetFieldID(cls, "nPast", "I");
-    cfg.n_past       = nPastId ? env->GetIntField(configObj, nPastId) : 0;
 
     // ----------- stopWords  -----------
     static thread_local std::vector<std::string> stopWordStorage;
@@ -151,6 +150,13 @@ geniex_GenerationConfig extract_generation_config(JNIEnv* env, jobject configObj
     getStringArrayField(env, configObj, cls, "audioPaths", audioPathStorage, audioPathPtrs);
     cfg.audio_paths = audioPathPtrs.empty() ? nullptr : (geniex_Path*)audioPathPtrs.data();
     cfg.audio_count = audioPathPtrs.size();
+
+    // ----------- sliding window (qcom-ai-hub/geniex#1197) -----------
+    jfieldID slidingWindowId = env->GetFieldID(cls, "slidingWindow", "Z");
+    cfg.sliding_window       = slidingWindowId ? env->GetBooleanField(configObj, slidingWindowId) : false;
+
+    jfieldID slidingWindowNKeepId = env->GetFieldID(cls, "slidingWindowNKeep", "I");
+    cfg.sliding_window_n_keep     = slidingWindowNKeepId ? env->GetIntField(configObj, slidingWindowNKeepId) : 0;
 
     return cfg;
 }
@@ -237,17 +243,27 @@ geniex_ModelConfig extract_model_config(JNIEnv* env, jobject configObj) {
     // Note: old fields like system_library_path, backend_library_path, etc. are removed
     // They don't exist in geniex_ModelConfig anymore (see include/ml.h)
 
-    // max_tokens
-    fid               = env->GetFieldID(cls, "max_tokens", "I");
-    config.max_tokens = env->GetIntField(configObj, fid);
+    // spec_type
+    fid              = env->GetFieldID(cls, "spec_type", "Ljava/lang/String;");
+    jstr             = (jstring)env->GetObjectField(configObj, fid);
+    config.spec_type = jstr ? hold_c_str(jstring2str(env, jstr)) : nullptr;
 
-    // enable_thinking
-    fid                    = env->GetFieldID(cls, "enable_thinking", "Z");
-    config.enable_thinking = env->GetBooleanField(configObj, fid);
+    // spec_draft_model
+    fid                     = env->GetFieldID(cls, "spec_draft_model", "Ljava/lang/String;");
+    jstr                    = (jstring)env->GetObjectField(configObj, fid);
+    config.spec_draft_model = jstr ? hold_c_str(jstring2str(env, jstr)) : nullptr;
 
-    // verbose
-    fid            = env->GetFieldID(cls, "verbose", "Z");
-    config.verbose = env->GetBooleanField(configObj, fid);
+    // spec_n_max
+    fid               = env->GetFieldID(cls, "spec_n_max", "I");
+    config.spec_n_max = env->GetIntField(configObj, fid);
+
+    // spec_n_min
+    fid               = env->GetFieldID(cls, "spec_n_min", "I");
+    config.spec_n_min = env->GetIntField(configObj, fid);
+
+    // spec_p_min
+    fid               = env->GetFieldID(cls, "spec_p_min", "F");
+    config.spec_p_min = env->GetFloatField(configObj, fid);
 
     return config;
 }
@@ -255,19 +271,19 @@ jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data) {
     jclass cls = env->FindClass("com/geniex/sdk/bean/ProfilingData");
     if (!cls) return nullptr;
 
-    // (DDDJJJDDDLjava/lang/String;)V
-    jmethodID ctor = env->GetMethodID(cls, "<init>", "(DDDJJJDDDLjava/lang/String;)V");
+    // (DDDDJJDDJJLjava/lang/String;)V
+    jmethodID ctor = env->GetMethodID(cls, "<init>", "(DDDDJJDDJJLjava/lang/String;)V");
     if (!ctor) return nullptr;
 
     const jdouble ttft_ms   = static_cast<jdouble>(data.ttft / 1000.0);
+    const jdouble media_ms  = static_cast<jdouble>(data.media_time / 1000.0);
     const jdouble prompt_ms = static_cast<jdouble>(data.prompt_time / 1000.0);
     const jdouble decode_ms = static_cast<jdouble>(data.decode_time / 1000.0);
 
     const jlong prompt_tokens = static_cast<jlong>(data.prompt_tokens);
     const jlong gen_tokens    = static_cast<jlong>(data.generated_tokens);
-    const jlong audio_ms      = static_cast<jlong>(data.audio_duration / 1000);
 
-    // ---- compute speeds/rtf locally (tokens/sec; RTF: audio/proc) ----
+    // ---- compute speeds locally (tokens/sec) ----
     auto tok_per_s = [](int64_t tokens, int64_t time_us) -> jdouble {
         if (time_us <= 0) return 0.0;
         return static_cast<jdouble>(tokens) * 1e6 / static_cast<jdouble>(time_us);
@@ -276,26 +292,26 @@ jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data) {
     const jdouble prefill_speed  = tok_per_s(data.prompt_tokens, data.prompt_time);
     const jdouble decoding_speed = tok_per_s(data.generated_tokens, data.decode_time);
 
-    const int64_t proc_us =
-        (data.prompt_time > 0 ? data.prompt_time : 0) + (data.decode_time > 0 ? data.decode_time : 0);
-    const jdouble rtf = (proc_us > 0) ? static_cast<jdouble>(data.audio_duration) / static_cast<jdouble>(proc_us) : 0.0;
+    LOGe("prefill_speed=%.6f tok/s, decoding_speed=%.6f tok/s", prefill_speed, decoding_speed);
 
-    LOGe("prefill_speed=%.6f tok/s, decoding_speed=%.6f tok/s, rtf=%.4f", prefill_speed, decoding_speed, rtf);
+    const jlong draft_n_total    = static_cast<jlong>(data.draft_n_total);
+    const jlong draft_n_accepted = static_cast<jlong>(data.draft_n_accepted);
 
     jstring jStopReason = env->NewStringUTF(data.stop_reason ? data.stop_reason : "");
 
     jobject obj = env->NewObject(cls,
         ctor,
         ttft_ms,
+        media_ms,
         prompt_ms,
-        decode_ms,  // D D D
+        decode_ms,  // D D D D
         prompt_tokens,
-        gen_tokens,
-        audio_ms,  // J J J
+        gen_tokens,  // J J
         prefill_speed,
-        decoding_speed,
-        rtf,         // D D D
-        jStopReason  // String
+        decoding_speed,  // D D
+        draft_n_total,
+        draft_n_accepted,  // J J
+        jStopReason        // String
     );
 
     env->DeleteLocalRef(jStopReason);
@@ -327,24 +343,6 @@ geniex_LlmCreateInput extract_llm_create_input(JNIEnv* env, jobject inputObj) {
 
     jfieldID fid;
     jstring  jstr;
-
-    // === model_name (optional — QAIRT plugin reads metadata.json, only
-    //     llama_cpp's gpt-oss device-default override consults it) ===
-    LOGi("[JNI] [extract] locating field 'model_name' (Ljava/lang/String;)");
-    fid = env->GetFieldID(cls, "model_name", "Ljava/lang/String;");
-    if (checkAndLogJniException(env, "GetFieldID(model_name)") || !fid) {
-        LOGi("[JNI] [extract] field 'model_name' not present (Kotlin property)");
-    } else {
-        jstr = (jstring)env->GetObjectField(inputObj, fid);
-        if (checkAndLogJniException(env, "GetObjectField(model_name)") || !jstr) {
-            LOGi("[JNI] [extract] model_name = (null)");
-        } else {
-            std::string s  = jstring2str(env, jstr);
-            out.model_name = hold_c_str(s);
-            LOGi("[JNI] [extract] model_name = %s", s.c_str());
-            env->DeleteLocalRef(jstr);
-        }
-    }
 
     // === model_path ===
     LOGi("[JNI] [extract] locating field 'model_path' (Ljava/lang/String;)");
@@ -424,9 +422,9 @@ geniex_LlmCreateInput extract_llm_create_input(JNIEnv* env, jobject inputObj) {
         }
     }
     {
-        ResolvedDevice r = resolve_device(out.plugin_id, out.model_name, raw_dev);
-        out.device_id    = r.device_id.empty() ? nullptr : hold_c_str(r.device_id);
-        if (r.ngl_override >= 0) out.config.n_gpu_layers = r.ngl_override;
+        ResolvedDevice r        = resolve_device(out.plugin_id, nullptr, raw_dev, out.config.n_gpu_layers);
+        out.device_id           = r.device_id.empty() ? nullptr : hold_c_str(r.device_id);
+        out.config.n_gpu_layers = r.ngl;
         LOGi("[JNI] [extract] compute_unit = %s, n_gpu_layers = %d (from raw='%s')",
             r.device_id.empty() ? "(null)" : r.device_id.c_str(),
             out.config.n_gpu_layers,
@@ -446,18 +444,6 @@ geniex_VlmCreateInput extract_vlm_create_input(JNIEnv* env, jobject inputObj) {
 
     jfieldID fid;
     jstring  jstr;
-
-    // model_name: String
-    fid = env->GetFieldID(cls, "model_name", "Ljava/lang/String;");
-    if (fid) {
-        jstr = (jstring)env->GetObjectField(inputObj, fid);
-        if (jstr) {
-            std::string s  = jstring2str(env, jstr);
-            out.model_name = hold_c_str(s);
-            LOGi("[JNI] [extract_vlm] model_name = %s", s.c_str());
-            env->DeleteLocalRef(jstr);
-        }
-    }
 
     // model_path : String
     fid = env->GetFieldID(cls, "model_path", "Ljava/lang/String;");
@@ -502,9 +488,9 @@ geniex_VlmCreateInput extract_vlm_create_input(JNIEnv* env, jobject inputObj) {
                 env->DeleteLocalRef(jstr);
             }
         }
-        ResolvedDevice r = resolve_device(out.plugin_id, out.model_name, raw_dev);
-        out.device_id    = r.device_id.empty() ? nullptr : hold_c_str(r.device_id);
-        if (r.ngl_override >= 0) out.config.n_gpu_layers = r.ngl_override;
+        ResolvedDevice r        = resolve_device(out.plugin_id, nullptr, raw_dev, out.config.n_gpu_layers);
+        out.device_id           = r.device_id.empty() ? nullptr : hold_c_str(r.device_id);
+        out.config.n_gpu_layers = r.ngl;
         LOGi("[JNI] [extract_vlm] compute_unit = %s, n_gpu_layers = %d (from raw='%s')",
             r.device_id.empty() ? "(null)" : r.device_id.c_str(),
             out.config.n_gpu_layers,

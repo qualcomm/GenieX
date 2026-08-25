@@ -32,25 +32,30 @@ link_lib() {
     MISSING_LIBS="$MISSING_LIBS $bare"
 }
 
-# fastrpc: bare-name links required by libQnnHtp*Stub.so's $ORIGIN rpath.
-link_lib libcdsprpc.so
-link_lib libadsprpc.so
+# Only warn about drivers a plugin in this image actually needs. See #1217.
+if [ -d "$LIB_DIR/qairt" ] || [ -e "$LIB_DIR/llama_cpp/libggml-hexagon.so" ]; then
+    # fastrpc: bare-name links required by libQnnHtp*Stub.so's $ORIGIN rpath.
+    link_lib libcdsprpc.so
+    link_lib libadsprpc.so
+fi
 
-# Other QCOM user-space libs (GPU/CL/llvm).
-for lib in \
-    libOpenCL.so.1 \
-    libOpenCL_adreno.so.1 \
-    libCB.so.1 \
-    libadreno_utils.so.1 \
-    libgsl.so.1 \
-    libllvm-qcom.so.1 \
-    libllvm-qgl.so.1 \
-    libllvm-glnext.so.1 \
-    libpropertyvault.so.0 \
-    libdmabufheap.so.0 \
-; do
-    link_lib "$lib"
-done
+if [ -e "$LIB_DIR/llama_cpp/libggml-opencl.so" ]; then
+    # QCOM user-space libs the Adreno OpenCL backend pulls in.
+    for lib in \
+        libOpenCL.so.1 \
+        libOpenCL_adreno.so.1 \
+        libCB.so.1 \
+        libadreno_utils.so.1 \
+        libgsl.so.1 \
+        libllvm-qcom.so.1 \
+        libllvm-qgl.so.1 \
+        libllvm-glnext.so.1 \
+        libpropertyvault.so.0 \
+        libdmabufheap.so.0 \
+    ; do
+        link_lib "$lib"
+    done
+fi
 
 if [ -n "$MISSING_LIBS" ]; then
     warn "the following libraries were not found under /opt/qcom-lib; NPU/GPU may fail:"

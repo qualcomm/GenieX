@@ -16,6 +16,7 @@ go_library(
     name = "geniex_sdk_go",
     srcs = [
         "common.go",
+        "crash_handler.c",
         "device.go",
         "helpers.go",
         "llm.go",

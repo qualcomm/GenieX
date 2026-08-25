@@ -24,9 +24,23 @@ static const char* stop_reason_to_string(StopReason reason) {
 
 void Profiler::start() { start_time = clock::now(); }
 
+void Profiler::media_start() { media_start_time = clock::now(); }
+
+void Profiler::media_end() {
+    if (media_start_time != timestamp{}) {
+        media_us += to_us(clock::now() - media_start_time);
+        media_start_time = timestamp{};
+    }
+}
+
 void Profiler::prompt_start() { prompt_start_time = clock::now(); }
 
-void Profiler::prompt_end() { prompt_end_time = clock::now(); }
+void Profiler::prompt_end() {
+    if (prompt_start_time != timestamp{}) {
+        prompt_us += to_us(clock::now() - prompt_start_time);
+        prompt_start_time = timestamp{};
+    }
+}
 
 void Profiler::decode_start() { decode_start_time = clock::now(); }
 
@@ -43,6 +57,11 @@ void Profiler::update_prompt_tokens(uint32_t count) { prompt_tokens = count; }
 
 void Profiler::update_generated_tokens(uint32_t count) { generated_tokens = count; }
 
+void Profiler::set_draft_stats(int64_t n_total, int64_t n_accepted) {
+    draft_n_total    = n_total;
+    draft_n_accepted = n_accepted;
+}
+
 void Profiler::set_stop_reason(StopReason reason) { stop_reason = reason; }
 
 StopReason Profiler::get_stop_reason() const { return stop_reason; }
@@ -56,9 +75,8 @@ void Profiler::to_profile_data(ProfileData& pd) {
         pd.ttft = to_us(first_token_time - start_time);
     }
 
-    if (prompt_start_time != timestamp{} && prompt_end_time != timestamp{}) {
-        pd.prompt_time = to_us(prompt_end_time - prompt_start_time);
-    }
+    pd.media_time  = media_us;
+    pd.prompt_time = prompt_us;
 
     if (decode_start_time != timestamp{} && decode_end_time != timestamp{}) {
         pd.decode_time = to_us(decode_end_time - decode_start_time);
@@ -66,6 +84,8 @@ void Profiler::to_profile_data(ProfileData& pd) {
 
     pd.prompt_tokens    = prompt_tokens;
     pd.generated_tokens = generated_tokens;
+    pd.draft_n_total    = draft_n_total;
+    pd.draft_n_accepted = draft_n_accepted;
     pd.stop_reason      = stop_reason_to_string(stop_reason);
 }
 

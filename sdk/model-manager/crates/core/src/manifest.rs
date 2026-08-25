@@ -56,6 +56,7 @@ pub struct ModelManifest {
     pub model_type: ModelType,
     #[serde(rename = "PluginId")]
     pub plugin_id: String,
+    /// DEPRECATED #1242: read-only compat for old QAIRT manifests; new ones key `ModelFile` by precision directly.
     #[serde(
         rename = "Precision",
         default,
@@ -97,10 +98,4 @@ impl ModelManifest {
         }
         total
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct DownloadInfo {
-    pub total_downloaded: i64,
-    pub total_size: i64,
 }

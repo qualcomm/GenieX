@@ -31,6 +31,12 @@ func TestProcessContextLengthExceeded(t *testing.T) {
 			wantRuns:  2, // first errors+resets, second returns nil then EOF
 		},
 		{
+			name:      "prompt too long resets and continues",
+			runErr:    geniex_sdk.ErrLlmGenerationPromptTooLong,
+			wantReset: 1,
+			wantRuns:  2,
+		},
+		{
 			name:        "reset failure aborts the loop",
 			runErr:      geniex_sdk.ErrLlmTokenizationContextLength,
 			resetErr:    errors.New("reset boom"),

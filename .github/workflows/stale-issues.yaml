@@ -11,7 +11,7 @@ jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/stale@v10
+    - uses: actions/stale@v11
       with:
         stale-issue-message: 'Remove the stale label or add a comment to reset the inactivity timer.'
         stale-pr-message: 'Remove the stale label or add a comment to reset the inactivity timer'

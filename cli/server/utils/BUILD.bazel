@@ -2,14 +2,27 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "utils",
-    srcs = ["common.go"],
+    srcs = [
+        "common.go",
+        "toolcall.go",
+        "toolcall_gemma4.go",
+    ],
     importpath = "github.com/qualcomm/GenieX/cli/server/utils",
     visibility = ["//visibility:public"],
-    deps = ["@org_golang_x_image//webp"],
+    deps = [
+        "@com_github_bytedance_sonic//:sonic",
+        "@com_github_bytedance_sonic//ast",
+        "@com_github_openai_openai_go_v3//:openai-go",
+        "@org_golang_x_image//webp",
+    ],
 )
 
 go_test(
     name = "utils_test",
-    srcs = ["common_test.go"],
+    srcs = [
+        "common_test.go",
+        "toolcall_gemma4_test.go",
+        "toolcall_test.go",
+    ],
     embed = [":utils"],
 )

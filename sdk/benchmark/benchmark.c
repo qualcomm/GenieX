@@ -53,9 +53,11 @@
 #include <dirent.h>
 #endif
 
-/* Fixed VLM prompt. Multimodal cells still go through the bundle's chat
- * template (which needs real text), so the LLM/VLM paths are intentionally
- * asymmetric: LLM prefills random ids; VLM keeps a one-line text payload. */
+/* Default VLM prompt used when no --prompt-file is supplied. Throughput
+ * benchmarking only needs a representative fixed text; the chat template
+ * (which needs real text to place image tokens) is applied by build_vlm_prompt.
+ * When --prompt-file IS supplied the file content is used verbatim as the
+ * prompt_utf8, bypassing this default and build_vlm_prompt entirely. */
 static const char* const VLM_DEFAULT_PROMPT = "Describe the image.";
 
 #define MAX_PATHS 16
@@ -87,6 +89,7 @@ typedef struct {
     char*       mm_model_path;
     char*       mm_mmproj;
     char*       mm_tokenizer;
+    char*       mm_draft_model;
     bool        force_vlm; /* run VLM path even without an mmproj (QAIRT bundles) */
     bool        mm_is_vlm; /* manager classified the resolved model as VLM (geniex_ModelType) */
     const char* image_paths[MAX_PATHS];
@@ -95,7 +98,8 @@ typedef struct {
     int32_t     audio_count;
 
     int32_t n_prompt;   /* LLM random-ids prefill length (llama-bench -p), used when prompt_buf is NULL */
-    char*   prompt_buf; /* heap-owned text prompt loaded via --prompt-file; NULL = use random-ids */
+    char*   prompt_buf; /* heap-owned text prompt loaded via --prompt-file; NULL = use random-ids.
+                         * Split into multiple prompts on lines that are exactly "---". */
     int32_t max_new_tokens;
     float   temperature;
     int32_t seed;
@@ -103,9 +107,21 @@ typedef struct {
     int32_t repeat;
     bool    reset_between_runs; /* true => geniex_llm_reset() before each run, freeing KV */
     bool    accuracy;           /* true => single run (warmup=0, repeat=1), print generated text */
+
+    /* Prefill-only raw-logits mode (--logits): one forward pass over the prompt,
+     * no decode loop. Bypasses the timing/warmup/repeat machinery entirely. */
+    bool    logits_mode;
+    bool    logits_last_only; /* default: every position; set to emit only the last token's row */
+    int32_t logits_top_n;     /* per row, emit only the top-N (token_id, logit) pairs */
     int32_t n_ctx;
     int32_t n_threads;
     int32_t ngl_override; /* -1 = use resolved alias default; >=0 overrides */
+
+    const char* spec_type;    /* speculative type(s), comma-separated (llama_cpp); NULL = disabled */
+    const char* draft_model;  /* draft/MTP GGUF for draft-* spec types (NULL for ngram-*) */
+    int32_t     draft_tokens; /* max draft tokens per step (0 = plugin default) */
+    int32_t     draft_min;    /* min draft tokens per step (0 = llama.cpp default) */
+    float       draft_p_min;  /* min greedy draft probability (0 = llama.cpp default) */
 
     const char* output_json;
     const char* output_md;
@@ -131,9 +147,10 @@ typedef struct {
     int32_t     run_idx;
     bool        is_warmup;
     int64_t     ttft_us;
+    int64_t     media_us; /* image/audio encoder time; 0 for text-only */
     int64_t     prompt_time_us;
     int64_t     decode_time_us;
-    int64_t     prompt_tokens;
+    int64_t     prompt_tokens; /* text + media tokens */
     int64_t     gen_tokens;
     double      prefill_tps;
     double      decode_tps;
@@ -144,9 +161,9 @@ typedef struct {
 
 /* Adjust the reported prefill metrics for the engine's real prefill work.
  * QAIRT pads the prompt to a QAIRT_PREFILL_CHUNK multiple before prefill, so
- * prompt_tokens/prefill_tps should reflect that padded length (#1194); QAIRT's
- * prompt_time equals ttft, so recomputing the rate over the padded count keeps
- * rate == prompt_tokens / prompt_time consistent. llama_cpp does no such
+ * prompt_tokens/prefill_tps should reflect that padded length (#1194). Padding
+ * the full count is correct: prompt_tokens already includes the media tokens,
+ * which are prefilled through the same chunked path. llama_cpp does no such
  * padding, so its metrics are left as the SDK reported them. */
 static void normalize_prefill_metrics(run_result_t* r, const char* plugin) {
     if (!plugin || strcmp(plugin, "qairt") != 0 || r->prompt_tokens <= 0) return;
@@ -215,7 +232,14 @@ static void usage(const char* argv0) {
         "  -c, --ctx-size N       model n_ctx (0 = from model, default 0)\n"
         "  -t, --threads N        generation threads (0 = SDK default)\n"
         "  -ngl, --n-gpu-layers N llama_cpp layers to offload; overrides the\n"
-        "                         device alias default (needed for a real gpu run)\n"
+        "                         device alias default (-1 = all layers)\n"
+        "  --spec-type TYPES      speculative type(s), comma-separated: draft-mtp,\n"
+        "                         draft-eagle3,draft-simple,ngram-simple,ngram-map-k,\n"
+        "                         ngram-map-k4v,ngram-mod,ngram-cache (llama_cpp)\n"
+        "  --draft-model PATH     draft/MTP GGUF for draft-* spec types (llama_cpp)\n"
+        "  --draft-tokens N       max draft tokens per step (0 = plugin default)\n"
+        "  --draft-min N          min draft tokens per step (0 = llama.cpp default)\n"
+        "  --draft-p-min F        min greedy draft probability (0 = llama.cpp default)\n"
         "  --warmup N             default 1\n"
         "  --no-warmup            equivalent to --warmup 0\n"
         "  --temperature F        default 0.0\n"
@@ -228,6 +252,12 @@ static void usage(const char* argv0) {
         "                         For qairt, `pp` and prefill tok/s are reported over\n"
         "                         the padded length ceil(pp/128)*128, matching the\n"
         "                         engine's 128-token prefill chunking (#1194).\n"
+        "                         Batch prompts by separating them with a line that\n"
+        "                         is exactly `---`; each segment runs as its own\n"
+        "                         prompt (KV cache reset between segments), delimited\n"
+        "                         in stdout by a `[sep ] prompt i/n` marker. A file\n"
+        "                         with no `---` line is a single prompt, so this works\n"
+        "                         the same in timing and --accuracy runs.\n"
         "  --no-reset-between-runs\n"
         "                         keep KV cache across measured runs (default is\n"
         "                         to call geniex_llm_reset() before every run so\n"
@@ -239,6 +269,21 @@ static void usage(const char* argv0) {
         "                         speed. Overrides --warmup / --repetitions. Pair\n"
         "                         with --prompt-file for a real prompt; the default\n"
         "                         random-ids prefill produces meaningless text.\n"
+        "  --logits               prefill-only raw-logits mode: run one forward pass\n"
+        "                         (geniex_llm_forward_logits, no decode loop) over N\n"
+        "                         random token ids (-p N, like the timing default) and\n"
+        "                         write every position's logits row ([n_tokens, vocab])\n"
+        "                         to the JSON report, for on-target accuracy metrics\n"
+        "                         (perplexity/MMLU/MMMU). Bypasses timing; --warmup/-r/-n\n"
+        "                         are ignored. Input is random ids only (the\n"
+        "                         forward-logits API takes input_ids, and the bench tool\n"
+        "                         has no tokenizer): --prompt-file is rejected with\n"
+        "                         --logits.\n"
+        "  --logits-last-only     with --logits, emit only the last token's logits row\n"
+        "                         instead of every position (next-token / MMLU scoring).\n"
+        "  --logits-top-n N       with --logits, emit only the top-N (token_id, logit)\n"
+        "                         pairs per row (default 20) to keep the JSON small;\n"
+        "                         the report records this truncation.\n"
         "\n"
         "Optional (multimodal):\n"
         "  --tokenizer-path PATH  explicit tokenizer file\n"
@@ -406,7 +451,7 @@ static int resolve_via_mm(options_t* o, const char* id_in) {
      * second cell of a matrix. Fall through to pull on file-not-found. */
     geniex_ModelPaths paths;
     memset(&paths, 0, sizeof(paths));
-    int32_t rc = geniex_model_get_paths(name, &paths);
+    int32_t rc = geniex_model_get_paths(id_in, &paths);
     if (rc != GENIEX_SUCCESS) {
         geniex_ModelPullInput in;
         memset(&in, 0, sizeof(in));
@@ -424,7 +469,7 @@ static int resolve_via_mm(options_t* o, const char* id_in) {
             free(buf);
             return 1;
         }
-        rc = geniex_model_get_paths(name, &paths);
+        rc = geniex_model_get_paths(id_in, &paths);
         if (rc != GENIEX_SUCCESS) {
             const char* m = geniex_model_last_error_message();
             fprintf(stderr, "ERROR: geniex_model_get_paths(%s): %s (%d)\n", id_in, m ? m : "?", rc);
@@ -468,6 +513,63 @@ static int resolve_via_mm(options_t* o, const char* id_in) {
     }
     if (o->mm_tokenizer) o->tokenizer_path = o->mm_tokenizer;
     fprintf(stderr, "[mm  ] resolved %s -> %s\n", id_in, o->mm_model_path);
+    return 0;
+}
+
+/* Without this the plugin gets a raw id like "org/repo:Q4_0", fails to
+ * open it as a file, and silently falls back to non-speculative decode. */
+static int resolve_draft_via_mm(options_t* o) {
+    if (!o->draft_model || looks_like_path(o->draft_model)) return 0;
+    if (!g_mm_inited) {
+        int32_t rc = geniex_model_init(o->mm_data_dir);
+        if (rc != GENIEX_SUCCESS) {
+            const char* m = geniex_model_last_error_message();
+            fprintf(stderr, "ERROR: geniex_model_init: %s (%d)\n", m ? m : "?", rc);
+            return 1;
+        }
+        g_mm_inited = true;
+    }
+    size_t n   = strlen(o->draft_model);
+    char*  buf = (char*)malloc(n + 1);
+    if (!buf) return 1;
+    memcpy(buf, o->draft_model, n + 1);
+    const char* name;
+    const char* quant;
+    split_id(buf, &name, &quant);
+    geniex_ModelPaths paths;
+    memset(&paths, 0, sizeof(paths));
+    int32_t rc = geniex_model_get_paths(o->draft_model, &paths);
+    if (rc != GENIEX_SUCCESS) {
+        geniex_ModelPullInput in;
+        memset(&in, 0, sizeof(in));
+        in.struct_size = (uint32_t)sizeof(in);
+        in.model_name  = name;
+        in.quant       = quant;
+        in.hub         = parse_hub(o->mm_hub);
+        in.chipset     = o->mm_chipset;
+        in.model_type  = GENIEX_MODEL_TYPE_AUTO;
+        fprintf(stderr, "[mm  ] pulling draft %s%s%s ...\n", name, quant ? ":" : "", quant ? quant : "");
+        rc = geniex_model_pull(&in);
+        if (rc != GENIEX_SUCCESS) {
+            const char* m = geniex_model_last_error_message();
+            fprintf(stderr, "ERROR: geniex_model_pull(%s): %s (%d)\n", o->draft_model, m ? m : "?", rc);
+            free(buf);
+            return 1;
+        }
+        rc = geniex_model_get_paths(o->draft_model, &paths);
+        if (rc != GENIEX_SUCCESS) {
+            const char* m = geniex_model_last_error_message();
+            fprintf(stderr, "ERROR: geniex_model_get_paths(%s): %s (%d)\n", o->draft_model, m ? m : "?", rc);
+            free(buf);
+            return 1;
+        }
+    }
+    free(buf);
+    o->mm_draft_model = paths.model_path;
+    paths.model_path  = NULL;
+    geniex_model_paths_free(&paths);
+    o->draft_model = o->mm_draft_model;
+    fprintf(stderr, "[mm  ] resolved draft %s -> %s\n", o->draft_model, o->mm_draft_model);
     return 0;
 }
 
@@ -560,6 +662,9 @@ static char* resolve_local_anchor(const char* path) {
     return best;
 }
 
+/* Defined near main(); used by run_llm to trim prompt separator lines. */
+static char* rstrip(char* s);
+
 /* Load whole file into a heap buffer (caller frees). Used by --prompt-file
  * for plugins that don't implement geniex_llm_get_model_info. */
 static char* slurp(const char* path) {
@@ -612,6 +717,7 @@ static void parse_args(int argc, char** argv, options_t* o) {
     o->mm_model_path      = NULL;
     o->mm_mmproj          = NULL;
     o->mm_tokenizer       = NULL;
+    o->mm_draft_model     = NULL;
     o->force_vlm          = false;
     o->mm_is_vlm          = false;
     o->image_count        = 0;
@@ -625,9 +731,17 @@ static void parse_args(int argc, char** argv, options_t* o) {
     o->repeat             = 5;
     o->reset_between_runs = true;
     o->accuracy           = false;
+    o->logits_mode        = false;
+    o->logits_last_only   = false;
+    o->logits_top_n       = 20;
     o->n_ctx              = 0;
     o->n_threads          = 0;
     o->ngl_override       = -1;
+    o->spec_type          = NULL;
+    o->draft_model        = NULL;
+    o->draft_tokens       = 0;
+    o->draft_min          = 0;
+    o->draft_p_min        = 0.0f;
     o->output_json        = NULL;
     o->output_md          = NULL;
     o->cell_id            = NULL;
@@ -688,12 +802,29 @@ static void parse_args(int argc, char** argv, options_t* o) {
             o->reset_between_runs = false;
         } else if (strcmp(a, "--accuracy") == 0) {
             o->accuracy = true;
+        } else if (strcmp(a, "--logits") == 0) {
+            o->logits_mode = true;
+        } else if (strcmp(a, "--logits-last-only") == 0) {
+            o->logits_mode      = true;
+            o->logits_last_only = true;
+        } else if (strcmp(a, "--logits-top-n") == 0) {
+            o->logits_top_n = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "-c") == 0 || strcmp(a, "--ctx-size") == 0) {
             o->n_ctx = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "-t") == 0 || strcmp(a, "--threads") == 0) {
             o->n_threads = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "-ngl") == 0 || strcmp(a, "--n-gpu-layers") == 0) {
             o->ngl_override = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--spec-type") == 0) {
+            o->spec_type = arg_value(argc, argv, &i, a);
+        } else if (strcmp(a, "--draft-model") == 0) {
+            o->draft_model = arg_value(argc, argv, &i, a);
+        } else if (strcmp(a, "--draft-tokens") == 0) {
+            o->draft_tokens = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--draft-min") == 0) {
+            o->draft_min = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--draft-p-min") == 0) {
+            o->draft_p_min = (float)atof(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--output-json") == 0) {
             o->output_json = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--output-md") == 0) {
@@ -724,6 +855,17 @@ static void parse_args(int argc, char** argv, options_t* o) {
     if (o->accuracy) {
         o->warmup = 0;
         o->repeat = 1;
+    }
+
+    if (o->logits_mode) {
+        if (o->prompt_buf) {
+            fprintf(stderr, "ERROR: --logits uses random token ids; --prompt-file is not supported with it\n");
+            exit(2);
+        }
+        if (o->logits_top_n < 1) {
+            fprintf(stderr, "ERROR: --logits-top-n must be >=1\n");
+            exit(2);
+        }
     }
 
     if (o->matrix_file) {
@@ -941,6 +1083,15 @@ static void print_gen_text(const char* text) {
 
 /* ----------------------------- LLM run loop ----------------------------- */
 
+/* Append `seg` to the prompt list unless it is NULL or all whitespace, so
+ * stray/leading/trailing "---" separators don't produce empty prompts. */
+static void append_prompt_if_nonempty(const char** prompts, int32_t* n, char* seg) {
+    if (!seg) return;
+    const char* s = seg;
+    while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') s++;
+    if (*s) prompts[(*n)++] = seg;
+}
+
 static void fill_sampler(geniex_SamplerConfig* s, const options_t* o) {
     memset(s, 0, sizeof(*s));
     s->temperature        = o->temperature;
@@ -967,16 +1118,19 @@ static void fill_gen_config(geniex_GenerationConfig* g, geniex_SamplerConfig* s,
 
 static void fill_model_config(geniex_ModelConfig* c, const options_t* o, int32_t ngl) {
     memset(c, 0, sizeof(*c));
-    c->n_ctx        = o->n_ctx;
-    c->n_threads    = o->n_threads;
-    c->n_gpu_layers = ngl;
-    c->max_tokens   = o->max_new_tokens;
+    c->n_ctx            = o->n_ctx;
+    c->n_threads        = o->n_threads;
+    c->n_gpu_layers     = ngl;
+    c->spec_type        = o->spec_type;   /* may be NULL */
+    c->spec_draft_model = o->draft_model; /* may be NULL */
+    c->spec_n_max       = o->draft_tokens;
+    c->spec_n_min       = o->draft_min;
+    c->spec_p_min       = o->draft_p_min;
 }
 
 static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_result_t* out) {
     geniex_LlmCreateInput cin;
     memset(&cin, 0, sizeof(cin));
-    cin.model_name     = "benchmark";
     cin.model_path     = o->model_path;
     cin.tokenizer_path = o->tokenizer_path; /* may be NULL */
     cin.plugin_id      = o->plugin;
@@ -989,7 +1143,8 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
     /* Two prefill modes, picked by whether --prompt-file was passed:
      *   - prompt_buf != NULL: feed prompt_utf8 verbatim (the plugin tokenizes).
      *     `pp` is the tokenizer's count, NOT n_prompt. Required for plugins
-     *     that don't implement geniex_llm_get_model_info.
+     *     that don't accept input_ids (today: qairt). The buffer is split into
+     *     one prompt per "---"-delimited segment (see the loop below).
      *   - prompt_buf == NULL: random-ids mode (mirrors llama-bench
      *     test_prompt) — query vocab + BOS via geniex_llm_get_model_info,
      *     fill n_prompt positions with rand() % vocab_size, overwrite pos 0
@@ -1032,61 +1187,140 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
     fill_sampler(&sampler, o);
     fill_gen_config(&gconfig, &sampler, o, /*with_media=*/false);
 
-    int32_t total = o->warmup + o->repeat;
-    for (int32_t i = 0; i < total; ++i) {
-        bool    is_warmup = (i < o->warmup);
-        int32_t run_idx   = is_warmup ? i : (i - o->warmup);
+    /* Prompt list for the outer loop:
+     *   - random-ids mode (prompt_buf == NULL): a single NULL entry.
+     *   - --prompt-file: split prompt_buf on lines that are exactly "---"
+     *     (a "\n---\n" separator, ignoring leading/trailing whitespace on that
+     *     line). No separator => the whole file is one prompt, so the same
+     *     split works for both accuracy and timing runs without branching on
+     *     the mode. Multiple prompts reset the KV cache between segments.
+     * Each separator line is overwritten with a NUL so the preceding segment
+     * ends there; `prompts` points into prompt_buf and is freed here. */
+    const char** prompts   = NULL;
+    int32_t      n_prompts = 1;
+    if (o->prompt_buf) {
+        /* Upper bound: one more segment than newlines. */
+        int32_t cap = 1;
+        for (char* p = o->prompt_buf; *p; ++p)
+            if (*p == '\n') cap++;
+        prompts   = (const char**)malloc((size_t)cap * sizeof(char*));
+        n_prompts = 0;
 
-        if (o->reset_between_runs) {
-            check(geniex_llm_reset(llm), "geniex_llm_reset");
+        char* seg = o->prompt_buf; /* start of the current segment, NULL at EOF */
+        for (char* line = o->prompt_buf; line;) {
+            char* nl = strchr(line, '\n');
+            if (nl) *nl = '\0'; /* isolate this line for the separator test */
+
+            /* Is `line` exactly "---" once surrounding whitespace is ignored? */
+            char* t = line;
+            while (*t == ' ' || *t == '\t' || *t == '\r') t++;
+            rstrip(t);
+            bool is_sep = (strcmp(t, "---") == 0);
+
+            if (is_sep) {
+                /* End the preceding segment. When it spans real lines (seg <
+                 * line) terminate at the newline before this separator so the
+                 * trailing "\n" is dropped; an empty segment (seg == line, e.g.
+                 * a leading or back-to-back separator) collapses to "". */
+                if (line > seg)
+                    line[-1] = '\0';
+                else if (seg)
+                    *seg = '\0';
+                append_prompt_if_nonempty(prompts, &n_prompts, seg);
+                seg = nl ? nl + 1 : NULL;
+            } else if (nl) {
+                *nl = '\n'; /* not a separator: restore so segment text is intact */
+            }
+            line = nl ? nl + 1 : NULL;
         }
-
-        geniex_LlmGenerateInput  gin;
-        geniex_LlmGenerateOutput gout;
-        memset(&gin, 0, sizeof(gin));
-        memset(&gout, 0, sizeof(gout));
-        if (o->prompt_buf) {
-            gin.prompt_utf8 = o->prompt_buf;
-        } else {
-            gin.input_ids       = tokens;
-            gin.input_ids_count = o->n_prompt;
-        }
-        gin.config   = &gconfig;
-        gin.on_token = on_token;
-
-        int32_t rc = geniex_llm_generate(llm, &gin, &gout);
-        if (rc != GENIEX_SUCCESS) {
-            const char* msg = geniex_get_error_message((geniex_ErrorCode)rc);
-            fprintf(stderr, "ERROR: geniex_llm_generate run %d failed: %s (%d)\n", run_idx, msg ? msg : "?", rc);
+        /* Trailing segment (the whole file when there is no "---"). */
+        append_prompt_if_nonempty(prompts, &n_prompts, seg);
+        if (n_prompts == 0) {
+            fprintf(stderr, "ERROR: --prompt-file has no non-empty prompts\n");
+            free(prompts);
             free(tokens);
             geniex_llm_destroy(llm);
             exit(1);
         }
+    } else {
+        prompts    = (const char**)malloc(sizeof(char*));
+        prompts[0] = NULL; /* random-ids */
+    }
 
-        if (!is_warmup) {
-            run_result_t* r = &out[run_idx];
-            memset(r, 0, sizeof(*r));
-            r->run_idx        = run_idx;
-            r->ttft_us        = gout.profile_data.ttft;
-            r->prompt_time_us = gout.profile_data.prompt_time;
-            r->decode_time_us = gout.profile_data.decode_time;
-            r->prompt_tokens  = gout.profile_data.prompt_tokens;
-            r->gen_tokens     = gout.profile_data.generated_tokens;
-            r->prefill_tps    = gout.profile_data.prefill_speed;
-            r->decode_tps     = gout.profile_data.decoding_speed;
-            r->stop_reason    = gout.profile_data.stop_reason;
-            r->status         = 0;
-            normalize_prefill_metrics(r, o->plugin);
+    int32_t total = o->warmup + o->repeat;
+    for (int32_t pi = 0; pi < n_prompts; ++pi) {
+        const char* cur_prompt = prompts[pi];
+        if (n_prompts > 1) {
+            fprintf(stdout, "[sep ] prompt %d/%d\n", pi + 1, n_prompts);
         }
+        for (int32_t i = 0; i < total; ++i) {
+            bool    is_warmup = (i < o->warmup);
+            int32_t run_idx   = is_warmup ? i : (i - o->warmup);
 
-        if (!is_warmup && o->accuracy && gout.full_text) {
-            print_gen_text(gout.full_text);
-        }
-        if (gout.full_text) {
-            geniex_free(gout.full_text);
+            /* Reset before each run (llama-bench semantics) OR always at the
+             * start of a new prompt segment, so batched prompts never inherit
+             * the previous segment's KV cache even under
+             * --no-reset-between-runs. */
+            if (o->reset_between_runs || (n_prompts > 1 && i == 0)) {
+                check(geniex_llm_reset(llm), "geniex_llm_reset");
+            }
+
+            geniex_LlmGenerateInput  gin;
+            geniex_LlmGenerateOutput gout;
+            memset(&gin, 0, sizeof(gin));
+            memset(&gout, 0, sizeof(gout));
+            if (cur_prompt) {
+                gin.prompt_utf8 = cur_prompt;
+            } else {
+                gin.input_ids       = tokens;
+                gin.input_ids_count = o->n_prompt;
+            }
+            gin.config   = &gconfig;
+            gin.on_token = on_token;
+
+            int32_t rc = geniex_llm_generate(llm, &gin, &gout);
+            if (rc != GENIEX_SUCCESS) {
+                const char* msg = geniex_get_error_message((geniex_ErrorCode)rc);
+                fprintf(stderr, "ERROR: geniex_llm_generate run %d failed: %s (%d)\n", run_idx, msg ? msg : "?", rc);
+                free(tokens);
+                geniex_llm_destroy(llm);
+                exit(1);
+            }
+
+            if (!is_warmup) {
+                run_result_t* r = &out[run_idx];
+                memset(r, 0, sizeof(*r));
+                r->run_idx        = run_idx;
+                r->ttft_us        = gout.profile_data.ttft;
+                r->media_us       = gout.profile_data.media_time;
+                r->prompt_time_us = gout.profile_data.prompt_time;
+                r->decode_time_us = gout.profile_data.decode_time;
+                r->prompt_tokens  = gout.profile_data.prompt_tokens;
+                r->gen_tokens     = gout.profile_data.generated_tokens;
+                r->prefill_tps    = gout.profile_data.prefill_speed;
+                r->decode_tps     = gout.profile_data.decoding_speed;
+                r->stop_reason    = gout.profile_data.stop_reason;
+                r->status         = 0;
+                normalize_prefill_metrics(r, o->plugin);
+            }
+
+            if (!is_warmup && o->accuracy && gout.full_text) {
+                print_gen_text(gout.full_text);
+            }
+            if (!is_warmup && gout.profile_data.draft_n_total > 0) {
+                fprintf(stderr,
+                    "[spec] draft acceptance = %.5f (%lld accepted / %lld generated)\n",
+                    (double)gout.profile_data.draft_n_accepted / (double)gout.profile_data.draft_n_total,
+                    (long long)gout.profile_data.draft_n_accepted,
+                    (long long)gout.profile_data.draft_n_total);
+            }
+            if (gout.full_text) {
+                geniex_free(gout.full_text);
+            }
         }
     }
 
+    free(prompts);
     free(tokens);
     check(geniex_llm_destroy(llm), "geniex_llm_destroy");
 }
@@ -1096,7 +1330,6 @@ static void run_llm(const options_t* o, const char* device_id, int32_t ngl, run_
 static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_result_t* out) {
     geniex_VlmCreateInput cin;
     memset(&cin, 0, sizeof(cin));
-    cin.model_name     = "benchmark";
     cin.model_path     = o->model_path;
     cin.mmproj_path    = o->mmproj_path;
     cin.tokenizer_path = o->tokenizer_path;
@@ -1112,74 +1345,130 @@ static void run_vlm(const options_t* o, const char* device_id, int32_t ngl, run_
     fill_sampler(&sampler, o);
     fill_gen_config(&gconfig, &sampler, o, /*with_media=*/true);
 
+    const char** prompts   = NULL;
+    int32_t      n_prompts = 1;
+    if (o->prompt_buf) {
+        /* --prompt-file: feed the file content verbatim, same as the LLM loop.
+         * Supports "---"-delimited segments. */
+        int32_t cap = 1;
+        for (char* p = o->prompt_buf; *p; ++p)
+            if (*p == '\n') cap++;
+        prompts   = (const char**)malloc((size_t)cap * sizeof(char*));
+        n_prompts = 0;
+
+        char* seg = o->prompt_buf;
+        for (char* line = o->prompt_buf; line;) {
+            char* nl = strchr(line, '\n');
+            if (nl) *nl = '\0';
+            char* t = line;
+            while (*t == ' ' || *t == '\t' || *t == '\r') t++;
+            rstrip(t);
+            bool is_sep = (strcmp(t, "---") == 0);
+            if (is_sep) {
+                if (line > seg)
+                    line[-1] = '\0';
+                else if (seg)
+                    *seg = '\0';
+                append_prompt_if_nonempty(prompts, &n_prompts, seg);
+                seg = nl ? nl + 1 : NULL;
+            } else if (nl) {
+                *nl = '\n';
+            }
+            line = nl ? nl + 1 : NULL;
+        }
+        append_prompt_if_nonempty(prompts, &n_prompts, seg);
+        if (n_prompts == 0) {
+            fprintf(stderr, "ERROR: --prompt-file has no non-empty prompts\n");
+            free(prompts);
+            geniex_vlm_destroy(vlm);
+            exit(1);
+        }
+    } else {
+        prompts    = (const char**)malloc(sizeof(char*));
+        prompts[0] = NULL; /* no --prompt-file: build_vlm_prompt uses VLM_DEFAULT_PROMPT */
+    }
+
     int32_t total = o->warmup + o->repeat;
-    for (int32_t i = 0; i < total; ++i) {
-        bool    is_warmup = (i < o->warmup);
-        int32_t run_idx   = is_warmup ? i : (i - o->warmup);
-        /* VLM generate() takes a fully-templated prompt; run a fixed base
-         * text + media through the bundle's chat template so the image
-         * tokens land right. The LLM path uses random-ids and skips the
-         * tokenizer; the VLM path can't because the chat template needs
-         * real text plus typed content parts. */
-        char* prompt = build_vlm_prompt(vlm, o, VLM_DEFAULT_PROMPT);
-        if (!prompt) {
-            geniex_vlm_destroy(vlm);
-            exit(1);
+    for (int32_t pi = 0; pi < n_prompts; ++pi) {
+        const char* cur_prompt = prompts[pi];
+        if (n_prompts > 1) {
+            fprintf(stdout, "[sep ] prompt %d/%d\n", pi + 1, n_prompts);
         }
+        for (int32_t i = 0; i < total; ++i) {
+            bool    is_warmup = (i < o->warmup);
+            int32_t run_idx   = is_warmup ? i : (i - o->warmup);
 
-        if (o->reset_between_runs) {
-            check(geniex_vlm_reset(vlm), "geniex_vlm_reset");
-        }
+            /* Build the templated prompt once per run.  When --prompt-file
+             * supplies a pre-templated string, use it directly; otherwise run
+             * the fixed default text through the bundle's chat template so the
+             * image tokens are placed correctly. */
+            char*       built_prompt = NULL;
+            const char* final_prompt;
+            if (cur_prompt) {
+                final_prompt = cur_prompt;
+            } else {
+                built_prompt = build_vlm_prompt(vlm, o, VLM_DEFAULT_PROMPT);
+                if (!built_prompt) {
+                    free(prompts);
+                    geniex_vlm_destroy(vlm);
+                    exit(1);
+                }
+                final_prompt = built_prompt;
+            }
 
-        geniex_VlmGenerateInput  gin;
-        geniex_VlmGenerateOutput gout;
-        memset(&gin, 0, sizeof(gin));
-        memset(&gout, 0, sizeof(gout));
-        gin.prompt_utf8 = prompt;
-        gin.config      = &gconfig;
-        gin.on_token    = on_token;
+            /* VLM must reset between runs: the image is consumed into the KV
+             * cache on the first generate() call, so a second call re-sends an
+             * already-processed prompt and generates nothing. */
+            if (o->reset_between_runs) {
+                check(geniex_vlm_reset(vlm), "geniex_vlm_reset");
+            }
 
-        int32_t rc = geniex_vlm_generate(vlm, &gin, &gout);
-        if (rc != GENIEX_SUCCESS) {
-            const char* msg = geniex_get_error_message((geniex_ErrorCode)rc);
-            fprintf(stderr, "ERROR: geniex_vlm_generate run %d failed: %s (%d)\n", run_idx, msg ? msg : "?", rc);
-            geniex_free(prompt);
-            geniex_vlm_destroy(vlm);
-            exit(1);
-        }
+            geniex_VlmGenerateInput  gin;
+            geniex_VlmGenerateOutput gout;
+            memset(&gin, 0, sizeof(gin));
+            memset(&gout, 0, sizeof(gout));
+            gin.prompt_utf8 = final_prompt;
+            gin.config      = &gconfig;
+            gin.on_token    = on_token;
 
-        if (!is_warmup) {
-            run_result_t* r = &out[run_idx];
-            memset(r, 0, sizeof(*r));
-            r->run_idx        = run_idx;
-            r->ttft_us        = gout.profile_data.ttft;
-            r->prompt_time_us = gout.profile_data.prompt_time;
-            r->decode_time_us = gout.profile_data.decode_time;
-            r->prompt_tokens  = gout.profile_data.prompt_tokens;
-            r->gen_tokens     = gout.profile_data.generated_tokens;
-            r->prefill_tps    = gout.profile_data.prefill_speed;
-            r->decode_tps     = gout.profile_data.decoding_speed;
-            r->stop_reason    = gout.profile_data.stop_reason;
-            r->status         = 0;
-            normalize_prefill_metrics(r, o->plugin);
-        }
+            int32_t rc = geniex_vlm_generate(vlm, &gin, &gout);
+            if (rc != GENIEX_SUCCESS) {
+                const char* msg = geniex_get_error_message((geniex_ErrorCode)rc);
+                fprintf(stderr, "ERROR: geniex_vlm_generate run %d failed: %s (%d)\n", run_idx, msg ? msg : "?", rc);
+                if (built_prompt) geniex_free(built_prompt);
+                free(prompts);
+                geniex_vlm_destroy(vlm);
+                exit(1);
+            }
 
-        if (!is_warmup && o->accuracy && gout.full_text) {
-            print_gen_text(gout.full_text);
-        }
-        if (gout.full_text) {
-            geniex_free(gout.full_text);
-        }
-        geniex_free(prompt);
-        /* Unlike the LLM loop, VLM must reset between runs: the image is
-         * attached to the first message and consumed into the KV cache, so a
-         * second run with the same history re-sends an already-processed
-         * prompt and generates nothing (prompt_tokens=0, immediate eos). */
-        if (i + 1 < total) {
-            check(geniex_vlm_reset(vlm), "geniex_vlm_reset");
+            if (!is_warmup) {
+                run_result_t* r = &out[run_idx];
+                memset(r, 0, sizeof(*r));
+                r->run_idx        = run_idx;
+                r->ttft_us        = gout.profile_data.ttft;
+                r->media_us       = gout.profile_data.media_time;
+                r->prompt_time_us = gout.profile_data.prompt_time;
+                r->decode_time_us = gout.profile_data.decode_time;
+                r->prompt_tokens  = gout.profile_data.prompt_tokens;
+                r->gen_tokens     = gout.profile_data.generated_tokens;
+                r->prefill_tps    = gout.profile_data.prefill_speed;
+                r->decode_tps     = gout.profile_data.decoding_speed;
+                r->stop_reason    = gout.profile_data.stop_reason;
+                r->status         = 0;
+                normalize_prefill_metrics(r, o->plugin);
+            }
+
+            if (!is_warmup && o->accuracy && gout.full_text) {
+                print_gen_text(gout.full_text);
+            }
+            if (gout.full_text) {
+                geniex_free(gout.full_text);
+            }
+            if (built_prompt) geniex_free(built_prompt);
         }
     }
 
+    free(prompts);
     check(geniex_vlm_destroy(vlm), "geniex_vlm_destroy");
 }
 
@@ -1191,6 +1480,7 @@ typedef struct {
     double decode_med, decode_lo, decode_hi, decode_mean, decode_sd;
     double gen_tokens_med;
     double prompt_tokens_med;
+    double media_ms_med;
 } agg_t;
 
 static void aggregate(const run_result_t* runs, int n, agg_t* a) {
@@ -1214,6 +1504,9 @@ static void aggregate(const run_result_t* runs, int n, agg_t* a) {
     for (int i = 0; i < n; ++i) tmp[i] = (double)runs[i].prompt_tokens;
     summarize(tmp, n, &med, &lo, &hi);
     a->prompt_tokens_med = med;
+    for (int i = 0; i < n; ++i) tmp[i] = (double)runs[i].media_us / 1000.0;
+    summarize(tmp, n, &med, &lo, &hi);
+    a->media_ms_med = med;
     free(tmp);
 }
 
@@ -1290,7 +1583,7 @@ static void write_json(const options_t* o, const char* device_id, int32_t ngl, i
         exit(1);
     }
     fprintf(f, "{\n");
-    json_field_str(f, "schema_version", "3", false);
+    json_field_str(f, "schema_version", "4", false);
     json_field_str(f, "cell_id", o->cell_id ? o->cell_id : "cell", false);
     json_field_str(f, "plugin", o->plugin, false);
     json_field_str(f, "device", o->device, false);
@@ -1302,7 +1595,7 @@ static void write_json(const options_t* o, const char* device_id, int32_t ngl, i
     fprintf(f, "    \"params\": {\n");
     fprintf(f,
         "      \"warmup\": %d, \"repetitions\": %d, \"n_prompt\": %d, \"n_gen\": %d,\n"
-        "      \"temperature\": %.6f, \"seed\": %d, \"n_ctx\": %d, \"n_threads\": %d, \"n_gpu_layers\": %d\n",
+        "      \"temperature\": %.6f, \"seed\": %d, \"n_ctx\": %d, \"n_threads\": %d, \"n_gpu_layers\": %d",
         o->warmup,
         o->repeat,
         o->n_prompt,
@@ -1312,22 +1605,33 @@ static void write_json(const options_t* o, const char* device_id, int32_t ngl, i
         o->n_ctx,
         o->n_threads,
         ngl);
-    fprintf(f, "    },\n");
+    if (o->spec_type) {
+        fprintf(f, ",\n      \"spec_type\": ");
+        json_write_quoted(f, o->spec_type);
+        if (o->draft_model) {
+            fprintf(f, ",\n      \"draft_model\": ");
+            json_write_quoted(f, o->draft_model);
+        }
+        fprintf(f, ",\n      \"draft_tokens\": %d", o->draft_tokens);
+    }
+    fprintf(f, "\n    },\n");
     fprintf(f, "    \"runs\": [\n");
     for (int i = 0; i < o->repeat; ++i) {
         const run_result_t* r = &runs[i];
         fprintf(f,
-            "      {\"run_idx\": %d, \"ttft_us\": %lld, \"prompt_tokens\": %lld, "
-            "\"gen_tokens\": %lld, \"prefill_tps\": %.6f, \"decode_tps\": %.6f, "
-            "\"prompt_time_us\": %lld, \"decode_time_us\": %lld, \"stop_reason\": %s%s%s}%s\n",
+            "      {\"run_idx\": %d, \"ttft_us\": %lld, \"media_us\": %lld, "
+            "\"prompt_time_us\": %lld, \"decode_time_us\": %lld, "
+            "\"prompt_tokens\": %lld, \"gen_tokens\": %lld, "
+            "\"prefill_tps\": %.6f, \"decode_tps\": %.6f, \"stop_reason\": %s%s%s}%s\n",
             r->run_idx,
             (long long)r->ttft_us,
+            (long long)r->media_us,
+            (long long)r->prompt_time_us,
+            (long long)r->decode_time_us,
             (long long)r->prompt_tokens,
             (long long)r->gen_tokens,
             r->prefill_tps,
             r->decode_tps,
-            (long long)r->prompt_time_us,
-            (long long)r->decode_time_us,
             r->stop_reason ? "\"" : "null",
             r->stop_reason ? r->stop_reason : "",
             r->stop_reason ? "\"" : "",
@@ -1357,12 +1661,63 @@ static void write_json(const options_t* o, const char* device_id, int32_t ngl, i
         a->decode_mean,
         a->decode_sd);
     fprintf(f, "      \"gen_tokens\":  {\"median\": %.6f},\n", a->gen_tokens_med);
-    fprintf(f, "      \"prompt_tokens\":{\"median\": %.6f}\n", a->prompt_tokens_med);
+    fprintf(f, "      \"prompt_tokens\":{\"median\": %.6f},\n", a->prompt_tokens_med);
+    fprintf(f, "      \"media_ms\":{\"median\": %.6f}\n", a->media_ms_med);
     fprintf(f, "    }\n");
     fprintf(f, "}\n");
     fclose(f);
     /* keep static-analysis happy */
     (void)json_field_dbl;
+}
+
+/* Write one row of the SDK's top-N output as a JSON array of [token_id, logit]
+ * pairs. The SDK already selected and sorted the top-N (descending logit), so
+ * this just formats row_width pairs. */
+static void write_top_n_row(FILE* f, const int32_t* ids, const float* logits, int32_t row_width) {
+    fputc('[', f);
+    for (int32_t k = 0; k < row_width; ++k) {
+        fprintf(f, "%s[%d, %.6f]", k ? ", " : "", ids[k], logits[k]);
+    }
+    fputc(']', f);
+}
+
+/* Write the prefill-only logits report for --logits. Emits shape metadata plus,
+ * per row, the top-N [token_id, logit] pairs. Records the top-N truncation
+ * explicitly so a consumer never mistakes it for the full vocabulary. */
+static void write_logits_json(const options_t* o, const char* device_id, int32_t ngl,
+    const geniex_LlmForwardLogitsInput* fin, const geniex_LlmForwardLogitsOutput* fout) {
+    FILE* f = fopen(o->output_json, "w");
+    if (!f) {
+        fprintf(stderr, "ERROR: cannot open %s for write\n", o->output_json);
+        exit(1);
+    }
+    const bool truncated = fout->row_width < fout->vocab_size;
+
+    fprintf(f, "{\n");
+    json_field_str(f, "schema_version", "logits-1", false);
+    json_field_str(f, "cell_id", o->cell_id ? o->cell_id : "cell", false);
+    json_field_str(f, "plugin", o->plugin, false);
+    json_field_str(f, "device", o->device, false);
+    json_field_str(f, "device_id", device_id, false);
+    json_field_str(f, "model_path", o->model_path, false);
+    json_field_i64(f, "n_gpu_layers", ngl, false);
+    json_field_i64(f, "n_prompt", fin->input_ids_count, false);
+    fprintf(f, "    \"all_positions\": %s,\n", fin->all_positions ? "true" : "false");
+    json_field_i64(f, "n_rows", fout->n_rows, false);
+    json_field_i64(f, "vocab_size", fout->vocab_size, false);
+    json_field_i64(f, "top_n", fout->row_width, false);
+    fprintf(f, "    \"truncated_to_top_n\": %s,\n", truncated ? "true" : "false");
+
+    fprintf(f, "    \"rows\": [\n");
+    for (int32_t r = 0; r < fout->n_rows; ++r) {
+        const size_t off = (size_t)r * fout->row_width;
+        fprintf(f, "      ");
+        write_top_n_row(f, fout->token_ids + off, fout->logits + off, fout->row_width);
+        fprintf(f, r + 1 < fout->n_rows ? ",\n" : "\n");
+    }
+    fprintf(f, "    ]\n");
+    fprintf(f, "}\n");
+    fclose(f);
 }
 
 /* Trim the `-{plugin}-{device}[-c{N}]` tail from a cell_id; falls back to the
@@ -1425,8 +1780,10 @@ static void write_md_row(const options_t* o, int32_t ngl, int64_t model_size_byt
     }
     if (first) {
         fprintf(f,
-            "| Model | Size | Backend | Device | ngl | Test | TTFT (ms) | Prefill (tok/s) | Decode (tok/s) |\n"
-            "|-------|-----:|---------|--------|----:|------|----------:|----------------:|---------------:|\n");
+            "| Model | Size | Backend | Device | ngl | Test | TTFT (ms) | Media enc (ms) | Prefill (tok/s) | "
+            "Decode (tok/s) |\n"
+            "|-------|-----:|---------|--------|----:|------|----------:|---------------:|----------------:|"
+            "---------------:|\n");
     }
 
     char  size_buf[32];
@@ -1442,8 +1799,14 @@ static void write_md_row(const options_t* o, int32_t ngl, int64_t model_size_byt
     snprintf(
         test_buf, sizeof(test_buf), "pp%lld+tg%lld", (long long)a->prompt_tokens_med, (long long)a->gen_tokens_med);
 
+    char media_buf[24];
+    if (a->media_ms_med > 0)
+        snprintf(media_buf, sizeof(media_buf), "%.1f", a->media_ms_med);
+    else
+        snprintf(media_buf, sizeof(media_buf), "-");
+
     fprintf(f,
-        "| %s | %s | %s | %s | %s | %s | %.1f ± %.1f | %.1f ± %.1f | %.1f ± %.1f |\n",
+        "| %s | %s | %s | %s | %s | %s | %.1f ± %.1f | %s | %.1f ± %.1f | %.1f ± %.1f |\n",
         model ? model : (o->cell_id ? o->cell_id : "cell"),
         size_buf,
         o->plugin,
@@ -1452,12 +1815,99 @@ static void write_md_row(const options_t* o, int32_t ngl, int64_t model_size_byt
         test_buf,
         a->ttft_ms_med,
         a->ttft_ms_sd,
+        media_buf,
         a->prefill_med,
         a->prefill_sd,
         a->decode_med,
         a->decode_sd);
     free(model);
     fclose(f);
+}
+
+/* --logits mode: prefill-only raw logits, no timing. Runs one forward pass over
+ * `o->n_prompt` random token ids and writes the top-N (token_id, logit) pairs
+ * per row to `o->output_json`. Bypasses run_llm's warmup/repeat/aggregate path.
+ * The forward-logits API takes input_ids only, so this is random-ids input
+ * (bench has no tokenizer). */
+static void run_logits(const options_t* o, const char* device_id, int32_t ngl) {
+    geniex_LlmCreateInput cin;
+    memset(&cin, 0, sizeof(cin));
+    cin.model_path     = o->model_path;
+    cin.tokenizer_path = o->tokenizer_path; /* may be NULL */
+    cin.plugin_id      = o->plugin;
+    cin.device_id      = device_id; /* may be NULL */
+    fill_model_config(&cin.config, o, ngl);
+
+    geniex_LLM* llm = NULL;
+    check(geniex_llm_create(&cin, &llm), "geniex_llm_create");
+
+    geniex_LlmModelInfo info;
+    int32_t             rc_info = geniex_llm_get_model_info(llm, &info);
+    if (rc_info != GENIEX_SUCCESS || info.vocab_size <= 0) {
+        const char* msg = geniex_get_error_message((geniex_ErrorCode)rc_info);
+        fprintf(stderr,
+            "ERROR: %s plugin does not support random-ids prefill required by --logits "
+            "(geniex_llm_get_model_info: %s, code=%d).\n",
+            o->plugin,
+            msg ? msg : "?",
+            rc_info);
+        geniex_llm_destroy(llm);
+        exit(1);
+    }
+
+    int32_t* tokens = (int32_t*)malloc((size_t)o->n_prompt * sizeof(int32_t));
+    if (!tokens) {
+        fprintf(stderr, "ERROR: oom allocating %d prompt tokens\n", o->n_prompt);
+        geniex_llm_destroy(llm);
+        exit(1);
+    }
+    srand((unsigned)o->seed);
+    for (int32_t k = 0; k < o->n_prompt; ++k) {
+        tokens[k] = (int32_t)(rand() % info.vocab_size);
+    }
+    if (info.add_bos && info.bos_token >= 0 && o->n_prompt > 0) {
+        tokens[0] = info.bos_token;
+    }
+
+    geniex_LlmForwardLogitsInput  fin;
+    geniex_LlmForwardLogitsOutput fout;
+    memset(&fin, 0, sizeof(fin));
+    memset(&fout, 0, sizeof(fout));
+    fin.input_ids       = tokens;
+    fin.input_ids_count = o->n_prompt;
+    fin.all_positions   = !o->logits_last_only;
+    fin.top_n           = o->logits_top_n;
+
+    int32_t rc = geniex_llm_forward_logits(llm, &fin, &fout);
+    if (rc != GENIEX_SUCCESS) {
+        const char* msg = geniex_get_error_message((geniex_ErrorCode)rc);
+        fprintf(stderr, "ERROR: geniex_llm_forward_logits failed: %s (%d)\n", msg ? msg : "?", rc);
+        free(tokens);
+        geniex_llm_destroy(llm);
+        exit(1);
+    }
+
+    fprintf(stdout,
+        "[ok  ] %s  plugin=%s device=%s ngl=%d logits n_rows=%d vocab=%d top_n=%d%s\n",
+        o->cell_id ? o->cell_id : "cell",
+        o->plugin,
+        o->device,
+        ngl,
+        fout.n_rows,
+        fout.vocab_size,
+        fout.row_width,
+        fout.row_width < fout.vocab_size ? " (rows truncated to top_n)" : "");
+
+    if (o->output_json) {
+        write_logits_json(o, device_id, ngl, &fin, &fout);
+    } else {
+        fprintf(stderr, "[warn] --logits without --output-json: logits computed but not written\n");
+    }
+
+    geniex_free(fout.logits);
+    geniex_free(fout.token_ids);
+    free(tokens);
+    geniex_llm_destroy(llm);
 }
 
 /* ----------------------------- main ----------------------------- */
@@ -1483,16 +1933,18 @@ static int run_one_cell(options_t* o) {
         o->force_vlm = true;
     }
 
+    if (resolve_draft_via_mm(o) != 0) {
+        return 1;
+    }
+
     char* anchored = resolve_local_anchor(o->model_path);
     if (anchored) {
         fprintf(stderr, "[info] resolved model dir to anchor: %s\n", anchored);
         o->model_path = anchored;
     }
 
-    /* Device-alias resolution. ngl_default=-1 is the sentinel `auto.py` uses
-     * to distinguish "SDK forced a value" (cpu→0, hybrid→999) from "alias
-     * passed through". Treat -1 as "leave n_gpu_layers at its plugin default
-     * (0)". */
+    /* Device-alias resolution. ngl_default=-1 means "all layers" to
+     * llama.cpp (cpu and qairt are forced to 0 by the SDK). */
     geniex_ResolveDeviceInput rin;
     memset(&rin, 0, sizeof(rin));
     rin.plugin_id   = o->plugin;
@@ -1510,10 +1962,8 @@ static int run_one_cell(options_t* o) {
         fprintf(stderr, "[warn] %s\n", rout.warning);
     }
     const char* device_id = o->device_id ? o->device_id : rout.device_id;
-    int32_t     ngl       = (rout.ngl == -1) ? 0 : rout.ngl;
-    /* --n-gpu-layers overrides the alias default. The gpu alias resolves
-     * device_id but no ngl, so a high --n-gpu-layers is what actually
-     * offloads layers to the GPU. */
+    int32_t     ngl       = rout.ngl;
+    /* --n-gpu-layers overrides the resolved value. */
     if (o->ngl_override >= 0) {
         ngl = o->ngl_override;
     }
@@ -1525,6 +1975,41 @@ static int run_one_cell(options_t* o) {
         o->n_ctx = 0;
     }
 
+    bool is_vlm = (o->mmproj_path != NULL) || o->force_vlm;
+
+    /* --logits is a prefill-only forward pass, not a timing run: it skips the
+     * warmup/repeat/aggregate machinery and writes its own report. LLM only. */
+    if (o->logits_mode) {
+        if (is_vlm) {
+            fprintf(stderr, "ERROR: --logits is not supported for VLM models\n");
+            if (anchored) free(anchored);
+            if (rout.device_id) geniex_free(rout.device_id);
+            if (rout.warning) geniex_free(rout.warning);
+            return 1;
+        }
+        run_logits(o, device_id, ngl);
+        if (anchored) free(anchored);
+        if (rout.device_id) geniex_free(rout.device_id);
+        if (rout.warning) geniex_free(rout.warning);
+        if (o->mm_model_path) {
+            geniex_free(o->mm_model_path);
+            o->mm_model_path = NULL;
+        }
+        if (o->mm_mmproj) {
+            geniex_free(o->mm_mmproj);
+            o->mm_mmproj = NULL;
+        }
+        if (o->mm_tokenizer) {
+            geniex_free(o->mm_tokenizer);
+            o->mm_tokenizer = NULL;
+        }
+        if (o->mm_draft_model) {
+            geniex_free(o->mm_draft_model);
+            o->mm_draft_model = NULL;
+        }
+        return 0;
+    }
+
     run_result_t* runs = (run_result_t*)calloc((size_t)o->repeat, sizeof(run_result_t));
     if (!runs) {
         fprintf(stderr, "ERROR: oom\n");
@@ -1534,7 +2019,6 @@ static int run_one_cell(options_t* o) {
         return 1;
     }
 
-    bool is_vlm = (o->mmproj_path != NULL) || o->force_vlm;
     if (is_vlm) {
         run_vlm(o, device_id, ngl, runs);
     } else {
@@ -1565,6 +2049,10 @@ static int run_one_cell(options_t* o) {
     if (o->mm_tokenizer) {
         geniex_free(o->mm_tokenizer);
         o->mm_tokenizer = NULL;
+    }
+    if (o->mm_draft_model) {
+        geniex_free(o->mm_draft_model);
+        o->mm_draft_model = NULL;
     }
     return 0;
 }

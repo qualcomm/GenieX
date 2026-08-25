@@ -6,7 +6,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -27,8 +30,12 @@ import (
 )
 
 const (
-	githubAPIURL = "https://api.github.com/repos/qualcomm/GenieX/releases/latest"
-	userAgent    = "GenieX-Updater/1.0"
+	// releaseBaseURL is the S3 prefix holding index.json and the per-version
+	// manifest-<tag>.json files. manifest asset URLs are absolute, so this is
+	// only used to resolve index.json and manifest names.
+	releaseBaseURL = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/"
+	indexURL       = releaseBaseURL + "index.json"
+	userAgent      = "GenieX-Updater/1.0"
 
 	updateCheckInterval  = 24 * time.Hour
 	notificationInterval = 8 * time.Hour
@@ -36,28 +43,37 @@ const (
 	defaultChunkSize  = 4 * 1024 * 1024
 	defaultNumWorkers = 16
 
-	linuxInstallScriptURL = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh"
+	linuxInstallScriptURL = releaseBaseURL + "install.sh"
+	windowsSignedURL      = releaseBaseURL + "windows-signed.txt"
 )
 
 func update() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		GroupID: "management",
 		Use:     "update",
 		Short:   "update geniex",
 		Long:    "Update geniex to the latest version",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUpdate(cmd, args)
+			silent, _ := cmd.Flags().GetBool("silent")
+			return runUpdate(silent)
 		},
 	}
+	cmd.Flags().Bool("silent", false, "run the installer silently (no prompts or progress UI)")
+	return cmd
 }
 
-func runUpdate(_ *cobra.Command, _ []string) error {
-	rls, err := getLastRelease()
+func runUpdate(silent bool) error {
+	latest, err := getLatestVersion()
 	if err != nil {
 		return err
 	}
 
-	latest := rls.Name
+	// Refresh the cache so other commands' notify banner matches this result.
+	ck := getUpdateCheck()
+	ck.LastCheck = time.Now()
+	ck.LatestVersion = latest
+	setUpdateCheck(ck)
+
 	cmp, err := compareVersion(Version, latest)
 	if err != nil {
 		return err
@@ -80,16 +96,23 @@ func runUpdate(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("auto-update is not supported on %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 
-	assetName := fmt.Sprintf("geniex-cli-setup-windows-%s-%s.exe", runtime.GOARCH, latest)
-	var ast asset
-	for _, a := range rls.Assets {
-		if a.Name == assetName {
-			ast = a
-			break
-		}
+	// Skip until the published installer is code-signed.
+	signed, err := isWindowsSigned()
+	if err != nil {
+		return err
 	}
-	if ast.Name == "" {
-		return fmt.Errorf("asset %s not found in release", assetName)
+	if !signed {
+		fmt.Println("Already up-to-date.")
+		return nil
+	}
+
+	mf, err := getManifest(latest)
+	if err != nil {
+		return err
+	}
+	ast, err := mf.find("cli-installer", "windows", runtime.GOARCH)
+	if err != nil {
+		return err
 	}
 
 	fmt.Println(
@@ -100,7 +123,7 @@ func runUpdate(_ *cobra.Command, _ []string) error {
 
 	dst := filepath.Join(os.TempDir(), ast.Name)
 	progress := make(chan int64)
-	bar := render.NewProgressBar(int64(ast.Size), "downloading")
+	bar := render.NewProgressBar(int64(ast.Size), 0, "downloading")
 
 	var dlErr error
 	go func() {
@@ -114,65 +137,140 @@ func runUpdate(_ *cobra.Command, _ []string) error {
 		return dlErr
 	}
 
-	if err := exec.Command(dst).Start(); err != nil {
+	if err := verifySHA256(dst, ast.SHA256); err != nil {
+		return err
+	}
+
+	var installArgs []string
+	if silent {
+		installArgs = []string{"/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"}
+	}
+	// dst is a local file downloaded from the official release S3 bucket and
+	// verified against its published SHA256 above, so executing it is safe.
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command
+	if err := exec.Command(dst, installArgs...).Start(); err != nil {
 		return err
 	}
 	fmt.Println("update package is ready to install")
 	return nil
 }
 
-// GitHub release API
+// S3 release index & manifests
 
-// Release `name` is the display version (e.g. "v0.1.4"). We prefer it over
-// `tag_name` because releases published without a git tag surface a synthetic
-// `tag_name` like "untagged-<sha>".
-type release struct {
-	Name   string  `json:"name"`
+// index is the top-level S3 manifest listing every published version.
+type index struct {
+	LatestStable string `json:"latest_stable"`
+}
+
+// manifest describes the downloadable assets for one version.
+type manifest struct {
+	Tag    string  `json:"tag"`
 	Assets []asset `json:"assets"`
 }
 
 type asset struct {
-	// URL is the GitHub API endpoint. Use it (with Accept:
-	// application/octet-stream) for private repos — browser_download_url
-	// 404s when the release was published without a real git tag.
-	URL    string `json:"url"`
-	Name   string `json:"name"`
-	Size   int    `json:"size"`
-	Digest string `json:"digest"`
+	Name     string `json:"name"`
+	URL      string `json:"url"`
+	Size     int    `json:"size"`
+	SHA256   string `json:"sha256"`
+	Kind     string `json:"kind"`
+	Platform string `json:"platform"`
+	Arch     string `json:"arch"`
 }
 
-// resolveGitHubToken returns a PAT for authenticating the release-lookup call.
-// geniex's own var wins over the generic one used by gh / CI.
-func resolveGitHubToken() string {
-	if t := os.Getenv("GENIEX_GITHUB_TOKEN"); t != "" {
-		return t
+// find returns the asset matching kind/platform/arch, or an error if none.
+func (m manifest) find(kind, platform, arch string) (asset, error) {
+	for _, a := range m.Assets {
+		if a.Kind == kind && a.Platform == platform && a.Arch == arch {
+			return a, nil
+		}
 	}
-	return os.Getenv("GITHUB_TOKEN")
+	return asset{}, fmt.Errorf("no %s asset for %s/%s in release %s", kind, platform, arch, m.Tag)
 }
 
-func getLastRelease() (release, error) {
-	var rls release
-
-	req, err := http.NewRequest("GET", githubAPIURL, nil)
+// fetchJSON GETs url and decodes the JSON body into v.
+func fetchJSON(url string, v any) error {
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return rls, err
+		return err
 	}
 	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	if tok := resolveGitHubToken(); tok != "" {
-		req.Header.Set("Authorization", "Bearer "+tok)
-	}
 
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
-		return rls, err
+		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return rls, fmt.Errorf("get latest release failed: %d", resp.StatusCode)
+		return fmt.Errorf("get %s failed: %d", url, resp.StatusCode)
 	}
-	return rls, sonic.ConfigDefault.NewDecoder(resp.Body).Decode(&rls)
+	return sonic.ConfigDefault.NewDecoder(resp.Body).Decode(v)
+}
+
+// getLatestVersion returns the latest stable version tag from the S3 index.
+func getLatestVersion() (string, error) {
+	var idx index
+	if err := fetchJSON(indexURL, &idx); err != nil {
+		return "", err
+	}
+	if idx.LatestStable == "" {
+		return "", fmt.Errorf("no stable release found in index")
+	}
+	return idx.LatestStable, nil
+}
+
+// getManifest fetches the per-version asset manifest for tag.
+func getManifest(tag string) (manifest, error) {
+	var mf manifest
+	url := releaseBaseURL + "manifest-" + tag + ".json"
+	if err := fetchJSON(url, &mf); err != nil {
+		return mf, err
+	}
+	return mf, nil
+}
+
+// isWindowsSigned reports whether windows-signed.txt on S3 contains "true".
+func isWindowsSigned() (bool, error) {
+	req, err := http.NewRequest("GET", windowsSignedURL, nil)
+	if err != nil {
+		return false, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, nil
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, err
+	}
+	return strings.EqualFold(strings.TrimSpace(string(body)), "true"), nil
+}
+
+// verifySHA256 checks that the file at path matches the expected hex digest.
+func verifySHA256(path, expected string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+	got := hex.EncodeToString(h.Sum(nil))
+	if !strings.EqualFold(got, expected) {
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", expected, got)
+	}
+	return nil
 }
 
 // compareVersion compares two SemVer strings.
@@ -213,8 +311,6 @@ func downloadPkg(url, dst string, size int64, progress chan int64) error {
 	g, ctx := errgroup.WithContext(context.Background())
 	g.SetLimit(numWorkers)
 	dl := downloader.NewDownloader()
-	dl.AuthToken = resolveGitHubToken()
-	dl.Headers = map[string]string{"Accept": "application/octet-stream"}
 
 	for offset := int64(0); offset < size; offset += chunkSize {
 		offset := offset
@@ -272,14 +368,14 @@ func checkUpdate() {
 		return
 	}
 
-	rls, err := getLastRelease()
+	latest, err := getLatestVersion()
 	if err != nil {
 		slog.Debug("update check failed", "error", err)
 		return
 	}
 
 	ck.LastCheck = time.Now()
-	ck.LatestVersion = rls.Name
+	ck.LatestVersion = latest
 	setUpdateCheck(ck)
 }
 

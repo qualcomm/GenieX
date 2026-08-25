@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 	"github.com/qualcomm/GenieX/cli/internal/render"
@@ -43,6 +45,8 @@ func resolveHub() (geniex_sdk.HubSource, error) {
 		return geniex_sdk.HubAIHub, nil
 	case "hf", "huggingface":
 		return geniex_sdk.HubHuggingFace, nil
+	case "docker", "dockerhub":
+		return geniex_sdk.HubDocker, nil
 	case "local", "localfs":
 		if localPath == "" {
 			return 0, fmt.Errorf("local path is required for localfs model hub")
@@ -59,14 +63,16 @@ func pull() *cobra.Command {
 		GroupID: "model",
 		Use:     "pull <model-name>[:<precision>]",
 
-		Short: "Pull model from HuggingFace or Qualcomm AI Hub Models",
-		Long:  "Download and cache a model by name. Append ':<precision>' to pull a specific precision; otherwise you'll be prompted to choose one.",
+		Short: "Pull model from HuggingFace, Qualcomm AI Hub Models, or Docker Hub",
+		Long: "Download and cache a model by name. Append ':<precision>' to pull a specific precision; otherwise you'll be prompted to choose one.\n\n" +
+			"Docker Hub models (e.g. docker.io/ai/gemma3, or ai/gemma3 with --model-hub docker) " +
+			"use ':<tag>' instead of a precision — omit it to pull the 'latest' tag.",
 	}
 
 	pullCmd.Args = cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs)
 
 	pullCmd.Flags().SortFlags = false
-	pullCmd.Flags().StringVarP(&modelHub, "model-hub", "", "", "specify model hub to use: aihub|hf|localfs")
+	pullCmd.Flags().StringVarP(&modelHub, "model-hub", "", "", "specify model hub to use: aihub|hf|docker|localfs")
 	pullCmd.Flags().StringVarP(&localPath, "local-path", "", "", "[localfs] path to local directory or aihub zip file")
 	pullCmd.Flags().StringVarP(&modelType, "model-type", "", "", "specify model type to use: [llm|vlm]")
 
@@ -200,6 +206,8 @@ func list() *cobra.Command {
 		case "csv":
 			return printListCSV(models)
 		}
+		fmt.Println(render.GetTheme().Info.Sprintf("Models cached in %s", filepath.Join(store.Get().DataPath(), "models")))
+		fmt.Println()
 		printListTable(models, verbose)
 		return nil
 	}
@@ -305,7 +313,68 @@ func modelCmd() *cobra.Command {
 		Short:   "Manage cached models",
 		Long:    "Commands to manage cached models, including reconfiguring model-specific settings.",
 	}
-	cmd.AddCommand(setTypeCmd())
+	cmd.AddCommand(setTypeCmd(), listHubCmd())
+	return cmd
+}
+
+func printHubTable(models []geniex_sdk.HubModel, showChipsets bool) {
+	tw := table.NewWriter()
+	tw.SetOutputMirror(os.Stdout)
+	tw.SetStyle(table.StyleLight)
+	if showChipsets {
+		tw.AppendHeader(table.Row{"NAME", "TYPE", "CHIPSETS"})
+	} else {
+		tw.AppendHeader(table.Row{"NAME", "TYPE"})
+	}
+	for _, m := range models {
+		if showChipsets {
+			chips := make([]string, len(m.Chipsets))
+			for i, c := range m.Chipsets {
+				chips[i] = strings.TrimPrefix(strings.TrimPrefix(c, "qualcomm-"), "snapdragon-")
+			}
+			tw.AppendRow(table.Row{m.Name, m.ModelType, strings.Join(chips, ", ")})
+		} else {
+			tw.AppendRow(table.Row{m.Name, m.ModelType})
+		}
+	}
+	tw.Render()
+}
+
+func listHubCmd() *cobra.Command {
+	var all bool
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List Qualcomm AI Hub models geniex can run",
+		Long: "List Qualcomm AI Hub models with a qairt (NPU) build.\n\n" +
+			"By default only models compatible with the current device are shown; " +
+			"pass --all to list every model. Names are ready to pull, e.g. " +
+			"'geniex pull qualcomm/Qwen3-4B'.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// "" lists every model; --all skips filtering entirely.
+			var chipset string
+			if !all {
+				c, err := ensureChipset()
+				if err != nil {
+					return err
+				}
+				chipset = c
+			}
+			models, err := geniex_sdk.ModelListHub(chipset)
+			if err != nil {
+				return err
+			}
+			if all {
+				fmt.Println(render.GetTheme().Info.Sprint("Qualcomm AI Hub models geniex can run:"))
+			} else {
+				fmt.Println(render.GetTheme().Info.Sprintf("Qualcomm AI Hub models for %s (use --all to see every model):", chipset))
+			}
+			fmt.Println()
+			// CHIPSETS column only with --all; filtered rows all share one chipset.
+			printHubTable(models, all)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&all, "all", false, "list every model, not just ones compatible with this device")
 	return cmd
 }
 
@@ -359,10 +428,18 @@ func setTypeCmd() *cobra.Command {
 	}
 }
 
-func pullModel(ctx context.Context, name string, quant string) error {
+func pullModel(ctx context.Context, name, quant string) error {
 	slog.Debug("pullModel", "name", name, "quant", quant)
 
 	hub, err := resolveHub()
+	if err != nil {
+		return err
+	}
+	// resolveHub() only sees the --model-hub flag; a prefixed name like
+	// docker.io/... still reads as HubAuto here. Ask the SDK for the hub the
+	// pull will actually use so the skip-precision guard below is correct for
+	// prefix auto-routing too, not just an explicit --model-hub docker.
+	effectiveHub, err := geniex_sdk.ResolveHub(name, hub)
 	if err != nil {
 		return err
 	}
@@ -375,18 +452,9 @@ func pullModel(ctx context.Context, name string, quant string) error {
 		DisplayName: "",
 	}
 
-	// Resolve a chipset before the spinner (the picker can't share the terminal
-	// with one): configured value wins, then a host probe, then an interactive
-	// picker. The SDK decides whether the chipset is actually used for this pull.
-	if chipset, _, _ := store.Get().ConfigGet(store.ConfigKeyChipset); chipset != "" {
-		in.Chipset = chipset
-	} else if detected, _ := geniex_sdk.ModelDetectChipset(); detected != "" {
-		in.Chipset = detected
-	} else {
-		fmt.Println(render.GetTheme().Info.Sprint("No chipset configured. Please select your chipset first."))
-		if in.Chipset, err = pickChipset(); err != nil {
-			return err
-		}
+	// Resolve before the spinner — the picker can't share the terminal with one.
+	if in.Chipset, err = ensureChipset(); err != nil {
+		return err
 	}
 
 	// Validate --model-type early so we fail before downloading anything, and
@@ -400,8 +468,11 @@ func pullModel(ctx context.Context, name string, quant string) error {
 	}
 
 	// No precision requested: query the remote candidates and let the user
-	// pick (skipped for localfs, which has no remote listing).
-	if quant == "" && hub != geniex_sdk.HubLocalFS {
+	// pick (skipped for localfs, which has no remote listing, and for
+	// Docker Hub, where an empty quant already means "pull the 'latest'
+	// tag" — querying would resolve one tag's manifest and then
+	// mis-feed its GGUF quant label back in as if it were the tag).
+	if quant == "" && effectiveHub != geniex_sdk.HubLocalFS && effectiveHub != geniex_sdk.HubDocker {
 		spin := render.NewSpinner("fetching available precisions from: " + name)
 		spin.Start()
 		q, err := geniex_sdk.ModelQuery(in)
@@ -409,7 +480,23 @@ func pullModel(ctx context.Context, name string, quant string) error {
 		if err != nil {
 			return err
 		}
-		if chosen, err := choosePrecision(q.Candidates); err != nil {
+		// Only the picker hides cached precisions: without a terminal the head
+		// wins, and filtering would make a repeated `geniex pull <model>` walk
+		// the list instead of resolving to the recommended one every time.
+		candidates := q.Candidates
+		if hasTerminal() {
+			cached := cachedPrecisions(name, candidates)
+			if pending := skipDownloaded(candidates, cached); len(pending) > 0 {
+				candidates = pending
+			} else if len(cached) > 0 {
+				// A re-pull still repairs a truncated file or refetches a
+				// requantized or per-chipset bundle (the store is keyed by name).
+				fmt.Println(render.GetTheme().Info.Sprint("Every precision is already downloaded; pick one to re-download."))
+			}
+			slog.Debug("pull precisions", "remote", len(q.Candidates), "cached", cached, "offered", len(candidates))
+		}
+
+		if chosen, err := choosePrecision("Choose a precision version to download", candidates); err != nil {
 			return err
 		} else {
 			in.Precision = chosen
@@ -430,7 +517,7 @@ func pullModel(ctx context.Context, name string, quant string) error {
 			}
 		}
 		if bar == nil {
-			bar = render.NewProgressBar(total, "downloading")
+			bar = render.NewProgressBar(total, downloaded, "downloading")
 		}
 		bar.Set(downloaded)
 		return ctx.Err() == nil
@@ -459,40 +546,86 @@ func pullModel(ctx context.Context, name string, quant string) error {
 	}
 
 	fmt.Println(render.GetTheme().Success.Sprint("✔  Download success"))
+
+	key := name
+	if quant != "" {
+		key = name + ":" + quant
+	}
+	if m, err := geniex_sdk.ModelGetDetailed(name); err == nil && m.TotalSize > 0 {
+		fmt.Println(render.GetTheme().Info.Sprintf("   Size:      %s", humanize.IBytes(uint64(m.TotalSize))))
+	}
+	if paths, err := geniex_sdk.ModelGetPaths(key); err == nil && paths.ModelPath != "" {
+		fmt.Println(render.GetTheme().Info.Sprintf("   Location:  %s", filepath.Dir(paths.ModelPath)))
+	}
+	if quant != "" {
+		fmt.Println(render.GetTheme().Info.Sprintf("   Precision: %s", quant))
+	}
 	return nil
 }
 
-// choosePrecision picks a precision from the remote candidates: the only one
-// when there's a single option, otherwise an interactive picker that defaults
-// to the SDK-recommended quant.
-func choosePrecision(candidates []geniex_sdk.PrecisionCandidate) (string, error) {
+// cachedPrecisions returns the candidates already on disk. The SDK canonicalizes
+// the name, so a bare AI Hub id or an ai-hub-models/ prefix hits its own entry.
+func cachedPrecisions(name string, candidates []geniex_sdk.PrecisionCandidate) []string {
+	if _, err := geniex_sdk.ModelGetPaths(name); err != nil {
+		return nil
+	}
+	var cached []string
+	for _, c := range candidates {
+		if _, err := geniex_sdk.ModelGetPaths(name + ":" + c.Precision); err == nil {
+			cached = append(cached, c.Precision)
+		}
+	}
+	return cached
+}
+
+func skipDownloaded(candidates []geniex_sdk.PrecisionCandidate, cached []string) []geniex_sdk.PrecisionCandidate {
+	if len(cached) == 0 {
+		return candidates
+	}
+	return slices.DeleteFunc(slices.Clone(candidates), func(c geniex_sdk.PrecisionCandidate) bool {
+		// GGUF quant labels match case-insensitively, as the SDK does.
+		return slices.ContainsFunc(cached, func(p string) bool { return strings.EqualFold(p, c.Precision) })
+	})
+}
+
+// hasTerminal reports whether a picker can be drawn: keys come from stdin, and
+// huh draws on stderr, so both have to be a terminal.
+func hasTerminal() bool {
+	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stderr.Fd()))
+}
+
+// choosePrecision picks a precision from candidates, whose head must be the
+// recommended pick: it is taken as-is when it is the only option or there is no
+// terminal to draw on, otherwise the picker pre-selects it.
+func choosePrecision(title string, candidates []geniex_sdk.PrecisionCandidate) (string, error) {
 	if len(candidates) == 0 {
 		return "", fmt.Errorf("no precision available for this model")
 	}
-	if len(candidates) == 1 {
+	if len(candidates) == 1 || !hasTerminal() {
 		return candidates[0].Precision, nil
 	}
 
-	var defaultQuant string
-	var options []huh.Option[string]
+	// Sizes come from the remote query; a local pick has none, so drop the
+	// column rather than render a row of placeholders.
+	withSize := slices.ContainsFunc(candidates, func(c geniex_sdk.PrecisionCandidate) bool {
+		return c.Size > 0
+	})
+	options := make([]huh.Option[string], 0, len(candidates))
 	for _, c := range candidates {
-		var sz string
-		if c.Size > 0 {
-			sz = humanize.IBytes(uint64(c.Size))
-		} else {
-			sz = "—"
-		}
-		label := fmt.Sprintf("%-10s [%7s]", c.Precision, sz)
-		if c.IsDefault {
-			label += " (default)"
-			defaultQuant = c.Precision
+		label := c.Precision
+		if withSize {
+			sz := "—"
+			if c.Size > 0 {
+				sz = humanize.IBytes(uint64(c.Size))
+			}
+			label = fmt.Sprintf("%-10s [%7s]", c.Precision, sz)
 		}
 		options = append(options, huh.NewOption(label, c.Precision))
 	}
 
-	chosen := defaultQuant
+	chosen := candidates[0].Precision
 	if err := huh.NewSelect[string]().
-		Title("Choose a precision version to download").
+		Title(title).
 		Options(options...).
 		Value(&chosen).
 		Run(); err != nil {

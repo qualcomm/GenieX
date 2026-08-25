@@ -3,16 +3,27 @@
 
 use std::fs;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use fs2::FileExt;
 
 use crate::config::StoreConfig;
 use crate::error::{Error, Result};
 use crate::manifest::{ModelManifest, ModelType};
+use crate::manifest_builder::QUANT_PRIORITY;
 use crate::mapping::canonicalize_model_name;
-use crate::paths::{resolve_model_paths, ModelPaths};
 use crate::validation::{validate_model_name, validate_relative_file};
+
+#[derive(Debug, Clone)]
+pub struct ModelPaths {
+    pub model_path: PathBuf,
+    pub mmproj_path: Option<PathBuf>,
+    pub tokenizer_path: Option<PathBuf>,
+    pub model_dir: PathBuf,
+    pub model_name: String,
+    pub plugin_id: String,
+    pub model_type: ModelType,
+}
 
 pub const MANIFEST_FILE: &str = "geniex.json";
 
@@ -213,8 +224,7 @@ impl Store {
     }
 
     pub fn get_model_type(&self, name: &str) -> Result<ModelType> {
-        let name = canonicalize_model_name(name);
-        Ok(self.get_manifest(&name)?.model_type)
+        Ok(self.resolve_manifest(name)?.model_type)
     }
 
     pub fn set_model_type(&self, name: &str, model_type: ModelType) -> Result<()> {
@@ -225,6 +235,36 @@ impl Store {
             manifest.model_type = model_type;
             self.write_manifest(&manifest)
         })
+    }
+
+    /// Read one cached model's manifest, accepting the same loose name forms as
+    /// [`Self::get_paths`]: a non-canonical name is canonicalized and any
+    /// ":quant" suffix is dropped, since a manifest covers every precision.
+    ///
+    /// Canonicalization runs first so a pasted HuggingFace URL still resolves:
+    /// `split_quant` would otherwise cut at the colon in "https:".
+    pub fn resolve_manifest(&self, name_with_quant: &str) -> Result<ModelManifest> {
+        let canonical = canonicalize_model_name(name_with_quant);
+        let (name, _) = split_quant(&canonical);
+        validate_model_name(name)?;
+        self.get_manifest(name)
+    }
+
+    /// Read one cached model's manifest for reporting, skipping a model whose
+    /// directory holds an in-progress pull so this agrees with [`Self::list`].
+    /// The load path ([`Self::get_paths`] / [`Self::get_model_type`]) keeps
+    /// resolving the already-cached precisions while another one is pulling.
+    pub fn resolve_detail_manifest(&self, name_with_quant: &str) -> Result<ModelManifest> {
+        let manifest = self.resolve_manifest(name_with_quant)?;
+        if self
+            .cfg
+            .model_dir(&manifest.name)
+            .join(INFLIGHT_DIR)
+            .exists()
+        {
+            return Err(Error::ModelNotFound(manifest.name));
+        }
+        Ok(manifest)
     }
 
     /// Resolve a model name (with optional ":quant" suffix) to ModelPaths.
@@ -249,13 +289,92 @@ impl Store {
     }
 }
 
+/// Look up the file paths for one quant of a cached model.
+///
+/// When `quant` is `None` we fall back to the highest-priority downloaded
+/// quant. That fallback is a *cache-side* convenience — it picks among
+/// what's already local, not what a hub offers — and exists because
+/// keepalive / auto-load paths pass bare names.
+pub(crate) fn resolve_model_paths(
+    manifest: &ModelManifest,
+    base_dir: &Path,
+    quant: Option<&str>,
+) -> Result<(String, ModelPaths)> {
+    let quant = match quant {
+        Some(q) => q.to_string(),
+        None => pick_downloaded_by_priority(manifest)?,
+    };
+    let fi = manifest
+        .model_file
+        .get(&quant)
+        .ok_or_else(|| Error::QuantNotFound(quant.clone(), manifest.name.clone()))?;
+    if !fi.downloaded {
+        return Err(Error::QuantNotDownloaded(quant, manifest.name.clone()));
+    }
+    let model_path = base_dir.join(&fi.name);
+    let mmproj_path =
+        (!manifest.mmproj_file.name.is_empty()).then(|| base_dir.join(&manifest.mmproj_file.name));
+    let tokenizer_path = (!manifest.tokenizer_file.name.is_empty())
+        .then(|| base_dir.join(&manifest.tokenizer_file.name));
+    Ok((
+        quant,
+        ModelPaths {
+            model_path,
+            mmproj_path,
+            tokenizer_path,
+            model_dir: base_dir.to_path_buf(),
+            model_name: manifest.model_name.clone(),
+            plugin_id: manifest.plugin_id.clone(),
+            model_type: manifest.model_type.clone(),
+        },
+    ))
+}
+
+fn pick_downloaded_by_priority(manifest: &ModelManifest) -> Result<String> {
+    let downloaded: Vec<&str> = manifest
+        .model_file
+        .iter()
+        .filter(|(_, v)| v.downloaded)
+        .map(|(k, _)| k.as_str())
+        .collect();
+    if downloaded.is_empty() {
+        return Err(Error::ModelNotFound(manifest.name.clone()));
+    }
+    for pref in QUANT_PRIORITY {
+        if let Some(hit) = downloaded.iter().find(|q| **q == *pref) {
+            return Ok((*hit).to_string());
+        }
+    }
+    Ok(downloaded.iter().min().copied().unwrap().to_string())
+}
+
 /// Read and parse `geniex.json` with a hard size cap.
 fn read_manifest(path: &std::path::Path) -> Result<ModelManifest> {
     let file = fs::File::open(path)?;
     let mut reader = file.take(MANIFEST_MAX_BYTES);
     let mut data = String::new();
     reader.read_to_string(&mut data)?;
-    Ok(serde_json::from_str(&data)?)
+    let mut manifest: ModelManifest = serde_json::from_str(&data)?;
+    if migrate_legacy_qairt_precision(&mut manifest) {
+        if let Ok(rewritten) = serde_json::to_string(&manifest) {
+            let _ = fs::write(path, rewritten);
+        }
+    }
+    Ok(manifest)
+}
+
+// DEPRECATED-COMPAT #1242: rewrite pre-fix QAIRT shape ("N/A" key + top-level Precision) to the new shape.
+fn migrate_legacy_qairt_precision(m: &mut ModelManifest) -> bool {
+    if m.plugin_id != "qairt" || m.precision.is_empty() {
+        return false;
+    }
+    if m.model_file.len() != 1 || !m.model_file.contains_key("N/A") {
+        return false;
+    }
+    let entry = m.model_file.remove("N/A").unwrap();
+    let key = std::mem::take(&mut m.precision);
+    m.model_file.insert(key, entry);
+    true
 }
 
 /// Split "org/repo:quant" into ("org/repo", Some("quant")) or ("org/repo", None).
@@ -279,13 +398,12 @@ mod tests {
     use crate::manifest::{ModelFileInfo, ModelType};
     use std::collections::HashMap;
 
-    fn make_store() -> Store {
-        // leak the TempDir so the directory persists for the test duration
+    /// The returned TempDir must stay bound for the test's duration: dropping it
+    /// removes the store directory.
+    fn make_store() -> (Store, tempfile::TempDir) {
         let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().to_path_buf();
-        std::mem::forget(tmp);
-        let cfg = StoreConfig::new(path);
-        Store::new(cfg).unwrap()
+        let cfg = StoreConfig::new(tmp.path().to_path_buf());
+        (Store::new(cfg).unwrap(), tmp)
     }
 
     fn sample_manifest(name: &str) -> ModelManifest {
@@ -313,7 +431,7 @@ mod tests {
 
     #[test]
     fn roundtrip_manifest() {
-        let store = make_store();
+        let (store, _tmp) = make_store();
         let m = sample_manifest("TestOrg/TestRepo");
         store.write_manifest(&m).unwrap();
         let loaded = store.get_manifest("TestOrg/TestRepo").unwrap();
@@ -321,8 +439,53 @@ mod tests {
     }
 
     #[test]
+    fn resolve_manifest_canonicalizes_and_drops_quant() {
+        let (store, _tmp) = make_store();
+        store
+            .write_manifest(&sample_manifest("qualcomm/Bare"))
+            .unwrap();
+        // bare name -> qualcomm/<name>, and the ":quant" suffix is ignored
+        assert_eq!(
+            store.resolve_manifest("Bare").unwrap().name,
+            "qualcomm/Bare"
+        );
+        assert_eq!(
+            store.resolve_manifest("Bare:Q4_K_M").unwrap().name,
+            "qualcomm/Bare"
+        );
+        assert!(store.resolve_manifest("Org/Missing").is_err());
+    }
+
+    #[test]
+    fn resolve_manifest_accepts_a_pasted_hf_url() {
+        let (store, _tmp) = make_store();
+        store
+            .write_manifest(&sample_manifest("ggml-org/Qwen3"))
+            .unwrap();
+        assert_eq!(
+            store
+                .resolve_manifest("https://huggingface.co/ggml-org/Qwen3")
+                .unwrap()
+                .name,
+            "ggml-org/Qwen3"
+        );
+    }
+
+    #[test]
+    fn resolve_detail_manifest_skips_inflight() {
+        let (store, _tmp) = make_store();
+        store
+            .write_manifest(&sample_manifest("Org/Pulling"))
+            .unwrap();
+        fs::create_dir_all(store.cfg.model_dir("Org/Pulling").join(INFLIGHT_DIR)).unwrap();
+        // hidden from list + get_detailed, but still loadable through get_paths
+        assert!(store.resolve_detail_manifest("Org/Pulling").is_err());
+        assert!(store.resolve_manifest("Org/Pulling").is_ok());
+    }
+
+    #[test]
     fn list_returns_written_manifests() {
-        let store = make_store();
+        let (store, _tmp) = make_store();
         store.write_manifest(&sample_manifest("Org/A")).unwrap();
         store.write_manifest(&sample_manifest("Org/B")).unwrap();
         let list = store.list().unwrap();
@@ -330,8 +493,21 @@ mod tests {
     }
 
     #[test]
+    fn get_model_type_tolerates_a_precision_suffix() {
+        let (store, _tmp) = make_store();
+        store
+            .write_manifest(&sample_manifest("qualcomm/Typed"))
+            .unwrap();
+        // get_paths accepts "<name>:<quant>"; get_type must not diverge
+        assert_eq!(
+            store.get_model_type("Typed:Q4_K_M").unwrap(),
+            ModelType::Llm
+        );
+    }
+
+    #[test]
     fn remove_deletes_directory() {
-        let store = make_store();
+        let (store, _tmp) = make_store();
         store.write_manifest(&sample_manifest("Org/C")).unwrap();
         store.remove("Org/C").unwrap();
         assert!(!store.cfg.model_dir("Org/C").exists());
@@ -339,7 +515,7 @@ mod tests {
 
     #[test]
     fn set_model_type_roundtrips() {
-        let store = make_store();
+        let (store, _tmp) = make_store();
         store.write_manifest(&sample_manifest("Org/Typed")).unwrap();
         assert_eq!(store.get_model_type("Org/Typed").unwrap(), ModelType::Llm);
         store.set_model_type("Org/Typed", ModelType::Vlm).unwrap();
@@ -348,7 +524,7 @@ mod tests {
 
     #[test]
     fn set_model_type_missing_model_errors() {
-        let store = make_store();
+        let (store, _tmp) = make_store();
         let err = store
             .set_model_type("Org/Absent", ModelType::Vlm)
             .unwrap_err();
@@ -360,7 +536,7 @@ mod tests {
         // Single-quant manifest: rm "name:Q4_K_M" should nuke the whole dir
         // rather than leave an orphan manifest with an empty ModelFile map.
         // Also guards against the Windows os-error-267 regression (colon in path).
-        let store = make_store();
+        let (store, _tmp) = make_store();
         store
             .write_manifest(&sample_manifest("Org/WithQuant"))
             .unwrap();
@@ -392,7 +568,7 @@ mod tests {
 
     #[test]
     fn remove_quant_keeps_other_quants_and_shared_files() {
-        let store = make_store();
+        let (store, _tmp) = make_store();
         let m = multi_quant_manifest("Org/Multi");
         store.write_manifest(&m).unwrap();
         let dir = store.cfg.model_dir("Org/Multi");
@@ -413,7 +589,7 @@ mod tests {
 
     #[test]
     fn remove_unknown_quant_errors() {
-        let store = make_store();
+        let (store, _tmp) = make_store();
         store
             .write_manifest(&multi_quant_manifest("Org/Multi2"))
             .unwrap();
@@ -429,7 +605,7 @@ mod tests {
 
     #[test]
     fn clean_returns_count() {
-        let store = make_store();
+        let (store, _tmp) = make_store();
         store.write_manifest(&sample_manifest("Org/D")).unwrap();
         store.write_manifest(&sample_manifest("Org/E")).unwrap();
         let n = store.clean().unwrap();
@@ -438,7 +614,7 @@ mod tests {
 
     #[test]
     fn list_skips_inflight() {
-        let store = make_store();
+        let (store, _tmp) = make_store();
         // write a valid manifest + an inflight marker in the same dir
         store.write_manifest(&sample_manifest("Org/F")).unwrap();
         let dir = store.cfg.model_dir("Org/F");
@@ -449,7 +625,7 @@ mod tests {
 
     #[test]
     fn list_skips_corrupted() {
-        let store = make_store();
+        let (store, _tmp) = make_store();
         store.write_manifest(&sample_manifest("Org/Good")).unwrap();
         let bad_dir = store.cfg.model_dir("Org/Bad");
         fs::create_dir_all(&bad_dir).unwrap();
@@ -461,7 +637,7 @@ mod tests {
 
     #[test]
     fn rejects_invalid_names() {
-        let store = make_store();
+        let (store, _tmp) = make_store();
         assert!(store.get_manifest("../etc").is_err());
         assert!(store.remove("a/..").is_err());
         assert!(store.model_file_path("Org/Foo", "../outside").is_err());
@@ -469,12 +645,38 @@ mod tests {
 
     #[test]
     fn rejects_oversized_manifest() {
-        let store = make_store();
+        let (store, _tmp) = make_store();
         let dir = store.cfg.model_dir("Org/Huge");
         fs::create_dir_all(&dir).unwrap();
         let big = "x".repeat((MANIFEST_MAX_BYTES + 1) as usize);
         fs::write(dir.join(MANIFEST_FILE), big).unwrap();
         // Size-capped reader will truncate, then JSON parse fails — either way, Err.
         assert!(store.get_manifest("Org/Huge").is_err());
+    }
+
+    #[test]
+    fn legacy_qairt_manifest_migrates_on_read_and_rewrites_disk() {
+        let (store, _tmp) = make_store();
+        let dir = store.cfg.model_dir("qualcomm/Legacy");
+        fs::create_dir_all(&dir).unwrap();
+        let legacy = r#"{
+            "Name":"qualcomm/Legacy","ModelName":"legacy","ModelType":"llm",
+            "PluginId":"qairt","Precision":"W4A16",
+            "ModelFile":{"N/A":{"Name":"model-00.bin","Downloaded":true,"Size":10}},
+            "MMProjFile":{"Name":"","Downloaded":false,"Size":0},
+            "TokenizerFile":{"Name":"","Downloaded":false,"Size":0},
+            "ExtraFiles":[]
+        }"#;
+        fs::write(dir.join(MANIFEST_FILE), legacy).unwrap();
+
+        let loaded = store.get_manifest("qualcomm/Legacy").unwrap();
+        assert_eq!(loaded.precision, "");
+        assert!(loaded.model_file.contains_key("W4A16"));
+        assert!(!loaded.model_file.contains_key("N/A"));
+
+        let on_disk = fs::read_to_string(dir.join(MANIFEST_FILE)).unwrap();
+        assert!(on_disk.contains(r#""W4A16":"#), "on-disk: {on_disk}");
+        assert!(!on_disk.contains(r#""N/A""#), "on-disk: {on_disk}");
+        assert!(!on_disk.contains(r#""Precision""#), "on-disk: {on_disk}");
     }
 }

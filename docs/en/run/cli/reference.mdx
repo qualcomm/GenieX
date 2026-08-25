@@ -71,21 +71,48 @@ geniex infer unsloth/Qwen3.5-0.8B-GGUF --compute cpu
 geniex infer ai-hub-models/Qwen3-4B --compute npu
 ```
 
+```bash
+# Explicit device list — spread across multiple HTP cores (llama.cpp + multi-DSP devices only)
+GGML_HEXAGON_NDEV=4 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 --compute HTP0,HTP1,HTP2,HTP3
+```
+
+<Note>Set `GGML_HEXAGON_NDEV` to match the number of device IDs in `--compute`. `qairt` models coerce a device list to NPU with a warning. See [Spreading across multiple HTP cores](/en/tutorials/speculative-decoding-mtp#spreading-across-multiple-htp-cores) for MTP performance numbers.</Note>
+
 <Warning>Qualcomm AI Hub Models run on NPU only. Using `--compute cpu` or `--compute gpu` returns an error.</Warning>
 
 ### **`geniex infer` — VLM**
 
-Run vision-language inference with text-only or image input:
+Run vision-language inference with text-only, image, or audio input:
 
 ```bash
-geniex infer ai-hub-models/Qwen2.5-VL-7B-Instruct-GGUF
+geniex infer google/gemma-4-E2B-it-qat-q4_0-gguf
 ```
 
-For text-only, just launch and chat. For image input, provide the **absolute path** or drag the file into your terminal:
+For text-only, just launch and chat. For image or audio input, provide the **absolute path** or drag the file into your terminal — image (`.jpg`, `.jpeg`, `.png`, `.webp`) and audio (`.wav`, `.mp3`) paths are auto-detected, and a single prompt can carry both. `google/gemma-4-E2B-it-qat-q4_0-gguf` ships an audio-capable mmproj (~4.0 GiB total: `Q4_0` weights + conformer mmproj, pulled together):
 
 ```bash
-Describe this picture </full/path/to/image.png>
+geniex pull google/gemma-4-E2B-it-qat-q4_0-gguf
+
+curl -L -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/master/samples/jfk.wav
+curl -L -o landmark.jpg "https://images.pexels.com/photos/402028/pexels-photo-402028.jpeg?w=1024"
+
+geniex infer google/gemma-4-E2B-it-qat-q4_0-gguf \
+  -p "Describe the image and transcribe the audio. Image: /full/path/to/landmark.jpg Audio: /full/path/to/jfk.wav"
 ```
+
+Output (verified on `--compute npu`, Snapdragon X Elite):
+
+```text
+**Image Description:**
+This is a scenic, panoramic photograph that features a traditional Japanese temple ... The overall mood of the image is serene and beautiful.
+
+**Audio Transcription:**
+"And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+```
+
+<Warning>Audio input runs on the **llama.cpp** backend only and needs an audio-capable model (mmproj with a conformer encoder). Audio also runs on `--compute cpu` / `gpu`, but QAIRT models report `audio: false` and a QAIRT model given audio fails with `GenieXError(-201201): Multimodal generation failed`.</Warning>
+
+In an interactive session with an audio-capable model, `/mic` records a clip instead of loading one from disk — `Ctrl-C` stops the recording and transcribes it. This needs **SoX** on your `PATH` (`sudo apt install sox`, or `winget install --id=ChrisBagwell.SoX -e` on Windows); without it GenieX warns `SoX is not installed` at startup. See the [audio input tutorial](/en/tutorials/audio-input) for the full walkthrough.
 
 ## **`geniex serve`**
 
@@ -94,6 +121,25 @@ Start the OpenAI-compatible local server. See [Local server](/en/run/cli/local-s
 ```bash
 geniex serve
 ```
+
+To move a thinking model's chain-of-thought out of `message.content` into `message.reasoning_content`, set the per-request `reasoning_format` field — see [Separating reasoning](/en/run/cli/local-server#separating-reasoning-reasoning_content).
+
+## **Logging**
+
+`--log` is a global flag controlling the CLI's log output. It is equivalent to the `GENIEX_LOG` environment variable and takes precedence over it when both are set.
+
+```bash
+geniex --log debug list
+```
+
+| Value | Emits |
+|---|---|
+| `none` | nothing (**CLI default**) |
+| `error` | errors only |
+| `warn` | warnings + errors |
+| `info` | info + warnings + errors |
+| `debug` | debug + info + warnings + errors |
+| `trace` | everything |
 
 ## **Configuration flags**
 
@@ -123,13 +169,50 @@ Control model loading, context, and generation limits.
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `-n`, `--ngl` | int | `999` | Number of layers to offload to GPU. |
+| `-n`, `--ngl` | int | `-1` | Number of layers to offload to GPU/NPU, `-1` = all (llama_cpp only). |
 | `--nctx` | int | `4096` | Context window size (max input + output tokens). |
 | `--max-tokens` | int | `2048` | Maximum tokens to generate per response. |
 | `--stop` | string[] | — | Stop sequences (can be specified multiple times). |
 | `--stop-file` | string | — | File containing stop sequences (one per line). |
 | `--think` / `--think=false` | bool | `true` | Enable or disable thinking mode for reasoning models. |
 | `-s`, `--system-prompt` | string | — | System prompt to set model behavior. |
+| `--sliding-window` | — | `false` | (`qairt` only) Evict the oldest context above a small anchored prefix instead of erroring when the context length is exceeded, letting the conversation continue. |
+
+### Increasing the context length
+
+The context window (`--nctx`) is how much the model can hold at once. When a conversation grows past it you get a *context length exceeded* error. How to raise it depends on the runtime:
+
+- **llama.cpp (GGUF):** `--nctx <N>` raises the window at runtime, up to the model's trained maximum. A larger window uses more KV-cache memory.
+
+  ```bash
+  geniex infer unsloth/Qwen3-8B-GGUF --nctx 8192
+  ```
+
+- **Qualcomm AI Engine Direct (NPU):** the context length is **baked into the compiled bundle** and cannot be raised at runtime — `--nctx` has no effect. Instead:
+  - Add `--sliding-window` to keep chatting past the limit: the oldest context above a small anchored prefix is evicted instead of erroring.
+  - For a genuinely larger window, pull a bundle compiled for a longer context from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/). See [Qualcomm AI Engine Direct runtime constraints](/en/get-started/platforms#runtime-constraints).
+
+## **`geniex-bench`**
+
+`geniex-bench` is a standalone benchmark binary — separate from the `geniex` CLI — that measures TTFT, prefill speed, and decode speed directly against the GenieX C API. It ships as a pre-built archive for Windows ARM64 and Linux ARM64.
+
+See the [Benchmarking tutorial](/en/tutorials/benchmarking) for download instructions and a full walkthrough. Quick reference:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--plugin` | — | `llama_cpp` \| `qairt`. Required. |
+| `--device` | `auto` | `cpu` \| `gpu` \| `npu` \| `hybrid`. |
+| `-m` / `--model` | — | Local path (`.gguf` or bundle dir) or model-manager id (`org/repo[:quant]`). Required. |
+| `-p` | `512` | Random-token prefill length. |
+| `-n` / `--n-gen` | `128` | Tokens to generate per run. |
+| `-r` | `5` | Measured repetitions. |
+| `--warmup` | `1` | Warmup runs (not counted in stats). |
+| `--temperature` | `0.0` | Sampling temperature. `0.0` = deterministic (greedy). |
+| `--seed` | `42` | Random seed for prefill token generation. |
+| `--output-json` | — | Write per-cell JSON with aggregated stats to this path. |
+| `--matrix-file` | — | TSV file (`cell_id`, `plugin`, `device`, `model`) to run multiple cells in one session. |
+| `--output-json-dir` | — | Output directory for matrix-mode JSON files. |
+| `--accuracy` | — | Print generated text instead of timing (1 run, no warmup). Pair with `--prompt-file`. |
 
 ## **Utility commands**
 

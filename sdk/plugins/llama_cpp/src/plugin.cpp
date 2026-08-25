@@ -18,6 +18,7 @@
 #include "build_config.h"
 #include "common.h"
 #include "ggml-backend.h"
+#include "htp_session.h"
 #include "llama.h"
 #include "llm.h"
 #include "logging.h"
@@ -142,6 +143,8 @@ class LlamaPlugin : public Plugin {
     ILlm* create_llm() override { return new geniex::LlamaLlm; }
 
     IVlm* create_vlm() override { return new geniex::LlamaVlm; }
+
+    void on_foreign_plugin_load() override { htp::release_sessions_if_idle(); }
 };
 
 }  // namespace geniex

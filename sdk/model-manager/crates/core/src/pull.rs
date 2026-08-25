@@ -40,6 +40,7 @@ use crate::manifest_builder::ManifestHint;
 use crate::mapping::canonicalize_model_name;
 use crate::resume;
 use crate::source::ai_hub::{AiHubConfig, AiHubSource};
+use crate::source::dockerhub::DockerHubSource;
 use crate::source::hf::HfSource;
 use crate::source::localfs::LocalFsSource;
 use crate::source::ModelSource;
@@ -77,6 +78,12 @@ pub enum PullIntent {
         display_name: String,
         chipset: String,
     },
+    DockerHub {
+        /// "ai/gemma3" — no registry host prefix.
+        repo: String,
+        /// Tag or `sha256:<hex>` digest; empty means `"latest"`.
+        reference: String,
+    },
 }
 
 /// Download a model, writing its manifest only after every file is
@@ -91,7 +98,7 @@ pub async fn pull(store: &Store, mut req: PullRequest) -> Result<()> {
     validate_model_name(&req.model_name)?;
 
     let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
-    let source: Box<dyn ModelSource> = build_source(&req, store, transport.clone())?;
+    let source: Box<dyn ModelSource> = build_source(&req, store, transport.clone()).await?;
     pull_with_source(
         store,
         &req.model_name,
@@ -200,16 +207,17 @@ pub fn pull_blocking(
     handle.block_on(pull(store, req))
 }
 
-pub(crate) fn build_source(
+pub(crate) async fn build_source(
     req: &PullRequest,
     store: &Store,
     transport: Arc<dyn HttpTransport>,
 ) -> Result<Box<dyn ModelSource>> {
     match &req.intent {
         PullIntent::HuggingFace { repo, token } => {
+            let endpoint = StoreConfig::hf_endpoint();
             let src = HfSource::with_endpoint_and_transport(
                 repo.clone(),
-                crate::source::hf::DEFAULT_HF_ENDPOINT,
+                &endpoint,
                 token.clone(),
                 transport,
                 req.hint.clone(),
@@ -225,19 +233,21 @@ pub(crate) fn build_source(
             display_name,
             chipset,
         } => {
-            let cfg = AiHubConfig::new(
-                StoreConfig::ai_hub_base_url(),
-                StoreConfig::ai_hub_version(),
-                chipset.clone(),
-                store.config().ai_hub_cache_dir(),
-                false,
-            );
+            let endpoint = StoreConfig::ai_hub_base_url();
+            let cache_dir = store.config().ai_hub_cache_dir();
+            let version = StoreConfig::ai_hub_version_override()
+                .unwrap_or_else(StoreConfig::ai_hub_version_fallback);
+            let cfg = AiHubConfig::new(endpoint, version, chipset.clone(), cache_dir, false);
             let src = AiHubSource::with_transport(
                 display_name.clone(),
                 req.model_name.clone(),
                 cfg,
                 transport,
             );
+            Ok(Box::new(src))
+        }
+        PullIntent::DockerHub { repo, reference } => {
+            let src = DockerHubSource::new(repo.clone(), reference.clone(), transport)?;
             Ok(Box::new(src))
         }
     }

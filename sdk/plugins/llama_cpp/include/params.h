@@ -28,7 +28,7 @@ std::optional<std::vector<ggml_backend_dev_t>> resolve_devices(const char* devic
 //   cpu    -> n_gpu_layers == 0                     -> CPU
 //   gpu    -> device_id starts with "GPU"           -> GPU
 //   npu    -> device_id starts with "HTP"           -> HTP
-//   hybrid -> empty device_id, ngl == 999           -> HTP
+//   hybrid -> empty device_id, ngl != 0             -> HTP
 Device classify_device(const char* device_id, int n_gpu_layers);
 
 // Map a caller's config to llama params, filling each unset (0) field from the
@@ -38,8 +38,19 @@ Device classify_device(const char* device_id, int n_gpu_layers);
 // the upstream-fixed count; pure CPU uses cores/2). build_model_params only
 // reads n_gpu_layers. Device selection and tensor-buffer overrides stay at the
 // call site.
+//
+// spec is the parsed speculative config (nullptr when disabled, and always
+// nullptr for the draft context itself): a target context that drafts needs
+// n_max recurrent-state snapshots to roll back rejected drafts and one logits
+// row per drafted token. Mirrors common_context_params_to_llama +
+// server_output_limits.
 llama_model_params   build_model_params(const geniex_ModelConfig& config, Device device);
-llama_context_params build_context_params(const geniex_ModelConfig& config, int32_t n_ctx_default, Device device);
+llama_context_params build_context_params(const geniex_ModelConfig& config, int32_t n_ctx_default, Device device,
+    const common_params_speculative* spec = nullptr);
+
+// Parse spec_type / spec_n_* into llama.cpp's own speculative params. Returns
+// nullopt when speculative decoding is disabled or no type name resolves.
+std::optional<common_params_speculative> build_speculative_params(const geniex_ModelConfig& config);
 
 // Build threadpool tuning (cpumask / strict / poll) for a given thread count
 // on the given target device. Returned struct is what ggml_threadpool_new

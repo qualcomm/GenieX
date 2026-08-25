@@ -33,6 +33,8 @@ jobs:
             runner: windows-11-arm
           - platform: linux-arm64
             runner: ubuntu-24.04-arm
+          - platform: linux-arm64-cpu
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
 
@@ -84,7 +86,7 @@ jobs:
         run: bazelisk build //cli:artifact --//sdk:sdk_type=local "--define=VERSION=%RAW_VERSION%"
 
       - name: Build CLI (Linux)
-        if: matrix.platform == 'linux-arm64'
+        if: startsWith(matrix.platform, 'linux-arm64')
         shell: bash
         env:
           RAW_VERSION: ${{ steps.version.outputs.version }}
@@ -110,9 +112,9 @@ jobs:
           retention-days: 1
 
       - name: Upload Linux CLI artifact
-        if: inputs.upload_artifact && matrix.platform == 'linux-arm64'
+        if: inputs.upload_artifact && startsWith(matrix.platform, 'linux-arm64')
         uses: actions/upload-artifact@v7
         with:
-          name: cli-linux-arm64
+          name: cli-${{ matrix.platform }}
           path: bazel-bin/cli/artifact.zip
           retention-days: 1

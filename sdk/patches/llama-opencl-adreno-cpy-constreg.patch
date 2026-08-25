@@ -1,0 +1,18 @@
+diff --git a/ggml/src/ggml-opencl/kernels/cpy.cl b/ggml/src/ggml-opencl/kernels/cpy.cl
+index adbd2e766..89aeb1cca 100644
+--- a/ggml/src/ggml-opencl/kernels/cpy.cl
++++ b/ggml/src/ggml-opencl/kernels/cpy.cl
+@@ -208,7 +208,12 @@ kernel void kernel_cpy_f32_f32_pack(
+     src0 = (global float*)((global char*)src0 + offset0);
+     dst = (global float*)((global char*)dst + offsetd);
+ 
+-    int lsz = get_local_size(0);
++    // Adreno's instruction validator rejects min(uniform, constant): the
++    // resulting IMINrr would carry two constant-class operands (ne00 is a
++    // uniform reg, get_local_size(0) a constant reg). Force lsz into a GPR
++    // via volatile to break the pairing.
++    volatile int lsz_v = get_local_size(0);
++    int lsz = lsz_v;
+     int tpr = min(ne00, lsz);          // threads per row
+     int rpw = lsz / tpr;               // rows per workgroup
+     int lid = get_local_id(0);

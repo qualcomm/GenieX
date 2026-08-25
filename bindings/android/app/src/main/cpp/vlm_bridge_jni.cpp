@@ -27,7 +27,6 @@ extern "C" JNIEXPORT jlong JNICALL Java_com_geniex_sdk_jni_Vlm_create(JNIEnv* en
     try {
         LOGi("[JNI] [create] Java_com_geniex_sdk_jni_Vlm_create ");
         geniex_VlmCreateInput create_input = extract_vlm_create_input(env, vlmCreateInputObj);
-        LOGi("[JNI] [create] model_name = %s", create_input.model_name ? create_input.model_name : "(null)");
         LOGi("[JNI] [create] plugin_id = %s", create_input.plugin_id ? create_input.plugin_id : "(null)");
         geniex_VLM* handle = nullptr;
         int32_t     result = geniex_vlm_create(&create_input, &handle);

@@ -31,6 +31,15 @@ import Feedback from "/snippets/page-feedback.mdx";
   <Accordion title="`--compute cpu` or `--compute gpu` errors with a Qualcomm AI Hub Model">
     Qualcomm AI Engine Direct is NPU-only. Use `--compute npu` (or omit the flag — `npu` is the default for `qairt`). To run on CPU/GPU, switch to a GGUF model on the [llama.cpp runtime](/en/get-started/platforms#llamacpp).
   </Accordion>
+
+  <Accordion title="`Context length exceeded` during a long chat">
+    The conversation outgrew the context window (`--nctx`, default 4096).
+
+    - **llama.cpp (GGUF):** raise it at runtime, e.g. `geniex infer <model> --nctx 8192`, up to the model's trained maximum. A larger window uses more memory.
+    - **Qualcomm AI Engine Direct (NPU):** the window is fixed in the compiled bundle and `--nctx` has no effect. Add `--sliding-window` to keep chatting (evicts the oldest context), or pull a bundle built for a longer context.
+
+    See [Increasing the context length](/en/run/cli/reference#increasing-the-context-length).
+  </Accordion>
 </AccordionGroup>
 
 ## **Server**
@@ -55,52 +64,29 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="`docker pull` fails with permission / unauthorized">
-    Add yourself to the `docker` group and re-login:
+    Two separate things have to be right:
 
-    ```bash bash
-    sudo usermod -aG docker $USER
-    ```
-  </Accordion>
+    1. **Registry login.** Docker Hub (`docker.io/qualcomm/geniex`) is public and needs no login. For the Qualcomm Container Registry, log in first:
 
-  <Accordion title="`geniex` install.sh reports missing shared libraries">
-    On a fresh Ubuntu 24.04 ARM64 host (e.g. IQ9075 EVK), `install.sh` — and, for Docker, the pre-flight `check.sh` / container `entrypoint.sh` — check for libraries like `libCB.so.1`, `libOpenCL_adreno.so.1`, `libcdsprpc.so.1.0.0`, `libgsl.so.1`, `libllvm-*.so.1`, `libpropertyvault.so.0.0.0`, `libdmabufheap.so.0.0.0`, plus Debian's `libatomic1` / `libglib2.0-0`. Install them **on the host** in two steps — if you're inside the geniex container, `exit` first.
+       ```bash bash
+       # Qualcomm Container Registry:
+       docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
+       ```
 
-    **1. Standard APT packages**
+       You should see `Login Succeeded`.
 
-    Addresses the `libatomic1` and `libglib2.0-0` requirements reported by the `geniex` installer, and provides a generic OpenCL ICD loader:
+    2. **Docker group membership.** If `docker pull` returns `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, your user isn't in the `docker` group:
 
-    ```bash bash
-    sudo apt update
-    sudo apt install -y \
-      libatomic1 \
-      libglib2.0-0 \
-      ocl-icd-libopencl1
-    ```
+       ```bash bash
+       sudo usermod -aG docker $USER
+       newgrp docker        # apply the new group in the current shell
+       ```
 
-    <Note>`ocl-icd-libopencl1` is replaced by `qcom-adreno1` in the next step.</Note>
-
-    **2. Qualcomm driver packages (via `ubuntu-qcom-iot` PPA)**
-
-    Provides the Qualcomm-proprietary libraries required by `geniex`:
-
-    | Missing library | Provided by |
-    | --- | --- |
-    | `libOpenCL_adreno.so.1`, `libCB.so.1`, `libadreno_utils.so.1`, `libgsl.so.1`, `libllvm-*.so.1` | `qcom-adreno1` |
-    | `libdmabufheap.so.0.0.0` | `qcom-libdmabufheap` *(auto-dep of `qcom-adreno1`)* |
-    | `libpropertyvault.so.0.0.0` | `qcom-property-vault` *(auto-dep of `qcom-adreno1`)* |
-    | `libcdsprpc.so.1.0.0` | `qcom-fastrpc1` |
-
-    ```bash bash
-    sudo apt-get install -y qcom-adreno1 qcom-fastrpc1
-    ```
-
-    The PPA (`ppa:ubuntu-qcom-iot/qcom-ppa`) is pre-configured on the IQ9075 EVK Ubuntu image. `qcom-adreno1` automatically pulls in `qcom-libdmabufheap` and `qcom-property-vault`.
-
-    After this, re-run `install.sh` (bare metal) or restart the container to confirm; the "Linking host NPU libraries" step should succeed. If `libcdsprpc.so` / `libadsprpc.so` symlinks are still missing on bare metal, re-run `install.sh` to recreate them.
+       Then retry the pull.
   </Accordion>
 
   <Accordion title="Container loads model but inference fails with `Failed to create device: 14001`">
-    The container can't reach the NPU. Make sure your `docker run` includes `--privileged` and the `/usr/lib` mount, and that the host's Qualcomm driver packages (`qcom-adreno1`, `qcom-fastrpc1`) are installed — see the missing-libraries entry above.
+    The container can't reach the NPU. Make sure your `docker run` includes `--privileged` and the `/usr/lib` mount, and that the host's Qualcomm driver packages (`qcom-adreno1`, `qcom-fastrpc1`) are installed — see [Linux install → Install host dependencies](/en/run/linux/install#install-host-dependencies).
   </Accordion>
 
   <Accordion title="`--compute npu` fails with `SDKError(Invalid input parameters or handle)` / `Device 'HTP0' not found`">
@@ -115,6 +101,33 @@ import Feedback from "/snippets/page-feedback.mdx";
 
   <Accordion title="`--compute hybrid` runs but at CPU speed (silent NPU fallback)">
     If the Hexagon driver can't load (see the entry above), `hybrid` still produces correct output — it just runs entirely on CPU, so the failure is silent. Confirm the NPU is actually engaged by running with `GGML_HEX_VERBOSE=1`; you should see `Hexagon Arch version vNN` and a `libggml-htp-vNN.so` session. No such lines means it fell back to CPU.
+  </Accordion>
+
+  <Accordion title="`geniex` exits with 'device is missing CPU features geniex requires'">
+    The aarch64 Linux build is compiled for **armv8.2-a** with the `fp16`, `dotprod`, `lse` (atomics), and `rdm` extensions. Baseline armv8.0 boards — some Dragonwing IoT SoCs with no NPU — don't implement these, so `geniex` stops at startup with a clear error rather than crashing with a raw `SIGILL: illegal instruction` partway through a run.
+
+    This check is global: every backend needs those instructions, so switching `--compute` to `cpu`, `gpu`, or `npu` won't help on such a device. Check what your CPU reports:
+
+    ```bash bash
+    LD_SHOW_AUXV=1 /bin/true | grep AT_HWCAP   # look for atomics, asimdrdm, asimddp, fphp, asimdhp
+    cat /proc/cpuinfo | grep Features          # same features, under the kernel's names
+    ```
+
+    If those features are absent, install the **CPU-only** build instead. It is compiled for plain `armv8.0-a` with no ISA extensions, ships CPU inference only (no QAIRT/NPU, no OpenCL/GPU, no Hexagon), and is correspondingly slower — ggml falls back to its fp32 quant kernels without `dotprod`/`fp16`. Every channel asks for it explicitly; nothing is auto-detected:
+
+    ```bash bash
+    curl -fsSL https://raw.githubusercontent.com/qualcomm/GenieX/main/cli/release/linux/install.sh | sh -s -- --cpu-only
+    ```
+
+    | Channel | How to select the CPU-only build |
+    | --- | --- |
+    | `install.sh` | `--cpu-only` |
+    | `pip install geniex` | `GENIEX_SDK_VARIANT=cpu` |
+    | Docker | the `-cpu` tag — `docker.io/qualcomm/geniex:latest-cpu` |
+
+    `geniex-qairt` has no CPU-only build at all: QAIRT needs an NPU, and these boards have none. Use `geniex-llama-cpp` (or the `geniex` meta package, which drops the QAIRT backend automatically on such a board).
+
+    If the CPU-only build still fails, report it in [GitHub Issues](https://github.com/qualcomm/GenieX/issues) or Slack with the output above.
   </Accordion>
 </AccordionGroup>
 
@@ -135,6 +148,12 @@ import Feedback from "/snippets/page-feedback.mdx";
 
   <Accordion title="`nGpuLayers` or `nCtx` rejected on Qualcomm AI Engine Direct">
     Qualcomm AI Hub Models are compiled with fixed KV cache and context length. Leave both `nGpuLayers` and `nCtx` at their defaults; tune `max_tokens` and `enable_thinking` instead.
+  </Accordion>
+
+  <Accordion title="Init fails with 'this device's CPU lacks features required by geniex'">
+    The same startup guard as on Linux. The default AAR is compiled for **armv8.7-a** with the `fp16`, `dotprod`, and `i8mm` extensions, but `minSdk` 27 still admits phones that predate them, so `geniex_init` returns `NOT_SUPPORTED` instead of crashing with a raw `SIGILL` partway through a run.
+
+    Ship the **CPU-only** AAR on those devices — `geniex-android-aar-cpu-<tag>.aar` from the [release assets](https://github.com/qualcomm/GenieX/releases). It is compiled for plain `armv8.0-a` with no ISA extensions, ships CPU inference only (no Qualcomm AI Engine Direct, no OpenCL, no Hexagon), and is correspondingly slower. Otherwise it is a drop-in replacement: same `com.geniex.sdk` namespace and API. Only the default AAR is published to Maven Central.
   </Accordion>
 </AccordionGroup>
 

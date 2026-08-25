@@ -3,6 +3,7 @@
 
 #include "vlm.h"
 
+#include <algorithm>
 #include <cstring>
 #include <nlohmann/json.hpp>
 
@@ -20,27 +21,35 @@
 namespace geniex {
 
 LlamaVlm::~LlamaVlm() {
-    if (this->ctx) {
-        llama_free(this->ctx);
-        this->ctx = nullptr;
-    }
+    // ctx_vision and ctx hold pointers into model; free them first.
     if (this->ctx_vision) {
         mtmd_free(this->ctx_vision);
         this->ctx_vision = nullptr;
     }
+    if (this->ctx) {
+        llama_free(this->ctx);
+        this->ctx = nullptr;
+    }
+    if (this->model) {
+        llama_model_free(this->model);
+        this->model = nullptr;
+    }
 }
 
-int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
+int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
     if (!input || !input->model_path) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
-    // See llm.cpp for the rationale behind the HTP session release/reacquire
-    // dance. Any llama.cpp class that might load onto HTP must participate.
-    htp::reacquire_before_load();
-
     const Device              device = classify_device(input->device_id, input->config.n_gpu_layers);
     const geniex_ModelConfig& config = input->config;
+
+    // See llm.cpp: reacquire whenever the HTP backend is registered, since
+    // any llama.cpp load walks the registry's device list and a stale session
+    // pointer left from a prior release will crash the load on cpu / gpu too.
+    if (htp::htp_backend_present()) {
+        htp::reacquire_before_load();
+    }
 
     llama_model_params mpar      = build_model_params(config, device);
     auto               selection = resolve_devices(input->device_id);
@@ -82,7 +91,7 @@ int32_t LlamaVlm::create_impl(const geniex_VlmCreateInput* input) {
     // Initialize vision context if mmproj_path provided
     if (input->mmproj_path) {
         mtmd_context_params mparams = mtmd_context_params_default();
-        mparams.use_gpu             = config.n_gpu_layers > 0;
+        mparams.use_gpu             = device == Device::GPU;
         mparams.print_timings       = false;
         mparams.n_threads           = 4;
         // Zack TODO: elegant fix this error:  no member named 'verbosity' in 'mtmd_context_params'
@@ -112,14 +121,13 @@ int32_t LlamaVlm::get_capabilities(geniex_VlmCapabilities* output) {
 int32_t LlamaVlm::reset() {
     if (!this->ctx) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
-    // Clear memory keeping BOS token (like mtmd-cli.cpp does)
-    llama_memory_seq_rm(llama_get_memory(this->ctx), 0, 1, -1);
+    // Hybrid/recurrent models require a full KV cache clear; partial trimming can
+    // leave cache state inconsistent with n_past. Keep this aligned with LlamaLlm::reset().
+    llama_memory_clear(llama_get_memory(this->ctx), /*clear data=*/true);
 
-    // Reset conversation state, setting to n_past = 1 since we preserved the BOS token above.
-    // TODO: revisit and verify that setting to 1 is correct. mtmd-cli.cpp in llama-cpp sets it to 0 but setting to 0
-    // will cause all test cases to fail.
-    this->n_past              = 1;
-    this->global_n_past_chars = 0;
+    this->n_past = 0;
+    this->past_prompt.clear();
+    this->past_gen.clear();
 
     return GENIEX_SUCCESS;
 }
@@ -191,7 +199,6 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     }
 
     common::Profiler profiler;
-    profiler.prompt_start();
 
     int32_t res = GENIEX_SUCCESS;
 
@@ -200,7 +207,8 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
 
     this->set_sampler(cfg.sampler_config);
 
-    // Prepare multimodal input: collect bitmaps for images and audio
+    // Bitmap loading and tokenization fall outside both media_time and
+    // prompt_time (only the chunk loop below is timed), so they show up in ttft.
     std::vector<mtmd_bitmap*> bitmaps;
     int                       n_media = 0;
 
@@ -251,17 +259,32 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
 
     GENIEX_LOG_DEBUG("total media files loaded: {}", n_media);
 
-    // Get the full prompt length for tracking
-    const int32_t full_prompt_len = (int32_t)strlen(input->prompt_utf8);
-    GENIEX_LOG_DEBUG("full prompt length: {}, global_text_pos: {}", full_prompt_len, this->global_n_past_chars);
+    // Incremental text to feed (see vlm.h). Mismatch breaks append-only — fail.
+    const std::string full_prompt(input->prompt_utf8);
 
-    // Extract only the new text portion that hasn't been processed yet
     std::string new_text_portion;
-    if (this->global_n_past_chars < full_prompt_len) {
-        new_text_portion = std::string(input->prompt_utf8 + this->global_n_past_chars);
-        GENIEX_LOG_DEBUG("new text portion length: {}", new_text_portion.length());
+    if (this->n_past == 0 || this->past_prompt.empty()) {
+        new_text_portion = full_prompt;
     } else {
-        GENIEX_LOG_DEBUG("no new text to process (global_text_pos >= full_prompt_len)");
+        size_t lcp     = 0;
+        size_t lcp_max = std::min(full_prompt.size(), this->past_prompt.size());
+        while (lcp < lcp_max && full_prompt[lcp] == this->past_prompt[lcp]) ++lcp;
+
+        const size_t reuse_end = lcp + this->past_gen.size();
+        const bool   gen_matches =
+            reuse_end <= full_prompt.size() && full_prompt.compare(lcp, this->past_gen.size(), this->past_gen) == 0;
+
+        if (!gen_matches) {
+            GENIEX_LOG_ERROR("prefix reuse failed: prompt[{}:{}] does not match last generation (|G|={})",
+                lcp,
+                reuse_end,
+                this->past_gen.size());
+            return GENIEX_ERROR_VLM_GENERATION_FAILED;
+        }
+
+        new_text_portion = full_prompt.substr(reuse_end);
+        GENIEX_LOG_DEBUG(
+            "prefix reuse: |A|={}, |G|={}, increment={} bytes", lcp, this->past_gen.size(), new_text_portion.size());
     }
 
     // Use mtmd path when ctx_vision is available, fallback to direct llama path otherwise
@@ -273,6 +296,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             // prompt_utf8 already has chat template and media markers applied
             mtmd_input_text text;
             text.text          = new_text_portion.c_str();
+            text.text_len      = new_text_portion.length();
             text.add_special   = this->n_past == 0;  // add BOS only on first message
             text.parse_special = true;
 
@@ -290,22 +314,70 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
                 return GENIEX_ERROR_VLM_GENERATION_FAILED;
             }
 
-            // Evaluate chunks (like eval_message does). 1 means the prompt does
-            // not fit the KV cache: report truncation, not a generic failure.
-            llama_pos new_n_past = this->n_past;
-            switch (mtmd_helper_eval_chunks(
-                this->ctx_vision, this->ctx, chunks, this->n_past, 0, llama_n_batch(this->ctx), true, &new_n_past)) {
-                case 0:
-                    profiler.update_prompt_tokens(new_n_past - this->n_past);
-                    this->n_past = new_n_past;
-                    break;
-                case 1:
-                    res = GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
-                    break;
-                default:
-                    GENIEX_LOG_ERROR("mtmd_helper_eval_chunks failed");
-                    res = GENIEX_ERROR_VLM_GENERATION_FAILED;
-                    break;
+            // Time each phase separately: encoder → media_time, decode/prefill →
+            // prompt_time. prompt_tokens counts text + media tokens.
+            const size_t  n_chunks      = mtmd_input_chunks_size(chunks);
+            const int32_t n_batch       = llama_n_batch(this->ctx);
+            llama_pos     n_past_cur    = this->n_past;
+            uint32_t      prompt_tokens = 0;
+            for (size_t i = 0; i < n_chunks && res == GENIEX_SUCCESS; ++i) {
+                const mtmd_input_chunk* chunk    = mtmd_input_chunks_get(chunks, i);
+                const bool              is_media = mtmd_input_chunk_get_type(chunk) != MTMD_INPUT_CHUNK_TYPE_TEXT;
+                const bool              is_last  = (i == n_chunks - 1);
+                // Token count, not KV positions (differ under M-RoPE; KV uses new_n_past).
+                const size_t n_tokens = mtmd_input_chunk_get_n_tokens(chunk);
+
+                llama_pos new_n_past = n_past_cur;
+                int32_t   ret;
+                if (is_media) {
+                    profiler.media_start();
+                    ret = mtmd_encode_chunk(this->ctx_vision, chunk);
+                    profiler.media_end();
+                    if (ret != 0) {
+                        // encode returns 1 on a generic error, not KV-full: fail, don't truncate.
+                        GENIEX_LOG_ERROR("media chunk encoding failed");
+                        res = GENIEX_ERROR_VLM_GENERATION_FAILED;
+                        break;
+                    }
+                    float* embd = mtmd_get_output_embd(this->ctx_vision);
+                    profiler.prompt_start();
+                    ret = mtmd_helper_decode_image_chunk(this->ctx_vision,
+                        this->ctx,
+                        chunk,
+                        embd,
+                        n_past_cur,
+                        0,
+                        n_batch,
+                        &new_n_past,
+                        nullptr,
+                        nullptr);
+                    profiler.prompt_end();
+                } else {
+                    profiler.prompt_start();
+                    ret = mtmd_helper_eval_chunk_single(
+                        this->ctx_vision, this->ctx, chunk, n_past_cur, 0, n_batch, is_last, &new_n_past);
+                    profiler.prompt_end();
+                }
+
+                // This is prefill: a return of 1 (KV cache full) means the prompt
+                // itself is too long, not a generic failure.
+                switch (ret) {
+                    case 0:
+                        prompt_tokens += (uint32_t)n_tokens;
+                        n_past_cur = new_n_past;
+                        break;
+                    case 1:
+                        res = GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG;
+                        break;
+                    default:
+                        GENIEX_LOG_ERROR("chunk evaluation failed");
+                        res = GENIEX_ERROR_VLM_GENERATION_FAILED;
+                        break;
+                }
+            }
+            if (res == GENIEX_SUCCESS) {
+                profiler.update_prompt_tokens(prompt_tokens);
+                this->n_past = n_past_cur;
             }
             mtmd_input_chunks_free(chunks);
         } else {
@@ -314,7 +386,6 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             GENIEX_LOG_DEBUG("no new text content, skipping mtmd processing");
         }
 
-        profiler.prompt_end();
         profiler.decode_start();
     } else {
         GENIEX_LOG_DEBUG("using text-only (direct llama) path");
@@ -343,10 +414,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
 
             GENIEX_LOG_DEBUG("_ml_vlm_generate_internal: Tokenized new text portion into {} tokens", prompt_len);
 
-            // Record prompt processing end and decode start
-            profiler.prompt_end();
             profiler.update_prompt_tokens(prompt_len);
-            profiler.decode_start();
 
             llama_batch batch = llama_batch_get_one(prompt_tokens, prompt_len);
             // Set positions based on current n_past
@@ -354,15 +422,19 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
                 batch.pos[i] = this->n_past + i;
             }
 
+            profiler.prompt_start();
             int32_t decode_ret = llama_decode(this->ctx, batch);
+            profiler.prompt_end();
+            profiler.decode_start();
             free(prompt_tokens);
-            // 1 means the prompt does not fit the KV cache: report truncation, not a generic failure.
+            // 1 means the prompt does not fit the KV cache: since this is
+            // prefill, the prompt itself is too long, not a generic failure.
             switch (decode_ret) {
                 case 0:
                     this->n_past += prompt_len;
                     break;
                 case 1:
-                    res = GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+                    res = GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG;
                     break;
                 default:
                     GENIEX_LOG_ERROR("llama_decode failed");
@@ -463,7 +535,9 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     auto full_text_str = full_text.str();
     output->full_text  = strdup(full_text_str.c_str());
     if (generated_token_count > 0) {
-        this->global_n_past_chars = full_prompt_len + full_text_str.length();
+        // Record this turn so the next can reuse A+T+G (see vlm.h).
+        this->past_prompt = full_prompt;
+        this->past_gen    = full_text_str;
     }
 
     GENIEX_LOG_DEBUG("completed generation with {} tokens", generated_token_count);

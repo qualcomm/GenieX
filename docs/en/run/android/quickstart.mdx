@@ -58,7 +58,6 @@ The flow is the same regardless of model: **init the SDK → pull weights → lo
     val llm = LlmWrapper.builder()
         .llmCreateInput(
             LlmCreateInput(
-                model_name = paths.model_name,
                 model_path = paths.model_path,
                 config     = ModelConfig(nCtx = 4096),
                 runtime_id  = "llama_cpp",

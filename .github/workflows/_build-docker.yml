@@ -23,7 +23,7 @@ on:
         type: string
         default: ""
       is_prerelease:
-        description: "When true, skip moving the :latest tag."
+        description: "When true, skip moving the floating :latest / :latest-cpu tag."
         required: false
         type: boolean
         default: true
@@ -33,8 +33,20 @@ permissions:
 
 jobs:
   build:
+    name: ${{ matrix.variant }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: default
+            sdk_artifact: sdk-linux-arm64
+            tag_suffix: ""
+          # OCI has no micro-arch discriminator, so this needs its own tag. #1217
+          - variant: cpu
+            sdk_artifact: sdk-linux-arm64-cpu
+            tag_suffix: "-cpu"
 
     steps:
       - name: Checkout source
@@ -52,16 +64,16 @@ jobs:
       - name: Download linux-arm64 SDK artifact
         uses: actions/download-artifact@v8
         with:
-          name: sdk-linux-arm64
+          name: ${{ matrix.sdk_artifact }}
           path: sdk/pkg-geniex/
 
       - name: Restore Bazel disk cache
         uses: actions/cache@v6
         with:
           path: ~/.cache/bazel-disk
-          key: bazel-cli-${{ runner.os }}-${{ hashFiles('MODULE.bazel.lock', 'cli/**/BUILD.bazel', 'cli/**/*.bzl') }}
+          key: bazel-cli-${{ runner.os }}-${{ matrix.variant }}-${{ hashFiles('MODULE.bazel.lock', 'cli/**/BUILD.bazel', 'cli/**/*.bzl') }}
           restore-keys: |
-            bazel-cli-${{ runner.os }}-
+            bazel-cli-${{ runner.os }}-${{ matrix.variant }}-
 
       - name: Build docker tarball (//cli/release/linux)
         shell: bash
@@ -94,11 +106,13 @@ jobs:
         env:
           RAW_VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ inputs.tag }}
+          TAG_SUFFIX: ${{ matrix.tag_suffix }}
         run: |
           set -euo pipefail
           bare="${RAW_VERSION#v}"
-          dest_tag="${TAG:-$bare}"
+          dest_tag="${TAG:-$bare}${TAG_SUFFIX}"
           echo "DOCKERHUB_REF=docker.io/qualcomm/geniex:${dest_tag}" >> "$GITHUB_ENV"
+          echo "DOCKERHUB_LATEST=latest${TAG_SUFFIX}" >> "$GITHUB_ENV"
 
       - name: Validate tarball (PR path)
         if: ${{ !inputs.push }}
@@ -125,11 +139,12 @@ jobs:
         shell: bash
         env:
           IMAGE_REF: ${{ env.DOCKERHUB_REF }}
+          LATEST_TAG: ${{ env.DOCKERHUB_LATEST }}
           IS_PRERELEASE: ${{ inputs.is_prerelease }}
         run: |
           set -euo pipefail
           crane push bazel-bin/cli/release/linux/geniex-cli-docker.tar "${IMAGE_REF}"
-          # Prereleases must not clobber the floating :latest tag.
+          # Prereleases must not clobber the floating tag.
           if [[ "${IS_PRERELEASE}" != "true" ]]; then
-            crane tag "${IMAGE_REF}" latest
+            crane tag "${IMAGE_REF}" "${LATEST_TAG}"
           fi

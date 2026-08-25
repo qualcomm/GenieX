@@ -17,6 +17,10 @@ go_library(
 
 go_test(
     name = "middleware_test",
-    srcs = ["package_test.go"],
+    srcs = [
+        "gil_test.go",
+        "package_test.go",
+    ],
     embed = [":middleware"],
+    deps = ["@com_github_gin_gonic_gin//:gin"],
 )
