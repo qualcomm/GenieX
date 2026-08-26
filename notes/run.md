@@ -109,45 +109,21 @@ Warning: qairt plugin only supports NPU inference; ignoring device='cpu' and run
 
 QAIRT models need a `geniex.json` to work. See the [granite4_micro example](https://huggingface.co/yichqian/geniex-qairt-models/blob/main/granite4_micro/geniex.json).
 
-### Using a custom QNN library
+### Using a different QAIRT version
 
-> [!WARNING]
-> **Testing/validation aid — not a general version-mixing feature.** GenieX's QAIRT plugin
-> is compiled against a specific set of QAIRT headers, and QAIRT is not currently guaranteed
-> to be ABI-stable across versions. Loading a QNN build whose struct layouts, field offsets,
-> or vtables differ can **segfault** on the first changed code path — it will appear to work on
-> unchanged paths and crash on changed ones (see ai-hub-models-internal#3964). Use this to
-> validate a specific candidate QAIRT build before bundling it into a GenieX `.alpha`/RC, not
-> to run against arbitrary installed QAIRT versions in production.
-
-By default the QAIRT plugin loads the QNN shared libraries bundled with the GenieX
-release. To validate a different QAIRT/QNN build without reinstalling, point the plugin at
-the library location:
+GenieX ships one plugin variant per supported QAIRT ABI (`qairt-2.45`, `qairt-2.47`,
+`qairt-2.48`, …). By default the bundled `qairt-2.45` variant and its libraries are used.
+To run against a different installed QAIRT SDK, point `QAIRT_LIBRARY_PATH` at it (picked up
+by any front-end: CLI, pybind, Android):
 
 ```bash
-# via the CLI flag (qairt models only)
-geniex infer local/granite4_micro --qnn-lib /path/to/qairt/2.XX.0
-
-# or via the environment variable (picked up by any front-end: CLI, pybind, Android)
-GENIEX_QNN_LIB=/path/to/qairt/2.XX.0 geniex infer local/granite4_micro
+QAIRT_LIBRARY_PATH=/path/to/qairt/2.47 geniex infer local/granite4_micro
 ```
 
-The path accepts either layout:
-
-- **A QAIRT SDK root** (as installed from the Qualcomm Software Center). The plugin resolves
-  the host libraries from `lib/<triple>` (`aarch64-windows-msvc`, `aarch64-android`, or
-  `aarch64-oe-linux-gcc11.2`) and points `ADSP_LIBRARY_PATH` at every Hexagon DSP skel folder
-  (`lib/hexagon-v*/unsigned`), so the on-device HTP arch is matched automatically. This mirrors
-  the manual env-var setup in the [llm_on_genie tutorial](https://github.com/qualcomm/ai-hub-apps/tree/main/tutorials/llm_on_genie#windows-powershell).
-- **A flat folder** that directly holds `QnnHtp.dll` / `QnnSystem.dll` /
-  `QnnHtpNetRunExtensions.dll` (or the `libQnn*.so` equivalents) — the same shape as the
-  bundled `htp-files` layout.
-
-`--qnn-lib` is a convenience wrapper that sets `GENIEX_QNN_LIB` for the process; the flag
-wins when both are given. If no backend library is found under either layout, model load
-fails fast with a clear error (e.g. `GENIEX_QNN_LIB does not contain QnnHtp.dll (looked in
-the folder itself and lib/aarch64-windows-msvc): <path>`). When neither the flag nor the env
-var is set, behavior is unchanged and the bundled QNN-lib is used.
+The path accepts either a QAIRT SDK root (host libs under `lib/<triple>`, Hexagon DSP skels
+under `lib/hexagon-v*/unsigned`) or a flat folder holding the libs directly. The SDK reads
+`QNN_API_VERSION_MINOR` from the SDK and loads the plugin variant that matches; if it can't
+be determined, model load fails fast with a clear error.
 
 ### Build and run locally
 

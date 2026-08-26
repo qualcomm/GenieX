@@ -109,10 +109,8 @@ std::string selectQairtVariant() {
     const std::string variant = qairtVariantForMinor(minor);
     if (variant.empty()) {
         GENIEX_LOG_WARN(
-            "QAIRT_LIBRARY_PATH set but QNN_API_VERSION_MINOR not found under {}; "
-            "falling back to default variant (qairt-2.45)",
+            "QAIRT_LIBRARY_PATH set but QNN_API_VERSION_MINOR not found under {}; no qairt variant selected",
             qnn_lib_root.u8string());
-        return "qairt-2.45";
     } else {
         GENIEX_LOG_INFO("QAIRT_LIBRARY_PATH QNN API minor {} -> loading plugin variant {}", minor, variant);
     }
@@ -269,8 +267,8 @@ void Registry::scan_plugins() {
 
     // The qairt plugin ships as several ABI variants (qairt-2.45, qairt-2.47, …),
     // one per QAIRT/QNN version, that all register the same plugin_id. Exactly one
-    // may load — pick the one matching the QNN libs named by GENIEX_QNN_LIB and
-    // skip the rest. Empty => no qairt libs specified, so skip all qairt variants.
+    // may load — pick the one matching QAIRT_LIBRARY_PATH and skip the rest. Empty
+    // => version could not be resolved, so skip all qairt variants.
     const std::string selected_qairt = selectQairtVariant();
 
     // Search child plugin directories for the brand-specific plugin shared library.
