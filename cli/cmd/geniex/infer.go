@@ -40,7 +40,6 @@ var (
 	input         string
 	systemPrompt  string
 	computeUnit   string
-	qnnLib        string
 	slidingWindow bool
 	specType      string
 	draftModel    string
@@ -82,7 +81,6 @@ var (
 		llmFlags := pflag.NewFlagSet("LLM/VLM Model", pflag.ExitOnError)
 		llmFlags.SortFlags = false
 		llmFlags.StringVarP(&computeUnit, "compute", "c", "", "compute unit to run on: cpu, gpu, npu, hybrid, or an explicit device list like HTP0,HTP1,HTP2,HTP3 (llama_cpp only) (default: npu)")
-		llmFlags.StringVarP(&qnnLib, "qnn-lib", "", "", "path to the QAIRT SDK providing the QNN libraries (qairt only; sets GENIEX_QNN_LIB; REQUIRED — no QNN libs are bundled; the matching plugin ABI variant is selected automatically)")
 		llmFlags.Int32VarP(&ngl, "ngl", "n", -1, "number of layers to offload to gpu/npu, -1 = all (llama_cpp only)")
 		llmFlags.Int32VarP(&nctx, "nctx", "", 4096, "context window size; raise to extend context (llama_cpp only)")
 		llmFlags.Int32VarP(&maxTokens, "max-tokens", "", 2048, "max tokens")
@@ -141,16 +139,6 @@ func infer() *cobra.Command {
 		paths, err := ensureModelAvailable(cmd.Context(), name, precision)
 		if err != nil {
 			return err
-		}
-
-		// --qnn-lib is a convenience wrapper over the GENIEX_QNN_LIB env var the qairt
-		// plugin reads at model-load time. Exporting it here means both the LLM and VLM
-		// paths (and any binding that shares this process) pick it up uniformly.
-		// Must precede InitSDK(), which is where the plugin variant gets selected.
-		if qnnLib != "" {
-			if err := os.Setenv("GENIEX_QNN_LIB", qnnLib); err != nil {
-				return fmt.Errorf("failed to set GENIEX_QNN_LIB: %w", err)
-			}
 		}
 
 		if err := common.InitSDK(); err != nil {
