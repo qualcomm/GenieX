@@ -160,7 +160,8 @@ inline QnnRuntimeConfig make_qnn_runtime_config(const std::filesystem::path& mod
         if (adsp_path.empty()) adsp_path = host_dir.string();
 
         GENIEX_LOG_INFO("Using QNN libraries from QAIRT_LIBRARY_PATH: {} (host libs: {})",
-            qnn_lib_root.string(), host_dir.string());
+            qnn_lib_root.string(),
+            host_dir.string());
 #if defined(WIN32)
         _putenv_s("ADSP_LIBRARY_PATH", adsp_path.c_str());
         SetDllDirectoryA(host_dir.string().c_str());
