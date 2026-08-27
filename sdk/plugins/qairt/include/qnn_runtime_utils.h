@@ -135,58 +135,64 @@ inline std::string collect_adsp_library_path(const std::filesystem::path& root) 
     return joined;
 }
 
-// Returns a QnnRuntimeConfig for the given model directory.
-//
-// This build bundles NO QNN runtime libraries: the QAIRT/QNN libraries MUST be
-// supplied at load time via the GENIEX_QNN_LIB env var (or the CLI `--qnn-lib`
-// flag). GENIEX_QNN_LIB names either a full QAIRT SDK root (host libs under
-// `lib/<triple>`, Hexagon DSP skels under `lib/hexagon-v*/unsigned`) or a flat
-// folder holding the libs directly; the two are resolved separately because a
-// real QAIRT SDK does not colocate them. The SDK registry has already selected
-// the plugin variant whose ABI matches this QNN version (lib/qairt-<ver>), so the
-// libraries loaded here are ABI-compatible by construction — no version warning.
-// If GENIEX_QNN_LIB is unset, or set but missing the backend library, model load
-// fails fast with a clear std::runtime_error.
+// Must match sdk/plugins/qairt/CMakeLists.txt's QAIRT_PLUGIN_DIR (built from QAIRT_QNN_VERSION).
+constexpr const char* kDefaultQairtVariant = "qairt-2.45";
+
 inline QnnRuntimeConfig make_qnn_runtime_config(const std::filesystem::path& model_dir) {
     namespace fs = std::filesystem;
 
     QnnRuntimeConfig runtime_cfg{};
 
-    const fs::path qnn_lib_root = read_env_path("GENIEX_QNN_LIB", L"GENIEX_QNN_LIB");
-    if (qnn_lib_root.empty()) {
-        throw std::runtime_error(
-            "no QNN libraries specified: this build bundles none. Pass --qnn-lib <QAIRT SDK path> "
-            "(or set GENIEX_QNN_LIB) to point the qairt plugin at a QAIRT SDK.");
-    }
+    const fs::path qnn_lib_root = read_env_path("QAIRT_LIBRARY_PATH", L"QAIRT_LIBRARY_PATH");
+    if (!qnn_lib_root.empty()) {
+        std::error_code ec;
+        if (!fs::is_directory(qnn_lib_root, ec)) {
+            throw std::runtime_error("QAIRT_LIBRARY_PATH path is not a directory: " + qnn_lib_root.string());
+        }
+        const fs::path host_dir = locate_qnn_host_lib_dir(qnn_lib_root);
+        if (host_dir.empty()) {
+            throw std::runtime_error("QAIRT_LIBRARY_PATH does not contain " + std::string(kQnnBackendLib) +
+                                     " (looked in the folder itself and lib/" + kHostLibTriple +
+                                     "): " + qnn_lib_root.string());
+        }
 
-    std::error_code ec;
-    if (!fs::is_directory(qnn_lib_root, ec)) {
-        throw std::runtime_error("GENIEX_QNN_LIB path is not a directory: " + qnn_lib_root.string());
-    }
-    const fs::path host_dir = locate_qnn_host_lib_dir(qnn_lib_root);
-    if (host_dir.empty()) {
-        throw std::runtime_error("GENIEX_QNN_LIB does not contain " + std::string(kQnnBackendLib) +
-                                 " (looked in the folder itself and lib/" + kHostLibTriple +
-                                 "): " + qnn_lib_root.string());
-    }
+        std::string adsp_path = collect_adsp_library_path(qnn_lib_root);
+        if (adsp_path.empty()) adsp_path = host_dir.string();
 
-    // ADSP_LIBRARY_PATH points at the Hexagon DSP skel folders. In a QAIRT SDK these live
-    // apart from the host libs; if none are found (flat folder) fall back to the host dir.
-    std::string adsp_path = collect_adsp_library_path(qnn_lib_root);
-    if (adsp_path.empty()) adsp_path = host_dir.string();
-
-    GENIEX_LOG_INFO(
-        "Using QNN libraries from GENIEX_QNN_LIB: {} (host libs: {})", qnn_lib_root.string(), host_dir.string());
-    GENIEX_LOG_DEBUG("Setting ADSP_LIBRARY_PATH to {}", adsp_path);
+        GENIEX_LOG_INFO("Using QNN libraries from QAIRT_LIBRARY_PATH: {} (host libs: {})",
+            qnn_lib_root.string(),
+            host_dir.string());
 #if defined(WIN32)
-    _putenv_s("ADSP_LIBRARY_PATH", adsp_path.c_str());
-    SetDllDirectoryA(host_dir.string().c_str());
+        _putenv_s("ADSP_LIBRARY_PATH", adsp_path.c_str());
+        SetDllDirectoryA(host_dir.string().c_str());
 #else
-    setenv("ADSP_LIBRARY_PATH", adsp_path.c_str(), 1);
+        setenv("ADSP_LIBRARY_PATH", adsp_path.c_str(), 1);
 #endif
-    runtime_cfg.backend_path    = (host_dir / kQnnBackendLib).string();
-    runtime_cfg.system_lib_path = (host_dir / kQnnSystemLib).string();
-    runtime_cfg.extensions_path = (host_dir / kQnnExtensionsLib).string();
+        runtime_cfg.backend_path    = (host_dir / kQnnBackendLib).string();
+        runtime_cfg.system_lib_path = (host_dir / kQnnSystemLib).string();
+        runtime_cfg.extensions_path = (host_dir / kQnnExtensionsLib).string();
+
+        static_cast<void>(model_dir);
+        return runtime_cfg;
+    }
+
+    fs::path backend_dir = read_env_path("GENIEX_PLUGIN_PATH", L"GENIEX_PLUGIN_PATH");
+#if not defined(__ANDROID__)
+    if (!backend_dir.empty()) {
+        backend_dir = backend_dir / kDefaultQairtVariant / "htp-files";
+    }
+#endif
+
+    GENIEX_LOG_DEBUG("Using bundled QNN libraries from {}", backend_dir.string());
+#if defined(WIN32)
+    _putenv_s("ADSP_LIBRARY_PATH", backend_dir.string().c_str());
+    SetDllDirectoryA(backend_dir.string().c_str());
+#else
+    setenv("ADSP_LIBRARY_PATH", backend_dir.string().c_str(), 1);
+#endif
+    runtime_cfg.backend_path    = (backend_dir / kQnnBackendLib).string();
+    runtime_cfg.system_lib_path = (backend_dir / kQnnSystemLib).string();
+    runtime_cfg.extensions_path = (backend_dir / kQnnExtensionsLib).string();
 
     static_cast<void>(model_dir);
     return runtime_cfg;
