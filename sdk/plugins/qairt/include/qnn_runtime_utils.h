@@ -135,7 +135,7 @@ inline std::string collect_adsp_library_path(const std::filesystem::path& root) 
     return joined;
 }
 
-// Must match registry.cpp's selectQairtVariant() default.
+// Must match sdk/plugins/qairt/CMakeLists.txt's QAIRT_PLUGIN_DIR (built from QAIRT_QNN_VERSION).
 constexpr const char* kDefaultQairtVariant = "qairt-2.45";
 
 inline QnnRuntimeConfig make_qnn_runtime_config(const std::filesystem::path& model_dir) {

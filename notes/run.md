@@ -111,9 +111,8 @@ QAIRT models need a `geniex.json` to work. See the [granite4_micro example](http
 
 ### Using a different QAIRT version
 
-GenieX ships one plugin variant per supported QAIRT ABI (`qairt-2.45`, `qairt-2.47`,
-`qairt-2.48`, …). By default the bundled `qairt-2.45` variant and its libraries are used.
-To run against a different installed QAIRT SDK, point `QAIRT_LIBRARY_PATH` at it (picked up
+By default the bundled `qairt-2.45` libraries are used. To run against a different
+installed QAIRT SDK, point `QAIRT_LIBRARY_PATH` at it (picked up
 by any front-end: CLI, pybind, Android):
 
 ```bash
@@ -121,9 +120,8 @@ QAIRT_LIBRARY_PATH=/path/to/qairt/2.47 geniex infer local/granite4_micro
 ```
 
 The path accepts either a QAIRT SDK root (host libs under `lib/<triple>`, Hexagon DSP skels
-under `lib/hexagon-v*/unsigned`) or a flat folder holding the libs directly. The SDK reads
-`QNN_API_VERSION_MINOR` from the SDK and loads the plugin variant that matches; if it can't
-be determined, model load fails fast with a clear error.
+under `lib/hexagon-v*/unsigned`) or a flat folder holding the libs directly. If no backend
+library is found there, model load fails fast with a clear error.
 
 ### Build and run locally
 

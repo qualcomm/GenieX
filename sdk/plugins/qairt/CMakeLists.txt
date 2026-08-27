@@ -20,8 +20,8 @@ add_subdirectory(./src)
 
 # setup install
 #
-# Built once per QAIRT_QNN_VERSION, installed into its own lib/qairt-<ver>/ so
-# multiple ABI builds coexist; the registry picks the one matching QAIRT_LIBRARY_PATH.
+# Single build against QAIRT_QNN_VERSION's headers, installed into lib/qairt-<ver>/.
+# QAIRT_LIBRARY_PATH selects which QNN runtime libs this one build loads at runtime.
 set(QAIRT_PLUGIN_DIR "lib/qairt-${QAIRT_QNN_VERSION}")
 
 set(QAIRT_LIBS geniex_core geniex-proc geniex-proc-vision geniex-proc-audio geniex_vlm)
@@ -34,7 +34,7 @@ foreach(dep IN LISTS QAIRT_LIBS)
 endforeach()
 
 # geniex-qairt's own htp-files install() is excluded (EXCLUDE_FROM_ALL); re-install
-# its build-tree POST_BUILD output here. OPTIONAL: only the default version populates it.
+# its build-tree POST_BUILD output here.
 if(TARGET geniex_core)
     install(DIRECTORY "$<TARGET_FILE_DIR:geniex_core>/htp-files/"
         DESTINATION "${QAIRT_PLUGIN_DIR}/htp-files"
