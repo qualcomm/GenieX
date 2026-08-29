@@ -13,7 +13,16 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="Windows SmartScreen 拦截 CLI 安装包">
-    `.exe` 尚未代码签名。在 SmartScreen 对话框中点击 **More info → Run anyway**。
+    发布版本已完成 Authenticode 代码签名，SmartScreen 会信任。若使用的是旧版未签名安装包，在 SmartScreen 对话框中点击 **More info → Run anyway**。
+  </Accordion>
+
+  <Accordion title="Windows Smart App Control 拦截 GenieX DLL">
+    Smart App Control 只运行已签名且信誉良好的二进制——未签名构建会被拦截，CLI 可能无法完整启动。发布版本已完成 Authenticode 签名并获得信任。
+
+    若你使用的是旧版或自行编译的未签名构建：
+    1. 从 [CLI 安装](/cn/run/cli/install) 页面重新下载最新发布版。
+    2. 若仍被拦截，可临时关闭 Smart App Control：**Windows 安全中心 → 应用和浏览器控制 → Smart App Control 设置 → 关闭**（之后记得重新开启）。
+    3. 在受管设备上，请 IT 管理员允许该发布者。
   </Accordion>
 </AccordionGroup>
 
