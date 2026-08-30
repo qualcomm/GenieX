@@ -3,19 +3,20 @@
 
 use std::os::raw::c_char;
 
-use model_manager_core::mapping::{is_docker_hub_reference, resolve_alias};
+use model_manager_core::mapping::{is_llmman_reference, resolve_alias};
 
 use crate::pull::GenieXHubSource;
 use crate::types::*;
 
 /// Resolve the hub a pull/query would *actually* use for `model_name`, given
-/// the caller's requested `hub_in`. Mirrors the `use_docker` decision inside
-/// `extract_name_and_intent`: an explicit `GENIEX_HUB_DOCKER` stays Docker, and
-/// `GENIEX_HUB_AUTO` becomes Docker when the name carries a Docker Hub prefix
-/// (`docker.io/…`). Every other input is returned unchanged.
+/// the caller's requested `hub_in`. Mirrors the `use_llmman` decision inside
+/// `extract_name_and_intent`: an explicit `GENIEX_HUB_LLMMAN` stays llmman, and
+/// `GENIEX_HUB_AUTO` becomes llmman when the name carries an OCI registry
+/// prefix (`docker.io/`, `ghcr.io/`, `oci://`, …). Every other input is
+/// returned unchanged.
 ///
 /// Bindings call this to decide binding-side flow (e.g. skip the GGUF precision
-/// picker for Docker Hub, whose `:<tag>` is a registry reference, not a quant)
+/// picker for llmman, whose `:<tag>` is a registry reference, not a quant)
 /// without re-implementing the prefix table the SDK owns. No network I/O.
 #[no_mangle]
 pub extern "C" fn geniex_model_resolve_hub(
@@ -29,7 +30,7 @@ pub extern "C" fn geniex_model_resolve_hub(
         }
         let name = unsafe { cstr_to_str(model_name) }?;
         let resolved = match hub_in {
-            GenieXHubSource::Auto if is_docker_hub_reference(name) => GenieXHubSource::Docker,
+            GenieXHubSource::Auto if is_llmman_reference(name) => GenieXHubSource::Llmman,
             other => other,
         };
         unsafe { *out_hub = resolved };

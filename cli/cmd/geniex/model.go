@@ -45,8 +45,8 @@ func resolveHub() (geniex_sdk.HubSource, error) {
 		return geniex_sdk.HubAIHub, nil
 	case "hf", "huggingface":
 		return geniex_sdk.HubHuggingFace, nil
-	case "docker", "dockerhub":
-		return geniex_sdk.HubDocker, nil
+	case "llmman", "oci":
+		return geniex_sdk.HubLlmman, nil
 	case "local", "localfs":
 		if localPath == "" {
 			return 0, fmt.Errorf("local path is required for localfs model hub")
@@ -63,16 +63,17 @@ func pull() *cobra.Command {
 		GroupID: "model",
 		Use:     "pull <model-name>[:<precision>]",
 
-		Short: "Pull model from HuggingFace, Qualcomm AI Hub Models, or Docker Hub",
+		Short: "Pull model from HuggingFace, Qualcomm AI Hub Models, or an OCI registry",
 		Long: "Download and cache a model by name. Append ':<precision>' to pull a specific precision; otherwise you'll be prompted to choose one.\n\n" +
-			"Docker Hub models (e.g. docker.io/ai/gemma3, or ai/gemma3 with --model-hub docker) " +
-			"use ':<tag>' instead of a precision — omit it to pull the 'latest' tag.",
+			"OCI registry models (e.g. docker.io/ai/gemma3, ghcr.io/org/model, or ai/gemma3 with --model-hub llmman) " +
+			"use ':<tag>' instead of a precision — omit it to pull the 'latest' tag. These are fetched by " +
+			"llmman, which must be installed and running (`llmman serve`).",
 	}
 
 	pullCmd.Args = cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs)
 
 	pullCmd.Flags().SortFlags = false
-	pullCmd.Flags().StringVarP(&modelHub, "model-hub", "", "", "specify model hub to use: aihub|hf|docker|localfs")
+	pullCmd.Flags().StringVarP(&modelHub, "model-hub", "", "", "specify model hub to use: aihub|hf|llmman|localfs")
 	pullCmd.Flags().StringVarP(&localPath, "local-path", "", "", "[localfs] path to local directory or aihub zip file")
 	pullCmd.Flags().StringVarP(&modelType, "model-type", "", "", "specify model type to use: [llm|vlm]")
 
@@ -462,9 +463,10 @@ func pullModel(ctx context.Context, name, quant string) error {
 	}
 
 	// No precision requested: query the remote candidates and let the user pick.
-	// Skipped for localfs (no remote listing) and Docker, where an empty quant
-	// already means the `latest` tag and a query would feed back a quant label.
-	if quant == "" && effectiveHub != geniex_sdk.HubLocalFS && effectiveHub != geniex_sdk.HubDocker {
+	// Skipped for localfs (no remote listing) and llmman, which publishes one
+	// artifact per tag rather than a set of quants — the SDK rejects a query
+	// there outright, since answering one would mean doing the whole download.
+	if quant == "" && effectiveHub != geniex_sdk.HubLocalFS && effectiveHub != geniex_sdk.HubLlmman {
 		spin := render.NewSpinner("fetching available precisions from: " + name)
 		spin.Start()
 		q, err := geniex_sdk.ModelQuery(in)

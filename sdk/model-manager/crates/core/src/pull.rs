@@ -16,6 +16,11 @@
 //! └───────────────────┘   └───────────────────────────┘   └──────────────────┘
 //! ```
 //!
+//! [`PullIntent::Llmman`] is the one intent that bends step 1: an
+//! external `llmman serve` daemon moves the bytes during `plan`, and
+//! step 2 degrades to a local hard link out of llmman's store. See
+//! [`crate::source::llmman`].
+//!
 //! Layout during/after a pull of `org/repo`:
 //!
 //! ```text
@@ -40,8 +45,8 @@ use crate::manifest_builder::ManifestHint;
 use crate::mapping::canonicalize_model_name;
 use crate::resume;
 use crate::source::ai_hub::{AiHubConfig, AiHubSource};
-use crate::source::dockerhub::DockerHubSource;
 use crate::source::hf::HfSource;
+use crate::source::llmman::LlmmanSource;
 use crate::source::localfs::LocalFsSource;
 use crate::source::ModelSource;
 use crate::store::{Store, INFLIGHT_DIR, MANIFEST_FILE};
@@ -78,10 +83,14 @@ pub enum PullIntent {
         display_name: String,
         chipset: String,
     },
-    DockerHub {
-        /// "ai/gemma3" — no registry host prefix.
-        repo: String,
-        /// Tag or `sha256:<hex>` digest; empty means `"latest"`.
+    /// Delegate acquisition to a running `llmman serve` daemon. Covers
+    /// every OCI registry (Docker Hub, GHCR, quay, a self-hosted
+    /// registry, …) plus llmman's own non-registry sources.
+    Llmman {
+        /// The reference verbatim as llmman should see it, host prefix
+        /// and `:<tag>` included — e.g. `docker.io/ai/gemma3:latest`.
+        /// Unlike the other hubs, this is *not* GenieX's storage name;
+        /// that is `PullRequest.model_name`.
         reference: String,
     },
 }
@@ -128,7 +137,11 @@ pub async fn pull_with_source(
             let inflight_dir = dest_dir.join(INFLIGHT_DIR);
             fs::create_dir_all(&inflight_dir)?;
 
-            let mut plan = source.plan().await?;
+            // `plan_with_progress` rather than `plan`: a source that
+            // delegates acquisition to an external agent (llmman) does
+            // the bulk transfer here, and must be able to drive the same
+            // progress bar the executor does below.
+            let mut plan = source.plan_with_progress(on_progress).await?;
             plan.manifest.name = model_name_owned.clone();
 
             // Merge with any existing manifest so pulling an extra quant keeps
@@ -246,10 +259,11 @@ pub(crate) async fn build_source(
             );
             Ok(Box::new(src))
         }
-        PullIntent::DockerHub { repo, reference } => {
-            let src = DockerHubSource::new(repo.clone(), reference.clone(), transport)?;
-            Ok(Box::new(src))
-        }
+        PullIntent::Llmman { reference } => Ok(Box::new(LlmmanSource::new(
+            reference.clone(),
+            req.model_name.clone(),
+            req.hint.clone(),
+        ))),
     }
 }
 

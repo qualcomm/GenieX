@@ -216,13 +216,23 @@ typedef enum {
     GENIEX_HUB_AIHUB       = 3, /**< Qualcomm AI Hub qairt assets         */
     GENIEX_HUB_VOLCES      = 4, /**< Volces TOS (mainland China preferred) */
     /**
-     * Docker Registry HTTP API V2 — e.g. models published under
-     * https://hub.docker.com/u/ai (`ai/gemma3`, `ai/smollm2`, ...).
+     * Any OCI registry, pulled via a running `llmman serve` daemon:
+     * Docker Hub's ai/* namespace (`docker.io/ai/gemma3`), GHCR, quay,
+     * a self-hosted registry, and llmman's own non-registry sources.
+     *
      * GENIEX_HUB_AUTO also resolves here when `model_name` carries an
-     * explicit `docker.io/`, `index.docker.io/`, or
-     * `https://hub.docker.com/r/` prefix.
+     * explicit registry prefix (`docker.io/`, `ghcr.io/`, `quay.io/`,
+     * `public.ecr.aws/`, `oci://`, `https://hub.docker.com/r/`, ...).
+     *
+     * The SDK does not speak the registry protocol itself. It requires
+     * `llmman serve` to be reachable (`LLMMAN_HOST`, default
+     * 127.0.0.1:17434) and the `llmman` binary on PATH (or
+     * `GENIEX_LLMMAN_BIN`); a pull fails with an actionable error when
+     * either is missing. `geniex_model_query` is not supported for this
+     * hub — a registry tag names one artifact, not a set of GGUF
+     * quantizations to choose between.
      */
-    GENIEX_HUB_DOCKER = 5,
+    GENIEX_HUB_LLMMAN = 5,
     /**
      * Local filesystem — not a real hub. The value 127 (0x7F) keeps it
      * well separated from real hub identifiers so future additions won't
@@ -279,9 +289,10 @@ typedef struct {
     /**
      * Quantization filter for HuggingFace / AI Hub pulls. When set only
      * that quant is fetched; NULL pulls every quant the repo publishes.
-     * Doubles as the Docker tag or `sha256:<hex>` digest when
-     * `hub == GENIEX_HUB_DOCKER` (or GENIEX_HUB_AUTO resolves to Docker);
-     * NULL or empty then means the `latest` tag.
+     * Doubles as the registry tag or `sha256:<hex>` digest when
+     * `hub == GENIEX_HUB_LLMMAN` (or GENIEX_HUB_AUTO resolves to llmman),
+     * and is ignored if `model_name` already carries a `:<tag>`. When
+     * neither supplies one, llmman applies its own `latest` default.
      */
     const char*      quant;
     geniex_HubSource hub;        /**< Use GENIEX_HUB_AUTO for automatic selection  */
@@ -406,12 +417,12 @@ GENIEX_API int32_t geniex_model_resolve_alias(const char* alias, char** out_full
  * @brief Resolve the hub a pull/query would actually use for @p model_name.
  *
  * An explicit @p hub_in other than GENIEX_HUB_AUTO is returned unchanged.
- * GENIEX_HUB_AUTO resolves to GENIEX_HUB_DOCKER when @p model_name carries a
- * Docker Hub prefix (`docker.io/`, `index.docker.io/`,
+ * GENIEX_HUB_AUTO resolves to GENIEX_HUB_LLMMAN when @p model_name carries an
+ * OCI registry prefix (`docker.io/`, `ghcr.io/`, `quay.io/`, `oci://`,
  * `https://hub.docker.com/r/`, …); otherwise it stays GENIEX_HUB_AUTO.
  *
  * Lets a binding branch on the effective hub — e.g. skip the GGUF precision
- * picker for Docker Hub, whose `:<tag>` is a registry reference, not a quant —
+ * picker for llmman, whose `:<tag>` is a registry reference, not a quant —
  * without duplicating the prefix table the SDK owns. No network I/O.
  *
  * @param model_name  "org/repo", a short alias, or a prefixed reference.
