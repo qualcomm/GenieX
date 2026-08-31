@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"reflect"
+	"sync/atomic"
 	"time"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
@@ -90,6 +91,33 @@ func KeepAliveGet[T any](name string, param types.ModelParam, reset bool) (*T, e
 }
 
 var keepAlive keepAliveService
+var keepAliveGeneration atomic.Uint64
+
+// KeepAliveGeneration identifies the exact lifetime/reset generation of the
+// mutable model state. Managed cache callers bind a committed transcript to
+// this value so an idle unload, model reload, or out-of-band reset can never be
+// mistaken for retained KV state.
+func KeepAliveGeneration() uint64 { return keepAliveGeneration.Load() }
+
+// ResetKeepAlive clears the loaded model's mutable state. If Reset is absent or
+// fails, the model is destroyed instead; either outcome prevents a caller from
+// reusing partially generated KV state. Caller holds middleware.GILock.
+func ResetKeepAlive() error {
+	if keepAlive.model == nil {
+		return nil
+	}
+	if r, ok := keepAlive.model.(keepResetable); ok {
+		if err := r.Reset(); err == nil {
+			keepAliveGeneration.Add(1)
+			return nil
+		} else {
+			keepAlive.destroy()
+			return err
+		}
+	}
+	keepAlive.destroy()
+	return nil
+}
 
 // keepAliveService caches a single loaded model. All access is under the
 // request GIL (middleware.GILock), so it needs no lock of its own.
@@ -150,6 +178,8 @@ func (keepAlive *keepAliveService) destroy() {
 		keepAlive.model.Destroy()
 		keepAlive.model = nil
 		keepAlive.name = ""
+		keepAlive.param = types.ModelParam{}
+		keepAliveGeneration.Add(1)
 	}
 }
 
@@ -168,8 +198,13 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 
 	if keepAlive.name == name && reflect.DeepEqual(keepAlive.param, param) {
 		if reset {
-			if r, ok := keepAlive.model.(keepResetable); ok {
-				r.Reset()
+			if err := ResetKeepAlive(); err != nil {
+				return nil, err
+			}
+			// A non-resettable model was destroyed to fail closed. Fall through
+			// and reload it rather than returning the now-nil handle.
+			if keepAlive.model == nil {
+				return keepAliveGet[T](name, param, false)
 			}
 		}
 		return keepAlive.model, nil
@@ -227,6 +262,7 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 	keepAlive.name = name
 	keepAlive.model = t
 	keepAlive.param = param
+	keepAliveGeneration.Add(1)
 
 	return t, nil
 }

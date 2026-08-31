@@ -34,9 +34,10 @@ type streamChoice struct {
 }
 
 type streamChunk struct {
-	Object  string                  `json:"object"`
-	Choices []streamChoice          `json:"choices"`
-	Usage   *openai.CompletionUsage `json:"usage,omitempty"`
+	Object      string                  `json:"object"`
+	Choices     []streamChoice          `json:"choices"`
+	Usage       *openai.CompletionUsage `json:"usage,omitempty"`
+	GenieXCache *managedCacheMetadata   `json:"geniex_cache,omitempty"`
 }
 
 const streamChunkObject = "chat.completion.chunk"
@@ -60,10 +61,11 @@ func tokenChunk(text string, reasoning bool) streamChunk {
 	return streamChunk{Object: streamChunkObject, Choices: []streamChoice{{Delta: delta}}}
 }
 
-func finishChunk(reason string) streamChunk {
+func finishChunk(reason string, cache *managedCacheMetadata) streamChunk {
 	return streamChunk{
-		Object:  streamChunkObject,
-		Choices: []streamChoice{{FinishReason: &reason}},
+		Object:      streamChunkObject,
+		Choices:     []streamChoice{{FinishReason: &reason}},
+		GenieXCache: cache,
 	}
 }
 
@@ -89,10 +91,22 @@ func toolCallChunk(call openai.ChatCompletionMessageFunctionToolCallFunction) st
 	}
 }
 
+type managedCacheFinalizer func(error) (*managedCacheMetadata, error)
+
 // profile is read only after wait() returns, when generation has filled it.
-func streamPlainText(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, profile *geniex_sdk.ProfileData, render tokenRender) {
-	c.Stream(func(w io.Writer) bool {
-		r, ok := <-dataCh
+// The return value is true when the client disconnected before the terminal
+// chunk. In that case the caller must abort and reset managed cache state.
+func streamPlainText(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, profile *geniex_sdk.ProfileData, render tokenRender, finalize managedCacheFinalizer) bool {
+	contextCancelled := false
+	disconnected := c.Stream(func(w io.Writer) bool {
+		var r string
+		var ok bool
+		select {
+		case <-c.Request.Context().Done():
+			contextCancelled = true
+			return false
+		case r, ok = <-dataCh:
+		}
 		if ok {
 			if chunk, emit := render(r); emit {
 				c.SSEvent("", chunk)
@@ -102,25 +116,47 @@ func streamPlainText(c *gin.Context, dataCh <-chan string, wait func() error, in
 		// A context window exhausted mid-stream is a normal truncated completion
 		// (finish_reason=length): fall through to the finish chunk. Other errors
 		// (including a too-long prompt) are surfaced as an error event.
-		if err := wait(); err != nil && !errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
-			c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
+		genErr := wait()
+		if genErr != nil && !errors.Is(genErr, geniex_sdk.ErrLlmTokenizationContextLength) {
+			if finalize != nil {
+				_, _ = finalize(genErr)
+			}
+			c.SSEvent("", map[string]any{"error": genErr.Error(), "code": geniex_sdk.SDKErrorCode(genErr)})
 			return false
 		}
-		c.SSEvent("", finishChunk(mapFinishReason(profile.StopReason)))
+		var cache *managedCacheMetadata
+		if finalize != nil {
+			var err error
+			cache, err = finalize(genErr)
+			if err != nil {
+				c.SSEvent("", map[string]any{"error": err.Error()})
+				return false
+			}
+		}
+		c.SSEvent("", finishChunk(mapFinishReason(profile.StopReason), cache))
 		if includeUsage {
 			c.SSEvent("", usageChunk(profile2Usage(*profile)))
 		}
 		c.SSEvent("", "[DONE]")
 		return false
 	})
+	return disconnected || contextCancelled
 }
 
 // Buffers the whole stream, then emits one tool-call chunk (or a content chunk
 // on parse failure).
-func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, profile *geniex_sdk.ProfileData) {
+func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, profile *geniex_sdk.ProfileData) bool {
 	buffer := strings.Builder{}
-	c.Stream(func(w io.Writer) bool {
-		r, ok := <-dataCh
+	contextCancelled := false
+	disconnected := c.Stream(func(w io.Writer) bool {
+		var r string
+		var ok bool
+		select {
+		case <-c.Request.Context().Done():
+			contextCancelled = true
+			return false
+		case r, ok = <-dataCh:
+		}
 		if ok {
 			buffer.WriteString(r)
 			return true
@@ -142,11 +178,12 @@ func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, inc
 		} else {
 			c.SSEvent("", toolCallChunk(toolCall))
 		}
-		c.SSEvent("", finishChunk(finishReason))
+		c.SSEvent("", finishChunk(finishReason, nil))
 		if includeUsage {
 			c.SSEvent("", usageChunk(profile2Usage(*profile)))
 		}
 		c.SSEvent("", "[DONE]")
 		return false
 	})
+	return disconnected || contextCancelled
 }

@@ -85,6 +85,10 @@ func ForwardLogits(c *gin.Context) {
 		return
 	}
 
+	// ForwardLogits mutates the same model state used by managed chat. Clear the
+	// committed lineage even when raw KeepCache prevents a model reset.
+	invalidateManagedLineageForUnmanagedRequest()
+
 	p, err := service.KeepAliveGet[geniex_sdk.LLM](
 		req.Model,
 		modelParam,

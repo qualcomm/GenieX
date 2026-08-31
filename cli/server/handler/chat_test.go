@@ -80,3 +80,28 @@ func TestMaxCompletionTokensAlias(t *testing.T) {
 		})
 	}
 }
+
+func TestManagedCacheMetadataAppearsOnlyOnFinalChunk(t *testing.T) {
+	metadata := &managedCacheMetadata{
+		Mode:     "managed",
+		Status:   "reused",
+		Revision: "sha256:" + strings.Repeat("a", 64),
+		Reason:   "exact_extension",
+	}
+	intermediate, err := json.Marshal(contentChunk("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(intermediate), "geniex_cache") {
+		t.Fatalf("intermediate chunk leaked cache metadata: %s", intermediate)
+	}
+	terminal, err := json.Marshal(finishChunk("stop", metadata))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range []string{`"geniex_cache"`, `"status":"reused"`, `"reason":"exact_extension"`} {
+		if !strings.Contains(string(terminal), marker) {
+			t.Fatalf("terminal chunk %s is missing %s", terminal, marker)
+		}
+	}
+}

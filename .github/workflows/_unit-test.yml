@@ -153,6 +153,18 @@ jobs:
               -- //cli/... //bindings/go/... -//cli/release/... \
               2>&1 | tee .bazel-test.log
 
+            # Managed cache state protects one mutable model handle. Run its
+            # handler and keep-alive tests with Go's race instrumentation on
+            # Linux; the race detector is unavailable on Windows ARM64.
+            bazelisk test \
+              --@io_bazel_rules_go//go/config:race \
+              --//sdk:sdk_type=local \
+              --disk_cache=/root/.cache/bazel-disk \
+              --test_output=errors \
+              --test_summary=terse \
+              -- //cli/server/handler:handler_test \
+                 //cli/server/service:service_test
+
       - name: Run go test (Windows host)
         if: steps.skip.outputs.skip != 'true' && inputs.language == 'go' && matrix.platform == 'windows-arm64'
         shell: cmd
