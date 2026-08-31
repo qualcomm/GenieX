@@ -513,6 +513,7 @@ func pullModel(ctx context.Context, name, quant string) error {
 		}
 		if bar == nil {
 			bar = render.NewProgressBar(total, downloaded, "downloading")
+			fmt.Println(render.GetTheme().Info.Sprint("   Press Ctrl+C to cancel — progress is saved, not discarded."))
 		}
 		bar.Set(downloaded)
 		return ctx.Err() == nil
@@ -523,7 +524,9 @@ func pullModel(ctx context.Context, name, quant string) error {
 			bar.Clear()
 		}
 		if ctx.Err() != nil {
+			key := geniex_sdk.JoinNamePrecision(name, quant)
 			fmt.Println(render.GetTheme().Warning.Sprint("✗  Download cancelled"))
+			fmt.Println(render.GetTheme().Info.Sprintf("   Run 'geniex pull %s' to resume, or 'geniex remove %s' to free the disk space instead.", key, key))
 			return nil
 		}
 		return err

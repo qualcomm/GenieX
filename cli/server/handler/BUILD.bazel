@@ -35,6 +35,8 @@ go_library(
 go_cgo_test(
     name = "handler_test",
     srcs = [
+        "chat_response_test.go",
+        "chat_stream_test.go",
         "chat_test.go",
         "cache_identity_test.go",
         "cache_lineage_test.go",

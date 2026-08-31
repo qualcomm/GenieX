@@ -4,52 +4,143 @@
 package utils
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/bytedance/sonic"
-	"github.com/openai/openai-go/v3"
 )
 
-// Gemma 4 emits tool calls as `<|tool_call>call:NAME{key:value,...}<tool_call|>`
-// instead of JSON. The body is a custom dict where strings are wrapped in
-// `<|"|>...<|"|>`, keys are bare up to ':', and scalars (number/bool/null) are
-// verbatim. Grammar mirrors llama.cpp's common_chat_params_init_gemma4.
+// Gemma 4 wraps each call in `<|tool_call>call:NAME{key:value,...}<tool_call|>`.
+// The body is a custom dict, not JSON: strings are wrapped in `<|"|>...<|"|>`, keys
+// are bare up to ':', and scalars are verbatim. Parallel calls are separate
+// wrappers, so a region still holds exactly one. Grammar: llama.cpp's
+// common_chat_params_init_gemma4.
 const (
-	gemma4ToolCallOpen = "<|tool_call>call:"
-	gemma4StringMarker = `<|"|>`
+	gemma4Open   = "<|tool_call>call:"
+	gemma4Close  = "<tool_call|>"
+	gemma4String = `<|"|>`
 )
 
-var errGemma4 = errors.New("gemma4 tool call not match")
+type gemma4ToolCall struct {
+	markerFormat
+}
 
-// parseToolCallsGemma4 extracts the first `<|tool_call>call:NAME{...}` in resp
-// and returns it with the dict body transcoded to JSON arguments.
-func parseToolCallsGemma4(resp string) (openai.ChatCompletionMessageFunctionToolCallFunction, error) {
-	tc := openai.ChatCompletionMessageFunctionToolCallFunction{}
+func newGemma4ToolCall() *gemma4ToolCall {
+	return &gemma4ToolCall{newMarkerFormat(gemma4Open, gemma4Close)}
+}
 
-	start := strings.Index(resp, gemma4ToolCallOpen)
-	if start < 0 {
-		return tc, errGemma4
+func (t *gemma4ToolCall) parse(s string) []toolCallFn { return parseGemma4ToolCalls(s) }
+
+// parseGemma4ToolCalls returns every call in s. The end marker is not required: a
+// call whose dict closed is complete, so Tail can still recover a truncated one.
+func parseGemma4ToolCalls(s string) []toolCallFn {
+	var calls []toolCallFn
+	for {
+		i := strings.Index(s, gemma4Open)
+		if i < 0 {
+			return calls
+		}
+		s = s[i+len(gemma4Open):] // a malformed call resumes at the next marker
+		brace := strings.IndexByte(s, '{')
+		if brace < 0 {
+			return calls
+		}
+		name := strings.TrimSpace(s[:brace])
+		args, next := parseGemma4Seq(s, brace, '{', '}', parseGemma4Member)
+		if name == "" || next < 0 {
+			continue
+		}
+		calls = append(calls, toolCallFn{Name: name, Arguments: args})
+		s = s[next:]
 	}
-	i := start + len(gemma4ToolCallOpen)
+}
 
-	brace := strings.IndexByte(resp[i:], '{')
-	if brace < 0 {
-		return tc, errGemma4
-	}
-	name := strings.TrimSpace(resp[i : i+brace])
-	if name == "" {
-		return tc, errGemma4
-	}
+// parseGemma4Value reads one value at s[i] as JSON plus the index past it, or a
+// negative index when s does not match the grammar. The parsers below all do.
+func parseGemma4Value(s string, i int) (string, int) {
+	switch {
+	case i >= len(s):
+		return "", -1
 
-	args, _, err := parseGemma4Dict(resp, i+brace)
-	if err != nil {
-		return tc, err
-	}
+	case strings.HasPrefix(s[i:], gemma4String):
+		i += len(gemma4String)
+		end := strings.Index(s[i:], gemma4String)
+		if end < 0 {
+			return "", -1
+		}
+		quoted, _ := sonic.MarshalString(s[i : i+end])
+		return quoted, i + end + len(gemma4String)
 
-	tc.Name = name
-	tc.Arguments = args
-	return tc, nil
+	case s[i] == '{':
+		return parseGemma4Seq(s, i, '{', '}', parseGemma4Member)
+	case s[i] == '[':
+		return parseGemma4Seq(s, i, '[', ']', parseGemma4Value)
+
+	default: // a number, bool or null runs to the next ',', '}' or ']'
+		start := i
+		for i < len(s) && s[i] != ',' && s[i] != '}' && s[i] != ']' {
+			i++
+		}
+		tok := strings.TrimSpace(s[start:i])
+		var v any
+		if tok == "" || sonic.UnmarshalString(tok, &v) != nil {
+			return "", -1
+		}
+		return tok, i
+	}
+}
+
+// parseGemma4Member reads one `key:value` pair as `"key":value`. The key grammar is
+// `[^:}]+`, so a member missing its value fails instead of swallowing later text.
+func parseGemma4Member(s string, i int) (string, int) {
+	colon := strings.IndexByte(s[i:], ':')
+	if colon < 0 || strings.IndexByte(s[i:i+colon], '}') >= 0 {
+		return "", -1
+	}
+	key := strings.TrimSpace(s[i : i+colon])
+	if key == "" {
+		return "", -1
+	}
+	val, next := parseGemma4Value(s, skipGemma4Space(s, i+colon+1))
+	if next < 0 {
+		return "", -1
+	}
+	quoted, _ := sonic.MarshalString(key)
+	return quoted + ":" + val, next
+}
+
+// parseGemma4Seq reads a comma-separated `open ... shut` sequence of elem. s[i] is
+// open, which the caller has checked.
+func parseGemma4Seq(s string, i int, open, shut byte,
+	elem func(string, int) (string, int)) (string, int) {
+	var b strings.Builder
+	b.WriteByte(open)
+
+	i = skipGemma4Space(s, i+1)
+	if i < len(s) && s[i] == shut {
+		b.WriteByte(shut)
+		return b.String(), i + 1
+	}
+	for {
+		enc, next := elem(s, skipGemma4Space(s, i))
+		if next < 0 {
+			return "", -1
+		}
+		b.WriteString(enc)
+		i = skipGemma4Space(s, next)
+		if i >= len(s) {
+			return "", -1
+		}
+		switch s[i] {
+		case ',':
+			i++
+			b.WriteByte(',')
+		case shut:
+			b.WriteByte(shut)
+			return b.String(), i + 1
+		default:
+			return "", -1
+		}
+	}
 }
 
 func skipGemma4Space(s string, i int) int {
@@ -57,120 +148,4 @@ func skipGemma4Space(s string, i int) int {
 		i++
 	}
 	return i
-}
-
-// parseGemma4Value parses one value at s[i] and returns its JSON encoding and
-// the index just past it.
-func parseGemma4Value(s string, i int) (string, int, error) {
-	if i >= len(s) {
-		return "", i, errGemma4
-	}
-	switch {
-	case strings.HasPrefix(s[i:], gemma4StringMarker):
-		return parseGemma4String(s, i)
-	case s[i] == '{':
-		return parseGemma4Dict(s, i)
-	case s[i] == '[':
-		return parseGemma4Array(s, i)
-	default:
-		return parseGemma4Scalar(s, i)
-	}
-}
-
-func parseGemma4String(s string, i int) (string, int, error) {
-	i += len(gemma4StringMarker)
-	end := strings.Index(s[i:], gemma4StringMarker)
-	if end < 0 {
-		return "", i, errGemma4
-	}
-	quoted, err := sonic.MarshalString(s[i : i+end])
-	if err != nil {
-		return "", i, err
-	}
-	return quoted, i + end + len(gemma4StringMarker), nil
-}
-
-func parseGemma4Dict(s string, i int) (string, int, error) {
-	return parseGemma4Seq(s, i, '{', '}', parseGemma4Member)
-}
-
-func parseGemma4Array(s string, i int) (string, int, error) {
-	return parseGemma4Seq(s, i, '[', ']', parseGemma4Value)
-}
-
-// parseGemma4Member parses one `key:value` pair and returns it as `"key":value`.
-// The key grammar is `[^:}]+`: it must be non-empty and cannot span the dict's
-// closing '}', so a member missing its value fails instead of swallowing later
-// text as the key.
-func parseGemma4Member(s string, i int) (string, int, error) {
-	colon := strings.IndexByte(s[i:], ':')
-	if colon < 0 || strings.IndexByte(s[i:i+colon], '}') >= 0 {
-		return "", i, errGemma4
-	}
-	key := strings.TrimSpace(s[i : i+colon])
-	if key == "" {
-		return "", i, errGemma4
-	}
-	val, next, err := parseGemma4Value(s, skipGemma4Space(s, i+colon+1))
-	if err != nil {
-		return "", i, err
-	}
-	quotedKey, err := sonic.MarshalString(key)
-	if err != nil {
-		return "", next, err
-	}
-	return quotedKey + ":" + val, next, nil
-}
-
-// parseGemma4Seq parses a comma-separated `open ... close` sequence, encoding
-// each element with elem. s[i] must be open (guaranteed by the caller).
-func parseGemma4Seq(s string, i int, open, close byte,
-	elem func(s string, i int) (string, int, error)) (string, int, error) {
-	i++ // past open
-
-	var b strings.Builder
-	b.WriteByte(open)
-
-	i = skipGemma4Space(s, i)
-	if i < len(s) && s[i] == close {
-		b.WriteByte(close)
-		return b.String(), i + 1, nil
-	}
-
-	for {
-		enc, next, err := elem(s, skipGemma4Space(s, i))
-		if err != nil {
-			return "", next, err
-		}
-		b.WriteString(enc)
-		i = skipGemma4Space(s, next)
-
-		if i >= len(s) {
-			return "", i, errGemma4
-		}
-		switch s[i] {
-		case ',':
-			i++
-			b.WriteByte(',')
-		case close:
-			b.WriteByte(close)
-			return b.String(), i + 1, nil
-		default:
-			return "", i, errGemma4
-		}
-	}
-}
-
-// parseGemma4Scalar reads a number/bool/null up to the next ',', '}' or ']'.
-func parseGemma4Scalar(s string, i int) (string, int, error) {
-	start := i
-	for i < len(s) && s[i] != ',' && s[i] != '}' && s[i] != ']' {
-		i++
-	}
-	tok := strings.TrimSpace(s[start:i])
-	var v any
-	if tok == "" || sonic.UnmarshalString(tok, &v) != nil {
-		return "", start, errGemma4
-	}
-	return tok, i, nil
 }

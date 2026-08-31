@@ -57,9 +57,10 @@ func writePromptTooLong(c *gin.Context, profile geniex_sdk.ProfileData) {
 // Adds reasoning_content, which openai-go's ChatCompletionMessage lacks; used
 // only when thinking is separated so the inline default stays byte-identical.
 type blockingMessage struct {
-	Role             string `json:"role"`
-	Content          string `json:"content"`
-	ReasoningContent string `json:"reasoning_content,omitempty"`
+	Role             string                                      `json:"role"`
+	Content          string                                      `json:"content"`
+	ReasoningContent string                                      `json:"reasoning_content,omitempty"`
+	ToolCalls        []openai.ChatCompletionMessageToolCallUnion `json:"tool_calls,omitempty"`
 }
 
 type blockingChoice struct {
@@ -89,35 +90,33 @@ func writeChatCompletion(c *gin.Context, response openai.ChatCompletion, cache *
 }
 
 func writeBlockingResponse(c *gin.Context, content, reasoning string, profile geniex_sdk.ProfileData, parseTool bool, cache *managedCacheMetadata) {
+	finishReason := mapFinishReason(profile.StopReason)
+	var toolCalls []openai.ChatCompletionMessageToolCallUnion
 	if parseTool {
-		toolCall, err := utils.ParseToolCalls(content)
-		if err == nil {
-			choice := openai.ChatCompletionChoice{
-				FinishReason: "tool_calls",
-				Message: openai.ChatCompletionMessage{
-					Role: constant.Assistant(openai.MessageRoleAssistant),
-					ToolCalls: []openai.ChatCompletionMessageToolCallUnion{{
-						ID:       fmt.Sprintf("call_%d", rand.Uint32()),
-						Type:     "function",
-						Function: toolCall,
-					}},
-				},
-			}
-			writeChatCompletion(c, openai.ChatCompletion{
-				Choices: []openai.ChatCompletionChoice{choice},
-				Usage:   profile2Usage(profile),
-			}, cache)
-			return
+		// Parse keeps the text around a call: that is content, not part of it.
+		text, calls := utils.NewToolCallScanner().Parse(content)
+		content = text
+		if len(calls) > 0 {
+			finishReason = "tool_calls"
+		} else {
+			slog.Debug("No tool call in the response")
 		}
-		slog.Warn("Tool call parse error, fallback to text", "error", err)
+		for _, call := range calls {
+			toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallUnion{
+				ID:       fmt.Sprintf("call_%d", rand.Uint32()),
+				Type:     "function",
+				Function: call,
+			})
+		}
 	}
 
 	if reasoning == "" {
 		choice := openai.ChatCompletionChoice{
-			FinishReason: mapFinishReason(profile.StopReason),
+			FinishReason: finishReason,
 			Message: openai.ChatCompletionMessage{
-				Role:    constant.Assistant(openai.MessageRoleAssistant),
-				Content: content,
+				Role:      constant.Assistant(openai.MessageRoleAssistant),
+				Content:   content,
+				ToolCalls: toolCalls,
 			},
 		}
 		writeChatCompletion(c, openai.ChatCompletion{
@@ -134,8 +133,9 @@ func writeBlockingResponse(c *gin.Context, content, reasoning string, profile ge
 				Role:             string(openai.MessageRoleAssistant),
 				Content:          content,
 				ReasoningContent: reasoning,
+				ToolCalls:        toolCalls,
 			},
-			FinishReason: mapFinishReason(profile.StopReason),
+			FinishReason: finishReason,
 		}},
 		Usage:       profile2Usage(profile),
 		GenieXCache: cache,

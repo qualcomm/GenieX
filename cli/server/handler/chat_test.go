@@ -88,7 +88,7 @@ func TestManagedCacheMetadataAppearsOnlyOnFinalChunk(t *testing.T) {
 		Revision: "sha256:" + strings.Repeat("a", 64),
 		Reason:   "exact_extension",
 	}
-	intermediate, err := json.Marshal(contentChunk("hello"))
+	intermediate, err := json.Marshal(tokenChunk("hello", false))
 	if err != nil {
 		t.Fatal(err)
 	}

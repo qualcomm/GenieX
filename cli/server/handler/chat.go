@@ -386,14 +386,14 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 				return cache, finalizeErr
 			}
 		}
+		class := tokenClass(plainClass)
+		if reasoningSeparated(param.ReasoningFormat) {
+			class = reasoningClass()
+		}
 		var disconnected bool
 		if parseTool {
-			disconnected = streamToolCall(c, dataCh, wait, includeUsage, &profile)
+			disconnected = streamToolCall(c, dataCh, wait, includeUsage, &profile, class)
 		} else {
-			class := tokenClass(plainClass)
-			if reasoningSeparated(param.ReasoningFormat) {
-				class = reasoningClass()
-			}
 			disconnected = streamPlainText(c, dataCh, wait, includeUsage, &profile, render(class), finalize)
 		}
 
@@ -408,7 +408,7 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		// blocking
 		var content, reasoning strings.Builder
 		class := tokenClass(plainClass)
-		if !parseTool && reasoningSeparated(param.ReasoningFormat) {
+		if reasoningSeparated(param.ReasoningFormat) {
 			class = reasoningClass()
 		}
 		tokenSink := sink(class, &content, &reasoning)

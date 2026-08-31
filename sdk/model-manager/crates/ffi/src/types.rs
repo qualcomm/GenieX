@@ -52,6 +52,7 @@ pub const GENIEX_ERROR_COMMON_RATE_LIMITED: i32 = -100011;
 pub const GENIEX_ERROR_COMMON_HUB_SERVER: i32 = -100012;
 pub const GENIEX_ERROR_COMMON_MANIFEST_PARSE: i32 = -100014;
 pub const GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE: i32 = -100015;
+pub const GENIEX_ERROR_COMMON_INSUFFICIENT_DISK_SPACE: i32 = -100017;
 pub const GENIEX_ERROR_COMMON_MODEL_INVALID: i32 = -100203;
 
 /// C-compatible per-file progress entry. Must mirror `geniex_FileProgress`
@@ -91,6 +92,7 @@ pub fn err_to_code(e: &Error) -> i32 {
         // failure, same category as a malformed remote index.
         Error::ManifestParse { .. } | Error::Json(_) => GENIEX_ERROR_COMMON_MANIFEST_PARSE,
         Error::ChipsetUnavailable { .. } => GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE,
+        Error::InsufficientDiskSpace { .. } => GENIEX_ERROR_COMMON_INSUFFICIENT_DISK_SPACE,
         Error::Cancelled => GENIEX_ERROR_COMMON_CANCELLED,
         // Inference failed because the source has no files we recognize as a
         // model — surface it as an invalid-model error, not a generic unknown.

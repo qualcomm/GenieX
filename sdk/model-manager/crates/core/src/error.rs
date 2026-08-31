@@ -93,6 +93,17 @@ pub enum Error {
     #[error("download cancelled")]
     Cancelled,
 
+    /// Not enough free disk space to fetch the still-pending files.
+    /// `required` is the sum of their full sizes (a conservative
+    /// overestimate for a partially-resumed file); `available` is
+    /// `fs2::available_space` on the destination directory.
+    #[error(
+        "not enough free disk space: this download needs {:.2} GiB but only {:.2} GiB is available",
+        *required as f64 / (1024.0 * 1024.0 * 1024.0),
+        *available as f64 / (1024.0 * 1024.0 * 1024.0)
+    )]
+    InsufficientDiskSpace { required: u64, available: u64 },
+
     #[error("invalid model name: '{0}' (must be 'org/repo' with no path traversal)")]
     InvalidModelName(String),
 

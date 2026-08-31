@@ -185,7 +185,7 @@ usage: CompletionUsage(completion_tokens=58, prompt_tokens=19, total_tokens=77, 
 思考模型默认会把思维链原样保留在 `message.content`（`<think>…</think>`），与最终回复混在一起。传入 `reasoning_format="deepseek"` 可让服务器把思维链拆到 OpenAI 标准的 `message.reasoning_content` 字段，`content` 只保留干净的回复。
 
 <Note>
-`reasoning_format` 与 `enable_think` 是两件事：`enable_think=False` 让模型**不产生**思维链；`reasoning_format="deepseek"` 让模型照常思考，但把思维链**移出** `content`。取值 `none`（默认）保持原样内联，`deepseek` / `deepseek-legacy` / `auto` 均触发分离。工具调用请求会忽略该参数（工具解析需要原始带标签的文本）。
+`reasoning_format` 与 `enable_think` 是两件事：`enable_think=False` 让模型**不产生**思维链；`reasoning_format="deepseek"` 让模型照常思考，但把思维链**移出** `content`。取值 `none`（默认）保持原样内联，`deepseek` / `deepseek-legacy` / `auto` 均触发分离。工具调用请求同样生效（含流式）：思维链会先分离出来，再对回复扫描工具调用。
 </Note>
 
 ```python python

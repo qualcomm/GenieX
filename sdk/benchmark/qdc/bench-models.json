@@ -203,6 +203,28 @@
     "image": true
   },
   {
+    "name": "SmolVLM-2B",
+    "plugin": "llama_cpp",
+    "devices": ["cpu", "npu"],
+    "model_id": "ggml-org/SmolVLM-Instruct-GGUF:Q8_0",
+    "hub": "hf",
+    "url": "https://huggingface.co/ggml-org/SmolVLM-Instruct-GGUF/resolve/main/SmolVLM-Instruct-Q8_0.gguf",
+    "mmproj_url": "https://huggingface.co/ggml-org/SmolVLM-Instruct-GGUF/resolve/main/mmproj-SmolVLM-Instruct-f16.gguf",
+    "vlm": true,
+    "image": true
+  },
+  {
+    "name": "SmolVLM2-2.2B",
+    "plugin": "llama_cpp",
+    "devices": ["cpu", "npu"],
+    "model_id": "ggml-org/SmolVLM2-2.2B-Instruct-GGUF:Q8_0",
+    "hub": "hf",
+    "url": "https://huggingface.co/ggml-org/SmolVLM2-2.2B-Instruct-GGUF/resolve/main/SmolVLM2-2.2B-Instruct-Q8_0.gguf",
+    "mmproj_url": "https://huggingface.co/ggml-org/SmolVLM2-2.2B-Instruct-GGUF/resolve/main/mmproj-SmolVLM2-2.2B-Instruct-f16.gguf",
+    "vlm": true,
+    "image": true
+  },
+  {
     "name": "Qwen3-4B-qairt",
     "plugin": "qairt",
     "devices": ["npu"],

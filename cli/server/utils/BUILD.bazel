@@ -6,6 +6,8 @@ go_library(
         "common.go",
         "toolcall.go",
         "toolcall_gemma4.go",
+        "toolcall_json.go",
+        "toolcall_qwen3.go",
     ],
     importpath = "github.com/qualcomm/GenieX/cli/server/utils",
     visibility = ["//visibility:public"],
@@ -22,6 +24,7 @@ go_test(
     srcs = [
         "common_test.go",
         "toolcall_gemma4_test.go",
+        "toolcall_json_test.go",
         "toolcall_test.go",
     ],
     embed = [":utils"],
