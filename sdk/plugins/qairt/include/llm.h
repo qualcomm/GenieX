@@ -17,8 +17,6 @@ class QairtLlm : public ILlm {
     // Bundle's `dialog.sampler` defaults; parsed once at create().
     ParsedSamplerConfig bundle_sampler_;
 
-    bool is_first_turn_ = true;
-
    public:
     virtual ~QairtLlm() override;
 
