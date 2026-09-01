@@ -77,10 +77,11 @@ type lineageRequest struct {
 }
 
 type lineageDecision struct {
-	TxnID  uint64
-	Reuse  bool
-	Status string
-	Reason string
+	TxnID         uint64
+	Reuse         bool
+	ResetRequired bool
+	Status        string
+	Reason        string
 }
 
 type pendingLineage struct {
@@ -134,8 +135,16 @@ func (s *lineageStore) Begin(req lineageRequest) (lineageDecision, error) {
 	}
 
 	s.nextTxn++
-	decision := lineageDecision{TxnID: s.nextTxn, Status: "reset", Reason: "branch"}
+	decision := lineageDecision{
+		TxnID: s.nextTxn, ResetRequired: true, Status: "reset", Reason: "branch",
+	}
 	current := s.committed
+	// A non-reusable completion was physically reset before its response was
+	// published. Preserve its logical revision for parent validation, but do
+	// not reset the already-clean handle a second time on the next request.
+	if current != nil && !current.Reusable {
+		decision.ResetRequired = false
+	}
 	switch {
 	case current == nil && req.Parent == "":
 		decision.Status = "cold"
@@ -153,6 +162,7 @@ func (s *lineageStore) Begin(req lineageRequest) (lineageDecision, error) {
 	case strictMessageExtension(current.Messages, req.Messages):
 		if current.Reusable {
 			decision.Reuse = true
+			decision.ResetRequired = false
 			decision.Status = "reused"
 			decision.Reason = "exact_extension"
 		} else {
@@ -181,6 +191,7 @@ func (s *lineageStore) BindGeneration(txnID, generation uint64) (lineageDecision
 	if s.pending.Decision.Reuse && (s.committed == nil || s.committed.Generation != generation) {
 		s.committed = nil
 		s.pending.Decision.Reuse = false
+		s.pending.Decision.ResetRequired = true
 		s.pending.Decision.Status = "reset"
 		s.pending.Decision.Reason = "parent_mismatch"
 	}

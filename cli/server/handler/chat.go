@@ -283,7 +283,7 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		}
 		txnID = decision.TxnID
 		plannedReuse = decision.Reuse
-		reset = !decision.Reuse
+		reset = decision.ResetRequired
 	} else {
 		// An unmanaged request can mutate the same single model handle. It must
 		// invalidate any managed lineage before the handle is touched.

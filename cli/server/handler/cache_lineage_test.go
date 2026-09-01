@@ -53,7 +53,7 @@ func seedLineage(t *testing.T, store *lineageStore) (managedCacheMetadata, []lin
 func TestManagedCacheFirstRequestAndExactExtension(t *testing.T) {
 	store := newLineageStore()
 	first, committed := seedLineage(t, store)
-	if first.Status != "cold" || first.Reason != "first_request" {
+	if first.Status != "cold" || first.Reason != "first_request" || !first.Reusable {
 		t.Fatalf("first metadata = %+v", first)
 	}
 
@@ -62,7 +62,7 @@ func TestManagedCacheFirstRequestAndExactExtension(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !decision.Reuse || decision.Status != "reused" || decision.Reason != "exact_extension" {
+	if !decision.Reuse || decision.ResetRequired || decision.Status != "reused" || decision.Reason != "exact_extension" {
 		t.Fatalf("extension decision = %+v", decision)
 	}
 	decision, err = store.BindGeneration(decision.TxnID, 7)
@@ -110,7 +110,7 @@ func TestManagedCacheNonReusableCommitForcesTheNextExactExtensionCold(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if next.Reuse || next.Status != "reset" || next.Reason != "previous_not_reusable" {
+	if next.Reuse || next.ResetRequired || next.Status != "reset" || next.Reason != "previous_not_reusable" {
 		t.Fatalf("post-truncation decision = %+v", next)
 	}
 }
@@ -157,7 +157,7 @@ func TestManagedCacheModelReloadDowngradesAHit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if decision.Reuse || decision.Status != "reset" || decision.Reason != "parent_mismatch" {
+	if decision.Reuse || !decision.ResetRequired || decision.Status != "reset" || decision.Reason != "parent_mismatch" {
 		t.Fatalf("decision = %+v", decision)
 	}
 }
