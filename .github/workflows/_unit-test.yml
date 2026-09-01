@@ -156,14 +156,20 @@ jobs:
             # Managed cache state protects one mutable model handle. Run its
             # handler and keep-alive tests with Go's race instrumentation on
             # Linux; the race detector is unavailable on Windows ARM64.
+            # Go's ARM64 race runtime is compiled from gotsan.cpp. The
+            # hermetic Zig/Clang toolchain otherwise emits outlined atomic
+            # helper calls that are not present in its glibc 2.28 sysroot.
+            # Compile those atomics inline so the race binary is hermetic too.
             bazelisk test \
               --@io_bazel_rules_go//go/config:race \
+              --copt=-mno-outline-atomics \
               --//sdk:sdk_type=local \
               --disk_cache=/root/.cache/bazel-disk \
               --test_output=errors \
               --test_summary=terse \
               -- //cli/server/handler:handler_test \
-                 //cli/server/service:service_test
+                 //cli/server/service:service_test \
+              2>&1 | tee -a .bazel-test.log
 
       - name: Run go test (Windows host)
         if: steps.skip.outputs.skip != 'true' && inputs.language == 'go' && matrix.platform == 'windows-arm64'
