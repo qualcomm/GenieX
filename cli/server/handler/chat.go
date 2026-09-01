@@ -397,7 +397,7 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		}
 		var disconnected bool
 		if parseTool {
-			disconnected = streamToolCall(c, dataCh, wait, includeUsage, &profile, class)
+			disconnected = streamToolCall(c, dataCh, wait, includeUsage, &profile, class, finalize)
 		} else {
 			disconnected = streamPlainText(c, dataCh, wait, includeUsage, &profile, render(class), finalize)
 		}

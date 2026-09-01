@@ -5,6 +5,7 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -53,8 +54,71 @@ func runStreamToolCall(t *testing.T, class tokenClass, tokens ...string) []strea
 	}
 	close(dataCh)
 	profile := geniex_sdk.ProfileData{StopReason: "eos"}
-	streamToolCall(c, dataCh, func() error { return nil }, false, &profile, class)
+	streamToolCall(c, dataCh, func() error { return nil }, false, &profile, class, nil)
 	return sseDeltas(t, w.Body.String())
+}
+
+func TestStreamToolCallFinalizesManagedCache(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := &streamRecorder{httptest.NewRecorder(), make(chan bool)}
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+
+	dataCh := make(chan string, 1)
+	dataCh <- `{"name":"lookup","arguments":{"id":"7"}}`
+	close(dataCh)
+	profile := geniex_sdk.ProfileData{StopReason: "eos"}
+	metadata := &managedCacheMetadata{
+		Mode:     "managed",
+		Status:   "reused",
+		Revision: "sha256:" + strings.Repeat("a", 64),
+		Reason:   "exact_extension",
+		Reusable: true,
+	}
+	finalizeCalls := 0
+	finalize := func(err error) (*managedCacheMetadata, error) {
+		finalizeCalls++
+		if err != nil {
+			t.Fatalf("finalizer received error: %v", err)
+		}
+		return metadata, nil
+	}
+
+	streamToolCall(c, dataCh, func() error { return nil }, false, &profile, plainClass, finalize)
+	if finalizeCalls != 1 {
+		t.Fatalf("finalizer calls = %d, want 1", finalizeCalls)
+	}
+	if !strings.Contains(w.Body.String(), `"geniex_cache":{"mode":"managed"`) {
+		t.Fatalf("terminal stream omitted managed cache metadata: %s", w.Body.String())
+	}
+}
+
+func TestStreamToolCallAbortsManagedCacheOnGenerationError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := &streamRecorder{httptest.NewRecorder(), make(chan bool)}
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+
+	dataCh := make(chan string)
+	close(dataCh)
+	profile := geniex_sdk.ProfileData{}
+	wantErr := errors.New("generation failed")
+	finalizeCalls := 0
+	finalize := func(err error) (*managedCacheMetadata, error) {
+		finalizeCalls++
+		if !errors.Is(err, wantErr) {
+			t.Fatalf("finalizer error = %v, want %v", err, wantErr)
+		}
+		return nil, nil
+	}
+
+	streamToolCall(c, dataCh, func() error { return wantErr }, false, &profile, plainClass, finalize)
+	if finalizeCalls != 1 {
+		t.Fatalf("finalizer calls = %d, want 1", finalizeCalls)
+	}
+	if strings.Contains(w.Body.String(), `"geniex_cache"`) {
+		t.Fatalf("error stream committed cache metadata: %s", w.Body.String())
+	}
 }
 
 // One tool_calls delta, flattened for comparison.

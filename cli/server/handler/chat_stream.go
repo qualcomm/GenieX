@@ -137,7 +137,7 @@ func streamPlainText(c *gin.Context, dataCh <-chan string, wait func() error, in
 // Streams the text that cannot be part of a tool call as it arrives, and each
 // tool call as soon as it is complete. The return value reports a disconnect or
 // request cancellation so callers can discard any provisional cache state.
-func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, profile *geniex_sdk.ProfileData, class tokenClass) bool {
+func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, profile *geniex_sdk.ProfileData, class tokenClass, finalize managedCacheFinalizer) bool {
 	scanner := utils.NewToolCallScanner()
 	sent := 0 // the delta index, which has to keep rising across chunks
 	contextCancelled := false
@@ -173,9 +173,13 @@ func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, inc
 		// A context window exhausted mid-stream is a normal truncated completion:
 		// fall through and emit what was buffered. Other errors (including a
 		// too-long prompt) are surfaced as an error event.
-		if err := wait(); err != nil && !errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
-			slog.Error("Generation error", "error", err)
-			c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
+		genErr := wait()
+		if genErr != nil && !errors.Is(genErr, geniex_sdk.ErrLlmTokenizationContextLength) {
+			if finalize != nil {
+				_, _ = finalize(genErr)
+			}
+			slog.Error("Generation error", "error", genErr)
+			c.SSEvent("", map[string]any{"error": genErr.Error(), "code": geniex_sdk.SDKErrorCode(genErr)})
 			return false
 		}
 		// The held tail may still hold calls the model stopped short of closing.
@@ -192,7 +196,16 @@ func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, inc
 		if sent > 0 {
 			finishReason = "tool_calls"
 		}
-		c.SSEvent("", finishChunk(finishReason, nil))
+		var cache *managedCacheMetadata
+		if finalize != nil {
+			var err error
+			cache, err = finalize(genErr)
+			if err != nil {
+				c.SSEvent("", map[string]any{"error": err.Error()})
+				return false
+			}
+		}
+		c.SSEvent("", finishChunk(finishReason, cache))
 		if includeUsage {
 			c.SSEvent("", usageChunk(profile2Usage(*profile)))
 		}
