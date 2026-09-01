@@ -17,8 +17,10 @@ import (
 )
 
 const (
-	managedCacheSessionHeader = "GenieX-Cache-Session"
-	managedCacheParentHeader  = "GenieX-Cache-Parent"
+	managedCacheSessionHeader   = "GenieX-Cache-Session"
+	managedCacheParentHeader    = "GenieX-Cache-Parent"
+	managedCacheProtocolHeader  = "GenieX-Cache-Protocol"
+	managedCacheProtocolVersion = "2"
 )
 
 var (
@@ -46,6 +48,7 @@ type managedCacheMetadata struct {
 	Status   string `json:"status"`
 	Revision string `json:"revision"`
 	Reason   string `json:"reason"`
+	Reusable bool   `json:"reusable"`
 }
 
 type lineageMessage struct {
@@ -93,6 +96,7 @@ type committedLineage struct {
 	Identity   lineageIdentity
 	Messages   []lineageMessage
 	Generation uint64
+	Reusable   bool
 }
 
 // lineageStore owns a single cache lineage because geniex serve owns one
@@ -147,9 +151,13 @@ func (s *lineageStore) Begin(req lineageRequest) (lineageDecision, error) {
 	case current.Revision != req.Parent:
 		decision.Reason = "parent_mismatch"
 	case strictMessageExtension(current.Messages, req.Messages):
-		decision.Reuse = true
-		decision.Status = "reused"
-		decision.Reason = "exact_extension"
+		if current.Reusable {
+			decision.Reuse = true
+			decision.Status = "reused"
+			decision.Reason = "exact_extension"
+		} else {
+			decision.Reason = "previous_not_reusable"
+		}
 	default:
 		decision.Reason = "branch"
 	}
@@ -180,7 +188,7 @@ func (s *lineageStore) BindGeneration(txnID, generation uint64) (lineageDecision
 	return s.pending.Decision, nil
 }
 
-func (s *lineageStore) Commit(txnID uint64, assistantContent string) (managedCacheMetadata, error) {
+func (s *lineageStore) Commit(txnID uint64, assistantContent string, reusable bool) (managedCacheMetadata, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.pending == nil || s.pending.ID != txnID {
@@ -201,6 +209,7 @@ func (s *lineageStore) Commit(txnID uint64, assistantContent string) (managedCac
 		Identity:   pending.Request.Identity,
 		Messages:   messages,
 		Generation: pending.Generation,
+		Reusable:   reusable,
 	}
 	s.pending = nil
 	return managedCacheMetadata{
@@ -208,6 +217,7 @@ func (s *lineageStore) Commit(txnID uint64, assistantContent string) (managedCac
 		Status:   pending.Decision.Status,
 		Revision: revision,
 		Reason:   pending.Decision.Reason,
+		Reusable: reusable,
 	}, nil
 }
 
@@ -247,7 +257,7 @@ func computeLineageRevision(identity lineageIdentity, messages []lineageMessage)
 		Version  string           `json:"version"`
 		Identity lineageIdentity  `json:"identity"`
 		Messages []lineageMessage `json:"messages"`
-	}{Version: "geniex.managed-cache/1", Identity: identity, Messages: messages}
+	}{Version: "geniex.managed-cache/2", Identity: identity, Messages: messages}
 	raw, err := json.Marshal(envelope)
 	if err != nil {
 		return "", fmt.Errorf("canonicalize managed cache state: %w", err)

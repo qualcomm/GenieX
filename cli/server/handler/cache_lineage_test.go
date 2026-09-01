@@ -43,7 +43,7 @@ func seedLineage(t *testing.T, store *lineageStore) (managedCacheMetadata, []lin
 	if _, err := store.BindGeneration(decision.TxnID, 7); err != nil {
 		t.Fatal(err)
 	}
-	metadata, err := store.Commit(decision.TxnID, "answer")
+	metadata, err := store.Commit(decision.TxnID, "answer", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,12 +69,49 @@ func TestManagedCacheFirstRequestAndExactExtension(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	metadata, err := store.Commit(decision.TxnID, "next answer")
+	metadata, err := store.Commit(decision.TxnID, "next answer", true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if metadata.Status != "reused" || metadata.Revision == first.Revision {
 		t.Fatalf("extension metadata = %+v", metadata)
+	}
+	if !first.Reusable || !metadata.Reusable {
+		t.Fatalf("normal completions were marked non-reusable: first=%+v next=%+v", first, metadata)
+	}
+}
+
+func TestManagedCacheNonReusableCommitForcesTheNextExactExtensionCold(t *testing.T) {
+	store := newLineageStore()
+	messages := []lineageMessage{{Role: "user", Content: "first"}}
+	first, err := store.Begin(testLineageRequest(testSessionA, "", messages...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.BindGeneration(first.TxnID, 7); err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := store.Commit(first.TxnID, "truncated answer", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.Reusable {
+		t.Fatalf("truncated commit was marked reusable: %+v", metadata)
+	}
+
+	committed := append(
+		append([]lineageMessage(nil), messages...),
+		lineageMessage{Role: "assistant", Content: "truncated answer"},
+		lineageMessage{Role: "user", Content: "continue"},
+	)
+	next, err := store.Begin(testLineageRequest(
+		testSessionA, metadata.Revision, committed...,
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Reuse || next.Status != "reset" || next.Reason != "previous_not_reusable" {
+		t.Fatalf("post-truncation decision = %+v", next)
 	}
 }
 
@@ -182,7 +219,7 @@ func TestManagedCacheAbortNextCommitMatchesAColdBaseline(t *testing.T) {
 	if _, err = store.BindGeneration(retry.TxnID, 8); err != nil {
 		t.Fatal(err)
 	}
-	retried, err := store.Commit(retry.TxnID, "deterministic-answer")
+	retried, err := store.Commit(retry.TxnID, "deterministic-answer", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +232,7 @@ func TestManagedCacheAbortNextCommitMatchesAColdBaseline(t *testing.T) {
 	if _, err = coldStore.BindGeneration(cold.TxnID, 1); err != nil {
 		t.Fatal(err)
 	}
-	baseline, err := coldStore.Commit(cold.TxnID, "deterministic-answer")
+	baseline, err := coldStore.Commit(cold.TxnID, "deterministic-answer", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +263,7 @@ func TestManagedCacheSessionCanariesNeverCrossLineages(t *testing.T) {
 					if _, err = store.BindGeneration(decision.TxnID, generation); err != nil {
 						t.Fatal(err)
 					}
-					if _, err = store.Commit(decision.TxnID, "answer-for-"+canary); err != nil {
+					if _, err = store.Commit(decision.TxnID, "answer-for-"+canary, true); err != nil {
 						t.Fatal(err)
 					}
 				}
@@ -285,7 +322,7 @@ func TestManagedCacheHasZeroFalseHitsAcrossRandomizedBranches(t *testing.T) {
 		if _, err = store.BindGeneration(first.TxnID, 9); err != nil {
 			t.Fatal(err)
 		}
-		committedMetadata, err := store.Commit(first.TxnID, fmt.Sprintf("committed-%d", iteration))
+		committedMetadata, err := store.Commit(first.TxnID, fmt.Sprintf("committed-%d", iteration), true)
 		if err != nil {
 			t.Fatal(err)
 		}

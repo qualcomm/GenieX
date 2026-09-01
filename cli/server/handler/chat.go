@@ -249,6 +249,9 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 	session := strings.TrimSpace(c.GetHeader(managedCacheSessionHeader))
 	parent := strings.TrimSpace(c.GetHeader(managedCacheParentHeader))
 	managed := session != "" || parent != ""
+	if managed {
+		c.Header(managedCacheProtocolHeader, managedCacheProtocolVersion)
+	}
 	legacyHeader := c.GetHeader("GenieX-KeepCache")
 	if managed && legacyHeader != "" {
 		c.JSON(http.StatusBadRequest, map[string]any{"error": "GenieX-KeepCache and managed-cache headers cannot be combined"})
@@ -381,7 +384,9 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 						finalizeErr = abortManagedCache(txnID)
 						return
 					}
-					cache, finalizeErr = commitManagedCache(txnID, fullText)
+					cache, finalizeErr = commitManagedCache(
+						txnID, fullText, managedGenerationReusable(profile),
+					)
 				})
 				return cache, finalizeErr
 			}
@@ -446,7 +451,9 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		}
 		var cache *managedCacheMetadata
 		if managed {
-			cache, err = commitManagedCache(txnID, fullText)
+			cache, err = commitManagedCache(
+				txnID, fullText, managedGenerationReusable(profile),
+			)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 				return
@@ -469,13 +476,28 @@ func abortManagedCache(txnID uint64) error {
 	return nil
 }
 
-func commitManagedCache(txnID uint64, assistantContent string) (*managedCacheMetadata, error) {
-	metadata, err := managedChatLineage.Commit(txnID, assistantContent)
+// Only an EOS-complete turn is safe for the next incremental QAIRT template.
+// A length, stop-sequence, callback, or unknown stop can leave the physical KV
+// state without the turn delimiter that a cold full-history template includes.
+// Keep the logical transcript revision, but reset the model and mark the state
+// non-reusable so the next exact extension is processed cold.
+func managedGenerationReusable(profile geniex_sdk.ProfileData) bool {
+	return profile.StopReason == "eos"
+}
+
+func commitManagedCache(txnID uint64, assistantContent string, reusable bool) (*managedCacheMetadata, error) {
+	metadata, err := managedChatLineage.Commit(txnID, assistantContent, reusable)
 	if err != nil {
 		if resetErr := abortManagedCache(txnID); resetErr != nil {
 			return nil, fmt.Errorf("commit managed cache: %v; %w", err, resetErr)
 		}
 		return nil, fmt.Errorf("commit managed cache: %w", err)
+	}
+	if !reusable {
+		if resetErr := service.ResetKeepAlive(); resetErr != nil {
+			managedChatLineage.Clear()
+			return nil, fmt.Errorf("reset non-reusable managed cache: %w", resetErr)
+		}
 	}
 	return &metadata, nil
 }

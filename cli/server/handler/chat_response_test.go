@@ -43,6 +43,7 @@ func TestWriteBlockingResponse(t *testing.T) {
 		Status:   "reused",
 		Revision: "sha256:0123456789abcdef",
 		Reason:   "exact_extension",
+		Reusable: true,
 	}
 
 	tests := []struct {

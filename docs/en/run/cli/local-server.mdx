@@ -400,7 +400,8 @@ The final response includes the committed revision:
     "mode": "managed",
     "status": "cold",
     "revision": "sha256:...",
-    "reason": "first_request"
+    "reason": "first_request",
+    "reusable": true
   }
 }
 ```
@@ -413,9 +414,19 @@ parent or a changed model identity force a reset.
 
 The final normal response, or final streaming finish chunk, reports `cold`,
 `reused`, or `reset` with one of these reasons: `first_request`,
-`exact_extension`, `branch`, `session_switch`, or `parent_mismatch`. If a
-generation fails, is cancelled, or disconnects before that final record, its
-provisional state is cleared and must not be reused.
+`exact_extension`, `branch`, `session_switch`, `parent_mismatch`, or
+`previous_not_reusable`. The `reusable` field says whether the completed turn's
+physical state may be used by a later exact extension. Only an EOS-complete turn
+is reusable. A length-limited, stop-sequence, callback, or unknown stop still
+commits its logical transcript revision, but GenieX immediately resets the
+physical model state. Its next exact extension runs cold with
+`previous_not_reusable`; this prevents a missing end-of-turn delimiter from
+changing the next answer.
+
+Managed requests also return `GenieX-Cache-Protocol: 2`. Clients should require
+that exact protocol version instead of treating any managed-looking error as a
+capability proof. If a generation fails, is cancelled, or disconnects before a
+final record, its provisional state is cleared and must not be reused.
 
 <Warning>
 Managed cache sessions separate one model state's lineage. They are not

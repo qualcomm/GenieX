@@ -14,6 +14,7 @@ func CORS(c *gin.Context) {
 	h.Set("Access-Control-Allow-Origin", config.Get().Origins)
 	h.Set("Access-Control-Allow-Methods", "OPTIONS, GET, POST")
 	h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, GenieX-KeepCache, GenieX-Cache-Session, GenieX-Cache-Parent")
+	h.Set("Access-Control-Expose-Headers", "GenieX-Cache-Protocol")
 	h.Set("Access-Control-Max-Age", "86400")
 
 	if c.Request.Method == "OPTIONS" {

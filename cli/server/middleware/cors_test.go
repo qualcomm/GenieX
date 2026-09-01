@@ -29,4 +29,7 @@ func TestCORSAllowsManagedCacheHeaders(t *testing.T) {
 			t.Errorf("Access-Control-Allow-Headers = %q, missing %q", allowed, header)
 		}
 	}
+	if exposed := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(exposed, "GenieX-Cache-Protocol") {
+		t.Errorf("Access-Control-Expose-Headers = %q, missing protocol header", exposed)
+	}
 }
