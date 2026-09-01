@@ -139,7 +139,7 @@ func ChatCompletions(c *gin.Context) {
 		runChat(c, param, modelParam, paths.RuntimeID, paths.ModelPath, paths.TokenizerPath, messages, prepareLLM)
 	case geniex_sdk.ModelTypeVLM:
 		if managedCacheRequested(c) {
-			c.JSON(http.StatusBadRequest, map[string]any{"error": "managed caching supports text LLM chat only in version 1"})
+			c.JSON(http.StatusBadRequest, map[string]any{"error": "managed caching supports text LLM chat only in version 2"})
 			return
 		}
 		messages, tempFiles, ok := buildVLMMessages(c, param)

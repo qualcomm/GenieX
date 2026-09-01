@@ -281,13 +281,13 @@ func normalizedReasoningFormat(value string) string {
 
 func lineageRequestFromChat(param ChatCompletionRequest, modelParam types.ModelParam, artifact lineageArtifactIdentity, session, parent string) (lineageRequest, error) {
 	if len(param.Tools) != 0 {
-		return lineageRequest{}, errors.New("managed caching does not support native tool-call messages in version 1")
+		return lineageRequest{}, errors.New("managed caching does not support native tool-call messages in version 2")
 	}
 	if reasoningSeparated(param.ReasoningFormat) {
-		return lineageRequest{}, errors.New("managed caching requires inline or disabled reasoning in version 1")
+		return lineageRequest{}, errors.New("managed caching requires inline or disabled reasoning in version 2")
 	}
 	if modelParam.Spec.Type != "" {
-		return lineageRequest{}, errors.New("managed caching does not support speculative decoding in version 1")
+		return lineageRequest{}, errors.New("managed caching does not support speculative decoding in version 2")
 	}
 	messages := make([]lineageMessage, 0, len(param.Messages))
 	for i, message := range param.Messages {
