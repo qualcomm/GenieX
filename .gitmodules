@@ -3,4 +3,6 @@
 	url = https://github.com/ggml-org/llama.cpp
 [submodule "third-party/geniex-qairt"]
 	path = third-party/geniex-qairt
-	url = https://github.com/qualcomm/geniex-qairt-plugin
+	# Temporary BrickKV validation pin for qualcomm/geniex-qairt-plugin#50.
+	# Restore the Qualcomm URL after the upstream fix is merged.
+	url = https://github.com/samkwak188/geniex-qairt-plugin

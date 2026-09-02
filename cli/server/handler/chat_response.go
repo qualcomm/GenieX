@@ -70,12 +70,26 @@ type blockingChoice struct {
 }
 
 type blockingResponse struct {
-	Object  string                 `json:"object"`
-	Choices []blockingChoice       `json:"choices"`
-	Usage   openai.CompletionUsage `json:"usage"`
+	Object      string                 `json:"object"`
+	Choices     []blockingChoice       `json:"choices"`
+	Usage       openai.CompletionUsage `json:"usage"`
+	GenieXCache *managedCacheMetadata  `json:"geniex_cache,omitempty"`
 }
 
-func writeBlockingResponse(c *gin.Context, content, reasoning string, profile geniex_sdk.ProfileData, parseTool bool) {
+type cachedChatCompletion struct {
+	openai.ChatCompletion
+	GenieXCache *managedCacheMetadata `json:"geniex_cache,omitempty"`
+}
+
+func writeChatCompletion(c *gin.Context, response openai.ChatCompletion, cache *managedCacheMetadata) {
+	if cache == nil {
+		c.JSON(http.StatusOK, response)
+		return
+	}
+	c.JSON(http.StatusOK, cachedChatCompletion{ChatCompletion: response, GenieXCache: cache})
+}
+
+func writeBlockingResponse(c *gin.Context, content, reasoning string, profile geniex_sdk.ProfileData, parseTool bool, cache *managedCacheMetadata) {
 	finishReason := mapFinishReason(profile.StopReason)
 	var toolCalls []openai.ChatCompletionMessageToolCallUnion
 	if parseTool {
@@ -105,10 +119,10 @@ func writeBlockingResponse(c *gin.Context, content, reasoning string, profile ge
 				ToolCalls: toolCalls,
 			},
 		}
-		c.JSON(http.StatusOK, openai.ChatCompletion{
+		writeChatCompletion(c, openai.ChatCompletion{
 			Choices: []openai.ChatCompletionChoice{choice},
 			Usage:   profile2Usage(profile),
-		})
+		}, cache)
 		return
 	}
 
@@ -123,7 +137,8 @@ func writeBlockingResponse(c *gin.Context, content, reasoning string, profile ge
 			},
 			FinishReason: finishReason,
 		}},
-		Usage: profile2Usage(profile),
+		Usage:       profile2Usage(profile),
+		GenieXCache: cache,
 	})
 }
 

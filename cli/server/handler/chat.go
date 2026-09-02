@@ -5,6 +5,7 @@ package handler
 
 import (
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -86,7 +87,13 @@ func ChatCompletions(c *gin.Context) {
 	// max_tokens is the deprecated alias; below reads MaxCompletionTokens only.
 	param.MaxCompletionTokens = openai.Int(param.MaxCompletionTokens.Or(param.MaxTokens.Value))
 
-	slog.Info("ChatCompletions", "param", param)
+	// Request messages and grammar strings may contain private prompt data.
+	// Keep operational logs useful without serializing the request body.
+	slog.Info("ChatCompletions",
+		"model", param.Model,
+		"message_count", len(param.Messages),
+		"stream", param.Stream,
+		"managed_cache", managedCacheRequested(c))
 	// Keep the precision: KeepAliveGet resolves this same string.
 	paths, err := geniex_sdk.ModelGetPaths(param.Model)
 	if err != nil {
@@ -130,11 +137,14 @@ func ChatCompletions(c *gin.Context) {
 		if !ok {
 			return
 		}
-		runChat(c, param, modelParam, messages, utils.SessionKeyOf(messages), prepareLLM)
+		runChat(c, param, modelParam, paths.RuntimeID, paths.ModelPath, paths.TokenizerPath, messages, utils.SessionKeyOf(messages), prepareLLM)
 	case geniex_sdk.ModelTypeVLM:
-		// Hash before buildVLMMessages replaces each image/audio part with a
-		// per-request temp file path; see SessionKeyOfVLMRequest.
-		session := utils.SessionKeyOfVLMRequest(param.Messages)
+		if managedCacheRequested(c) {
+			c.JSON(http.StatusBadRequest, map[string]any{"error": "managed caching supports text LLM chat only in version 2"})
+			return
+		}
+		// Hash before buildVLMMessages replaces media with per-request paths.
+		autoSession := utils.SessionKeyOfVLMRequest(param.Messages)
 		messages, tempFiles, ok := buildVLMMessages(c, param)
 		for _, f := range tempFiles {
 			defer os.Remove(f)
@@ -142,7 +152,7 @@ func ChatCompletions(c *gin.Context) {
 		if !ok {
 			return
 		}
-		runChat(c, param, modelParam, messages, session, prepareVLM)
+		runChat(c, param, modelParam, paths.RuntimeID, paths.ModelPath, paths.TokenizerPath, messages, autoSession, prepareVLM)
 	default:
 		slog.Error("Model type not support", "model_type", paths.ModelType)
 		c.JSON(http.StatusBadRequest, map[string]any{"error": "model type not support"})
@@ -235,9 +245,8 @@ func prepareVLM(p *geniex_sdk.VLM, input prepareInput[[]geniex_sdk.VlmChatMessag
 	return formatted.FormattedText, gen, nil
 }
 
-// runChat is the shared flow wrapping the type-specific prepareFn. session
-// identifies the conversation for the keepalive cache's reset decision.
-func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam types.ModelParam, messages M, session utils.SessionKey, prepare prepareFn[T, M]) {
+// runChat is the shared flow wrapping the type-specific prepareFn.
+func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam types.ModelParam, runtime, modelPath, tokenizerPath string, messages M, autoSession utils.SessionKey, prepare prepareFn[T, M]) {
 	// ---- prepare: parse tools, load the model, apply the chat template ----
 	parseTool, tools, err := parseTools(param)
 	if err != nil {
@@ -246,20 +255,103 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		return
 	}
 
-	acquired, err := service.KeepAliveGet[T](
-		string(param.Model),
-		modelParam,
-		session,
-	)
-	if writeKeepAliveError(c, err) {
-		return
-	}
 	// Warm-up: no messages, or a lone system message — model loaded, nothing to generate.
 	var role *string
 	if len(param.Messages) == 1 {
 		role = param.Messages[0].GetRole()
 	}
-	if len(param.Messages) == 0 || role != nil && *role == "system" {
+	warmup := len(param.Messages) == 0 || role != nil && *role == "system"
+
+	session := strings.TrimSpace(c.GetHeader(managedCacheSessionHeader))
+	parent := strings.TrimSpace(c.GetHeader(managedCacheParentHeader))
+	managed := session != "" || parent != ""
+	if managed {
+		c.Header(managedCacheProtocolHeader, managedCacheProtocolVersion)
+	}
+	legacyHeader := c.GetHeader("GenieX-KeepCache")
+	if legacyHeader != "" && legacyHeader != "true" {
+		c.JSON(http.StatusBadRequest, map[string]any{"error": "GenieX-KeepCache only accepts true"})
+		return
+	}
+	if managed && legacyHeader != "" {
+		c.JSON(http.StatusBadRequest, map[string]any{"error": "GenieX-KeepCache and managed-cache headers cannot be combined"})
+		return
+	}
+	if managed && warmup {
+		c.JSON(http.StatusBadRequest, map[string]any{"error": "managed caching requires a generative request"})
+		return
+	}
+
+	reset := false
+	var txnID uint64
+	var plannedReuse bool
+	if managed {
+		artifact, artifactErr := resolveLineageArtifactIdentity(runtime, modelPath, tokenizerPath)
+		if artifactErr != nil {
+			c.JSON(http.StatusInternalServerError, map[string]any{"error": artifactErr.Error()})
+			return
+		}
+		request, requestErr := lineageRequestFromChat(param, modelParam, artifact, session, parent)
+		if requestErr != nil {
+			c.JSON(http.StatusBadRequest, map[string]any{"error": requestErr.Error()})
+			return
+		}
+		decision, beginErr := managedChatLineage.Begin(request)
+		if beginErr != nil {
+			c.JSON(http.StatusBadRequest, map[string]any{"error": beginErr.Error()})
+			return
+		}
+		txnID = decision.TxnID
+		plannedReuse = decision.Reuse
+		reset = decision.ResetRequired
+	} else {
+		// An unmanaged request can mutate the same single model handle. It must
+		// invalidate any managed lineage before the handle is touched.
+		invalidateManagedLineageForUnmanagedRequest()
+	}
+
+	var p *T
+	var fresh bool
+	if managed {
+		p, err = service.KeepAliveGetManaged[T](string(param.Model), modelParam, reset)
+	} else if legacyHeader == "true" {
+		p, err = service.KeepAliveGetLegacy[T](string(param.Model), modelParam)
+	} else {
+		var acquired service.AcquiredModel[T]
+		acquired, err = service.KeepAliveGet[T](string(param.Model), modelParam, autoSession)
+		p, fresh = acquired.Model, acquired.Fresh
+	}
+	if err != nil && managed {
+		managedChatLineage.Abort(txnID)
+	}
+	if writeKeepAliveError(c, err) {
+		return
+	}
+	if managed {
+		bound, bindErr := managedChatLineage.BindGeneration(txnID, service.KeepAliveGeneration())
+		if bindErr != nil {
+			_ = abortManagedCache(txnID)
+			c.JSON(http.StatusInternalServerError, map[string]any{"error": bindErr.Error()})
+			return
+		}
+		// A generation change between Begin and binding invalidates a planned
+		// hit. Reset the handle explicitly before accepting the full prompt;
+		// merely changing the public status would leave unknown KV state live.
+		if plannedReuse && !bound.Reuse {
+			if resetErr := service.ResetKeepAlive(); resetErr != nil {
+				managedChatLineage.Abort(txnID)
+				c.JSON(http.StatusInternalServerError, map[string]any{"error": resetErr.Error()})
+				return
+			}
+			if _, bindErr = managedChatLineage.BindGeneration(txnID, service.KeepAliveGeneration()); bindErr != nil {
+				_ = abortManagedCache(txnID)
+				c.JSON(http.StatusInternalServerError, map[string]any{"error": bindErr.Error()})
+				return
+			}
+		}
+	}
+
+	if warmup {
 		c.JSON(http.StatusOK, nil)
 		return
 	}
@@ -274,14 +366,17 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		FrequencyPenalty:  float32(param.FrequencyPenalty.Value),
 		Seed:              int32(param.Seed.Value),
 	}
-	prompt, gen, err := prepare(acquired.Model, prepareInput[M]{
+	prompt, gen, err := prepare(p, prepareInput[M]{
 		Messages: messages,
 		Param:    param,
 		Tools:    tools,
 		Sampler:  sampler,
-		Fresh:    acquired.Fresh,
+		Fresh:    fresh,
 	})
 	if err != nil {
+		if managed {
+			_ = abortManagedCache(txnID)
+		}
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
 	}
@@ -293,15 +388,16 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		dataCh := make(chan string)
 
 		var (
-			profile geniex_sdk.ProfileData
-			genErr  error
-			wg      sync.WaitGroup
+			profile  geniex_sdk.ProfileData
+			fullText string
+			genErr   error
+			wg       sync.WaitGroup
 		)
 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			profile, _, genErr = gen(prompt, func(token string) bool {
+			profile, fullText, genErr = gen(prompt, func(token string) bool {
 				if stopGen.Load() {
 					return false
 				}
@@ -313,18 +409,41 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 
 		wait := func() error { wg.Wait(); return genErr }
 		includeUsage := param.StreamOptions.IncludeUsage.Value
+		var finalize managedCacheFinalizer
+		if managed {
+			var once sync.Once
+			var cache *managedCacheMetadata
+			var finalizeErr error
+			finalize = func(generationErr error) (*managedCacheMetadata, error) {
+				once.Do(func() {
+					if generationErr != nil && !errors.Is(generationErr, geniex_sdk.ErrLlmTokenizationContextLength) {
+						finalizeErr = abortManagedCache(txnID)
+						return
+					}
+					cache, finalizeErr = commitManagedCache(
+						txnID, fullText, managedGenerationReusable(profile),
+					)
+				})
+				return cache, finalizeErr
+			}
+		}
 		class := tokenClass(plainClass)
 		if reasoningSeparated(param.ReasoningFormat) {
 			class = reasoningClass()
 		}
+		var disconnected bool
 		if parseTool {
-			streamToolCall(c, dataCh, wait, includeUsage, &profile, class)
+			disconnected = streamToolCall(c, dataCh, wait, includeUsage, &profile, class, finalize)
 		} else {
-			streamPlainText(c, dataCh, wait, includeUsage, &profile, render(class))
+			disconnected = streamPlainText(c, dataCh, wait, includeUsage, &profile, render(class), finalize)
 		}
 
 		stopGen.Store(true)
 		for range dataCh {
+		}
+		wg.Wait()
+		if disconnected && managed {
+			_ = abortManagedCache(txnID)
 		}
 	} else {
 		// blocking
@@ -333,19 +452,90 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		if reasoningSeparated(param.ReasoningFormat) {
 			class = reasoningClass()
 		}
-		profile, _, err := gen(prompt, sink(class, &content, &reasoning))
+		tokenSink := sink(class, &content, &reasoning)
+		cancelled := false
+		profile, fullText, err := gen(prompt, func(token string) bool {
+			select {
+			case <-c.Request.Context().Done():
+				cancelled = true
+				return false
+			default:
+				return tokenSink(token)
+			}
+		})
+		if cancelled || c.Request.Context().Err() != nil {
+			if managed {
+				_ = abortManagedCache(txnID)
+			}
+			return
+		}
 		// A prompt that never fit is a 400; a window exhausted mid-generation is a
 		// normal truncated completion (finish_reason=length), handled below.
 		if errors.Is(err, geniex_sdk.ErrLlmGenerationPromptTooLong) {
+			if managed {
+				_ = abortManagedCache(txnID)
+			}
 			writePromptTooLong(c, profile)
 			return
 		}
 		if err != nil && !errors.Is(err, geniex_sdk.ErrLlmTokenizationContextLength) {
+			if managed {
+				_ = abortManagedCache(txnID)
+			}
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
-		writeBlockingResponse(c, content.String(), reasoning.String(), profile, parseTool)
+		var cache *managedCacheMetadata
+		if managed {
+			cache, err = commitManagedCache(
+				txnID, fullText, managedGenerationReusable(profile),
+			)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
+				return
+			}
+		}
+		writeBlockingResponse(c, content.String(), reasoning.String(), profile, parseTool, cache)
 	}
+}
+
+func managedCacheRequested(c *gin.Context) bool {
+	return strings.TrimSpace(c.GetHeader(managedCacheSessionHeader)) != "" ||
+		strings.TrimSpace(c.GetHeader(managedCacheParentHeader)) != ""
+}
+
+func abortManagedCache(txnID uint64) error {
+	managedChatLineage.Abort(txnID)
+	if err := service.ResetKeepAlive(); err != nil {
+		return fmt.Errorf("reset model after managed-cache abort: %w", err)
+	}
+	return nil
+}
+
+// Only an EOS-complete turn is safe for the next incremental QAIRT template.
+// A length, stop-sequence, callback, or unknown stop can leave the physical KV
+// state without the turn delimiter that a cold full-history template includes.
+// Keep the logical transcript revision, but reset the model and mark the state
+// non-reusable so the next exact extension is processed cold.
+func managedGenerationReusable(profile geniex_sdk.ProfileData) bool {
+	return profile.StopReason == "eos"
+}
+
+func commitManagedCache(txnID uint64, assistantContent string, reusable bool) (*managedCacheMetadata, error) {
+	metadata, err := managedChatLineage.Commit(txnID, assistantContent, reusable)
+	if err != nil {
+		if resetErr := abortManagedCache(txnID); resetErr != nil {
+			return nil, fmt.Errorf("commit managed cache: %v; %w", err, resetErr)
+		}
+		return nil, fmt.Errorf("commit managed cache: %w", err)
+	}
+	if !reusable {
+		if resetErr := service.ResetKeepAlive(); resetErr != nil {
+			managedChatLineage.Clear()
+			return nil, fmt.Errorf("reset non-reusable managed cache: %w", resetErr)
+		}
+	}
+	return &metadata, nil
 }
 
 func parseTools(param ChatCompletionRequest) (bool, string, error) {

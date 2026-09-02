@@ -18,6 +18,7 @@ go_library(
 go_test(
     name = "middleware_test",
     srcs = [
+        "cors_test.go",
         "gil_test.go",
         "package_test.go",
     ],

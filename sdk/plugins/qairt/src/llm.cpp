@@ -104,8 +104,7 @@ int32_t QairtLlm::create(const geniex_LlmCreateInput* input) {
         GENIEX_LOG_ERROR("Failed to create QAIRT LLM pipeline from bundle: {}", model_dir.string());
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
-    pipeline_      = std::make_unique<LLMPipeline>(std::move(*pipe));
-    is_first_turn_ = true;
+    pipeline_ = std::make_unique<LLMPipeline>(std::move(*pipe));
 
     GENIEX_LOG_DEBUG("QAIRT LLM created successfully from bundle: {}", model_dir.string());
     return GENIEX_SUCCESS;
@@ -114,7 +113,6 @@ int32_t QairtLlm::create(const geniex_LlmCreateInput* input) {
 int32_t QairtLlm::reset() {
     if (!pipeline_) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     pipeline_->reset();
-    is_first_turn_ = true;
     return GENIEX_SUCCESS;
 }
 
@@ -138,28 +136,17 @@ int32_t QairtLlm::apply_chat_template(
     if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
     if (!input->messages || input->message_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
-    int32_t start_idx = 0;
-    if (!is_first_turn_) {
-        for (int32_t i = input->message_count - 1; i >= 0; --i) {
-            const auto& m = input->messages[i];
-            if (m.role && std::strcmp(m.role, "assistant") == 0) {
-                start_idx = i + 1;
-                break;
-            }
-        }
-        if (start_idx >= input->message_count) {
-            GENIEX_LOG_ERROR("No new messages since last assistant turn");
-            return GENIEX_ERROR_COMMON_INVALID_INPUT;
-        }
-    }
-
     // Copy the FFI message array into the typed shape the new stateless
-    // applyChatTemplate() expects. reasoning_content has no FFI field yet and
-    // stays default-empty.
+    // applyChatTemplate() expects. Always render the complete transcript. The
+    // pipeline tokenizes that canonical prompt, matches it against retained KV,
+    // rewinds any divergent suffix, and evaluates only the remaining tokens.
+    // Slicing at the last assistant message is unsafe for templates whose
+    // generation header differs from their historical-assistant rendering.
+    // reasoning_content has no FFI field yet and stays default-empty.
     std::vector<ChatMessage> messages;
-    messages.reserve(static_cast<std::size_t>(input->message_count - start_idx) + 1);
+    messages.reserve(static_cast<std::size_t>(input->message_count) + 1);
     bool has_system = false;
-    for (int32_t i = start_idx; i < input->message_count; ++i) {
+    for (int32_t i = 0; i < input->message_count; ++i) {
         const auto& m = input->messages[i];
         if (!m.role) {
             GENIEX_LOG_ERROR("messages[{}] has null role", i);
@@ -183,7 +170,7 @@ int32_t QairtLlm::apply_chat_template(
         qairt::apply_tool_fields(out, m.tool_calls, m.tool_call_count, m.tool_call_id, m.tool_name);
         messages.push_back(std::move(out));
     }
-    if (is_first_turn_ && !has_system) {
+    if (!has_system) {
         ChatMessage sys;
         sys.role    = Role::System;
         sys.content = kDefaultSystemPrompt;
@@ -191,7 +178,7 @@ int32_t QairtLlm::apply_chat_template(
     }
 
     ApplyChatTemplateOptions opts;
-    if (is_first_turn_ && input->tools && input->tools[0] != '\0') {
+    if (input->tools && input->tools[0] != '\0') {
         opts.tools_json = input->tools;
     }
     opts.enable_thinking = input->enable_thinking;
@@ -251,9 +238,8 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         std::vector<int32_t> input_ids(input->input_ids, input->input_ids + input->input_ids_count);
         result = pipeline_->generate(input_ids, gen_cfg, on_token_fn);
     } else {
-        result = pipeline_->generate(input->prompt_utf8, gen_cfg, on_token_fn);
+        result = pipeline_->generateFullPrompt(input->prompt_utf8, gen_cfg, on_token_fn);
     }
-    is_first_turn_ = false;
 
     // Map result to output
     output->full_text = portable_strdup(result.full_text.c_str());

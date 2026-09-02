@@ -107,7 +107,8 @@ func Completions(c *gin.Context) {
 		return
 	}
 
-	slog.Info("Completions", "param", req)
+	// The legacy request contains the raw prompt. Never serialize it to logs.
+	slog.Info("Completions", "model", req.Model, "stream", req.Stream)
 	prompt, err := completionPrompt(req.Prompt)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, map[string]any{"error": err.Error()})
@@ -142,6 +143,9 @@ func Completions(c *gin.Context) {
 		slog.Debug("Adjust NCtx to MaxTokens", "from", modelParam.NCtx, "to", req.MaxTokens.Value)
 		modelParam.NCtx = int32(req.MaxTokens.Value)
 	}
+
+	// This endpoint mutates the same model handle as managed chat.
+	invalidateManagedLineageForUnmanagedRequest()
 
 	acquired, err := service.KeepAliveGet[geniex_sdk.LLM](
 		string(req.Model),

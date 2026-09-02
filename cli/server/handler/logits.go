@@ -86,6 +86,9 @@ func ForwardLogits(c *gin.Context) {
 		return
 	}
 
+	// This endpoint mutates the same model handle as managed chat.
+	invalidateManagedLineageForUnmanagedRequest()
+
 	acquired, err := service.KeepAliveGet[geniex_sdk.LLM](
 		req.Model,
 		modelParam,

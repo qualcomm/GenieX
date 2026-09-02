@@ -153,6 +153,33 @@ jobs:
               -- //cli/... //bindings/go/... -//cli/release/... \
               2>&1 | tee .bazel-test.log
 
+            # Managed cache state protects one mutable model handle. Run its
+            # handler and keep-alive packages with Go's race instrumentation;
+            # the race detector is unavailable on Windows ARM64.
+            #
+            # Go ships runtime/race's gotsan object precompiled. Bazel --copt
+            # therefore cannot alter that object, and the hermetic Zig linker
+            # does not supply the GCC outlined-atomic helpers it references on
+            # ARM64. Use the pinned official Go toolchain with this native
+            # ARM64 runner's GCC for the race-only gate. The normal suite above
+            # remains on the repository's hermetic Bazel toolchain.
+            GO_ARCHIVE=go1.25.9.linux-arm64.tar.gz
+            GO_ARCHIVE_SHA256=ec342e7389b7f489564ed5463c63b16cf8040023dabc7861256677165a8c0e2b
+            curl -fsSL -o "/tmp/$GO_ARCHIVE" "https://go.dev/dl/$GO_ARCHIVE"
+            echo "$GO_ARCHIVE_SHA256  /tmp/$GO_ARCHIVE" | sha256sum --check --strict
+            rm -rf /usr/local/go
+            tar -C /usr/local -xzf "/tmp/$GO_ARCHIVE"
+            export GOROOT=/usr/local/go
+            export PATH="$GOROOT/bin:$PATH"
+            export GOTOOLCHAIN=local
+            export CGO_ENABLED=1
+            export CGO_LDFLAGS="-L/workspace/sdk/pkg-geniex/lib -lgeniex"
+            export LD_LIBRARY_PATH="/workspace/sdk/pkg-geniex/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+            (
+              cd /workspace/cli
+              go test -race ./server/handler ./server/service
+            ) 2>&1 | tee -a /workspace/.bazel-test.log
+
       - name: Run go test (Windows host)
         if: steps.skip.outputs.skip != 'true' && inputs.language == 'go' && matrix.platform == 'windows-arm64'
         shell: cmd

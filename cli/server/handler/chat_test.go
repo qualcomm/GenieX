@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 )
 
 func TestReasoningSeparated(t *testing.T) {
@@ -76,6 +78,53 @@ func TestMaxCompletionTokensAlias(t *testing.T) {
 			}
 			if got := p.MaxCompletionTokens.Or(p.MaxTokens.Value); got != tc.want {
 				t.Errorf("cap = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestManagedCacheMetadataAppearsOnlyOnFinalChunk(t *testing.T) {
+	metadata := &managedCacheMetadata{
+		Mode:     "managed",
+		Status:   "reused",
+		Revision: "sha256:" + strings.Repeat("a", 64),
+		Reason:   "exact_extension",
+		Reusable: true,
+	}
+	intermediate, err := json.Marshal(tokenChunk("hello", false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(intermediate), "geniex_cache") {
+		t.Fatalf("intermediate chunk leaked cache metadata: %s", intermediate)
+	}
+	terminal, err := json.Marshal(finishChunk("stop", metadata))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, marker := range []string{`"geniex_cache"`, `"status":"reused"`, `"reason":"exact_extension"`, `"reusable":true`} {
+		if !strings.Contains(string(terminal), marker) {
+			t.Fatalf("terminal chunk %s is missing %s", terminal, marker)
+		}
+	}
+}
+
+func TestManagedGenerationReusesOnlyEOSCompleteState(t *testing.T) {
+	for _, tc := range []struct {
+		stopReason string
+		want       bool
+	}{
+		{"eos", true},
+		{"length", false},
+		{"stop_sequence", false},
+		{"user", false},
+		{"", false},
+		{"unknown", false},
+	} {
+		t.Run(tc.stopReason, func(t *testing.T) {
+			got := managedGenerationReusable(geniex_sdk.ProfileData{StopReason: tc.stopReason})
+			if got != tc.want {
+				t.Fatalf("managedGenerationReusable(%q) = %v, want %v", tc.stopReason, got, tc.want)
 			}
 		})
 	}

@@ -16,7 +16,8 @@ import (
 // Covers both bodies writeBlockingResponse can produce: openai's own struct, and the
 // local one that carries reasoning_content.
 type blockingBody struct {
-	Choices []struct {
+	GenieXCache *managedCacheMetadata `json:"geniex_cache"`
+	Choices     []struct {
 		FinishReason string `json:"finish_reason"`
 		Message      struct {
 			Content          string `json:"content"`
@@ -37,6 +38,13 @@ func TestWriteBlockingResponse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	const call = `{"name":"get_weather","arguments":{"city":"Beijing"}}`
 	weather := [2]string{"get_weather", `{"city":"Beijing"}`}
+	cache := &managedCacheMetadata{
+		Mode:     "managed",
+		Status:   "reused",
+		Revision: "sha256:0123456789abcdef",
+		Reason:   "exact_extension",
+		Reusable: true,
+	}
 
 	tests := []struct {
 		name          string
@@ -47,6 +55,7 @@ func TestWriteBlockingResponse(t *testing.T) {
 		wantReasoning string
 		wantFinish    string
 		wantCalls     [][2]string
+		cache         *managedCacheMetadata
 	}{
 		{
 			name: "text only", content: "hello",
@@ -77,6 +86,10 @@ func TestWriteBlockingResponse(t *testing.T) {
 			name: "reasoning without a call", content: "hello", reasoning: "let me check",
 			parseTool: true, wantContent: "hello", wantReasoning: "let me check", wantFinish: "stop",
 		},
+		{
+			name: "managed metadata with reasoning", content: "hello", reasoning: "let me check",
+			wantContent: "hello", wantReasoning: "let me check", wantFinish: "stop", cache: cache,
+		},
 	}
 
 	for _, tt := range tests {
@@ -84,7 +97,7 @@ func TestWriteBlockingResponse(t *testing.T) {
 			w := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(w)
 			profile := geniex_sdk.ProfileData{StopReason: "eos"}
-			writeBlockingResponse(c, tt.content, tt.reasoning, profile, tt.parseTool)
+			writeBlockingResponse(c, tt.content, tt.reasoning, profile, tt.parseTool, tt.cache)
 
 			var got blockingBody
 			if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
@@ -92,6 +105,12 @@ func TestWriteBlockingResponse(t *testing.T) {
 			}
 			if len(got.Choices) != 1 {
 				t.Fatalf("choices = %d, want 1", len(got.Choices))
+			}
+			if (got.GenieXCache == nil) != (tt.cache == nil) {
+				t.Fatalf("geniex_cache = %+v, want %+v", got.GenieXCache, tt.cache)
+			}
+			if tt.cache != nil && *got.GenieXCache != *tt.cache {
+				t.Errorf("geniex_cache = %+v, want %+v", got.GenieXCache, tt.cache)
 			}
 			choice := got.Choices[0]
 			if choice.FinishReason != tt.wantFinish {

@@ -61,6 +61,11 @@ jobs:
           PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
+          if [ -z "${QDC_API_KEY:-}" ]; then
+            echo "QDC_API_KEY is unavailable; skipping $PLATFORM device execution"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [ "$GATE" = "true" ] && [ "$ANY" != "true" ]; then
             echo "No QDC-relevant path changes — skipping $PLATFORM"
             echo "skip=true" >> "$GITHUB_OUTPUT"

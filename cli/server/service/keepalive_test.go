@@ -4,11 +4,14 @@
 package service
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 	"github.com/qualcomm/GenieX/cli/server/middleware"
 	"github.com/qualcomm/GenieX/cli/server/types"
+	"github.com/qualcomm/GenieX/cli/server/utils"
 	"github.com/spf13/viper"
 )
 
@@ -77,9 +80,18 @@ func TestResolveModelParam_NonLlamaCppZeroesNCtx(t *testing.T) {
 // Regression test for #1322: model destruction shares the request GIL, so
 // the cleanup goroutine can never destroy a model a handler is still using.
 
-type fakeModel struct{ destroyed int }
+type fakeModel struct {
+	destroyed int
+	reset     int
+	resetErr  error
+}
 
 func (f *fakeModel) Destroy() error { f.destroyed++; return nil }
+func (f *fakeModel) Reset() error   { f.reset++; return f.resetErr }
+
+type fakeNonResettable struct{ destroyed int }
+
+func (f *fakeNonResettable) Destroy() error { f.destroyed++; return nil }
 
 func TestSweepNeverDestroysMidRequest(t *testing.T) {
 	viper.Set("keepalive", -1) // any idle time counts as expired
@@ -105,5 +117,97 @@ func TestSweepNeverDestroysMidRequest(t *testing.T) {
 	}
 	if keepAlive.model != nil {
 		t.Fatal("destroyed model was left in the cache")
+	}
+}
+
+func TestResetKeepAliveAdvancesGeneration(t *testing.T) {
+	f := &fakeModel{}
+	keepAlive.name = "m"
+	keepAlive.model = f
+	keepAlive.param = types.ModelParam{}
+	keepAlive.lastSession = utils.SessionKey{1}
+	keepAlive.lastSessionValid = true
+	defer keepAlive.destroy()
+
+	before := KeepAliveGeneration()
+	if err := ResetKeepAlive(); err != nil {
+		t.Fatal(err)
+	}
+	if f.reset != 1 || f.destroyed != 0 {
+		t.Fatalf("reset=%d destroyed=%d", f.reset, f.destroyed)
+	}
+	if got := KeepAliveGeneration(); got != before+1 {
+		t.Fatalf("generation=%d, want %d", got, before+1)
+	}
+	if keepAlive.lastSessionValid {
+		t.Fatal("reset left automatic session valid")
+	}
+}
+
+func TestAcquisitionFreshSeparatesAutomaticManagedAndLegacyState(t *testing.T) {
+	last := utils.SessionKey{1, 2}
+	tests := []struct {
+		name      string
+		mode      acquireMode
+		valid     bool
+		next      utils.SessionKey
+		wantFresh bool
+	}{
+		{"automatic exact extension", acquireAutomatic, true, utils.SessionKey{1, 2, 3}, false},
+		{"automatic branch", acquireAutomatic, true, utils.SessionKey{1, 9}, true},
+		{"automatic after managed", acquireAutomatic, false, utils.SessionKey{1, 2, 3}, true},
+		{"managed reset", acquireManagedReset, true, utils.SessionKey{1, 2, 3}, true},
+		{"managed reuse", acquireManagedReuse, true, utils.SessionKey{9}, false},
+		{"legacy comparison", acquireLegacy, true, utils.SessionKey{9}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := acquisitionFresh(tc.mode, tc.valid, last, tc.next)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.wantFresh {
+				t.Fatalf("fresh=%v, want %v", got, tc.wantFresh)
+			}
+		})
+	}
+}
+
+func TestAcquisitionFreshRejectsUnknownMode(t *testing.T) {
+	if _, err := acquisitionFresh(acquireMode(255), true, nil, nil); err == nil {
+		t.Fatal("unknown acquisition mode was accepted")
+	}
+}
+
+func TestResetKeepAliveDestroysOnResetFailure(t *testing.T) {
+	wantErr := fmt.Errorf("reset failed")
+	f := &fakeModel{resetErr: wantErr}
+	keepAlive.name = "m"
+	keepAlive.model = f
+	keepAlive.param = types.ModelParam{}
+
+	if err := ResetKeepAlive(); !errors.Is(err, wantErr) {
+		t.Fatalf("ResetKeepAlive error = %v, want %v", err, wantErr)
+	}
+	if f.reset != 1 || f.destroyed != 1 || keepAlive.model != nil {
+		t.Fatalf("reset=%d destroyed=%d model=%v", f.reset, f.destroyed, keepAlive.model)
+	}
+}
+
+func TestResetKeepAliveDestroysAHandleWithoutResetSupport(t *testing.T) {
+	f := &fakeNonResettable{}
+	keepAlive.name = "m"
+	keepAlive.model = f
+	keepAlive.param = types.ModelParam{}
+
+	before := KeepAliveGeneration()
+	if err := ResetKeepAlive(); err != nil {
+		t.Fatal(err)
+	}
+	if f.destroyed != 1 || keepAlive.model != nil {
+		t.Fatalf("destroyed=%d model=%v", f.destroyed, keepAlive.model)
+	}
+	if got := KeepAliveGeneration(); got != before+1 {
+		t.Fatalf("generation=%d, want %d", got, before+1)
 	}
 }

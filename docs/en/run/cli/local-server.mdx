@@ -255,7 +255,7 @@ Function/tool calling uses the standard OpenAI `tools` schema. The server extrac
 The example below walks through a two-step agentic loop with `qualcomm/Qwen3-VL-4B-Instruct`: (1) the VLM identifies a landmark from a photo and calls `web_search`, (2) you execute the search locally and feed the results back so the VLM writes a grounded reply.
 
 <Note>
-Only one tool call per assistant turn is parsed — parallel tool calls in a single response are not supported.
+Multiple tool calls in one assistant turn are parsed and returned with distinct, increasing indexes.
 </Note>
 
 <Note>
@@ -370,6 +370,77 @@ The temple is located on a hill with a wooden stage built without nails, and the
 - Night illuminations (best experienced at night)
 ...
 ```
+
+## **Managed prompt-cache reuse**
+
+Ordinary chat requests use GenieX's automatic continuation check: exact or
+append-only message histories may reuse the current model state, while an edit,
+branch, or incompatible request resets it. `GenieX-KeepCache: true` retains raw
+state for compatibility without validating conversation lineage. Use the
+managed protocol when a client must bind reuse to an explicit session, parent
+revision, model identity, and successful generation.
+
+Send a random 128-bit session as 32 lowercase hexadecimal characters on the
+first request:
+
+```bash
+curl http://127.0.0.1:18181/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "GenieX-Cache-Session: 0123456789abcdef0123456789abcdef" \
+  -d '{
+    "model": "ai-hub-models/Qwen3-4B-Instruct-2507",
+    "messages": [{"role": "user", "content": "Summarize this synthetic note."}],
+    "max_tokens": 128
+  }'
+```
+
+The final response includes the committed revision:
+
+```json
+{
+  "geniex_cache": {
+    "mode": "managed",
+    "status": "cold",
+    "revision": "sha256:...",
+    "reason": "first_request",
+    "reusable": true
+  }
+}
+```
+
+On the next request, send the same session, the complete extended transcript,
+and that revision in `GenieX-Cache-Parent`. GenieX reuses state only when the
+session and parent match and the transcript exactly extends the committed
+messages. Edited, removed or reordered messages, a different session, a stale
+parent or a changed model identity force a reset.
+
+The final normal response, or final streaming finish chunk, reports `cold`,
+`reused`, or `reset` with one of these reasons: `first_request`,
+`exact_extension`, `branch`, `session_switch`, `parent_mismatch`, or
+`previous_not_reusable`. The `reusable` field says whether the completed turn's
+physical state may be used by a later exact extension. Only an EOS-complete turn
+is reusable. A length-limited, stop-sequence, callback, or unknown stop still
+commits its logical transcript revision, but GenieX immediately resets the
+physical model state. Its next exact extension runs cold with
+`previous_not_reusable`; this prevents a missing end-of-turn delimiter from
+changing the next answer.
+
+Managed requests also return `GenieX-Cache-Protocol: 2`. Clients should require
+that exact protocol version instead of treating any managed-looking error as a
+capability proof. If a generation fails, is cancelled, or disconnects before a
+final record, its provisional state is cleared and must not be reused.
+
+<Warning>
+Managed cache sessions separate one model state's lineage. They are not
+authentication or tenant isolation. Do not combine the managed headers with
+`GenieX-KeepCache`.
+</Warning>
+
+Protocol version 2 supports scalar text messages with `system`, `user`, and
+`assistant` roles. VLM content, native structured tool-call messages, separated
+reasoning, speculative decoding, unknown message forms, and system-only warm-up
+requests are rejected in managed mode. Browser clients may send the managed
+headers through the server's CORS policy.
 
 ## **Other endpoints**
 
