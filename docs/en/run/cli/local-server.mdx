@@ -373,10 +373,12 @@ The temple is located on a hill with a wooden stage built without nails, and the
 
 ## **Managed prompt-cache reuse**
 
-By default, GenieX resets mutable model state for every chat-completion request.
-`GenieX-KeepCache: true` retains raw state for compatibility, but it does not
-validate that a later request belongs to the same conversation. Use the managed
-protocol when a client can edit, prune, branch, retry or cancel its history.
+Ordinary chat requests use GenieX's automatic continuation check: exact or
+append-only message histories may reuse the current model state, while an edit,
+branch, or incompatible request resets it. `GenieX-KeepCache: true` retains raw
+state for compatibility without validating conversation lineage. Use the
+managed protocol when a client must bind reuse to an explicit session, parent
+revision, model identity, and successful generation.
 
 Send a random 128-bit session as 32 lowercase hexadecimal characters on the
 first request:
@@ -434,7 +436,7 @@ authentication or tenant isolation. Do not combine the managed headers with
 `GenieX-KeepCache`.
 </Warning>
 
-Version one supports scalar text messages with `system`, `user`, and
+Protocol version 2 supports scalar text messages with `system`, `user`, and
 `assistant` roles. VLM content, native structured tool-call messages, separated
 reasoning, speculative decoding, unknown message forms, and system-only warm-up
 requests are rejected in managed mode. Browser clients may send the managed

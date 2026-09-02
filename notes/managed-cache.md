@@ -21,11 +21,14 @@ The managed protocol adds that proof and commits cache state transactionally.
 - A model unload, reload or out-of-band reset changes the monotonic generation
   and prevents a planned hit from being committed as reused.
 
-The cache identity includes the model name, full model and tokenizer artifact
-digests, runtime, SDK and plugin versions, resolved model/device parameters,
-chat template options, grammar settings and reasoning mode. Session is checked
-separately. Revisions are SHA-256 digests over a versioned JSON envelope of the
-identity and committed messages.
+The cache identity includes the model name, content digests of the model and
+tokenizer paths resolved by the model manager, runtime, SDK and plugin versions,
+resolved model/device parameters, chat template options, grammar settings and
+reasoning mode. Additional files loaded by a runtime-specific model bundle are
+not enumerated by this identity; a model reload changes the keep-alive generation
+and therefore invalidates reuse. Session is checked separately. Revisions are
+SHA-256 digests over a versioned JSON envelope of the identity and committed
+messages.
 
 ## Protocol boundary
 
@@ -33,7 +36,7 @@ The request headers are `GenieX-Cache-Session` and, after the first successful
 call, `GenieX-Cache-Parent`. Managed headers cannot be combined with
 `GenieX-KeepCache`.
 
-Version one supports only scalar text content with `system`, `user` and
+Protocol version 2 supports only scalar text content with `system`, `user` and
 `assistant` roles. It rejects VLM input, native tool-call messages, separated
 reasoning, speculative decoding, system-only warm-up and unknown message forms
 before generation.
@@ -42,8 +45,8 @@ The final blocking response or final streaming finish chunk contains
 `geniex_cache`. Its public vocabulary is:
 
 - status: `cold`, `reused`, or `reset`;
-- reason: `first_request`, `exact_extension`, `branch`, `session_switch`, or
-  `parent_mismatch`.
+- reason: `first_request`, `exact_extension`, `branch`, `session_switch`,
+  `parent_mismatch`, or `previous_not_reusable`.
 
 A missing final record is an uncommitted request and must not be reused by a
 client. Session IDs separate state lineage; they are not authentication,
