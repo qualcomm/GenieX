@@ -7,7 +7,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <nlohmann/json.hpp>
 #include <sstream>
 #include <vector>
 
@@ -191,10 +190,17 @@ int32_t LlamaLlm::apply_chat_template(
     common_messages.reserve(input->message_count);
 
     for (int32_t i = 0; i < input->message_count; ++i) {
+        const geniex_LlmChatMessage& src = input->messages[i];
+        if (!src.role) {
+            GENIEX_LOG_ERROR("messages[{}] has null role", i);
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
         common_chat_msg msg;
-        msg.role    = input->messages[i].role;
-        msg.content = input->messages[i].content;
-        common_messages.push_back(msg);
+        msg.role = src.role;
+        // An assistant turn that only issues tool calls carries no content.
+        if (src.content) msg.content = src.content;
+        apply_tool_fields(msg, src.tool_calls, src.tool_call_count, src.tool_call_id, src.tool_name);
+        common_messages.push_back(std::move(msg));
     }
 
     // Initialize chat templates
@@ -209,7 +215,7 @@ int32_t LlamaLlm::apply_chat_template(
     inputs.add_generation_prompt = input->add_generation_prompt;
 
     if (input->tools && strlen(input->tools) > 0) {
-        inputs.tools = common_chat_tools_parse_oaicompat(nlohmann::ordered_json::parse(std::string(input->tools)));
+        inputs.tools = common_chat_tools_parse_oaicompat(common_json::parse(std::string(input->tools)));
     }
 
     inputs.enable_thinking = input->enable_thinking;

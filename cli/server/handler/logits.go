@@ -13,6 +13,7 @@ import (
 	"github.com/qualcomm/GenieX/cli/internal/config"
 	"github.com/qualcomm/GenieX/cli/server/service"
 	"github.com/qualcomm/GenieX/cli/server/types"
+	"github.com/qualcomm/GenieX/cli/server/utils"
 )
 
 // ForwardLogitsRequest is the body for POST /v1/logits: one prefill-only forward
@@ -85,18 +86,18 @@ func ForwardLogits(c *gin.Context) {
 		return
 	}
 
-	// ForwardLogits mutates the same model state used by managed chat. Clear the
-	// committed lineage even when raw KeepCache prevents a model reset.
+	// This endpoint mutates the same model handle as managed chat.
 	invalidateManagedLineageForUnmanagedRequest()
 
-	p, err := service.KeepAliveGet[geniex_sdk.LLM](
+	acquired, err := service.KeepAliveGet[geniex_sdk.LLM](
 		req.Model,
 		modelParam,
-		c.GetHeader("GenieX-KeepCache") != "true",
+		utils.HashTokens(req.InputIDs),
 	)
 	if writeKeepAliveError(c, err) {
 		return
 	}
+	p := acquired.Model
 
 	topN := defaultLogitsTopN
 	if req.TopN != nil {

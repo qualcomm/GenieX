@@ -16,6 +16,7 @@ go_library(
         "//cli/internal/store",
         "//cli/server/middleware",
         "//cli/server/types",
+        "//cli/server/utils",
     ],
 )
 
@@ -26,6 +27,7 @@ go_cgo_test(
     deps = [
         "//bindings/go:geniex_sdk_go",
         "//cli/server/middleware",
+        "//cli/server/utils",
         "@com_github_spf13_viper//:viper",
     ],
 )

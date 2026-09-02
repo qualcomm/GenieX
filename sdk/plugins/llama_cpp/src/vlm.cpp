@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <nlohmann/json.hpp>
 
 #include "chat.h"
 #include "common.h"
@@ -90,14 +89,23 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
 
     // Initialize vision context if mmproj_path provided
     if (input->mmproj_path) {
+        ggml_backend_dev_t htp_device = device == Device::NPU ? ggml_backend_dev_by_name("HTP0") : nullptr;
+
         mtmd_context_params mparams = mtmd_context_params_default();
-        mparams.use_gpu             = device == Device::GPU;
+        mparams.use_gpu             = device == Device::GPU || htp_device != nullptr;
+        mparams.device              = htp_device;
         mparams.print_timings       = false;
         mparams.n_threads           = 4;
         // Zack TODO: elegant fix this error:  no member named 'verbosity' in 'mtmd_context_params'
         // mparams.verbosity           = GGML_LOG_LEVEL_ERROR;
 
         this->ctx_vision = mtmd_init_from_file(input->mmproj_path, this->model, mparams);
+        if (!this->ctx_vision && htp_device) {
+            GENIEX_LOG_WARN("mtmd failed to initialize the vision encoder on HTP; falling back to CPU");
+            mparams.use_gpu  = false;
+            mparams.device   = nullptr;
+            this->ctx_vision = mtmd_init_from_file(input->mmproj_path, this->model, mparams);
+        }
         // Continue even if vision context fails
         if (this->ctx_vision) {
             this->supports_vision = mtmd_support_vision(this->ctx_vision);
@@ -159,7 +167,7 @@ int32_t LlamaVlm::apply_chat_template(
     tmpl_inputs.add_generation_prompt = true;
     tmpl_inputs.use_jinja             = true;
     if (input->tools && strlen(input->tools) > 0) {
-        tmpl_inputs.tools = common_chat_tools_parse_oaicompat(nlohmann::ordered_json::parse(std::string(input->tools)));
+        tmpl_inputs.tools = common_chat_tools_parse_oaicompat(common_json::parse(std::string(input->tools)));
     }
 
     if (input->enable_thinking) {
@@ -219,9 +227,9 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             GENIEX_LOG_DEBUG("processing {} image(s)", input->config->image_count);
             for (int i = 0; i < input->config->image_count; ++i) {
                 if (input->config->image_paths[i]) {
-                    mtmd_bitmap* bmp =
-                        mtmd_helper_bitmap_init_from_file(this->ctx_vision, input->config->image_paths[i], false)
-                            .bitmap;
+                    mtmd_bitmap* bmp = mtmd_helper_bitmap_init_from_file(
+                        this->ctx_vision, input->config->image_paths[i], false, mtmd_helper_init_opt_default())
+                                           .bitmap;
                     if (bmp) {
                         bitmaps.push_back(bmp);
                         n_media++;
@@ -242,9 +250,9 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             GENIEX_LOG_DEBUG("processing {} audio file(s)", input->config->audio_count);
             for (int i = 0; i < input->config->audio_count; ++i) {
                 if (input->config->audio_paths[i]) {
-                    mtmd_bitmap* bmp =
-                        mtmd_helper_bitmap_init_from_file(this->ctx_vision, input->config->audio_paths[i], false)
-                            .bitmap;
+                    mtmd_bitmap* bmp = mtmd_helper_bitmap_init_from_file(
+                        this->ctx_vision, input->config->audio_paths[i], false, mtmd_helper_init_opt_default())
+                                           .bitmap;
                     if (bmp) {
                         bitmaps.push_back(bmp);
                         n_media++;
@@ -566,6 +574,7 @@ bool LlamaVlm::vlm_message_to_common_chat_msg(const geniex_VlmChatMessage* input
     }
 
     output->role = input->role;
+    apply_tool_fields(*output, input->tool_calls, input->tool_call_count, input->tool_call_id, input->tool_name);
 
     if (input->contents && input->content_count > 0) {
         int         media_count = 0;

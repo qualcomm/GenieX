@@ -501,40 +501,101 @@ geniex_VlmCreateInput extract_vlm_create_input(JNIEnv* env, jobject inputObj) {
     return out;
 }
 
-std::vector<geniex_LlmChatMessage> extract_llm_chat_messages(
-    JNIEnv* env, jobjectArray jmessages, std::vector<std::string>& str_buf) {
+// Reads an optional String field, returning nullptr when absent or null.
+static const char* opt_string_field(JNIEnv* env, jobject obj, jclass cls, const char* name) {
+    jfieldID fid = env->GetFieldID(cls, name, "Ljava/lang/String;");
+    if (!fid) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+    jstring jval = (jstring)env->GetObjectField(obj, fid);
+    if (!jval) return nullptr;
+    const char* held = hold_c_str(jstring2str(env, jval));
+    env->DeleteLocalRef(jval);
+    return held;
+}
+
+// Reads a `List<ToolCall>` field into a fresh array. Returns nullptr with
+// count 0 when the field is absent or the list is empty; the caller owns the
+// array and frees it with free_*_chat_messages.
+static geniex_ToolCall* extract_tool_calls(
+    JNIEnv* env, jobject jmsg, jclass msgCls, const char* field, int32_t* out_count) {
+    *out_count = 0;
+
+    jfieldID fid = env->GetFieldID(msgCls, field, "Ljava/util/List;");
+    if (!fid) {
+        env->ExceptionClear();
+        return nullptr;
+    }
+    jobject jList = env->GetObjectField(jmsg, fid);
+    if (!jList) return nullptr;
+
+    jclass    listCls = env->FindClass("java/util/List");
+    jmethodID midSize = listCls ? env->GetMethodID(listCls, "size", "()I") : nullptr;
+    jmethodID midGet  = listCls ? env->GetMethodID(listCls, "get", "(I)Ljava/lang/Object;") : nullptr;
+    if (!midSize || !midGet) {
+        env->ExceptionClear();
+        if (listCls) env->DeleteLocalRef(listCls);
+        env->DeleteLocalRef(jList);
+        return nullptr;
+    }
+
+    const jint n = env->CallIntMethod(jList, midSize);
+    if (n <= 0) {
+        env->DeleteLocalRef(listCls);
+        env->DeleteLocalRef(jList);
+        return nullptr;
+    }
+
+    auto* calls = new geniex_ToolCall[n]();
+    for (jint i = 0; i < n; ++i) {
+        jobject jtc = env->CallObjectMethod(jList, midGet, i);
+        if (!jtc) continue;
+        jclass tcCls       = env->GetObjectClass(jtc);
+        calls[i].id        = opt_string_field(env, jtc, tcCls, "id");
+        calls[i].name      = opt_string_field(env, jtc, tcCls, "name");
+        calls[i].arguments = opt_string_field(env, jtc, tcCls, "arguments");
+        env->DeleteLocalRef(tcCls);
+        env->DeleteLocalRef(jtc);
+    }
+    *out_count = static_cast<int32_t>(n);
+
+    env->DeleteLocalRef(listCls);
+    env->DeleteLocalRef(jList);
+    return calls;
+}
+
+std::vector<geniex_LlmChatMessage> extract_llm_chat_messages(JNIEnv* env, jobjectArray jmessages) {
     std::vector<geniex_LlmChatMessage> msgs;
-    str_buf.clear();
-    jsize len = env->GetArrayLength(jmessages);
+    jsize                              len = env->GetArrayLength(jmessages);
     msgs.reserve(len);
 
     for (jsize i = 0; i < len; ++i) {
         jobject jmsg   = env->GetObjectArrayElement(jmessages, i);
         jclass  msgCls = env->GetObjectClass(jmsg);
 
-        jfieldID roleFid    = env->GetFieldID(msgCls, "role", "Ljava/lang/String;");
-        jfieldID contentFid = env->GetFieldID(msgCls, "content", "Ljava/lang/String;");
-
-        jstring jrole    = (jstring)env->GetObjectField(jmsg, roleFid);
-        jstring jcontent = (jstring)env->GetObjectField(jmsg, contentFid);
-
-        std::string sRole    = jstring2str(env, jrole);
-        std::string sContent = jstring2str(env, jcontent);
-        str_buf.push_back(sRole);
-        str_buf.push_back(sContent);
-
-        geniex_LlmChatMessage m;
-        m.role    = str_buf[str_buf.size() - 2].c_str();
-        m.content = str_buf[str_buf.size() - 1].c_str();
+        geniex_LlmChatMessage m{};
+        m.role         = opt_string_field(env, jmsg, msgCls, "role");
+        m.content      = opt_string_field(env, jmsg, msgCls, "content");
+        m.tool_call_id = opt_string_field(env, jmsg, msgCls, "toolCallId");
+        m.tool_name    = opt_string_field(env, jmsg, msgCls, "toolName");
+        m.tool_calls   = extract_tool_calls(env, jmsg, msgCls, "toolCalls", &m.tool_call_count);
         msgs.push_back(m);
 
-        env->DeleteLocalRef(jrole);
-        env->DeleteLocalRef(jcontent);
         env->DeleteLocalRef(jmsg);
         env->DeleteLocalRef(msgCls);
     }
     return msgs;
 }
+
+void free_llm_chat_messages(std::vector<geniex_LlmChatMessage>& msgs) {
+    for (auto& m : msgs) {
+        delete[] m.tool_calls;  // deleting nullptr is safe
+        m.tool_calls      = nullptr;
+        m.tool_call_count = 0;
+    }
+}
+
 // typedef struct {
 //     const char* type;  // "text", "image", "audio", …
 //     const char* text;  // payload: actual text, URL, or token
@@ -678,6 +739,9 @@ std::vector<geniex_VlmChatMessage> extract_vlm_chat_messages(JNIEnv* env, jobjec
         m.role          = role_cstr;
         m.content_count = count;
         m.contents      = contents_arr;
+        m.tool_call_id  = opt_string_field(env, jmsg, msgCls, "toolCallId");
+        m.tool_name     = opt_string_field(env, jmsg, msgCls, "toolName");
+        m.tool_calls    = extract_tool_calls(env, jmsg, msgCls, "toolCalls", &m.tool_call_count);
 
         msgs.push_back(m);
 
@@ -694,6 +758,9 @@ void free_vlm_chat_messages(std::vector<geniex_VlmChatMessage>& msgs) {
         delete[] m.contents;  // deleting nullptr is safe
         m.contents      = nullptr;
         m.content_count = 0;
+        delete[] m.tool_calls;
+        m.tool_calls      = nullptr;
+        m.tool_call_count = 0;
     }
 }
 

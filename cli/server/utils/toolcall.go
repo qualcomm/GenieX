@@ -111,6 +111,9 @@ func NewToolCallScanner() *ToolCallScanner {
 	return &ToolCallScanner{formats: []toolCallFormat{
 		newGemma4ToolCall(),
 		newQwen3ToolCall(),
+		newQwen35ToolCall(),
+		newGptOssToolCall(),
+		newLFM2ToolCall(),
 		&jsonToolCall{},
 	}}
 }
@@ -124,13 +127,13 @@ func (s *ToolCallScanner) Push(token string) (string, []toolCallFn) {
 	for {
 		// The earliest format wins: what a later one found may sit inside its region.
 		all, from := s.buf.String(), s.emitted
-		hold, end, owner := len(all), -1, -1
-		for i, f := range s.formats {
+		hold, end := len(all), -1
+		for _, f := range s.formats {
 			n, m := f.feed(all, from)
 			if n < 0 || n >= hold {
 				continue
 			}
-			hold, end, owner = n, m, i
+			hold, end = n, m
 		}
 
 		// Nothing finished: emit up to the hold point, buffer the rest.
@@ -143,7 +146,7 @@ func (s *ToolCallScanner) Push(token string) (string, []toolCallFn) {
 		}
 
 		s.emitted = end
-		got := s.formats[owner].parse(all[hold:end])
+		got := s.parse(all[hold:end])
 		if len(got) == 0 {
 			text += all[from:end] // the region was prose all along
 			continue
@@ -152,6 +155,18 @@ func (s *ToolCallScanner) Push(token string) (string, []toolCallFn) {
 		text += all[from:hold]
 		calls = append(calls, got...)
 	}
+}
+
+// parse reads a region with each format in turn: formats can share an opener —
+// Qwen3 and Qwen3.5 both wrap their calls in `<tool_call>` — so the one that holds
+// the region is not always the one whose syntax it is.
+func (s *ToolCallScanner) parse(region string) []toolCallFn {
+	for _, f := range s.formats {
+		if calls := f.parse(region); len(calls) > 0 {
+			return calls
+		}
+	}
+	return nil
 }
 
 // Parse splits a whole response on a fresh scanner, keeping and dropping what the
@@ -167,15 +182,12 @@ func (s *ToolCallScanner) Parse(all string) (string, []toolCallFn) {
 func (s *ToolCallScanner) Tail() (string, []toolCallFn) {
 	tail := s.buf.String()[s.emitted:]
 	s.emitted += len(tail) // terminal: a second call has nothing left to report
-	for _, f := range s.formats {
-		calls := f.parse(tail)
-		if len(calls) == 0 {
-			continue
-		}
-		// parse reports no offsets, so text before or between the calls goes too.
-		slog.Warn("Tool call recovered from unclosed output, dropping the text held with it",
-			"held_bytes", len(tail), "tool_calls", len(calls))
-		return "", calls
+	calls := s.parse(tail)
+	if len(calls) == 0 {
+		return tail, nil
 	}
-	return tail, nil
+	// parse reports no offsets, so text before or between the calls goes too.
+	slog.Warn("Tool call recovered from unclosed output, dropping the text held with it",
+		"held_bytes", len(tail), "tool_calls", len(calls))
+	return "", calls
 }

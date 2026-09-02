@@ -46,6 +46,19 @@ class geniex_ProfileData(Structure):
 
 
 # ---------------------------------------------------------------------------
+# geniex_ToolCall
+# ---------------------------------------------------------------------------
+
+
+class geniex_ToolCall(Structure):
+    _fields_ = [
+        ('id', c_char_p),
+        ('name', c_char_p),
+        ('arguments', c_char_p),  # JSON string
+    ]
+
+
+# ---------------------------------------------------------------------------
 # geniex_SamplerConfig
 # ---------------------------------------------------------------------------
 
@@ -194,6 +207,10 @@ class geniex_LlmChatMessage(Structure):
     _fields_ = [
         ('role', c_char_p),
         ('content', c_char_p),
+        ('tool_calls', POINTER(geniex_ToolCall)),
+        ('tool_call_count', c_int32),
+        ('tool_call_id', c_char_p),
+        ('tool_name', c_char_p),
     ]
 
 
@@ -228,6 +245,10 @@ class geniex_VlmChatMessage(Structure):
         ('role', c_char_p),
         ('contents', POINTER(geniex_VlmContent)),
         ('content_count', c_int64),  # int64_t in geniex.h
+        ('tool_calls', POINTER(geniex_ToolCall)),
+        ('tool_call_count', c_int32),
+        ('tool_call_id', c_char_p),
+        ('tool_name', c_char_p),
     ]
 
 

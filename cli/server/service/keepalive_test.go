@@ -11,6 +11,7 @@ import (
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 	"github.com/qualcomm/GenieX/cli/server/middleware"
 	"github.com/qualcomm/GenieX/cli/server/types"
+	"github.com/qualcomm/GenieX/cli/server/utils"
 	"github.com/spf13/viper"
 )
 
@@ -124,6 +125,8 @@ func TestResetKeepAliveAdvancesGeneration(t *testing.T) {
 	keepAlive.name = "m"
 	keepAlive.model = f
 	keepAlive.param = types.ModelParam{}
+	keepAlive.lastSession = utils.SessionKey{1}
+	keepAlive.lastSessionValid = true
 	defer keepAlive.destroy()
 
 	before := KeepAliveGeneration()
@@ -135,6 +138,44 @@ func TestResetKeepAliveAdvancesGeneration(t *testing.T) {
 	}
 	if got := KeepAliveGeneration(); got != before+1 {
 		t.Fatalf("generation=%d, want %d", got, before+1)
+	}
+	if keepAlive.lastSessionValid {
+		t.Fatal("reset left automatic session valid")
+	}
+}
+
+func TestAcquisitionFreshSeparatesAutomaticManagedAndLegacyState(t *testing.T) {
+	last := utils.SessionKey{1, 2}
+	tests := []struct {
+		name      string
+		mode      acquireMode
+		valid     bool
+		next      utils.SessionKey
+		wantFresh bool
+	}{
+		{"automatic exact extension", acquireAutomatic, true, utils.SessionKey{1, 2, 3}, false},
+		{"automatic branch", acquireAutomatic, true, utils.SessionKey{1, 9}, true},
+		{"automatic after managed", acquireAutomatic, false, utils.SessionKey{1, 2, 3}, true},
+		{"managed reset", acquireManagedReset, true, utils.SessionKey{1, 2, 3}, true},
+		{"managed reuse", acquireManagedReuse, true, utils.SessionKey{9}, false},
+		{"legacy comparison", acquireLegacy, true, utils.SessionKey{9}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := acquisitionFresh(tc.mode, tc.valid, last, tc.next)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.wantFresh {
+				t.Fatalf("fresh=%v, want %v", got, tc.wantFresh)
+			}
+		})
+	}
+}
+
+func TestAcquisitionFreshRejectsUnknownMode(t *testing.T) {
+	if _, err := acquisitionFresh(acquireMode(255), true, nil, nil); err == nil {
+		t.Fatal("unknown acquisition mode was accepted")
 	}
 }
 

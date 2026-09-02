@@ -161,6 +161,12 @@ Run `geniex-bench --help` for the full flag list.
   `runs` array. Every other mode feeds the file verbatim as one prompt,
   because the segments differ in length and a tok/s median across them would
   mix populations.
+- with `--accuracy`, each prompt-file segment is run through the bundle's own
+  chat template (`geniex_llm_apply_chat_template`) before generation — the
+  same templating `geniex infer` uses — so pass the raw user turn, not
+  pre-templated text. `--system-prompt TEXT` adds a system message ahead of
+  it; `--think` / `--no-think` sets `enable_thinking` (default: think).
+  Without `--accuracy`, `--prompt-file` still feeds the file verbatim.
 - `--logits` runs one prefill-only forward pass (no decode loop, no timing) over
   `-p N` random ids and writes every position's top-N logits to `--output-json`
   (`--logits-top-n`, default 20; `--logits-last-only` for the last row only).

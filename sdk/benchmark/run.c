@@ -175,6 +175,46 @@ static void print_gen_text(const char* text) {
 
 /* ----------------------------- LLM run loop ----------------------------- */
 
+/* --accuracy --prompt-file: run user_prompt (optionally preceded by
+ * --system-prompt) through the bundle's own chat template before
+ * generation, so the benchmark exercises the same templating `geniex infer`
+ * uses instead of feeding the file verbatim. Returns heap text the caller
+ * frees with geniex_free, or NULL on failure. */
+static char* build_llm_accuracy_prompt(geniex_LLM* llm, const options_t* o, const char* user_prompt) {
+    /* Zero first: the plugins dereference the optional tool-calling fields
+     * whenever they're non-NULL, so stack garbage there is an access violation. */
+    geniex_LlmChatMessage messages[2];
+    memset(messages, 0, sizeof(messages));
+    int32_t nm = 0;
+    if (o->system_prompt) {
+        messages[nm].role    = "system";
+        messages[nm].content = o->system_prompt;
+        nm++;
+    }
+    messages[nm].role    = "user";
+    messages[nm].content = user_prompt;
+    nm++;
+
+    geniex_LlmApplyChatTemplateInput  tin;
+    geniex_LlmApplyChatTemplateOutput tout;
+    memset(&tin, 0, sizeof(tin));
+    memset(&tout, 0, sizeof(tout));
+    tin.messages              = messages;
+    tin.message_count         = nm;
+    tin.enable_thinking       = o->enable_thinking;
+    tin.add_generation_prompt = true;
+
+    int32_t rc = geniex_llm_apply_chat_template(llm, &tin, &tout);
+    if (rc != GENIEX_SUCCESS) {
+        fprintf(stderr,
+            "ERROR: geniex_llm_apply_chat_template: %s (%d)\n",
+            geniex_get_error_message((geniex_ErrorCode)rc),
+            rc);
+        return NULL;
+    }
+    return tout.formatted_text;
+}
+
 void run_llm(const options_t* o, const device_t* dev, run_result_t* out) {
     geniex_LlmCreateInput cin;
     memset(&cin, 0, sizeof(cin));
@@ -226,8 +266,19 @@ void run_llm(const options_t* o, const device_t* dev, run_result_t* out) {
             geniex_LlmGenerateOutput gout;
             memset(&gin, 0, sizeof(gin));
             memset(&gout, 0, sizeof(gout));
+            char* templated_prompt = NULL;
             if (cur_prompt) {
-                gin.prompt_utf8 = cur_prompt;
+                if (o->accuracy) {
+                    templated_prompt = build_llm_accuracy_prompt(llm, o, cur_prompt);
+                    if (!templated_prompt) {
+                        free(tokens);
+                        geniex_llm_destroy(llm);
+                        exit(1);
+                    }
+                    gin.prompt_utf8 = templated_prompt;
+                } else {
+                    gin.prompt_utf8 = cur_prompt;
+                }
             } else {
                 gin.input_ids       = tokens;
                 gin.input_ids_count = o->n_prompt;
@@ -240,6 +291,7 @@ void run_llm(const options_t* o, const device_t* dev, run_result_t* out) {
             if (rc != GENIEX_SUCCESS) {
                 const char* msg = geniex_get_error_message((geniex_ErrorCode)rc);
                 fprintf(stderr, "ERROR: geniex_llm_generate run %d failed: %s (%d)\n", run_idx, msg ? msg : "?", rc);
+                if (templated_prompt) geniex_free(templated_prompt);
                 free(tokens);
                 geniex_llm_destroy(llm);
                 exit(1);
@@ -262,6 +314,9 @@ void run_llm(const options_t* o, const device_t* dev, run_result_t* out) {
             }
             if (gout.full_text) {
                 geniex_free(gout.full_text);
+            }
+            if (templated_prompt) {
+                geniex_free(templated_prompt);
             }
         }
     }

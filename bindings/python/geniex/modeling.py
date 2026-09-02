@@ -22,6 +22,7 @@ from ._ffi._types import (
     geniex_LlmGenerateOutput,
     geniex_SamplerConfig,
     geniex_token_callback,
+    geniex_ToolCall,
     geniex_VlmApplyChatTemplateInput,
     geniex_VlmApplyChatTemplateOutput,
     geniex_VlmCapabilities,
@@ -44,6 +45,38 @@ def _decode_utf8(p) -> str:
     # whose tail is a partial multibyte sequence — e.g. when generation stops
     # at max_new_tokens mid-character — and a strict decode would raise.
     return string_at(p).decode('utf-8', errors='replace') if p else ''
+
+
+def _tool_fields(msg: dict, keepalive: list) -> dict:
+    """Extract the OpenAI tool-calling fields of one message as chat-message
+    struct kwargs. Chat templates render a ``tool`` message only from the
+    ``tool_calls`` of the assistant turn before it, so both halves must cross
+    the FFI. Allocated arrays are appended to ``keepalive``, which the caller
+    must hold until the SDK call returns."""
+    calls = msg.get('tool_calls') or []
+    fields = {
+        'tool_call_id': _enc(msg.get('tool_call_id')),
+        # `name` means the function on a tool response, but a participant label
+        # on user/system turns — only the former belongs in tool_name.
+        'tool_name': _enc(msg.get('name')) if msg.get('role') == 'tool' else None,
+    }
+    if not calls:
+        return fields
+    CallArray = geniex_ToolCall * len(calls)
+    c_calls = CallArray(
+        *[
+            geniex_ToolCall(
+                id=_enc(tc.get('id')),
+                name=_enc(tc.get('function', {}).get('name')),
+                arguments=_enc(tc.get('function', {}).get('arguments')),
+            )
+            for tc in calls
+        ]
+    )
+    keepalive.append(c_calls)
+    fields['tool_calls'] = c_calls
+    fields['tool_call_count'] = len(calls)
+    return fields
 
 
 def _build_sampler(
@@ -158,12 +191,14 @@ class GenieXLLM:
     ) -> str:
         lib = load_library()
         count = len(messages)
+        keepalive: list = []
         MsgArray = geniex_LlmChatMessage * count
         c_msgs = MsgArray(
             *[
                 geniex_LlmChatMessage(
                     role=msg['role'].encode(),
-                    content=(msg['content'] if isinstance(msg['content'], str) else '').encode(),
+                    content=(msg['content'] if isinstance(msg.get('content'), str) else '').encode(),
+                    **_tool_fields(msg, keepalive),
                 )
                 for msg in messages
             ]
@@ -389,17 +424,18 @@ def _build_vlm_messages(messages: list[dict]):
     count = len(messages)
     MsgArray = geniex_VlmChatMessage * count
     c_msgs_list = []
-    _content_refs: list = []  # keep content arrays alive
+    _content_refs: list = []  # keep content / tool-call arrays alive
 
     for msg in messages:
         role = msg['role'].encode()
         content = msg.get('content', '')
+        tools = _tool_fields(msg, _content_refs)
 
         if isinstance(content, str):
             ContentArray = geniex_VlmContent * 1
             contents = ContentArray(geniex_VlmContent(type=b'text', text=content.encode()))
             _content_refs.append(contents)
-            c_msgs_list.append(geniex_VlmChatMessage(role=role, contents=contents, content_count=1))
+            c_msgs_list.append(geniex_VlmChatMessage(role=role, contents=contents, content_count=1, **tools))
         elif isinstance(content, list):
             n = len(content)
             ContentArray = geniex_VlmContent * n
@@ -410,9 +446,9 @@ def _build_vlm_messages(messages: list[dict]):
                 items.append(geniex_VlmContent(type=ctype, text=text_val))
             contents = ContentArray(*items)
             _content_refs.append(contents)
-            c_msgs_list.append(geniex_VlmChatMessage(role=role, contents=contents, content_count=n))
+            c_msgs_list.append(geniex_VlmChatMessage(role=role, contents=contents, content_count=n, **tools))
         else:
-            c_msgs_list.append(geniex_VlmChatMessage(role=role, content_count=0))
+            c_msgs_list.append(geniex_VlmChatMessage(role=role, content_count=0, **tools))
 
     arr = MsgArray(*c_msgs_list)
     return arr, count, _content_refs

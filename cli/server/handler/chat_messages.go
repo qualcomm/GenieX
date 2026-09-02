@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v3"
@@ -15,25 +16,90 @@ import (
 	"github.com/qualcomm/GenieX/cli/server/utils"
 )
 
+// Flattens a message's content union to plain text. Returns "" for a nil
+// content — an assistant turn that only issues tool calls carries none.
+func contentText(msg openai.ChatCompletionMessageParamUnion) string {
+	switch content := msg.GetContent().AsAny().(type) {
+	case *string:
+		return *content
+	case *[]openai.ChatCompletionContentPartTextParam:
+		var b strings.Builder
+		for _, ct := range *content {
+			b.WriteString(ct.Text)
+		}
+		return b.String()
+	case *[]openai.ChatCompletionAssistantMessageParamContentArrayOfContentPartUnion:
+		var b strings.Builder
+		for _, ct := range *content {
+			if *ct.GetType() == "text" {
+				b.WriteString(*ct.GetText())
+			}
+		}
+		return b.String()
+	default:
+		return ""
+	}
+}
+
+// contentText in the VLM shape: one text part, or none for an assistant turn
+// that carries only tool calls.
+func textContents(msg openai.ChatCompletionMessageParamUnion) []geniex_sdk.VlmContent {
+	text := contentText(msg)
+	if text == "" {
+		return nil
+	}
+	return []geniex_sdk.VlmContent{{Type: geniex_sdk.VlmContentTypeText, Text: text}}
+}
+
+// Tool calls must reach the SDK structured, not flattened into assistant text:
+// chat templates render a tool response only from the tool_calls of the
+// assistant turn before it, matched by call ID. On failure, writes a response
+// and returns ok=false; the caller must return.
+func buildToolCalls(c *gin.Context, msg openai.ChatCompletionMessageParamUnion) (calls []geniex_sdk.ToolCall, ok bool) {
+	toolCalls := msg.GetToolCalls()
+	calls = make([]geniex_sdk.ToolCall, 0, len(toolCalls))
+	for _, tc := range toolCalls {
+		fn := tc.GetFunction()
+		if fn == nil {
+			kind := ""
+			if t := tc.GetType(); t != nil {
+				kind = *t
+			}
+			slog.Error("Not support tool call type", "type", kind)
+			c.JSON(http.StatusBadRequest, map[string]any{"error": "not support tool call type"})
+			return nil, false
+		}
+		call := geniex_sdk.ToolCall{Name: fn.Name, Arguments: fn.Arguments}
+		if id := tc.GetID(); id != nil {
+			call.ID = *id
+		}
+		calls = append(calls, call)
+	}
+	return calls, true
+}
+
 // On failure, writes a response and returns ok=false; the caller must return.
 func buildLLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []geniex_sdk.LlmChatMessage, ok bool) {
 	messages = make([]geniex_sdk.LlmChatMessage, 0, len(param.Messages))
 	for _, msg := range param.Messages {
-		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
-			for _, tc := range toolCalls {
-				messages = append(messages, geniex_sdk.LlmChatMessage{
-					Role: geniex_sdk.LlmRole(*msg.GetRole()),
-					Content: fmt.Sprintf(`<tool_call>{"name":"%s","arguments":"%s"}</tool_call>`,
-						tc.GetFunction().Name, tc.GetFunction().Arguments),
-				})
+		if len(msg.GetToolCalls()) > 0 {
+			calls, valid := buildToolCalls(c, msg)
+			if !valid {
+				return nil, false
 			}
+			messages = append(messages, geniex_sdk.LlmChatMessage{
+				Role:      geniex_sdk.LlmRole(*msg.GetRole()),
+				Content:   contentText(msg),
+				ToolCalls: calls,
+			})
 			continue
 		}
 
-		if toolResp := msg.GetToolCallID(); toolResp != nil {
+		if toolCallID := msg.GetToolCallID(); toolCallID != nil {
 			messages = append(messages, geniex_sdk.LlmChatMessage{
-				Role:    geniex_sdk.LlmRole(*msg.GetRole()),
-				Content: *msg.GetContent().AsAny().(*string),
+				Role:       geniex_sdk.LlmRole(*msg.GetRole()),
+				Content:    contentText(msg),
+				ToolCallID: *toolCallID,
 			})
 			continue
 		}
@@ -95,29 +161,24 @@ func buildLLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []g
 func buildVLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []geniex_sdk.VlmChatMessage, tempFiles []string, ok bool) {
 	messages = make([]geniex_sdk.VlmChatMessage, 0, len(param.Messages))
 	for _, msg := range param.Messages {
-		if toolCalls := msg.GetToolCalls(); len(toolCalls) > 0 {
-			contents := make([]geniex_sdk.VlmContent, 0, len(toolCalls))
-			for _, tc := range toolCalls {
-				contents = append(contents, geniex_sdk.VlmContent{
-					Type: geniex_sdk.VlmContentTypeText,
-					Text: fmt.Sprintf(`<tool_call>{"name":"%s","arguments":"%s"}</tool_call>`,
-						tc.GetFunction().Name, tc.GetFunction().Arguments),
-				})
+		if len(msg.GetToolCalls()) > 0 {
+			calls, valid := buildToolCalls(c, msg)
+			if !valid {
+				return nil, tempFiles, false
 			}
 			messages = append(messages, geniex_sdk.VlmChatMessage{
-				Role:     geniex_sdk.VlmRole(*msg.GetRole()),
-				Contents: contents,
+				Role:      geniex_sdk.VlmRole(*msg.GetRole()),
+				Contents:  textContents(msg),
+				ToolCalls: calls,
 			})
 			continue
 		}
 
-		if toolResp := msg.GetToolCallID(); toolResp != nil {
+		if toolCallID := msg.GetToolCallID(); toolCallID != nil {
 			messages = append(messages, geniex_sdk.VlmChatMessage{
-				Role: geniex_sdk.VlmRole(*msg.GetRole()),
-				Contents: []geniex_sdk.VlmContent{{
-					Type: geniex_sdk.VlmContentTypeText,
-					Text: *msg.GetContent().AsAny().(*string),
-				}},
+				Role:       geniex_sdk.VlmRole(*msg.GetRole()),
+				Contents:   textContents(msg),
+				ToolCallID: *toolCallID,
 			})
 			continue
 		}

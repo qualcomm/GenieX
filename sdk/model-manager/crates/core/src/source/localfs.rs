@@ -21,12 +21,15 @@ use async_trait::async_trait;
 use url::Url;
 
 use crate::error::{Error, Result};
+use crate::gguf;
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
-use crate::manifest_builder::{infer_manifest_from_names, ManifestHint};
+use crate::manifest_builder::{infer_manifest_from_names, untagged_gguf_names, ManifestHint};
 use crate::transport::HttpTransport;
 
 use super::ai_hub::remote_zip::{fetch_central_directory, LocalFileTransport, Method};
-use super::ai_hub::{classify_from_metadata_json, prepare_flat_entries};
+use super::ai_hub::{
+    classify_from_metadata_json, precision_from_metadata_json, prepare_flat_entries,
+};
 use super::{BytesSource, FileSpec, ModelSource, Plan};
 
 const MANIFEST_FILE: &str = "geniex.json";
@@ -181,6 +184,11 @@ impl LocalFsSource {
                 infer_hint.config_json_bytes =
                     std::fs::read(self.source_dir.join(CONFIG_FILE)).ok();
             }
+            for name in untagged_gguf_names(&file_names) {
+                if let Some(q) = gguf::quant_from_file(&self.source_dir.join(name)) {
+                    infer_hint.header_quants.insert(name.clone(), q);
+                }
+            }
             infer_manifest_from_names(&self.model_name, &file_names, &sizes, infer_hint)?
         };
         manifest.name = self.model_name.clone();
@@ -251,18 +259,28 @@ impl LocalFsSource {
         // Lex-first `.bin` mirrors the remote AiHub puller.
         entries.sort_by(|a, b| a.0.cmp(&b.0));
         let display = self.source_dir.display().to_string();
-        let (model_file, extra_files) = super::split_entrypoint_and_extras(
+        let (mut model_file, extra_files) = super::split_entrypoint_and_extras(
             &entries,
             || format!("AI Hub directory {display} has no .bin shard"),
             |s| *s as i64,
         )?;
 
-        let model_type = std::fs::read(self.source_dir.join(AIHUB_METADATA_FILE))
-            .ok()
+        let metadata_bytes = std::fs::read(self.source_dir.join(AIHUB_METADATA_FILE)).ok();
+        let model_type = metadata_bytes
             .as_deref()
             .and_then(classify_from_metadata_json)
             .or_else(|| self.hint.model_type.clone())
             .unwrap_or(ModelType::Llm);
+
+        // Key by real precision, matching the remote AI Hub puller (#1242).
+        if let Some(precision_label) = metadata_bytes
+            .as_deref()
+            .and_then(precision_from_metadata_json)
+        {
+            if let Some(entry) = model_file.remove("N/A") {
+                model_file.insert(precision_label, entry);
+            }
+        }
 
         let manifest = ModelManifest {
             name: self.model_name.clone(),
@@ -311,20 +329,30 @@ impl LocalFsSource {
             )));
         }
 
-        // Modality: read metadata.json out of the zip without extracting.
-        // Method::Stored → straight range read; Method::Deflate → range
-        // read + flate2.
-        let model_type = read_metadata_modality(&flat, &transport, &dummy)
-            .await
+        // Read metadata.json out of the zip once, for both modality and precision.
+        let metadata_bytes = read_metadata_json_bytes(&flat, &transport, &dummy).await;
+        let model_type = metadata_bytes
+            .as_deref()
+            .and_then(classify_from_metadata_json)
             .or_else(|| self.hint.model_type.clone())
             .unwrap_or(ModelType::Llm);
 
         let zip_display = zip_path.display().to_string();
-        let (model_file, extra_files) = super::split_entrypoint_and_extras(
+        let (mut model_file, extra_files) = super::split_entrypoint_and_extras(
             &flat,
             || format!("AI Hub archive {zip_display} has no .bin shard"),
             |e| e.uncompressed_size as i64,
         )?;
+
+        // Key by real precision, matching the remote AI Hub puller (#1242).
+        if let Some(precision_label) = metadata_bytes
+            .as_deref()
+            .and_then(precision_from_metadata_json)
+        {
+            if let Some(entry) = model_file.remove("N/A") {
+                model_file.insert(precision_label, entry);
+            }
+        }
 
         let manifest = ModelManifest {
             name: self.model_name.clone(),
@@ -365,16 +393,13 @@ impl LocalFsSource {
     }
 }
 
-/// Slurp `metadata.json` out of a flat zip listing — STORED entries are
-/// a direct range read; DEFLATE entries inflate the buffered slice in
-/// memory. Returns `None` for any failure: missing entry, parse error,
-/// absent `genie.supports_vision`. The caller falls back to LLM, the
-/// same default as the Go CLI's `detectModelTypeFromDir`.
-async fn read_metadata_modality(
+/// Slurp `metadata.json` out of a flat zip listing; `None` on any failure
+/// (missing entry, read/decode error) — callers derive modality and precision from the bytes.
+async fn read_metadata_json_bytes(
     flat: &[(String, super::ai_hub::remote_zip::ZipEntry)],
     transport: &Arc<dyn HttpTransport>,
     url: &Url,
-) -> Option<ModelType> {
+) -> Option<Vec<u8>> {
     let (_, entry) = flat.iter().find(|(name, _)| name == AIHUB_METADATA_FILE)?;
     let mut compressed: Vec<u8> = Vec::with_capacity(entry.compressed_size as usize);
     transport
@@ -399,7 +424,7 @@ async fn read_metadata_modality(
             buf
         }
     };
-    classify_from_metadata_json(&bytes)
+    Some(bytes)
 }
 
 /// Last path component of `name` (the `org/repo` string). Mirrors
@@ -536,6 +561,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn aihub_extracted_keys_model_file_by_metadata_precision() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(
+            tmp.path().join("metadata.json"),
+            r#"{"precision":"w4a16","genie":{"supports_vision":false}}"#,
+        )
+        .unwrap();
+        fs::write(tmp.path().join("weights_part_1.bin"), b"abc").unwrap();
+        let src = LocalFsSource::new(
+            tmp.path().to_path_buf(),
+            "local/phi_4_mini_instruct".to_string(),
+            ManifestHint::default(),
+        );
+        let plan = src.plan().await.unwrap();
+        assert!(!plan.manifest.model_file.contains_key("N/A"));
+        let entry = plan.manifest.model_file.get("w4a16").expect("w4a16 entry");
+        assert_eq!(entry.name, "weights_part_1.bin");
+    }
+
+    #[tokio::test]
     async fn aihub_extracted_metadata_field_absent_falls_back_to_llm() {
         let tmp = tempfile::tempdir().unwrap();
         // metadata.json present but without genie.supports_vision.
@@ -625,6 +670,32 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[tokio::test]
+    async fn aihub_zip_keys_model_file_by_metadata_precision() {
+        let tmp = tempfile::tempdir().unwrap();
+        let zip_path = tmp.path().join("model.zip");
+        let body = build_zip(
+            &[
+                (
+                    "metadata.json",
+                    br#"{"precision":"w4a16","genie":{"supports_vision":false}}"#.as_slice(),
+                ),
+                ("shard_a.bin", b"hello-shard-a"),
+            ],
+            false,
+        );
+        fs::write(&zip_path, &body).unwrap();
+        let src = LocalFsSource::new(
+            zip_path.clone(),
+            "local/phi_4_mini_instruct".to_string(),
+            ManifestHint::default(),
+        );
+        let plan = src.plan().await.unwrap();
+        assert!(!plan.manifest.model_file.contains_key("N/A"));
+        let entry = plan.manifest.model_file.get("w4a16").expect("w4a16 entry");
+        assert_eq!(entry.name, "shard_a.bin");
     }
 
     #[tokio::test]

@@ -95,6 +95,14 @@ static void usage(const char* argv0) {
         "                         speed. Overrides --warmup / --repetitions. Pair\n"
         "                         with --prompt-file for a real prompt; the default\n"
         "                         random-ids prefill produces meaningless text.\n"
+        "                         Each --prompt-file segment is run through the\n"
+        "                         bundle's own chat template before generation --\n"
+        "                         same templating `geniex infer` uses -- so pass the\n"
+        "                         raw user turn, not pre-templated text.\n"
+        "  --system-prompt TEXT   with --accuracy --prompt-file: system message added\n"
+        "                         ahead of the prompt in the chat template\n"
+        "  --think / --no-think  with --accuracy --prompt-file: enable_thinking for\n"
+        "                         the chat template (default: think)\n"
         "  --logits               prefill-only raw-logits mode: run one forward pass\n"
         "                         (geniex_llm_forward_logits, no decode loop) over N\n"
         "                         random token ids (-p N, like the timing default) and\n"
@@ -263,6 +271,8 @@ void parse_args(int argc, char** argv, options_t* o) {
     o->repeat                  = 5;
     o->reset_between_runs      = true;
     o->accuracy                = false;
+    o->system_prompt           = NULL;
+    o->enable_thinking         = true;
     o->logits_mode             = false;
     o->logits_last_only        = false;
     o->logits_top_n            = 20;
@@ -335,6 +345,12 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->reset_between_runs = false;
         } else if (strcmp(a, "--accuracy") == 0) {
             o->accuracy = true;
+        } else if (strcmp(a, "--system-prompt") == 0) {
+            o->system_prompt = arg_value(argc, argv, &i, a);
+        } else if (strcmp(a, "--think") == 0) {
+            o->enable_thinking = true;
+        } else if (strcmp(a, "--no-think") == 0) {
+            o->enable_thinking = false;
         } else if (strcmp(a, "--logits") == 0) {
             o->logits_mode = true;
         } else if (strcmp(a, "--logits-last-only") == 0) {
@@ -388,6 +404,9 @@ void parse_args(int argc, char** argv, options_t* o) {
     if (o->accuracy) {
         o->warmup = 0;
         o->repeat = 1;
+    } else if (o->system_prompt) {
+        fprintf(stderr, "ERROR: --system-prompt requires --accuracy --prompt-file\n");
+        exit(2);
     }
 
     if (o->logits_mode) {

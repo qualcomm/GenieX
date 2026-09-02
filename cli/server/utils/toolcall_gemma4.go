@@ -45,7 +45,7 @@ func parseGemma4ToolCalls(s string) []toolCallFn {
 			return calls
 		}
 		name := strings.TrimSpace(s[:brace])
-		args, next := parseGemma4Seq(s, brace, '{', '}', parseGemma4Member)
+		args, next := parseSeq(s, brace, '{', '}', parseGemma4Member)
 		if name == "" || next < 0 {
 			continue
 		}
@@ -71,9 +71,9 @@ func parseGemma4Value(s string, i int) (string, int) {
 		return quoted, i + end + len(gemma4String)
 
 	case s[i] == '{':
-		return parseGemma4Seq(s, i, '{', '}', parseGemma4Member)
+		return parseSeq(s, i, '{', '}', parseGemma4Member)
 	case s[i] == '[':
-		return parseGemma4Seq(s, i, '[', ']', parseGemma4Value)
+		return parseSeq(s, i, '[', ']', parseGemma4Value)
 
 	default: // a number, bool or null runs to the next ',', '}' or ']'
 		start := i
@@ -100,7 +100,7 @@ func parseGemma4Member(s string, i int) (string, int) {
 	if key == "" {
 		return "", -1
 	}
-	val, next := parseGemma4Value(s, skipGemma4Space(s, i+colon+1))
+	val, next := parseGemma4Value(s, skipSpace(s, i+colon+1))
 	if next < 0 {
 		return "", -1
 	}
@@ -108,25 +108,26 @@ func parseGemma4Member(s string, i int) (string, int) {
 	return quoted + ":" + val, next
 }
 
-// parseGemma4Seq reads a comma-separated `open ... shut` sequence of elem. s[i] is
+// parseSeq reads a comma-separated `open ... shut` sequence of elem, shared with
+// the other formats whose arguments are a dict in the model's own syntax. s[i] is
 // open, which the caller has checked.
-func parseGemma4Seq(s string, i int, open, shut byte,
+func parseSeq(s string, i int, open, shut byte,
 	elem func(string, int) (string, int)) (string, int) {
 	var b strings.Builder
 	b.WriteByte(open)
 
-	i = skipGemma4Space(s, i+1)
+	i = skipSpace(s, i+1)
 	if i < len(s) && s[i] == shut {
 		b.WriteByte(shut)
 		return b.String(), i + 1
 	}
 	for {
-		enc, next := elem(s, skipGemma4Space(s, i))
+		enc, next := elem(s, skipSpace(s, i))
 		if next < 0 {
 			return "", -1
 		}
 		b.WriteString(enc)
-		i = skipGemma4Space(s, next)
+		i = skipSpace(s, next)
 		if i >= len(s) {
 			return "", -1
 		}
@@ -143,7 +144,7 @@ func parseGemma4Seq(s string, i int, open, shut byte,
 	}
 }
 
-func skipGemma4Space(s string, i int) int {
+func skipSpace(s string, i int) int {
 	for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
 		i++
 	}

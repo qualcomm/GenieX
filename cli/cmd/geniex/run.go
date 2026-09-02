@@ -199,8 +199,7 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 				option.WithJSONSet("spec_draft_model", draftModel),
 				option.WithJSONSet("spec_n_max", draftTokens),
 				option.WithJSONSet("spec_n_min", draftMin),
-				option.WithJSONSet("spec_p_min", draftPMin),
-				option.WithHeaderAdd("GenieX-KeepCache", "true"))
+				option.WithJSONSet("spec_p_min", draftPMin))
 
 			var firstToken time.Time
 			var profileData geniex_sdk.ProfileData

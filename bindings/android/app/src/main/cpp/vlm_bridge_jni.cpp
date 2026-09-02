@@ -216,6 +216,7 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_applyChatTempla
         jmethodID ctor   = env->GetMethodID(cls, "<init>", "(Ljava/lang/String;)V");
         jobject   result = env->NewObject(cls, ctor, env->NewStringUTF(""));
 
+        free_vlm_chat_messages(msgs);
         clear_jni_cstr_pool();
         return result;
     }
@@ -227,6 +228,7 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_applyChatTempla
     jobject   result = env->NewObject(cls, ctor, formatted);
 
     free(output.formatted_text);
+    free_vlm_chat_messages(msgs);
     clear_jni_cstr_pool();
     return result;
 }

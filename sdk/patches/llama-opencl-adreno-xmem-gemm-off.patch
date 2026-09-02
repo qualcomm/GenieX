@@ -1,0 +1,13 @@
+diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
+index 34d58f4ee..ad7d87871 100644
+--- a/ggml/src/ggml-opencl/ggml-opencl.cpp
++++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
+@@ -6067,7 +6067,7 @@ static ggml_backend_opencl_context * ggml_cl_init(ggml_backend_dev_t dev) {
+     {
+         const char * xmem_env = getenv("GGML_OPENCL_ADRENO_XMEM_GEMM");
+         backend_ctx->adreno_xmem_gemm_enabled = backend_ctx->gpu_family == GPU_FAMILY::ADRENO &&
+-                                                (xmem_env ? atoi(xmem_env) != 0 : true);
++                                                (xmem_env ? atoi(xmem_env) != 0 : false);
+     }
+ #endif
+ 

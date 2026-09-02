@@ -1,17 +1,23 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//scripts:cgo_test.bzl", "go_cgo_test")
 
 go_library(
     name = "utils",
     srcs = [
         "common.go",
+        "hash.go",
         "toolcall.go",
         "toolcall_gemma4.go",
+        "toolcall_gptoss.go",
         "toolcall_json.go",
+        "toolcall_lfm2.go",
         "toolcall_qwen3.go",
+        "toolcall_qwen35.go",
     ],
     importpath = "github.com/qualcomm/GenieX/cli/server/utils",
     visibility = ["//visibility:public"],
     deps = [
+        "//bindings/go:geniex_sdk_go",
         "@com_github_bytedance_sonic//:sonic",
         "@com_github_bytedance_sonic//ast",
         "@com_github_openai_openai_go_v3//:openai-go",
@@ -19,12 +25,15 @@ go_library(
     ],
 )
 
-go_test(
+go_cgo_test(
     name = "utils_test",
     srcs = [
         "common_test.go",
         "toolcall_gemma4_test.go",
+        "toolcall_gptoss_test.go",
         "toolcall_json_test.go",
+        "toolcall_lfm2_test.go",
+        "toolcall_qwen35_test.go",
         "toolcall_test.go",
     ],
     embed = [":utils"],

@@ -149,12 +149,19 @@ enable_testing()
 #   every device reports 0 free memory: the splits normalize to NaN and the
 #   device lookup runs off the end. Adreno 643 on QCS6490 hits it because the
 #   OpenCL backend subtracts a fixed 1 GiB margin from global_mem_size. See #1497.
+# * llama-opencl-adreno-xmem-gemm-off.patch defaults the Adreno xmem F16xF32
+#   GEMM path (upstream #27640) back to off. On this Adreno generation it
+#   corrupts output after repeated model loads through the same OpenCL
+#   context (quality/logits-parity tests pass individually, fail once several
+#   gpu/hybrid models have loaded in one process); upstream's own
+#   GGML_OPENCL_ADRENO_XMEM_GEMM=0 override confirms the fix.
 if(GENIEX_PLUGIN_LLAMA_CPP)
     set(_LLAMA_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/../third-party/llama.cpp")
     set(_LLAMA_PATCHES
         "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-release-sessions.patch"
         "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-opencl-adreno-cpy-constreg.patch"
-        "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-zero-free-mem-even-split.patch")
+        "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-zero-free-mem-even-split.patch"
+        "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-opencl-adreno-xmem-gemm-off.patch")
     find_package(Git QUIET REQUIRED)
     foreach(_LLAMA_PATCH ${_LLAMA_PATCHES})
         if(EXISTS "${_LLAMA_PATCH}")

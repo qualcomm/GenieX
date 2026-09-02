@@ -14,5 +14,6 @@ pub mod source;
 pub mod store;
 pub mod transport;
 
+mod gguf;
 mod resume;
 mod validation;

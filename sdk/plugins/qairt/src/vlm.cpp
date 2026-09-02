@@ -15,6 +15,7 @@
 #define portable_strdup strdup
 #endif
 
+#include "chat_message_utils.h"
 #include "dispatch.h"               // provided by geniex-qairt/models/
 #include "geniex-proc/tokenizer.h"  // ApplyChatTemplateOptions
 #include "geniex-proc/types.h"      // ChatMessage, MMContent, Role::, Modality::
@@ -183,10 +184,14 @@ int32_t QairtVlm::apply_chat_template(
             msg.role = Role::Assistant;
         } else if (std::strcmp(src.role, "system") == 0) {
             msg.role = Role::System;
+        } else if (std::strcmp(src.role, "tool") == 0) {
+            msg.role = Role::Tool;
         } else {
             GENIEX_LOG_WARN("Unknown VLM message role '{}', treating as user", src.role);
             msg.role = Role::User;
         }
+
+        qairt::apply_tool_fields(msg, src.tool_calls, src.tool_call_count, src.tool_call_id, src.tool_name);
 
         // Map content items
         for (int64_t j = 0; j < src.content_count; ++j) {

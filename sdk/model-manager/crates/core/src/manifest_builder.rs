@@ -28,6 +28,9 @@ pub struct ManifestHint {
     /// source has one. Parsed by [`classify_from_config`] to decide LLM
     /// vs VLM more reliably than the mmproj filename heuristic.
     pub config_json_bytes: Option<Vec<u8>>,
+    /// Quant tag read out of a GGUF's `general.file_type`, keyed by filename,
+    /// for the files [`untagged_gguf_names`] reports.
+    pub header_quants: HashMap<String, String>,
 }
 
 /// Quantization priority order (earlier = preferred). Consumed by
@@ -65,13 +68,14 @@ pub fn infer_manifest_from_names(
 
     for n in file_names {
         let lname = n.to_lowercase();
-        if lname.ends_with(".gguf") {
+        if is_weight_gguf(&lname) {
+            let quant = extract_quant(n)
+                .or_else(|| hint.header_quants.get(n).cloned())
+                .unwrap_or_else(|| "DEFAULT".to_string());
+            ggufs.entry(quant).or_default().push(n);
+        } else if lname.ends_with(".gguf") {
             if is_mmproj_filename(&lname) {
                 mmprojs.push(n);
-            } else if lname.contains("mtp") {
-                // MTP draft models can't load standalone; skip.
-            } else if let Some(quant) = extract_quant(n) {
-                ggufs.entry(quant).or_default().push(n);
             }
         } else if lname.ends_with("tokenizer.json") {
             tokenizers.push(n);
@@ -329,6 +333,20 @@ fn is_mmproj_filename(lname: &str) -> bool {
         || stem.ends_with("_mmproj")
         || stem.contains("-mmproj-")
         || stem.contains("_mmproj_")
+}
+
+/// True for a `.gguf` holding weights — not a vision projector, not an MTP
+/// draft head. Callers must pass a lowercased name.
+fn is_weight_gguf(lname: &str) -> bool {
+    lname.ends_with(".gguf") && !is_mmproj_filename(lname) && !lname.contains("mtp")
+}
+
+/// Weight GGUFs whose filename carries no quant tag.
+pub(crate) fn untagged_gguf_names(file_names: &[String]) -> Vec<&String> {
+    file_names
+        .iter()
+        .filter(|n| is_weight_gguf(&n.to_lowercase()) && extract_quant(n).is_none())
+        .collect()
 }
 
 /// Extract a quant tag like `Q4_K_M`, `IQ4_XS`, `TQ1_0`, `MXFP4`, `F16`,
@@ -708,6 +726,62 @@ mod tests {
         assert_eq!(m.model_file.len(), 2);
         assert!(m.model_file.contains_key("Q4_0"));
         assert!(m.model_file.contains_key("FP16"));
+    }
+
+    #[test]
+    fn single_untagged_gguf_pulls_as_default() {
+        let (names, sizes) = sizes_of(&[("Qwen3-35B-A3B-REAP-48-v2.gguf", 8_000_000)]);
+        let m =
+            infer_manifest_from_names("peonist/REAP-48", &names, &sizes, ManifestHint::default())
+                .unwrap();
+        assert_eq!(m.model_file.len(), 1);
+        assert_eq!(
+            m.model_file.get("DEFAULT").map(|f| f.name.as_str()),
+            Some("Qwen3-35B-A3B-REAP-48-v2.gguf")
+        );
+    }
+
+    #[test]
+    fn header_quant_names_the_untagged_bucket() {
+        let (names, sizes) = sizes_of(&[("Qwen3-35B-A3B-REAP-48-v2.gguf", 8_000_000)]);
+        let hint = ManifestHint {
+            header_quants: HashMap::from([(
+                "Qwen3-35B-A3B-REAP-48-v2.gguf".to_string(),
+                "Q4_K_M".to_string(),
+            )]),
+            ..Default::default()
+        };
+        let m = infer_manifest_from_names("peonist/REAP-48", &names, &sizes, hint).unwrap();
+        assert_eq!(
+            m.model_file.get("Q4_K_M").map(|f| f.name.as_str()),
+            Some("Qwen3-35B-A3B-REAP-48-v2.gguf")
+        );
+    }
+
+    #[test]
+    fn filename_quant_wins_over_the_header() {
+        let (names, sizes) = sizes_of(&[("model-Q4_0.gguf", 1_000_000)]);
+        let hint = ManifestHint {
+            header_quants: HashMap::from([("model-Q4_0.gguf".to_string(), "Q8_0".to_string())]),
+            ..Default::default()
+        };
+        let m = infer_manifest_from_names("Org/Repo", &names, &sizes, hint).unwrap();
+        assert_eq!(m.model_file.keys().collect::<Vec<_>>(), vec!["Q4_0"]);
+    }
+
+    #[test]
+    fn untagged_gguf_names_skips_tagged_projectors_and_drafts() {
+        let names: Vec<String> = [
+            "model.gguf",
+            "model-Q4_K_M.gguf",
+            "mmproj.gguf",
+            "model-mtp.gguf",
+            "README.md",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert_eq!(untagged_gguf_names(&names), vec!["model.gguf"]);
     }
 
     #[test]

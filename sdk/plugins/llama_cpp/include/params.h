@@ -6,6 +6,7 @@
 #include <optional>
 #include <vector>
 
+#include "chat.h"          // common_chat_msg
 #include "common.h"        // common_params_sampling
 #include "geniex.h"        // geniex_ModelConfig
 #include "ggml-backend.h"  // ggml_backend_dev_t
@@ -58,5 +59,12 @@ std::optional<common_params_speculative> build_speculative_params(const geniex_M
 // accepts.
 ggml_threadpool_params build_threadpool_params(int n_threads, Device device);
 common_params_sampling build_sampling_params(const geniex_SamplerConfig* cfg);
+
+// Copy the FFI tool-calling fields of a chat message onto a common_chat_msg.
+// Templates need tool_calls structurally, not as assistant text: most render a
+// "tool" message only from the tool_calls of the assistant turn before it
+// (matched by id), so dropping them drops the tool result from the prompt.
+void apply_tool_fields(common_chat_msg& msg, const geniex_ToolCall* tool_calls, int32_t tool_call_count,
+    const char* tool_call_id, const char* tool_name);
 
 }  // namespace geniex

@@ -86,6 +86,12 @@ typedef struct {
     int32_t      repeat;
     bool         reset_between_runs; /* true => geniex_llm_reset() before each run, freeing KV */
     bool         accuracy;           /* true => single run (warmup=0, repeat=1), print generated text */
+    /* --accuracy --prompt-file only: run each prompt through the bundle's own
+     * chat template (geniex_llm_apply_chat_template) before generation, so the
+     * benchmark exercises the same templating production inference uses
+     * instead of feeding the file verbatim. */
+    const char* system_prompt;   /* --system-prompt; NULL = no system message */
+    bool        enable_thinking; /* --think / --no-think; default true, matches `geniex infer` */
 
     /* Prefill-only raw-logits mode (--logits): one forward pass over the prompt,
      * no decode loop. Bypasses the timing/warmup/repeat machinery entirely. */

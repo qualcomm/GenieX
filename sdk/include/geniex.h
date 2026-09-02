@@ -366,6 +366,20 @@ typedef struct {
     const char* stop_reason; /* Stop reason: "eos", "length", "user", "stop_sequence", "context_length" */
 } geniex_ProfileData;
 
+/**
+ * A function call the model issued on a prior "assistant" turn.
+ *
+ * Chat templates need these structurally: many render a tool response only when
+ * the preceding assistant message carries `tool_calls`, and match the response
+ * back to the call by `id`. Flattening a call into assistant `content` text
+ * drops the following "tool" message from the prompt entirely.
+ */
+typedef struct {
+    const char* id;        /* Call id echoed by the matching "tool" message (optional, can be NULL) */
+    const char* name;      /* Function name */
+    const char* arguments; /* Function arguments as a JSON string */
+} geniex_ToolCall;
+
 /* ========================================================================== */
 /*                              LANGUAGE MODELS (LLM)                          */
 /* ========================================================================== */
@@ -505,8 +519,14 @@ GENIEX_API int32_t geniex_llm_load_kv_cache(
 
 /** Chat message structure */
 typedef struct {
-    const char* role;    /* Message role: "user", "assistant", "system" */
+    const char* role;    /* Message role: "user", "assistant", "system", "tool" */
     const char* content; /* Message content in UTF-8 */
+
+    /* Tool calling. All optional — leave zeroed for plain chat turns. */
+    geniex_ToolCall* tool_calls;      /* "assistant": calls issued this turn (may be NULL) */
+    int32_t          tool_call_count; /* Number of elements in `tool_calls` */
+    const char*      tool_call_id;    /* "tool": id of the call this responds to (may be NULL) */
+    const char*      tool_name;       /* "tool": name of the function that ran (may be NULL) */
 } geniex_LlmChatMessage;
 
 /** Input structure for applying chat template */
@@ -675,9 +695,15 @@ typedef struct {
 
 /* ---------- Message ---------- */
 typedef struct {
-    const char*        role;           // "user", "assistant", "system", …
+    const char*        role;           // "user", "assistant", "system", "tool", …
     geniex_VlmContent* contents;       // dynamically-allocated array (may be NULL)
     int64_t            content_count;  // number of elements in `contents`
+
+    // Tool calling. All optional — leave zeroed for plain chat turns.
+    geniex_ToolCall* tool_calls;       // "assistant": calls issued this turn (may be NULL)
+    int32_t          tool_call_count;  // number of elements in `tool_calls`
+    const char*      tool_call_id;     // "tool": id of the call this responds to (may be NULL)
+    const char*      tool_name;        // "tool": name of the function that ran (may be NULL)
 } geniex_VlmChatMessage;
 
 typedef struct geniex_VLM geniex_VLM; /* Opaque VLM handle */

@@ -347,6 +347,41 @@ def test_chat_template_tools_list_and_json_string_equivalent(llama_cpp_llm_paths
     assert 'get_weather' in from_list
 
 
+# Regression: tool calls used to be flattened into assistant text, so templates
+# that render a tool response only from the tool_calls of the turn before it
+# (Gemma 4, Mistral, Cohere) dropped the tool result from the prompt entirely.
+@pytest.mark.llm
+@pytest.mark.parametrize('device_map', ['cpu'])
+def test_chat_template_renders_tool_response(llama_cpp_llm_paths, device_map):
+    tool = {
+        'type': 'function',
+        'function': {
+            'name': 'get_weather',
+            'description': 'Get current weather.',
+            'parameters': {'type': 'object', 'properties': {'city': {'type': 'string'}}},
+        },
+    }
+    call = {
+        'id': 'call_1',
+        'type': 'function',
+        'function': {'name': 'get_weather', 'arguments': '{"city": "Paris"}'},
+    }
+    asked = [{'role': 'user', 'content': "what's the weather in Paris?"}]
+    answered = asked + [
+        {'role': 'assistant', 'content': None, 'tool_calls': [call]},
+        {'role': 'tool', 'tool_call_id': 'call_1', 'name': 'get_weather', 'content': 'MAGIC_SUNNY_42'},
+    ]
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        _LLM.id,
+        precision=_LLM.precision,
+        device_map=device_map,
+    ) as llm:
+        before = llm.tokenizer.apply_chat_template(asked, tokenize=False, tools=[tool])
+        after = llm.tokenizer.apply_chat_template(answered, tokenize=False, tools=[tool])
+    assert 'MAGIC_SUNNY_42' in after, f'tool response missing from the prompt: {after!r}'
+    assert len(after) > len(before), 'adding a tool round trip did not grow the prompt'
+
+
 @pytest.mark.llm
 @pytest.mark.parametrize('device_map', ['cpu'])
 def test_chat_template_content_load_override(llama_cpp_llm_paths, device_map):

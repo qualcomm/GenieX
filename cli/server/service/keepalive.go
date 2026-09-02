@@ -16,6 +16,7 @@ import (
 	"github.com/qualcomm/GenieX/cli/internal/render"
 	"github.com/qualcomm/GenieX/cli/server/middleware"
 	"github.com/qualcomm/GenieX/cli/server/types"
+	"github.com/qualcomm/GenieX/cli/server/utils"
 )
 
 // resolveDraftModelPath maps a spec_draft_model value to an absolute GGUF path:
@@ -78,14 +79,47 @@ func ResolveModelParam(runtimeID, modelName string, reqNCtx, reqNgl int32, reqCo
 	return mp, nil
 }
 
-// KeepAliveGet returns the cached model of type T, loading it if needed, to
-// avoid reloading from disk on every request.
-func KeepAliveGet[T any](name string, param types.ModelParam, reset bool) (*T, error) {
-	t, err := keepAliveGet[T](name, param, reset)
+// AcquiredModel is a cached model and whether it was loaded or reset for this
+// request. Fresh tells VLM callers to replay all request media.
+type AcquiredModel[T any] struct {
+	Model *T
+	Fresh bool
+}
+
+// KeepAliveGet applies GenieX's automatic conversation reset policy. A cached
+// model is reused only when session exactly extends the last request seen here.
+func KeepAliveGet[T any](name string, param types.ModelParam, session utils.SessionKey) (AcquiredModel[T], error) {
+	t, fresh, err := keepAliveGet[T](name, param, session, acquireAutomatic)
+	if err != nil {
+		return AcquiredModel[T]{}, err
+	}
+	middleware.RunOnRelease(func() { keepAlive.lastActivity = time.Now() })
+	return AcquiredModel[T]{Model: t.(*T), Fresh: fresh}, nil
+}
+
+// KeepAliveGetManaged applies the reset decision made by the transactional
+// managed-cache lineage. It invalidates the automatic lineage so an ordinary
+// request can never extend state changed by a managed request.
+func KeepAliveGetManaged[T any](name string, param types.ModelParam, reset bool) (*T, error) {
+	mode := acquireManagedReuse
+	if reset {
+		mode = acquireManagedReset
+	}
+	t, _, err := keepAliveGet[T](name, param, nil, mode)
 	if err != nil {
 		return nil, err
 	}
-	// Stamp the idle timer at request end (only model requests reach here).
+	middleware.RunOnRelease(func() { keepAlive.lastActivity = time.Now() })
+	return t.(*T), nil
+}
+
+// KeepAliveGetLegacy retains raw mutable state without lineage validation. It
+// exists only for the explicitly enabled synthetic comparison runner.
+func KeepAliveGetLegacy[T any](name string, param types.ModelParam) (*T, error) {
+	t, _, err := keepAliveGet[T](name, param, nil, acquireLegacy)
+	if err != nil {
+		return nil, err
+	}
 	middleware.RunOnRelease(func() { keepAlive.lastActivity = time.Now() })
 	return t.(*T), nil
 }
@@ -106,8 +140,10 @@ func ResetKeepAlive() error {
 	if keepAlive.model == nil {
 		return nil
 	}
-	if r, ok := keepAlive.model.(keepResetable); ok {
+	if r, ok := keepAlive.model.(resettable); ok {
 		if err := r.Reset(); err == nil {
+			keepAlive.lastSession = nil
+			keepAlive.lastSessionValid = false
 			keepAliveGeneration.Add(1)
 			return nil
 		} else {
@@ -122,19 +158,21 @@ func ResetKeepAlive() error {
 // keepAliveService caches a single loaded model. All access is under the
 // request GIL (middleware.GILock), so it needs no lock of its own.
 type keepAliveService struct {
-	name         string           // cache key of the loaded model, "" when none
-	model        keepable         // nil when none
-	param        types.ModelParam // params the cache keys on
-	lastActivity time.Time        // when the last model request finished
-	stopCh       chan struct{}
+	name             string           // cache key of the loaded model, "" when none
+	model            keepable         // nil when none
+	param            types.ModelParam // params the cache keys on
+	lastSession      utils.SessionKey // last request handled by automatic reset
+	lastSessionValid bool             // false after managed or legacy state mutation
+	lastActivity     time.Time        // when the last model request finished
+	stopCh           chan struct{}
 }
 
-// keepable is a model the cache can free; keepResetable can also be reset.
+// keepable is a model the cache can free; resettable can also be reset.
 type keepable interface {
 	Destroy() error
 }
 
-type keepResetable interface {
+type resettable interface {
 	keepable
 	Reset() error
 }
@@ -179,35 +217,71 @@ func (keepAlive *keepAliveService) destroy() {
 		keepAlive.model = nil
 		keepAlive.name = ""
 		keepAlive.param = types.ModelParam{}
+		keepAlive.lastSession = nil
+		keepAlive.lastSessionValid = false
 		keepAliveGeneration.Add(1)
 	}
 }
 
-// keepAliveGet reuses the cached model when name and params match, otherwise
-// loads a fresh one. Runs under the request GIL, so no locking here.
-func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, error) {
+type acquireMode uint8
+
+const (
+	acquireAutomatic acquireMode = iota
+	acquireManagedReset
+	acquireManagedReuse
+	acquireLegacy
+)
+
+func acquisitionFresh(mode acquireMode, lastValid bool, last, next utils.SessionKey) (bool, error) {
+	switch mode {
+	case acquireAutomatic:
+		return !lastValid || !utils.IsContinuation(last, next), nil
+	case acquireManagedReset:
+		return true, nil
+	case acquireManagedReuse, acquireLegacy:
+		return false, nil
+	default:
+		return false, fmt.Errorf("unsupported keepalive acquisition mode: %d", mode)
+	}
+}
+
+// keepAliveGet reuses the cached model when safe, otherwise resets or loads a
+// fresh one. Runs under the request GIL, so no locking is needed here.
+func keepAliveGet[T any](name string, param types.ModelParam, session utils.SessionKey, mode acquireMode) (any, bool, error) {
 	// The SDK resolves bare names / aliases and picks the default precision
 	// when none is given; pass the request string through verbatim.
 	paths, err := geniex_sdk.ModelGetPaths(name)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	slog.Debug("KeepAliveGet", "name", name, "param", param, "model_path", paths.ModelPath)
 
 	modelfile := paths.ModelPath
 
 	if keepAlive.name == name && reflect.DeepEqual(keepAlive.param, param) {
-		if reset {
+		fresh, modeErr := acquisitionFresh(mode, keepAlive.lastSessionValid, keepAlive.lastSession, session)
+		if modeErr != nil {
+			return nil, false, modeErr
+		}
+		if mode != acquireAutomatic {
+			keepAlive.lastSession = nil
+			keepAlive.lastSessionValid = false
+		}
+		if fresh {
 			if err := ResetKeepAlive(); err != nil {
-				return nil, err
+				return nil, false, err
 			}
 			// A non-resettable model was destroyed to fail closed. Fall through
 			// and reload it rather than returning the now-nil handle.
 			if keepAlive.model == nil {
-				return keepAliveGet[T](name, param, false)
+				return keepAliveGet[T](name, param, session, modeWithoutReset(mode))
 			}
 		}
-		return keepAlive.model, nil
+		if mode == acquireAutomatic {
+			keepAlive.lastSession = append(utils.SessionKey(nil), session...)
+			keepAlive.lastSessionValid = true
+		}
+		return keepAlive.model, fresh, nil
 	}
 
 	// Drop the current model so only one stays in memory.
@@ -224,7 +298,7 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 		if param.Spec.Type != "" && param.Spec.DraftModel != "" {
 			p, perr := resolveDraftModelPath(param.Spec.DraftModel)
 			if perr != nil {
-				return nil, perr
+				return nil, false, perr
 			}
 			draftPath = p
 		}
@@ -254,17 +328,31 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 			RuntimeID: paths.RuntimeID,
 		})
 	default:
-		return nil, fmt.Errorf("unsupported model type: %s", reflect.TypeFor[T]())
+		return nil, false, fmt.Errorf("unsupported model type: %s", reflect.TypeFor[T]())
 	}
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
 	keepAlive.name = name
 	keepAlive.model = t
 	keepAlive.param = param
+	if mode == acquireAutomatic {
+		keepAlive.lastSession = append(utils.SessionKey(nil), session...)
+		keepAlive.lastSessionValid = true
+	} else {
+		keepAlive.lastSession = nil
+		keepAlive.lastSessionValid = false
+	}
 	keepAliveGeneration.Add(1)
 
-	return t, nil
+	return t, true, nil
+}
+
+func modeWithoutReset(mode acquireMode) acquireMode {
+	if mode == acquireManagedReset {
+		return acquireManagedReuse
+	}
+	return mode
 }
 
 // stop ends the sweep goroutine and frees the cached model — here rather than in
