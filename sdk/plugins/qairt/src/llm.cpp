@@ -18,8 +18,8 @@
 #define portable_strdup strdup
 #endif
 
-#include "dispatch.h"               // provided by geniex-qairt/models/
 #include "chat_message_utils.h"
+#include "dispatch.h"               // provided by geniex-qairt/models/
 #include "geniex-proc/tokenizer.h"  // ApplyChatTemplateOptions
 #include "geniex-proc/types.h"      // ChatMessage, Role
 #include "llm/llm_spec_loader.h"    // parseGenieSamplerConfig
