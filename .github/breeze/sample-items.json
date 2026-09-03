@@ -1,0 +1,44 @@
+{
+  "items": [
+    {
+      "prompt": "What is gravity?",
+      "response": "Gravity is the force that attracts objects with mass toward one another. On Earth, it causes objects to fall toward the ground."
+    },
+    {
+      "prompt": "What is photosynthesis?",
+      "response": "Photosynthesis is the process by which green plants use sunlight, water, and carbon dioxide to produce glucose and oxygen."
+    },
+    {
+      "prompt": "What is 12 multiplied by 8?",
+      "response": "12 multiplied by 8 is 86."
+    },
+    {
+      "prompt": "What is the square root of 144?",
+      "response": "The square root of 144 is 12. Therefore, 12 × 12 = 144."
+    },
+    {
+      "prompt": "If all cats are animals and Luna is a cat, what can we conclude about Luna?",
+      "response": "Luna is an animal."
+    },
+    {
+      "prompt": "Write a Python function that adds two numbers.",
+      "response": "def add_numbers(a, b):\n    return a + b"
+    },
+    {
+      "prompt": "Translate 'Good morning' into French.",
+      "response": "Good morning in French is Bonjour."
+    },
+    {
+      "prompt": "Write one sentence about the ocean.",
+      "response": "The ocean stretches beneath the sunlight, shimmering like a vast blue mirror."
+    },
+    {
+      "prompt": "What is a llama?",
+      "response": "A llama is a domesticated South American camelid commonly raised for its wool and used as a pack animal."
+    },
+    {
+      "prompt": "Explain why the sky appears blue.",
+      "response": "The sky appears blue because blue light is scattered more strongly by the atmosphere. The the blue light is scattered across the\nsky."
+    }
+  ]
+}

@@ -1,0 +1,168 @@
+name: Breeze Grade
+run-name: breeze-grade (run ${{ github.run_id }})
+
+# Grade generated text with the internal Breeze workflow and publish the result.
+
+on:
+  workflow_dispatch:
+    inputs:
+      items:
+        description: "Path to the items JSON ({\"items\":[{prompt,response}]})"
+        required: false
+        type: string
+        default: ".github/breeze/sample-items.json"
+  workflow_call:
+    inputs:
+      items:
+        required: false
+        type: string
+        default: ".github/breeze/sample-items.json"
+    secrets:
+      GH_PAT:
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: breeze-grade-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADER_REPO: qcom-ai-hub/geniex
+  GRADER_WORKFLOW: breeze.yml
+  ARTIFACT_NAME: breeze-grade-payload
+  PAYLOAD_FILE: grade-payload.md
+
+jobs:
+  grade:
+    name: grade
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Build grading payload
+        env:
+          ITEMS: ${{ inputs.items }}
+        run: |
+          set -euo pipefail
+          python .github/breeze/build_payload.py \
+            --items "$ITEMS" \
+            --out "${PAYLOAD_FILE}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.PAYLOAD_FILE }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Open grading issue
+        id: issue
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          cat > issue-body.md <<EOF
+          Automated quality grading for [GenieX workflow run ${RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}).
+
+          @breeze-ai Grade generated text for quantization damage.
+
+          \`\`\`bash
+          gh run download ${RUN_ID} --repo ${GITHUB_REPOSITORY} --name ${ARTIFACT_NAME} --dir grade
+          cat grade/${PAYLOAD_FILE}
+          \`\`\`
+
+          That file holds the grading rubric followed by the items to grade.
+          EOF
+
+          url=$(gh issue create \
+            --repo "${GRADER_REPO}" \
+            --title "[Breeze] Grade GenieX run ${RUN_ID}" \
+            --body-file issue-body.md)
+          number="${url##*/}"
+          echo "number=${number}" >> "$GITHUB_OUTPUT"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+          echo "Opened ${url}"
+
+      - name: Watch internal grader run
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          ISSUE: ${{ steps.issue.outputs.number }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # Match the exact title to avoid confusing similar run IDs.
+          export WANT="[Breeze] Grade GenieX run ${RUN_ID}"
+          target=""
+          for attempt in $(seq 1 24); do
+            target=$(gh run list --repo "${GRADER_REPO}" --workflow "${GRADER_WORKFLOW}" \
+              --event issues --limit 50 --json databaseId,displayTitle \
+              --jq '[.[] | select(.displayTitle == env.WANT)][0].databaseId')
+            [ -n "${target}" ] && break
+            echo "Waiting for grader run (${attempt}/24)..."
+            sleep 10
+          done
+          [ -n "${target}" ] || {
+            echo "::error::grader run for issue #${ISSUE} not found"
+            exit 1
+          }
+          echo "Found grader run ${target}"
+          echo "Watching ${GRADER_REPO} run ${target}"
+          gh run watch "${target}" --repo "${GRADER_REPO}" --exit-status --interval 10
+
+      - name: Collect grades
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          ISSUE: ${{ steps.issue.outputs.number }}
+          ISSUE_URL: ${{ steps.issue.outputs.url }}
+        run: |
+          set -euo pipefail
+          # Breeze may update its comment after the run finishes.
+          body=""
+          for _ in $(seq 1 20); do
+            body=$(gh issue view "${ISSUE}" --repo "${GRADER_REPO}" --json comments \
+              --jq '[.comments[] | select(.body | test("Rating|\\| *[0-9]+ *\\|"))] | last | .body // ""')
+            [ -n "${body}" ] && break
+            sleep 10
+          done
+
+          {
+            echo "## Breeze grading results"
+            echo
+            echo "Source: [${GRADER_REPO}#${ISSUE}](${ISSUE_URL})"
+            echo
+            if [ -n "${body}" ]; then
+              printf '%s\n' "${body}"
+            else
+              echo "> No grading comment found — see the issue for the raw agent output."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          [ -n "${body}" ] || {
+            echo "::error::grader produced no result comment on issue #${ISSUE}"
+            exit 1
+          }
+
+      # Always close the temporary trigger issue.
+      - name: Close grading issue
+        if: always() && steps.issue.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          ISSUE: ${{ steps.issue.outputs.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          gh issue close "${ISSUE}" --repo "${GRADER_REPO}" \
+            --comment "GenieX run finished with status \`${OUTCOME}\` — ${RUN_URL}" ||
+            echo "::warning::failed to close ${GRADER_REPO}#${ISSUE}; close it by hand"
