@@ -1,0 +1,41 @@
+name: Windows Signature Verifier Test
+
+# Runs the self-test for scripts/verify-windows-signatures.ps1 on Windows so
+# the Authenticode gate used by the release pipeline (release.yml → sign-windows)
+# is exercised in CI, not just at release time. Covers qualcomm/GenieX#1398.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/verify-windows-signatures.ps1"
+      - "scripts/test-verify-windows-signatures.ps1"
+      - ".github/workflows/release.yml"
+      - ".github/workflows/signature-verify-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signature-verify-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify-windows-signatures self-test
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Run verifier self-test
+        shell: powershell
+        run: |
+          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-verify-windows-signatures.ps1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::error::Windows signature verifier self-test failed."
+            exit $LASTEXITCODE
+          }

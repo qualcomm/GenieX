@@ -178,15 +178,107 @@ jobs:
       build_installer: true
       upload_artifact: true
 
-  # TODO: wire Authenticode signing for the Windows installer (AzureSignTool
-  # / ESRP / .pfx secret). Gate publish-github-release + publish-winget on it.
+  # Authenticode-sign every Windows ARM64 PE file (installer + SDK DLLs) so
+  # Windows Smart App Control / SmartScreen stop blocking GenieX (issue #1398).
+  # Signing is a hard release gate: without a signing cert the job fails, so an
+  # unsigned Windows build can never ship again.
   sign-windows:
     name: sign-windows
     needs: [build-cli]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
+    runs-on: windows-latest
+    timeout-minutes: 20
     steps:
-      - run: 'echo "TODO: sign cli-setup-windows-arm64."'
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: sdk-windows-arm64
+          path: sdk-windows-arm64
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: cli-setup-windows-arm64
+          path: .
+
+      - name: Locate signtool
+        id: signtool
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $kit = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending | Select-Object -First 1
+          if (-not $kit) { throw "Windows SDK (signtool) not found" }
+          $signtool = Get-ChildItem $kit.FullName -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { throw "signtool.exe not found under Windows Kits" }
+          Write-Host "signtool: $signtool"
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "path=$signtool"
+
+      - name: Ensure signing certificate is configured
+        shell: powershell
+        env:
+          WINDOWS_CODESIGN_PFX: ${{ secrets.WINDOWS_CODESIGN_PFX }}
+        run: |
+          if (-not $env:WINDOWS_CODESIGN_PFX) {
+            Write-Error "WINDOWS_CODESIGN_PFX secret is not configured. Windows binaries must be Authenticode-signed or Windows Smart App Control / SmartScreen blocks them (qualcomm/GenieX#1398). Set the secret (base64 of the code-signing .pfx) and re-run the release."
+            exit 1
+          }
+
+      - name: Sign Windows binaries (Authenticode)
+        shell: powershell
+        env:
+          WINDOWS_CODESIGN_PFX: ${{ secrets.WINDOWS_CODESIGN_PFX }}
+          WINDOWS_CODESIGN_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PASSWORD }}
+          WINDOWS_CODESIGN_TIMESTAMP_URL: ${{ secrets.WINDOWS_CODESIGN_TIMESTAMP_URL }}
+          SIGNTOOL_PATH: ${{ steps.signtool.outputs.path }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $signtool = $env:SIGNTOOL_PATH
+          $tsa = if ($env:WINDOWS_CODESIGN_TIMESTAMP_URL) { $env:WINDOWS_CODESIGN_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }
+
+          $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CODESIGN_PFX))
+
+          $targets = @()
+          $targets += Get-ChildItem -LiteralPath "sdk-windows-arm64" -Recurse -File | Where-Object { $_.Extension -in @(".exe", ".dll") }
+          $targets += Get-Item -LiteralPath "geniex-cli-setup.exe"
+
+          $signed = 0
+          foreach ($t in $targets) {
+            Write-Host "signing $($t.FullName)"
+            & $signtool sign /fd SHA256 /td SHA256 /tr $tsa /f $pfx /p $env:WINDOWS_CODESIGN_PASSWORD $t.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed on $($t.FullName)" }
+            $signed++
+          }
+          Write-Host "Signed $signed PE file(s)."
+
+      - name: Verify Authenticode signatures
+        shell: powershell
+        run: |
+          $failed = 0
+          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-windows-signatures.ps1 -Path sdk-windows-arm64
+          if ($LASTEXITCODE -ne 0) { $failed = 1 }
+          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-windows-signatures.ps1 -Path geniex-cli-setup.exe
+          if ($LASTEXITCODE -ne 0) { $failed = 1 }
+          if ($failed -ne 0) { throw "One or more Windows binaries are unsigned or have an invalid Authenticode signature." }
+          Write-Host "All Windows binaries are Authenticode-signed."
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sdk-windows-arm64
+          path: sdk-windows-arm64/
+          retention-days: 1
+          overwrite: true
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cli-setup-windows-arm64
+          path: geniex-cli-setup.exe
+          retention-days: 1
+          overwrite: true
 
   # Assemble every release asset into one release-assets artifact so
   # publish-github-release and publish-s3 can run in parallel.

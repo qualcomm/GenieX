@@ -20,7 +20,7 @@ CLI 提供 Windows ARM64 原生可执行文件，以及面向跃龙 QCS9075 等 
       最新 Windows ARM64 GenieX CLI。点击下载好的 `.exe` 并按提示完成安装。
     </Card>
 
-    安装包尚未代码签名——Windows SmartScreen 会发出告警。点击 **More info → Run anyway**。
+    发布版本已完成 Authenticode 代码签名，Windows SmartScreen 与 Smart App Control 均会信任。若使用的是旧版未签名安装包，SmartScreen 会告警——点击 **More info → Run anyway**。若 Smart App Control 仍拦截某个 DLL，参见[故障排查 → Windows Smart App Control 拦截](/cn/resources/troubleshooting#windows-smart-app-control-拦截-geniex-dll)。
 
     ### **加入 PATH**
 
