@@ -15,6 +15,8 @@
 //! - [`BytesSource::HttpDeflate`] — single-range fetch + inline flate2
 //!   decode. Resume is entry-granular because DEFLATE is not seekable.
 //! - [`BytesSource::Local`] — plain copy for `LocalFsSource` directories.
+//! - [`BytesSource::LocalLink`] — hard link with a copy fallback, for
+//!   adopting a blob out of llmman's store without duplicating it.
 //! - [`BytesSource::LocalRange`] / [`BytesSource::LocalDeflate`] —
 //!   byte ranges inside a local zip, with optional DEFLATE decode.
 //!   Used when the user pulls from an AI Hub `.zip` on disk.
@@ -305,20 +307,10 @@ async fn run_one(
             .await
         }
         BytesSource::Local { path } => {
-            let dest = dest_dir.join(&spec.name);
-            if let Some(parent) = dest.parent() {
-                tokio::fs::create_dir_all(parent).await?;
-            }
-            tokio::fs::copy(&path, &dest).await?;
-            let size = tokio::fs::metadata(&dest)
-                .await
-                .map(|m| m.len())
-                .unwrap_or(0);
-            state.total_bytes.store(size, Ordering::Relaxed);
-            state.downloaded_bytes.store(size, Ordering::Relaxed);
-            let marker = PathBuf::from(format!("{}{}", dest.display(), PROGRESS_SUFFIX));
-            tokio::fs::write(&marker, [chunk::PROGRESS_DONE_BYTE]).await?;
-            Ok(())
+            materialise_local(&spec.name, path, state, dest_dir, false).await
+        }
+        BytesSource::LocalLink { path } => {
+            materialise_local(&spec.name, path, state, dest_dir, true).await
         }
         BytesSource::LocalRange { path, offset, len } => {
             copy_local_range(&spec.name, path, offset, len, state, dest_dir).await
@@ -340,6 +332,54 @@ async fn run_one(
             .await
         }
     }
+}
+
+/// Materialise a whole local file as `dest_dir/name`.
+///
+/// With `prefer_link`, try `hard_link` first so the two stores share one
+/// inode — a 4 GB model adopted from llmman then costs nothing extra on
+/// disk. Any link failure (cross-device, Windows without the privilege,
+/// link-count limit) silently falls back to the copy, so this is only
+/// ever an optimisation.
+///
+/// A stale destination is removed first: `hard_link` fails on an
+/// existing path, and a partial file from an interrupted run would
+/// otherwise make the copy path produce a corrupt result.
+async fn materialise_local(
+    name: &str,
+    src_path: PathBuf,
+    state: Arc<FileState>,
+    dest_dir: &Path,
+    prefer_link: bool,
+) -> Result<()> {
+    let dest = dest_dir.join(name);
+    if let Some(parent) = dest.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    match tokio::fs::remove_file(&dest).await {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.into()),
+    }
+
+    let linked = if prefer_link {
+        tokio::fs::hard_link(&src_path, &dest).await.is_ok()
+    } else {
+        false
+    };
+    if !linked {
+        tokio::fs::copy(&src_path, &dest).await?;
+    }
+
+    let size = tokio::fs::metadata(&dest)
+        .await
+        .map(|m| m.len())
+        .unwrap_or(0);
+    state.total_bytes.store(size, Ordering::Relaxed);
+    state.downloaded_bytes.store(size, Ordering::Relaxed);
+    let marker = PathBuf::from(format!("{}{}", dest.display(), PROGRESS_SUFFIX));
+    tokio::fs::write(&marker, [chunk::PROGRESS_DONE_BYTE]).await?;
+    Ok(())
 }
 
 /// Copy `[offset, offset+len)` from a local file into `dest_dir/name`.

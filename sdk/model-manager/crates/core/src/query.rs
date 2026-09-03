@@ -10,11 +10,11 @@
 
 use std::sync::Arc;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::manifest::ModelType;
 use crate::manifest_builder::quant_sort_key;
 use crate::mapping::canonicalize_model_name;
-use crate::pull::{build_source, PullRequest};
+use crate::pull::{build_source, PullIntent, PullRequest};
 use crate::source::Plan;
 use crate::store::Store;
 use crate::transport::{HttpTransport, ReqwestTransport};
@@ -43,6 +43,18 @@ pub struct ModelQuery {
 pub async fn query(store: &Store, mut req: PullRequest) -> Result<ModelQuery> {
     req.model_name = canonicalize_model_name(&req.model_name);
     validate_model_name(&req.model_name)?;
+
+    // llmman has no plan-only mode: its `plan` *is* the download (see
+    // `crate::source::llmman`), so answering a query would quietly pull
+    // gigabytes. There is also nothing to pick between — an llmman
+    // reference's `:<tag>` is a registry tag, and the registry publishes
+    // one artifact per tag, not a set of GGUF quantizations.
+    if let PullIntent::Llmman { reference } = &req.intent {
+        return Err(Error::Hub(format!(
+            "{reference} is served by llmman, which publishes one artifact per tag; \
+             there are no quantization candidates to choose from. Pull it directly."
+        )));
+    }
 
     let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
     let source = build_source(&req, store, transport).await?;

@@ -11,6 +11,6 @@ enum class HubSource(val value: Int) {
     MODELSCOPE(2),
     AIHUB(3),
     VOLCES(4),
-    DOCKER(5),
+    LLMMAN(5),
     LOCALFS(127),
 }

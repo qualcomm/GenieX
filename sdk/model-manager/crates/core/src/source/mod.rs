@@ -12,12 +12,16 @@
 //! Implementations live beside this file: [`hf`] (HuggingFace REST API
 //! with siblings), [`localfs`] (on-disk directory walk), [`ai_hub`]
 //! (Qualcomm AI Hub S3 protojson chain plus remote ZIP64 central-dir
-//! parse), and [`dockerhub`] (Docker Registry HTTP API V2, for models
-//! published under `hub.docker.com/u/ai` and similar).
+//! parse), and [`llmman`] (OCI registries — Docker Hub, GHCR, quay, … —
+//! by delegating acquisition to a running `llmman serve` daemon).
+//!
+//! [`llmman`] is the one source that moves bulk bytes inside `plan`,
+//! because an external agent does the downloading; see
+//! [`ModelSource::plan_with_progress`].
 
 pub mod ai_hub;
-pub mod dockerhub;
 pub mod hf;
+pub mod llmman;
 pub mod localfs;
 
 use std::collections::HashMap;
@@ -27,6 +31,7 @@ use async_trait::async_trait;
 use url::Url;
 
 use crate::error::{Error, Result};
+use crate::executor::ProgressCallback;
 use crate::manifest::{ModelFileInfo, ModelManifest};
 
 /// Last path component of `path`, treating both `/` and `\` as separators.
@@ -85,6 +90,22 @@ pub trait ModelSource: Send + Sync {
     /// does pure byte movement — no more HTTP "what files exist"
     /// lookups.
     async fn plan(&self) -> Result<Plan>;
+
+    /// [`ModelSource::plan`], with a progress sink for sources whose
+    /// planning step is itself long-running.
+    ///
+    /// Only [`llmman`] overrides this. It delegates acquisition to an
+    /// external `llmman serve` daemon, so by the time `plan` can name
+    /// the files the bytes have *already* moved — and a multi-gigabyte
+    /// download with no progress bar is not an acceptable UX. Every
+    /// other source resolves metadata in well under a second and takes
+    /// the default, which just ignores the callback.
+    ///
+    /// Returning `false` from the callback cancels, exactly as it does
+    /// during [`crate::executor::Executor::run`].
+    async fn plan_with_progress(&self, _on_progress: Option<&ProgressCallback>) -> Result<Plan> {
+        self.plan().await
+    }
 }
 
 /// Output of [`ModelSource::plan`]. The executor consumes `files`; the
@@ -149,6 +170,22 @@ pub enum BytesSource {
     /// directory is already an unpacked tree; tests sometimes do too
     /// for offline fixtures.
     Local { path: PathBuf },
+    /// Local file adopted by hard link, falling back to a copy when the
+    /// link can't be made (different filesystem, Windows without the
+    /// privilege, a source that is already at its link limit).
+    ///
+    /// Used only by [`llmman`], where the source file is a blob in
+    /// llmman's own content-addressed store: linking means a model
+    /// shared between the two stores costs its bytes once instead of
+    /// twice. Safe because neither side ever mutates a published model
+    /// file in place — they only ever create or unlink whole files —
+    /// and an unlink on either side leaves the other's link intact.
+    ///
+    /// Deliberately *not* used by `LocalFsSource`: its source is a
+    /// user-owned directory that the user may well edit in place, and
+    /// sharing an inode with the store would silently corrupt the cached
+    /// model when they did.
+    LocalLink { path: PathBuf },
     /// Byte range inside a local file, no decoding. STORED zip entries
     /// inside an AI Hub archive that the user is pulling from disk.
     LocalRange {

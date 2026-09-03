@@ -61,7 +61,7 @@ func ParseModelType(s string) (ModelType, bool) {
 // HuggingFace URL prefix is stripped first so its scheme colon isn't mistaken
 // for the precision separator. Name canonicalization, precision case-folding
 // (GGUF quant labels are matched upper-cased), and hub routing all happen in
-// the SDK across the FFI boundary — including Docker Hub, where the suffix is a
+// the SDK across the FFI boundary — including llmman, where the suffix is a
 // case-sensitive registry tag the SDK deliberately leaves untouched. This only
 // does the URL strip + ':' split so callers can pass the two to the FFI
 // separately.
@@ -93,14 +93,15 @@ const (
 	HubModelScope  HubSource = C.GENIEX_HUB_MODELSCOPE
 	HubAIHub       HubSource = C.GENIEX_HUB_AIHUB
 	HubVolces      HubSource = C.GENIEX_HUB_VOLCES
-	HubDocker      HubSource = C.GENIEX_HUB_DOCKER
+	HubLlmman      HubSource = C.GENIEX_HUB_LLMMAN
 	HubLocalFS     HubSource = C.GENIEX_HUB_LOCALFS
 )
 
 // ResolveHub reports the hub a pull/query will actually use for name given the
-// requested hub. HubAuto resolves to HubDocker when name carries a Docker Hub
-// prefix (docker.io/…); every other input is returned unchanged. The prefix
-// table lives in the SDK, so callers must not re-derive it. No network I/O.
+// requested hub. HubAuto resolves to HubLlmman when name carries an OCI registry
+// prefix (docker.io/, ghcr.io/, oci://, …); every other input is returned
+// unchanged. The prefix table lives in the SDK, so callers must not re-derive
+// it. No network I/O.
 func ResolveHub(name string, hub HubSource) (HubSource, error) {
 	cName := cStringIfSet(name)
 	defer cFreeIfSet(unsafe.Pointer(cName))

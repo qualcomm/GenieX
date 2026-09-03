@@ -66,9 +66,14 @@ geniex infer google/gemma-4-E4B-it-qat-q4_0-gguf
 # Pre-compiled bundle from Qualcomm AI Hub → Qualcomm AI Engine Direct (NPU)
 geniex infer ai-hub-models/Qwen2.5-VL-7B-Instruct
 
-# GGUF from Docker Hub (https://hub.docker.com/u/ai) → llama.cpp (NPU / GPU / CPU)
+# GGUF from any OCI registry, via llmman → llama.cpp (NPU / GPU / CPU)
 geniex infer docker.io/ai/gemma3
 ```
+
+OCI registry references (`docker.io/`, `ghcr.io/`, `quay.io/`, …) are fetched by
+[llmman](https://github.com/llmmanorg/llmman), which must be installed with
+`llmman serve` running — GenieX links the result out of llmman's store rather
+than re-downloading it.
 
 📖 **Docs** — [Install](https://geniex.aihub.qualcomm.com/en/run/cli/install) · [Quickstart](https://geniex.aihub.qualcomm.com/en/run/cli/quickstart) · [Command reference](https://geniex.aihub.qualcomm.com/en/run/cli/reference)
 

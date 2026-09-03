@@ -14,8 +14,8 @@ from ._ffi._lib import load_library
 from ._ffi._types import (
     GENIEX_HUB_AIHUB,
     GENIEX_HUB_AUTO,
-    GENIEX_HUB_DOCKER,
     GENIEX_HUB_HUGGINGFACE,
+    GENIEX_HUB_LLMMAN,
     GENIEX_HUB_LOCALFS,
     GENIEX_MODEL_TYPE_LLM,
     GENIEX_MODEL_TYPE_VLM,
@@ -150,8 +150,8 @@ _HUB_MAP = {
     'hf': GENIEX_HUB_HUGGINGFACE,
     'huggingface': GENIEX_HUB_HUGGINGFACE,
     'aihub': GENIEX_HUB_AIHUB,
-    'docker': GENIEX_HUB_DOCKER,
-    'dockerhub': GENIEX_HUB_DOCKER,
+    'llmman': GENIEX_HUB_LLMMAN,
+    'oci': GENIEX_HUB_LLMMAN,
     'localfs': GENIEX_HUB_LOCALFS,
     'local': GENIEX_HUB_LOCALFS,
 }
@@ -241,7 +241,7 @@ def pull(
     Args:
         model_name: ``org/repo``, ``org/repo:precision``, or a short alias.
         precision: Optional precision hint (e.g. ``"Q4_K_M"``).
-        hub: ``"auto" | "hf" | "aihub" | "docker" | "localfs"`` or a raw enum int.
+        hub: ``"auto" | "hf" | "aihub" | "llmman" | "localfs"`` or a raw enum int.
         local_path: Required when ``hub == "localfs"``.
         hf_token: HuggingFace bearer token; falls back to ``GENIEX_HFTOKEN``.
         chipset: AI Hub target chipset; auto-detected on Windows-on-Snapdragon.
@@ -482,9 +482,10 @@ def resolve_alias(alias: str) -> str:
 def resolve_effective_hub(model_name: str, hub: str | int = 'auto') -> int:
     """Return the hub enum a pull/query will actually use for ``model_name``.
 
-    ``"auto"`` resolves to Docker Hub when the name carries a Docker Hub prefix
-    (``docker.io/…``); every other hub is returned unchanged. The prefix table
-    lives in the SDK, so callers must not re-derive it. No network I/O.
+    ``"auto"`` resolves to llmman when the name carries an OCI registry prefix
+    (``docker.io/``, ``ghcr.io/``, ``oci://``, …); every other hub is returned
+    unchanged. The prefix table lives in the SDK, so callers must not re-derive
+    it. No network I/O.
     """
     _ensure_init()
     lib = load_library()

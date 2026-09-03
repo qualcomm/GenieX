@@ -662,6 +662,7 @@ mod tests {
             match &f.bytes {
                 BytesSource::LocalRange { path, .. } => assert_eq!(path, &zip_path),
                 BytesSource::Local { .. }
+                | BytesSource::LocalLink { .. }
                 | BytesSource::LocalDeflate { .. }
                 | BytesSource::Http { .. }
                 | BytesSource::HttpRange { .. }

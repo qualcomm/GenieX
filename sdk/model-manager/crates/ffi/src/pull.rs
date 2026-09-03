@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use model_manager_core::config::StoreConfig;
 use model_manager_core::manifest_builder::ManifestHint;
 use model_manager_core::mapping::{
-    aihub_display_name_from_repo, canonicalize_model_name, docker_hub_repo_from_name,
-    is_docker_hub_reference,
+    aihub_display_name_from_repo, canonicalize_model_name, is_llmman_reference,
+    llmman_reference_from_name, llmman_store_name_from_reference, reference_has_tag,
 };
 use model_manager_core::pull::{pull_blocking, PullIntent, PullRequest};
 
@@ -26,9 +26,10 @@ pub enum GenieXHubSource {
     ModelScope = 2,
     AiHub = 3,
     Volces = 4,
-    /// Docker Registry HTTP API V2 — publicly, models published under
-    /// `hub.docker.com/u/ai` (e.g. `ai/gemma3`).
-    Docker = 5,
+    /// Any OCI registry, via a running `llmman serve` daemon — Docker
+    /// Hub's `ai/*` namespace (`docker.io/ai/gemma3`), GHCR, quay, a
+    /// self-hosted registry, and llmman's own non-registry sources.
+    Llmman = 5,
     /// Local filesystem — intentionally 127, not 5, to keep "not a real
     /// hub" visually separated from the network hub IDs above.
     LocalFs = 127,
@@ -167,20 +168,29 @@ pub(crate) unsafe fn extract_name_and_intent(
     let inp = &*input;
     let raw_model_name = cstr_to_str(inp.model_name)?;
 
-    // Docker Hub routing is decided on the *original* string, before generic
+    // llmman routing is decided on the *original* string, before the generic
     // HF/AI-Hub canonicalisation below would discard the hub-identifying
-    // prefix — mirrors docker/model-runner's `IsHuggingFaceReference` check.
-    let use_docker = matches!(inp.hub, GenieXHubSource::Docker)
-        || (matches!(inp.hub, GenieXHubSource::Auto) && is_docker_hub_reference(raw_model_name));
-    if use_docker {
-        let repo = canonicalize_model_name(&docker_hub_repo_from_name(raw_model_name));
-        // `quant` doubles as the Docker tag/digest; empty ⇒ "latest".
-        let reference = cstr_to_str(inp.quant)
-            .ok()
-            .filter(|s| !s.is_empty())
-            .unwrap_or("latest")
-            .to_string();
-        return Ok((repo.clone(), PullIntent::DockerHub { repo, reference }));
+    // registry prefix.
+    let use_llmman = matches!(inp.hub, GenieXHubSource::Llmman)
+        || (matches!(inp.hub, GenieXHubSource::Auto) && is_llmman_reference(raw_model_name));
+    if use_llmman {
+        let mut reference = llmman_reference_from_name(raw_model_name);
+        // `quant` doubles as the registry tag / `sha256:<hex>` digest for
+        // this hub (there is no GGUF-quant filtering step to reuse it for
+        // otherwise). A tag already on the reference wins; when neither
+        // supplies one, llmman applies its own `:latest` default.
+        if let Ok(tag) = cstr_to_str(inp.quant) {
+            if !tag.is_empty() && !reference_has_tag(&reference) {
+                reference = format!("{reference}:{tag}");
+            }
+        }
+        // The store name drops the host and tag so the same model behind
+        // two mirrors shares one cache entry. Deliberately *not*
+        // `canonicalize_model_name`: that gives a bare name the
+        // `qualcomm/` org, which would collide an llmman pull of
+        // `gemma3` with the AI Hub model of the same name.
+        let store_name = llmman_store_name_from_reference(&reference);
+        return Ok((store_name, PullIntent::Llmman { reference }));
     }
 
     // Bare names (no '/') land under `qualcomm/<name>`.
