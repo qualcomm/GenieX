@@ -3,6 +3,12 @@
 set(GGML_BLAS OFF)
 set(GGML_NATIVE OFF)
 set(GGML_BACKEND_DL OFF)
+# Qualcomm Adreno OpenCL driver (CB.dll) fail-fast crashes (0xC0000409) any
+# process that calls clGetPlatformIDs on Windows-on-Snapdragon builds (26000+).
+# llama.cpp's OpenCL backend initializes at startup regardless of --compute,
+# so linking it poisons the whole process. Hexagon (NPU) + CPU backends cover
+# the Snapdragon NPU/CPU path and do not touch the OpenCL driver; disable it.
+set(GGML_OPENCL OFF)
 
 set(LLAMA_BUILD_COMMON ON)
 set(LLAMA_CURL OFF)
