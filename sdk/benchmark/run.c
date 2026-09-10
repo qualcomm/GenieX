@@ -88,6 +88,7 @@ static void fill_model_config(geniex_ModelConfig* c, const options_t* o, int32_t
     c->spec_n_max       = o->draft_tokens;
     c->spec_n_min       = o->draft_min;
     c->spec_p_min       = o->draft_p_min;
+    c->power_mode       = o->power_mode; /* may be NULL */
 }
 
 /* Random-ids prefill (mirrors llama-bench test_prompt): query vocab + BOS via

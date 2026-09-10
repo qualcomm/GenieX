@@ -97,7 +97,7 @@ int write_cell_json(const options_t* o, const device_t* dev, int64_t model_size_
         return 1;
     }
     fprintf(f, "{\n");
-    json_field_str(f, "schema_version", "4", false);
+    json_field_str(f, "schema_version", "5", false);
     json_field_str(f, "cell_id", cell_name(o), false);
     json_field_str(f, "plugin", o->plugin, false);
     json_field_str(f, "device", o->device, false);
@@ -127,6 +127,10 @@ int write_cell_json(const options_t* o, const device_t* dev, int64_t model_size_
             json_write_quoted(f, o->draft_model);
         }
         fprintf(f, ",\n      \"draft_tokens\": %d", o->draft_tokens);
+    }
+    if (o->power_mode) {
+        fprintf(f, ",\n      \"power_mode\": ");
+        json_write_quoted(f, o->power_mode);
     }
     /* Which QAIRT runtime produced these numbers -- the reason the override exists. */
     if (o->qairt_lib) {
