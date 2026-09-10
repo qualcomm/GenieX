@@ -168,10 +168,11 @@ with no hits for a category shows `-`.
 - **Platform isolation** — differences are confined to artifact-building and entry
   scripts; the on-device benchmark binary and JSON schema are shared.
 - **Common per-cell JSON schema** — every platform produces the same schema
-  (`schema_version` `4`), so the aggregator renders uniformly regardless of
+  (`schema_version` `5`), so the aggregator renders uniformly regardless of
   origin. v4 added the `media_us` per-run encoder time and its `media_ms` agg
   median. On a VLM run `prompt_tokens` counts text + media tokens, so
-  `prefill_tps` reflects the full prefill.
+  `prefill_tps` reflects the full prefill. v5 added the optional `power_mode`
+  param (set via `--power-mode`; omitted when unset).
 
 ## Downloading geniex-bench
 

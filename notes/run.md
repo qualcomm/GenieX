@@ -53,6 +53,49 @@ through to llama.cpp verbatim (handy for multi-DSP recipes that need more
 than the single `HTP0` the `npu` alias pins); `--ngl` still applies. qairt
 is NPU-only, so a device list gets coerced to `NPU` with a warning.
 
+## Power mode
+
+Like compute-unit aliases, the power-mode alias table lives in the **SDK**:
+[`sdk/src/device.cpp`](../sdk/src/device.cpp) exposes
+`geniex_resolve_power_mode` via `sdk/include/geniex.h`. It's a single
+unified knob for both runtimes' HTP DCVS/HMX power/clock-management, set via
+`geniex_ModelConfig.power_mode` (`--power-mode` on `geniex infer` / `run` /
+`serve` and `geniex-bench`; a JSON `power_mode` field on `geniex serve`
+requests).
+
+| Alias                          | Relative power (lowest → highest) |
+|---------------------------------|-----|
+| `low_power_saver`               | 1   |
+| `power_saver`                   | 2   |
+| `high_power_saver`              | 3   |
+| `low_balanced`                  | 4   |
+| `balanced`                      | 5   |
+| `high_performance`              | 6   |
+| `sustained_high_performance`    | 7   |
+| `burst`                         | 8 (highest — max clocks, DCVS disabled) |
+
+Empty / `default` resolves to `burst` on both runtimes, matching today's
+behavior before this knob existed (qairt's `perf_profile` already defaulted
+to `BURST`; llama_cpp's HTP corners were hardcoded to max). This applies
+only on the NPU compute unit — it's a no-op (logged, not an error) on
+`cpu` / `gpu`.
+
+- **`llama_cpp`** — carried by an internal, unmerged patch on top of
+  [`ggml/llama.cpp#340`](https://github.qualcomm.com/ggml/llama.cpp/pull/340)
+  (`sdk/patches/llama-hexagon-power-mode.patch` +
+  `sdk/patches/llama-hexagon-power-mode-setter.patch`; see the comments in
+  [`sdk/CMakeLists.txt`](../sdk/CMakeLists.txt)). Only affects sessions
+  created after the call — an already-open HTP session (another model still
+  loaded in the same process) keeps its old mode until released and
+  reacquired; the plugin logs a warning rather than silently no-op'ing.
+- **`qairt`** — sets `ModelConfig::perf_profile`, which the QAIRT core (a
+  real HTP `PerfProfile` → `QnnHtpPerfInfrastructure` vote) already
+  supports. **Bundle precedence:** if the model bundle ships an
+  `htp_backend_ext_config.json` with its own `perf_profile`, that value
+  wins over `--power-mode` (`Model::initialize` seeds from the caller, then
+  lets the bundle's `parseHtpConfig` overwrite it) — the plugin logs a
+  warning when the two disagree.
+
 ## Compute-unit selection (llama_cpp)
 
 `llama_cpp` supports OpenCL and Hexagon on Windows ARM64. The compute unit is driven by two inputs on `geniex_LlmCreateInput`:

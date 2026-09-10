@@ -206,6 +206,7 @@ Control model loading, context, and generation limits.
 | `--think` / `--think=false` | bool | `true` | Enable or disable thinking mode for reasoning models. |
 | `-s`, `--system-prompt` | string | — | System prompt to set model behavior. |
 | `--sliding-window` | — | `false` | (`qairt` only) Evict the oldest context above a small anchored prefix instead of erroring when the context length is exceeded, letting the conversation continue. |
+| `--power-mode` | string | `burst` | HTP power/clock-management mode, shared by `qairt` and `llama_cpp`: `low_power_saver`, `power_saver`, `high_power_saver`, `low_balanced`, `balanced`, `high_performance`, `sustained_high_performance`, `burst`. |
 
 ### Increasing the context length
 
@@ -238,6 +239,7 @@ See the [Benchmarking tutorial](/en/tutorials/benchmarking) for download instruc
 | `--warmup` | `1` | Warmup runs (not counted in stats). |
 | `--temperature` | `0.0` | Sampling temperature. `0.0` = deterministic (greedy). |
 | `--seed` | `42` | Random seed for prefill token generation. |
+| `--power-mode` | `burst` | HTP power/clock-management mode, shared by `qairt` and `llama_cpp`. |
 | `--output-json` | — | Write per-cell JSON with aggregated stats to this path. |
 | `--matrix-file` | — | TSV file (`cell_id`, `plugin`, `device`, `model`) to run multiple cells in one session. |
 | `--output-json-dir` | — | Output directory for matrix-mode JSON files. |
