@@ -74,6 +74,27 @@ func TestResolveModelParam_NonLlamaCppZeroesNCtx(t *testing.T) {
 	}
 }
 
+// TestResolveModelParam_PowerModePassesThrough verifies a valid power_mode
+// alias is validated and stored unresolved (each plugin resolves it itself).
+func TestResolveModelParam_PowerModePassesThrough(t *testing.T) {
+	got, err := ResolveModelParam(geniex_sdk.RuntimeLlamaCpp, "some-model", 4096, -1, "npu", "sustained_high_performance", "", types.SpecParam{})
+	if err != nil {
+		t.Fatalf("ResolveModelParam: %v", err)
+	}
+	if got.PowerMode != "sustained_high_performance" {
+		t.Errorf("PowerMode = %q, want sustained_high_performance", got.PowerMode)
+	}
+}
+
+// TestResolveModelParam_InvalidPowerMode verifies an unknown power_mode alias
+// fails fast rather than reaching the plugin's own (slower) validation.
+func TestResolveModelParam_InvalidPowerMode(t *testing.T) {
+	_, err := ResolveModelParam(geniex_sdk.RuntimeLlamaCpp, "some-model", 4096, -1, "npu", "turbo", "", types.SpecParam{})
+	if err == nil {
+		t.Fatal("ResolveModelParam: want error for invalid power_mode, got nil")
+	}
+}
+
 // Regression test for #1322: model destruction shares the request GIL, so
 // the cleanup goroutine can never destroy a model a handler is still using.
 

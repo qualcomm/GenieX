@@ -48,6 +48,7 @@ var (
 	draftTokens    int32
 	draftMin       int32
 	draftPMin      float32
+	powerMode      string
 
 	// sampler config
 	temperature       float32
@@ -101,6 +102,7 @@ var (
 		llmFlags.Int32VarP(&draftTokens, "draft-tokens", "", 3, "max draft tokens per step for speculative decoding (llama_cpp only)")
 		llmFlags.Int32VarP(&draftMin, "draft-min", "", 0, "min draft tokens per step (0 = llama.cpp default) (llama_cpp only)")
 		llmFlags.Float32VarP(&draftPMin, "draft-p-min", "", 0.0, "min greedy draft probability (0 = llama.cpp default) (llama_cpp only)")
+		llmFlags.StringVarP(&powerMode, "power-mode", "", "", "HTP power/clock-management mode: low_power_saver, power_saver, high_power_saver, low_balanced, balanced, high_performance, sustained_high_performance, burst (default: burst)")
 		return llmFlags
 	}()
 	vlmFlags = func() *pflag.FlagSet {
@@ -155,6 +157,10 @@ func infer() *cobra.Command {
 		}
 
 		if err := common.InitSDK(); err != nil {
+			return err
+		}
+
+		if err := geniex_sdk.ResolvePowerMode(powerMode); err != nil {
 			return err
 		}
 
@@ -398,6 +404,7 @@ func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths) error {
 			SpecNMax:       draftTokens,
 			SpecNMin:       draftMin,
 			SpecPMin:       draftPMin,
+			PowerMode:      powerMode,
 		},
 	})
 	spin.Stop()
@@ -557,6 +564,7 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 			NCtx:       nctxResolved,
 			NUbatch:    ubatch,
 			NGpuLayers: nglResolved,
+			PowerMode:  powerMode,
 		},
 	})
 	spin.Stop()

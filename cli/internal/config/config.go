@@ -26,6 +26,7 @@ type Config struct {
 	Ngl        int32  // Default GPU/NPU layers to offload, -1 = all (default: -1)
 	Compute    string // Default compute unit: cpu, gpu, npu, hybrid (default: "")
 	VitCompute string // Default VLM vision encoder compute unit (default: "")
+	PowerMode  string // Default HTP power/clock-management mode (default: "" = burst)
 	// HTTPS / TLS settings
 	HTTPS    bool   // Whether to serve over HTTPS (default: false)
 	CertFile string // TLS certificate file path
