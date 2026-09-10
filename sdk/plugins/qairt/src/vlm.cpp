@@ -24,6 +24,7 @@
 #include "metadata_utils.h"
 #include "path_utils.h"
 #include "pipeline/vlm_pipeline.h"
+#include "power_mode_utils.h"
 #include "qnn_runtime_utils.h"
 #include "sampler_config_utils.h"
 #include "types.h"
@@ -51,6 +52,12 @@ int32_t QairtVlm::create(const geniex_VlmCreateInput* input) {
     if (input->config.n_ctx != 0) {
         GENIEX_LOG_ERROR("--nctx (n_ctx) is not supported by the qairt plugin");
         return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
+    }
+
+    geniex_PowerMode power_mode;
+    if (geniex_resolve_power_mode(input->config.power_mode, &power_mode) != GENIEX_SUCCESS) {
+        GENIEX_LOG_ERROR("invalid power_mode '{}'", input->config.power_mode ? input->config.power_mode : "");
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
     // Derive model directory from the model_path
@@ -82,6 +89,7 @@ int32_t QairtVlm::create(const geniex_VlmCreateInput* input) {
         GENIEX_LOG_ERROR("Failed to resolve QAIRT bundle layout in {}: {}", model_dir.string(), e.what());
         return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
+    qairt::apply_power_mode(power_mode, llm_cfg);
 
     // The vision encoder is driven as its own graph, so keep it out of the LLM
     // shard list even if ctx-bins lists it.
@@ -130,6 +138,7 @@ int32_t QairtVlm::create(const geniex_VlmCreateInput* input) {
     }
     has_vision_encoder_        = !vision_cfg.model_paths.empty();
     vision_cfg.htp_config_path = llm_cfg.htp_config_path;
+    qairt::apply_power_mode(power_mode, vision_cfg);
 
     // ── Build VLMConfig and create pipeline ───────────────────────────────────
     VLMConfig vlm_cfg{};

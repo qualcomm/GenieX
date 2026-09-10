@@ -26,6 +26,7 @@
 #include "logging.h"
 #include "metadata_utils.h"
 #include "pipeline/llm_pipeline.h"
+#include "power_mode_utils.h"
 #include "qnn_runtime_utils.h"
 #include "sampler_config_utils.h"
 #include "types.h"
@@ -55,6 +56,12 @@ int32_t QairtLlm::create(const geniex_LlmCreateInput* input) {
         return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
     }
 
+    geniex_PowerMode power_mode;
+    if (geniex_resolve_power_mode(input->config.power_mode, &power_mode) != GENIEX_SUCCESS) {
+        GENIEX_LOG_ERROR("invalid power_mode '{}'", input->config.power_mode ? input->config.power_mode : "");
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    }
+
     // Parse model_path to get model directory
     fs::path model_path(input->model_path);
     fs::path model_dir = model_path.parent_path();
@@ -78,6 +85,7 @@ int32_t QairtLlm::create(const geniex_LlmCreateInput* input) {
         GENIEX_LOG_ERROR("Failed to resolve QAIRT bundle layout in {}: {}", model_dir.string(), e.what());
         return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
+    qairt::apply_power_mode(power_mode, model_cfg);
 
     GENIEX_LOG_DEBUG("Found {} model shards in {}", model_cfg.model_paths.size(), model_dir.string());
 
