@@ -179,6 +179,9 @@ def _bind_all() -> None:
     lib.geniex_resolve_device.argtypes = [POINTER(geniex_ResolveDeviceInput), POINTER(geniex_ResolveDeviceOutput)]
     lib.geniex_resolve_device.restype = c_int32
 
+    lib.geniex_resolve_power_mode.argtypes = [c_char_p, POINTER(c_int32)]
+    lib.geniex_resolve_power_mode.restype = c_int32
+
     # LLM
     lib.geniex_llm_create.argtypes = [POINTER(geniex_LlmCreateInput), POINTER(c_void_p)]
     lib.geniex_llm_create.restype = c_int32

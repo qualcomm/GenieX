@@ -119,6 +119,7 @@ class geniex_ModelConfig(Structure):
         ('spec_n_max', c_int32),
         ('spec_n_min', c_int32),
         ('spec_p_min', c_float),
+        ('power_mode', c_char_p),
     ]
 
 
