@@ -20,7 +20,7 @@
 
 ---
 
-GenieX is an **on-device Gen AI inference runtime for Qualcomm devices**. Bring  almost any GGUF model from Hugging Face — or a pre-compiled bundle from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) — and run it locally on the **Hexagon NPU, Adreno GPU, or CPU** in a few lines of code. One C SDK underneath, exposed through a CLI, Python, Kotlin/Java, Docker, and an OpenAI-compatible server. It is the community version of Qualcomm GENIE.
+GenieX is an **on-device Gen AI inference runtime for Qualcomm devices**. Bring almost any GGUF model from Hugging Face, ModelScope, or Docker Hub, or use a pre-compiled bundle from [Qualcomm AI Hub](https://aihub.qualcomm.com/models/). Run it locally on the **Hexagon NPU, Adreno GPU, or CPU** in a few lines of code. One C SDK underneath is exposed through a CLI, Python, Kotlin/Java, Docker, and an OpenAI-compatible server. It is the community version of Qualcomm GENIE.
 
 <div align="center">
   <img src="docs/Mintlify-image/geniex_arch_v2.png" width="820" alt="GenieX architecture: CLI, Python, Java, Docker, and OpenAI-compatible Serve interfaces sit on a single GenieX SDK, which dispatches to the llama.cpp runtime (GGML over CPU / GPU / Hexagon HTP kernels) or the Qualcomm AI Engine Direct runtime on the NPU — across Windows, Android, and Linux." />
@@ -43,7 +43,7 @@ GenieX runs **only on Qualcomm Snapdragon**. Find your platform, then jump strai
 
 ## Quickstart
 
-Pick your interface below. Each one follows the same three steps — **Install**, **Run**, and **Docs** — and shows both runtimes: a **GGUF** model from Hugging Face (`llama_cpp`) and a **pre-compiled bundle** from Qualcomm AI Hub (`qairt`, NPU).
+Pick your interface below. Each one follows the same three steps: **Install**, **Run**, and **Docs**. The examples show both runtimes: a **GGUF** model from Hugging Face, ModelScope, or Docker Hub (`llama_cpp`) and a **pre-compiled bundle** from Qualcomm AI Hub (`qairt`, NPU).
 
 ### CLI
 
@@ -62,6 +62,9 @@ Pick your interface below. Each one follows the same three steps — **Install**
 ```bash
 # GGUF from Hugging Face → llama.cpp (NPU / GPU / CPU)
 geniex infer google/gemma-4-E4B-it-qat-q4_0-gguf
+
+# GGUF from ModelScope → llama.cpp (NPU / GPU / CPU)
+geniex infer https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF
 
 # Pre-compiled bundle from Qualcomm AI Hub → Qualcomm AI Engine Direct (NPU)
 geniex infer ai-hub-models/Qwen2.5-VL-7B-Instruct
@@ -150,13 +153,13 @@ Point any OpenAI client at `http://127.0.0.1:18181/v1` — no code changes.
 
 ```kotlin
 dependencies {
-    implementation("com.qualcomm.qti:geniex-android:0.3.1")
+    implementation("com.qualcomm.qti:geniex-android:0.4.0")
 }
 ```
 
 **Run** — fastest path is the sample app (chat UI, model picker for GGUF + Qualcomm AI Hub bundles, VLM support):
 
-The Android demo app lives in [`qualcomm/ai-hub-apps`](https://github.com/qualcomm/ai-hub-apps/blob/release/geniex_chat_android/README.md). Clone it, open the sample app in Android Studio, and hit **Run**.
+The Android demo app lives in [`qualcomm/ai-hub-apps`](https://github.com/qualcomm/ai-hub-apps/tree/main/apps/geniex_chat_android). Clone it, open the sample app in Android Studio, and hit **Run**.
 
 📖 **Docs** — [Install](https://geniex.aihub.qualcomm.com/en/run/android/install) · [Quickstart](https://geniex.aihub.qualcomm.com/en/run/android/quickstart) · [API reference](https://geniex.aihub.qualcomm.com/en/run/android/api-reference)
 
@@ -190,10 +193,16 @@ GenieX has two runtimes so you get **broad model coverage** *and* **peak Snapdra
 
 | | **llama.cpp** (`llama_cpp`) | **Qualcomm AI Engine Direct** (`qairt`) |
 | --- | --- | --- |
-| **Get models from** | [Hugging Face](https://huggingface.co/models?library=gguf) (any GGUF) | [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) (pre-compiled) |
+| **Get models from** | [Hugging Face](https://huggingface.co/models?library=gguf), [ModelScope](https://modelscope.cn/models), or [Docker Hub](https://hub.docker.com/u/ai) | [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) (pre-compiled) |
 | **Format** | GGUF | Per-chipset bundle |
 | **Compute units** | NPU · GPU · CPU | NPU only |
 | **Best for** | Bringing your own GGUF | Highest NPU performance |
+
+Run `geniex model list` to browse every Qualcomm AI Hub bundle currently available for your chipset. Use `geniex model list --all` to include all chipsets. The catalogue changes independently of GenieX, so the CLI provides a more current list than a static table in this README.
+
+The `qairt` runtime uses the QAIRT libraries bundled with GenieX by default. Advanced users can select another compatible installation with `--qairt-lib` or `GENIEX_QAIRT_LIB`. See [QAIRT runtime selection](notes/run.md#using-a-custom-qnn-library) for details.
+
+See [GenieX releases](https://github.com/qualcomm/GenieX/releases) for new model families, runtime features, fixes, and complete changelogs.
 
 
 > For llama.cpp, pick the **`Q4_0`** precision when prompted — it has the best Hexagon NPU support. See the [Models guide →](https://geniex.aihub.qualcomm.com/en/models/supported) for the full list, precisions, and how to run a local model.
