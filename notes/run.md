@@ -90,11 +90,10 @@ only on the NPU compute unit — it's a no-op (logged, not an error) on
   reacquired; the plugin logs a warning rather than silently no-op'ing.
 - **`qairt`** — sets `ModelConfig::perf_profile`, which the QAIRT core (a
   real HTP `PerfProfile` → `QnnHtpPerfInfrastructure` vote) already
-  supports. **Bundle precedence:** if the model bundle ships an
-  `htp_backend_ext_config.json` with its own `perf_profile`, that value
-  wins over `--power-mode` (`Model::initialize` seeds from the caller, then
-  lets the bundle's `parseHtpConfig` overwrite it) — the plugin logs a
-  warning when the two disagree.
+  supports. **Precedence:** `--power-mode` wins over anything the model
+  bundle's `htp_backend_ext_config.json` sets (`resolveHtpPerfConfig` in
+  `geniex-qairt` core: caller > bundle json > default), since
+  [`geniex-qairt-plugin#55`](https://github.com/qualcomm/geniex-qairt-plugin/pull/55).
 
 ## Compute-unit selection (llama_cpp)
 
