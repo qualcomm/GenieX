@@ -22,7 +22,7 @@
 
 ---
 
-GenieX 是一款**面向高通设备的端侧生成式 AI 推理运行时**。你几乎可以引入任意来自 Hugging Face 的 GGUF 模型——或来自 [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) 的预编译模型包——只需几行代码即可在 **Hexagon NPU、Adreno GPU 或 CPU** 上本地运行。底层是同一套 C SDK，并通过 CLI、Python、Kotlin/Java、Docker 以及一个 OpenAI 兼容服务器交互。它是 Qualcomm GENIE 的社区版本。
+GenieX 是一款**面向高通设备的端侧生成式 AI 推理运行时**。你几乎可以引入任意来自 Hugging Face、ModelScope 或 Docker Hub 的 GGUF 模型，也可以使用来自 [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) 的预编译模型包。只需几行代码，即可在 **Hexagon NPU、Adreno GPU 或 CPU** 上本地运行。底层使用同一套 C SDK，并通过 CLI、Python、Kotlin/Java、Docker 以及一个 OpenAI 兼容服务器交互。它是 Qualcomm GENIE 的社区版本。
 
 <div align="center">
   <img src="docs/Mintlify-image/geniex_arch_v2.png" width="820" alt="GenieX 架构：CLI、Python、Java、Docker 以及 OpenAI 兼容的 Serve 接口构建在单一的 GenieX SDK 之上，由其分发到 llama.cpp 运行时（在 CPU / GPU / Hexagon HTP 内核上运行的 GGML）或 NPU 上的 Qualcomm AI Engine Direct 运行时——覆盖 Windows、Android 与 Linux。" />
@@ -45,7 +45,7 @@ GenieX **仅在高通骁龙（Qualcomm Snapdragon）上运行**。找到你的�
 
 ## 快速入门
 
-从下方选择你的接口。每个接口都遵循相同的三个步骤——**安装（Install）**、**运行（Run）** 和 **文档（Docs）**——并同时展示两种运行时：来自 Hugging Face 的 **GGUF** 模型（`llama_cpp`）和来自 Qualcomm AI Hub 的**预编译模型包**（`qairt`，NPU）。
+从下方选择你的接口。每个接口都遵循相同的三个步骤：**安装（Install）**、**运行（Run）** 和 **文档（Docs）**。示例同时展示两种运行时：来自 Hugging Face、ModelScope 或 Docker Hub 的 **GGUF** 模型（`llama_cpp`），以及来自 Qualcomm AI Hub 的**预编译模型包**（`qairt`，NPU）。
 
 ### CLI
 
@@ -65,8 +65,14 @@ GenieX **仅在高通骁龙（Qualcomm Snapdragon）上运行**。找到你的�
 # 来自 Hugging Face 的 GGUF → llama.cpp（NPU / GPU / CPU）
 geniex infer google/gemma-4-E4B-it-qat-q4_0-gguf
 
+# 来自 ModelScope 的 GGUF → llama.cpp（NPU / GPU / CPU）
+geniex infer https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF
+
 # 来自 Qualcomm AI Hub 的预编译模型包 → Qualcomm AI Engine Direct（NPU）
 geniex infer ai-hub-models/Qwen2.5-VL-7B-Instruct
+
+# 来自 Docker Hub 的 GGUF → llama.cpp（NPU / GPU / CPU）
+geniex infer docker.io/ai/gemma3
 ```
 
 📖 **文档** —— [安装](https://geniex.aihub.qualcomm.com/en/run/cli/install) · [快速入门](https://geniex.aihub.qualcomm.com/en/run/cli/quickstart) · [命令参考](https://geniex.aihub.qualcomm.com/en/run/cli/reference)
@@ -149,13 +155,13 @@ curl http://127.0.0.1:18181/v1/chat/completions \
 
 ```kotlin
 dependencies {
-    implementation("com.qualcomm.qti:geniex-android:0.3.1")
+    implementation("com.qualcomm.qti:geniex-android:0.4.0")
 }
 ```
 
 **运行** —— 最快的上手路径是示例应用（含聊天 UI、支持 GGUF + Qualcomm AI Hub 模型包的模型选择器、VLM 支持）：
 
-Android 演示应用位于 [`qualcomm/ai-hub-apps`](https://github.com/qualcomm/ai-hub-apps/blob/release/geniex_chat_android/README.md)。克隆它，在 Android Studio 中打开示例应用，然后点击 **Run**。
+Android 演示应用位于 [`qualcomm/ai-hub-apps`](https://github.com/qualcomm/ai-hub-apps/tree/main/apps/geniex_chat_android)。克隆它，在 Android Studio 中打开示例应用，然后点击 **Run**。
 
 📖 **文档** —— [安装](https://geniex.aihub.qualcomm.com/en/run/android/install) · [快速入门](https://geniex.aihub.qualcomm.com/en/run/android/quickstart) · [API 参考](https://geniex.aihub.qualcomm.com/en/run/android/api-reference)
 
@@ -189,10 +195,16 @@ GenieX 拥有两套运行时，让你在同一技术栈中既能获得**广泛�
 
 | | **llama.cpp**（`llama_cpp`） | **Qualcomm AI Engine Direct**（`qairt`） |
 | --- | --- | --- |
-| **模型来源** | [Hugging Face](https://huggingface.co/models?library=gguf)（任意 GGUF） | [Qualcomm AI Hub](https://aihub.qualcomm.com/models/)（预编译） |
+| **模型来源** | [Hugging Face](https://huggingface.co/models?library=gguf)、[ModelScope](https://modelscope.cn/models) 或 [Docker Hub](https://hub.docker.com/u/ai) | [Qualcomm AI Hub](https://aihub.qualcomm.com/models/)（预编译） |
 | **格式** | GGUF | 按芯片组打包 |
 | **计算单元** | NPU · GPU · CPU | 仅 NPU |
 | **最适合** | 引入你自己的 GGUF | 最高的 NPU 性能 |
+
+运行 `geniex model list` 可浏览当前适用于你的芯片组的所有 Qualcomm AI Hub 模型包。使用 `geniex model list --all` 可包含所有芯片组。模型目录独立于 GenieX 更新，因此 CLI 提供的列表比 README 中的静态表格更新。
+
+`qairt` 运行时默认使用 GenieX 随附的 QAIRT 库。高级用户可以通过 `--qairt-lib` 或 `GENIEX_QAIRT_LIB` 选择其他兼容版本。详情请参阅 [QAIRT 运行时选择](notes/run.md#using-a-custom-qnn-library)。
+
+有关新模型系列、运行时功能、修复和完整变更日志，请参阅 [GenieX 版本发布](https://github.com/qualcomm/GenieX/releases)。
 
 
 > 对于 llama.cpp，在提示时请选择 **`Q4_0`** 精度——它对 Hexagon NPU 的支持最佳。完整的模型列表、精度以及如何运行本地模型，请参阅[模型指南 →](https://geniex.aihub.qualcomm.com/en/models/supported)。
