@@ -156,7 +156,7 @@ index 27d1dedcd..6aad19124 100644
 +        .core_min_corner    = (min_c), \
 +        .core_max_corner    = (max_c), \
 +        .core_target_corner = (max_c), \
-+        .sleep_disable      = FALSE, \
++        .sleep_disable      = TRUE, \
 +        .hmx_min_corner     = (hmx_c), \
 +        .hmx_max_corner     = (hmx_c), \
 +        .hmx_target_corner  = (hmx_c), \
