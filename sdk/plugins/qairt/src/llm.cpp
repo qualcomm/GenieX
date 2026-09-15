@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include "llm.h"
+#include <algorithm>
+#include <thread>
 
 #include <cstdlib>
 #include <cstring>
@@ -36,6 +38,13 @@ namespace geniex {
 
 namespace {
 constexpr const char* kDefaultSystemPrompt = "You are a helpful AI assistant.";
+
+unsigned resolveDecodeWorkerCount(int32_t requested_threads, size_t shard_count) {
+    unsigned workers = requested_threads > 0 ? static_cast<unsigned>(requested_threads)
+                                         : std::thread::hardware_concurrency();
+    if (workers == 0) workers = 1;
+    return std::min(workers, std::max(1u, static_cast<unsigned>(shard_count)));
+}
 }  // namespace
 
 QairtLlm::~QairtLlm() = default;
@@ -78,6 +87,16 @@ int32_t QairtLlm::create(const geniex_LlmCreateInput* input) {
         GENIEX_LOG_ERROR("Failed to resolve QAIRT bundle layout in {}: {}", model_dir.string(), e.what());
         return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
+
+    // Keep CPU-side KV writes parallel with HTP execution. --threads remains an
+    // explicit override; its default (0) uses the host’s available workers.
+    model_cfg.n_decode_workers =
+        resolveDecodeWorkerCount(input->config.n_threads, model_cfg.model_paths.size());
+    GENIEX_LOG_INFO(
+        "QAIRT decode workers: {} (requested threads={}, model shards={})",
+        model_cfg.n_decode_workers,
+        input->config.n_threads,
+        model_cfg.model_paths.size());
 
     GENIEX_LOG_DEBUG("Found {} model shards in {}", model_cfg.model_paths.size(), model_dir.string());
 
