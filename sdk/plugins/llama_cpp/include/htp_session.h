@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "geniex.h"
+
 namespace geniex {
 
 // A QAIRT plugin spun up after llama.cpp collides on the same CDSP domain
@@ -18,6 +20,14 @@ bool htp_backend_present();
 
 // Close all HTP sessions iff no SessionGuard is holding a reference.
 void release_sessions_if_idle();
+
+// Change the DCVS/HMX power mode requested for HTP sessions (see
+// sdk/patches/llama-hexagon-power-mode-setter.patch). Only affects sessions
+// created after this call: if a session is already open (a SessionGuard is
+// still holding a reference), the new mode is logged as deferred and only
+// takes effect once that session is torn down and reacquired. Call before
+// reacquire_before_load() so a released session picks up the new mode.
+void set_power_mode(geniex_PowerMode mode);
 
 class SessionGuard {
    public:

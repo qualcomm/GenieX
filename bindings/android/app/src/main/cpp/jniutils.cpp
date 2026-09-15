@@ -265,6 +265,11 @@ geniex_ModelConfig extract_model_config(JNIEnv* env, jobject configObj) {
     fid               = env->GetFieldID(cls, "spec_p_min", "F");
     config.spec_p_min = env->GetFloatField(configObj, fid);
 
+    // power_mode
+    fid               = env->GetFieldID(cls, "power_mode", "Ljava/lang/String;");
+    jstr              = (jstring)env->GetObjectField(configObj, fid);
+    config.power_mode = jstr ? hold_c_str(jstring2str(env, jstr)) : nullptr;
+
     return config;
 }
 jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data) {

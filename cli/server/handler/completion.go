@@ -32,6 +32,7 @@ type CompletionRequest struct {
 	Ngl        int32  `json:"ngl"`
 	Compute    string `json:"compute"`
 	VitCompute string `json:"vit_compute"`
+	PowerMode  string `json:"power_mode"`
 
 	TopK              int32   `json:"top_k"`
 	MinP              float32 `json:"min_p"`
@@ -49,6 +50,7 @@ func defaultCompletionRequest() CompletionRequest {
 		Ngl:               cfg.Ngl,
 		Compute:           cfg.Compute,
 		VitCompute:        cfg.VitCompute,
+		PowerMode:         cfg.PowerMode,
 		RepetitionPenalty: 1.0,
 	}
 }
@@ -131,7 +133,7 @@ func Completions(c *gin.Context) {
 		return
 	}
 
-	modelParam, err := service.ResolveModelParam(paths.RuntimeID, paths.ModelName, req.NCtx, req.Ngl, req.Compute, req.VitCompute, service.Chipset(), types.SpecParam{})
+	modelParam, err := service.ResolveModelParam(paths.RuntimeID, paths.ModelName, req.NCtx, req.Ngl, req.Compute, req.VitCompute, req.PowerMode, service.Chipset(), types.SpecParam{})
 	if err != nil {
 		slog.Error("Failed to resolve model params", "model", req.Model, "error", err)
 		c.JSON(http.StatusBadRequest, map[string]any{"error": err.Error()})

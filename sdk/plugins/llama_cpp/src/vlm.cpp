@@ -43,10 +43,21 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
     const Device              device = classify_device(input->device_id, input->config.n_gpu_layers);
     const geniex_ModelConfig& config = input->config;
 
+    geniex_PowerMode power_mode;
+    if (geniex_resolve_power_mode(config.power_mode, &power_mode) != GENIEX_SUCCESS) {
+        GENIEX_LOG_ERROR("invalid power_mode '{}'", config.power_mode ? config.power_mode : "");
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    }
+
     // See llm.cpp: reacquire whenever the HTP backend is registered, since
     // any llama.cpp load walks the registry's device list and a stale session
     // pointer left from a prior release will crash the load on cpu / gpu too.
     if (htp::htp_backend_present()) {
+        if (device == Device::NPU) {
+            htp::set_power_mode(power_mode);
+        } else if (config.power_mode && config.power_mode[0] != '\0') {
+            GENIEX_LOG_WARN("power_mode is only meaningful on the NPU device; ignoring on this device");
+        }
         htp::reacquire_before_load();
     }
 

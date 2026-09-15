@@ -35,6 +35,7 @@ type ChatCompletionRequest struct {
 	Ngl         int32  `json:"ngl"` // 0 = pure CPU, -1 = all layers, N = N layers; defaults to the server --ngl when omitted
 	Compute     string `json:"compute"`
 	VitCompute  string `json:"vit_compute"`
+	PowerMode   string `json:"power_mode"`
 
 	// "" / "none" keeps thinking inline in content (default); "deepseek" /
 	// "deepseek-legacy" / "auto" move it to reasoning_content.
@@ -70,6 +71,7 @@ func defaultChatCompletionRequest() ChatCompletionRequest {
 		Ngl:               cfg.Ngl,
 		Compute:           cfg.Compute,
 		VitCompute:        cfg.VitCompute,
+		PowerMode:         cfg.PowerMode,
 		TopK:              0,
 		MinP:              0.0,
 		RepetitionPenalty: 1.0,
@@ -99,7 +101,7 @@ func ChatCompletions(c *gin.Context) {
 
 	// Fill unset knobs from the server defaults before the MaxCompletionTokens
 	// floor, so a body that omits nctx picks up the default, not the floor.
-	modelParam, err := service.ResolveModelParam(paths.RuntimeID, paths.ModelName, param.NCtx, param.Ngl, param.Compute, param.VitCompute, service.Chipset(), types.SpecParam{
+	modelParam, err := service.ResolveModelParam(paths.RuntimeID, paths.ModelName, param.NCtx, param.Ngl, param.Compute, param.VitCompute, param.PowerMode, service.Chipset(), types.SpecParam{
 		Type:       param.SpecType,
 		DraftModel: param.SpecDraftModel,
 		NMax:       param.SpecNMax,

@@ -1,0 +1,34 @@
+diff --git a/ggml/src/ggml-hexagon/ggml-hexagon.cpp b/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+index c94658d3d..bb75fb2be 100644
+--- a/ggml/src/ggml-hexagon/ggml-hexagon.cpp
++++ b/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+@@ -5880,8 +5880,29 @@ static bool ggml_backend_hexagon_comm_allreduce_tensor(void * comm_ctx_v, struct
+     return true;
+ }
+ 
++// geniex: change the DCVS/HMX power mode requested for HTP sessions. Only
++// takes effect for sessions created after this call: existing open sessions
++// keep whatever mode they started with (HAP_power_set is a session-scoped
++// vote, not something we re-issue on a live session). GenieX pairs this with
++// ggml_backend_hexagon_release_sessions when no session is in active use, so
++// the next llama.cpp load's ggml_backend_hexagon_reacquire_sessions creates
++// fresh sessions under the new mode. See sdk/plugins/llama_cpp/src/htp_session.cpp.
++static void ggml_backend_hexagon_set_power_mode(ggml_backend_reg_t reg, uint32_t mode) {
++    GGML_UNUSED(reg);
++    if (mode >= HTP_POWER_MODE_COUNT) {
++        GGML_LOG_WARN("ggml-hex: geniex: invalid power mode %u, ignoring\n", (unsigned) mode);
++        return;
++    }
++    opt_power_mode = (int) mode;
++    GGML_LOG_INFO("ggml-hex: geniex: power mode set to %s (applies to sessions created from now on)\n",
++                   htp_power_mode_to_str(opt_power_mode));
++}
++
+ static void * ggml_backend_hexagon_get_proc_address(ggml_backend_reg_t reg, const char * name) {
+     GGML_UNUSED(reg);
++    if (strcmp(name, "ggml_backend_hexagon_set_power_mode") == 0) {
++        return (void *) ggml_backend_hexagon_set_power_mode;
++    }
+     if (strcmp(name, "ggml_backend_comm_init") == 0) {
+         return (void *) ggml_backend_hexagon_comm_init;
+     }

@@ -141,6 +141,15 @@ enable_testing()
 #   the llama.cpp plugin to tear down HTP FastRPC channels on model unload so
 #   QAIRT's HTP re-init is not poisoned by stale sessions. See
 #   sdk/plugins/llama_cpp/src/llm.cpp for the caller.
+# * llama-hexagon-power-mode.patch adds the HTP DCVS/HMX power-mode table from
+#   our internal llama.cpp PR (ggml/llama.cpp#340, unmerged upstream). Delete
+#   this file once the submodule is bumped past that merge.
+# * llama-hexagon-power-mode-setter.patch is a permanent GenieX addition on top
+#   of the above: exposes "ggml_backend_hexagon_set_power_mode" via
+#   get_proc_address so the llama.cpp plugin can change the power mode
+#   per-model (llama-hexagon-power-mode.patch alone only reads it once, from
+#   GGML_HEXAGON_POWER_MODE, at backend-registry construction). See
+#   sdk/plugins/llama_cpp/src/htp_session.cpp for the caller.
 # * llama-opencl-adreno-cpy-constreg.patch works around an Adreno OpenCL
 #   compiler crash: kernel_cpy_f32_f32_pack's min(ne00, get_local_size(0))
 #   emits an IMINrr with two constant-class operands, which the driver's
@@ -164,7 +173,9 @@ if(GENIEX_PLUGIN_LLAMA_CPP)
     set(_LLAMA_PATCHES)
     if(GGML_HEXAGON)
         list(APPEND _LLAMA_PATCHES
-            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-release-sessions.patch")
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-release-sessions.patch"
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode.patch"
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode-setter.patch")
     endif()
     if(GGML_OPENCL)
         list(APPEND _LLAMA_PATCHES

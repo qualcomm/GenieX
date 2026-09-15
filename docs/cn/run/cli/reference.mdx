@@ -186,6 +186,7 @@ geniex --log debug list
 | `--think` / `--think=false` | bool | `true` | 启用或禁用推理模型的思考模式。 |
 | `-s`, `--system-prompt` | string | — | 设置模型行为的系统提示。 |
 | `--sliding-window` | — | `false` | （仅 `qairt`）当上下文长度超限时，驱逐锚定前缀之外最旧的上下文，而不是报错，从而让对话继续。 |
+| `--power-mode` | string | `burst` | HTP 电源/时钟管理模式，`qairt` 与 `llama_cpp` 共用：`low_power_saver`、`power_saver`、`high_power_saver`、`low_balanced`、`balanced`、`high_performance`、`sustained_high_performance`、`burst`。 |
 
 ### 增大上下文长度
 

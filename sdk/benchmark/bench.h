@@ -109,6 +109,10 @@ typedef struct {
     int32_t     draft_min;    /* min draft tokens per step (0 = llama.cpp default) */
     float       draft_p_min;  /* min greedy draft probability (0 = llama.cpp default) */
 
+    /* HTP power/clock-management mode, shared by qairt and llama_cpp;
+     * NULL / "" / "default" = burst. */
+    const char* power_mode;
+
     /* QAIRT runtime override (qairt); NULL = GENIEX_QAIRT_LIB, then the bundled runtime.
      * Run-wide, not per cell: the QNN libraries load once per process. */
     const char* qairt_lib;

@@ -1,14 +1,17 @@
 // Copyright (c) 2024-2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-// Single source of truth for the user-facing device alias table
-// (cpu / gpu / npu / hybrid → concrete device_id + n_gpu_layers).
+// Single source of truth for two user-facing alias tables:
+//   - device (cpu / gpu / npu / hybrid → concrete device_id + n_gpu_layers)
+//   - power_mode (unified HTP power/clock-management mode, shared by the
+//     qairt and llama_cpp plugins)
 // Language bindings (Go CLI, Python, Android/JNI) call through to this.
 
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <string>
+#include <utility>
 
 #include "geniex.h"
 #include "logging.h"
@@ -32,6 +35,19 @@ constexpr const char* kAliasAuto   = "auto";
 constexpr const char* kDeviceHTP0      = "HTP0";
 constexpr const char* kDeviceGPUOpenCL = "GPUOpenCL";
 constexpr const char* kDeviceQairtNPU  = "NPU";
+
+constexpr const char* kPowerModeDefault = "default";
+
+constexpr std::pair<const char*, geniex_PowerMode> kPowerModeAliases[] = {
+    {"low_power_saver", GENIEX_POWER_MODE_LOW_POWER_SAVER},
+    {"power_saver", GENIEX_POWER_MODE_POWER_SAVER},
+    {"high_power_saver", GENIEX_POWER_MODE_HIGH_POWER_SAVER},
+    {"low_balanced", GENIEX_POWER_MODE_LOW_BALANCED},
+    {"balanced", GENIEX_POWER_MODE_BALANCED},
+    {"high_performance", GENIEX_POWER_MODE_HIGH_PERFORMANCE},
+    {"sustained_high_performance", GENIEX_POWER_MODE_SUSTAINED_HIGH_PERFORMANCE},
+    {"burst", GENIEX_POWER_MODE_BURST},
+};
 
 std::string to_lower(const char* s) {
     if (!s) return {};
@@ -155,4 +171,27 @@ int32_t geniex_resolve_device(const geniex_ResolveDeviceInput* input, geniex_Res
         output->device_id = portable_strdup(kDeviceHTP0);
     }
     return GENIEX_SUCCESS;
+}
+
+int32_t geniex_resolve_power_mode(const char* mode, geniex_PowerMode* out) {
+    if (!out) {
+        GENIEX_LOG_ERROR("geniex_resolve_power_mode: out is null");
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    }
+
+    const std::string alias = to_lower_trim(mode);
+    if (alias.empty() || alias == kPowerModeDefault) {
+        *out = GENIEX_POWER_MODE_BURST;
+        return GENIEX_SUCCESS;
+    }
+
+    for (const auto& entry : kPowerModeAliases) {
+        if (alias == entry.first) {
+            *out = entry.second;
+            return GENIEX_SUCCESS;
+        }
+    }
+
+    GENIEX_LOG_ERROR("geniex_resolve_power_mode: invalid power mode '{}'", mode ? mode : "");
+    return GENIEX_ERROR_COMMON_INVALID_INPUT;
 }

@@ -67,6 +67,10 @@ static void usage(const char* argv0) {
         "  --draft-tokens N       max draft tokens per step (0 = plugin default)\n"
         "  --draft-min N          min draft tokens per step (0 = llama.cpp default)\n"
         "  --draft-p-min F        min greedy draft probability (0 = llama.cpp default)\n"
+        "  --power-mode MODE      HTP power/clock-management mode, shared by qairt and\n"
+        "                         llama_cpp: low_power_saver, power_saver, high_power_saver,\n"
+        "                         low_balanced, balanced, high_performance,\n"
+        "                         sustained_high_performance, burst (default)\n"
         "  --warmup N             default 1\n"
         "  --no-warmup            equivalent to --warmup 0\n"
         "  --temperature F        default 0.0\n"
@@ -288,6 +292,7 @@ void parse_args(int argc, char** argv, options_t* o) {
     o->draft_tokens            = 0;
     o->draft_min               = 0;
     o->draft_p_min             = 0.0f;
+    o->power_mode              = NULL;
     o->qairt_lib               = NULL;
     o->output_json             = NULL;
     o->output_md               = NULL;
@@ -380,6 +385,8 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->draft_min = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--draft-p-min") == 0) {
             o->draft_p_min = (float)atof(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--power-mode") == 0) {
+            o->power_mode = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--output-json") == 0) {
             o->output_json = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--output-md") == 0) {

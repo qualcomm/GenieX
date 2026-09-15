@@ -12,6 +12,15 @@ set(LLAMA_BUILD_EXAMPLES OFF)
 set(LLAMA_BUILD_SERVER OFF)
 set(BUILD_SHARED_LIBS ON)
 
+# lld-link (unlike link.exe) doesn't auto-add oldnames.lib, which upstream
+# llama.cpp code needs for POSIX-named CRT calls (isatty/fileno/strdup/...).
+# Set as a directory-scoped default so every target under this
+# add_subdirectory (llama-common, mtmd, etc.) picks it up.
+if(WIN32 AND CMAKE_C_COMPILER_ID MATCHES "Clang")
+    string(APPEND CMAKE_SHARED_LINKER_FLAGS " -Xlinker /DEFAULTLIB:oldnames.lib")
+    string(APPEND CMAKE_EXE_LINKER_FLAGS " -Xlinker /DEFAULTLIB:oldnames.lib")
+endif()
+
 add_subdirectory(
     ../../../third-party/llama.cpp
     ${CMAKE_BINARY_DIR}/third-party/llama.cpp

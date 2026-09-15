@@ -121,6 +121,13 @@ geniex-bench \
   --output-json results/qwen3-1.7b-hybrid.json \
   --cell-id Qwen3-1.7B-llama_cpp-hybrid
 
+# Power mode: HTP power/clock-management mode, shared by qairt and llama_cpp
+# (default: burst)
+geniex-bench \
+  --plugin qairt --device npu \
+  -m /path/to/qualcomm/Qwen3-4B-Instruct-2507/ \
+  --power-mode sustained_high_performance
+
 # Accuracy mode: single run, print the generated text (eyeball output quality,
 # not speed). Pair with --prompt-file so the model sees a real prompt.
 geniex-bench \
@@ -178,6 +185,9 @@ Run `geniex-bench --help` for the full flag list.
   padded prompt length `ceil(prompt_tokens / 128) * 128`: the QAIRT engine pads
   input_ids to a 128-token prefill chunk, so the padded count reflects the work
   actually done (#1194). llama_cpp does no such padding and is reported as-is
+- `--power-mode MODE` sets the HTP power/clock-management mode, shared by
+  qairt and llama_cpp (default: `burst`); see
+  [`notes/run.md`](../../notes/run.md#power-mode) for the full alias table
 
 ## Per-cell JSON shape
 

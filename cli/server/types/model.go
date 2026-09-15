@@ -5,12 +5,15 @@ package types
 
 // ModelParam holds the model-load knobs the keep-alive cache keys instances on.
 // NCtx / NGpuLayers are llama_cpp-only; DeviceID is the compute unit resolved by
-// the SDK (empty = the SDK's own default).
+// the SDK (empty = the SDK's own default). PowerMode is passed through
+// unresolved (empty = the SDK's own default of burst) — both plugins resolve
+// it themselves via geniex_resolve_power_mode.
 type ModelParam struct {
 	NCtx        int32
 	NGpuLayers  int32
 	DeviceID    string
 	VitDeviceID string
+	PowerMode   string
 	Spec        SpecParam
 }
 

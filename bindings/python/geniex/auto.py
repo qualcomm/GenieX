@@ -232,7 +232,7 @@ def _build_model_config(plugin_id: str | None, n_ctx: int, n_gpu_layers: int, **
     }
     _bool_fields = {'enable_thinking'}
     _float_fields = {'spec_p_min'}
-    _str_fields = {'chat_template_path', 'chat_template_content', 'spec_type', 'spec_draft_model'}
+    _str_fields = {'chat_template_path', 'chat_template_content', 'spec_type', 'spec_draft_model', 'power_mode'}
     for k, v in kwargs.items():
         if k in _int_fields:
             setattr(cfg, k, int(v))
