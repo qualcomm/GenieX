@@ -1,3 +1,4 @@
+startup --host_jvm_args=-Djava.net.preferIPv4Stack=true
 common --enable_bzlmod
 
 # default settings
