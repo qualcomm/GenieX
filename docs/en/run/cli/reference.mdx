@@ -143,6 +143,33 @@ geniex model list
 geniex model list --all
 ```
 
+### **`geniex eval`**
+
+Evaluate one or more models on an eval pack and compare their accuracy side by side:
+
+```bash
+geniex eval Qwen/Qwen3-0.6B-GGUF unsloth/Llama-3.2-1B-Instruct-GGUF
+```
+
+`--eval` selects a built-in pack (`basic`) or a custom pack from a JSON file; `--json` additionally writes full per-task results to a file. Runs are greedy (top-k 1, fixed seed) with thinking disabled, so results are repeatable.
+
+```bash
+geniex eval Qwen/Qwen3-0.6B-GGUF --eval my-eval.json --json results.json
+```
+
+A custom pack is a JSON file with a `name` and a list of `tasks`. Each task is one of three types: `multiple_choice` (lettered `choices` plus the correct `answer` letter), `exact_match`, or `contains` (both match model output against `expected`, case-insensitively):
+
+```json
+{
+  "name": "my-eval",
+  "tasks": [
+    { "type": "multiple_choice", "prompt": "Which planet is the Red Planet?", "choices": ["Venus", "Mars", "Jupiter"], "answer": "B" },
+    { "type": "exact_match", "prompt": "What is 2+2? Answer with only the number.", "expected": "4" },
+    { "type": "contains", "prompt": "What is the plural of 'child'?", "expected": "children" }
+  ]
+}
+```
+
 ## **`geniex serve`**
 
 Start the OpenAI-compatible local server. See [Local server](/en/run/cli/local-server) for the API.
