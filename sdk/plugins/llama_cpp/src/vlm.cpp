@@ -499,7 +499,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             break;
         }
 
-        int n = llama_token_to_piece(vocab, token, token_buffer, sizeof(token_buffer) - 1, 0, false);
+        int n = llama_token_to_piece(vocab, token, token_buffer, sizeof(token_buffer) - 1, 0, /*special=*/true);
         if (n < 0) n = 0;
         token_buffer[n] = '\0';
 
