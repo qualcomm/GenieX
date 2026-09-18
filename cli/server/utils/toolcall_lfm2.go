@@ -9,122 +9,33 @@ import (
 	"github.com/bytedance/sonic"
 )
 
-// LFM2 and LFM2.5 write all their calls as one Python-style list:
+// LFM2 and LFM2.5 write all their calls as one Python-style list wrapped in a
+// pair of control tokens:
 //
 //	<|tool_call_start|>[get_time(city="Paris"), toggle(enabled=True)]<|tool_call_end|>
 //
-// Both markers are control tokens, which the runtime detokenizes to nothing, so
-// only the bare list arrives and `[NAME(` is what identifies it — a marker that
-// does reach here goes out as text. Values are Python literals — quoted strings,
-// numbers, True / False / None — and JSON's true / false / null. Grammar:
-// llama.cpp's common_chat_params_init_lfm2.
+// Both are grammar-only tokens the model has no other way to produce, so seeing
+// one is already the whole signal — the boundary is the marker pair, not the
+// brackets, same as Qwen3's `<tool_call>` wrapping plain JSON. Values are Python
+// literals — quoted strings, numbers, True / False / None — and JSON's true /
+// false / null. Grammar: llama.cpp's common_chat_params_init_lfm2.
+const (
+	lfm2ToolCallStart = "<|tool_call_start|>"
+	lfm2ToolCallEnd   = "<|tool_call_end|>"
+)
+
 type lfm2ToolCall struct {
-	begin markerScan
-	held  int // the offset last reported, so a stale scan is noticed
-	at    int // where the list began; -1 while no list is open
-	end   int // where it closed; -1 until it does
+	markerFormat
 }
 
 func newLFM2ToolCall() *lfm2ToolCall {
-	t := &lfm2ToolCall{begin: markerScan{marker: "["}}
-	t.reset(0)
-	return t
+	return &lfm2ToolCall{newMarkerFormat(lfm2ToolCallStart, lfm2ToolCallEnd)}
 }
 
-func (t *lfm2ToolCall) reset(from int) {
-	t.begin.reset(from)
-	t.held, t.at, t.end = from, -1, -1
-}
-
-func (t *lfm2ToolCall) parse(s string) []toolCallFn { return parseLFM2ToolCalls(s) }
-
-func (t *lfm2ToolCall) feed(all string, from int) (int, int) {
-	if from > t.held { // the region was consumed or bypassed: start over
-		t.reset(from)
-	}
-	at, end := t.scan(all)
-	if at < 0 {
-		t.held = len(all)
-	} else {
-		t.held = at
-	}
-	return at, end
-}
-
-func (t *lfm2ToolCall) scan(all string) (int, int) {
-	for t.at < 0 {
-		t.begin.feed(all)
-		if t.begin.done == 0 {
-			if t.begin.start < len(all) {
-				return t.begin.start, -1 // a '[' that has not arrived whole
-			}
-			return -1, -1
-		}
-		// A '[' opens far too much prose to claim on its own: the list has to name
-		// a function before this is taken for a call.
-		at := t.begin.done - 1
-		ok, settled := isCallList(all, at)
-		if !settled {
-			return at, -1
-		}
-		if !ok {
-			t.begin.reset(at + 1) // prose: keep looking past it
-			continue
-		}
-		t.at = at
-	}
-	if t.end < 0 {
-		n := listEnd(all[t.at:])
-		if n < 0 {
-			return t.at, -1 // the list is still open
-		}
-		t.end = t.at + n
-	}
-	return t.at, t.end
-}
-
-// isCallList reports whether s[i:] opens a list of Python calls. settled is false
-// while too little has arrived to tell, so the caller has to wait for more input.
-func isCallList(s string, i int) (ok, settled bool) {
-	if i >= len(s) {
-		return false, false
-	}
-	if s[i] != '[' {
-		return false, true
-	}
-	i = skipSpace(s, i+1)
-	name := i + lfm2NameEnd(s[i:])
-	if name >= len(s) {
-		return false, false
-	}
-	return name > i && s[name] == '(', true
-}
-
-// listEnd is the offset past the ']' closing the list s opens, or -1 while it is
-// still open. Brackets inside a string argument do not count.
-func listEnd(s string) int {
-	depth, inStr, quote, escaped := 0, false, byte(0), false
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case inStr && escaped:
-			escaped = false
-		case inStr && c == '\\':
-			escaped = true
-		case inStr:
-			inStr = c != quote
-		case c == '"' || c == '\'':
-			inStr, quote = true, c
-		case c == '[' || c == '{' || c == '(':
-			depth++
-		case c == ']' || c == '}' || c == ')':
-			depth--
-			if depth == 0 {
-				return i + 1
-			}
-		}
-	}
-	return -1
+func (t *lfm2ToolCall) parse(s string) []toolCallFn {
+	s = strings.TrimPrefix(s, lfm2ToolCallStart)
+	s = strings.TrimSuffix(s, lfm2ToolCallEnd)
+	return parseLFM2ToolCalls(s)
 }
 
 // parseLFM2ToolCalls returns every call in the list s holds, nothing unless the
@@ -132,7 +43,7 @@ func listEnd(s string) int {
 // likely a misread than a call the model meant.
 func parseLFM2ToolCalls(s string) []toolCallFn {
 	i := skipSpace(s, 0)
-	if ok, _ := isCallList(s, i); !ok {
+	if i >= len(s) || s[i] != '[' {
 		return nil
 	}
 
@@ -164,7 +75,9 @@ func parseLFM2Call(s string, i int) (toolCallFn, int) {
 	if name == i || name >= len(s) || s[name] != '(' {
 		return toolCallFn{}, -1
 	}
-	args, next := parseSeq(s, name, '(', ')', parseLFM2Arg)
+	args, next := parseSeq(s, name, '(', ')', func(s string, i int) (string, int) {
+		return parseLFM2Pair(s, i, true)
+	})
 	if next < 0 {
 		return toolCallFn{}, -1
 	}
@@ -172,18 +85,31 @@ func parseLFM2Call(s string, i int) (toolCallFn, int) {
 	return toolCallFn{Name: s[i:name], Arguments: "{" + args[1:len(args)-1] + "}"}, next
 }
 
-// parseLFM2Arg reads one `key=value` argument as `"key":value`.
-func parseLFM2Arg(s string, i int) (string, int) {
-	key := i + lfm2NameEnd(s[i:])
-	if key == i || key >= len(s) || s[key] != '=' {
+// parseLFM2Pair reads one key/value pair as `"key":value`: a call's key=value
+// argument if bare, a dict's "key": value member otherwise.
+func parseLFM2Pair(s string, i int, bare bool) (string, int) {
+	key, sep, next := "", byte('='), 0
+	if bare {
+		if next = i + lfm2NameEnd(s[i:]); next == i {
+			return "", -1
+		}
+		key = s[i:next]
+	} else {
+		sep = ':'
+		if key, next = parseLFM2String(s, i); next < 0 {
+			return "", -1
+		}
+		next = skipSpace(s, next) // the dict grammar allows space before ':', unlike bare key=value
+	}
+	if next >= len(s) || s[next] != sep {
 		return "", -1
 	}
-	val, next := parseLFM2Value(s, skipSpace(s, key+1))
-	if next < 0 {
+	val, end := parseLFM2Value(s, skipSpace(s, next+1))
+	if end < 0 {
 		return "", -1
 	}
-	quoted, _ := sonic.MarshalString(s[i:key])
-	return quoted + ":" + val, next
+	quoted, _ := sonic.MarshalString(key)
+	return quoted + ":" + val, end
 }
 
 // parseLFM2Value reads one Python literal at s[i] as JSON plus the index past it.
@@ -201,7 +127,9 @@ func parseLFM2Value(s string, i int) (string, int) {
 		return quoted, next
 
 	case s[i] == '{':
-		return parseSeq(s, i, '{', '}', parseLFM2Member)
+		return parseSeq(s, i, '{', '}', func(s string, i int) (string, int) {
+			return parseLFM2Pair(s, i, false)
+		})
 	case s[i] == '[':
 		return parseSeq(s, i, '[', ']', parseLFM2Value)
 
@@ -225,24 +153,6 @@ func parseLFM2Value(s string, i int) (string, int) {
 			return tok, i
 		}
 	}
-}
-
-// parseLFM2Member reads one `"key": value` pair of a dict.
-func parseLFM2Member(s string, i int) (string, int) {
-	key, next := parseLFM2String(s, i)
-	if next < 0 {
-		return "", -1
-	}
-	i = skipSpace(s, next)
-	if i >= len(s) || s[i] != ':' {
-		return "", -1
-	}
-	val, next := parseLFM2Value(s, skipSpace(s, i+1))
-	if next < 0 {
-		return "", -1
-	}
-	quoted, _ := sonic.MarshalString(key)
-	return quoted + ":" + val, next
 }
 
 // parseLFM2String decodes one quoted literal, either quoting style, plus the index
