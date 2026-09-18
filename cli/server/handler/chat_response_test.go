@@ -69,6 +69,10 @@ func TestWriteBlockingResponse(t *testing.T) {
 			wantContent: "x ", wantFinish: "tool_calls", wantCalls: [][2]string{{"f", `{"a":1}`}},
 		},
 		{
+			name: "MiniCPM5 XML", content: `<function name="get_weather"><param name="city">Beijing</param></function>`,
+			parseTool: true, wantFinish: "tool_calls", wantCalls: [][2]string{weather},
+		},
+		{
 			name: "reasoning with a call", content: "sure " + call, reasoning: "let me check",
 			parseTool: true, wantContent: "sure ", wantReasoning: "let me check",
 			wantFinish: "tool_calls", wantCalls: [][2]string{weather},
