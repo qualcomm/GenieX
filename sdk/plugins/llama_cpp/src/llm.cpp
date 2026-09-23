@@ -239,11 +239,12 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     // Validate input
     if (!input) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
+    bool has_input_embd  = input->input_embd != nullptr && input->input_embd_count > 0;
     bool has_input_ids   = input->input_ids != nullptr && input->input_ids_count > 0;
     bool has_prompt_utf8 = input->prompt_utf8 != nullptr;
 
-    if (!has_input_ids && !has_prompt_utf8)
-        return GENIEX_ERROR_COMMON_INVALID_INPUT;  // error: neither input_ids nor prompt_utf8 provided
+    if (!has_input_embd && !has_input_ids && !has_prompt_utf8)
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;  // error: none of input_embd, input_ids, prompt_utf8 provided
 
     geniex_GenerationConfig cfg = input->config ? *input->config : geniex_GenerationConfig{};
     cfg.max_tokens              = cfg.max_tokens > 0 ? cfg.max_tokens : 128;
@@ -256,60 +257,89 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     const int          n_batch   = llama_n_batch(this->ctx);
     const bool         can_shift = llama_memory_can_shift(mem) && !llama_model_is_recurrent(this->model);
 
-    // Encode the full prompt (either from input_ids or prompt_utf8)
+    if (has_input_embd) {
+        const int32_t expected_dim = llama_model_n_embd_inp(this->model);
+        if (input->input_embd_dim != expected_dim) {
+            GENIEX_LOG_ERROR("input_embd_dim ({}) does not match model's expected embedding width ({})",
+                input->input_embd_dim,
+                expected_dim);
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
+        if (this->spec) {
+            GENIEX_LOG_ERROR("input_embd is not supported together with speculative decoding");
+            return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
+        }
+        // Embedding turns always fully redecode (see the "update past record"
+        // comment near the end of this function), so start from a clean KV
+        // cache rather than continuing from whatever a prior turn left behind.
+        llama_memory_seq_rm(mem, 0, 0, -1);
+        this->n_past        = 0;
+        this->n_past_global = 0;
+        this->past_prompt_tokens.clear();
+    }
+
+    // Encode the full prompt (from input_embd, input_ids, or prompt_utf8)
     std::vector<llama_token> prompt_ids;
-    if (has_input_ids) {
-        const int32_t vocab_size = llama_vocab_n_tokens(vocab);
-        // Validate token IDs are within vocabulary range
-        for (int32_t i = 0; i < input->input_ids_count; i++) {
-            if (input->input_ids[i] < 0 || input->input_ids[i] >= vocab_size) {
-                GENIEX_LOG_ERROR("token ID out of range: {}", input->input_ids[i]);
-                return GENIEX_ERROR_COMMON_INVALID_INPUT;  // error: token ID out of vocabulary range
+    if (!has_input_embd) {
+        if (has_input_ids) {
+            const int32_t vocab_size = llama_vocab_n_tokens(vocab);
+            // Validate token IDs are within vocabulary range
+            for (int32_t i = 0; i < input->input_ids_count; i++) {
+                if (input->input_ids[i] < 0 || input->input_ids[i] >= vocab_size) {
+                    GENIEX_LOG_ERROR("token ID out of range: {}", input->input_ids[i]);
+                    return GENIEX_ERROR_COMMON_INVALID_INPUT;  // error: token ID out of vocabulary range
+                }
+            }
+
+            prompt_ids.assign(input->input_ids, input->input_ids + input->input_ids_count);
+        } else {
+            // Use text tokenization path
+            try {
+                prompt_ids = common_tokenize(vocab, std::string(input->prompt_utf8), true, true);
+            } catch (const std::exception& e) {
+                return GENIEX_ERROR_LLM_TOKENIZATION_FAILED;  // error: prompt encoding failed
             }
         }
+    }
 
-        prompt_ids.assign(input->input_ids, input->input_ids + input->input_ids_count);
-    } else {
-        // Use text tokenization path
-        try {
-            prompt_ids = common_tokenize(vocab, std::string(input->prompt_utf8), true, true);
-        } catch (const std::exception& e) {
-            return GENIEX_ERROR_LLM_TOKENIZATION_FAILED;  // error: prompt encoding failed
+    // Prefix Match — not applicable to embedding input (nothing to diff against a
+    // token history), so an input_embd call always fully redecodes its rows.
+
+    int32_t prompt_len = has_input_embd ? input->input_embd_count : static_cast<int32_t>(prompt_ids.size());
+    if (!has_input_embd) {
+        int match_len = 0;
+        while (match_len < std::min((int)past_prompt_tokens.size(), prompt_len) &&
+               past_prompt_tokens[match_len] == prompt_ids[match_len]) {
+            match_len++;
+        }
+        GENIEX_LOG_DEBUG(
+            "prefix match: past_prompt_tokens size: {}, prompt_len: {}, "
+            "match_len: {}",
+            past_prompt_tokens.size(),
+            prompt_len,
+            match_len);
+
+        if (match_len < (int)this->past_prompt_tokens.size()) {
+            if (match_len < this->n_past_global - this->n_past) {
+                // match out of kvcache, need reset
+                llama_memory_seq_rm(mem, 0, 0, this->n_past);
+                this->n_past        = 0;
+                this->n_past_global = prompt_len > n_ctx - 4 ? n_ctx - 4 : 0;
+                GENIEX_LOG_INFO("prefix match: n_past_global rollback to: {}", this->n_past_global);
+            } else {
+                // match in kvcache, need rollback
+                llama_memory_seq_rm(mem, 0, match_len, -1);
+                this->n_past        = match_len;
+                this->n_past_global = match_len;
+                GENIEX_LOG_INFO("prefix match: n_past_global rollback to: {}", this->n_past_global);
+            }
         }
     }
 
-    // Prefix Match
-
-    int32_t prompt_len = static_cast<int32_t>(prompt_ids.size());
-    int     match_len  = 0;
-    while (match_len < std::min((int)past_prompt_tokens.size(), prompt_len) &&
-           past_prompt_tokens[match_len] == prompt_ids[match_len]) {
-        match_len++;
+    std::vector<llama_token> embd_inp;
+    if (!has_input_embd) {
+        embd_inp.assign(prompt_ids.begin() + this->n_past_global, prompt_ids.end());
     }
-    GENIEX_LOG_DEBUG(
-        "prefix match: past_prompt_tokens size: {}, prompt_len: {}, "
-        "match_len: {}",
-        past_prompt_tokens.size(),
-        prompt_len,
-        match_len);
-
-    if (match_len < (int)this->past_prompt_tokens.size()) {
-        if (match_len < this->n_past_global - this->n_past) {
-            // match out of kvcache, need reset
-            llama_memory_seq_rm(mem, 0, 0, this->n_past);
-            this->n_past        = 0;
-            this->n_past_global = prompt_len > n_ctx - 4 ? n_ctx - 4 : 0;
-            GENIEX_LOG_INFO("prefix match: n_past_global rollback to: {}", this->n_past_global);
-        } else {
-            // match in kvcache, need rollback
-            llama_memory_seq_rm(mem, 0, match_len, -1);
-            this->n_past        = match_len;
-            this->n_past_global = match_len;
-            GENIEX_LOG_INFO("prefix match: n_past_global rollback to: {}", this->n_past_global);
-        }
-    }
-
-    std::vector<llama_token> embd_inp(prompt_ids.begin() + this->n_past_global, prompt_ids.end());
 
     // Main loop
 
@@ -381,19 +411,58 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         return GENIEX_SUCCESS;
     };
 
+    // Decode one batch of pre-computed embedding rows and advance n_past.
+    // Mirrors process() above but populates llama_batch.embd instead of .token,
+    // the same mechanism the VLM/mtmd path uses for vision-encoder output.
+    auto process_embd = [&](const float* rows, int n_rows, int32_t overflow_err) -> int32_t {
+        llama_batch batch = llama_batch_init(n_rows, input->input_embd_dim, /*n_seq_max=*/1);
+        batch.n_tokens    = n_rows;
+        std::memcpy(batch.embd, rows, (size_t)n_rows * input->input_embd_dim * sizeof(float));
+        for (int i = 0; i < n_rows; ++i) {
+            batch.pos[i]       = this->n_past + i;
+            batch.n_seq_id[i]  = 1;
+            batch.seq_id[i][0] = 0;
+            batch.logits[i]    = (i == n_rows - 1);
+        }
+        int rc = llama_decode(this->ctx, batch);
+        while (rc == 1 && can_shift && slide_window(n_rows) > 0) {
+            rc = llama_decode(this->ctx, batch);
+        }
+        llama_batch_free(batch);
+        switch (rc) {
+            case 0:
+                break;
+            case 1:
+                return overflow_err;
+            default:
+                return GENIEX_ERROR_LLM_GENERATION_FAILED;
+        }
+        n_past += n_rows;
+        return GENIEX_SUCCESS;
+    };
+
     // Process input (prefilling)
 
-    for (llama_token id : prompt_ids) {
-        common_sampler_accept(this->sampler, id, /* accept_grammar= */ false);
-    }
+    if (has_input_embd) {
+        for (int i = 0; i < input->input_embd_count && res == GENIEX_SUCCESS; i += n_batch) {
+            int n_eval = std::min(n_batch, input->input_embd_count - i);
+            res        = process_embd(input->input_embd + (size_t)i * input->input_embd_dim,
+                n_eval,
+                GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG);
+        }
+    } else {
+        for (llama_token id : prompt_ids) {
+            common_sampler_accept(this->sampler, id, /* accept_grammar= */ false);
+        }
 
-    // A context overflow during prefill means the prompt itself doesn't fit,
-    // even after any context shift (or the model can't shift at all); during
-    // decode it means the window filled up mid-generation. Distinct causes, so
-    // process() reports the one matching the phase.
-    for (int i = 0; i < (int)embd_inp.size() && res == GENIEX_SUCCESS; i += n_batch) {
-        int n_eval = std::min(n_batch, (int)embd_inp.size() - i);
-        res        = process(embd_inp.data() + i, n_eval, GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG);
+        // A context overflow during prefill means the prompt itself doesn't fit,
+        // even after any context shift (or the model can't shift at all); during
+        // decode it means the window filled up mid-generation. Distinct causes, so
+        // process() reports the one matching the phase.
+        for (int i = 0; i < (int)embd_inp.size() && res == GENIEX_SUCCESS; i += n_batch) {
+            int n_eval = std::min(n_batch, (int)embd_inp.size() - i);
+            res        = process(embd_inp.data() + i, n_eval, GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG);
+        }
     }
 
     profiler.prompt_end();
@@ -476,9 +545,21 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     output->full_text = strdup(full_text.str().c_str());
 
     // update past record
-    this->n_past_global = prompt_len + generated_tokens.size();
-    this->past_prompt_tokens.insert(this->past_prompt_tokens.end(), embd_inp.begin(), embd_inp.end());
-    this->past_prompt_tokens.insert(this->past_prompt_tokens.end(), generated_tokens.begin(), generated_tokens.end());
+    if (has_input_embd) {
+        // Embedding rows aren't diffable against a token history and their KV
+        // isn't representable as past_prompt_tokens, so the KV cache is dropped
+        // entirely after an embedding turn: the next call (text, input_ids, or
+        // another input_embd) always starts a full redecode from position 0.
+        llama_memory_seq_rm(mem, 0, 0, -1);
+        this->n_past        = 0;
+        this->n_past_global = 0;
+        this->past_prompt_tokens.clear();
+    } else {
+        this->n_past_global = prompt_len + generated_tokens.size();
+        this->past_prompt_tokens.insert(this->past_prompt_tokens.end(), embd_inp.begin(), embd_inp.end());
+        this->past_prompt_tokens.insert(
+            this->past_prompt_tokens.end(), generated_tokens.begin(), generated_tokens.end());
+    }
 
     return res;
 }
@@ -490,6 +571,7 @@ int32_t LlamaLlm::get_model_info(geniex_LlmModelInfo* output) {
     const llama_token bos    = llama_vocab_bos(vocab);
     output->bos_token        = (bos == LLAMA_TOKEN_NULL) ? -1 : static_cast<int32_t>(bos);
     output->add_bos          = llama_vocab_get_add_bos(vocab) ? 1 : 0;
+    output->embd_dim         = llama_model_n_embd_inp(this->model);
     return GENIEX_SUCCESS;
 }
 
