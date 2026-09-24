@@ -502,10 +502,18 @@ async fn download_range_based(job: RangeJob, dest_dir: &Path) -> Result<()> {
     let output_path = dest_dir.join(&name);
     let marker_path = PathBuf::from(format!("{}{}", output_path.display(), PROGRESS_SUFFIX));
 
+    let plan = chunk::plan_chunks(size);
+    let mut bitmap = chunk::load_or_init_bitmap(&marker_path, &plan)?;
+    let output_size = tokio::fs::metadata(&output_path)
+        .await
+        .ok()
+        .map(|m| m.len());
+    if chunk::bitmap_complete(&bitmap) && output_size != Some(size) {
+        bitmap.fill(0);
+        tokio::fs::write(&marker_path, &bitmap).await?;
+    }
     chunk::preallocate(&output_path, size)?;
 
-    let plan = chunk::plan_chunks(size);
-    let bitmap = chunk::load_or_init_bitmap(&marker_path, &plan)?;
     let already = chunk::bytes_already_done(&plan, &bitmap);
     state.downloaded_bytes.store(already, Ordering::Relaxed);
 
