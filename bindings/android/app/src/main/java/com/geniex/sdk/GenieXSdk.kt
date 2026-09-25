@@ -19,6 +19,13 @@ class GenieXSdk private constructor() {
     external fun getPluginVersion(pluginId: String): String
 
     /**
+     * The GenieX SDK bridge version (build_config::kBridgeVersion) -- the same
+     * string [getPluginVersion] callers compare against when caching plugin
+     * versions, exposed here for the SDK itself.
+     */
+    external fun getSdkVersion(): String
+
+    /**
      * Load the QAIRT runtime from [path] instead of the one bundled in the APK, for
      * running against another QAIRT version. [path] is either a QAIRT SDK root or a
      * flat folder of QNN libraries, pushed somewhere the app can read; "" restores the

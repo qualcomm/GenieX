@@ -97,13 +97,14 @@ int write_cell_json(const options_t* o, const device_t* dev, int64_t model_size_
         return 1;
     }
     fprintf(f, "{\n");
-    json_field_str(f, "schema_version", "5", false);
+    json_field_str(f, "schema_version", "6", false);
     json_field_str(f, "cell_id", cell_name(o), false);
     json_field_str(f, "plugin", o->plugin, false);
     json_field_str(f, "device", o->device, false);
     json_field_str(f, "device_id", dev->id, false);
     json_field_str(f, "model_path", o->model_path, false);
     json_field_i64(f, "model_size_bytes", model_size_bytes, false);
+    json_field_str(f, "geniex_version", geniex_version(), false);
     json_field_str(f, "qairt_version", geniex_get_plugin_version("qairt"), false);
     json_field_str(f, "llama_cpp_version", geniex_get_plugin_version("llama_cpp"), false);
     fprintf(f, "    \"params\": {\n");

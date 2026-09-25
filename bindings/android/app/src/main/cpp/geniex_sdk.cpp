@@ -84,6 +84,12 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_GenieXSdk_getPluginVers
     return env->NewStringUTF(result ? result : "");
 }
 
+extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_GenieXSdk_getSdkVersion(
+    JNIEnv* env, jobject thiz) {
+    const char* result = geniex_version();
+    return env->NewStringUTF(result ? result : "");
+}
+
 // Reaching this from Kotlin needs native code: the JVM has no setenv, so the
 // GENIEX_QAIRT_LIB fallback the other bindings can use is not available here.
 extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_GenieXSdk_setQairtRuntimePath(
