@@ -5,8 +5,8 @@ package utils
 
 import "testing"
 
-// The cases llama.cpp's LFM2 tests cover, with the markers off: they are control
-// tokens the runtime detokenizes to nothing, so the parser never sees them.
+// The cases llama.cpp's LFM2 tests cover, against the bare call-list body: parse
+// strips the surrounding control-token markers before parseLFM2ToolCalls ever sees it.
 func TestParseLFM2ToolCalls(t *testing.T) {
 	tests := []struct {
 		name string
@@ -42,6 +42,13 @@ func TestParseLFM2ToolCalls(t *testing.T) {
 			name: "nested python dict",
 			resp: `[set_config(config={"enabled": True, "count": 3})]`,
 			want: []toolCallFn{{Name: "set_config", Arguments: `{"config":{"enabled":true,"count":3}}`}},
+		},
+		{
+			// the grammar's dict member allows space on both sides of ':', unlike a
+			// bare key=value call argument
+			name: "space before the colon in a nested dict",
+			resp: `[configure(opts={"key" : "value"})]`,
+			want: []toolCallFn{{Name: "configure", Arguments: `{"opts":{"key":"value"}}`}},
 		},
 		{
 			name: "dotted name and an array",
@@ -120,8 +127,8 @@ func TestParseLFM2ToolCalls(t *testing.T) {
 	}
 }
 
-// A bare list holds the stream from its '[', so whatever turns out not to be a call
-// has to come back out as content, byte for byte.
+// The boundary is the marker pair, not the brackets: a list with neither marker is
+// just content, byte for byte, same as any other bracket a model might write.
 func TestLFM2ToolCallStream(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -130,29 +137,65 @@ func TestLFM2ToolCallStream(t *testing.T) {
 		wantCalls []toolCallFn
 	}{
 		{
-			name:      "bare list, which is all the runtime passes through",
-			resp:      `[get_time(city="Paris")]`,
-			wantCalls: []toolCallFn{{Name: "get_time", Arguments: `{"city":"Paris"}`}},
-		},
-		{
-			// should a runtime ever detokenize them, the call still comes out and
-			// only the markers go out as text
-			name:      "markers around the list",
+			name:      "markers around the list are consumed with the call",
 			resp:      `<|tool_call_start|>[get_time(city="Paris")]<|tool_call_end|>`,
-			wantText:  `<|tool_call_start|><|tool_call_end|>`,
 			wantCalls: []toolCallFn{{Name: "get_time", Arguments: `{"city":"Paris"}`}},
 		},
 		{
-			name:      "content before the call",
-			resp:      `Let me check the time.[get_time(city="Paris")]`,
-			wantText:  "Let me check the time.",
+			name:      "content before a marker-wrapped call",
+			resp:      `Let me check.<|tool_call_start|>[get_time(city="Paris")]<|tool_call_end|>`,
+			wantText:  "Let me check.",
 			wantCalls: []toolCallFn{{Name: "get_time", Arguments: `{"city":"Paris"}`}},
 		},
 		{
-			name:      "content after the call",
-			resp:      `[get_time(city="Paris")] done`,
+			name:      "content after a marker-wrapped call",
+			resp:      `<|tool_call_start|>[get_time(city="Paris")]<|tool_call_end|> done`,
 			wantText:  " done",
 			wantCalls: []toolCallFn{{Name: "get_time", Arguments: `{"city":"Paris"}`}},
+		},
+		{
+			name:      "parallel calls, both markers",
+			resp:      `<|tool_call_start|>[a(x=1), b(y=2)]<|tool_call_end|>`,
+			wantCalls: []toolCallFn{{Name: "a", Arguments: `{"x":1}`}, {Name: "b", Arguments: `{"y":2}`}},
+		},
+		{
+			// an unrelated bracket ahead of the real call is never even looked at:
+			// nothing here scans for '[' on its own anymore
+			name:      "an unrelated bracket before a marker-wrapped call",
+			resp:      `See [1] for details.<|tool_call_start|>[get_time(city="Paris")]<|tool_call_end|>`,
+			wantText:  "See [1] for details.",
+			wantCalls: []toolCallFn{{Name: "get_time", Arguments: `{"city":"Paris"}`}},
+		},
+		{
+			// no start marker at all: the list is not even a candidate, just content
+			name:     "a bare list with no markers is content",
+			resp:     `[get_time(city="Paris")]`,
+			wantText: `[get_time(city="Paris")]`,
+		},
+		{
+			// an end marker with nothing to open it is content too
+			name:     "an end marker with no start marker is content",
+			resp:     `[get_time(city="Paris")]<|tool_call_end|>`,
+			wantText: `[get_time(city="Paris")]<|tool_call_end|>`,
+		},
+		{
+			// the model stopped before the closing marker: Tail still finds the call,
+			// since the list itself is a complete, well-formed one
+			name:      "only the start marker: recovered at the tail if the list is complete",
+			resp:      `<|tool_call_start|>[get_time(city="Paris")]`,
+			wantCalls: []toolCallFn{{Name: "get_time", Arguments: `{"city":"Paris"}`}},
+		},
+		{
+			// no list ever follows the marker, and no end marker arrives either
+			name:     "a start marker with no list after it is content",
+			resp:     `<|tool_call_start|>not a list after all`,
+			wantText: `<|tool_call_start|>not a list after all`,
+		},
+		{
+			// both markers close the region, but the body inside is not the grammar
+			name:     "a start marker around something that is not a call",
+			resp:     `<|tool_call_start|>[1, 2, 3]<|tool_call_end|>`,
+			wantText: `<|tool_call_start|>[1, 2, 3]<|tool_call_end|>`,
 		},
 		{
 			name:     "markdown links stay content",
@@ -165,7 +208,7 @@ func TestLFM2ToolCallStream(t *testing.T) {
 			wantText: "steps: [1, 2, 3] and then [f(x=1] broken",
 		},
 		{
-			name:     "an unclosed bracket is held to the end",
+			name:     "an unclosed bracket is content, not held",
 			resp:     "an [ that never closes",
 			wantText: "an [ that never closes",
 		},

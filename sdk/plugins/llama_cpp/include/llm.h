@@ -36,8 +36,6 @@ class LlamaLlm : public ILlm {
     int                      n_past        = 0;   // for context shifting
     std::vector<llama_token> past_prompt_tokens;  // for prefix match
 
-    bool allow_special_tokens = false;  // Control special token output
-
     // Tracks whether this instance pinned an HTP session; releases on last handoff.
     htp::SessionGuard htp_guard_;
 

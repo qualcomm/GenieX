@@ -64,7 +64,6 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
         bool is_gpt_oss_model =
             (model_path_lower.find("gpt") != std::string::npos) && (model_path_lower.find("oss") != std::string::npos);
 
-        this->allow_special_tokens = is_gpt_oss_model;
         if (is_gpt_oss_model) {
             tensor_overrides[0]        = {"\\.ffn_(up|down|gate)_exps\\.(weight|bias)", ggml_backend_cpu_buffer_type()};
             tensor_overrides[1]        = {nullptr, nullptr};  // Null terminator
@@ -422,7 +421,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         }
 
         char token_buf[64];
-        int  n = llama_token_to_piece(vocab, id, token_buf, sizeof(token_buf) - 1, 0, this->allow_special_tokens);
+        int  n = llama_token_to_piece(vocab, id, token_buf, sizeof(token_buf) - 1, 0, /*special=*/true);
         if (n < 0) {
             res = GENIEX_ERROR_LLM_GENERATION_FAILED;
             return false;
