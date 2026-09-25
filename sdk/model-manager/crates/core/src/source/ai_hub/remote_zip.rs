@@ -140,6 +140,16 @@ pub async fn fetch_central_directory(
 
         // The ZIP64 EOCD has a 56-byte fixed prefix plus extensible
         // data we don't need — a 56-byte fetch is enough.
+        let z64_end = z64_eocd_off.checked_add(56).ok_or_else(|| {
+            Error::Hub(format!(
+                "zip at {url}: ZIP64 EOCD offset {z64_eocd_off} overflows"
+            ))
+        })?;
+        if z64_end > total {
+            return Err(Error::Hub(format!(
+                "zip at {url}: ZIP64 EOCD range ({z64_eocd_off}+56) exceeds archive size ({total})"
+            )));
+        }
         let mut z64 = Vec::with_capacity(56);
         transport
             .get_range(url, None, z64_eocd_off, 56, &mut z64)
@@ -157,7 +167,12 @@ pub async fn fetch_central_directory(
     if cd_size == 0 {
         return Ok(Vec::new());
     }
-    if cd_offset + cd_size > total {
+    let cd_end = cd_offset.checked_add(cd_size).ok_or_else(|| {
+        Error::Hub(format!(
+            "zip at {url}: central directory range ({cd_offset}+{cd_size}) overflows"
+        ))
+    })?;
+    if cd_end > total {
         return Err(Error::Hub(format!(
             "zip at {url}: central directory range ({cd_offset}+{cd_size}) exceeds archive size ({total})"
         )));
@@ -215,20 +230,27 @@ pub async fn fetch_central_directory(
             let tag = read_u16(extra, ex_cursor);
             let ex_size = read_u16(extra, ex_cursor + 2) as usize;
             if ex_cursor + 4 + ex_size > extra.len() {
-                break;
+                return Err(Error::Hub(format!(
+                    "zip entry {name:?}: extra field at offset {ex_cursor} exceeds entry boundary"
+                )));
             }
             if tag == 0x0001 {
+                let read_zip64 = |offset| {
+                    read_zip64_u64(extra, offset).ok_or_else(|| {
+                        Error::Hub(format!("zip entry {name:?}: truncated ZIP64 extra field"))
+                    })
+                };
                 let mut ez = ex_cursor + 4;
                 if uncompressed_size == 0xFFFF_FFFF {
-                    uncompressed_size = read_u64(extra, ez);
+                    uncompressed_size = read_zip64(ez)?;
                     ez += 8;
                 }
                 if compressed_size == 0xFFFF_FFFF {
-                    compressed_size = read_u64(extra, ez);
+                    compressed_size = read_zip64(ez)?;
                     ez += 8;
                 }
                 if local_header_offset == 0xFFFF_FFFF {
-                    local_header_offset = read_u64(extra, ez);
+                    local_header_offset = read_zip64(ez)?;
                 }
                 break;
             }
@@ -270,6 +292,18 @@ pub async fn fetch_central_directory(
             continue;
         }
         let header_abs = e.payload_offset;
+        let header_end = header_abs.checked_add(30).ok_or_else(|| {
+            Error::Hub(format!(
+                "zip entry {:?}: local header offset {header_abs} overflows",
+                e.name
+            ))
+        })?;
+        if header_end > total {
+            return Err(Error::Hub(format!(
+                "zip entry {:?}: local header range ({header_abs}+30) exceeds archive size ({total})",
+                e.name
+            )));
+        }
         let mut hdr = Vec::with_capacity(30);
         transport
             .get_range(url, None, header_abs, 30, &mut hdr)
@@ -282,7 +316,25 @@ pub async fn fetch_central_directory(
         }
         let lh_name_len = read_u16(&hdr, 26) as u64;
         let lh_extra_len = read_u16(&hdr, 28) as u64;
-        e.payload_offset = header_abs + 30 + lh_name_len + lh_extra_len;
+        e.payload_offset = header_abs
+            .checked_add(30)
+            .and_then(|offset| offset.checked_add(lh_name_len))
+            .and_then(|offset| offset.checked_add(lh_extra_len))
+            .ok_or_else(|| {
+                Error::Hub(format!("zip entry {:?}: payload offset overflows", e.name))
+            })?;
+        let payload_end = e
+            .payload_offset
+            .checked_add(e.compressed_size)
+            .ok_or_else(|| {
+                Error::Hub(format!("zip entry {:?}: payload range overflows", e.name))
+            })?;
+        if payload_end > total {
+            return Err(Error::Hub(format!(
+                "zip entry {:?}: payload range ({}+{}) exceeds archive size ({total})",
+                e.name, e.payload_offset, e.compressed_size
+            )));
+        }
         resolved.push(e);
     }
 
@@ -318,6 +370,12 @@ fn read_u64(buf: &[u8], off: usize) -> u64 {
         buf[off + 6],
         buf[off + 7],
     ])
+}
+
+fn read_zip64_u64(buf: &[u8], off: usize) -> Option<u64> {
+    let end = off.checked_add(8)?;
+    let bytes = buf.get(off..end)?;
+    Some(u64::from_le_bytes(bytes.try_into().ok()?))
 }
 
 /// [`HttpTransport`] adapter that serves a single local file. Used by the
@@ -445,6 +503,34 @@ mod tests {
         buf
     }
 
+    fn corrupt_zip64_extra(body: &mut Vec<u8>) {
+        let central = body
+            .windows(4)
+            .position(|window| window == b"PK\x01\x02")
+            .unwrap();
+        let name_len = u16::from_le_bytes([body[central + 28], body[central + 29]]) as usize;
+        let extra_len = u16::from_le_bytes([body[central + 30], body[central + 31]]) as usize;
+        assert_eq!(extra_len, 0);
+        body.splice(
+            central + 46 + name_len..central + 46 + name_len,
+            [1, 0, 0, 0],
+        );
+        body[central + 20..central + 24].copy_from_slice(&u32::MAX.to_le_bytes());
+        body[central + 24..central + 28].copy_from_slice(&u32::MAX.to_le_bytes());
+        body[central + 30..central + 32].copy_from_slice(&4u16.to_le_bytes());
+        let eocd = body
+            .windows(4)
+            .rposition(|window| window == b"PK\x05\x06")
+            .unwrap();
+        let cd_size = u32::from_le_bytes([
+            body[eocd + 12],
+            body[eocd + 13],
+            body[eocd + 14],
+            body[eocd + 15],
+        ]);
+        body[eocd + 12..eocd + 16].copy_from_slice(&(cd_size + 4).to_le_bytes());
+    }
+
     fn build_deflate_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
         let mut buf: Vec<u8> = Vec::new();
         {
@@ -504,6 +590,20 @@ mod tests {
         assert_eq!(bin.method, Method::Stored);
         assert_eq!(bin.uncompressed_size, 5);
         assert_eq!(bin.compressed_size, 5);
+    }
+
+    #[tokio::test]
+    async fn rejects_truncated_zip64_extra_metadata() {
+        let mut body = build_stored_zip(&[("model.bin", b"HELLO")]);
+        corrupt_zip64_extra(&mut body);
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("malformed.zip");
+        std::fs::write(&path, body).unwrap();
+        let transport: Arc<dyn HttpTransport> = Arc::new(LocalFileTransport::open(&path).unwrap());
+        let url = Url::parse("file:///malformed.zip").unwrap();
+
+        let err = fetch_central_directory(&transport, &url).await.unwrap_err();
+        assert!(err.to_string().contains("ZIP64 extra"), "{err}");
     }
 
     #[tokio::test]
