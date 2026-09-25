@@ -5,10 +5,12 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -37,6 +39,8 @@ var (
 	enableThink    bool
 	prompt         []string
 	tokenFile      string
+	embdFile       string
+	embdDim        int32
 	input          string
 	systemPrompt   string
 	computeUnit    string
@@ -96,6 +100,8 @@ var (
 		llmFlags.StringVarP(&input, "input", "i", "", "prompt txt file")
 		llmFlags.StringArrayVarP(&prompt, "prompt", "p", nil, "pass prompt")
 		llmFlags.StringVarP(&tokenFile, "token-file", "t", "", "path to token file (space-separated token IDs) (llama_cpp only)")
+		llmFlags.StringVarP(&embdFile, "embd-file", "", "", "path to a raw flat float32 embedding file, row-major [n_rows, embd-dim] (llama_cpp only)")
+		llmFlags.Int32VarP(&embdDim, "embd-dim", "", 0, "embedding row width for --embd-file; required when --embd-file is set (llama_cpp only)")
 		llmFlags.BoolVarP(&slidingWindow, "sliding-window", "", false, "evict oldest context on overflow instead of erroring (qairt only)")
 		llmFlags.StringVarP(&specType, "spec-type", "", "", "speculative decoding type(s), comma-separated: draft-mtp,draft-eagle3,draft-simple,ngram-simple,ngram-map-k,ngram-map-k4v,ngram-mod,ngram-cache (llama_cpp only)")
 		llmFlags.StringVarP(&draftModel, "draft-model", "", "", "draft/MTP model for draft-* spec types: catalogue name or local GGUF path (llama_cpp only)")
@@ -441,6 +447,32 @@ func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths, resolvedPowerMo
 		fmt.Println(render.GetTheme().Info.Sprintf("Using token IDs from file: %s (%d tokens)", tokenFile, len(tokenIDs)))
 	}
 
+	// Check if using raw embedding input mode
+	var embd []float32
+	if embdFile != "" {
+		if embdDim <= 0 {
+			return fmt.Errorf("--embd-dim must be > 0 when --embd-file is set")
+		}
+		content, err := os.ReadFile(embdFile)
+		if err != nil {
+			return fmt.Errorf("failed to read embedding file: %w", err)
+		}
+		if len(content)%4 != 0 {
+			return fmt.Errorf("embedding file size (%d bytes) is not a multiple of 4 (float32)", len(content))
+		}
+		n := len(content) / 4
+		embd = make([]float32, n)
+		for i := 0; i < n; i++ {
+			bits := binary.LittleEndian.Uint32(content[i*4 : i*4+4])
+			embd[i] = math.Float32frombits(bits)
+		}
+		if int32(n)%embdDim != 0 {
+			return fmt.Errorf("embedding file has %d floats, not a multiple of --embd-dim (%d)", n, embdDim)
+		}
+		fmt.Println(render.GetTheme().Info.Sprintf(
+			"Using embeddings from file: %s (%d rows x %d dim)", embdFile, int32(n)/embdDim, embdDim))
+	}
+
 	processor := &common.Processor{
 		Verbose:  verbose,
 		TestMode: testMode,
@@ -455,7 +487,25 @@ func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths, resolvedPowerMo
 			var res *geniex_sdk.LlmGenerateOutput
 			var err error
 
-			if len(tokenIDs) > 0 {
+			if len(embd) > 0 {
+				// When using raw embeddings, skip chat template and tokenization entirely
+				res, err = p.Generate(geniex_sdk.LlmGenerateInput{
+					InputEmbd:    embd,
+					InputEmbdDim: embdDim,
+					OnToken:      onToken,
+					Config: &geniex_sdk.GenerationConfig{
+						MaxTokens:     maxTokens,
+						SamplerConfig: samplerConfig,
+						SlidingWindow: slidingWindow,
+					},
+				})
+				if err != nil {
+					// The SDK keeps whatever was generated before the failure; surface it.
+					return res.FullText, res.ProfileData, err
+				}
+				// Clear embd after use so subsequent calls use normal mode
+				embd = nil
+			} else if len(tokenIDs) > 0 {
 				// When using token IDs, skip chat template and use IDs directly
 				res, err = p.Generate(geniex_sdk.LlmGenerateInput{
 					InputIDs: tokenIDs,
@@ -508,13 +558,13 @@ func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths, resolvedPowerMo
 		},
 	}
 
-	if len(tokenIDs) > 0 {
-		// Token ID mode: return empty prompt once, then EOF to exit after first round
+	if len(embd) > 0 || len(tokenIDs) > 0 {
+		// Embedding / token ID mode: return empty prompt once, then EOF to exit after first round
 		firstCall := true
 		processor.GetPrompt = func() (string, error) {
 			if firstCall {
 				firstCall = false
-				return "", nil // Trigger first round with empty prompt (token IDs will be used)
+				return "", nil // Trigger first round with empty prompt (embd/tokenIDs will be used)
 			}
 			return "", io.EOF // Exit after first round
 		}

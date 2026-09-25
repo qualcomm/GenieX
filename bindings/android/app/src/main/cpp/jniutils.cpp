@@ -95,6 +95,13 @@ std::vector<int32_t> jintArray2vec(JNIEnv* env, jintArray arr) {
     return result;
 }
 
+std::vector<float> jfloatArray2vec(JNIEnv* env, jfloatArray arr) {
+    jsize              len = env->GetArrayLength(arr);
+    std::vector<float> result(len);
+    env->GetFloatArrayRegion(arr, 0, len, result.data());
+    return result;
+}
+
 void getStringArrayField(JNIEnv* env, jobject obj, jclass cls, const char* fieldName, std::vector<std::string>& storage,
     std::vector<const char*>& ptrs) {
     jfieldID     fieldId = env->GetFieldID(cls, fieldName, "[Ljava/lang/String;");

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import geniex
 import pytest
+from geniex._ffi._api import GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED
 
 from _models import matrix, primary, pull_cells
 from _quality_data import (
@@ -214,6 +215,19 @@ def test_llm_logits_self_consistency(qairt_llm_paths, device_map):
     kl = parity_kl_divergence(ref_last, cand_last)
     assert agree == 1.0, f'device_map={device_map!r} top1={agree:.3f} != 1.0'
     assert kl <= PARITY_QAIRT_KL_MAX, f'device_map={device_map!r} KL={kl:.6f} > {PARITY_QAIRT_KL_MAX}'
+
+
+@pytest.mark.llm
+@pytest.mark.parametrize('device_map', ['npu'])
+def test_llm_generate_input_embd_not_supported(qairt_llm_paths, device_map):
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        _LLM.id,
+        device_map=device_map,
+    ) as llm:
+        assert llm.embd_dim == 0, 'qairt should not report an embd_dim'
+        with pytest.raises(geniex.GenieXError) as excinfo:
+            llm.generate(input_embd=[0.0, 0.0], input_embd_dim=2, max_new_tokens=1)
+        assert excinfo.value.code == GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED
 
 
 @pytest.mark.vlm

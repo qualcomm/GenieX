@@ -102,10 +102,12 @@ func freeLlmCreateInput(cPtr *C.geniex_LlmCreateInput) {
 }
 
 type LlmGenerateInput struct {
-	PromptUTF8 string
-	InputIDs   []int32
-	Config     *GenerationConfig
-	OnToken    OnTokenCallback
+	PromptUTF8   string
+	InputIDs     []int32
+	InputEmbd    []float32
+	InputEmbdDim int32
+	Config       *GenerationConfig
+	OnToken      OnTokenCallback
 }
 
 func (lgi LlmGenerateInput) toCPtr() *C.geniex_LlmGenerateInput {
@@ -124,6 +126,17 @@ func (lgi LlmGenerateInput) toCPtr() *C.geniex_LlmGenerateInput {
 		cPtr.input_ids_count = C.int32_t(n)
 	}
 
+	if n := len(lgi.InputEmbd); n > 0 {
+		raw := cMalloc(C.size_t(n) * C.size_t(unsafe.Sizeof(C.float(0))))
+		embd := unsafe.Slice((*C.float)(raw), n)
+		for i, v := range lgi.InputEmbd {
+			embd[i] = C.float(v)
+		}
+		cPtr.input_embd = (*C.float)(raw)
+		cPtr.input_embd_count = C.int32_t(int32(n) / lgi.InputEmbdDim)
+		cPtr.input_embd_dim = C.int32_t(lgi.InputEmbdDim)
+	}
+
 	if lgi.Config != nil {
 		cPtr.config = lgi.Config.toCPtr()
 	}
@@ -136,6 +149,7 @@ func freeLlmGenerateInput(cPtr *C.geniex_LlmGenerateInput) {
 	}
 	cFreeIfSet(unsafe.Pointer(cPtr.prompt_utf8))
 	cFreeIfSet(unsafe.Pointer(cPtr.input_ids))
+	cFreeIfSet(unsafe.Pointer(cPtr.input_embd))
 	freeGenerationConfig(cPtr.config)
 	C.free(unsafe.Pointer(cPtr))
 }
@@ -303,6 +317,7 @@ type LlmModelInfo struct {
 	VocabSize int32
 	BosToken  int32
 	AddBos    bool
+	EmbdDim   int32
 }
 
 func (l *LLM) GetModelInfo() (LlmModelInfo, error) {
@@ -318,6 +333,7 @@ func (l *LLM) GetModelInfo() (LlmModelInfo, error) {
 		VocabSize: int32(cInfo.vocab_size),
 		BosToken:  int32(cInfo.bos_token),
 		AddBos:    cInfo.add_bos != 0,
+		EmbdDim:   int32(cInfo.embd_dim),
 	}, nil
 }
 
@@ -475,7 +491,7 @@ func (l *LLM) LoadKVCache(input LlmLoadKVCacheInput) error {
 }
 
 func (l *LLM) Generate(input LlmGenerateInput) (*LlmGenerateOutput, error) {
-	slog.Debug("Generate called", "promptLen", len(input.PromptUTF8), "inputIDsLen", len(input.InputIDs))
+	slog.Debug("Generate called", "promptLen", len(input.PromptUTF8), "inputIDsLen", len(input.InputIDs), "inputEmbdLen", len(input.InputEmbd))
 
 	cInput := input.toCPtr()
 	defer freeLlmGenerateInput(cInput)

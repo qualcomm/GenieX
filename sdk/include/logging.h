@@ -282,11 +282,15 @@ struct fmt::formatter<geniex_LlmGenerateInput> {
     constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
     auto           format(const geniex_LlmGenerateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
-            "LlmGenerateInput(prompt_utf8: {}, input_ids: {}, input_ids_count: {}, config: {}, on_token: {}, "
+            "LlmGenerateInput(prompt_utf8: {}, input_ids: {}, input_ids_count: {}, input_embd: {}, "
+                      "input_embd_count: {}, input_embd_dim: {}, config: {}, on_token: {}, "
                       "user_data: {})",
             lp(p.prompt_utf8),
             lp(fmt::ptr(p.input_ids)),
             lp(p.input_ids_count),
+            lp(fmt::ptr(p.input_embd)),
+            lp(p.input_embd_count),
+            lp(p.input_embd_dim),
             lp(p.config),
             lp(fmt::ptr(p.on_token)),
             lp(fmt::ptr(p.user_data)));
