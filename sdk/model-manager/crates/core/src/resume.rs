@@ -42,10 +42,11 @@ fn needs_fetch(spec: &FileSpec, dest_dir: &Path) -> bool {
         return on_disk != spec.size;
     }
     if let Ok(data) = std::fs::read(&marker) {
-        // Non-empty, all-0x01 bitmap means every chunk already
-        // succeeded; skip. Partial bitmaps fall through so the
-        // executor can decide what to refetch.
-        if !data.is_empty() && data.iter().all(|b| *b == 0x01) {
+        // Non-empty, all-0x01 bitmap plus an exact-size payload means
+        // every chunk succeeded; skip. Partial or stale state falls
+        // through so the executor can decide what to refetch.
+        let output_size = std::fs::metadata(&output).map(|m| m.len()).ok();
+        if !data.is_empty() && data.iter().all(|b| *b == 0x01) && output_size == Some(spec.size) {
             return false;
         }
     }
@@ -82,6 +83,23 @@ mod tests {
         std::fs::write(tmp.path().join("a.gguf.progress"), [0x01, 0x01]).unwrap();
         let pending = filter_pending(&[local_spec("a.gguf")], tmp.path());
         assert!(pending.is_empty());
+    }
+
+    #[test]
+    fn refetches_complete_bitmap_when_output_is_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("a.gguf.progress"), [0x01]).unwrap();
+        let pending = filter_pending(&[local_spec("a.gguf")], tmp.path());
+        assert_eq!(pending.len(), 1);
+    }
+
+    #[test]
+    fn refetches_complete_bitmap_when_output_size_mismatches() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("a.gguf"), b"xxxx").unwrap();
+        std::fs::write(tmp.path().join("a.gguf.progress"), [0x01]).unwrap();
+        let pending = filter_pending(&[local_spec("a.gguf")], tmp.path());
+        assert_eq!(pending.len(), 1);
     }
 
     #[test]

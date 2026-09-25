@@ -223,6 +223,39 @@ async fn resume_skips_completed_chunks() {
 }
 
 #[tokio::test]
+async fn complete_bitmap_without_payload_is_refetched() {
+    let body = make_body(chunklib::MIN_CHUNK_SIZE as usize + 1024, 0xA6);
+    let server = MockServer::start().await;
+    install_file_mock(&server, "/org/repo/resolve/main/missing.bin", body.clone()).await;
+
+    let tmp = tempdir().unwrap();
+    let plan = chunklib::plan_chunks(body.len() as u64);
+    assert_eq!(plan.chunks.len(), 2);
+    std::fs::write(
+        tmp.path().join("missing.bin.progress"),
+        vec![0x01; plan.chunks.len()],
+    )
+    .unwrap();
+
+    let files = vec![http_spec(
+        "missing.bin",
+        Url::parse(&format!(
+            "{}/org/repo/resolve/main/missing.bin",
+            server.uri()
+        ))
+        .unwrap(),
+    )];
+
+    Executor::new(fast_transport(), 1)
+        .run(&files, tmp.path(), None)
+        .await
+        .expect("refetch stale bitmap");
+
+    let actual = std::fs::read(tmp.path().join("missing.bin")).unwrap();
+    assert!(actual == body, "downloaded payload differs from source");
+}
+
+#[tokio::test]
 async fn cancel_via_callback_returns_cancelled() {
     std::env::set_var("GENIEX_DL_CHUNK_SIZE", "16384");
 
