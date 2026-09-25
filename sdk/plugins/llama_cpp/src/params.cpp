@@ -35,6 +35,7 @@ Device classify_device(const char* device_id, int n_gpu_layers) {
     if (n_gpu_layers == 0) return Device::CPU;                   // <0 means "all layers" to llama.cpp
     if (!device_id || device_id[0] == '\0') return Device::NPU;  // HYBRID treat as NPU
     const std::string id(device_id);
+    if (id.rfind("CUDA", 0) == 0) return Device::GPU;
     if (id.rfind("GPU", 0) == 0) return Device::GPU;
     if (id.rfind("HTP", 0) == 0) return Device::NPU;
     return Device::CPU;  // UNKOWN treat as CPU
@@ -96,6 +97,9 @@ llama_context_params build_context_params(
 
     uint32_t ubatch = ubatch_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
     bool     fa     = fa_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+#if defined(GENIEX_CUDA)
+    if (device == Device::GPU) fa = true;
+#endif
 
     llama_context_params cpar = llama_context_default_params();
     cpar.swa_full             = false;
