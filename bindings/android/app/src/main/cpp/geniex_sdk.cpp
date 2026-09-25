@@ -84,8 +84,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_GenieXSdk_getPluginVers
     return env->NewStringUTF(result ? result : "");
 }
 
-extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_GenieXSdk_getSdkVersion(
-    JNIEnv* env, jobject thiz) {
+extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_GenieXSdk_getSdkVersion(JNIEnv* env, jobject thiz) {
     const char* result = geniex_version();
     return env->NewStringUTF(result ? result : "");
 }
