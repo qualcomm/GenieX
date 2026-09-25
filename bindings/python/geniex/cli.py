@@ -587,9 +587,7 @@ def _build_parser() -> argparse.ArgumentParser:
     devices = sub.add_parser('devices', help='List available plugins and devices')
     devices.set_defaults(func=_cmd_devices)
 
-    ver = sub.add_parser(
-        'version', help='Print binding, SDK, QAIRT, and llama.cpp versions'
-    )
+    ver = sub.add_parser('version', help='Print binding, SDK, QAIRT, and llama.cpp versions')
     ver.set_defaults(func=_cmd_version)
 
     return parser
