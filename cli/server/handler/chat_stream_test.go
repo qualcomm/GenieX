@@ -94,6 +94,31 @@ func TestStreamToolCallSeparatesReasoning(t *testing.T) {
 	}
 }
 
+func TestStreamMiniCPM5SpecialTokens(t *testing.T) {
+	// The four XML delimiters are separate control tokens in MiniCPM5's
+	// vocabulary. The runtime must render them before passing them here.
+	got := runStreamToolCall(t, plainClass,
+		"<function", ` name="get_weather">`, "<param", ` name="city">`,
+		"Beijing", "</param>", "</function>")
+	var content strings.Builder
+	var calls []toolCallDelta
+	for _, ch := range got {
+		content.WriteString(ch.Delta.Content)
+		for _, tc := range ch.Delta.ToolCalls {
+			calls = append(calls, toolCallDelta{int(tc.Index), tc.Function.Name, tc.Function.Arguments})
+		}
+	}
+	if content.Len() != 0 {
+		t.Errorf("XML leaked into content: %q", content.String())
+	}
+	if len(calls) != 1 || calls[0] != (toolCallDelta{0, "get_weather", `{"city":"Beijing"}`}) {
+		t.Errorf("calls = %+v", calls)
+	}
+	if reason := got[len(got)-1].FinishReason; reason == nil || *reason != "tool_calls" {
+		t.Errorf("finish_reason = %v, want tool_calls", reason)
+	}
+}
+
 // Parallel calls need a rising index, and plain text needs no tool_calls finish.
 func TestStreamToolCallIndexes(t *testing.T) {
 	got := runStreamToolCall(t, plainClass,

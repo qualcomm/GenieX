@@ -17,6 +17,25 @@ tests/
 └── _quality_data.py       # Keyword-quality prompts shared by both plugins
 ```
 
+## MiniCPM5 HTTP tool calls
+
+With a built GenieX CLI, pull the official model and start the server in one
+terminal, then run the standalone standard-library test in another:
+
+```bash
+geniex pull openbmb/MiniCPM5-1B-GGUF:Q4_K_M
+geniex serve --compute cpu --ngl 0
+python tests/http/minicpm5.py --model openbmb/MiniCPM5-1B-GGUF:Q4_K_M --output /tmp/minicpm5-http
+```
+
+The model name is resolved on the server. `--url` selects a different server
+(default `http://127.0.0.1:18181`). This is an opt-in real-model test, separate
+from the model-free CI suite. It checks blocking and streaming tool calls,
+JSON arguments, call IDs, the `tool_calls` finish reason, tool-result follow-up
+turns, and ordinary chat. Saved requests and responses provide a reproducible
+record. Unlike scanner-only tests, these requests pass through chat-template
+application, inference, special-token decoding, and HTTP serialization.
+
 ## What each plugin covers
 
 Every plugin file ships the same behavioural cases, plus an explicit

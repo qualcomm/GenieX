@@ -110,6 +110,7 @@ type ToolCallScanner struct {
 func NewToolCallScanner() *ToolCallScanner {
 	return &ToolCallScanner{formats: []toolCallFormat{
 		newGemma4ToolCall(),
+		newMiniCPM5ToolCall(),
 		newQwen3ToolCall(),
 		newQwen35ToolCall(),
 		newGptOssToolCall(),

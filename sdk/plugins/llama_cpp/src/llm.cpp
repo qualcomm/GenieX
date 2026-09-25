@@ -421,8 +421,15 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
             return false;
         }
 
+        // MiniCPM5's XML delimiters are control tokens. Keep them for the
+        // HTTP tool-call scanner, in both callbacks and full_text, without
+        // exposing unrelated control tokens or depending on the model filename.
+        const char* token          = llama_vocab_get_text(vocab, id);
+        const bool  xml_tool_token = strcmp(token, "<function") == 0 || strcmp(token, "</function>") == 0 ||
+                                    strcmp(token, "<param") == 0 || strcmp(token, "</param>") == 0;
         char token_buf[64];
-        int  n = llama_token_to_piece(vocab, id, token_buf, sizeof(token_buf) - 1, 0, this->allow_special_tokens);
+        int  n = llama_token_to_piece(
+            vocab, id, token_buf, sizeof(token_buf) - 1, 0, this->allow_special_tokens || xml_tool_token);
         if (n < 0) {
             res = GENIEX_ERROR_LLM_GENERATION_FAILED;
             return false;
