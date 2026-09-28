@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import json
 import platform
+import random
 from pathlib import Path
 
 import geniex
 import pytest
+from geniex._ffi._api import GENIEX_ERROR_COMMON_INVALID_INPUT
 
 from _models import matrix, primary, pull_cells
 from _quality_data import (
@@ -254,6 +256,58 @@ def test_llm_logits_parity(llama_cpp_llm_paths, device_map):
     kl = parity_kl_divergence(ref_last, cand_last)
     assert agree >= PARITY_TOP1_MIN, f'device_map={device_map!r} top1={agree:.3f} < {PARITY_TOP1_MIN}'
     assert kl <= PARITY_KL_MAX, f'device_map={device_map!r} KL={kl:.4f} > {PARITY_KL_MAX}'
+
+
+@pytest.mark.llm
+@pytest.mark.parametrize('device_map', ['cpu'])
+def test_llm_model_info_embd_dim(llama_cpp_llm_paths, device_map):
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        _LLM.id,
+        precision=_LLM.precision,
+        device_map=device_map,
+    ) as llm:
+        assert llm.embd_dim > 0, 'llama_cpp should report a positive embd_dim'
+
+
+@pytest.mark.llm
+@pytest.mark.parametrize('device_map', ['cpu'])
+def test_llm_generate_input_embd_smoke(llama_cpp_llm_paths, device_map):
+    # No public API exposes the model's own token-embedding table, so this
+    # can't assert semantic parity with a text prompt — it only proves the
+    # input_embd decode path runs end-to-end (batches, advances KV, samples)
+    # without crashing on arbitrary (but correctly-shaped) float rows.
+    random.seed(0)
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        _LLM.id,
+        precision=_LLM.precision,
+        device_map=device_map,
+    ) as llm:
+        dim = llm.embd_dim
+        assert dim > 0
+        n_rows = 4
+        embd = [random.uniform(-1.0, 1.0) for _ in range(n_rows * dim)]
+        out = llm.generate(
+            input_embd=embd,
+            input_embd_dim=dim,
+            max_new_tokens=8,
+            temperature=GREEDY_TEMPERATURE,
+            seed=LLM_QUALITY_SEED,
+        )
+        assert out.profile.generated_tokens > 0
+
+
+@pytest.mark.llm
+@pytest.mark.parametrize('device_map', ['cpu'])
+def test_llm_generate_input_embd_dimension_mismatch(llama_cpp_llm_paths, device_map):
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        _LLM.id,
+        precision=_LLM.precision,
+        device_map=device_map,
+    ) as llm:
+        wrong_dim = llm.embd_dim + 1
+        with pytest.raises(geniex.GenieXError) as excinfo:
+            llm.generate(input_embd=[0.0] * wrong_dim, input_embd_dim=wrong_dim, max_new_tokens=1)
+        assert excinfo.value.code == GENIEX_ERROR_COMMON_INVALID_INPUT
 
 
 @pytest.mark.llm

@@ -75,9 +75,15 @@ class LlmWrapper private constructor(
             runCatching { llm.applyChatTemplate(handle, messages, tools, enableThinking, addGenerationPrompt) }
         }
 
-    // Generate tokens with streaming using Kotlin Flow
+    // Generate tokens with streaming using Kotlin Flow.
+    // At most one of inputIds / inputEmbd should be provided; when both are
+    // null, prompt is used. inputEmbdDim is required (and must match the
+    // model's expected width) when inputEmbd is provided.
     fun generateStreamFlow(
-        prompt: String,
+        prompt: String? = null,
+        inputIds: IntArray? = null,
+        inputEmbd: FloatArray? = null,
+        inputEmbdDim: Int = 0,
         config: GenerationConfig
     ): Flow<LlmStreamResult> = callbackFlow {
         withContext(dispatcher) {
@@ -93,7 +99,7 @@ class LlmWrapper private constructor(
                 }
             }
             try {
-                val result = llm.generate(handle, prompt, config, callback)
+                val result = llm.generate(handle, prompt, inputIds, inputEmbd, inputEmbdDim, config, callback)
                 // FIXME: result is null here when a callback is supplied.
                 Log.d(TAG, "llm result:$result")
             } catch (e: Exception) {

@@ -218,7 +218,12 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     if (!pipeline_) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
-    bool has_input_ids = input->input_ids != nullptr && input->input_ids_count > 0;
+    bool has_input_embd = input->input_embd != nullptr && input->input_embd_count > 0;
+    bool has_input_ids  = input->input_ids != nullptr && input->input_ids_count > 0;
+
+    // QAIRT's pipeline runs a fixed NPU context-binary graph with no concept of
+    // raw embedding input; only llama_cpp can decode a caller-supplied embedding batch.
+    if (has_input_embd) return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
 
     if (!has_input_ids && !input->prompt_utf8) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 

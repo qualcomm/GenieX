@@ -55,6 +55,8 @@ std::vector<std::string> jstringArray2vec(JNIEnv* env, jobjectArray arr);
 
 std::vector<int32_t> jintArray2vec(JNIEnv* env, jintArray arr);
 
+std::vector<float> jfloatArray2vec(JNIEnv* env, jfloatArray arr);
+
 geniex_LlmCreateInput extract_llm_create_input(JNIEnv* env, jobject inputObj);
 
 geniex_VlmCreateInput extract_vlm_create_input(JNIEnv* env, jobject inputObj);

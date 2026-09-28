@@ -23,7 +23,10 @@ internal class Llm {
 
     external fun generate(
         handle: Long,
-        prompt: String,
+        prompt: String?,
+        inputIds: IntArray?,
+        inputEmbd: FloatArray?,
+        inputEmbdDim: Int,
         config: GenerationConfig,
         cb: LLMTokenCallback
     ): LlmGenerateResult

@@ -123,7 +123,9 @@ class GenieXError(Exception):
 
 # Subset of geniex_ErrorCode values that callers may want to check against.
 # Keep aligned with sdk/include/geniex.h; expand on demand.
+GENIEX_ERROR_COMMON_INVALID_INPUT = -100001
 GENIEX_ERROR_COMMON_PLUGIN_INVALID = -100302
+GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED = -100016
 GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH = -200004
 GENIEX_ERROR_VLM_PREFIX_REUSE_FAILED = -201202
 

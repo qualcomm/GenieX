@@ -70,9 +70,12 @@ extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_jni_Llm_destroy(JNIEnv*, j
     return 0;
 }
 
-// JNI: generate - Generate text with streaming support
-extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Llm_generate(
-    JNIEnv* env, jobject /*thiz*/, jlong handle, jstring prompt, jobject configObj, jobject callback) {
+// JNI: generate - Generate text with streaming support. At most one of
+// inputIds / inputEmbd should be non-null; when both are null, prompt is used.
+// Priority when several are set: inputEmbd > inputIds > prompt (matches the C
+// header's geniex_LlmGenerateInput contract).
+extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Llm_generate(JNIEnv* env, jobject /*thiz*/, jlong handle,
+    jstring prompt, jintArray inputIds, jfloatArray inputEmbd, jint inputEmbdDim, jobject configObj, jobject callback) {
     try {
         void* h = (void*)handle;
 
@@ -85,13 +88,30 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Llm_generate(
             stop_flag      = g_stopFlags[h];
         }
 
-        std::string             cprompt = jstring2str(env, prompt);
+        std::string             cprompt = prompt ? jstring2str(env, prompt) : std::string();
         geniex_GenerationConfig cfg     = extract_generation_config(env, configObj);
+
+        std::vector<int32_t> ids;
+        std::vector<float>   embd;
+        if (inputEmbd) {
+            embd = jfloatArray2vec(env, inputEmbd);
+        } else if (inputIds) {
+            ids = jintArray2vec(env, inputIds);
+        }
 
         geniex_LlmGenerateInput  input  = {};
         geniex_LlmGenerateOutput output = {};
-        input.prompt_utf8               = cprompt.c_str();
-        input.config                    = &cfg;
+        if (!embd.empty()) {
+            input.input_embd       = embd.data();
+            input.input_embd_count = static_cast<int32_t>(inputEmbdDim > 0 ? embd.size() / inputEmbdDim : 0);
+            input.input_embd_dim   = inputEmbdDim;
+        } else if (!ids.empty()) {
+            input.input_ids       = ids.data();
+            input.input_ids_count = static_cast<int32_t>(ids.size());
+        } else {
+            input.prompt_utf8 = cprompt.c_str();
+        }
+        input.config = &cfg;
 
         JavaCallbackCtx cbCtx{};
         if (callback) {

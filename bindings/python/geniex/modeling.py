@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import os
-from ctypes import POINTER, byref, c_char_p, c_int32, c_void_p, cast, pointer, string_at
+from ctypes import POINTER, byref, c_char_p, c_float, c_int32, c_void_p, cast, pointer, string_at
 
 from ._ffi._api import GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH, _check, _str_list_to_c, load_library
 from ._ffi._types import (
@@ -20,6 +20,7 @@ from ._ffi._types import (
     geniex_LlmForwardLogitsOutput,
     geniex_LlmGenerateInput,
     geniex_LlmGenerateOutput,
+    geniex_LlmModelInfo,
     geniex_SamplerConfig,
     geniex_token_callback,
     geniex_ToolCall,
@@ -182,6 +183,15 @@ class GenieXLLM:
         detected = self._meta.get('supports_thinking')
         return True if detected is None else bool(detected)
 
+    @property
+    def embd_dim(self) -> int:
+        """Expected row width for ``generate(input_embd=..., input_embd_dim=...)``,
+        or 0 if this backend cannot report it / doesn't support embedding input."""
+        lib = load_library()
+        info = geniex_LlmModelInfo()
+        _check(lib.geniex_llm_get_model_info(self._handle, byref(info)))
+        return int(info.embd_dim)
+
     def _apply_chat_template(
         self,
         messages: list[dict],
@@ -219,7 +229,7 @@ class GenieXLLM:
 
     def generate(
         self,
-        prompt: str,
+        prompt: str | None = None,
         *,
         max_new_tokens: int = 512,
         # 0 = defer to bundle/plugin default. Pass non-zero to override.
@@ -237,14 +247,31 @@ class GenieXLLM:
         # Opt-in ring-buffer context eviction (qairt only).
         sliding_window: bool = False,
         sliding_window_n_keep: int = 0,
+        # Caller-supplied embedding input (llama_cpp only), alternative to prompt.
+        # input_embd is a flat row-major [n_rows, input_embd_dim] float list; n_rows
+        # is inferred from len(input_embd) // input_embd_dim. input_embd_dim must
+        # match the model's expected width (see forward_logits' sibling metadata,
+        # geniex_LlmModelInfo.embd_dim). Special tokens are the caller's responsibility.
+        input_embd: list[float] | None = None,
+        input_embd_dim: int = 0,
         **_kwargs,
     ) -> GenerateOutput | TextIteratorStreamer:
-        """Generate text from ``prompt``.
+        """Generate text from ``prompt``, or from ``input_embd`` (llama_cpp only).
 
         Returns a :class:`GenerateOutput` when ``stream=False`` (default),
         or a :class:`TextIteratorStreamer` that yields token chunks and
         exposes ``.output`` once the generation thread finishes.
         """
+        if input_embd is not None:
+            if not input_embd:
+                raise ValueError('input_embd must be non-empty')
+            if input_embd_dim <= 0:
+                raise ValueError('input_embd_dim must be > 0 when input_embd is provided')
+            if len(input_embd) % input_embd_dim != 0:
+                raise ValueError('len(input_embd) must be a multiple of input_embd_dim')
+        elif prompt is None:
+            raise ValueError('either prompt or input_embd must be provided')
+
         stop = stop or []
         sampler = _build_sampler(
             temperature,
@@ -262,22 +289,34 @@ class GenieXLLM:
         )
 
         if stream:
-            return self._generate_stream(prompt, cfg, sampler, _sa, _ia, _aa)
-        return self._generate_blocking(prompt, cfg, sampler, _sa, _ia, _aa)
+            return self._generate_stream(
+                prompt, cfg, sampler, _sa, _ia, _aa, input_embd=input_embd, input_embd_dim=input_embd_dim
+            )
+        return self._generate_blocking(
+            prompt, cfg, sampler, _sa, _ia, _aa, input_embd=input_embd, input_embd_dim=input_embd_dim
+        )
 
-    def _generate_blocking(self, prompt: str, cfg, sampler, *_keep) -> GenerateOutput:
+    def _build_generate_input(self, prompt, cfg, on_token, input_embd, input_embd_dim):
+        kwargs: dict = dict(config=pointer(cfg), on_token=on_token, user_data=None)
+        if input_embd is not None:
+            n = len(input_embd)
+            EmbdArray = c_float * n
+            embd = EmbdArray(*[float(v) for v in input_embd])
+            kwargs['input_embd'] = cast(embd, POINTER(c_float))
+            kwargs['input_embd_count'] = n // input_embd_dim
+            kwargs['input_embd_dim'] = input_embd_dim
+        else:
+            kwargs['prompt_utf8'] = prompt.encode()
+        return geniex_LlmGenerateInput(**kwargs)
+
+    def _generate_blocking(self, prompt, cfg, sampler, *_keep, input_embd=None, input_embd_dim=0) -> GenerateOutput:
         lib = load_library()
 
         @geniex_token_callback
         def _noop(token, _ud):
             return True
 
-        inp = geniex_LlmGenerateInput(
-            prompt_utf8=prompt.encode(),
-            config=pointer(cfg),
-            on_token=_noop,
-            user_data=None,
-        )
+        inp = self._build_generate_input(prompt, cfg, _noop, input_embd, input_embd_dim)
         out = geniex_LlmGenerateOutput()
         rc = lib.geniex_llm_generate(self._handle, byref(inp), byref(out))
         full = _decode_utf8(out.full_text)
@@ -294,18 +333,13 @@ class GenieXLLM:
         _check(rc)
         return GenerateOutput.from_raw(full, profile)
 
-    def _generate_stream(self, prompt: str, cfg, sampler, *_keep) -> TextIteratorStreamer:
+    def _generate_stream(self, prompt, cfg, sampler, *_keep, input_embd=None, input_embd_dim=0) -> TextIteratorStreamer:
         streamer = TextIteratorStreamer()
         cb = streamer._make_callback()
 
         def _run() -> GenerateOutput:
             lib = load_library()
-            inp = geniex_LlmGenerateInput(
-                prompt_utf8=prompt.encode(),
-                config=pointer(cfg),
-                on_token=cb,
-                user_data=None,
-            )
+            inp = self._build_generate_input(prompt, cfg, cb, input_embd, input_embd_dim)
             out = geniex_LlmGenerateOutput()
             rc = lib.geniex_llm_generate(self._handle, byref(inp), byref(out))
             full = _decode_utf8(out.full_text)
