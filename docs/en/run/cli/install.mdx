@@ -20,7 +20,7 @@ The CLI ships as a native Windows ARM64 executable, and as a Linux ARM64 Docker 
       Latest GenieX CLI for Windows ARM64. Click the downloaded `.exe` and follow the prompts.
     </Card>
 
-    The installer is not yet code-signed — Windows SmartScreen will warn you. Click **More info → Run anyway**.
+    Release builds are Authenticode-signed, so Windows SmartScreen and Smart App Control trust them. On an older unsigned build, Windows SmartScreen warns — click **More info → Run anyway**. If Smart App Control still blocks a DLL, see [Troubleshooting → Windows Smart App Control](/en/resources/troubleshooting#windows-smart-app-control-blocks-a-geniex-dll).
 
     ### **Add to PATH**
 

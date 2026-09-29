@@ -13,7 +13,16 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="Windows SmartScreen blocks the CLI installer">
-    The `.exe` is not yet code-signed. Click **More info → Run anyway** in the SmartScreen dialog.
+    Release builds are Authenticode-signed, so SmartScreen trusts them. On an older unsigned build, click **More info → Run anyway** in the SmartScreen dialog.
+  </Accordion>
+
+  <Accordion title="Windows Smart App Control blocks a GenieX DLL">
+    Smart App Control only runs signed, reputable binaries — unsigned builds are blocked, so the CLI may not start fully. Release builds are Authenticode-signed and trusted.
+
+    If you're on an older or self-built unsigned build:
+    1. Re-download the latest release from the [CLI install](/en/run/cli/install) page.
+    2. If it's still blocked, temporarily turn off Smart App Control: **Windows Security → App & browser control → Smart App Control settings → Off** (re-enable it afterwards), or run `geniex` from a PowerShell session that isn't subject to the block.
+    3. On managed devices, have your IT admin allow the publisher.
   </Accordion>
 </AccordionGroup>
 
