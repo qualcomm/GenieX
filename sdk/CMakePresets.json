@@ -2,6 +2,28 @@
   "version": 5,
   "configurePresets": [
     {
+      "name": "x64-windows-cuda-release",
+      "displayName": "Experimental Windows x64 CUDA SDK",
+      "inherits": ["release", "base"],
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "GENIEX_PLUGIN_LLAMA_CPP": "ON",
+        "GENIEX_PLUGIN_QAIRT": "OFF",
+        "GENIEX_CPU_ONLY": "OFF",
+        "GENIEX_BENCHMARK": "OFF",
+        "GGML_CUDA": "ON",
+        "GGML_HEXAGON": "OFF",
+        "GGML_OPENCL": "OFF",
+        "GGML_OPENMP": "OFF",
+        "CMAKE_CUDA_ARCHITECTURES": "native"
+      }
+    },
+    {
       "name": "base",
       "hidden": true,
       "binaryDir": "${sourceDir}/build-${presetName}"
@@ -184,6 +206,10 @@
     }
   ],
   "buildPresets": [
+    {
+      "name": "x64-windows-cuda-release",
+      "configurePreset": "x64-windows-cuda-release"
+    },
     {
       "name": "default",
       "configurePreset": "default",

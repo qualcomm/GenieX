@@ -30,6 +30,10 @@ The `arm64-windows-snapdragon-release` preset requires:
 
 ## Build the SDK
 
+For an experimental source-only Windows x64 / NVIDIA build, see
+[Windows x64 CUDA SDK](windows-x64-cuda.md). This does not change the supported
+Snapdragon release platforms.
+
 ### Windows ARM64 (Snapdragon)
 
 > [!NOTE]
