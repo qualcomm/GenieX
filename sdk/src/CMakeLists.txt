@@ -86,4 +86,7 @@ install(TARGETS geniex
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION lib)
 
-install(FILES ${CMAKE_SOURCE_DIR}/include/geniex.h DESTINATION include)
+install(FILES
+    ${CMAKE_SOURCE_DIR}/include/geniex.h
+    ${CMAKE_SOURCE_DIR}/include/power_mode_alias.h
+    DESTINATION include)

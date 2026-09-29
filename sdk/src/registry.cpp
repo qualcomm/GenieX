@@ -1,8 +1,6 @@
 // Copyright (c) 2024-2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-
-
 #if defined(_WIN32)
 #include <windows.h>
 #else

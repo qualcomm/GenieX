@@ -7,7 +7,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <nlohmann/json.hpp>
 #include <sstream>
 #include <vector>
 
@@ -49,6 +48,11 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
     // a prior release_sessions crashes the load even on cpu / gpu targets.
     {
         if (htp::htp_backend_present()) {
+            if (device == Device::NPU) {
+                htp::set_power_mode(config.power_mode);
+            } else if (config.power_mode != GENIEX_POWER_MODE_BURST) {
+                GENIEX_LOG_WARN("power_mode is only meaningful on the NPU device; ignoring on this device");
+            }
             htp::reacquire_before_load();
         }
     }
@@ -60,7 +64,6 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
         bool is_gpt_oss_model =
             (model_path_lower.find("gpt") != std::string::npos) && (model_path_lower.find("oss") != std::string::npos);
 
-        this->allow_special_tokens = is_gpt_oss_model;
         if (is_gpt_oss_model) {
             tensor_overrides[0]        = {"\\.ffn_(up|down|gate)_exps\\.(weight|bias)", ggml_backend_cpu_buffer_type()};
             tensor_overrides[1]        = {nullptr, nullptr};  // Null terminator
@@ -191,10 +194,17 @@ int32_t LlamaLlm::apply_chat_template(
     common_messages.reserve(input->message_count);
 
     for (int32_t i = 0; i < input->message_count; ++i) {
+        const geniex_LlmChatMessage& src = input->messages[i];
+        if (!src.role) {
+            GENIEX_LOG_ERROR("messages[{}] has null role", i);
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
         common_chat_msg msg;
-        msg.role    = input->messages[i].role;
-        msg.content = input->messages[i].content;
-        common_messages.push_back(msg);
+        msg.role = src.role;
+        // An assistant turn that only issues tool calls carries no content.
+        if (src.content) msg.content = src.content;
+        apply_tool_fields(msg, src.tool_calls, src.tool_call_count, src.tool_call_id, src.tool_name);
+        common_messages.push_back(std::move(msg));
     }
 
     // Initialize chat templates
@@ -209,7 +219,7 @@ int32_t LlamaLlm::apply_chat_template(
     inputs.add_generation_prompt = input->add_generation_prompt;
 
     if (input->tools && strlen(input->tools) > 0) {
-        inputs.tools = common_chat_tools_parse_oaicompat(nlohmann::ordered_json::parse(std::string(input->tools)));
+        inputs.tools = common_chat_tools_parse_oaicompat(common_json::parse(std::string(input->tools)));
     }
 
     inputs.enable_thinking = input->enable_thinking;
@@ -411,7 +421,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         }
 
         char token_buf[64];
-        int  n = llama_token_to_piece(vocab, id, token_buf, sizeof(token_buf) - 1, 0, this->allow_special_tokens);
+        int  n = llama_token_to_piece(vocab, id, token_buf, sizeof(token_buf) - 1, 0, /*special=*/true);
         if (n < 0) {
             res = GENIEX_ERROR_LLM_GENERATION_FAILED;
             return false;

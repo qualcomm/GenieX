@@ -18,12 +18,15 @@
 #define portable_strdup strdup
 #endif
 
+#include "chat_message_utils.h"
 #include "dispatch.h"               // provided by geniex-qairt/models/
 #include "geniex-proc/tokenizer.h"  // ApplyChatTemplateOptions
 #include "geniex-proc/types.h"      // ChatMessage, Role
 #include "llm/llm_spec_loader.h"    // parseGenieSamplerConfig
 #include "logging.h"
+#include "metadata_utils.h"
 #include "pipeline/llm_pipeline.h"
+#include "power_mode_utils.h"
 #include "qnn_runtime_utils.h"
 #include "sampler_config_utils.h"
 #include "types.h"
@@ -33,8 +36,6 @@ namespace fs = std::filesystem;
 namespace geniex {
 
 namespace {
-// Default system prompt used on the first turn when the caller does not supply one
-// via a `system` role chat message.
 constexpr const char* kDefaultSystemPrompt = "You are a helpful AI assistant.";
 }  // namespace
 
@@ -59,6 +60,9 @@ int32_t QairtLlm::create(const geniex_LlmCreateInput* input) {
     fs::path model_path(input->model_path);
     fs::path model_dir = model_path.parent_path();
 
+    const auto chat_template_metadata = qairt::read_chat_template_metadata(model_dir);
+    default_system_prompt_            = chat_template_metadata.default_system_prompt;
+    if (default_system_prompt_.empty()) default_system_prompt_ = kDefaultSystemPrompt;
     bundle_sampler_ = parseGenieSamplerConfig(model_dir);
 
     QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(model_dir);
@@ -75,6 +79,7 @@ int32_t QairtLlm::create(const geniex_LlmCreateInput* input) {
         GENIEX_LOG_ERROR("Failed to resolve QAIRT bundle layout in {}: {}", model_dir.string(), e.what());
         return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
+    qairt::apply_power_mode(input->config.power_mode, model_cfg);
 
     GENIEX_LOG_DEBUG("Found {} model shards in {}", model_cfg.model_paths.size(), model_dir.string());
 
@@ -153,9 +158,8 @@ int32_t QairtLlm::apply_chat_template(
     }
 
     // Copy the FFI message array into the typed shape the new stateless
-    // applyChatTemplate() expects. Anything not in geniex_LlmChatMessage
-    // (tool_calls, reasoning_content, ...) is left default-empty; extending
-    // the FFI to carry those is its own change.
+    // applyChatTemplate() expects. reasoning_content has no FFI field yet and
+    // stays default-empty.
     std::vector<ChatMessage> messages;
     messages.reserve(static_cast<std::size_t>(input->message_count - start_idx) + 1);
     bool has_system = false;
@@ -180,12 +184,13 @@ int32_t QairtLlm::apply_chat_template(
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
         if (m.content) out.content = m.content;
+        qairt::apply_tool_fields(out, m.tool_calls, m.tool_call_count, m.tool_call_id, m.tool_name);
         messages.push_back(std::move(out));
     }
-    if (is_first_turn_ && !has_system) {
+    if (is_first_turn_ && !has_system && !default_system_prompt_.empty()) {
         ChatMessage sys;
         sys.role    = Role::System;
-        sys.content = kDefaultSystemPrompt;
+        sys.content = default_system_prompt_;
         messages.insert(messages.begin(), std::move(sys));
     }
 
@@ -215,12 +220,6 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
     bool has_input_ids = input->input_ids != nullptr && input->input_ids_count > 0;
 
-    // Reject llama.cpp-only parameters that have no meaning in the QAIRT plugin
-    if (input->config && input->config->stop && input->config->stop_count > 0) {
-        GENIEX_LOG_ERROR("--stop / --stop-file (stop sequences) is not supported by the qairt plugin");
-        return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
-    }
-
     if (!has_input_ids && !input->prompt_utf8) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
     // Map geniex_GenerationConfig -> geniex::GenerationConfig
@@ -228,6 +227,18 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     if (input->config) {
         gen_cfg.max_tokens = input->config->max_tokens > 0 ? input->config->max_tokens : 512;
         qairt::apply_sampler_config(input->config->sampler_config, gen_cfg, bundle_sampler_);
+
+        // Stop sequences are handled natively by the pipeline's generateTokens
+        // (byte-level matching across tokens, mirroring llama_cpp).
+        gen_cfg.stop_sequences.clear();
+        if (input->config->stop && input->config->stop_count > 0) {
+            gen_cfg.stop_sequences.reserve(static_cast<std::size_t>(input->config->stop_count));
+            for (int32_t i = 0; i < input->config->stop_count; ++i) {
+                if (input->config->stop[i]) {
+                    gen_cfg.stop_sequences.emplace_back(input->config->stop[i]);
+                }
+            }
+        }
 
         // Opt-in ring-buffer context eviction. llama_cpp
         // ignores this field (it always context-shifts).
@@ -274,6 +285,8 @@ int32_t QairtLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         output->profile_data.stop_reason = "user";
     } else if (result.stop_reason == "length") {
         output->profile_data.stop_reason = "length";
+    } else if (result.stop_reason == "stop_sequence") {
+        output->profile_data.stop_reason = "stop_sequence";
     } else if (result.stop_reason == "context_length") {
         output->profile_data.stop_reason = "length";
         GENIEX_LOG_WARN("QAIRT generate: context length exceeded (partial result populated)");

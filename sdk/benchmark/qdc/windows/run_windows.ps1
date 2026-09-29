@@ -8,21 +8,27 @@
 # substitutes:
 #   {MODELS}  → `name|plugin|csv_devices|model_id|vlm|image` lines
 #   {CHIPSET} → AI Hub chipset slug (e.g. qualcomm-snapdragon-x-elite)
+#   {MODE}    → `bench` or `accuracy`
+#   {THINK}   → `--think` or `--no-think` (accuracy only)
 # Each cell's column-4 model_id is resolved on the device by the model-
 # manager C API (multi-connection HTTPS, byte-range resume) on first
 # reference; the cached copy is reused across the ctx sweep — replacing
 # the Invoke-WebRequest loop the previous script ran (which OOMed on
 # >~7 GB GGUFs on X2 Elite).
 #
-# We sweep ctx in {512, 1024, 4096} per cell to align with test-llama.cpp's
-# PERFORMANCE SESSION. Three buckets, each with its own per-ctx TSV so
-# their invocations don't mix:
-#   - llama_cpp cells use random-ids prefill (`-p N`);
-#   - qairt cells go through prompt_utf8 with `sample_prompt_${ctx}.txt`
-#     because the plugin doesn't accept pre-tokenized input_ids (#1008);
-#   - spec (llama_cpp speculative-decoding) cells share random-ids
-#     prefill and additionally pass --spec-type/--draft-model/--draft-tokens
-#     as CLI-level flags per matrix invocation.
+# Two modes share the model plan:
+#   bench    — ctx sweep {512, 1024, 4096} for speed, in three buckets that
+#              each get their own per-ctx TSV so their invocations don't mix:
+#                - llama_cpp cells use random-ids prefill (`-p N`);
+#                - qairt cells go through prompt_utf8 with
+#                  `sample_prompt_${ctx}.txt` because the plugin doesn't accept
+#                  pre-tokenized input_ids (#1008);
+#                - spec (llama_cpp speculative-decoding) cells share random-ids
+#                  prefill and additionally pass --spec-type/--draft-model/
+#                  --draft-tokens as CLI-level flags per matrix invocation.
+#   accuracy — one pass over the same chat-templated prompt file for every cell,
+#              so one TSV covers them all; the `[gen ]` lines geniex-bench
+#              prints are the result, not the timings.
 
 $ErrorActionPreference = "Continue"
 
@@ -57,6 +63,12 @@ $rows = @'
 '@ -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
 
 $IMG = "$TC/test.png" -replace '\\', '/'
+$MODE = "{MODE}"
+$THINK = "{THINK}"  # accuracy only
+$ACC_TSV = "C:\Temp\matrix-accuracy.tsv"
+# Same host is reused across jobs: a stale accuracy.log would be uploaded as if
+# this job had generated it.
+Remove-Item $ACC_TSV, "$LOG\accuracy.log" -ErrorAction SilentlyContinue
 
 # Sweep dimensions come from workflow inputs (with defaults filled host-side).
 # ctxList / ppList / tgList are parallel arrays of equal length.
@@ -84,12 +96,16 @@ foreach ($row in $rows) {
     if ($bucket -ne "qairt") { $vlm = ""; $image = "" }
     $imgpath = if ($image -eq "1") { $IMG } else { "" }
     foreach ($d in $devs -split ',') {
-        foreach ($ctx in $ctxList) {
+        # accuracy collects every cell in one TSV at a single ctx; bench spreads
+        # them over per-(bucket, ctx) files.
+        $planCtx = if ($MODE -eq "accuracy") { @($ctxList[0]) } else { $ctxList }
+        foreach ($ctx in $planCtx) {
             # Columns 5/6 (tokenizer/mmproj) intentionally blank: the model
             # manager fills both from the resolved manifest.
+            $tsv = if ($MODE -eq "accuracy") { $ACC_TSV } else { $tsvByPluginCtx["$bucket-$ctx"] }
             "{0}-{1}-{2}-c{3}`t{1}`t{2}`t{4}`t`t`t{5}`t{6}" -f `
                 $name, $plugin, $d, $ctx, $model_id, $imgpath, $vlm `
-                | Add-Content $tsvByPluginCtx["$bucket-$ctx"]
+                | Add-Content $tsv
             if ($bucket -eq "spec") {
                 $specParamsByCtx["$ctx"] = @{
                     type   = $spec_type
@@ -101,49 +117,69 @@ foreach ($row in $rows) {
     }
 }
 
-for ($i = 0; $i -lt $ctxList.Count; $i++) {
-    $ctx = $ctxList[$i]
-    $pp  = $ppList[$i]
-    $tg  = $tgList[$i]
-    $llamaTsv = $tsvByPluginCtx["llama-$ctx"]
-    $qairtTsv = $tsvByPluginCtx["qairt-$ctx"]
+if ($MODE -eq "accuracy") {
+    # --accuracy pins --warmup 0 -r 1.
+    $ctx = $ctxList[0]
+    $tg = $tgList[0]
+    Write-Output "=== matrix accuracy ctx=$ctx tg=$tg $THINK (prompt-file) ==="
+    Get-Content $ACC_TSV
+    # Start-Transcript does not capture a native command's stdout, so the
+    # generated text is collected into its own log. UTF-8 both ways: the
+    # console's ANSI codepage would mojibake non-ASCII output, and the rubric
+    # scores mojibake.
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    $gen = & "$BUNDLE\bin\geniex-bench.exe" --matrix-file $ACC_TSV --output-json-dir "$OUT" `
+        --accuracy --prompt-file "$PROMPTS\accuracy_prompts.txt" `
+        -c $ctx -n $tg $THINK `
+        --mm-data-dir $MM_CACHE --chipset "{CHIPSET}" 2>&1
+    Write-Output "rc=$LASTEXITCODE ($($gen.Count) lines -> accuracy.log)"
+    $gen | Out-File -FilePath "$LOG\accuracy.log" -Encoding utf8
+}
+else {
+    for ($i = 0; $i -lt $ctxList.Count; $i++) {
+        $ctx = $ctxList[$i]
+        $pp  = $ppList[$i]
+        $tg  = $tgList[$i]
+        $llamaTsv = $tsvByPluginCtx["llama-$ctx"]
+        $qairtTsv = $tsvByPluginCtx["qairt-$ctx"]
 
-    if ((Test-Path $llamaTsv) -and ((Get-Item $llamaTsv).Length -gt 0)) {
-        Write-Output "=== matrix llama_cpp ctx=$ctx pp=$pp tg=$tg (random-ids prefill) ==="
-        Get-Content $llamaTsv
-        & "$BUNDLE\bin\geniex-bench.exe" --matrix-file $llamaTsv --output-json-dir "$OUT" -r 3 `
-            -c $ctx -p $pp -n $tg `
-            --mm-data-dir $MM_CACHE --chipset "{CHIPSET}"
-        Write-Output "rc=$LASTEXITCODE  ($((Get-ChildItem $OUT).Count) cell json files so far)"
-    }
+        if ((Test-Path $llamaTsv) -and ((Get-Item $llamaTsv).Length -gt 0)) {
+            Write-Output "=== matrix llama_cpp ctx=$ctx pp=$pp tg=$tg (random-ids prefill) ==="
+            Get-Content $llamaTsv
+            & "$BUNDLE\bin\geniex-bench.exe" --matrix-file $llamaTsv --output-json-dir "$OUT" -r 3 `
+                -c $ctx -p $pp -n $tg `
+                --mm-data-dir $MM_CACHE --chipset "{CHIPSET}"
+            Write-Output "rc=$LASTEXITCODE  ($((Get-ChildItem $OUT).Count) cell json files so far)"
+        }
 
-    if ((Test-Path $qairtTsv) -and ((Get-Item $qairtTsv).Length -gt 0)) {
-        Write-Output "=== matrix qairt ctx=$ctx tg=$tg (prompt-file) ==="
-        Get-Content $qairtTsv
-        & "$BUNDLE\bin\geniex-bench.exe" --matrix-file $qairtTsv --output-json-dir "$OUT" -r 3 `
-            -c $ctx -n $tg --prompt-file "$PROMPTS\sample_prompt_$ctx.txt" `
-            --mm-data-dir $MM_CACHE --chipset "{CHIPSET}"
-        Write-Output "rc=$LASTEXITCODE  ($((Get-ChildItem $OUT).Count) cell json files so far)"
-    }
+        if ((Test-Path $qairtTsv) -and ((Get-Item $qairtTsv).Length -gt 0)) {
+            Write-Output "=== matrix qairt ctx=$ctx tg=$tg (prompt-file) ==="
+            Get-Content $qairtTsv
+            & "$BUNDLE\bin\geniex-bench.exe" --matrix-file $qairtTsv --output-json-dir "$OUT" -r 3 `
+                -c $ctx -n $tg --prompt-file "$PROMPTS\sample_prompt_$ctx.txt" `
+                --mm-data-dir $MM_CACHE --chipset "{CHIPSET}"
+            Write-Output "rc=$LASTEXITCODE  ($((Get-ChildItem $OUT).Count) cell json files so far)"
+        }
 
-    $specTsv = $tsvByPluginCtx["spec-$ctx"]
-    if ((Test-Path $specTsv) -and ((Get-Item $specTsv).Length -gt 0)) {
-        $sp = $specParamsByCtx["$ctx"]
-        # Spec-decoding needs `--draft-tokens` extra KV slots on the last
-        # decode step (target + draft), or llama.cpp trips
-        # "decode: failed to find a memory slot for batch of size N+1".
-        # Bench defaults pp+tg = ctx exactly, so trim tg by that margin.
-        $draftHeadroom = if ($sp.tokens) { [int]$sp.tokens + 1 } else { 4 }
-        $specTg = [Math]::Max(1, [int]$tg - $draftHeadroom)
-        Write-Output "=== matrix spec ctx=$ctx pp=$pp tg=$specTg type=$($sp.type) draft=$($sp.draft) n_max=$($sp.tokens) (random-ids prefill) ==="
-        Get-Content $specTsv
-        $extra = @()
-        if ($sp.tokens) { $extra += @("--draft-tokens", $sp.tokens) }
-        & "$BUNDLE\bin\geniex-bench.exe" --matrix-file $specTsv --output-json-dir "$OUT" -r 1 --no-warmup `
-            -c $ctx -p $pp -n $specTg `
-            --spec-type $sp.type --draft-model $sp.draft @extra `
-            --mm-data-dir $MM_CACHE --chipset "{CHIPSET}"
-        Write-Output "rc=$LASTEXITCODE  ($((Get-ChildItem $OUT).Count) cell json files so far)"
+        $specTsv = $tsvByPluginCtx["spec-$ctx"]
+        if ((Test-Path $specTsv) -and ((Get-Item $specTsv).Length -gt 0)) {
+            $sp = $specParamsByCtx["$ctx"]
+            # Spec-decoding needs `--draft-tokens` extra KV slots on the last
+            # decode step (target + draft), or llama.cpp trips
+            # "decode: failed to find a memory slot for batch of size N+1".
+            # Bench defaults pp+tg = ctx exactly, so trim tg by that margin.
+            $draftHeadroom = if ($sp.tokens) { [int]$sp.tokens + 1 } else { 4 }
+            $specTg = [Math]::Max(1, [int]$tg - $draftHeadroom)
+            Write-Output "=== matrix spec ctx=$ctx pp=$pp tg=$specTg type=$($sp.type) draft=$($sp.draft) n_max=$($sp.tokens) (random-ids prefill) ==="
+            Get-Content $specTsv
+            $extra = @()
+            if ($sp.tokens) { $extra += @("--draft-tokens", $sp.tokens) }
+            & "$BUNDLE\bin\geniex-bench.exe" --matrix-file $specTsv --output-json-dir "$OUT" -r 1 --no-warmup `
+                -c $ctx -p $pp -n $specTg `
+                --spec-type $sp.type --draft-model $sp.draft @extra `
+                --mm-data-dir $MM_CACHE --chipset "{CHIPSET}"
+            Write-Output "rc=$LASTEXITCODE  ($((Get-ChildItem $OUT).Count) cell json files so far)"
+        }
     }
 }
 Write-Output "=== done ==="

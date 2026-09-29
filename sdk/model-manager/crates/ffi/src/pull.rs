@@ -8,7 +8,8 @@ use model_manager_core::config::StoreConfig;
 use model_manager_core::manifest_builder::ManifestHint;
 use model_manager_core::mapping::{
     aihub_display_name_from_repo, canonicalize_model_name, is_llmman_reference,
-    llmman_reference_from_name, llmman_store_name_from_reference, reference_has_tag,
+    is_modelscope_reference, llmman_reference_from_name, llmman_store_name_from_reference,
+    reference_has_tag,
 };
 use model_manager_core::pull::{pull_blocking, PullIntent, PullRequest};
 
@@ -53,8 +54,9 @@ pub struct GenieXModelPullInput {
     pub quant: *const c_char,
     pub hub: GenieXHubSource,
     pub local_path: *const c_char,
-    /// HuggingFace bearer token (NULL = fall back to GENIEX_HFTOKEN env,
-    /// then anonymous). Only meaningful when `hub == GENIEX_HUB_HUGGINGFACE`.
+    /// Hub bearer token (NULL = fall back to `GENIEX_HFTOKEN` env, then
+    /// anonymous). Only meaningful when `hub == GENIEX_HUB_HUGGINGFACE`
+    /// or `hub == GENIEX_HUB_MODELSCOPE`.
     pub hf_token: *const c_char,
     /// Target chipset for AI Hub pulls. Required when
     /// `hub == GENIEX_HUB_AIHUB`; ignored otherwise. Matched against the
@@ -117,6 +119,10 @@ pub(crate) fn build_pull_intent(
             repo: model_name.to_string(),
             token: hf_token,
         },
+        GenieXHubSource::ModelScope => PullIntent::ModelScope {
+            repo: model_name.to_string(),
+            token: hf_token,
+        },
         GenieXHubSource::LocalFs => {
             let path = local_path.ok_or(GENIEX_ERROR_COMMON_INVALID_INPUT)?;
             PullIntent::LocalFs { source_dir: path }
@@ -133,7 +139,8 @@ pub(crate) fn build_pull_intent(
                 chipset,
             }
         }
-        // ModelScope / Volces remain placeholders — fall back to HuggingFace.
+        // Volces remains a placeholder: fall back to HuggingFace. llmman
+        // never reaches this point (it is routed in extract_name_and_intent).
         _ => PullIntent::HuggingFace {
             repo: model_name.to_string(),
             token: hf_token,
@@ -193,6 +200,15 @@ pub(crate) unsafe fn extract_name_and_intent(
         return Ok((store_name, PullIntent::Llmman { reference }));
     }
 
+    // Same reason as llmman above: a pasted ModelScope model-page URL is the
+    // only auto-detectable ModelScope signal, and canonicalisation discards it.
+    let hub = if matches!(inp.hub, GenieXHubSource::Auto) && is_modelscope_reference(raw_model_name)
+    {
+        GenieXHubSource::ModelScope
+    } else {
+        inp.hub
+    };
+
     // Bare names (no '/') land under `qualcomm/<name>`.
     let model_name = canonicalize_model_name(raw_model_name);
 
@@ -208,7 +224,7 @@ pub(crate) unsafe fn extract_name_and_intent(
     let local_path = cstr_to_str(inp.local_path).ok().map(PathBuf::from);
 
     let intent = build_pull_intent(
-        &inp.hub,
+        &hub,
         &model_name,
         hf_token,
         chipset,
@@ -291,4 +307,60 @@ pub extern "C" fn geniex_model_pull(input: *const GenieXModelPullInput) -> i32 {
         pull_blocking(&runtime_handle(), get_store()?, req).map_err(|e| report(&e))?;
         Ok(GENIEX_SUCCESS)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn route(hub: GenieXHubSource, name: &str) -> PullIntent {
+        build_pull_intent(&hub, name, None, String::new(), None, None).unwrap()
+    }
+
+    #[test]
+    fn routes_modelscope_to_modelscope_intent() {
+        let intent = route(GenieXHubSource::ModelScope, "Qwen/Qwen3-0.6B-GGUF");
+        match intent {
+            PullIntent::ModelScope { repo, token } => {
+                assert_eq!(repo, "Qwen/Qwen3-0.6B-GGUF");
+                assert!(token.is_none());
+            }
+            _ => panic!("expected ModelScope intent"),
+        }
+    }
+
+    #[test]
+    fn routes_huggingface_to_huggingface_intent() {
+        let intent = route(GenieXHubSource::HuggingFace, "ggml-org/Qwen3-1.7B-GGUF");
+        assert!(matches!(intent, PullIntent::HuggingFace { .. }));
+    }
+
+    #[test]
+    fn auto_routes_qualcomm_org_to_aihub() {
+        let intent = route(GenieXHubSource::Auto, "qualcomm/Qwen3-4B");
+        assert!(matches!(intent, PullIntent::AiHub { .. }));
+    }
+
+    #[test]
+    fn auto_keeps_other_orgs_on_huggingface() {
+        let intent = route(GenieXHubSource::Auto, "ggml-org/Qwen3-1.7B-GGUF");
+        assert!(matches!(intent, PullIntent::HuggingFace { .. }));
+    }
+
+    #[test]
+    fn modelscope_forward_keeps_token() {
+        let intent = build_pull_intent(
+            &GenieXHubSource::ModelScope,
+            "Qwen/Qwen3-0.6B-GGUF",
+            Some("tok".to_string()),
+            String::new(),
+            None,
+            None,
+        )
+        .unwrap();
+        match intent {
+            PullIntent::ModelScope { token, .. } => assert_eq!(token.as_deref(), Some("tok")),
+            _ => panic!("expected ModelScope intent"),
+        }
+    }
 }

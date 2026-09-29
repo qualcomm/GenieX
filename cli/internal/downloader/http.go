@@ -5,7 +5,6 @@ package downloader
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -92,26 +91,22 @@ func (d *HTTPDownloader) DownloadChunk(ctx context.Context, reqURL string, offse
 		var lastErr error
 		baseDelay := d.retryDelayMs
 		for retry := 0; retry < d.maxRetries; retry++ {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
 			if retry > 0 {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				default:
-				}
 				time.Sleep(time.Duration(baseDelay) * time.Millisecond)
 			}
+			resp.Reset()
 			if err := d.Client.Do(req, resp); err != nil {
 				lastErr = err
-				if errors.Is(err, fasthttp.ErrTimeout) || errors.Is(err, io.EOF) {
-					slog.Warn("Request failed, retrying", "error", err, "retry", retry+1)
-					continue
-				}
-				// Other errors are returned directly
-				return err
-			} else {
-				lastErr = nil
-				break
+				slog.Warn("Request failed, retrying", "error", err, "retry", retry+1)
+				continue
 			}
+			lastErr = nil
+			break
 		}
 		if lastErr != nil {
 			return fmt.Errorf("download failed after %d retries: %w", d.maxRetries, lastErr)

@@ -5,4 +5,5 @@ go_library(
     srcs = ["model.go"],
     importpath = "github.com/qualcomm/GenieX/cli/server/types",
     visibility = ["//cli:__subpackages__"],
+    deps = ["//bindings/go:geniex_sdk_go"],
 )

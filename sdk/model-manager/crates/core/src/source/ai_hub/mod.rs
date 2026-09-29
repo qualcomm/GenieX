@@ -626,6 +626,21 @@ pub(crate) fn classify_from_metadata_json(bytes: &[u8]) -> Option<ModelType> {
     })
 }
 
+/// `metadata.json`'s top-level `"precision"` (e.g. `"w4a16"`); `None` if missing/empty.
+pub(crate) fn precision_from_metadata_json(bytes: &[u8]) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct Outer {
+        #[serde(default)]
+        precision: String,
+    }
+    let outer: Outer = serde_json::from_slice(bytes).ok()?;
+    if outer.precision.is_empty() {
+        None
+    } else {
+        Some(outer.precision)
+    }
+}
+
 /// Modality classifier for the AI Hub source. `domain == MULTIMODAL`
 /// is retained as a positive signal; for `GENERATIVE_AI` models (which
 /// include Qwen2.5-VL), we keyword-match the info.json description +

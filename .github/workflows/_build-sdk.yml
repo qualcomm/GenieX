@@ -18,6 +18,9 @@ on:
         required: false
         type: string
         default: ""
+    secrets:
+      HEXAGON_HTP_CERT_PFX:
+        required: false
 
 permissions:
   contents: read

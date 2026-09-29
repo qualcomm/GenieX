@@ -125,6 +125,7 @@ class GenieXError(Exception):
 # Keep aligned with sdk/include/geniex.h; expand on demand.
 GENIEX_ERROR_COMMON_PLUGIN_INVALID = -100302
 GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH = -200004
+GENIEX_ERROR_VLM_PREFIX_REUSE_FAILED = -201202
 
 
 def _unknown_runtime_message(runtime: str, available: list[str]) -> str:
@@ -159,6 +160,12 @@ def _bind_all() -> None:
 
     lib.geniex_version.argtypes = []
     lib.geniex_version.restype = c_char_p
+
+    lib.geniex_set_qairt_runtime_path.argtypes = [c_char_p]
+    lib.geniex_set_qairt_runtime_path.restype = c_int32
+
+    lib.geniex_get_qairt_runtime_path.argtypes = []
+    lib.geniex_get_qairt_runtime_path.restype = c_char_p
 
     lib.geniex_get_plugin_version.argtypes = [c_char_p]
     lib.geniex_get_plugin_version.restype = c_char_p
@@ -452,6 +459,28 @@ def version() -> str:
     _ensure_bound()
     lib = load_library()
     return lib.geniex_version().decode()
+
+
+def set_qairt_runtime_path(path: str) -> None:
+    """Load the QAIRT runtime from ``path`` instead of the one bundled with the plugin.
+
+    ``path`` is either a QAIRT SDK root or a flat folder of QNN libraries; ``""``
+    restores the bundled runtime. Ignored by other plugins.
+
+    Call before :func:`init`: the QNN libraries load once per process and are never
+    unloaded, so this raises afterwards. An unusable path is reported when the model is
+    created, not here.
+    """
+    _ensure_bound()
+    lib = load_library()
+    _check(lib.geniex_set_qairt_runtime_path(path.encode() if path else None))
+
+
+def get_qairt_runtime_path() -> str:
+    """Return the path set by :func:`set_qairt_runtime_path`, or ``""`` when unset."""
+    _ensure_bound()
+    lib = load_library()
+    return (lib.geniex_get_qairt_runtime_path() or b'').decode()
 
 
 def get_plugin_version(plugin_id: str) -> str:

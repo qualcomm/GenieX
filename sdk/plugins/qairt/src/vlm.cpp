@@ -15,13 +15,16 @@
 #define portable_strdup strdup
 #endif
 
+#include "chat_message_utils.h"
 #include "dispatch.h"               // provided by geniex-qairt/models/
 #include "geniex-proc/tokenizer.h"  // ApplyChatTemplateOptions
 #include "geniex-proc/types.h"      // ChatMessage, MMContent, Role::, Modality::
 #include "llm/llm_spec_loader.h"    // parseGenieSamplerConfig
 #include "logging.h"
+#include "metadata_utils.h"
 #include "path_utils.h"
 #include "pipeline/vlm_pipeline.h"
+#include "power_mode_utils.h"
 #include "qnn_runtime_utils.h"
 #include "sampler_config_utils.h"
 #include "types.h"
@@ -31,8 +34,6 @@ namespace fs = std::filesystem;
 namespace geniex {
 
 namespace {
-// Default system prompt prepended on the first turn when the caller does not include
-// a `system` role message in the chat history.
 constexpr const char* kDefaultSystemPrompt = "You are a helpful AI assistant.";
 }  // namespace
 
@@ -57,6 +58,9 @@ int32_t QairtVlm::create(const geniex_VlmCreateInput* input) {
     fs::path model_path(input->model_path);
     fs::path model_dir = model_path.parent_path();
 
+    const auto chat_template_metadata = qairt::read_chat_template_metadata(model_dir);
+    default_system_prompt_            = chat_template_metadata.default_system_prompt;
+    if (default_system_prompt_.empty()) default_system_prompt_ = kDefaultSystemPrompt;
     bundle_sampler_ = parseGenieSamplerConfig(model_dir);
 
     QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(model_dir);
@@ -79,6 +83,7 @@ int32_t QairtVlm::create(const geniex_VlmCreateInput* input) {
         GENIEX_LOG_ERROR("Failed to resolve QAIRT bundle layout in {}: {}", model_dir.string(), e.what());
         return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
     }
+    qairt::apply_power_mode(input->config.power_mode, llm_cfg);
 
     // The vision encoder is driven as its own graph, so keep it out of the LLM
     // shard list even if ctx-bins lists it.
@@ -127,6 +132,7 @@ int32_t QairtVlm::create(const geniex_VlmCreateInput* input) {
     }
     has_vision_encoder_        = !vision_cfg.model_paths.empty();
     vision_cfg.htp_config_path = llm_cfg.htp_config_path;
+    qairt::apply_power_mode(input->config.power_mode, vision_cfg);
 
     // ── Build VLMConfig and create pipeline ───────────────────────────────────
     VLMConfig vlm_cfg{};
@@ -183,10 +189,14 @@ int32_t QairtVlm::apply_chat_template(
             msg.role = Role::Assistant;
         } else if (std::strcmp(src.role, "system") == 0) {
             msg.role = Role::System;
+        } else if (std::strcmp(src.role, "tool") == 0) {
+            msg.role = Role::Tool;
         } else {
             GENIEX_LOG_WARN("Unknown VLM message role '{}', treating as user", src.role);
             msg.role = Role::User;
         }
+
+        qairt::apply_tool_fields(msg, src.tool_calls, src.tool_call_count, src.tool_call_id, src.tool_name);
 
         // Map content items
         for (int64_t j = 0; j < src.content_count; ++j) {
@@ -222,12 +232,12 @@ int32_t QairtVlm::apply_chat_template(
 
     // On the first turn, ensure there is a system prompt at the front. If the caller did
     // not supply one, inject the default. Subsequent turns reuse the already-cached system.
-    if (history_size_ == 0) {
+    if (history_size_ == 0 && !default_system_prompt_.empty()) {
         const bool has_system = !new_messages.empty() && new_messages.front().role == Role::System;
         if (!has_system) {
             ChatMessage sys{};
             sys.role    = Role::System;
-            sys.content = kDefaultSystemPrompt;
+            sys.content = default_system_prompt_;
             new_messages.insert(new_messages.begin(), std::move(sys));
         }
     }

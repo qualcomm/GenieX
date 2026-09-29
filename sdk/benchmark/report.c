@@ -97,27 +97,31 @@ int write_cell_json(const options_t* o, const device_t* dev, int64_t model_size_
         return 1;
     }
     fprintf(f, "{\n");
-    json_field_str(f, "schema_version", "4", false);
+    json_field_str(f, "schema_version", "6", false);
     json_field_str(f, "cell_id", cell_name(o), false);
     json_field_str(f, "plugin", o->plugin, false);
     json_field_str(f, "device", o->device, false);
     json_field_str(f, "device_id", dev->id, false);
     json_field_str(f, "model_path", o->model_path, false);
     json_field_i64(f, "model_size_bytes", model_size_bytes, false);
+    json_field_str(f, "geniex_version", geniex_version(), false);
     json_field_str(f, "qairt_version", geniex_get_plugin_version("qairt"), false);
     json_field_str(f, "llama_cpp_version", geniex_get_plugin_version("llama_cpp"), false);
     fprintf(f, "    \"params\": {\n");
     fprintf(f,
         "      \"warmup\": %d, \"repetitions\": %d, \"n_prompt\": %d, \"n_gen\": %d,\n"
-        "      \"temperature\": %.6f, \"seed\": %d, \"n_ctx\": %d, \"n_threads\": %d, \"n_gpu_layers\": %d",
+        "      \"temperature\": %.6f, \"top_p\": %.6f, \"seed\": %d, \"n_ctx\": %d, \"n_threads\": %d, "
+        "\"n_ubatch\": %d, \"n_gpu_layers\": %d",
         o->warmup,
         o->repeat,
         o->n_prompt,
         o->max_new_tokens,
         (double)o->temperature,
+        (double)o->top_p,
         o->seed,
         o->n_ctx,
         o->n_threads,
+        o->n_ubatch,
         dev->ngl);
     if (o->spec_type) {
         fprintf(f, ",\n      \"spec_type\": ");
@@ -127,6 +131,15 @@ int write_cell_json(const options_t* o, const device_t* dev, int64_t model_size_
             json_write_quoted(f, o->draft_model);
         }
         fprintf(f, ",\n      \"draft_tokens\": %d", o->draft_tokens);
+    }
+    if (o->power_mode) {
+        fprintf(f, ",\n      \"power_mode\": ");
+        json_write_quoted(f, o->power_mode);
+    }
+    /* Which QAIRT runtime produced these numbers -- the reason the override exists. */
+    if (o->qairt_lib) {
+        fprintf(f, ",\n      \"qairt_lib\": ");
+        json_write_quoted(f, o->qairt_lib);
     }
     fprintf(f, "\n    },\n");
     fprintf(f, "    \"runs\": [\n");
@@ -196,6 +209,7 @@ int write_logits_json(const options_t* o, const device_t* dev, const geniex_LlmF
     json_field_str(f, "device_id", dev->id, false);
     json_field_str(f, "model_path", o->model_path, false);
     json_field_i64(f, "n_gpu_layers", dev->ngl, false);
+    json_field_i64(f, "n_ubatch", o->n_ubatch, false);
     json_field_i64(f, "n_prompt", fin->input_ids_count, false);
     fprintf(f, "    \"all_positions\": %s,\n", fin->all_positions ? "true" : "false");
     json_field_i64(f, "n_rows", fout->n_rows, false);

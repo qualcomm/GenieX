@@ -15,8 +15,9 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::error::{Error, Result};
+use crate::gguf;
 use crate::manifest::ModelManifest;
-use crate::manifest_builder::{infer_manifest_from_names, ManifestHint};
+use crate::manifest_builder::{infer_manifest_from_names, untagged_gguf_names, ManifestHint};
 use crate::transport::{HttpTransport, ReqwestTransport};
 
 use super::{BytesSource, FileSpec, ModelSource, Plan};
@@ -86,6 +87,28 @@ impl HfSource {
             .await?;
         Ok(buf)
     }
+
+    /// Recover the quant of GGUFs whose filename doesn't carry one. Usually
+    /// zero extra requests; a failure leaves the file to the `DEFAULT` bucket.
+    async fn probe_header_quants(
+        &self,
+        file_names: &[String],
+        sizes: &HashMap<String, i64>,
+    ) -> HashMap<String, String> {
+        let mut out = HashMap::new();
+        for name in untagged_gguf_names(file_names) {
+            let Ok(url) = self.file_url(name) else {
+                continue;
+            };
+            let size = sizes.get(name).copied().unwrap_or(0).max(0) as u64;
+            let quant =
+                gguf::probe_quant(self.transport.as_ref(), &url, self.token.as_deref(), size).await;
+            if let Some(q) = quant {
+                out.insert(name.clone(), q);
+            }
+        }
+        out
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -141,6 +164,9 @@ impl ModelSource for HfSource {
             };
         let mut infer_hint = self.hint.clone();
         infer_hint.config_json_bytes = config_bytes;
+        if !ships_manifest {
+            infer_hint.header_quants = self.probe_header_quants(&file_names, &file_sizes).await;
+        }
 
         let mut manifest: ModelManifest = if ships_manifest {
             let url = self.file_url(MANIFEST_FILE)?;
@@ -248,6 +274,48 @@ mod tests {
             .respond_with(ResponseTemplate::new(206).set_body_bytes(body.as_bytes()))
             .mount(server)
             .await;
+    }
+
+    #[tokio::test]
+    async fn plan_rejects_safetensors_only_repo_with_a_format_hint() {
+        // openai/gpt-oss-safeguard-20b: safetensors + tokenizer, no GGUF. The
+        // failure has to name the formats we accept.
+        let server = MockServer::start().await;
+        let api_body = r#"{
+          "siblings": [
+            {"rfilename": "config.json", "size": 128},
+            {"rfilename": "model-00001-of-00002.safetensors", "size": 1024},
+            {"rfilename": "tokenizer.json", "size": 256}
+          ]
+        }"#;
+        let repo = "openai/gpt-oss-safeguard-20b";
+        mount_file(&server, &format!("/api/models/{repo}"), api_body).await;
+        mount_file(
+            &server,
+            &format!("/{repo}/resolve/main/config.json"),
+            r#"{"architectures":["GptOssForCausalLM"]}"#,
+        )
+        .await;
+        Mock::given(method("HEAD"))
+            .and(path(format!("/{repo}/resolve/main/geniex.json")))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+
+        let src = HfSource::with_endpoint_and_transport(
+            repo.to_string(),
+            &server.uri(),
+            None,
+            fast_transport(),
+            ManifestHint::default(),
+        )
+        .unwrap();
+        let err = src.plan().await.unwrap_err();
+        assert!(matches!(err, Error::ManifestInferenceFailed(_)), "{err:?}");
+        let msg = err.to_string();
+        assert!(msg.contains(repo), "{msg}");
+        assert!(msg.contains("GGUF"), "{msg}");
+        assert!(msg.contains("QAIRT"), "{msg}");
     }
 
     #[tokio::test]
@@ -368,5 +436,40 @@ mod tests {
             }
             _ => panic!("HF file should be BytesSource::Http"),
         }
+    }
+
+    #[tokio::test]
+    async fn plan_reads_quant_from_the_header_when_the_name_lacks_one() {
+        let server = MockServer::start().await;
+        let head = crate::gguf::testdata::gguf_head(15, 0);
+        let api_body = format!(
+            r#"{{"siblings": [{{"rfilename": "REAP-48-v2.gguf", "size": {}}}]}}"#,
+            head.len()
+        );
+        mount_file(&server, "/api/models/tests/Untagged", &api_body).await;
+        Mock::given(method("HEAD"))
+            .and(path("/tests/Untagged/resolve/main/geniex.json"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/tests/Untagged/resolve/main/REAP-48-v2.gguf"))
+            .respond_with(ResponseTemplate::new(206).set_body_bytes(head))
+            .mount(&server)
+            .await;
+
+        let src = HfSource::with_endpoint_and_transport(
+            "tests/Untagged".to_string(),
+            &server.uri(),
+            None,
+            fast_transport(),
+            ManifestHint::default(),
+        )
+        .unwrap();
+        let plan = src.plan().await.unwrap();
+        assert_eq!(
+            plan.manifest.model_file.get("Q4_K_M").map(|f| &f.name),
+            Some(&"REAP-48-v2.gguf".to_string())
+        );
     }
 }

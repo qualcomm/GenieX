@@ -44,6 +44,15 @@ impl StoreConfig {
         }
     }
 
+    /// ModelScope public API base URL. Honours the same `MODELSCOPE_ENDPOINT`
+    /// variable as the ModelScope SDK; defaults to `https://modelscope.cn`.
+    pub fn modelscope_endpoint() -> String {
+        match std::env::var("MODELSCOPE_ENDPOINT") {
+            Ok(v) if !v.trim().is_empty() => v.trim().trim_end_matches('/').to_string(),
+            _ => crate::source::modelscope::DEFAULT_MODELSCOPE_ENDPOINT.to_string(),
+        }
+    }
+
     /// AI Hub public assets base URL. Mirrors the Go CLI's
     /// `DefaultAIHubBaseURL`; override via `GENIEX_AIHUBBASEURL`.
     pub fn ai_hub_base_url() -> String {
@@ -146,6 +155,33 @@ mod tests {
         {
             let _g = EnvGuard::set("HF_ENDPOINT", "  ");
             assert_eq!(StoreConfig::hf_endpoint(), DEFAULT_HF_ENDPOINT);
+        }
+    }
+
+    #[test]
+    fn modelscope_endpoint_covers_unset_custom_and_trailing_slash() {
+        let default = crate::source::modelscope::DEFAULT_MODELSCOPE_ENDPOINT;
+        {
+            let _g = EnvGuard::unset("MODELSCOPE_ENDPOINT");
+            assert_eq!(StoreConfig::modelscope_endpoint(), default);
+        }
+        {
+            let _g = EnvGuard::set("MODELSCOPE_ENDPOINT", "https://modelscope.example.com");
+            assert_eq!(
+                StoreConfig::modelscope_endpoint(),
+                "https://modelscope.example.com"
+            );
+        }
+        {
+            let _g = EnvGuard::set("MODELSCOPE_ENDPOINT", "https://modelscope.example.com/");
+            assert_eq!(
+                StoreConfig::modelscope_endpoint(),
+                "https://modelscope.example.com"
+            );
+        }
+        {
+            let _g = EnvGuard::set("MODELSCOPE_ENDPOINT", "  ");
+            assert_eq!(StoreConfig::modelscope_endpoint(), default);
         }
     }
 }

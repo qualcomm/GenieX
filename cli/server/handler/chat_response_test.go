@@ -1,0 +1,143 @@
+// Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
+// SPDX-License-Identifier: BSD-3-Clause
+
+package handler
+
+import (
+	"encoding/json"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+
+	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
+)
+
+// Covers both bodies writeBlockingResponse can produce: openai's own struct, and the
+// local one that carries reasoning_content.
+type blockingBody struct {
+	Choices []struct {
+		FinishReason string `json:"finish_reason"`
+		Message      struct {
+			Content          string `json:"content"`
+			ReasoningContent string `json:"reasoning_content"`
+			ToolCalls        []struct {
+				Function struct {
+					Name      string `json:"name"`
+					Arguments string `json:"arguments"`
+				} `json:"function"`
+			} `json:"tool_calls"`
+		} `json:"message"`
+	} `json:"choices"`
+	Timings timings `json:"timings"`
+}
+
+// A tool call must not cost the text around it, nor the reasoning: both used to be
+// dropped whenever one was found.
+func TestWriteBlockingResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	const call = `{"name":"get_weather","arguments":{"city":"Beijing"}}`
+	weather := [2]string{"get_weather", `{"city":"Beijing"}`}
+
+	tests := []struct {
+		name          string
+		content       string
+		reasoning     string
+		parseTool     bool
+		tools         string
+		wantContent   string
+		wantReasoning string
+		wantFinish    string
+		wantCalls     [][2]string
+	}{
+		{
+			name: "text only", content: "hello",
+			wantContent: "hello", wantFinish: "stop",
+		},
+		{
+			name: "tools on but nothing to match", content: "hello", parseTool: true,
+			wantContent: "hello", wantFinish: "stop",
+		},
+		{
+			name: "a call keeps the prose around it", content: "sure " + call + " done", parseTool: true,
+			wantContent: "sure  done", wantFinish: "tool_calls", wantCalls: [][2]string{weather},
+		},
+		{
+			name: "parallel calls", content: call + call, parseTool: true,
+			wantFinish: "tool_calls", wantCalls: [][2]string{weather, weather},
+		},
+		{
+			name: "gemma4 syntax", content: `x <|tool_call>call:f{a:1}<tool_call|>`, parseTool: true,
+			wantContent: "x ", wantFinish: "tool_calls", wantCalls: [][2]string{{"f", `{"a":1}`}},
+		},
+		{
+			name: "MiniCPM5 typed arguments", content: `<function name="set"><param name="count">5</param><param name="label">5</param></function>`,
+			parseTool: true, tools: `[{"type":"function","function":{"name":"set","parameters":{"type":"object","properties":{"count":{"type":"integer"},"label":{"type":"string"}}}}}]`,
+			wantFinish: "tool_calls", wantCalls: [][2]string{{"set", `{"count":5,"label":"5"}`}},
+		},
+		{
+			name: "MiniCPM5 unsupported schema leaves valid types intact", content: `<function name="set"><param name="count">5</param><param name="disabled">false</param></function>`,
+			parseTool: true, tools: `[{"type":"function","function":{"name":"set","parameters":{"type":"object","properties":{"count":{"type":"integer"},"disabled":false}}}},
+				{"type":"function","function":{"name":"other","parameters":{"type":"object","properties":{"disabled":false}}}}]`,
+			wantFinish: "tool_calls", wantCalls: [][2]string{{"set", `{"count":5,"disabled":"false"}`}},
+		},
+		{
+			name: "reasoning with a call", content: "sure " + call, reasoning: "let me check",
+			parseTool: true, wantContent: "sure ", wantReasoning: "let me check",
+			wantFinish: "tool_calls", wantCalls: [][2]string{weather},
+		},
+		{
+			name: "reasoning without a call", content: "hello", reasoning: "let me check",
+			parseTool: true, wantContent: "hello", wantReasoning: "let me check", wantFinish: "stop",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tools := tt.tools
+			if tools != "" {
+				_, request := bindRequest(t, `{"model":"m","messages":[{"role":"user","content":"test"}],"tools":`+tools+`}`)
+				_, encoded, err := parseTools(request)
+				if err != nil {
+					t.Fatal(err)
+				}
+				tools = encoded
+			}
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			profile := geniex_sdk.ProfileData{StopReason: "eos", PromptTokens: 5, PrefillSpeed: 10, GeneratedTokens: 3, DecodingSpeed: 20}
+			writeBlockingResponse(c, tt.content, tt.reasoning, profile, tt.parseTool, tools)
+
+			var got blockingBody
+			if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+				t.Fatalf("body %s: %v", w.Body.Bytes(), err)
+			}
+			if len(got.Choices) != 1 {
+				t.Fatalf("choices = %d, want 1", len(got.Choices))
+			}
+			if got.Timings.PromptPerSecond != 10 || got.Timings.PredictedPerSecond != 20 {
+				t.Errorf("timings = %+v, want prompt_per_second=10 predicted_per_second=20", got.Timings)
+			}
+			choice := got.Choices[0]
+			if choice.FinishReason != tt.wantFinish {
+				t.Errorf("finish_reason = %q, want %q", choice.FinishReason, tt.wantFinish)
+			}
+			if choice.Message.Content != tt.wantContent {
+				t.Errorf("content = %q, want %q", choice.Message.Content, tt.wantContent)
+			}
+			if choice.Message.ReasoningContent != tt.wantReasoning {
+				t.Errorf("reasoning_content = %q, want %q", choice.Message.ReasoningContent, tt.wantReasoning)
+			}
+			if len(choice.Message.ToolCalls) != len(tt.wantCalls) {
+				t.Fatalf("tool_calls = %+v, want %v", choice.Message.ToolCalls, tt.wantCalls)
+			}
+			for i, want := range tt.wantCalls {
+				fn := choice.Message.ToolCalls[i].Function
+				if fn.Name != want[0] || fn.Arguments != want[1] {
+					t.Errorf("tool_calls[%d] = (%q, %q), want (%q, %q)",
+						i, fn.Name, fn.Arguments, want[0], want[1])
+				}
+			}
+		})
+	}
+}

@@ -57,9 +57,10 @@ func writePromptTooLong(c *gin.Context, profile geniex_sdk.ProfileData) {
 // Adds reasoning_content, which openai-go's ChatCompletionMessage lacks; used
 // only when thinking is separated so the inline default stays byte-identical.
 type blockingMessage struct {
-	Role             string `json:"role"`
-	Content          string `json:"content"`
-	ReasoningContent string `json:"reasoning_content,omitempty"`
+	Role             string                                      `json:"role"`
+	Content          string                                      `json:"content"`
+	ReasoningContent string                                      `json:"reasoning_content,omitempty"`
+	ToolCalls        []openai.ChatCompletionMessageToolCallUnion `json:"tool_calls,omitempty"`
 }
 
 type blockingChoice struct {
@@ -72,43 +73,52 @@ type blockingResponse struct {
 	Object  string                 `json:"object"`
 	Choices []blockingChoice       `json:"choices"`
 	Usage   openai.CompletionUsage `json:"usage"`
+	Timings timings                `json:"timings"`
 }
 
-func writeBlockingResponse(c *gin.Context, content, reasoning string, profile geniex_sdk.ProfileData, parseTool bool) {
+// chatCompletionWithTimings adds timings to the openai-go response type via
+// embedding, keeping the reasoning=="" branch's fields byte-identical.
+type chatCompletionWithTimings struct {
+	openai.ChatCompletion
+	Timings timings `json:"timings"`
+}
+
+func writeBlockingResponse(c *gin.Context, content, reasoning string, profile geniex_sdk.ProfileData, parseTool bool, tools string) {
+	finishReason := mapFinishReason(profile.StopReason)
+	var toolCalls []openai.ChatCompletionMessageToolCallUnion
 	if parseTool {
-		toolCall, err := utils.ParseToolCalls(content)
-		if err == nil {
-			choice := openai.ChatCompletionChoice{
-				FinishReason: "tool_calls",
-				Message: openai.ChatCompletionMessage{
-					Role: constant.Assistant(openai.MessageRoleAssistant),
-					ToolCalls: []openai.ChatCompletionMessageToolCallUnion{{
-						ID:       fmt.Sprintf("call_%d", rand.Uint32()),
-						Type:     "function",
-						Function: toolCall,
-					}},
-				},
-			}
-			c.JSON(http.StatusOK, openai.ChatCompletion{
-				Choices: []openai.ChatCompletionChoice{choice},
-				Usage:   profile2Usage(profile),
-			})
-			return
+		// Parse keeps the text around a call: that is content, not part of it.
+		text, calls := utils.NewToolCallScanner(utils.ToolParameterTypesFromTools(tools)).Parse(content)
+		content = text
+		if len(calls) > 0 {
+			finishReason = "tool_calls"
+		} else {
+			slog.Debug("No tool call in the response")
 		}
-		slog.Warn("Tool call parse error, fallback to text", "error", err)
+		for _, call := range calls {
+			toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallUnion{
+				ID:       fmt.Sprintf("call_%d", rand.Uint32()),
+				Type:     "function",
+				Function: call,
+			})
+		}
 	}
 
 	if reasoning == "" {
 		choice := openai.ChatCompletionChoice{
-			FinishReason: mapFinishReason(profile.StopReason),
+			FinishReason: finishReason,
 			Message: openai.ChatCompletionMessage{
-				Role:    constant.Assistant(openai.MessageRoleAssistant),
-				Content: content,
+				Role:      constant.Assistant(openai.MessageRoleAssistant),
+				Content:   content,
+				ToolCalls: toolCalls,
 			},
 		}
-		c.JSON(http.StatusOK, openai.ChatCompletion{
-			Choices: []openai.ChatCompletionChoice{choice},
-			Usage:   profile2Usage(profile),
+		c.JSON(http.StatusOK, chatCompletionWithTimings{
+			ChatCompletion: openai.ChatCompletion{
+				Choices: []openai.ChatCompletionChoice{choice},
+				Usage:   profile2Usage(profile),
+			},
+			Timings: profile2Timings(profile),
 		})
 		return
 	}
@@ -120,10 +130,12 @@ func writeBlockingResponse(c *gin.Context, content, reasoning string, profile ge
 				Role:             string(openai.MessageRoleAssistant),
 				Content:          content,
 				ReasoningContent: reasoning,
+				ToolCalls:        toolCalls,
 			},
-			FinishReason: mapFinishReason(profile.StopReason),
+			FinishReason: finishReason,
 		}},
-		Usage: profile2Usage(profile),
+		Usage:   profile2Usage(profile),
+		Timings: profile2Timings(profile),
 	})
 }
 
@@ -137,6 +149,46 @@ func profile2Usage(p geniex_sdk.ProfileData) openai.CompletionUsage {
 			RejectedPredictionTokens: p.DraftNTotal - p.DraftNAccepted,
 		},
 	}
+}
+
+// timings mirrors llama-server's per-request timing object (prompt_n,
+// predicted_per_second, ...) so clients familiar with that shape can read
+// prefill/decode speed the same way.
+type timings struct {
+	PromptN            int64   `json:"prompt_n"`
+	PromptMs           float64 `json:"prompt_ms"`
+	PromptPerSecond    float64 `json:"prompt_per_second"`
+	PredictedN         int64   `json:"predicted_n"`
+	PredictedMs        float64 `json:"predicted_ms"`
+	PredictedPerSecond float64 `json:"predicted_per_second"`
+	DraftN             int64   `json:"draft_n,omitempty"`
+	DraftNAccepted     int64   `json:"draft_n_accepted,omitempty"`
+}
+
+func profile2Timings(p geniex_sdk.ProfileData) timings {
+	return timings{
+		PromptN:            p.PromptTokens,
+		PromptMs:           float64(p.PromptTime) / 1e3,
+		PromptPerSecond:    p.PrefillSpeed,
+		PredictedN:         p.GeneratedTokens,
+		PredictedMs:        float64(p.DecodeTime) / 1e3,
+		PredictedPerSecond: p.DecodingSpeed,
+		DraftN:             p.DraftNTotal,
+		DraftNAccepted:     p.DraftNAccepted,
+	}
+}
+
+// logProfile emits the same prefill/decode numbers llama-server logs per
+// request, since geniex serve's request log otherwise ends at "param" and
+// never reports how generation went.
+func logProfile(profile geniex_sdk.ProfileData) {
+	slog.Info("Generation complete",
+		"prompt_tokens", profile.PromptTokens,
+		"prompt_tok_s", profile.PrefillSpeed,
+		"decode_tokens", profile.GeneratedTokens,
+		"decode_tok_s", profile.DecodingSpeed,
+		"ttft_s", float64(profile.TTFT)/1e6,
+	)
 }
 
 func mapFinishReason(stopReason string) string {

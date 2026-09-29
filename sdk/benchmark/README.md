@@ -121,6 +121,13 @@ geniex-bench \
   --output-json results/qwen3-1.7b-hybrid.json \
   --cell-id Qwen3-1.7B-llama_cpp-hybrid
 
+# Power mode: HTP power/clock-management mode, shared by qairt and llama_cpp
+# (default: burst)
+geniex-bench \
+  --plugin qairt --device npu \
+  -m /path/to/qualcomm/Qwen3-4B-Instruct-2507/ \
+  --power-mode sustained_high_performance
+
 # Accuracy mode: single run, print the generated text (eyeball output quality,
 # not speed). Pair with --prompt-file so the model sees a real prompt.
 geniex-bench \
@@ -161,6 +168,12 @@ Run `geniex-bench --help` for the full flag list.
   `runs` array. Every other mode feeds the file verbatim as one prompt,
   because the segments differ in length and a tok/s median across them would
   mix populations.
+- with `--accuracy`, each prompt-file segment is run through the bundle's own
+  chat template (`geniex_llm_apply_chat_template`) before generation — the
+  same templating `geniex infer` uses — so pass the raw user turn, not
+  pre-templated text. `--system-prompt TEXT` adds a system message ahead of
+  it; `--think` / `--no-think` sets `enable_thinking` (default: think).
+  Without `--accuracy`, `--prompt-file` still feeds the file verbatim.
 - `--logits` runs one prefill-only forward pass (no decode loop, no timing) over
   `-p N` random ids and writes every position's top-N logits to `--output-json`
   (`--logits-top-n`, default 20; `--logits-last-only` for the last row only).
@@ -172,18 +185,24 @@ Run `geniex-bench --help` for the full flag list.
   padded prompt length `ceil(prompt_tokens / 128) * 128`: the QAIRT engine pads
   input_ids to a 128-token prefill chunk, so the padded count reflects the work
   actually done (#1194). llama_cpp does no such padding and is reported as-is
+- `--power-mode MODE` sets the HTP power/clock-management mode, shared by
+  qairt and llama_cpp (default: `burst`); see
+  [`notes/run.md`](../../notes/run.md#power-mode) for the full alias table
 
 ## Per-cell JSON shape
 
 ```json
 {
-  "schema_version": "2",
+  "schema_version": "6",
   "cell_id": "Qwen3-0.6B-llama_cpp-cpu",
   "plugin": "llama_cpp",
   "device": "cpu",
   "device_id": null,
   "model_path": ".../Qwen_Qwen3-0.6B-Q4_0.gguf",
   "model_size_bytes": 368705536,
+  "geniex_version": "v0.3.1",
+  "qairt_version": "2.45",
+  "llama_cpp_version": "b4920-abc1234",
   "params": { "warmup": 1, "repetitions": 3, "n_gen": 128, ... },
   "runs": [ { "run_idx": 0, "ttft_us": 49758, "prefill_tps": 102.1, ... }, ... ],
   "agg": {
@@ -195,6 +214,12 @@ Run `geniex-bench --help` for the full flag list.
   }
 }
 ```
+
+`geniex_version` is the SDK bridge version (`geniex_version()`); `qairt_version`/`llama_cpp_version`
+are whichever plugin each cell's `--plugin` used (`geniex_get_plugin_version(...)`), but note
+`report.c` currently writes both plugin-version fields on every cell regardless of `--plugin`, so a
+`llama_cpp`-plugin cell's `qairt_version` reflects whatever QAIRT plugin happens to be registered in
+that binary, not necessarily anything relevant to that cell.
 
 ## Accuracy mode output
 

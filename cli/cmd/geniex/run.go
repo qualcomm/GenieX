@@ -111,11 +111,13 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 		option.WithJSONSet("ngl", ngl),
 		option.WithJSONSet("nctx", nctx),
 		option.WithJSONSet("compute", computeUnit),
+		option.WithJSONSet("vit_compute", vitComputeUnit),
 		option.WithJSONSet("spec_type", specType),
 		option.WithJSONSet("spec_draft_model", draftModel),
 		option.WithJSONSet("spec_n_max", draftTokens),
 		option.WithJSONSet("spec_n_min", draftMin),
 		option.WithJSONSet("spec_p_min", draftPMin),
+		option.WithJSONSet("power_mode", powerMode),
 	)
 	spin.Stop()
 
@@ -195,12 +197,13 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 				option.WithJSONSet("ngl", ngl),
 				option.WithJSONSet("nctx", nctx),
 				option.WithJSONSet("compute", computeUnit),
+				option.WithJSONSet("vit_compute", vitComputeUnit),
 				option.WithJSONSet("spec_type", specType),
 				option.WithJSONSet("spec_draft_model", draftModel),
 				option.WithJSONSet("spec_n_max", draftTokens),
 				option.WithJSONSet("spec_n_min", draftMin),
 				option.WithJSONSet("spec_p_min", draftPMin),
-				option.WithHeaderAdd("GenieX-KeepCache", "true"))
+				option.WithJSONSet("power_mode", powerMode))
 
 			var firstToken time.Time
 			var profileData geniex_sdk.ProfileData

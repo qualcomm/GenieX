@@ -83,3 +83,21 @@ extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_GenieXSdk_getPluginVers
     const char* result = geniex_get_plugin_version(id.c_str());
     return env->NewStringUTF(result ? result : "");
 }
+
+extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_GenieXSdk_getSdkVersion(JNIEnv* env, jobject thiz) {
+    const char* result = geniex_version();
+    return env->NewStringUTF(result ? result : "");
+}
+
+// Reaching this from Kotlin needs native code: the JVM has no setenv, so the
+// GENIEX_QAIRT_LIB fallback the other bindings can use is not available here.
+extern "C" JNIEXPORT jint JNICALL Java_com_geniex_sdk_GenieXSdk_setQairtRuntimePath(
+    JNIEnv* env, jobject thiz, jstring path) {
+    std::string p = jstring2str(env, path);
+    return geniex_set_qairt_runtime_path(p.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_GenieXSdk_getQairtRuntimePath(JNIEnv* env, jobject thiz) {
+    const char* result = geniex_get_qairt_runtime_path();
+    return env->NewStringUTF(result ? result : "");
+}

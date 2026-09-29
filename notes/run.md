@@ -53,6 +53,50 @@ through to llama.cpp verbatim (handy for multi-DSP recipes that need more
 than the single `HTP0` the `npu` alias pins); `--ngl` still applies. qairt
 is NPU-only, so a device list gets coerced to `NPU` with a warning.
 
+## Power mode
+
+Unlike compute-unit aliases, the power-mode alias table is **not** behind a
+public SDK API: [`sdk/include/power_mode_alias.h`](../sdk/include/power_mode_alias.h)
+is a header-only table that the qairt and llama_cpp plugins each `#include`
+directly and resolve on their own (they're separate shared libraries and
+don't call into each other or into `libgeniex` for this). It's a single
+unified knob for both runtimes' HTP DCVS/HMX power/clock-management, set via
+`geniex_ModelConfig.power_mode` (`--power-mode` on `geniex infer` / `run` /
+`serve` and `geniex-bench`; a JSON `power_mode` field on `geniex serve`
+requests).
+
+| Alias                          | Relative power (lowest → highest) |
+|---------------------------------|-----|
+| `low_power_saver`               | 1   |
+| `power_saver`                   | 2   |
+| `high_power_saver`              | 3   |
+| `low_balanced`                  | 4   |
+| `balanced`                      | 5   |
+| `high_performance`              | 6   |
+| `sustained_high_performance`    | 7   |
+| `burst`                         | 8 (highest — max clocks, DCVS disabled) |
+
+Empty / `default` resolves to `burst` on both runtimes, matching today's
+behavior before this knob existed (qairt's `perf_profile` already defaulted
+to `BURST`; llama_cpp's HTP corners were hardcoded to max). This applies
+only on the NPU compute unit — it's a no-op (logged, not an error) on
+`cpu` / `gpu`.
+
+- **`llama_cpp`** — carried by an internal, unmerged patch on top of
+  [`ggml/llama.cpp#340`](https://github.qualcomm.com/ggml/llama.cpp/pull/340)
+  (`sdk/patches/llama-hexagon-power-mode.patch` +
+  `sdk/patches/llama-hexagon-power-mode-setter.patch`; see the comments in
+  [`sdk/CMakeLists.txt`](../sdk/CMakeLists.txt)). Only affects sessions
+  created after the call — an already-open HTP session (another model still
+  loaded in the same process) keeps its old mode until released and
+  reacquired; the plugin logs a warning rather than silently no-op'ing.
+- **`qairt`** — sets `ModelConfig::perf_profile`, which the QAIRT core (a
+  real HTP `PerfProfile` → `QnnHtpPerfInfrastructure` vote) already
+  supports. **Precedence:** `--power-mode` wins over anything the model
+  bundle's `htp_backend_ext_config.json` sets (`resolveHtpPerfConfig` in
+  `geniex-qairt` core: caller > bundle json > default), since
+  [`geniex-qairt-plugin#55`](https://github.com/qualcomm/geniex-qairt-plugin/pull/55).
+
 ## Compute-unit selection (llama_cpp)
 
 `llama_cpp` supports OpenCL and Hexagon on Windows ARM64. The compute unit is driven by two inputs on `geniex_LlmCreateInput`:
@@ -108,6 +152,113 @@ Warning: qairt plugin only supports NPU inference; ignoring device='cpu' and run
 ```
 
 QAIRT models need a `geniex.json` to work. See the [granite4_micro example](https://huggingface.co/yichqian/geniex-qairt-models/blob/main/granite4_micro/geniex.json).
+
+### Using a custom QNN library
+
+A QAIRT runtime ships with GenieX and is used by default. To run against a different one
+without reinstalling, point the plugin at it:
+
+```bash
+# via the CLI flag (qairt models only)
+geniex infer local/granite4_micro --qairt-lib /path/to/qairt/2.XX.0
+
+# or via the environment variable (picked up by any front-end: CLI, pybind, Android)
+GENIEX_QAIRT_LIB=/path/to/qairt/2.XX.0 geniex infer local/granite4_micro
+```
+
+SDK embedders call it **before `geniex_init`** instead of touching their own environment —
+the only route on Android, where the JVM cannot `setenv`:
+
+```c
+geniex_set_qairt_runtime_path("/path/to/qairt/2.XX.0");  /* "" restores the bundled runtime */
+geniex_init();
+```
+
+```python
+geniex.set_qairt_runtime_path('/path/to/qairt/2.XX.0')
+```
+
+```kotlin
+GenieXSdk.getInstance().setQairtRuntimePath("/path/to/qairt/2.XX.0")
+```
+
+Precedence is `geniex_set_qairt_runtime_path` → `GENIEX_QAIRT_LIB` → the bundled runtime.
+`--qairt-lib` calls the API, so the flag wins over an inherited environment variable.
+
+The path accepts either layout:
+
+- **A QAIRT SDK root** (as installed from the Qualcomm Software Center). The host libraries
+  are taken from `lib/<triple>` (`aarch64-windows-msvc`, `aarch64-android`, or
+  `aarch64-oe-linux-gcc11.2`) and `ADSP_LIBRARY_PATH` is pointed at every Hexagon DSP skel
+  folder (`lib/hexagon-v*/unsigned`), so the on-device HTP arch is matched automatically.
+- **A flat folder** holding `QnnHtp.dll` and `QnnSystem.dll` (or the `libQnn*.so`
+  equivalents) directly — the same shape as the bundled `htp-files` layout.
+
+> [!IMPORTANT]
+> A runtime the plugin accepts can still produce **wrong output at full speed**, so confirm
+> the override resolved where you meant. Run with `--log info` (the CLI default is `none`):
+>
+> ```
+> Overriding the bundled QAIRT runtime from <source>: <what you passed> (host libs: <resolved dir>)
+> ```
+>
+> `host libs:` is the part that matters — for an SDK root it is the `lib/<triple>` subfolder,
+> not the root you passed. `<source>` is `geniex_set_qairt_runtime_path` or
+> `GENIEX_QAIRT_LIB`, so the line also tells you which knob won.
+
+<details><summary>Which runtimes are accepted, and why this is a supported override</summary>
+
+The plugin reaches QNN only through the versioned C interface, which negotiates at load time
+against `compiled QNN_API_VERSION_MINOR <= runtime minor`. The floor is the API version the
+plugin *compiled* against (QAIRT 2.36 headers, C API 2.27), not the version it bundles — so
+runtimes both older and newer than the bundled one are accepted, down to that floor. One
+build was measured on Snapdragon X Elite across 2.45 / 2.48 / 2.49 at identical throughput.
+
+This replaces an earlier C++ `IBackend` path whose vtable layout changed every release, where
+a mismatch could segfault (ai-hub-models-internal#3964). That hazard is gone with the C API,
+which is why this is a supported override rather than a testing-only aid.
+
+`QnnHtpNetRunExtensions` is no longer loaded at all — the plugin applies
+`htp_backend_ext_config.json` itself through the public C API — so a runtime folder does not
+need to carry it.
+
+An unusable path fails model load immediately, naming the source it came from, e.g.
+`geniex_set_qairt_runtime_path does not contain QnnHtp.dll (looked in the folder itself and
+lib/aarch64-windows-msvc): <path>`.
+
+**One runtime per process.** `QnnHtp` is loaded once and stays resident for the life of the
+process — the plugin never unloads it, and `ADSP_LIBRARY_PATH` / `SetDllDirectory` are
+process-wide. So the path is locked at `geniex_init`, and setting it afterwards returns
+`GENIEX_ERROR_COMMON_ALREADY_INITIALIZED` rather than appearing to work. `geniex_deinit` does
+not unlock it: the QNN libraries outlive the cycle. Comparing versions means one process per
+version.
+
+</details>
+
+### HTP multicore (qairt)
+
+By default a QAIRT model executes on **one** NSP core. The knob is the bundle's
+`htp_backend_ext_config.json`: the QAIRT core counts the `devices[].cores` entries
+and, when more than one is listed, sets
+`QNN_HTP_GRAPH_CONFIG_OPTION_NUM_CORES` on every loaded graph
+(`ModelConfig::num_cores` in the plugin; see
+[geniex-qairt docs § HTP Backend Config and Multicore Execution](../third-party/geniex-qairt/docs/README.md#5-htp-backend-config-and-multicore-execution)).
+
+What you can and cannot change at load time:
+
+- **Load time**: the `NUM_CORES` graph config, per-core `perf_profile`, and
+  `rpc_control_latency` — all read from the JSON when the model loads.
+- **Generation time**: graph partitioning baked into the context binaries.
+  Binaries compiled single-core may not speed up (or may reject the config)
+  even when more cores are requested.
+
+At init the runtime logs the device-reported core count and the effective core
+count (`--log info`), warns and clamps when the JSON requests more cores
+than the SoC exposes, and warns without failing when the driver reports
+multicore unavailable (QNN verbose trace: `Error code 1000 ... key = 304` /
+`Multicore support is unavailable`). Most current Snapdragon mobile/compute
+SoCs expose a single NSP core; multi-NSP parts (e.g. certain automotive SoCs)
+report `numCores > 1` in QNN platform info.
 
 ### Build and run locally
 

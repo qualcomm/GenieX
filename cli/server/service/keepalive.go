@@ -15,12 +15,12 @@ import (
 	"github.com/qualcomm/GenieX/cli/internal/render"
 	"github.com/qualcomm/GenieX/cli/server/middleware"
 	"github.com/qualcomm/GenieX/cli/server/types"
+	"github.com/qualcomm/GenieX/cli/server/utils"
 )
 
-// resolveDraftModelPath maps a spec_draft_model value to an absolute GGUF path:
-// an existing filesystem path is returned as-is, otherwise it is a catalogue
-// name (optionally :precision) looked up in the local cache. A cache miss is an
-// error — the server never auto-pulls, so the draft must be pulled beforehand.
+// resolveDraftModelPath resolves spec_draft_model to a GGUF path: an existing
+// path passes through as-is, otherwise it's a catalogue name (optionally
+// :precision) looked up in the local cache — never auto-pulled.
 func resolveDraftModelPath(draft string) (string, error) {
 	if draft == "" {
 		return "", nil
@@ -36,15 +36,21 @@ func resolveDraftModelPath(draft string) (string, error) {
 	return paths.ModelPath, nil
 }
 
-// ResolveModelParam turns the already-resolved (nctx, ngl, compute) knobs into
-// the ModelParam the cache keys on. Compute is resolved to a DeviceID by the
-// SDK; nctx/ngl are llama_cpp-only and zeroed for other plugins.
-func ResolveModelParam(runtimeID, modelName string, reqNCtx, reqNgl int32, reqCompute, chipset string, spec types.SpecParam) (types.ModelParam, error) {
+// ResolveModelParam turns the model-load options into the ModelParam the cache
+// keys on. Compute is resolved to a DeviceID by the SDK; nctx/ngl are
+// llama_cpp-only and zeroed for other plugins. power_mode is shared by both
+// plugins and resolved here, once, into the geniex_PowerMode the SDK expects.
+func ResolveModelParam(runtimeID, modelName string, reqNCtx, reqNgl int32, reqCompute, reqVitCompute, reqPowerMode, chipset string, spec types.SpecParam) (types.ModelParam, error) {
 	// Non-llama_cpp plugins (e.g. qairt) reject non-zero nctx; the SDK zeroes
 	// ngl for them in geniex_resolve_device.
 	nctx, ngl := reqNCtx, reqNgl
 	if runtimeID != geniex_sdk.RuntimeLlamaCpp {
 		nctx = 0
+	}
+
+	resolvedPowerMode, err := geniex_sdk.ResolvePowerMode(reqPowerMode)
+	if err != nil {
+		return types.ModelParam{}, err
 	}
 
 	// Runs before the SDK's npu fallback; chipset comes from the caller so this
@@ -66,9 +72,11 @@ func ResolveModelParam(runtimeID, modelName string, reqNCtx, reqNgl int32, reqCo
 	}
 
 	mp := types.ModelParam{
-		NCtx:       nctx,
-		NGpuLayers: resolved.Ngl,
-		DeviceID:   resolved.DeviceID,
+		NCtx:        nctx,
+		NGpuLayers:  resolved.Ngl,
+		DeviceID:    resolved.DeviceID,
+		VitDeviceID: reqVitCompute,
+		PowerMode:   resolvedPowerMode,
 	}
 	// Spec is llama_cpp-only; leave it zero (disabled) for other plugins.
 	if runtimeID == geniex_sdk.RuntimeLlamaCpp {
@@ -77,16 +85,23 @@ func ResolveModelParam(runtimeID, modelName string, reqNCtx, reqNgl int32, reqCo
 	return mp, nil
 }
 
-// KeepAliveGet returns the cached model of type T, loading it if needed, to
-// avoid reloading from disk on every request.
-func KeepAliveGet[T any](name string, param types.ModelParam, reset bool) (*T, error) {
-	t, err := keepAliveGet[T](name, param, reset)
+// AcquiredModel is a cached model and whether it has reusable request state.
+type AcquiredModel[T any] struct {
+	Model *T
+	Fresh bool
+}
+
+// KeepAliveGet returns the cached model of type T, loading it if needed.
+// session identifies the request's conversation; Fresh is true after a load
+// or reset.
+func KeepAliveGet[T any](name string, param types.ModelParam, session utils.SessionKey) (AcquiredModel[T], error) {
+	t, fresh, err := keepAliveGet[T](name, param, session)
 	if err != nil {
-		return nil, err
+		return AcquiredModel[T]{}, err
 	}
 	// Stamp the idle timer at request end (only model requests reach here).
 	middleware.RunOnRelease(func() { keepAlive.lastActivity = time.Now() })
-	return t.(*T), nil
+	return AcquiredModel[T]{Model: t.(*T), Fresh: fresh}, nil
 }
 
 var keepAlive keepAliveService
@@ -97,16 +112,18 @@ type keepAliveService struct {
 	name         string           // cache key of the loaded model, "" when none
 	model        keepable         // nil when none
 	param        types.ModelParam // params the cache keys on
+	lastSession  utils.SessionKey // session served by the last request
 	lastActivity time.Time        // when the last model request finished
 	stopCh       chan struct{}
 }
 
-// keepable is a model the cache can free; keepResetable can also be reset.
+// keepable is a model the cache can free; resettable can also clear its
+// KV cache / turn state without a full reload.
 type keepable interface {
 	Destroy() error
 }
 
-type keepResetable interface {
+type resettable interface {
 	keepable
 	Reset() error
 }
@@ -130,9 +147,9 @@ func (keepAlive *keepAliveService) start() {
 	}()
 }
 
-// sweep frees the model once idle past the timeout. It runs only when it can
-// take the GIL, so an in-flight request defers it and the model is never freed
-// mid-generation; idle is measured from the last model request's end (#1322).
+// sweep frees the model once idle past the timeout. Runs only when it can
+// take the GIL, so it never fires mid-generation; idle is measured from the
+// last request's end (#1322).
 func (keepAlive *keepAliveService) sweep() {
 	if !middleware.GILock.TryLock() {
 		return
@@ -153,34 +170,40 @@ func (keepAlive *keepAliveService) destroy() {
 	}
 }
 
-// keepAliveGet reuses the cached model when name and params match, otherwise
-// loads a fresh one. Runs under the request GIL, so no locking here.
-func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, error) {
+// keepAliveGet reuses the cached model when name/params match, resetting it
+// when session isn't a continuation of the one last served, so a new
+// conversation never inherits another's KV cache. Returns whether the model
+// is fresh after a reset or load. Runs under the request GIL.
+func keepAliveGet[T any](name string, param types.ModelParam, session utils.SessionKey) (any, bool, error) {
 	// The SDK resolves bare names / aliases and picks the default precision
 	// when none is given; pass the request string through verbatim.
 	paths, err := geniex_sdk.ModelGetPaths(name)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	slog.Debug("KeepAliveGet", "name", name, "param", param, "model_path", paths.ModelPath)
 
 	modelfile := paths.ModelPath
 
 	if keepAlive.name == name && reflect.DeepEqual(keepAlive.param, param) {
-		if reset {
-			if r, ok := keepAlive.model.(keepResetable); ok {
-				r.Reset()
+		fresh := !utils.IsContinuation(keepAlive.lastSession, session)
+		if fresh {
+			if r, ok := keepAlive.model.(resettable); ok {
+				if err := r.Reset(); err != nil {
+					return nil, false, err
+				}
 			}
 		}
-		return keepAlive.model, nil
+		keepAlive.lastSession = session
+		return keepAlive.model, fresh, nil
 	}
 
 	// Drop the current model so only one stays in memory.
 	// TODO: unload model due to free ram/vram
 	keepAlive.destroy()
 
-	// param already carries the resolved NCtx / NGpuLayers / DeviceID; the
-	// cache keys on it, so no further resolution here.
+	// param already carries the resolved NCtx/NGpuLayers/DeviceID; no further
+	// resolution needed here.
 	var t keepable
 	var e error
 	switch reflect.TypeFor[T]() {
@@ -189,7 +212,7 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 		if param.Spec.Type != "" && param.Spec.DraftModel != "" {
 			p, perr := resolveDraftModelPath(param.Spec.DraftModel)
 			if perr != nil {
-				return nil, perr
+				return nil, false, perr
 			}
 			draftPath = p
 		}
@@ -204,35 +227,39 @@ func keepAliveGet[T any](name string, param types.ModelParam, reset bool) (any, 
 				SpecNMax:       param.Spec.NMax,
 				SpecNMin:       param.Spec.NMin,
 				SpecPMin:       param.Spec.PMin,
+				PowerMode:      param.PowerMode,
 			},
 			RuntimeID: paths.RuntimeID,
 		})
 	case reflect.TypeFor[geniex_sdk.VLM]():
 		t, e = geniex_sdk.NewVLM(geniex_sdk.VlmCreateInput{
-			ModelPath:  modelfile,
-			MmprojPath: paths.MmprojPath,
-			DeviceID:   param.DeviceID,
+			ModelPath:   modelfile,
+			MmprojPath:  paths.MmprojPath,
+			DeviceID:    param.DeviceID,
+			VitDeviceID: param.VitDeviceID,
 			Config: geniex_sdk.ModelConfig{
 				NCtx:       param.NCtx,
 				NGpuLayers: param.NGpuLayers,
+				PowerMode:  param.PowerMode,
 			},
 			RuntimeID: paths.RuntimeID,
 		})
 	default:
-		return nil, fmt.Errorf("unsupported model type: %s", reflect.TypeFor[T]())
+		return nil, false, fmt.Errorf("unsupported model type: %s", reflect.TypeFor[T]())
 	}
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
 	keepAlive.name = name
 	keepAlive.model = t
 	keepAlive.param = param
+	keepAlive.lastSession = session
 
-	return t, nil
+	return t, true, nil
 }
 
-// stop ends the sweep goroutine and frees the cached model — here rather than in
-// the goroutine, so it lands before the SDK deinit that follows.
+// stop ends the sweep goroutine and frees the model here, not in the
+// goroutine, so it lands before the SDK deinit that follows.
 func (keepAlive *keepAliveService) stop() {
 	close(keepAlive.stopCh)
 	middleware.GILock.Lock()

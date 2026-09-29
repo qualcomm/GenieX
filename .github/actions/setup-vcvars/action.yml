@@ -34,8 +34,14 @@ runs:
         }
         if (-not $vcvars) { throw "Could not locate vcvars for arch=$arch" }
 
-        $llvmBin = Get-ChildItem "C:\Program Files*\Microsoft Visual Studio\*\*\VC\Tools\Llvm\bin" `
-          -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+        # Search recursively for clang-cl.exe itself rather than assuming a fixed
+        # "Llvm\bin" layout -- newer VS releases have been seen nesting it under an
+        # arch-specific subfolder (e.g. "Llvm\ARM64\bin"). Prefer a match whose path
+        # names the target arch when more than one clang-cl.exe is found.
+        $clangCl = Get-ChildItem "C:\Program Files*\Microsoft Visual Studio\*\*\VC\Tools\Llvm" `
+          -Recurse -Filter "clang-cl.exe" -ErrorAction SilentlyContinue
+        $llvmBin = ($clangCl | Where-Object { $_.FullName -match "\\$arch\\" } | Select-Object -First 1).DirectoryName
+        if (-not $llvmBin) { $llvmBin = ($clangCl | Select-Object -First 1).DirectoryName }
         if (-not $llvmBin) { throw "Could not locate VS-bundled Llvm\bin" }
 
         Write-Host "vcvars:   $vcvars $vcvarsArgs"

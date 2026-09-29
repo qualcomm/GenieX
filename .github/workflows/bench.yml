@@ -143,7 +143,7 @@ jobs:
             --ctx "$CTX" \
             --pp "$PP" \
             --tg "$TG" \
-            --cells-out "$DEVICE-$MODEL_NAME.json"
+            --out "$DEVICE-$MODEL_NAME.json"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -172,5 +172,6 @@ jobs:
           DEVICE: ${{ matrix.device }}
         run: |
           python sdk/benchmark/qdc/run_qdc_jobs.py \
+            --mode bench_aggregate \
             --device "$DEVICE" \
-            --render-dir cells
+            --in-dir cells

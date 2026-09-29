@@ -21,6 +21,7 @@ import (
 	"github.com/qualcomm/GenieX/cli/internal/config"
 	"github.com/qualcomm/GenieX/cli/server/service"
 	"github.com/qualcomm/GenieX/cli/server/types"
+	"github.com/qualcomm/GenieX/cli/server/utils"
 )
 
 type ChatCompletionNewParams openai.ChatCompletionNewParams
@@ -33,6 +34,8 @@ type ChatCompletionRequest struct {
 	NCtx        int32  `json:"nctx"`
 	Ngl         int32  `json:"ngl"` // 0 = pure CPU, -1 = all layers, N = N layers; defaults to the server --ngl when omitted
 	Compute     string `json:"compute"`
+	VitCompute  string `json:"vit_compute"`
+	PowerMode   string `json:"power_mode"`
 
 	// "" / "none" keeps thinking inline in content (default); "deepseek" /
 	// "deepseek-legacy" / "auto" move it to reasoning_content.
@@ -52,9 +55,9 @@ type ChatCompletionRequest struct {
 }
 
 func defaultChatCompletionRequest() ChatCompletionRequest {
-	// Prefill the llama_cpp knobs with the server-wide defaults (--nctx / --ngl /
-	// --compute): ShouldBindJSON only overwrites fields present in the body, so an
-	// omitted knob keeps the default and an explicit one (incl. ngl 0) wins.
+	// Prefill llama_cpp knobs with server defaults (--nctx/--ngl/--compute):
+	// ShouldBindJSON only overwrites fields present in the body, so an omitted
+	// knob keeps the default and an explicit one (incl. ngl 0) wins.
 	cfg := config.Get()
 	return ChatCompletionRequest{
 		ChatCompletionNewParams: ChatCompletionNewParams{
@@ -67,6 +70,8 @@ func defaultChatCompletionRequest() ChatCompletionRequest {
 		NCtx:              cfg.NCtx,
 		Ngl:               cfg.Ngl,
 		Compute:           cfg.Compute,
+		VitCompute:        cfg.VitCompute,
+		PowerMode:         cfg.PowerMode,
 		TopK:              0,
 		MinP:              0.0,
 		RepetitionPenalty: 1.0,
@@ -96,7 +101,7 @@ func ChatCompletions(c *gin.Context) {
 
 	// Fill unset knobs from the server defaults before the MaxCompletionTokens
 	// floor, so a body that omits nctx picks up the default, not the floor.
-	modelParam, err := service.ResolveModelParam(paths.RuntimeID, paths.ModelName, param.NCtx, param.Ngl, param.Compute, service.Chipset(), types.SpecParam{
+	modelParam, err := service.ResolveModelParam(paths.RuntimeID, paths.ModelName, param.NCtx, param.Ngl, param.Compute, param.VitCompute, param.PowerMode, service.Chipset(), types.SpecParam{
 		Type:       param.SpecType,
 		DraftModel: param.SpecDraftModel,
 		NMax:       param.SpecNMax,
@@ -108,7 +113,6 @@ func ChatCompletions(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-
 	// Automatically adjust NCtx if MaxCompletionTokens is larger (llama_cpp only — QAIRT
 	// does not use NCtx and the 0-default must not be overwritten for non-llama_cpp plugins).
 	if paths.RuntimeID == geniex_sdk.RuntimeLlamaCpp && modelParam.NCtx < int32(param.MaxCompletionTokens.Value) {
@@ -129,8 +133,11 @@ func ChatCompletions(c *gin.Context) {
 		if !ok {
 			return
 		}
-		runChat(c, param, modelParam, messages, prepareLLM)
+		runChat(c, param, modelParam, messages, utils.SessionKeyOf(messages), prepareLLM)
 	case geniex_sdk.ModelTypeVLM:
+		// Hash before buildVLMMessages swaps each image/audio part for a
+		// per-request temp file path; see SessionKeyOfVLMRequest.
+		session := utils.SessionKeyOfVLMRequest(param.Messages)
 		messages, tempFiles, ok := buildVLMMessages(c, param)
 		for _, f := range tempFiles {
 			defer os.Remove(f)
@@ -138,7 +145,7 @@ func ChatCompletions(c *gin.Context) {
 		if !ok {
 			return
 		}
-		runChat(c, param, modelParam, messages, prepareVLM)
+		runChat(c, param, modelParam, messages, session, prepareVLM)
 	default:
 		slog.Error("Model type not support", "model_type", paths.ModelType)
 		c.JSON(http.StatusBadRequest, map[string]any{"error": "model type not support"})
@@ -149,15 +156,23 @@ func ChatCompletions(c *gin.Context) {
 // generateFn adapts LLM/VLM Generate to one shape; fullText is set even on error.
 type generateFn func(prompt string, onToken func(string) bool) (geniex_sdk.ProfileData, string, error)
 
-// prepareFn holds the only LLM/VLM-specific work: apply the chat template, then
-// return the formatted prompt and a generateFn.
-type prepareFn[T, M any] func(p *T, messages M, param ChatCompletionRequest, tools string, sampler *geniex_sdk.SamplerConfig) (prompt string, gen generateFn, err error)
+type prepareInput[M any] struct {
+	Messages M
+	Param    ChatCompletionRequest
+	Tools    string
+	Sampler  *geniex_sdk.SamplerConfig
+	Fresh    bool
+}
 
-func prepareLLM(p *geniex_sdk.LLM, messages []geniex_sdk.LlmChatMessage, param ChatCompletionRequest, tools string, sampler *geniex_sdk.SamplerConfig) (string, generateFn, error) {
+// prepareFn holds the LLM/VLM-specific work: apply the chat template and
+// return the formatted prompt plus a generateFn.
+type prepareFn[T, M any] func(p *T, input prepareInput[M]) (prompt string, gen generateFn, err error)
+
+func prepareLLM(p *geniex_sdk.LLM, input prepareInput[[]geniex_sdk.LlmChatMessage]) (string, generateFn, error) {
 	formatted, err := p.ApplyChatTemplate(geniex_sdk.LlmApplyChatTemplateInput{
-		Messages:            messages,
-		Tools:               tools,
-		EnableThink:         param.EnableThink,
+		Messages:            input.Messages,
+		Tools:               input.Tools,
+		EnableThink:         input.Param.EnableThink,
 		AddGenerationPrompt: true,
 	})
 	if err != nil {
@@ -168,8 +183,8 @@ func prepareLLM(p *geniex_sdk.LLM, messages []geniex_sdk.LlmChatMessage, param C
 			PromptUTF8: prompt,
 			OnToken:    onToken,
 			Config: &geniex_sdk.GenerationConfig{
-				MaxTokens:     int32(param.MaxCompletionTokens.Value),
-				SamplerConfig: sampler,
+				MaxTokens:     int32(input.Param.MaxCompletionTokens.Value),
+				SamplerConfig: input.Sampler,
 			},
 		})
 		if out == nil {
@@ -180,23 +195,28 @@ func prepareLLM(p *geniex_sdk.LLM, messages []geniex_sdk.LlmChatMessage, param C
 	return formatted.FormattedText, gen, nil
 }
 
-func prepareVLM(p *geniex_sdk.VLM, messages []geniex_sdk.VlmChatMessage, param ChatCompletionRequest, tools string, sampler *geniex_sdk.SamplerConfig) (string, generateFn, error) {
+func prepareVLM(p *geniex_sdk.VLM, input prepareInput[[]geniex_sdk.VlmChatMessage]) (string, generateFn, error) {
 	formatted, err := p.ApplyChatTemplate(geniex_sdk.VlmApplyChatTemplateInput{
-		Messages:    messages,
-		Tools:       tools,
-		EnableThink: param.EnableThink,
+		Messages:    input.Messages,
+		Tools:       input.Tools,
+		EnableThink: input.Param.EnableThink,
 	})
 	if err != nil {
 		return "", nil, err
 	}
-	images := make([]string, 0)
-	audios := make([]string, 0)
-	for _, content := range messages[len(messages)-1].Contents {
-		switch content.Type {
-		case geniex_sdk.VlmContentTypeImage:
-			images = append(images, content.Text)
-		case geniex_sdk.VlmContentTypeAudio:
-			audios = append(audios, content.Text)
+	start := len(input.Messages) - 1
+	if input.Fresh {
+		start = 0
+	}
+	var images, audios []string
+	for _, message := range input.Messages[start:] {
+		for _, content := range message.Contents {
+			switch content.Type {
+			case geniex_sdk.VlmContentTypeImage:
+				images = append(images, content.Text)
+			case geniex_sdk.VlmContentTypeAudio:
+				audios = append(audios, content.Text)
+			}
 		}
 	}
 	gen := func(prompt string, onToken func(string) bool) (geniex_sdk.ProfileData, string, error) {
@@ -204,8 +224,8 @@ func prepareVLM(p *geniex_sdk.VLM, messages []geniex_sdk.VlmChatMessage, param C
 			PromptUTF8: prompt,
 			OnToken:    onToken,
 			Config: &geniex_sdk.GenerationConfig{
-				MaxTokens:     int32(param.MaxCompletionTokens.Value),
-				SamplerConfig: sampler,
+				MaxTokens:     int32(input.Param.MaxCompletionTokens.Value),
+				SamplerConfig: input.Sampler,
 				ImagePaths:    images,
 				AudioPaths:    audios,
 			},
@@ -218,8 +238,35 @@ func prepareVLM(p *geniex_sdk.VLM, messages []geniex_sdk.VlmChatMessage, param C
 	return formatted.FormattedText, gen, nil
 }
 
-// runChat is the shared flow wrapping the type-specific prepareFn.
-func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam types.ModelParam, messages M, prepare prepareFn[T, M]) {
+// generateWithRetry retries a VLM prefix reuse failure once after resetting
+// the model and rebuilding the full conversation.
+func generateWithRetry[T, M any](model *T, prompt string, gen generateFn, input prepareInput[M], prepare prepareFn[T, M], onToken func(string) bool) (geniex_sdk.ProfileData, string, error) {
+	profile, fullText, err := gen(prompt, onToken)
+	if !errors.Is(err, geniex_sdk.ErrVlmPrefixReuseFailed) {
+		return profile, fullText, err
+	}
+
+	vlm, ok := any(model).(*geniex_sdk.VLM)
+	if !ok {
+		slog.Error("Cannot retry VLM prefix reuse failure with non-VLM model")
+		return profile, fullText, err
+	}
+	if resetErr := vlm.Reset(); resetErr != nil {
+		slog.Error("Failed to reset model before VLM prefix reuse retry", "error", resetErr)
+		return profile, fullText, err
+	}
+	slog.Warn("VLM prefix reuse failed; resetting and retrying", "error", err)
+	input.Fresh = true
+	prompt, gen, err = prepare(model, input)
+	if err != nil {
+		return profile, fullText, err
+	}
+	return gen(prompt, onToken)
+}
+
+// runChat is the shared flow wrapping the type-specific prepareFn. session
+// identifies the conversation for the keepalive cache's reset decision.
+func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam types.ModelParam, messages M, session utils.SessionKey, prepare prepareFn[T, M]) {
 	// ---- prepare: parse tools, load the model, apply the chat template ----
 	parseTool, tools, err := parseTools(param)
 	if err != nil {
@@ -228,10 +275,10 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		return
 	}
 
-	p, err := service.KeepAliveGet[T](
+	acquired, err := service.KeepAliveGet[T](
 		string(param.Model),
 		modelParam,
-		c.GetHeader("GenieX-KeepCache") != "true",
+		session,
 	)
 	if writeKeepAliveError(c, err) {
 		return
@@ -256,7 +303,13 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		FrequencyPenalty:  float32(param.FrequencyPenalty.Value),
 		Seed:              int32(param.Seed.Value),
 	}
-	prompt, gen, err := prepare(p, messages, param, tools, sampler)
+	prompt, gen, err := prepare(acquired.Model, prepareInput[M]{
+		Messages: messages,
+		Param:    param,
+		Tools:    tools,
+		Sampler:  sampler,
+		Fresh:    acquired.Fresh,
+	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 		return
@@ -277,7 +330,13 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			profile, _, genErr = gen(prompt, func(token string) bool {
+			profile, _, genErr = generateWithRetry(acquired.Model, prompt, gen, prepareInput[M]{
+				Messages: messages,
+				Param:    param,
+				Tools:    tools,
+				Sampler:  sampler,
+				Fresh:    acquired.Fresh,
+			}, prepare, func(token string) bool {
 				if stopGen.Load() {
 					return false
 				}
@@ -289,13 +348,13 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 
 		wait := func() error { wg.Wait(); return genErr }
 		includeUsage := param.StreamOptions.IncludeUsage.Value
+		class := tokenClass(plainClass)
+		if reasoningSeparated(param.ReasoningFormat) {
+			class = reasoningClass()
+		}
 		if parseTool {
-			streamToolCall(c, dataCh, wait, includeUsage, &profile)
+			streamToolCall(c, dataCh, wait, includeUsage, &profile, class, tools)
 		} else {
-			class := tokenClass(plainClass)
-			if reasoningSeparated(param.ReasoningFormat) {
-				class = reasoningClass()
-			}
 			streamPlainText(c, dataCh, wait, includeUsage, &profile, render(class))
 		}
 
@@ -306,10 +365,16 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		// blocking
 		var content, reasoning strings.Builder
 		class := tokenClass(plainClass)
-		if !parseTool && reasoningSeparated(param.ReasoningFormat) {
+		if reasoningSeparated(param.ReasoningFormat) {
 			class = reasoningClass()
 		}
-		profile, _, err := gen(prompt, sink(class, &content, &reasoning))
+		profile, _, err := generateWithRetry(acquired.Model, prompt, gen, prepareInput[M]{
+			Messages: messages,
+			Param:    param,
+			Tools:    tools,
+			Sampler:  sampler,
+			Fresh:    acquired.Fresh,
+		}, prepare, sink(class, &content, &reasoning))
 		// A prompt that never fit is a 400; a window exhausted mid-generation is a
 		// normal truncated completion (finish_reason=length), handled below.
 		if errors.Is(err, geniex_sdk.ErrLlmGenerationPromptTooLong) {
@@ -320,7 +385,8 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
-		writeBlockingResponse(c, content.String(), reasoning.String(), profile, parseTool)
+		logProfile(profile)
+		writeBlockingResponse(c, content.String(), reasoning.String(), profile, parseTool, tools)
 	}
 }
 

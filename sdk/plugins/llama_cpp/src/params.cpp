@@ -244,4 +244,25 @@ std::optional<std::vector<ggml_backend_dev_t>> resolve_devices(const char* devic
     return devices;
 }
 
+void apply_tool_fields(common_chat_msg& msg, const geniex_ToolCall* tool_calls, int32_t tool_call_count,
+    const char* tool_call_id, const char* tool_name) {
+    if (tool_calls && tool_call_count > 0) {
+        msg.tool_calls.reserve(static_cast<size_t>(tool_call_count));
+        for (int32_t i = 0; i < tool_call_count; ++i) {
+            const geniex_ToolCall& src = tool_calls[i];
+            if (!src.name) {
+                GENIEX_LOG_WARN("Skipping tool call {} with null name", i);
+                continue;
+            }
+            common_chat_tool_call tc;
+            tc.name      = src.name;
+            tc.arguments = src.arguments ? src.arguments : "{}";
+            tc.id        = src.id ? src.id : "";
+            msg.tool_calls.push_back(std::move(tc));
+        }
+    }
+    if (tool_call_id) msg.tool_call_id = tool_call_id;
+    if (tool_name) msg.tool_name = tool_name;
+}
+
 }  // namespace geniex

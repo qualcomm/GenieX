@@ -13,6 +13,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <string>
 
 #include "build_config.h"
 #include "logging.h"
@@ -72,6 +73,8 @@ static void default_log_handler(geniex_LogLevel level, const char* msg) {
     std::cerr << colorCode << prefix << msg << "\033[0m" << std::endl;
 }
 
+static void lock_qairt_runtime_path();
+
 int32_t geniex_init(void) {
 #ifdef _WIN32
     // set console output to UTF-8 code page for Windows
@@ -91,6 +94,7 @@ int32_t geniex_init(void) {
 
     try {
         Registry::instance().scan_plugins();
+        lock_qairt_runtime_path();
         return GENIEX_SUCCESS;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("failed to initialize ml: {}", e.what());
@@ -136,6 +140,30 @@ int32_t geniex_set_log(geniex_log_callback callback) {
     geniex_log = callback;
     return GENIEX_SUCCESS;
 }
+
+// QAIRT runtime override
+
+static std::string qairt_runtime_path;
+
+// Latched by the first geniex_init and never cleared: QnnHtp is loaded once and the
+// plugin never unloads it, so a later path cannot take effect -- not even after a
+// geniex_deinit / geniex_init cycle, which leaves the QNN libraries resident.
+static bool qairt_runtime_path_locked = false;
+
+static void lock_qairt_runtime_path() { qairt_runtime_path_locked = true; }
+
+int32_t geniex_set_qairt_runtime_path(const char* path) {
+    if (qairt_runtime_path_locked) {
+        GENIEX_LOG_ERROR(
+            "geniex_set_qairt_runtime_path must be called before geniex_init; QnnHtp is already "
+            "loaded and stays resident, so run another QAIRT runtime in a fresh process");
+        return GENIEX_ERROR_COMMON_ALREADY_INITIALIZED;
+    }
+    qairt_runtime_path = (path != nullptr) ? path : "";
+    return GENIEX_SUCCESS;
+}
+
+const char* geniex_get_qairt_runtime_path(void) { return qairt_runtime_path.c_str(); }
 
 void geniex_free(void* ptr) {
     if (ptr) free(ptr);

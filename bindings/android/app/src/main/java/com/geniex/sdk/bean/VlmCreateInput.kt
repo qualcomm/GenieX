@@ -13,4 +13,5 @@ data class VlmCreateInput(
      * for `llama_cpp`, [ComputeUnitValue.NPU] for `qairt`).
      */
     override val compute_unit: String? = null,
+    val vit_device_id: String? = null,
 ) : CreateInputBase

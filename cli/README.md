@@ -28,6 +28,10 @@ geniex --log debug list
 
 `NO_COLOR=1` disables ANSI colors.
 
+This also governs the `qairt` backend's own QNN logging: at `none` (the
+default), QNN emits nothing extra; any other level asks QNN for full
+verbosity and lets the same threshold decide what's shown.
+
 ### Sliding window (qairt only)
 
 The `qairt` backend has a fixed context length (e.g. 4096 tokens). By default, once the accumulated

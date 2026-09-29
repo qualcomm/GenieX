@@ -122,6 +122,34 @@ async fn end_to_end_pull_qwen2_fp16() {
     );
 }
 
+/// `openai/gpt-oss-safeguard-20b` ships safetensors only. Fails while
+/// planning, so it downloads nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore]
+async fn pull_safetensors_only_repo_reports_supported_formats() {
+    let repo = "openai/gpt-oss-safeguard-20b";
+    let tmp = tempfile::tempdir().expect("tmpdir");
+    let cfg = StoreConfig::new(tmp.path().to_path_buf());
+    let store = Store::new(cfg).expect("store init");
+
+    let req = PullRequest {
+        model_name: repo.to_string(),
+        intent: PullIntent::HuggingFace {
+            repo: repo.to_string(),
+            token: None,
+        },
+        on_progress: None,
+        hint: ManifestHint::default(),
+    };
+    let msg = pull(&store, req)
+        .await
+        .expect_err("safetensors-only repo must not pull")
+        .to_string();
+    assert!(msg.contains(repo), "{msg}");
+    assert!(msg.contains("GGUF"), "{msg}");
+    assert!(msg.contains("QAIRT"), "{msg}");
+}
+
 /// `ggml-org/gpt-oss-20b-GGUF:mxfp4` ships a single ~12 GB MXFP4 weight —
 /// exercises the new MXFP token recognition in `extract_quant`. Pulls
 /// ~12 GB, so leave it off by default.

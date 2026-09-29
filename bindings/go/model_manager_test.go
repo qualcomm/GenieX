@@ -22,6 +22,32 @@ func TestResolveAlias(t *testing.T) {
 	}
 }
 
+func TestSplitNamePrecision(t *testing.T) {
+	cases := []struct{ arg, name, precision string }{
+		{"org/repo:Q4_0", "org/repo", "Q4_0"},
+		{"org/repo", "org/repo", ""},
+		{"org/repo:N/A", "org/repo", "N/A"},
+		{"docker.io/ai/gemma3:latest", "docker.io/ai/gemma3", "latest"},
+		{
+			"https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF:Q4_K_M",
+			"https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF",
+			"Q4_K_M",
+		},
+		{
+			"https://huggingface.co/Qwen/Qwen3-0.6B-GGUF",
+			"https://huggingface.co/Qwen/Qwen3-0.6B-GGUF",
+			"",
+		},
+	}
+	for _, c := range cases {
+		name, precision := SplitNamePrecision(c.arg)
+		if name != c.name || precision != c.precision {
+			t.Errorf("SplitNamePrecision(%q) = (%q, %q), want (%q, %q)",
+				c.arg, name, precision, c.name, c.precision)
+		}
+	}
+}
+
 func TestJoinNamePrecision(t *testing.T) {
 	cases := []struct{ name, precision, want string }{
 		{"org/repo", "Q4_0", "org/repo:Q4_0"},

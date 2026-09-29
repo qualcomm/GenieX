@@ -178,6 +178,7 @@ interrupts the current reply. `geniex-py <cmd> --help` for all flags.
 | `GENIEX_HFTOKEN`   | HuggingFace token for gated repos.                   |
 | `GENIEX_LIB_PATH`  | Point at a pre-built `libgeniex.so` / `geniex.dll`.  |
 | `GENIEX_LOG`       | Log level: `trace`/`debug`/`info`/`warn`/`error`/`none`. Default `info`. |
+| `GENIEX_QAIRT_LIB` | Run the `qairt` plugin against another QAIRT runtime: a QAIRT SDK root or a flat folder of QNN libraries. A runtime is bundled and used by default. `geniex.set_qairt_runtime_path()` does the same thing and takes precedence. |
 
 ## Logging
 

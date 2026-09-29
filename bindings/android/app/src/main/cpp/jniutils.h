@@ -59,11 +59,16 @@ geniex_LlmCreateInput extract_llm_create_input(JNIEnv* env, jobject inputObj);
 
 geniex_VlmCreateInput extract_vlm_create_input(JNIEnv* env, jobject inputObj);
 
-void                               clear_jni_cstr_pool();
-std::vector<geniex_LlmChatMessage> extract_llm_chat_messages(
-    JNIEnv* env, jobjectArray jmessages, std::vector<std::string>& str_buf);
+void clear_jni_cstr_pool();
+
+// The returned messages point into the hold_c_str pool and own their tool-call
+// arrays: call free_*_chat_messages, then clear_jni_cstr_pool, once the SDK
+// call that consumes them has returned.
+std::vector<geniex_LlmChatMessage> extract_llm_chat_messages(JNIEnv* env, jobjectArray jmessages);
+void                               free_llm_chat_messages(std::vector<geniex_LlmChatMessage>& msgs);
 
 std::vector<geniex_VlmChatMessage> extract_vlm_chat_messages(JNIEnv* env, jobjectArray jmessages);
+void                               free_vlm_chat_messages(std::vector<geniex_VlmChatMessage>& msgs);
 
 // Extract image and audio paths from VlmChatMessage contents
 void extract_media_paths_from_messages(

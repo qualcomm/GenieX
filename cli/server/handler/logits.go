@@ -13,6 +13,7 @@ import (
 	"github.com/qualcomm/GenieX/cli/internal/config"
 	"github.com/qualcomm/GenieX/cli/server/service"
 	"github.com/qualcomm/GenieX/cli/server/types"
+	"github.com/qualcomm/GenieX/cli/server/utils"
 )
 
 // ForwardLogitsRequest is the body for POST /v1/logits: one prefill-only forward
@@ -29,9 +30,11 @@ type ForwardLogitsRequest struct {
 	TopN *int `json:"top_n"`
 
 	// Compute-unit / layer overrides, same semantics as chat completions.
-	NCtx    int32  `json:"nctx"`
-	Ngl     int32  `json:"ngl"`
-	Compute string `json:"compute"`
+	NCtx       int32  `json:"nctx"`
+	Ngl        int32  `json:"ngl"`
+	Compute    string `json:"compute"`
+	VitCompute string `json:"vit_compute"`
+	PowerMode  string `json:"power_mode"`
 }
 
 const defaultLogitsTopN = 20
@@ -56,7 +59,7 @@ type ForwardRow struct {
 
 func ForwardLogits(c *gin.Context) {
 	cfg := config.Get()
-	req := ForwardLogitsRequest{NCtx: cfg.NCtx, Ngl: cfg.Ngl, Compute: cfg.Compute}
+	req := ForwardLogitsRequest{NCtx: cfg.NCtx, Ngl: cfg.Ngl, Compute: cfg.Compute, VitCompute: cfg.VitCompute, PowerMode: cfg.PowerMode}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Error("Failed to bind JSON", "error", err)
 		c.JSON(http.StatusBadRequest, map[string]any{"error": err.Error()})
@@ -78,21 +81,21 @@ func ForwardLogits(c *gin.Context) {
 		return
 	}
 
-	modelParam, err := service.ResolveModelParam(paths.RuntimeID, paths.ModelName, req.NCtx, req.Ngl, req.Compute, service.Chipset(), types.SpecParam{})
+	modelParam, err := service.ResolveModelParam(paths.RuntimeID, paths.ModelName, req.NCtx, req.Ngl, req.Compute, req.VitCompute, req.PowerMode, service.Chipset(), types.SpecParam{})
 	if err != nil {
 		slog.Error("Failed to resolve model params", "model", req.Model, "error", err)
 		c.JSON(http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-
-	p, err := service.KeepAliveGet[geniex_sdk.LLM](
+	acquired, err := service.KeepAliveGet[geniex_sdk.LLM](
 		req.Model,
 		modelParam,
-		c.GetHeader("GenieX-KeepCache") != "true",
+		utils.HashTokens(req.InputIDs),
 	)
 	if writeKeepAliveError(c, err) {
 		return
 	}
+	p := acquired.Model
 
 	topN := defaultLogitsTopN
 	if req.TopN != nil {

@@ -28,6 +28,10 @@ geniex --log debug list
 
 设置 `NO_COLOR=1` 可关闭 ANSI 颜色。
 
+该设置同样控制 `qairt` 后端自身的 QNN 日志：取值为 `none`（默认）时 QNN
+不会额外输出；其他任意取值都会要求 QNN 输出完整详细日志，再由同一阈值
+决定最终展示哪些内容。
+
 ### 滑动窗口（仅 qairt）
 
 `qairt` 后端的上下文长度是固定的（例如 4096 tokens）。默认情况下，一旦累计的对话历史加上新的 prompt 超出该长度，`geniex infer` 会返回超出上下文（out-of-context）错误，会话无法继续。

@@ -15,6 +15,7 @@ from appium.options.common import AppiumOptions
 HOST_BUNDLE = "/qdc/appium/pkg-geniex"
 HOST_ROWS = "/qdc/appium/matrix_rows.txt"
 HOST_CHIPSET = "/qdc/appium/chipset.txt"
+HOST_PARAMS = "/qdc/appium/params.json"
 HOST_IMAGE = "/qdc/appium/test.png"
 HOST_PROMPTS = "/qdc/appium/prompts"
 BUNDLE_PATH = "/data/local/tmp/pkg-geniex"

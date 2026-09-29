@@ -35,6 +35,9 @@ func serve() *cobra.Command {
 	serveCmd.Flags().Int32("nctx", 4096, "Default context window size, llama_cpp only (env: GENIEX_NCTX)")
 	serveCmd.Flags().Int32P("ngl", "n", -1, "Default layers to offload to gpu/npu, -1 = all, llama_cpp only (env: GENIEX_NGL)")
 	serveCmd.Flags().StringP("compute", "c", "", "Default compute unit: cpu, gpu, npu, or hybrid (env: GENIEX_COMPUTE)")
+	serveCmd.Flags().String("vit-compute", "", "Default VLM vision encoder compute unit, e.g. CPU or HTP2 (env: GENIEX_VIT_COMPUTE)")
+	serveCmd.Flags().String("power-mode", "", "Default HTP power/clock-management mode: low_power_saver, power_saver, high_power_saver, low_balanced, balanced, high_performance, sustained_high_performance, burst (default: burst) (env: GENIEX_POWER_MODE)")
+	serveCmd.Flags().String("qairt-lib", "", "Run against a different QAIRT runtime: path to a QAIRT SDK root or a folder of QNN libraries, qairt only (env: GENIEX_QAIRT_LIB)")
 	// HTTPS / TLS flags
 	serveCmd.Flags().Bool("https", false, "Enable HTTPS/TLS (env: GENIEX_HTTPS)")
 	serveCmd.Flags().String("certfile", "cert.pem", "TLS certificate file path (env: GENIEX_CERTFILE)")
@@ -46,13 +49,36 @@ func serve() *cobra.Command {
 	viper.BindPFlag("nctx", serveCmd.Flags().Lookup("nctx"))
 	viper.BindPFlag("ngl", serveCmd.Flags().Lookup("ngl"))
 	viper.BindPFlag("compute", serveCmd.Flags().Lookup("compute"))
+	viper.BindPFlag("vitcompute", serveCmd.Flags().Lookup("vit-compute"))
+	viper.BindEnv("vitcompute", "GENIEX_VIT_COMPUTE")
+	viper.BindPFlag("powermode", serveCmd.Flags().Lookup("power-mode"))
+	viper.BindEnv("powermode", "GENIEX_POWER_MODE")
+	viper.BindPFlag("qairtlib", serveCmd.Flags().Lookup("qairt-lib"))
+	// Bound explicitly so the plugin's own spelling is the only one that works;
+	// AutomaticEnv would otherwise make GENIEX_QAIRTLIB a silent second alias.
+	viper.BindEnv("qairtlib", "GENIEX_QAIRT_LIB")
 	viper.BindPFlag("enablehttps", serveCmd.Flags().Lookup("https"))
 	viper.BindPFlag("certfile", serveCmd.Flags().Lookup("certfile"))
 	viper.BindPFlag("keyfile", serveCmd.Flags().Lookup("keyfile"))
 
 	serveCmd.Run = func(cmd *cobra.Command, args []string) {
 		checkAudioDependency()
+
+		// Handed to the SDK rather than exported, matching `infer`; every model the server
+		// loads, LLM or VLM, then goes through the same SDK-side resolution.
+		if qairtLib := viper.GetString("qairtlib"); qairtLib != "" {
+			if err := geniex_sdk.SetQairtRuntimePath(qairtLib); err != nil {
+				common.PrintError(err)
+				os.Exit(1)
+			}
+		}
+
 		if err := common.InitSDK(); err != nil {
+			common.PrintError(err)
+			os.Exit(1)
+		}
+
+		if _, err := geniex_sdk.ResolvePowerMode(viper.GetString("powermode")); err != nil {
 			common.PrintError(err)
 			os.Exit(1)
 		}

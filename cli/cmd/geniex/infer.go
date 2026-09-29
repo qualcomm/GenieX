@@ -28,24 +28,27 @@ import (
 
 var (
 	// disableStream *bool // reuse in run.go
-	ngl           int32
-	nctx          int32
-	ubatch        int32
-	maxTokens     int32
-	stop          []string
-	stopFile      string
-	enableThink   bool
-	prompt        []string
-	tokenFile     string
-	input         string
-	systemPrompt  string
-	computeUnit   string
-	slidingWindow bool
-	specType      string
-	draftModel    string
-	draftTokens   int32
-	draftMin      int32
-	draftPMin     float32
+	ngl            int32
+	nctx           int32
+	ubatch         int32
+	maxTokens      int32
+	stop           []string
+	stopFile       string
+	enableThink    bool
+	prompt         []string
+	tokenFile      string
+	input          string
+	systemPrompt   string
+	computeUnit    string
+	vitComputeUnit string
+	qairtLib       string
+	slidingWindow  bool
+	specType       string
+	draftModel     string
+	draftTokens    int32
+	draftMin       int32
+	draftPMin      float32
+	powerMode      string
 
 	// sampler config
 	temperature       float32
@@ -81,6 +84,8 @@ var (
 		llmFlags := pflag.NewFlagSet("LLM/VLM Model", pflag.ExitOnError)
 		llmFlags.SortFlags = false
 		llmFlags.StringVarP(&computeUnit, "compute", "c", "", "compute unit to run on: cpu, gpu, npu, hybrid, or an explicit device list like HTP0,HTP1,HTP2,HTP3 (llama_cpp only) (default: npu)")
+		llmFlags.StringVar(&vitComputeUnit, "vit-compute", "", "compute unit for the VLM vision encoder, e.g. CPU or HTP2 (llama_cpp only)")
+		llmFlags.StringVarP(&qairtLib, "qairt-lib", "", "", "run against a different QAIRT runtime: path to a QAIRT SDK root or a folder of QNN libraries (qairt only; sets GENIEX_QAIRT_LIB; optional — a QAIRT runtime is bundled and used by default)")
 		llmFlags.Int32VarP(&ngl, "ngl", "n", -1, "number of layers to offload to gpu/npu, -1 = all (llama_cpp only)")
 		llmFlags.Int32VarP(&nctx, "nctx", "", 4096, "context window size; raise to extend context (llama_cpp only)")
 		llmFlags.Int32VarP(&maxTokens, "max-tokens", "", 2048, "max tokens")
@@ -97,6 +102,7 @@ var (
 		llmFlags.Int32VarP(&draftTokens, "draft-tokens", "", 3, "max draft tokens per step for speculative decoding (llama_cpp only)")
 		llmFlags.Int32VarP(&draftMin, "draft-min", "", 0, "min draft tokens per step (0 = llama.cpp default) (llama_cpp only)")
 		llmFlags.Float32VarP(&draftPMin, "draft-p-min", "", 0.0, "min greedy draft probability (0 = llama.cpp default) (llama_cpp only)")
+		llmFlags.StringVarP(&powerMode, "power-mode", "", "", "HTP power/clock-management mode: low_power_saver, power_saver, high_power_saver, low_balanced, balanced, high_performance, sustained_high_performance, burst (default: burst)")
 		return llmFlags
 	}()
 	vlmFlags = func() *pflag.FlagSet {
@@ -141,7 +147,21 @@ func infer() *cobra.Command {
 			return err
 		}
 
+		// Handed to the SDK rather than exported: os.Setenv is not reliably visible to a
+		// separately-CRT-linked plugin DLL on Windows. GENIEX_QAIRT_LIB still works as the
+		// SDK's own fallback, so an inherited environment keeps behaving as before.
+		if qairtLib != "" {
+			if err := geniex_sdk.SetQairtRuntimePath(qairtLib); err != nil {
+				return err
+			}
+		}
+
 		if err := common.InitSDK(); err != nil {
+			return err
+		}
+
+		resolvedPowerMode, err := geniex_sdk.ResolvePowerMode(powerMode)
+		if err != nil {
 			return err
 		}
 
@@ -157,9 +177,9 @@ func infer() *cobra.Command {
 
 		switch effectiveType {
 		case geniex_sdk.ModelTypeLLM:
-			err = inferLLM(cmd.Context(), paths)
+			err = inferLLM(cmd.Context(), paths, resolvedPowerMode)
 		case geniex_sdk.ModelTypeVLM:
-			err = inferVLM(paths)
+			err = inferVLM(paths, resolvedPowerMode)
 		default:
 			geniex_sdk.DeInit()
 			return fmt.Errorf("unsupported model type: %s", paths.ModelType)
@@ -327,7 +347,7 @@ func resolveModelParams(runtimeID, modelName string) (deviceID string, resolvedN
 	return
 }
 
-func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths) error {
+func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths, resolvedPowerMode geniex_sdk.PowerMode) error {
 	samplerConfig := &geniex_sdk.SamplerConfig{
 		Temperature:       temperature,
 		TopP:              topP,
@@ -385,6 +405,7 @@ func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths) error {
 			SpecNMax:       draftTokens,
 			SpecNMin:       draftMin,
 			SpecPMin:       draftPMin,
+			PowerMode:      resolvedPowerMode,
 		},
 	})
 	spin.Stop()
@@ -509,7 +530,7 @@ func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths) error {
 	return processor.Process()
 }
 
-func inferVLM(paths *geniex_sdk.ModelPaths) error {
+func inferVLM(paths *geniex_sdk.ModelPaths, resolvedPowerMode geniex_sdk.PowerMode) error {
 	samplerConfig := &geniex_sdk.SamplerConfig{
 		Temperature:       temperature,
 		TopP:              topP,
@@ -535,14 +556,16 @@ func inferVLM(paths *geniex_sdk.ModelPaths) error {
 	spin := render.NewSpinner("loading model...")
 	spin.Start()
 	p, err := geniex_sdk.NewVLM(geniex_sdk.VlmCreateInput{
-		ModelPath:  paths.ModelPath,
-		MmprojPath: paths.MmprojPath,
-		RuntimeID:  paths.RuntimeID,
-		DeviceID:   deviceID,
+		ModelPath:   paths.ModelPath,
+		MmprojPath:  paths.MmprojPath,
+		RuntimeID:   paths.RuntimeID,
+		DeviceID:    deviceID,
+		VitDeviceID: vitComputeUnit,
 		Config: geniex_sdk.ModelConfig{
 			NCtx:       nctxResolved,
 			NUbatch:    ubatch,
 			NGpuLayers: nglResolved,
+			PowerMode:  resolvedPowerMode,
 		},
 	})
 	spin.Stop()

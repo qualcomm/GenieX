@@ -19,6 +19,7 @@
 
 #include <geniex.h>
 #include <geniex_model.h>
+#include <power_mode_alias.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -81,11 +82,18 @@ typedef struct {
     int32_t      prompt_count;
     int32_t      max_new_tokens;
     float        temperature;
+    float        top_p;
     int32_t      seed;
     int32_t      warmup;
     int32_t      repeat;
     bool         reset_between_runs; /* true => geniex_llm_reset() before each run, freeing KV */
     bool         accuracy;           /* true => single run (warmup=0, repeat=1), print generated text */
+    /* --accuracy --prompt-file only: run each prompt through the bundle's own
+     * chat template (geniex_llm_apply_chat_template) before generation, so the
+     * benchmark exercises the same templating production inference uses
+     * instead of feeding the file verbatim. */
+    const char* system_prompt;   /* --system-prompt; NULL = no system message */
+    bool        enable_thinking; /* --think / --no-think; default true, matches `geniex infer` */
 
     /* Prefill-only raw-logits mode (--logits): one forward pass over the prompt,
      * no decode loop. Bypasses the timing/warmup/repeat machinery entirely. */
@@ -94,6 +102,7 @@ typedef struct {
     int32_t logits_top_n;            /* per row, emit only the top-N (token_id, logit) pairs */
     int32_t token_callback_delay_us; /* per-token busy-wait in on_token; 0 = no-op */
     int32_t n_ctx;
+    int32_t n_ubatch;
     int32_t n_threads;
     int32_t ngl_override; /* -1 = use resolved alias default; >=0 overrides */
 
@@ -102,6 +111,14 @@ typedef struct {
     int32_t     draft_tokens; /* max draft tokens per step (0 = plugin default) */
     int32_t     draft_min;    /* min draft tokens per step (0 = llama.cpp default) */
     float       draft_p_min;  /* min greedy draft probability (0 = llama.cpp default) */
+
+    /* HTP power/clock-management mode, shared by qairt and llama_cpp;
+     * NULL / "" / "default" = burst. */
+    const char* power_mode;
+
+    /* QAIRT runtime override (qairt); NULL = GENIEX_QAIRT_LIB, then the bundled runtime.
+     * Run-wide, not per cell: the QNN libraries load once per process. */
+    const char* qairt_lib;
 
     const char* output_json;
     const char* output_md;
@@ -184,6 +201,7 @@ void parse_args(int argc, char** argv, options_t* o);
 
 /* Distinguishes a filesystem path from a model-manager id. */
 bool looks_like_path(const char* s);
+void apply_chipset_defaults(options_t* o, const device_t* dev);
 /* Reads metadata.json's genie.supports_vision; false on any read/parse miss. */
 bool local_bundle_is_vlm(const char* model_path);
 /* If `path` is a directory, return a heap path to a regular file inside it

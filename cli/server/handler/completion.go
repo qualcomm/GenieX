@@ -19,6 +19,7 @@ import (
 	"github.com/qualcomm/GenieX/cli/internal/config"
 	"github.com/qualcomm/GenieX/cli/server/service"
 	"github.com/qualcomm/GenieX/cli/server/types"
+	"github.com/qualcomm/GenieX/cli/server/utils"
 )
 
 type CompletionNewParams openai.CompletionNewParams
@@ -27,9 +28,11 @@ type CompletionRequest struct {
 	CompletionNewParams
 	Stream bool `json:"stream"`
 
-	NCtx    int32  `json:"nctx"`
-	Ngl     int32  `json:"ngl"`
-	Compute string `json:"compute"`
+	NCtx       int32  `json:"nctx"`
+	Ngl        int32  `json:"ngl"`
+	Compute    string `json:"compute"`
+	VitCompute string `json:"vit_compute"`
+	PowerMode  string `json:"power_mode"`
 
 	TopK              int32   `json:"top_k"`
 	MinP              float32 `json:"min_p"`
@@ -46,6 +49,8 @@ func defaultCompletionRequest() CompletionRequest {
 		NCtx:              cfg.NCtx,
 		Ngl:               cfg.Ngl,
 		Compute:           cfg.Compute,
+		VitCompute:        cfg.VitCompute,
+		PowerMode:         cfg.PowerMode,
 		RepetitionPenalty: 1.0,
 	}
 }
@@ -128,13 +133,12 @@ func Completions(c *gin.Context) {
 		return
 	}
 
-	modelParam, err := service.ResolveModelParam(paths.RuntimeID, paths.ModelName, req.NCtx, req.Ngl, req.Compute, service.Chipset(), types.SpecParam{})
+	modelParam, err := service.ResolveModelParam(paths.RuntimeID, paths.ModelName, req.NCtx, req.Ngl, req.Compute, req.VitCompute, req.PowerMode, service.Chipset(), types.SpecParam{})
 	if err != nil {
 		slog.Error("Failed to resolve model params", "model", req.Model, "error", err)
 		c.JSON(http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-
 	// Automatically adjust NCtx if MaxTokens is larger (llama_cpp only — QAIRT
 	// does not use NCtx and the 0-default must not be overwritten for non-llama_cpp plugins).
 	if paths.RuntimeID == geniex_sdk.RuntimeLlamaCpp && modelParam.NCtx < int32(req.MaxTokens.Value) {
@@ -142,14 +146,15 @@ func Completions(c *gin.Context) {
 		modelParam.NCtx = int32(req.MaxTokens.Value)
 	}
 
-	p, err := service.KeepAliveGet[geniex_sdk.LLM](
+	acquired, err := service.KeepAliveGet[geniex_sdk.LLM](
 		string(req.Model),
 		modelParam,
-		c.GetHeader("GenieX-KeepCache") != "true",
+		utils.HashText(prompt),
 	)
 	if writeKeepAliveError(c, err) {
 		return
 	}
+	p := acquired.Model
 
 	genConfig := &geniex_sdk.GenerationConfig{
 		MaxTokens: int32(req.MaxTokens.Value),
@@ -225,6 +230,7 @@ func Completions(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return
 		}
+		logProfile(out.ProfileData)
 		writeCompletionResponse(c, echo+out.FullText, out.ProfileData)
 	}
 }
@@ -241,6 +247,7 @@ type completionStreamChunk struct {
 	Object  string                   `json:"object"`
 	Choices []completionStreamChoice `json:"choices"`
 	Usage   *openai.CompletionUsage  `json:"usage,omitempty"`
+	Timings *timings                 `json:"timings,omitempty"`
 }
 
 const completionObject = "text_completion"
@@ -259,8 +266,8 @@ func completionFinishChunk(reason string) completionStreamChunk {
 	}
 }
 
-func completionUsageChunk(u openai.CompletionUsage) completionStreamChunk {
-	return completionStreamChunk{Object: completionObject, Choices: []completionStreamChoice{}, Usage: &u}
+func completionUsageChunk(u openai.CompletionUsage, t timings) completionStreamChunk {
+	return completionStreamChunk{Object: completionObject, Choices: []completionStreamChoice{}, Usage: &u, Timings: &t}
 }
 
 // profile is read only after wait() returns, when generation has filled it.
@@ -283,9 +290,10 @@ func streamCompletion(c *gin.Context, dataCh <-chan string, wait func() error, i
 			c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return false
 		}
+		logProfile(*profile)
 		c.SSEvent("", completionFinishChunk(mapFinishReason(profile.StopReason)))
 		if includeUsage {
-			c.SSEvent("", completionUsageChunk(profile2Usage(*profile)))
+			c.SSEvent("", completionUsageChunk(profile2Usage(*profile), profile2Timings(*profile)))
 		}
 		c.SSEvent("", "[DONE]")
 		return false
@@ -304,6 +312,7 @@ type completionResponse struct {
 	Object  string                 `json:"object"`
 	Choices []completionChoice     `json:"choices"`
 	Usage   openai.CompletionUsage `json:"usage"`
+	Timings timings                `json:"timings"`
 }
 
 func writeCompletionResponse(c *gin.Context, text string, profile geniex_sdk.ProfileData) {
@@ -313,7 +322,8 @@ func writeCompletionResponse(c *gin.Context, text string, profile geniex_sdk.Pro
 			Text:         text,
 			FinishReason: mapFinishReason(profile.StopReason),
 		}},
-		Usage: profile2Usage(profile),
+		Usage:   profile2Usage(profile),
+		Timings: profile2Timings(profile),
 	})
 }
 

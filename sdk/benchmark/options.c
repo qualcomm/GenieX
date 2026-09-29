@@ -57,6 +57,9 @@ static void usage(const char* argv0) {
         "  -t, --threads N        generation threads (0 = SDK default)\n"
         "  -ngl, --n-gpu-layers N llama_cpp layers to offload; overrides the\n"
         "                         device alias default (-1 = all layers)\n"
+        "  --qairt-lib DIR        run against another QAIRT runtime (qairt): a QAIRT SDK\n"
+        "                         root or a flat folder of QNN libraries. Applies to the\n"
+        "                         whole run -- the QNN libraries load once per process.\n"
         "  --spec-type TYPES      speculative type(s), comma-separated: draft-mtp,\n"
         "                         draft-eagle3,draft-simple,ngram-simple,ngram-map-k,\n"
         "                         ngram-map-k4v,ngram-mod,ngram-cache (llama_cpp)\n"
@@ -64,9 +67,15 @@ static void usage(const char* argv0) {
         "  --draft-tokens N       max draft tokens per step (0 = plugin default)\n"
         "  --draft-min N          min draft tokens per step (0 = llama.cpp default)\n"
         "  --draft-p-min F        min greedy draft probability (0 = llama.cpp default)\n"
+        "  --power-mode MODE      HTP power/clock-management mode, shared by qairt and\n"
+        "                         llama_cpp: low_power_saver, power_saver, high_power_saver,\n"
+        "                         low_balanced, balanced, high_performance,\n"
+        "                         sustained_high_performance, burst (default)\n"
         "  --warmup N             default 1\n"
         "  --no-warmup            equivalent to --warmup 0\n"
         "  --temperature F        default 0.0\n"
+        "  --top-p F              default 0.0 (defers to the bundle's dialog.sampler.top-p,\n"
+        "                         then the plugin default, e.g. 0.95 for qairt/llama_cpp)\n"
         "  --seed N               default 42; also seeds rand() for prompt ids\n"
         "  --prompt-file PATH     opt out of random-ids prefill: read a UTF-8 prompt\n"
         "                         from PATH and feed it via prompt_utf8 instead. The\n"
@@ -95,6 +104,14 @@ static void usage(const char* argv0) {
         "                         speed. Overrides --warmup / --repetitions. Pair\n"
         "                         with --prompt-file for a real prompt; the default\n"
         "                         random-ids prefill produces meaningless text.\n"
+        "                         Each --prompt-file segment is run through the\n"
+        "                         bundle's own chat template before generation --\n"
+        "                         same templating `geniex infer` uses -- so pass the\n"
+        "                         raw user turn, not pre-templated text.\n"
+        "  --system-prompt TEXT   with --accuracy --prompt-file: system message added\n"
+        "                         ahead of the prompt in the chat template\n"
+        "  --think / --no-think  with --accuracy --prompt-file: enable_thinking for\n"
+        "                         the chat template (default: think)\n"
         "  --logits               prefill-only raw-logits mode: run one forward pass\n"
         "                         (geniex_llm_forward_logits, no decode loop) over N\n"
         "                         random token ids (-p N, like the timing default) and\n"
@@ -258,16 +275,20 @@ void parse_args(int argc, char** argv, options_t* o) {
     o->prompt_buf              = NULL;
     o->max_new_tokens          = 128;
     o->temperature             = 0.0f;
+    o->top_p                   = 0.0f;
     o->seed                    = 42;
     o->warmup                  = 1;
     o->repeat                  = 5;
     o->reset_between_runs      = true;
     o->accuracy                = false;
+    o->system_prompt           = NULL;
+    o->enable_thinking         = true;
     o->logits_mode             = false;
     o->logits_last_only        = false;
     o->logits_top_n            = 20;
     o->token_callback_delay_us = 0;
     o->n_ctx                   = 0;
+    o->n_ubatch                = 0;
     o->n_threads               = 0;
     o->ngl_override            = -1;
     o->spec_type               = NULL;
@@ -275,6 +296,8 @@ void parse_args(int argc, char** argv, options_t* o) {
     o->draft_tokens            = 0;
     o->draft_min               = 0;
     o->draft_p_min             = 0.0f;
+    o->power_mode              = NULL;
+    o->qairt_lib               = NULL;
     o->output_json             = NULL;
     o->output_md               = NULL;
     o->cell_id                 = NULL;
@@ -323,6 +346,8 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->max_new_tokens = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--temperature") == 0) {
             o->temperature = (float)atof(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--top-p") == 0) {
+            o->top_p = (float)atof(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--seed") == 0) {
             o->seed = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--warmup") == 0) {
@@ -335,6 +360,12 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->reset_between_runs = false;
         } else if (strcmp(a, "--accuracy") == 0) {
             o->accuracy = true;
+        } else if (strcmp(a, "--system-prompt") == 0) {
+            o->system_prompt = arg_value(argc, argv, &i, a);
+        } else if (strcmp(a, "--think") == 0) {
+            o->enable_thinking = true;
+        } else if (strcmp(a, "--no-think") == 0) {
+            o->enable_thinking = false;
         } else if (strcmp(a, "--logits") == 0) {
             o->logits_mode = true;
         } else if (strcmp(a, "--logits-last-only") == 0) {
@@ -348,6 +379,8 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->n_threads = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "-ngl") == 0 || strcmp(a, "--n-gpu-layers") == 0) {
             o->ngl_override = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--qairt-lib") == 0) {
+            o->qairt_lib = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--spec-type") == 0) {
             o->spec_type = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--draft-model") == 0) {
@@ -358,6 +391,8 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->draft_min = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--draft-p-min") == 0) {
             o->draft_p_min = (float)atof(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--power-mode") == 0) {
+            o->power_mode = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--output-json") == 0) {
             o->output_json = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--output-md") == 0) {
@@ -388,6 +423,9 @@ void parse_args(int argc, char** argv, options_t* o) {
     if (o->accuracy) {
         o->warmup = 0;
         o->repeat = 1;
+    } else if (o->system_prompt) {
+        fprintf(stderr, "ERROR: --system-prompt requires --accuracy --prompt-file\n");
+        exit(2);
     }
 
     if (o->logits_mode) {

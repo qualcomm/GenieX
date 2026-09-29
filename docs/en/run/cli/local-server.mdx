@@ -228,7 +228,7 @@ usage: CompletionUsage(completion_tokens=58, prompt_tokens=19, total_tokens=77, 
 By default a thinking model leaves its chain-of-thought inline in `message.content` (`<think>…</think>`), mixed in with the final reply. Pass `reasoning_format="deepseek"` to make the server move the chain-of-thought into the OpenAI-standard `message.reasoning_content` field, leaving `content` clean.
 
 <Note>
-`reasoning_format` is not the same as `enable_think`: `enable_think=False` makes the model **not produce** a chain-of-thought at all, while `reasoning_format="deepseek"` lets it think as usual but **moves** the thinking out of `content`. Values are `none` (default, kept inline) and `deepseek` / `deepseek-legacy` / `auto` (all separate). Tool-call requests ignore this parameter (tool parsing needs the raw tagged text).
+`reasoning_format` is not the same as `enable_think`: `enable_think=False` makes the model **not produce** a chain-of-thought at all, while `reasoning_format="deepseek"` lets it think as usual but **moves** the thinking out of `content`. Values are `none` (default, kept inline) and `deepseek` / `deepseek-legacy` / `auto` (all separate). It applies to tool-call requests too, streaming included: the thinking block is separated before the reply is scanned for a tool call.
 </Note>
 
 ```python python

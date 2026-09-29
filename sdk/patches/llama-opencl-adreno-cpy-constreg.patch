@@ -1,3 +1,24 @@
+diff --git a/ggml/src/ggml-opencl/kernels/add.cl b/ggml/src/ggml-opencl/kernels/add.cl
+index 509bf1734..3d72cb84a 100644
+--- a/ggml/src/ggml-opencl/kernels/add.cl
++++ b/ggml/src/ggml-opencl/kernels/add.cl
+@@ -55,7 +55,14 @@ kernel void kernel_add(
+     global char * src1_ptr = src1 + i13*nb13 + i12*nb12 + i11*nb11;
+     global char * dst_ptr  = dst  + i03*nb3  + i02*nb2  + i01*nb1;
+ 
+-    for (int i0 = get_local_id(0); i0 < ne0; i0 += get_local_size(0)) {
++    // Adreno's instruction validator rejects the strength-reduced step
++    // `get_local_size(0) * nb0X`: get_local_size(0) is a constant-class
++    // register, nb0X a uniform-class one, and the resulting UMULLrr still
++    // trips "# of constant registers must be < 2". Force lsz into a GPR via
++    // volatile to break the pairing, same fix as kernel_cpy_f32_f32_pack.
++    volatile int lsz_v = get_local_size(0);
++    int lsz = lsz_v;
++    for (int i0 = get_local_id(0); i0 < ne0; i0 += lsz) {
+         const int i10 = i0 % ne10;
+         *((global float *)(dst_ptr + i0*nb0)) = *((global float *)(src0_ptr + i0*nb00)) + *((global float *)(src1_ptr + i10*nb10));
+     }
+ }
 diff --git a/ggml/src/ggml-opencl/kernels/cpy.cl b/ggml/src/ggml-opencl/kernels/cpy.cl
 index adbd2e766..89aeb1cca 100644
 --- a/ggml/src/ggml-opencl/kernels/cpy.cl
@@ -16,3 +37,59 @@ index adbd2e766..89aeb1cca 100644
      int tpr = min(ne00, lsz);          // threads per row
      int rpw = lsz / tpr;               // rows per workgroup
      int lid = get_local_id(0);
+diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
+--- a/ggml/src/ggml-opencl/ggml-opencl.cpp
++++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
+@@ -4267,6 +4267,10 @@
+     {
+         std::string CL_gemv_compile_opts = std::string("-cl-std=") + opencl_c_std +
+                                        " -cl-mad-enable ";
++        if (backend_ctx->gpu_family == GPU_FAMILY::ADRENO &&
++            std::regex_search(backend_ctx->device_name, std::regex(R"(\b643\b)"))) {
++            CL_gemv_compile_opts += " -DADRENO_643_Q4K_CONSTREG_WORKAROUND=1";
++        }
+         if (backend_ctx->has_vector_subgroup_broadcast) {
+             CL_gemv_compile_opts += " -DVECTOR_SUB_GROUP_BROADCAST ";
+         }
+diff --git a/ggml/src/ggml-opencl/kernels/gemv_noshuffle_q4_k_f32.cl b/ggml/src/ggml-opencl/kernels/gemv_noshuffle_q4_k_f32.cl
+--- a/ggml/src/ggml-opencl/kernels/gemv_noshuffle_q4_k_f32.cl
++++ b/ggml/src/ggml-opencl/kernels/gemv_noshuffle_q4_k_f32.cl
+@@ -240,7 +240,12 @@
+     uint LINE_STRIDE_A  = M / 2;
+     // Physical per-K-block stride in the packed image: 8 uints/block-row-pair *
+     // (M/2) row-pairs = 4*M uints. This is a layout constant, not tied to nsg.
++#ifdef ADRENO_643_Q4K_CONSTREG_WORKAROUND
++    volatile uint block_stride_v = 4 * M;
++    uint BLOCK_STRIDE_A = block_stride_v;
++#else
+     uint BLOCK_STRIDE_A = 4 * M;
++#endif
+     uint scales_per_row = (K / QK_K) * 12;
+ 
+     // The x-grid is padded to CEIL_DIV(ne01/2,64)*64, so when ne01 % 128 != 0 the
+@@ -405,7 +410,12 @@
+     uint M = ne01;
+ 
+     uint LINE_STRIDE_A  = M / 2;
++#ifdef ADRENO_643_Q4K_CONSTREG_WORKAROUND
++    volatile uint block_stride_v = 4 * M;
++    uint BLOCK_STRIDE_A = block_stride_v;
++#else
+     uint BLOCK_STRIDE_A = 4 * M;
++#endif
+ 
+     private uint4  regA;
+     private half2  regS, regM;
+@@ -520,7 +530,12 @@
+     uint K = ne00;
+     uint M = ne01;
+     uint LINE_STRIDE_A  = M / 2;
++#ifdef ADRENO_643_Q4K_CONSTREG_WORKAROUND
++    volatile uint block_stride_v = 4 * M;
++    uint BLOCK_STRIDE_A = block_stride_v;
++#else
+     uint BLOCK_STRIDE_A = 4 * M;      // physical, independent of the K-split
++#endif
+ 
+     private uint4  regA;
+     private half2  regS, regM;

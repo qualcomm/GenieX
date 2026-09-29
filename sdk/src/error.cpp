@@ -57,6 +57,8 @@ const char* geniex_get_error_message(const geniex_ErrorCode error_code) {
             return "Requested chipset not available for this model";
         case GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED:
             return "Parameter not supported by this plugin";
+        case GENIEX_ERROR_COMMON_INSUFFICIENT_DISK_SPACE:
+            return "Insufficient disk space for download";
         case GENIEX_ERROR_COMMON_MODEL_LOAD:
             return "Model loading failed";
         case GENIEX_ERROR_COMMON_MODEL_INVALID:
@@ -86,6 +88,8 @@ const char* geniex_get_error_message(const geniex_ErrorCode error_code) {
             return "Unsupported audio format";
         case GENIEX_ERROR_VLM_GENERATION_FAILED:
             return "Multimodal generation failed";
+        case GENIEX_ERROR_VLM_PREFIX_REUSE_FAILED:
+            return "VLM prefix reuse failed";
 
         default:
             return "Unknown error code";

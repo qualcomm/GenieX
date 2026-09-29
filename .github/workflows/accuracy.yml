@@ -1,0 +1,344 @@
+name: Geniex Accuracy
+run-name: accuracy (${{ inputs.device }} · ${{ inputs.model }} · ${{ inputs.compute }})
+
+# Generate text on QDC devices with `geniex-bench --accuracy`, then grade it for
+# quantization damage with Breeze AI.
+#
+# Shaped like bench.yml: load-models fans out a device x model matrix, each cell
+# uploads its own items artifact. Grading then diverges -- one Breeze round trip
+# is expensive, so `grade` merges every cell into a single payload and opens one
+# issue, and the report tables carry a Cell column for cross-model comparison.
+#
+# Breeze only exists inside the Qualcomm network and GenieX has no credentials
+# for it, so grading is a round trip: open an issue in qcom-ai-hub/geniex whose
+# body tells the agent to `gh run download` the payload artifact, watch that run,
+# read its result comment into this summary, close the issue. That repo stays a
+# generic Breeze pipeline; the instruction lives entirely in the issue body.
+#
+# GH_PAT (as in release.yml's publish-s3 leg) covers issues:write and
+# actions:read. The agent needs no token: its Bash tool rejects any command
+# containing a `$VAR` expansion, so a bare `gh run download` is the only form
+# that works, and the runner's own GITHUB_TOKEN can fetch a public artifact.
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: "QDC chipsets, comma-separated"
+        type: string
+        default: "QCS9075M"
+      model:
+        description: "Model names from bench-models.json, comma-separated"
+        type: string
+        default: "Qwen3-1.7B"
+      compute:
+        description: "Compute unit: cpu/gpu/npu/hybrid"
+        type: string
+        default: "hybrid"
+      tokens:
+        description: "Max new tokens per prompt"
+        type: string
+        default: "2048"
+      think:
+        description: "Keep the model's thinking phase"
+        type: boolean
+        default: true
+      prompt_limit:
+        description: "Use only the first N prompts (blank = all)"
+        type: string
+        default: ""
+      grade:
+        description: "Grade the generated text with Breeze"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  GRADER_REPO: qcom-ai-hub/geniex
+  # Runs are attributed to breeze.yml on the default branch, not _breeze.yml.
+  GRADER_WORKFLOW: breeze.yml
+  PAYLOAD_ARTIFACT: breeze-grade-payload
+  PAYLOAD_FILE: grade-payload.md
+  # Item -> cell lookup, uploaded separately so the grader never downloads it.
+  ITEM_MAP_ARTIFACT: breeze-grade-item-map
+  ITEM_MAP_FILE: grade-item-map.md
+
+jobs:
+  build-sdk:
+    uses: ./.github/workflows/_build-sdk.yml
+    secrets:
+      HEXAGON_HTP_CERT_PFX: ${{ secrets.HEXAGON_HTP_CERT_PFX }}
+    with:
+      upload_artifact: true
+
+  load-models:
+    needs: [build-sdk]
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set.outputs.matrix }}
+      devices: ${{ steps.set.outputs.devices }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: set
+        env:
+          PICK_DEVICE: ${{ inputs.device }}
+          PICK_MODEL: ${{ inputs.model }}
+        run: |
+          set -euo pipefail
+          MODELS_FILE=sdk/benchmark/qdc/bench-models.json
+
+          csv() { jq -cn --arg s "$1" \
+            '$s | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length>0))'; }
+
+          devices=$(csv "${PICK_DEVICE:-QCS9075M}")
+          echo "devices=$devices" >> "$GITHUB_OUTPUT"
+
+          picks=$(csv "$PICK_MODEL")
+          matrix=$(jq -c --argjson pick "$picks" \
+            '[.[] | select(.name as $n | $pick | index($n)) | {name, plugin}]' "$MODELS_FILE")
+          if [ "$(jq length <<<"$matrix")" != "$(jq length <<<"$picks")" ]; then
+            echo "::error::model input has unknown name(s): $PICK_MODEL"
+            echo "::error::available: $(jq -r '.[].name' "$MODELS_FILE" | paste -sd, -)"
+            exit 1
+          fi
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  generate:
+    name: ${{ matrix.device }} · ${{ matrix.model.name }} · ${{ inputs.compute }}
+    needs: [build-sdk, load-models]
+    runs-on: ubuntu-latest
+    timeout-minutes: 355 # just under the GitHub-hosted 6h job hard cap
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        device: ${{ fromJson(needs.load-models.outputs.devices) }}
+        model: ${{ fromJson(needs.load-models.outputs.matrix) }}
+    env:
+      QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - id: sdk
+        env:
+          DEVICE: ${{ matrix.device }}
+        run: |
+          case "$DEVICE" in
+            SM*)         echo "name=sdk-android-arm64" ;;
+            SC*|CRD*|X*) echo "name=sdk-windows-arm64" ;;
+            *)           echo "name=sdk-linux-arm64" ;;
+          esac >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.sdk.outputs.name }}
+          path: pkg-geniex
+      - uses: ./.github/actions/install-qdc-sdk
+      - env:
+          DEVICE: ${{ matrix.device }}
+          MODEL_NAME: ${{ matrix.model.name }}
+          COMPUTE: ${{ inputs.compute }}
+          TOKENS: ${{ inputs.tokens }}
+          THINK: ${{ inputs.think && '--think' || '--no-think' }}
+          PROMPT_LIMIT: ${{ inputs.prompt_limit }}
+        run: |
+          python sdk/benchmark/qdc/run_qdc_jobs.py \
+            --mode accuracy \
+            --pkg-dir pkg-geniex \
+            --device "$DEVICE" \
+            --model-name "$MODEL_NAME" \
+            --compute "$COMPUTE" \
+            --tg "$TOKENS" \
+            "$THINK" \
+            --prompt-limit "${PROMPT_LIMIT:-0}" \
+            --out "$DEVICE-$MODEL_NAME.json"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: accuracy-items-${{ matrix.device }}-${{ matrix.model.name }}
+          path: ${{ matrix.device }}-${{ matrix.model.name }}.json
+          if-no-files-found: error
+
+  grade:
+    name: grade
+    needs: [load-models, generate]
+    if: always() && inputs.grade
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: accuracy-items-*
+          path: items
+
+      - name: Note any missing generate jobs
+        id: missing-check
+        env:
+          DEVICES: ${{ needs.load-models.outputs.devices }}
+          MATRIX: ${{ needs.load-models.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          expected=$(( $(jq length <<<"$DEVICES") * $(jq length <<<"$MATRIX") ))
+          mkdir -p items
+          got=$(find items -mindepth 1 -maxdepth 1 -type d | wc -l)
+          if [ "$got" -lt "$expected" ]; then
+            echo "> $((expected - got)) of $expected generate jobs produced no items." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # Every {model}-{device} the matrix should have produced, so the grade
+          # report can show a dash row for whichever one(s) came back empty
+          # instead of just dropping them.
+          expected_cells=$(jq -cn --argjson d "$DEVICES" --argjson m "$MATRIX" -r \
+            '[$d[] as $dev | $m[] as $mo | "\($mo.name)-\($dev)"] | join(",")')
+          echo "expected_cells=$expected_cells" >> "$GITHUB_OUTPUT"
+
+      - name: Render grading payload
+        run: |
+          python sdk/benchmark/qdc/run_qdc_jobs.py \
+            --mode accuracy_payload \
+            --in-dir items \
+            --out "$PAYLOAD_FILE"
+      # Downloaded by the grading agent -- see the issue body below. Not
+      # linked from the summary: it withholds cell, so item-map (below) is
+      # the copy a human actually wants.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.PAYLOAD_ARTIFACT }}
+          path: ${{ env.PAYLOAD_FILE }}
+          if-no-files-found: error
+          retention-days: 7
+      # Not part of what the issue tells the grader to download. ITEM_MAP_FILE
+      # (env, above) must match run_qdc_jobs.py's hardcoded sibling filename --
+      # if-no-files-found: error below is what catches the two drifting apart.
+      - uses: actions/upload-artifact@v7
+        id: item-map-artifact
+        with:
+          name: ${{ env.ITEM_MAP_ARTIFACT }}
+          path: ${{ env.ITEM_MAP_FILE }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Open grading issue
+        id: issue
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          cat > issue-body.md <<EOF
+          Automated quality grading for [GenieX workflow run ${RUN_ID}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}).
+
+          @breeze-ai Grade generated text for quantization damage.
+
+          \`\`\`bash
+          gh run download ${RUN_ID} --repo ${GITHUB_REPOSITORY} --name ${PAYLOAD_ARTIFACT} --dir grade
+          cat grade/${PAYLOAD_FILE}
+          \`\`\`
+
+          That file holds the grading rubric followed by the items to grade.
+          EOF
+
+          url=$(gh issue create \
+            --repo "${GRADER_REPO}" \
+            --title "[Breeze] Grade GenieX run ${RUN_ID}" \
+            --body-file issue-body.md)
+          number="${url##*/}"
+          echo "number=${number}" >> "$GITHUB_OUTPUT"
+          echo "url=${url}" >> "$GITHUB_OUTPUT"
+          echo "Opened ${url}"
+
+      - name: Watch internal grader run
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          ISSUE: ${{ steps.issue.outputs.number }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # displayTitle is the issue title, which embeds this run id. Match it
+          # exactly -- `contains` would let run 153 latch onto 1537. `gh --jq`
+          # has no --arg, so the title goes through the environment.
+          export WANT="[Breeze] Grade GenieX run ${RUN_ID}"
+          target=""
+          for attempt in $(seq 1 24); do
+            target=$(gh run list --repo "${GRADER_REPO}" --workflow "${GRADER_WORKFLOW}" \
+              --event issues --limit 50 --json databaseId,displayTitle \
+              --jq '[.[] | select(.displayTitle == env.WANT)][0].databaseId')
+            [ -n "${target}" ] && break
+            echo "Waiting for grader run (${attempt}/24)..."
+            sleep 10
+          done
+          [ -n "${target}" ] || {
+            echo "::error::grader run for issue #${ISSUE} not found"
+            exit 1
+          }
+          echo "Watching ${GRADER_REPO} run ${target}"
+          gh run watch "${target}" --repo "${GRADER_REPO}" --exit-status --interval 10
+
+      - name: Collect grades
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          ISSUE: ${{ steps.issue.outputs.number }}
+          ISSUE_URL: ${{ steps.issue.outputs.url }}
+          EXPECTED_CELLS: ${{ steps.missing-check.outputs.expected_cells }}
+        run: |
+          set -euo pipefail
+          # Breeze edits its comment in place, so a finished run does not mean
+          # the final text landed -- poll for a body carrying a rating row.
+          for _ in $(seq 1 20); do
+            gh issue view "${ISSUE}" --repo "${GRADER_REPO}" --json comments \
+              --jq '[.comments[] | select(.body | test("\\| *[0-9]+ *\\| *[0-9]+ *\\|"))] | last | .body // ""' \
+              > grades.md
+            [ -s grades.md ] && break
+            sleep 10
+          done
+          [ -s grades.md ] || {
+            echo "::error::grader produced no result comment on issue #${ISSUE}"
+            exit 1
+          }
+          echo "Source: [${GRADER_REPO}#${ISSUE}](${ISSUE_URL})" >> "$GITHUB_STEP_SUMMARY"
+          python sdk/benchmark/qdc/run_qdc_jobs.py \
+            --mode accuracy_report \
+            --in-dir items \
+            --grades-in grades.md \
+            --expected-cells "$EXPECTED_CELLS"
+
+      - uses: actions/upload-artifact@v7
+        id: grades-artifact
+        if: always()
+        with:
+          name: breeze-grades
+          path: grades.md
+          if-no-files-found: ignore
+
+      # The tables above are a distillation; steps.*.outputs.artifact-url
+      # points at the items with their cell (the payload sent for grading
+      # withholds it) and the grader's full, unparsed comment.
+      - if: always()
+        env:
+          ITEM_MAP_URL: ${{ steps.item-map-artifact.outputs.artifact-url }}
+          GRADES_URL: ${{ steps.grades-artifact.outputs.artifact-url }}
+        run: |
+          {
+            if [ -n "$ITEM_MAP_URL" ]; then echo "Graded items by cell: [grade-item-map.md]($ITEM_MAP_URL)"; fi
+            if [ -n "$GRADES_URL" ]; then echo "Full grading result: [breeze-grades]($GRADES_URL)"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # A throwaway trigger, not a record. `always()` so a failed run cleans up.
+      - name: Close grading issue
+        if: always() && steps.issue.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+          ISSUE: ${{ steps.issue.outputs.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          OUTCOME: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          gh issue close "${ISSUE}" --repo "${GRADER_REPO}" \
+            --comment "GenieX run finished with status \`${OUTCOME}\` — ${RUN_URL}" ||
+            echo "::warning::failed to close ${GRADER_REPO}#${ISSUE}; close it by hand"

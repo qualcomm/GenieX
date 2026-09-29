@@ -11,6 +11,7 @@ import "C"
 
 import (
 	"fmt"
+	"strings"
 	"unsafe"
 )
 
@@ -32,6 +33,52 @@ const (
 	RuntimeLlamaCpp = "llama_cpp"
 	RuntimeQairt    = "qairt"
 )
+
+// PowerMode is the unified HTP power-mode enum, shared by qairt and
+// llama_cpp. Values match geniex_PowerMode in sdk/include/geniex.h so they
+// cross the C ABI as-is (see ModelConfig.PowerMode / fillC).
+type PowerMode int32
+
+const (
+	PowerModeLowPowerSaver PowerMode = iota
+	PowerModePowerSaver
+	PowerModeHighPowerSaver
+	PowerModeLowBalanced
+	PowerModeBalanced
+	PowerModeHighPerformance
+	PowerModeSustainedHighPerformance
+	PowerModeBurst
+)
+
+var powerModeAliases = map[string]PowerMode{
+	"low_power_saver":            PowerModeLowPowerSaver,
+	"power_saver":                PowerModePowerSaver,
+	"high_power_saver":           PowerModeHighPowerSaver,
+	"low_balanced":               PowerModeLowBalanced,
+	"balanced":                   PowerModeBalanced,
+	"high_performance":           PowerModeHighPerformance,
+	"sustained_high_performance": PowerModeSustainedHighPerformance,
+	"burst":                      PowerModeBurst,
+}
+
+// ResolvePowerMode maps a user-facing power-mode alias to the geniex_PowerMode
+// value the SDK expects. "" / "default" resolve to burst. Matching is
+// case-insensitive; surrounding whitespace is trimmed.
+//
+// Unlike ResolveDevice, there's no exported C function to call into here:
+// the alias table is small and stable, so each language binding (this one,
+// Python, Android/JNI) resolves its own strings natively instead of sharing
+// one C entry point.
+func ResolvePowerMode(mode string) (PowerMode, error) {
+	alias := strings.ToLower(strings.TrimSpace(mode))
+	if alias == "" || alias == "default" {
+		return PowerModeBurst, nil
+	}
+	if pm, ok := powerModeAliases[alias]; ok {
+		return pm, nil
+	}
+	return 0, fmt.Errorf("invalid power mode %q, must be one of: low_power_saver, power_saver, high_power_saver, low_balanced, balanced, high_performance, sustained_high_performance, burst, default", mode)
+}
 
 type ResolveDeviceInput struct {
 	RuntimeID   string

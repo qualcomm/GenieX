@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 
 #include "llm/llm_spec_loader.h"  // ParsedSamplerConfig
 #include "pipeline/vlm_pipeline.h"
@@ -20,6 +21,9 @@ class QairtVlm : public IVlm {
 
     // Bundle's `dialog.sampler` defaults; parsed once at create().
     ParsedSamplerConfig bundle_sampler_;
+
+    // Bundle's `genie.chat_template.default_system_prompt`.
+    std::string default_system_prompt_;
 
     // Incremental history tracking.
     // history_size_         — messages already committed to the KV cache (advanced by generate()).

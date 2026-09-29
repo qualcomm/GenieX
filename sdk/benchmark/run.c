@@ -57,7 +57,7 @@ static bool on_token(const char* token, void* user_data) {
 static void fill_sampler(geniex_SamplerConfig* s, const options_t* o) {
     memset(s, 0, sizeof(*s));
     s->temperature        = o->temperature;
-    s->top_p              = 1.0f;
+    s->top_p              = o->top_p;
     s->top_k              = 0;
     s->min_p              = 0.0f;
     s->repetition_penalty = 1.0f;
@@ -81,6 +81,7 @@ static void fill_gen_config(geniex_GenerationConfig* g, geniex_SamplerConfig* s,
 static void fill_model_config(geniex_ModelConfig* c, const options_t* o, int32_t ngl) {
     memset(c, 0, sizeof(*c));
     c->n_ctx            = o->n_ctx;
+    c->n_ubatch         = o->n_ubatch;
     c->n_threads        = o->n_threads;
     c->n_gpu_layers     = ngl;
     c->spec_type        = o->spec_type;   /* may be NULL */
@@ -88,6 +89,10 @@ static void fill_model_config(geniex_ModelConfig* c, const options_t* o, int32_t
     c->spec_n_max       = o->draft_tokens;
     c->spec_n_min       = o->draft_min;
     c->spec_p_min       = o->draft_p_min;
+    if (!geniex_power_mode_from_alias(o->power_mode, &c->power_mode)) {
+        fprintf(stderr, "ERROR: invalid --power-mode '%s'\n", o->power_mode);
+        exit(1);
+    }
 }
 
 /* Random-ids prefill (mirrors llama-bench test_prompt): query vocab + BOS via
@@ -171,9 +176,62 @@ static void print_gen_text(const char* text) {
         if (!nl) break;
         line = nl + 1;
     }
+    /* stdout is block-buffered when redirected to a file, so an answer already
+     * generated would still be lost if the process is later killed (harness
+     * timeout, unrelated crash). Flush per answer to bound that loss. */
+    fflush(stdout);
+}
+
+/* Context exhaustion is a stop condition, not a failure: both plugins populate
+ * full_text and profile_data (stop_reason = "length") before returning it, the
+ * same way they do for a max-tokens stop. Treating it as fatal threw away a
+ * complete answer and exited before geniex_deinit(). Everything else is a real
+ * error with nothing usable in the output. */
+static bool generate_rc_is_fatal(int32_t rc) {
+    return rc != GENIEX_SUCCESS && rc != GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
 }
 
 /* ----------------------------- LLM run loop ----------------------------- */
+
+/* --accuracy --prompt-file: run user_prompt (optionally preceded by
+ * --system-prompt) through the bundle's own chat template before
+ * generation, so the benchmark exercises the same templating `geniex infer`
+ * uses instead of feeding the file verbatim. Returns heap text the caller
+ * frees with geniex_free, or NULL on failure. */
+static char* build_llm_accuracy_prompt(geniex_LLM* llm, const options_t* o, const char* user_prompt) {
+    /* Zero first: the plugins dereference the optional tool-calling fields
+     * whenever they're non-NULL, so stack garbage there is an access violation. */
+    geniex_LlmChatMessage messages[2];
+    memset(messages, 0, sizeof(messages));
+    int32_t nm = 0;
+    if (o->system_prompt) {
+        messages[nm].role    = "system";
+        messages[nm].content = o->system_prompt;
+        nm++;
+    }
+    messages[nm].role    = "user";
+    messages[nm].content = user_prompt;
+    nm++;
+
+    geniex_LlmApplyChatTemplateInput  tin;
+    geniex_LlmApplyChatTemplateOutput tout;
+    memset(&tin, 0, sizeof(tin));
+    memset(&tout, 0, sizeof(tout));
+    tin.messages              = messages;
+    tin.message_count         = nm;
+    tin.enable_thinking       = o->enable_thinking;
+    tin.add_generation_prompt = true;
+
+    int32_t rc = geniex_llm_apply_chat_template(llm, &tin, &tout);
+    if (rc != GENIEX_SUCCESS) {
+        fprintf(stderr,
+            "ERROR: geniex_llm_apply_chat_template: %s (%d)\n",
+            geniex_get_error_message((geniex_ErrorCode)rc),
+            rc);
+        return NULL;
+    }
+    return tout.formatted_text;
+}
 
 void run_llm(const options_t* o, const device_t* dev, run_result_t* out) {
     geniex_LlmCreateInput cin;
@@ -226,8 +284,19 @@ void run_llm(const options_t* o, const device_t* dev, run_result_t* out) {
             geniex_LlmGenerateOutput gout;
             memset(&gin, 0, sizeof(gin));
             memset(&gout, 0, sizeof(gout));
+            char* templated_prompt = NULL;
             if (cur_prompt) {
-                gin.prompt_utf8 = cur_prompt;
+                if (o->accuracy) {
+                    templated_prompt = build_llm_accuracy_prompt(llm, o, cur_prompt);
+                    if (!templated_prompt) {
+                        free(tokens);
+                        geniex_llm_destroy(llm);
+                        exit(1);
+                    }
+                    gin.prompt_utf8 = templated_prompt;
+                } else {
+                    gin.prompt_utf8 = cur_prompt;
+                }
             } else {
                 gin.input_ids       = tokens;
                 gin.input_ids_count = o->n_prompt;
@@ -237,12 +306,20 @@ void run_llm(const options_t* o, const device_t* dev, run_result_t* out) {
             gin.user_data = (void*)o;
 
             int32_t rc = geniex_llm_generate(llm, &gin, &gout);
-            if (rc != GENIEX_SUCCESS) {
+            if (generate_rc_is_fatal(rc)) {
                 const char* msg = geniex_get_error_message((geniex_ErrorCode)rc);
                 fprintf(stderr, "ERROR: geniex_llm_generate run %d failed: %s (%d)\n", run_idx, msg ? msg : "?", rc);
+                if (templated_prompt) geniex_free(templated_prompt);
                 free(tokens);
                 geniex_llm_destroy(llm);
                 exit(1);
+            }
+            if (rc != GENIEX_SUCCESS) {
+                fprintf(stderr,
+                    "[warn] geniex_llm_generate run %d: %s (%d); keeping partial output\n",
+                    run_idx,
+                    geniex_get_error_message((geniex_ErrorCode)rc),
+                    rc);
             }
 
             if (!is_warmup) {
@@ -262,6 +339,9 @@ void run_llm(const options_t* o, const device_t* dev, run_result_t* out) {
             }
             if (gout.full_text) {
                 geniex_free(gout.full_text);
+            }
+            if (templated_prompt) {
+                geniex_free(templated_prompt);
             }
         }
     }
@@ -319,6 +399,56 @@ static char* build_vlm_prompt(geniex_VLM* vlm, const options_t* o, const char* b
     return tout.formatted_text;
 }
 
+/* --accuracy --prompt-file (VLM): run user_prompt (optionally preceded by
+ * --system-prompt) through the bundle's own chat template before
+ * generation, mirroring build_llm_accuracy_prompt() for the LLM path.
+ */
+static char* build_vlm_accuracy_prompt(geniex_VLM* vlm, const options_t* o, const char* user_prompt) {
+    geniex_VlmContent user_contents[1];
+    user_contents[0].type = "text";
+    user_contents[0].text = user_prompt;
+
+    geniex_VlmChatMessage messages[2];
+    memset(messages, 0, sizeof(messages));
+    int32_t nm = 0;
+    if (o->system_prompt) {
+        geniex_VlmContent* system_contents = (geniex_VlmContent*)calloc(1, sizeof(geniex_VlmContent));
+        if (!system_contents) {
+            fprintf(stderr, "ERROR: oom\n");
+            return NULL;
+        }
+        system_contents[0].type    = "text";
+        system_contents[0].text    = o->system_prompt;
+        messages[nm].role          = "system";
+        messages[nm].contents      = system_contents;
+        messages[nm].content_count = 1;
+        nm++;
+    }
+    messages[nm].role          = "user";
+    messages[nm].contents      = user_contents;
+    messages[nm].content_count = 1;
+    nm++;
+
+    geniex_VlmApplyChatTemplateInput  tin;
+    geniex_VlmApplyChatTemplateOutput tout;
+    memset(&tin, 0, sizeof(tin));
+    memset(&tout, 0, sizeof(tout));
+    tin.messages        = messages;
+    tin.message_count   = nm;
+    tin.enable_thinking = o->enable_thinking;
+
+    int32_t rc = geniex_vlm_apply_chat_template(vlm, &tin, &tout);
+    if (nm > 1) free(messages[0].contents); /* the system_contents calloc above */
+    if (rc != GENIEX_SUCCESS) {
+        fprintf(stderr,
+            "ERROR: geniex_vlm_apply_chat_template: %s (%d)\n",
+            geniex_get_error_message((geniex_ErrorCode)rc),
+            rc);
+        return NULL;
+    }
+    return tout.formatted_text;
+}
+
 void run_vlm(const options_t* o, const device_t* dev, run_result_t* out) {
     geniex_VlmCreateInput cin;
     memset(&cin, 0, sizeof(cin));
@@ -348,13 +478,25 @@ void run_vlm(const options_t* o, const device_t* dev, run_result_t* out) {
             bool    is_warmup = (i < o->warmup);
             int32_t run_idx   = is_warmup ? i : (i - o->warmup);
 
-            /* Build the templated prompt once per run.  When --prompt-file
-             * supplies a pre-templated string, use it directly; otherwise run
-             * the fixed default text through the bundle's chat template so the
-             * image tokens are placed correctly. */
+            /* Build the templated prompt once per run. --accuracy --prompt-file
+             * runs the raw user turn through the bundle's chat template
+             * (matching build_llm_accuracy_prompt() on the LLM path) so
+             * --system-prompt / --no-think take effect and the model sees a
+             * real templated turn instead of raw, unframed text. Without
+             * --accuracy, --prompt-file supplies an already-templated string
+             * used directly (bench/perf callers pre-template themselves).
+             * With neither, run the fixed default text through the template
+             * so the image tokens are placed correctly. */
             char*       built_prompt = NULL;
             const char* final_prompt;
-            if (cur_prompt) {
+            if (cur_prompt && o->accuracy) {
+                built_prompt = build_vlm_accuracy_prompt(vlm, o, cur_prompt);
+                if (!built_prompt) {
+                    geniex_vlm_destroy(vlm);
+                    exit(1);
+                }
+                final_prompt = built_prompt;
+            } else if (cur_prompt) {
                 final_prompt = cur_prompt;
             } else {
                 built_prompt = build_vlm_prompt(vlm, o, VLM_DEFAULT_PROMPT);
@@ -382,12 +524,19 @@ void run_vlm(const options_t* o, const device_t* dev, run_result_t* out) {
             gin.user_data   = (void*)o;
 
             int32_t rc = geniex_vlm_generate(vlm, &gin, &gout);
-            if (rc != GENIEX_SUCCESS) {
+            if (generate_rc_is_fatal(rc)) {
                 const char* msg = geniex_get_error_message((geniex_ErrorCode)rc);
                 fprintf(stderr, "ERROR: geniex_vlm_generate run %d failed: %s (%d)\n", run_idx, msg ? msg : "?", rc);
                 if (built_prompt) geniex_free(built_prompt);
                 geniex_vlm_destroy(vlm);
                 exit(1);
+            }
+            if (rc != GENIEX_SUCCESS) {
+                fprintf(stderr,
+                    "[warn] geniex_vlm_generate run %d: %s (%d); keeping partial output\n",
+                    run_idx,
+                    geniex_get_error_message((geniex_ErrorCode)rc),
+                    rc);
             }
 
             if (!is_warmup) {

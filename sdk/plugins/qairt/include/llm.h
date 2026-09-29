@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 
 #include "llm/llm_spec_loader.h"  // ParsedSamplerConfig
 #include "pipeline/llm_pipeline.h"
@@ -16,6 +17,9 @@ class QairtLlm : public ILlm {
 
     // Bundle's `dialog.sampler` defaults; parsed once at create().
     ParsedSamplerConfig bundle_sampler_;
+
+    // Bundle's `genie.chat_template.default_system_prompt`.
+    std::string default_system_prompt_;
 
     bool is_first_turn_ = true;
 

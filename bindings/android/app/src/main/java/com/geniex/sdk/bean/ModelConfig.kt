@@ -52,4 +52,10 @@ data class ModelConfig(
 
     /** Min greedy draft probability (0 = llama.cpp default) */
     val spec_p_min: Float = 0.0f,
+
+    /** Unified HTP power/clock-management mode, shared by qairt and llama_cpp
+     *  ("low_power_saver".."burst"); "" / "default" = burst. Resolved to the
+     *  native geniex_PowerMode enum on the JNI side; an unknown alias falls
+     *  back to burst with a logged warning. */
+    val power_mode: String = "",
 )

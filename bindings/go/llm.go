@@ -25,7 +25,49 @@ const (
 	LlmRoleSystem    LlmRole = "system"
 	LlmRoleUser      LlmRole = "user"
 	LlmRoleAssistant LlmRole = "assistant"
+	LlmRoleTool      LlmRole = "tool"
 )
+
+// ToolCall is a function call issued on an assistant turn. Chat templates
+// render the following tool response from these, matching it by ID, so a call
+// flattened into assistant text costs the response its place in the prompt.
+type ToolCall struct {
+	ID        string
+	Name      string
+	Arguments string
+}
+
+type toolCalls []ToolCall
+
+func (tcs toolCalls) toCPtr() (*C.geniex_ToolCall, C.int32_t) {
+	if len(tcs) == 0 {
+		return nil, 0
+	}
+	count := len(tcs)
+	raw := cMalloc(C.size_t(count) * C.sizeof_geniex_ToolCall)
+	cCalls := unsafe.Slice((*C.geniex_ToolCall)(raw), count)
+	for i, tc := range tcs {
+		cCalls[i] = C.geniex_ToolCall{
+			id:        cStringIfSet(tc.ID),
+			name:      cStringIfSet(tc.Name),
+			arguments: cStringIfSet(tc.Arguments),
+		}
+	}
+	return (*C.geniex_ToolCall)(raw), C.int32_t(count)
+}
+
+func freeToolCalls(cPtr *C.geniex_ToolCall, count C.int32_t) {
+	if cPtr == nil || count == 0 {
+		return
+	}
+	cCalls := unsafe.Slice(cPtr, int(count))
+	for i := range cCalls {
+		cFreeIfSet(unsafe.Pointer(cCalls[i].id))
+		cFreeIfSet(unsafe.Pointer(cCalls[i].name))
+		cFreeIfSet(unsafe.Pointer(cCalls[i].arguments))
+	}
+	C.free(unsafe.Pointer(cPtr))
+}
 
 type LlmCreateInput struct {
 	ModelPath     string
@@ -123,6 +165,12 @@ func freeLlmGenerateOutput(ptr *C.geniex_LlmGenerateOutput) {
 type LlmChatMessage struct {
 	Role    LlmRole
 	Content string
+
+	// Assistant turns carry ToolCalls; the matching tool response carries
+	// ToolCallID and ToolName. All empty for a plain chat turn.
+	ToolCalls  []ToolCall
+	ToolCallID string
+	ToolName   string
 }
 
 type llmChatMessages []LlmChatMessage
@@ -135,9 +183,14 @@ func (lcm llmChatMessages) toCPtr() (*C.geniex_LlmChatMessage, C.int32_t) {
 	raw := cMalloc(C.size_t(count) * C.sizeof_geniex_LlmChatMessage)
 	cMessages := unsafe.Slice((*C.geniex_LlmChatMessage)(raw), count)
 	for i, msg := range lcm {
+		calls, callCount := toolCalls(msg.ToolCalls).toCPtr()
 		cMessages[i] = C.geniex_LlmChatMessage{
-			role:    cStringIfSet(string(msg.Role)),
-			content: cStringIfSet(msg.Content),
+			role:            cStringIfSet(string(msg.Role)),
+			content:         cStringIfSet(msg.Content),
+			tool_calls:      calls,
+			tool_call_count: callCount,
+			tool_call_id:    cStringIfSet(msg.ToolCallID),
+			tool_name:       cStringIfSet(msg.ToolName),
 		}
 	}
 	return (*C.geniex_LlmChatMessage)(raw), C.int32_t(count)
@@ -151,6 +204,9 @@ func freeLlmChatMessages(cPtr *C.geniex_LlmChatMessage, count C.int32_t) {
 	for i := range cMessages {
 		cFreeIfSet(unsafe.Pointer(cMessages[i].role))
 		cFreeIfSet(unsafe.Pointer(cMessages[i].content))
+		cFreeIfSet(unsafe.Pointer(cMessages[i].tool_call_id))
+		cFreeIfSet(unsafe.Pointer(cMessages[i].tool_name))
+		freeToolCalls(cMessages[i].tool_calls, cMessages[i].tool_call_count)
 	}
 	C.free(unsafe.Pointer(cPtr))
 }

@@ -99,6 +99,40 @@ func TestDownloadChunk_SameHostRedirectPreservesAuth(t *testing.T) {
 	}
 }
 
+func TestDownloadChunk_RetriesOnNonTimeoutError(t *testing.T) {
+	var attempts atomic.Int32
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if attempts.Add(1) == 1 {
+			hj := w.(http.Hijacker)
+			conn, _, err := hj.Hijack()
+			if err != nil {
+				t.Errorf("hijack: %v", err)
+				return
+			}
+			defer conn.Close()
+			conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: bogus\r\n\r\nhello"))
+			return
+		}
+		w.Header().Set("Content-Range", "bytes 0-4/5")
+		w.WriteHeader(http.StatusPartialContent)
+		w.Write([]byte("hello"))
+	}))
+	defer backend.Close()
+
+	d := NewDownloader()
+	d.retryDelayMs = 10
+	var buf bytes.Buffer
+	if err := d.DownloadChunk(context.Background(), backend.URL, 0, 5, &buf); err != nil {
+		t.Fatalf("DownloadChunk: %v", err)
+	}
+	if buf.String() != "hello" {
+		t.Errorf("body = %q, want %q", buf.String(), "hello")
+	}
+	if got := attempts.Load(); got < 2 {
+		t.Errorf("attempts = %d, want >= 2 (should have retried after the malformed response)", got)
+	}
+}
+
 func TestDownloadChunk_HonorsHTTPProxyEnv(t *testing.T) {
 	// Backend serves the bytes the downloader expects.
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

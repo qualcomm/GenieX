@@ -143,6 +143,8 @@ components:
           type: integer
         compute:
           type: string
+        power_mode:
+          type: string
     ForwardLogitsResponse:
       type: object
       properties:
@@ -273,6 +275,10 @@ components:
           type: string
           enum: [cpu, gpu, npu, hybrid]
           description: Compute unit to run on. Omit to use the server default set via `geniex serve --compute` / `GENIEX_COMPUTE`. QAIRT is NPU-only; other aliases are coerced with a warning.
+        power_mode:
+          type: string
+          enum: [low_power_saver, power_saver, high_power_saver, low_balanced, balanced, high_performance, sustained_high_performance, burst, default]
+          description: HTP power/clock-management mode, shared by qairt and llama_cpp. Omit to use the server default set via `geniex serve --power-mode` / `GENIEX_POWER_MODE` (burst out of the box).
     CompletionResponse:
       type: object
       properties:
@@ -414,6 +420,10 @@ components:
           type: string
           enum: [cpu, gpu, npu, hybrid]
           description: Compute unit to run on. Omit to use the server default set via `geniex serve --compute` / `GENIEX_COMPUTE`. QAIRT is NPU-only; other aliases are coerced with a warning.
+        power_mode:
+          type: string
+          enum: [low_power_saver, power_saver, high_power_saver, low_balanced, balanced, high_performance, sustained_high_performance, burst, default]
+          description: HTP power/clock-management mode, shared by qairt and llama_cpp. Omit to use the server default set via `geniex serve --power-mode` / `GENIEX_POWER_MODE` (burst out of the box).
         spec_type:
           type: string
           enum: [draft-mtp, draft-eagle3, draft-simple, ngram-simple, ngram-map-k, ngram-map-k4v, ngram-mod, ngram-cache]

@@ -1,9 +1,9 @@
 // Copyright (c) 2024-2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-// Single source of truth for the user-facing device alias table
-// (cpu / gpu / npu / hybrid → concrete device_id + n_gpu_layers).
-// Language bindings (Go CLI, Python, Android/JNI) call through to this.
+// Single source of truth for the device alias table (cpu / gpu / npu /
+// hybrid → concrete device_id + n_gpu_layers). Language bindings (Go CLI,
+// Python, Android/JNI) call through to this.
 
 #include <algorithm>
 #include <cctype>
@@ -48,8 +48,6 @@ std::string trim(const std::string& s) {
     while (end > start && std::isspace(static_cast<unsigned char>(s[end - 1]))) --end;
     return s.substr(start, end - start);
 }
-
-std::string to_lower_trim(const char* s) { return trim(to_lower(s)); }
 
 bool is_known_alias(const std::string& s) {
     return s == kAliasCPU || s == kAliasGPU || s == kAliasNPU || s == kAliasHybrid;

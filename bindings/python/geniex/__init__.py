@@ -7,9 +7,11 @@ from ._ffi._api import (
     deinit,
     get_compute_unit_list,
     get_plugin_version,
+    get_qairt_runtime_path,
     get_runtime_list,
     init,
     set_log_level,
+    set_qairt_runtime_path,
     version,
 )
 from ._version import __version__
@@ -30,6 +32,8 @@ __all__ = [
     'init',
     'deinit',
     'set_log_level',
+    'set_qairt_runtime_path',
+    'get_qairt_runtime_path',
     'version',
     'get_plugin_version',
     'get_runtime_list',

@@ -74,12 +74,13 @@ def test_cli_help_runs():
     assert 'GenieX Python CLI' in r.stdout
 
 
-def test_cli_version_prints_three_lines(geniex_session):
+def test_cli_version_prints_four_lines(geniex_session):
     r = _run_cli(['version'])
     assert r.returncode == 0, r.stderr
     assert 'geniex (python):' in r.stdout
     assert 'SDK:' in r.stdout
     assert 'QAIRT:' in r.stdout
+    assert 'LlamaCPP:' in r.stdout
 
 
 def test_cli_log_level_overrides_verbose(geniex_session):

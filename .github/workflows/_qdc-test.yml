@@ -58,10 +58,17 @@ jobs:
         env:
           GATE: ${{ inputs.gate_on_changed_files }}
           ANY: ${{ steps.files.outputs.any }}
+          # Fork PRs intentionally receive no repository secrets.  Treat a
+          # missing QDC credential as an unavailable hardware lane instead of
+          # invoking the dispatcher with an empty key and failing every cell.
+          HAS_QDC_API_KEY: ${{ secrets.QDC_API_KEY != '' }}
           PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
-          if [ "$GATE" = "true" ] && [ "$ANY" != "true" ]; then
+          if [ "$HAS_QDC_API_KEY" != "true" ]; then
+            echo "::notice::QDC_API_KEY is unavailable; skipping $PLATFORM"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ "$GATE" = "true" ] && [ "$ANY" != "true" ]; then
             echo "No QDC-relevant path changes — skipping $PLATFORM"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else

@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"math/rand/v2"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v3"
@@ -37,18 +36,10 @@ type streamChunk struct {
 	Object  string                  `json:"object"`
 	Choices []streamChoice          `json:"choices"`
 	Usage   *openai.CompletionUsage `json:"usage,omitempty"`
+	Timings *timings                `json:"timings,omitempty"`
 }
 
 const streamChunkObject = "chat.completion.chunk"
-
-func contentChunk(content string) streamChunk {
-	return streamChunk{
-		Object: streamChunkObject,
-		Choices: []streamChoice{{
-			Delta: streamDelta{Role: string(openai.MessageRoleAssistant), Content: content},
-		}},
-	}
-}
 
 func tokenChunk(text string, reasoning bool) streamChunk {
 	delta := streamDelta{Role: string(openai.MessageRoleAssistant)}
@@ -67,18 +58,19 @@ func finishChunk(reason string) streamChunk {
 	}
 }
 
-func usageChunk(u openai.CompletionUsage) streamChunk {
-	return streamChunk{Object: streamChunkObject, Choices: []streamChoice{}, Usage: &u}
+func usageChunk(u openai.CompletionUsage, t timings) streamChunk {
+	return streamChunk{Object: streamChunkObject, Choices: []streamChoice{}, Usage: &u, Timings: &t}
 }
 
-func toolCallChunk(call openai.ChatCompletionMessageFunctionToolCallFunction) streamChunk {
+func toolCallChunk(index int, call openai.ChatCompletionMessageFunctionToolCallFunction) streamChunk {
 	return streamChunk{
 		Object: streamChunkObject,
 		Choices: []streamChoice{{
 			Delta: streamDelta{
 				ToolCalls: []openai.ChatCompletionChunkChoiceDeltaToolCall{{
-					ID:   fmt.Sprintf("call_%d", rand.Uint32()),
-					Type: "function",
+					Index: int64(index),
+					ID:    fmt.Sprintf("call_%d", rand.Uint32()),
+					Type:  "function",
 					Function: openai.ChatCompletionChunkChoiceDeltaToolCallFunction{
 						Name:      call.Name,
 						Arguments: call.Arguments,
@@ -106,23 +98,41 @@ func streamPlainText(c *gin.Context, dataCh <-chan string, wait func() error, in
 			c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return false
 		}
+		logProfile(*profile)
 		c.SSEvent("", finishChunk(mapFinishReason(profile.StopReason)))
 		if includeUsage {
-			c.SSEvent("", usageChunk(profile2Usage(*profile)))
+			c.SSEvent("", usageChunk(profile2Usage(*profile), profile2Timings(*profile)))
 		}
 		c.SSEvent("", "[DONE]")
 		return false
 	})
 }
 
-// Buffers the whole stream, then emits one tool-call chunk (or a content chunk
-// on parse failure).
-func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, profile *geniex_sdk.ProfileData) {
-	buffer := strings.Builder{}
+// Streams the text that cannot be part of a tool call as it arrives, and each
+// tool call as soon as it is complete.
+func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, includeUsage bool, profile *geniex_sdk.ProfileData, class tokenClass, tools string) {
+	scanner := utils.NewToolCallScanner(utils.ToolParameterTypesFromTools(tools))
+	sent := 0 // the delta index, which has to keep rising across chunks
 	c.Stream(func(w io.Writer) bool {
 		r, ok := <-dataCh
 		if ok {
-			buffer.WriteString(r)
+			token, isReasoning, emit := class(r)
+			if !emit {
+				return true
+			}
+			// A tool call never lives in the thinking block, which goes out as it is.
+			if isReasoning {
+				c.SSEvent("", tokenChunk(token, true))
+				return true
+			}
+			text, calls := scanner.Push(token)
+			if text != "" {
+				c.SSEvent("", tokenChunk(text, false))
+			}
+			for _, call := range calls {
+				c.SSEvent("", toolCallChunk(sent, call))
+				sent++
+			}
 			return true
 		}
 		// A context window exhausted mid-stream is a normal truncated completion:
@@ -133,18 +143,24 @@ func streamToolCall(c *gin.Context, dataCh <-chan string, wait func() error, inc
 			c.SSEvent("", map[string]any{"error": err.Error(), "code": geniex_sdk.SDKErrorCode(err)})
 			return false
 		}
-		finishReason := "tool_calls"
-		toolCall, err := utils.ParseToolCalls(buffer.String())
-		if err != nil {
-			slog.Warn("Tool call parse error, fallback to text", "error", err)
-			finishReason = mapFinishReason(profile.StopReason)
-			c.SSEvent("", contentChunk(buffer.String()))
-		} else {
-			c.SSEvent("", toolCallChunk(toolCall))
+		// The held tail may still hold calls the model stopped short of closing.
+		tail, calls := scanner.Tail()
+		if tail != "" {
+			slog.Warn("Tool call not matched, streaming the held text instead")
+			c.SSEvent("", tokenChunk(tail, false))
+		}
+		for _, call := range calls {
+			c.SSEvent("", toolCallChunk(sent, call))
+			sent++
+		}
+		logProfile(*profile)
+		finishReason := mapFinishReason(profile.StopReason)
+		if sent > 0 {
+			finishReason = "tool_calls"
 		}
 		c.SSEvent("", finishChunk(finishReason))
 		if includeUsage {
-			c.SSEvent("", usageChunk(profile2Usage(*profile)))
+			c.SSEvent("", usageChunk(profile2Usage(*profile), profile2Timings(*profile)))
 		}
 		c.SSEvent("", "[DONE]")
 		return false

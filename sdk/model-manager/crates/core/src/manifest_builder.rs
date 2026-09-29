@@ -28,6 +28,9 @@ pub struct ManifestHint {
     /// source has one. Parsed by [`classify_from_config`] to decide LLM
     /// vs VLM more reliably than the mmproj filename heuristic.
     pub config_json_bytes: Option<Vec<u8>>,
+    /// Quant tag read out of a GGUF's `general.file_type`, keyed by filename,
+    /// for the files [`untagged_gguf_names`] reports.
+    pub header_quants: HashMap<String, String>,
 }
 
 /// Quantization priority order (earlier = preferred). Consumed by
@@ -65,13 +68,14 @@ pub fn infer_manifest_from_names(
 
     for n in file_names {
         let lname = n.to_lowercase();
-        if lname.ends_with(".gguf") {
+        if is_weight_gguf(&lname) {
+            let quant = extract_quant(n)
+                .or_else(|| hint.header_quants.get(n).cloned())
+                .unwrap_or_else(|| "DEFAULT".to_string());
+            ggufs.entry(quant).or_default().push(n);
+        } else if lname.ends_with(".gguf") {
             if is_mmproj_filename(&lname) {
                 mmprojs.push(n);
-            } else if lname.contains("mtp") {
-                // MTP draft models can't load standalone; skip.
-            } else if let Some(quant) = extract_quant(n) {
-                ggufs.entry(quant).or_default().push(n);
             }
         } else if lname.ends_with("tokenizer.json") {
             tokenizers.push(n);
@@ -86,8 +90,8 @@ pub fn infer_manifest_from_names(
 
     if ggufs.is_empty() && onnx_files.is_empty() && geniex_files.is_empty() {
         return Err(Error::ManifestInferenceFailed(format!(
-            "no recognizable model files found for '{}'",
-            name
+            "'{name}' has no model files GenieX can load; supported formats \
+             are GGUF (llama.cpp) and QAIRT (Qualcomm AI Hub)"
         )));
     }
 
@@ -117,7 +121,8 @@ pub fn infer_manifest_from_names(
         shard_extras.extend_from_slice(&files[1..]);
     }
 
-    // MMProj: 0 -> try single onnx/geniex; 1 -> use; >1 -> largest.
+    // MMProj: 0 -> try single onnx/geniex; 1 -> use; >1 -> prefer FP16 over
+    // BF16/F32/etc, then largest.
     let mmproj_file = match mmprojs.len() {
         0 => {
             if onnx_files.len() == 1 {
@@ -132,7 +137,12 @@ pub fn infer_manifest_from_names(
         _ => {
             let chosen = mmprojs
                 .iter()
-                .max_by_key(|n| sizes.get(n.as_str()).copied().unwrap_or(0))
+                .max_by_key(|n| {
+                    (
+                        is_preferred_mmproj_precision(n),
+                        sizes.get(n.as_str()).copied().unwrap_or(0),
+                    )
+                })
                 .unwrap();
             file_info(chosen, sizes)
         }
@@ -329,6 +339,28 @@ fn is_mmproj_filename(lname: &str) -> bool {
         || stem.ends_with("_mmproj")
         || stem.contains("-mmproj-")
         || stem.contains("_mmproj_")
+}
+
+/// True when a projector filename's precision tag is FP16/F16 — the
+/// native intermediate float format for vision encoders. Repos with
+/// multiple mmproj candidates (e.g. F16/BF16/F32) should prefer this one
+/// over a same-or-larger BF16/F32 copy.
+fn is_preferred_mmproj_precision(name: &str) -> bool {
+    matches!(extract_quant(name).as_deref(), Some("F16") | Some("FP16"))
+}
+
+/// True for a `.gguf` holding weights — not a vision projector, not an MTP
+/// draft head. Callers must pass a lowercased name.
+fn is_weight_gguf(lname: &str) -> bool {
+    lname.ends_with(".gguf") && !is_mmproj_filename(lname) && !lname.contains("mtp")
+}
+
+/// Weight GGUFs whose filename carries no quant tag.
+pub(crate) fn untagged_gguf_names(file_names: &[String]) -> Vec<&String> {
+    file_names
+        .iter()
+        .filter(|n| is_weight_gguf(&n.to_lowercase()) && extract_quant(n).is_none())
+        .collect()
 }
 
 /// Extract a quant tag like `Q4_K_M`, `IQ4_XS`, `TQ1_0`, `MXFP4`, `F16`,
@@ -711,6 +743,62 @@ mod tests {
     }
 
     #[test]
+    fn single_untagged_gguf_pulls_as_default() {
+        let (names, sizes) = sizes_of(&[("Qwen3-35B-A3B-REAP-48-v2.gguf", 8_000_000)]);
+        let m =
+            infer_manifest_from_names("peonist/REAP-48", &names, &sizes, ManifestHint::default())
+                .unwrap();
+        assert_eq!(m.model_file.len(), 1);
+        assert_eq!(
+            m.model_file.get("DEFAULT").map(|f| f.name.as_str()),
+            Some("Qwen3-35B-A3B-REAP-48-v2.gguf")
+        );
+    }
+
+    #[test]
+    fn header_quant_names_the_untagged_bucket() {
+        let (names, sizes) = sizes_of(&[("Qwen3-35B-A3B-REAP-48-v2.gguf", 8_000_000)]);
+        let hint = ManifestHint {
+            header_quants: HashMap::from([(
+                "Qwen3-35B-A3B-REAP-48-v2.gguf".to_string(),
+                "Q4_K_M".to_string(),
+            )]),
+            ..Default::default()
+        };
+        let m = infer_manifest_from_names("peonist/REAP-48", &names, &sizes, hint).unwrap();
+        assert_eq!(
+            m.model_file.get("Q4_K_M").map(|f| f.name.as_str()),
+            Some("Qwen3-35B-A3B-REAP-48-v2.gguf")
+        );
+    }
+
+    #[test]
+    fn filename_quant_wins_over_the_header() {
+        let (names, sizes) = sizes_of(&[("model-Q4_0.gguf", 1_000_000)]);
+        let hint = ManifestHint {
+            header_quants: HashMap::from([("model-Q4_0.gguf".to_string(), "Q8_0".to_string())]),
+            ..Default::default()
+        };
+        let m = infer_manifest_from_names("Org/Repo", &names, &sizes, hint).unwrap();
+        assert_eq!(m.model_file.keys().collect::<Vec<_>>(), vec!["Q4_0"]);
+    }
+
+    #[test]
+    fn untagged_gguf_names_skips_tagged_projectors_and_drafts() {
+        let names: Vec<String> = [
+            "model.gguf",
+            "model-Q4_K_M.gguf",
+            "mmproj.gguf",
+            "model-mtp.gguf",
+            "README.md",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        assert_eq!(untagged_gguf_names(&names), vec!["model.gguf"]);
+    }
+
+    #[test]
     fn quant_hint_rejects_unknown_quant() {
         let (names, sizes) = sizes_of(&[("model-Q4_K_M.gguf", 1_000_000)]);
         let hint = ManifestHint {
@@ -732,6 +820,34 @@ mod tests {
         assert!(m.model_file.contains_key("Q4_K_M"));
         assert_eq!(m.mmproj_file.name, "mmproj-F16.gguf");
         assert_eq!(m.model_name, "Repo");
+    }
+
+    #[test]
+    fn mmproj_prefers_fp16_over_larger_bf16_and_f32() {
+        // BF16 has no native HTP kernel support; F16 is the vision encoder's
+        // native intermediate float format, so it should win even though the
+        // repo also ships a larger BF16 or F32 copy (#1650).
+        let (names, sizes) = sizes_of(&[
+            ("model-Q4_K_M.gguf", 1_000_000),
+            ("mmproj-F16.gguf", 990_000_000),
+            ("mmproj-BF16.gguf", 992_000_000),
+            ("mmproj-F32.gguf", 1_910_000_000),
+        ]);
+        let m =
+            infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, Default::default()).unwrap();
+        assert_eq!(m.mmproj_file.name, "mmproj-F16.gguf");
+    }
+
+    #[test]
+    fn mmproj_falls_back_to_largest_without_fp16_candidate() {
+        let (names, sizes) = sizes_of(&[
+            ("model-Q4_K_M.gguf", 1_000_000),
+            ("mmproj-BF16.gguf", 992_000_000),
+            ("mmproj-F32.gguf", 1_910_000_000),
+        ]);
+        let m =
+            infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, Default::default()).unwrap();
+        assert_eq!(m.mmproj_file.name, "mmproj-F32.gguf");
     }
 
     #[test]
@@ -782,6 +898,28 @@ mod tests {
     fn rejects_empty_dir() {
         let (names, sizes) = sizes_of(&[]);
         assert!(infer_manifest_from_names("Org/X", &names, &sizes, Default::default()).is_err());
+    }
+
+    #[test]
+    fn safetensors_only_repo_names_the_supported_formats() {
+        // openai/gpt-oss-safeguard-20b layout: safetensors + tokenizer, no GGUF.
+        let (names, sizes) = sizes_of(&[
+            ("config.json", 1000),
+            ("model-00001-of-00002.safetensors", 8_000_000),
+            ("model-00002-of-00002.safetensors", 8_000_000),
+            ("tokenizer.json", 2000),
+        ]);
+        let err = infer_manifest_from_names(
+            "openai/gpt-oss-safeguard-20b",
+            &names,
+            &sizes,
+            Default::default(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("openai/gpt-oss-safeguard-20b"), "{err}");
+        assert!(err.contains("GGUF"), "{err}");
+        assert!(err.contains("QAIRT"), "{err}");
     }
 
     // -- modality classifier ------------------------------------------

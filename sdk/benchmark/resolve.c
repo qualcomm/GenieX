@@ -15,6 +15,24 @@
  * the flag must live outside the struct. */
 static bool g_mm_inited = false;
 
+void apply_chipset_defaults(options_t* o, const device_t* dev) {
+    o->n_ubatch = 0;
+    if (!o->plugin || strcmp(o->plugin, "llama_cpp") != 0 || !dev->id || strcmp(dev->id, "GPUOpenCL") != 0 ||
+        dev->ngl == 0) {
+        return;
+    }
+
+    char*   chipset = NULL;
+    int32_t rc      = geniex_model_detect_chipset(1, &chipset);
+    if (rc != GENIEX_SUCCESS) {
+        fprintf(stderr, "[warn] host chipset detection failed (%d); using SDK batch defaults\n", rc);
+    } else if (chipset && strcmp(chipset, "qualcomm-qcs6490") == 0) {
+        o->n_ubatch = 256;
+        fprintf(stderr, "[info] %s: setting n_ubatch=256 for %s on %s\n", cell_name(o), dev->id, chipset);
+    }
+    if (chipset) geniex_free(chipset);
+}
+
 /* A model-manager id is `org/repo[:quant]`: an embedded '/', no leading
  * '/' '.' or '\\', no drive prefix. Everything else is a path — including a
  * bare `model.gguf`, which has no '/' and so belongs in the cwd branch. */

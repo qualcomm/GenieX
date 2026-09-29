@@ -7,11 +7,16 @@ Builds an artifact (SDK pkg + entry script), submits it as a QDC job, downloads
 the per-cell JSON geniex-bench emits, and writes a markdown bench report to
 GITHUB_STEP_SUMMARY. Linux (QCS9075M, BASH), Windows (SC8380XP, PowerShell), and
 Android (SM8850, APPIUM via adb) are implemented.
+
+`--accuracy` swaps the timing sweep for one `geniex-bench --accuracy` pass over
+the committed prompt set and harvests the generated text from the device log
+into grading items plus a Breeze payload. Linux only for now.
 """
 
 from __future__ import annotations
 
 import argparse
+import codecs
 import json
 import logging
 import os
@@ -35,6 +40,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger(__name__)
 
 HERE = Path(__file__).parent
+MODELS_FILE = HERE / "bench-models.json"
+# Host poll and QDC reservation seconds. 330 min leaves headroom for log upload
+# under the GitHub-hosted 6h job cap.
+JOB_TIMEOUT = 19800
 
 # release_assets.json is published per model on the qualcomm HuggingFace org;
 # the download_url values inside it point at the qaihub-public-assets S3 bucket.
@@ -157,6 +166,259 @@ def model_rows(models: list[dict], device: str) -> list[str]:
     return rows
 
 
+PROMPTS = HERE / "prompts"
+ACCURACY_PROMPTS = PROMPTS / "accuracy_prompts.txt"
+
+
+def load_accuracy_prompts(limit: int = 0) -> list[str]:
+    """The committed prompt set, split the way geniex-bench splits it (on lines
+    that are exactly `---`). `limit` trims it for cheap runs."""
+    segs = [
+        s.strip() for s in ACCURACY_PROMPTS.read_text().split("\n---\n") if s.strip()
+    ]
+    return segs[:limit] if limit else segs
+
+
+_SEP_RE = re.compile(r"^\[sep \] prompt (\d+)/\d+")
+_GEN_RE = re.compile(r"^\[gen \] ?(.*)$")
+# geniex-bench prints this once per matrix row, naming the compute unit that
+# just finished; a multi-device accuracy run puts more than one in one log.
+_OK_RE = re.compile(r"^\[ok  \] \S+\s+plugin=\S+ device=([^\s(]+)")
+
+
+def decode_log(data: bytes) -> str:
+    """Device logs are UTF-8 everywhere except Windows, where PowerShell 5.1's
+    Start-Transcript writes UTF-16 with a BOM."""
+    for bom, enc in (
+        (codecs.BOM_UTF16_LE, "utf-16-le"),
+        (codecs.BOM_UTF16_BE, "utf-16-be"),
+        (codecs.BOM_UTF8, "utf-8-sig"),
+    ):
+        if data.startswith(bom):
+            return data.decode(enc, errors="replace")
+    return data.decode("utf-8", errors="replace")
+
+
+def _cell_items(
+    blocks: dict[int, list[str]], prompts: list[str], compute: str
+) -> list[dict]:
+    out = []
+    for i, prompt in enumerate(prompts):
+        text = "\n".join(blocks.get(i, [])).strip()
+        if text:
+            out.append({"prompt": prompt, "response": text, "compute": compute})
+        else:
+            where = f" ({compute})" if compute else ""
+            log.warning(
+                "no generated text for prompt %d%s: %r", i + 1, where, prompt[:60]
+            )
+    return out
+
+
+def parse_items(log_text: str, prompts: list[str]) -> list[dict]:
+    """Pair each prompt with the `[gen ]` block geniex-bench printed for it.
+    A row is a cell that ends in its own `[ok  ]` line; flush on every one
+    instead of assuming there's exactly one, so a multi-device accuracy run
+    (more than one compute unit for the same model) keeps every cell's text
+    instead of only the first."""
+    items: list[dict] = []
+    blocks: dict[int, list[str]] = {}
+    cur = 0
+    for line in log_text.splitlines():
+        if m := _OK_RE.match(line):
+            items += _cell_items(blocks, prompts, m.group(1))
+            blocks, cur = {}, 0
+        elif m := _SEP_RE.match(line):
+            cur = int(m.group(1)) - 1
+        elif m := _GEN_RE.match(line):
+            blocks.setdefault(cur, []).append(m.group(1))
+    if blocks:
+        # No closing [ok  ] seen (e.g. the device crashed mid-cell) -- whatever
+        # text made it out is still worth keeping, just unattributed.
+        items += _cell_items(blocks, prompts, "")
+    return items
+
+
+GRADE_RULES = PROMPTS / "grade-rules.md"
+
+
+def render_item_map(items: list[dict]) -> str:
+    """The human-facing copy of what was sent for grading -- same prompt and
+    response as the payload, but tagged with the cell it withholds, so a
+    reader can trace a rating back to a model without the grader ever
+    seeing that mapping."""
+    out = []
+    for i, item in enumerate(items):
+        out += [
+            f"========== ITEM {i} — {item['cell']} ==========",
+            "",
+            "--- Prompt ---",
+            item["prompt"],
+            "--- Response ---",
+            item["response"],
+            "",
+        ]
+    return "\n".join(out) + "\n"
+
+
+def render_payload(items: list[dict]) -> str:
+    """The Breeze grading payload: the rubric followed by the numbered items.
+    Rides a workflow artifact — an issue body caps at 65536 characters.
+
+    Item numbers are global across cells; which cell an item came from is
+    deliberately withheld so the grader cannot anchor on the model."""
+    out = [GRADE_RULES.read_text().strip(), ""]
+    for i, item in enumerate(items):
+        out += [
+            f"========== ITEM {i} ==========",
+            "",
+            "--- Prompt ---",
+            item["prompt"],
+            "--- Response to grade ---",
+            item["response"],
+            "--- End of response ---",
+            "",
+        ]
+    out += [
+        f"Grade all {len(items)} items above. Emit one markdown table, one row per",
+        "item, with the columns Item | Rating | Category | Note. Nothing else.",
+    ]
+    return "\n".join(out) + "\n"
+
+
+# --- grading round trip: merge cells -> payload, grader table -> two tables ---
+
+BANDS = (("0-3", 0, 3), ("4-6", 4, 6), ("7-9", 7, 9), ("10", 10, 10))
+# Closed vocabulary from prompts/grade-rules.md; anything else counts as other.
+CATEGORIES = frozenset(
+    (
+        "junk-tokens mojibake foreign-script loop truncation "
+        "duplicate-word markup misspelling code-error factual reasoning none"
+    ).split()
+)
+
+
+def merge_items(items_dir: Path) -> list[dict]:
+    """Flatten every generate job's `items.json` into one globally numbered
+    list. Each item already carries the cell it came from -- a multi-device
+    accuracy run can produce more than one cell per file."""
+    merged = []
+    for f in sorted(items_dir.rglob("*.json")):
+        merged += json.loads(f.read_text())["items"]
+    return merged
+
+
+_GRADE_ROW = re.compile(
+    r"^\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*`?([A-Za-z-]+)`?\s*\|\s*(.*?)\s*\|?\s*$"
+)
+
+
+def parse_grades(comment: str) -> dict[int, dict]:
+    """Pull `| item | rating | category | note |` rows out of the grader's
+    comment, ignoring the header separator and any stray prose."""
+    grades = {}
+    for line in comment.splitlines():
+        if m := _GRADE_ROW.match(line.strip()):
+            item, rating = int(m.group(1)), int(m.group(2))
+            if 0 <= rating <= 10:
+                grades[item] = {
+                    "rating": rating,
+                    "category": m.group(3).lower(),
+                    "note": m.group(4),
+                }
+    return grades
+
+
+def _score_table(graded: list[tuple[int, dict, dict]], cells: list[str]) -> list[str]:
+    """One row per cell: mean rating and the band histogram. `cells` may
+    include ones with no graded items (a generate job that produced
+    nothing) -- those get a dash row instead of silently vanishing."""
+    per_cell: dict[str, list[int]] = {}
+    for _, item, g in graded:
+        per_cell.setdefault(item["cell"], []).append(g["rating"])
+    lines = [
+        "| Cell | Items | Mean | " + " | ".join(b for b, _, _ in BANDS) + " |",
+        "|------|------:|-----:|" + "".join("----:|" for _ in BANDS),
+    ]
+    for cell in cells:
+        ratings = per_cell.get(cell)
+        if not ratings:
+            lines.append(f"| {cell} | 0 | - | " + " | ".join("-" for _ in BANDS) + " |")
+            continue
+        counts = [sum(1 for r in ratings if lo <= r <= hi) for _, lo, hi in BANDS]
+        mean = sum(ratings) / len(ratings)
+        lines.append(
+            f"| {cell} | {len(ratings)} | {mean:.1f} | "
+            + " | ".join(str(c) for c in counts)
+            + " |"
+        )
+    return lines
+
+
+def _category_table(
+    graded: list[tuple[int, dict, dict]], cells: list[str]
+) -> list[str]:
+    """Deduction counts, cell rows x category columns -- same orientation as
+    the score table above it. `none` is a perfect 10, not a deduction."""
+    counts: dict[str, dict[str, int]] = {c: {} for c in cells}
+    totals: dict[str, int] = {}
+    for _, item, g in graded:
+        cat = g["category"] if g["category"] in CATEGORIES else "other"
+        if cat == "none":
+            continue
+        counts[item["cell"]][cat] = counts[item["cell"]].get(cat, 0) + 1
+        totals[cat] = totals.get(cat, 0) + 1
+    if not totals:
+        return ["> Every item scored a perfect 10 -- no deductions."]
+    cats = sorted(totals, key=lambda c: -totals[c])
+    lines = [
+        "| Cell | " + " | ".join(f"`{c}`" for c in cats) + " |",
+        "|------|" + "".join("---:|" for _ in cats),
+    ]
+    for cell in cells:
+        row = [str(counts[cell][cat]) if cat in counts[cell] else "-" for cat in cats]
+        lines.append(f"| {cell} | " + " | ".join(row) + " |")
+    return lines
+
+
+def render_grades(
+    items: list[dict], comment: str, expected_cells: list[str] = ()
+) -> str:
+    """Two tables instead of 100 rows of prose: scores per cell, then a
+    breakdown of what the deductions were for.
+
+    `expected_cells` are the device x model matrix's base cell names
+    (`{model}-{device}`, no compute suffix -- the caller doesn't know
+    ahead of time whether a job would have split into more than one). Any
+    not matched by an actual item, exactly or as a `-{compute}` prefix,
+    get a dash row: a generate job that produced nothing should show up
+    as missing, not vanish from the table."""
+    grades = parse_grades(comment)
+    graded = [(i, item, grades[i]) for i, item in enumerate(items) if i in grades]
+    present = {item["cell"] for item in items}
+    missing_cells = [
+        c
+        for c in expected_cells
+        if c not in present and not any(p.startswith(c + "-") for p in present)
+    ]
+    cells = sorted({item["cell"] for _, item, _ in graded} | set(missing_cells))
+    lines = ["## Breeze grading results", ""]
+    if not graded and not cells:
+        lines += [
+            "> No parseable `| Item | Rating | Category | Note |` rows in the",
+            "> grader comment — see the issue for the raw agent output.",
+            "",
+        ]
+        return "\n".join(lines)
+    missing = len(items) - len(graded)
+    lines += _score_table(graded, cells) + [""]
+    if missing:
+        lines += [f"> {missing} of {len(items)} items came back ungraded.", ""]
+    lines += ["### Deductions", ""]
+    lines += _category_table(graded, cells) + [""]
+    return "\n".join(lines)
+
+
 DEFAULT_CTX = [512, 1024, 4096]
 DEFAULT_TG_PER_CELL = 128
 
@@ -207,13 +469,19 @@ def build_linux_artifact(
     ctx: list[int],
     pp: list[int],
     tg: list[int],
+    accuracy_prompts: list[str] | None = None,
+    think: bool = True,
 ) -> Path:
+    """`accuracy_prompts` picks the entry script's mode: None runs the bench
+    sweep, a list runs one accuracy pass over exactly those prompts."""
     stage = tmp / "stage"
     shutil.copytree(pkg_dir, stage / "pkg-geniex")
 
     subs = {
         "{MODELS}": "\n".join(model_rows(models, device)),
         "{CHIPSET}": CHIPSET.get(device, ""),
+        "{MODE}": "accuracy" if accuracy_prompts else "bench",
+        "{THINK}": "--think" if think else "--no-think",
         **_sweep_placeholders(ctx, pp, tg),
     }
     script = _apply_substitutions((HERE / "linux" / "run_linux.sh").read_text(), subs)
@@ -221,10 +489,22 @@ def build_linux_artifact(
     script_path.write_text(script, newline="\n")
     script_path.chmod(0o755)
 
-    shutil.copy(TEST_IMAGE, stage / "test.png")
-    shutil.copytree(HERE / "prompts", stage / "prompts")
-
+    _stage_shared(stage, accuracy_prompts)
     return Path(shutil.make_archive(str(tmp / "artifact"), "zip", stage))
+
+
+def _stage_shared(stage: Path, accuracy_prompts: list[str] | None) -> None:
+    """The VLM test image and the prompt set every platform ships. In accuracy
+    mode the committed prompt file is replaced by what --prompt-limit kept.
+
+    Prompts stay LF on every platform: geniex-bench tolerates CRLF around the
+    `---` separators, but the \\r would otherwise ride into the prompt text."""
+    shutil.copy(TEST_IMAGE, stage / "test.png")
+    shutil.copytree(PROMPTS, stage / "prompts")
+    if accuracy_prompts:
+        (stage / "prompts" / ACCURACY_PROMPTS.name).write_text(
+            "\n---\n".join(accuracy_prompts) + "\n", newline="\n"
+        )
 
 
 def build_windows_artifact(
@@ -235,6 +515,8 @@ def build_windows_artifact(
     ctx: list[int],
     pp: list[int],
     tg: list[int],
+    accuracy_prompts: list[str] | None = None,
+    think: bool = True,
 ) -> Path:
     stage = tmp / "stage"
     shutil.copytree(pkg_dir, stage / "pkg-geniex")
@@ -242,6 +524,8 @@ def build_windows_artifact(
     subs = {
         "{MODELS}": "\n".join(model_rows(models, device)),
         "{CHIPSET}": CHIPSET.get(device, ""),
+        "{MODE}": "accuracy" if accuracy_prompts else "bench",
+        "{THINK}": "--think" if think else "--no-think",
         **_sweep_placeholders(ctx, pp, tg),
     }
     script = _apply_substitutions(
@@ -252,9 +536,7 @@ def build_windows_artifact(
     cert = HERE.parents[2] / ".github" / "certs" / "hexagon" / "ggml-htp-v1.cer"
     shutil.copy(cert, stage / "ggml-htp-v1.cer")
 
-    shutil.copy(TEST_IMAGE, stage / "test.png")
-    shutil.copytree(HERE / "prompts", stage / "prompts")
-
+    _stage_shared(stage, accuracy_prompts)
     return Path(shutil.make_archive(str(tmp / "artifact"), "zip", stage))
 
 
@@ -266,18 +548,31 @@ def build_android_artifact(
     ctx: list[int],
     pp: list[int],
     tg: list[int],
+    accuracy_prompts: list[str] | None = None,
+    think: bool = True,
 ) -> Path:
     # Phones lack python3/curl, so the appium pytest harness on the QDC host
     # fetches+extracts each model and adb-pushes it, then runs geniex-bench
     # on-device; results land in the device's QDC_logs and are auto-collected.
+    # There is no entry script to substitute into, so the mode travels as JSON
+    # and the harness skips whichever test the mode did not ask for.
     stage = tmp / "stage"
     shutil.copytree(pkg_dir, stage / "pkg-geniex")
     (stage / "matrix_rows.txt").write_text("\n".join(model_rows(models, device)))
     (stage / "chipset.txt").write_text(CHIPSET.get(device, ""))
+    (stage / "params.json").write_text(
+        json.dumps(
+            {
+                "mode": "accuracy" if accuracy_prompts else "bench",
+                "think": think,
+                "ctx": ctx,
+                "tg": tg,
+            }
+        )
+    )
     shutil.copytree(HERE / "tests", stage / "tests")
     shutil.copy(HERE / "tests" / "requirements.txt", stage / "requirements.txt")
-    shutil.copy(TEST_IMAGE, stage / "test.png")
-    shutil.copytree(HERE / "prompts", stage / "prompts")
+    _stage_shared(stage, accuracy_prompts)
     (stage / "pytest.ini").write_text("[pytest]\naddopts = --junitxml=results.xml\n")
 
     return Path(shutil.make_archive(str(tmp / "artifact"), "zip", stage))
@@ -298,7 +593,16 @@ BUILDERS = {
 def download_cells(
     client, job_id: str, tmp: Path, model_names: list[str] | None = None
 ) -> list[dict]:
-    """Return the cell JSONs QDC collected for ``job_id``.
+    members = _qdc.download_log_members(
+        client, job_id, tmp, lambda n: n.endswith(".json")
+    )
+    return cells_from(members, model_names)
+
+
+def cells_from(
+    members: list[tuple[str, bytes]], model_names: list[str] | None = None
+) -> list[dict]:
+    """Parse the cell JSONs out of downloaded log members.
 
     QDC reuses physical hosts across jobs, so the log archive can carry
     stale cell files from earlier sessions in addition to what this job
@@ -306,10 +610,7 @@ def download_cells(
     whose ``cell_id`` starts with one of those names — cell_id is
     ``{model}-{plugin}-{device}-c{ctx}`` on the device side, so a name
     prefix is enough to disambiguate."""
-    members = _qdc.download_log_members(
-        client, job_id, tmp, lambda n: n.endswith(".json")
-    )
-    cells = [json.loads(data) for _, data in members]
+    cells = [json.loads(data) for name, data in members if name.endswith(".json")]
     if model_names:
         prefixes = tuple(f"{n}-" for n in model_names)
         kept, dropped = [], []
@@ -537,7 +838,13 @@ def _short_sha() -> str:
     )
 
 
-def render_aggregate(cells_dir: Path, device: str, models_file: Path) -> int:
+def _require(value, flag: str):
+    if value is None:
+        raise SystemExit(f"{flag} is required for this --mode")
+    return value
+
+
+def render_aggregate(cells_dir: Path, device: str) -> int:
     cells = (
         [
             c
@@ -551,22 +858,104 @@ def render_aggregate(cells_dir: Path, device: str, models_file: Path) -> int:
     if not cells:
         write_summary(f"## QDC Bench — {device} — {label}\n\nNo results recovered.\n")
         return 0
-    models = json.loads(models_file.read_text()) if models_file.exists() else None
+    models = json.loads(MODELS_FILE.read_text()) if MODELS_FILE.exists() else None
     write_summary(render(cells, device, label, models))
+    return 0
+
+
+def collect_bench(client, job_id: str, tmp: Path, args, models: list[dict]) -> int:
+    """Bench mode: the per-cell timing JSON in the device's results dir."""
+    cells = download_cells(client, job_id, tmp, model_names=[m["name"] for m in models])
+    if not cells:
+        for name, data in _qdc.download_log_members(
+            client, job_id, tmp, lambda n: n.endswith((".log", ".stdout", ".txt"))
+        ):
+            print(f"===== QDC log: {name} =====")
+            print(decode_log(data))
+
+    if args.out:
+        args.out.write_text(json.dumps(cells))
+    if not cells:
+        raise SystemExit("no benchmark results recovered from the device")
+
+    # Render this model's own table into its job summary for immediate visibility;
+    # the aggregate job later flattens every model's cells into one unified table.
+    write_summary(render(cells, args.device, detect_geniex_label(_short_sha()), models))
+    return 0
+
+
+def collect_accuracy(
+    client, job_id: str, tmp: Path, args, models: list[dict], prompts: list[str]
+) -> int:
+    """Accuracy mode: the generated text, which only exists on the device's
+    stdout — redirected into the uploaded log. Cells only label the summary.
+
+    One download for both: each download_log_members call refetches the whole
+    log archive. QDCDeviceLogs is the phones' logcat/kernel dump, megabytes of
+    noise with no bearing on generation."""
+    members = _qdc.download_log_members(
+        client,
+        job_id,
+        tmp,
+        lambda n: n.endswith((".log", ".json")) and "/QDCDeviceLogs/" not in n,
+    )
+    text = "\n".join(decode_log(d) for name, d in members if name.endswith(".log"))
+    raw = parse_items(text, prompts)
+    if not raw:
+        print(text)
+        # The device leg failed before generating; on Android the reason is in
+        # the appium harness's own stdout, which is not one of the logs above.
+        for name, data in _qdc.download_log_members(
+            client, job_id, tmp, lambda n: n.endswith((".stdout", ".txt", ".xml"))
+        ):
+            print(f"===== QDC log: {name} =====")
+            print(decode_log(data))
+        raise SystemExit("no generated text recovered from the device")
+
+    # {model}-{device} disambiguates the same model on two chipsets once cells
+    # are merged for grading. A multi-device run (more than one compute unit
+    # for this model) also needs the compute unit, or those cells collide too;
+    # the common single-device case keeps the plain two-part label.
+    multi = len({it["compute"] for it in raw}) > 1
+    items = []
+    for it in raw:
+        cell = f"{args.model_name}-{args.device}"
+        if multi and it["compute"]:
+            cell += f"-{it['compute']}"
+        items.append({"prompt": it["prompt"], "response": it["response"], "cell": cell})
+    if args.out:
+        args.out.write_text(json.dumps({"items": items}, indent=2))
+    print(f"accuracy: {len(items)} items -> {sorted({it['cell'] for it in items})}")
     return 0
 
 
 def main() -> int:
     p = argparse.ArgumentParser()
+    p.add_argument(
+        "--mode",
+        choices=(
+            "bench",
+            "bench_aggregate",
+            "accuracy",
+            "accuracy_payload",
+            "accuracy_report",
+        ),
+        default="bench",
+        help="bench: timing sweep on a device. accuracy: one geniex-bench "
+        "--accuracy pass over the committed prompt set. The rest run on the "
+        "host over --in-dir artifacts: bench_aggregate renders the bench "
+        "table, accuracy_payload builds the grading payload, accuracy_report "
+        "renders the grades",
+    )
     p.add_argument("--pkg-dir", type=Path)
     p.add_argument("--device", default="QCS9075M")
-    p.add_argument("--models-file", type=Path, default=HERE / "bench-models.json")
-    p.add_argument("--model-name", help="run only this model from --models-file")
+    p.add_argument("--model-name", help=f"run only this model from {MODELS_FILE.name}")
     p.add_argument(
         "--compute",
         default="",
         help="comma-separated compute filter (cpu/gpu/npu/hybrid); "
-        "empty keeps every compute unit declared on the model",
+        "empty keeps every compute unit declared on the model. In accuracy "
+        "mode it overrides the declared units instead of filtering",
     )
     p.add_argument(
         "--ctx",
@@ -583,19 +972,64 @@ def main() -> int:
         default="",
         help="comma-separated decode lengths matching --ctx (empty = 128 per cell)",
     )
-    p.add_argument("--cells-out", type=Path, help="write the per-cell JSON list here")
-    p.add_argument("--render-dir", type=Path, help="render mode: aggregate JSON here")
     p.add_argument(
-        "--job-timeout",
+        "--prompt-limit",
         type=int,
-        default=19800,
-        help="host poll and QDC reservation seconds; default 330 min leaves "
-        "headroom for log upload under the GitHub-hosted 6h job cap",
+        default=0,
+        help="accuracy mode: use only the first N prompts (0 = all)",
+    )
+    p.add_argument(
+        "--think",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="accuracy mode: keep the model's thinking phase (geniex-bench default)",
+    )
+    p.add_argument(
+        "--in-dir",
+        type=Path,
+        help="aggregate/payload/report mode: the artifact directory to read",
+    )
+    p.add_argument(
+        "--out",
+        type=Path,
+        help="where this mode's artifact goes: bench cells, accuracy items, or "
+        "the grading payload",
+    )
+    p.add_argument(
+        "--grades-in",
+        type=Path,
+        help="report mode: the grader's result comment",
+    )
+    p.add_argument(
+        "--expected-cells",
+        default="",
+        help="report mode: comma-separated `{model}-{device}` base cell names "
+        "to show even when the generate job produced no items for them",
     )
     args = p.parse_args()
 
-    if args.render_dir:
-        return render_aggregate(args.render_dir, args.device, args.models_file)
+    # Host-side modes read artifacts the device runs left behind; they need
+    # neither QDC nor a device.
+    if args.mode == "bench_aggregate":
+        return render_aggregate(_require(args.in_dir, "--in-dir"), args.device)
+    if args.mode in ("accuracy_payload", "accuracy_report"):
+        items = merge_items(_require(args.in_dir, "--in-dir"))
+        if not items:
+            raise SystemExit(f"no items found under {args.in_dir}")
+        if args.mode == "accuracy_payload":
+            out = _require(args.out, "--out")
+            out.write_text(render_payload(items))
+            log.info("payload: %d items -> %s", len(items), out)
+            # A fixed sibling name, not a flag -- the workflow's upload step
+            # for it (ITEM_MAP_FILE) expects this exact name.
+            out.with_name("grade-item-map.md").write_text(render_item_map(items))
+        else:
+            grades = _require(args.grades_in, "--grades-in")
+            expected_cells = [
+                c.strip() for c in args.expected_cells.split(",") if c.strip()
+            ]
+            write_summary(render_grades(items, grades.read_text(), expected_cells))
+        return 0
 
     if _qdc is None:
         raise SystemExit("qualcomm_device_cloud_sdk is required for run mode")
@@ -609,24 +1043,30 @@ def main() -> int:
     if platform not in BUILDERS:
         raise SystemExit(f"{platform} not implemented yet")
 
-    all_models = json.loads(args.models_file.read_text())
+    accuracy = args.mode == "accuracy"
+    all_models = json.loads(MODELS_FILE.read_text())
     if args.model_name:
         models = [m for m in all_models if m["name"] == args.model_name]
         if not models:
-            raise SystemExit(f"model {args.model_name!r} not in {args.models_file}")
+            raise SystemExit(f"model {args.model_name!r} not in {MODELS_FILE}")
         # Pull in every spec.draft dependency so _resolve_draft_model_id can
         # still find it after --model-name has trimmed the list to one row.
         needed = {m["spec"]["draft"] for m in models if m.get("spec")}
         for name in needed - {m["name"] for m in models}:
             entry = next((m for m in all_models if m["name"] == name), None)
             if entry is None:
-                raise SystemExit(f"draft {name!r} not in {args.models_file}")
+                raise SystemExit(f"draft {name!r} not in {MODELS_FILE}")
             models.append(entry)
     else:
         models = all_models
 
     compute_pick = [c.strip() for c in args.compute.split(",") if c.strip()]
-    if compute_pick:
+    if accuracy:
+        # Accuracy pins the unit outright rather than intersecting: the declared
+        # units are the timing matrix, which excludes `hybrid`.
+        if compute_pick:
+            models = [{**m, "devices": compute_pick} for m in models]
+    elif compute_pick:
         kept = []
         for m in models:
             devs = [d for d in m["devices"] if d in compute_pick]
@@ -642,15 +1082,31 @@ def main() -> int:
         models = kept
         if not models:
             raise SystemExit(
-                f"no model in {args.models_file} runs any of --compute={compute_pick}"
+                f"no model in {MODELS_FILE} runs any of --compute={compute_pick}"
             )
-    ctx_arg = args.ctx
-    if not ctx_arg:
-        active = [m for m in models if m.get("devices")]
-        if len(active) == 1 and active[0].get("ctx"):
-            ctx_arg = ",".join(str(x) for x in active[0]["ctx"])
-    ctx_list, pp_list, tg_list = resolve_sweep(ctx_arg, args.pp, args.tg)
-    log.info("sweep: ctx=%s pp=%s tg=%s", ctx_list, pp_list, tg_list)
+    if accuracy:
+        prompts = load_accuracy_prompts(args.prompt_limit)
+        # One pass, not a sweep, and the model's declared sweep is irrelevant:
+        # ctx only has to hold one prompt plus the requested generation, and a
+        # 512 cell from the timing matrix would truncate a 2048-token answer.
+        tg_first = (_parse_int_list(args.tg) or [DEFAULT_TG_PER_CELL])[0]
+        ctx_arg = args.ctx.split(",")[0] if args.ctx else str(max(2 * tg_first, 4096))
+        tg_arg = str(tg_first)
+    else:
+        prompts = None
+        tg_arg = args.tg
+        ctx_arg = args.ctx
+        if not ctx_arg:
+            # A lone model may carry its own sweep in bench-models.json.
+            active = [m for m in models if m.get("devices")]
+            if len(active) == 1 and active[0].get("ctx"):
+                ctx_arg = ",".join(str(x) for x in active[0]["ctx"])
+
+    ctx_list, pp_list, tg_list = resolve_sweep(ctx_arg, args.pp, tg_arg)
+    if accuracy:
+        log.info("accuracy: %d prompts, ctx=%s tg=%s", len(prompts), ctx_list, tg_list)
+    else:
+        log.info("sweep: ctx=%s pp=%s tg=%s", ctx_list, pp_list, tg_list)
 
     client = _qdc.make_client(api_key)
     target_id = _qdc.resolve_target(client, args.device)
@@ -658,40 +1114,29 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         zip_path = BUILDERS[platform](
-            args.pkg_dir, models, args.device, tmp, ctx_list, pp_list, tg_list
+            args.pkg_dir,
+            models,
+            args.device,
+            tmp,
+            ctx_list,
+            pp_list,
+            tg_list,
+            accuracy_prompts=prompts,
+            think=args.think,
         )
         job_id = _qdc.submit_and_wait(
             client,
             target_id=target_id,
-            job_name=f"geniex-bench-{args.device}",
+            job_name=f"geniex-{args.mode}-{args.device}",
             platform=platform,
             entry_script=ENTRY[platform],
             zip_path=zip_path,
-            timeout=args.job_timeout,
+            timeout=JOB_TIMEOUT,
         )
-        cells = download_cells(
-            client, job_id, tmp, model_names=[m["name"] for m in models]
-        )
-        if not cells:
-            for name, data in _qdc.download_log_members(
-                client, job_id, tmp, lambda n: n.endswith((".log", ".stdout", ".txt"))
-            ):
-                print(f"===== QDC log: {name} =====")
-                try:
-                    print(data.decode("utf-8", errors="replace"))
-                except Exception as e:
-                    print(f"[decode failed: {e}]")
-
-    if args.cells_out:
-        args.cells_out.write_text(json.dumps(cells))
-
-    if not cells:
-        raise SystemExit("no benchmark results recovered from the device")
-
-    # Render this model's own table into its job summary for immediate visibility;
-    # the aggregate job later flattens every model's cells into one unified table.
-    write_summary(render(cells, args.device, detect_geniex_label(_short_sha()), models))
-    return 0
+        if accuracy:
+            return collect_accuracy(client, job_id, tmp, args, models, prompts)
+        else:
+            return collect_bench(client, job_id, tmp, args, models)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import geniex
+import pytest
 
 
 def test_version_nonempty(geniex_session):
@@ -70,6 +71,8 @@ def test_public_surface_exports():
         'init',
         'deinit',
         'set_log_level',
+        'set_qairt_runtime_path',
+        'get_qairt_runtime_path',
         'version',
         'get_plugin_version',
         'get_runtime_list',
@@ -80,6 +83,16 @@ def test_public_surface_exports():
     assert expected.issubset(set(geniex.__all__))
     for name in expected:
         assert hasattr(geniex, name), f'{name} missing from geniex module'
+
+
+# QAIRT runtime override — set before init, process-global, and locked once
+# initialized; see notes/run.md § Using a custom QNN library.
+
+
+def test_qairt_runtime_path_is_locked_after_init(geniex_session):
+    with pytest.raises(geniex.GenieXError):
+        geniex.set_qairt_runtime_path('/nonexistent/qairt/2.XX.0')
+    assert geniex.get_qairt_runtime_path() == ''
 
 
 # resolve_device_map — source of truth lives in sdk/src/device.cpp. Any change

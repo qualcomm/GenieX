@@ -329,12 +329,13 @@ struct fmt::formatter<geniex_VlmCreateInput> {
     auto           format(const geniex_VlmCreateInput& p, fmt::format_context& ctx) const {
         return fmt::format_to(ctx.out(),
             "VlmCreateInput(model_path: {}, mmproj_path: {}, config: {}, plugin_id: {}, device_id: {}, "
-                      "tokenizer_path: {})",
+                      "vit_device_id: {}, tokenizer_path: {})",
             lp(p.model_path),
             lp(p.mmproj_path),
             lp(p.config),
             lp(p.plugin_id),
             lp(p.device_id),
+            lp(p.vit_device_id),
             lp(p.tokenizer_path));
     }
 };

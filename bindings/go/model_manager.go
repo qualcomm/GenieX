@@ -57,22 +57,25 @@ func ParseModelType(s string) (ModelType, bool) {
 	}
 }
 
-// SplitNamePrecision splits "name[:precision]" into (name, precision). A pasted
-// HuggingFace URL prefix is stripped first so its scheme colon isn't mistaken
-// for the precision separator. Name canonicalization, precision case-folding
-// (GGUF quant labels are matched upper-cased), and hub routing all happen in
-// the SDK across the FFI boundary — including llmman, where the suffix is a
-// case-sensitive registry tag the SDK deliberately leaves untouched. This only
-// does the URL strip + ':' split so callers can pass the two to the FFI
-// separately.
+// SplitNamePrecision splits "name[:precision]" into (name, precision). A
+// pasted model-page URL keeps its scheme, which is held back from the ':'
+// split so the scheme colon isn't mistaken for the precision separator — the
+// SDK needs the surviving host to route the hub (e.g. modelscope.cn). Name
+// canonicalization, precision case-folding (GGUF quant labels are matched
+// upper-cased), and hub routing all happen in the SDK across the FFI boundary,
+// including llmman, where the suffix is a case-sensitive registry tag the SDK
+// deliberately leaves untouched. This only does the ':' split so callers can
+// pass the two to the FFI separately.
 func SplitNamePrecision(arg string) (string, string) {
-	arg = strings.TrimPrefix(arg, "https://huggingface.co/")
-	arg = strings.TrimPrefix(arg, "http://huggingface.co/")
+	scheme := ""
+	if i := strings.Index(arg, "://"); i >= 0 {
+		scheme, arg = arg[:i+3], arg[i+3:]
+	}
 	name, precision, found := strings.Cut(arg, ":")
 	if !found || precision == "" {
-		return name, ""
+		return scheme + name, ""
 	}
-	return name, precision
+	return scheme + name, precision
 }
 
 // JoinNamePrecision builds the "name:precision" key the SDK accepts. Inverse of

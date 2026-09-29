@@ -5,7 +5,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <nlohmann/json.hpp>
 
 #include "chat.h"
 #include "common.h"
@@ -48,6 +47,11 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
     // any llama.cpp load walks the registry's device list and a stale session
     // pointer left from a prior release will crash the load on cpu / gpu too.
     if (htp::htp_backend_present()) {
+        if (device == Device::NPU) {
+            htp::set_power_mode(config.power_mode);
+        } else if (config.power_mode != GENIEX_POWER_MODE_BURST) {
+            GENIEX_LOG_WARN("power_mode is only meaningful on the NPU device; ignoring on this device");
+        }
         htp::reacquire_before_load();
     }
 
@@ -56,8 +60,21 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
     if (!selection) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
+
     if (!selection->empty()) {
         mpar.devices = selection->data();
+    }
+
+    ggml_backend_dev_t vision_device = nullptr;
+    if (input->vit_device_id && input->vit_device_id[0] != '\0') {
+        vision_device = ggml_backend_dev_by_name(input->vit_device_id);
+        if (!vision_device) {
+            GENIEX_LOG_ERROR("Vision device '{}' not found", input->vit_device_id);
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
+        GENIEX_LOG_INFO("Using vision device override: {}", input->vit_device_id);
+    } else if (!selection->empty()) {
+        vision_device = selection->front();
     }
 
     // See llm.cpp for why this is registry-scoped rather than per-device.
@@ -91,13 +108,24 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
     // Initialize vision context if mmproj_path provided
     if (input->mmproj_path) {
         mtmd_context_params mparams = mtmd_context_params_default();
-        mparams.use_gpu             = device == Device::GPU;
-        mparams.print_timings       = false;
-        mparams.n_threads           = 4;
+        mparams.use_gpu             = false;
+        if (vision_device) {
+            mparams.use_gpu = true;
+            mparams.device  = vision_device;
+        }
+        mparams.print_timings   = false;
+        mparams.n_threads       = cpar.n_threads;
+        mparams.flash_attn_type = cpar.flash_attn_type;
         // Zack TODO: elegant fix this error:  no member named 'verbosity' in 'mtmd_context_params'
         // mparams.verbosity           = GGML_LOG_LEVEL_ERROR;
 
         this->ctx_vision = mtmd_init_from_file(input->mmproj_path, this->model, mparams);
+        if (!this->ctx_vision && vision_device) {
+            GENIEX_LOG_WARN("mtmd failed to initialize the vision encoder on HTP; falling back to CPU");
+            mparams.use_gpu  = false;
+            mparams.device   = nullptr;
+            this->ctx_vision = mtmd_init_from_file(input->mmproj_path, this->model, mparams);
+        }
         // Continue even if vision context fails
         if (this->ctx_vision) {
             this->supports_vision = mtmd_support_vision(this->ctx_vision);
@@ -159,7 +187,7 @@ int32_t LlamaVlm::apply_chat_template(
     tmpl_inputs.add_generation_prompt = true;
     tmpl_inputs.use_jinja             = true;
     if (input->tools && strlen(input->tools) > 0) {
-        tmpl_inputs.tools = common_chat_tools_parse_oaicompat(nlohmann::ordered_json::parse(std::string(input->tools)));
+        tmpl_inputs.tools = common_chat_tools_parse_oaicompat(common_json::parse(std::string(input->tools)));
     }
 
     if (input->enable_thinking) {
@@ -219,9 +247,9 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             GENIEX_LOG_DEBUG("processing {} image(s)", input->config->image_count);
             for (int i = 0; i < input->config->image_count; ++i) {
                 if (input->config->image_paths[i]) {
-                    mtmd_bitmap* bmp =
-                        mtmd_helper_bitmap_init_from_file(this->ctx_vision, input->config->image_paths[i], false)
-                            .bitmap;
+                    mtmd_bitmap* bmp = mtmd_helper_bitmap_init_from_file(
+                        this->ctx_vision, input->config->image_paths[i], false, mtmd_helper_init_opt_default())
+                                           .bitmap;
                     if (bmp) {
                         bitmaps.push_back(bmp);
                         n_media++;
@@ -242,9 +270,9 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             GENIEX_LOG_DEBUG("processing {} audio file(s)", input->config->audio_count);
             for (int i = 0; i < input->config->audio_count; ++i) {
                 if (input->config->audio_paths[i]) {
-                    mtmd_bitmap* bmp =
-                        mtmd_helper_bitmap_init_from_file(this->ctx_vision, input->config->audio_paths[i], false)
-                            .bitmap;
+                    mtmd_bitmap* bmp = mtmd_helper_bitmap_init_from_file(
+                        this->ctx_vision, input->config->audio_paths[i], false, mtmd_helper_init_opt_default())
+                                           .bitmap;
                     if (bmp) {
                         bitmaps.push_back(bmp);
                         n_media++;
@@ -279,7 +307,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
                 lcp,
                 reuse_end,
                 this->past_gen.size());
-            return GENIEX_ERROR_VLM_GENERATION_FAILED;
+            return GENIEX_ERROR_VLM_PREFIX_REUSE_FAILED;
         }
 
         new_text_portion = full_prompt.substr(reuse_end);
@@ -471,7 +499,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             break;
         }
 
-        int n = llama_token_to_piece(vocab, token, token_buffer, sizeof(token_buffer) - 1, 0, false);
+        int n = llama_token_to_piece(vocab, token, token_buffer, sizeof(token_buffer) - 1, 0, /*special=*/true);
         if (n < 0) n = 0;
         token_buffer[n] = '\0';
 
@@ -566,6 +594,7 @@ bool LlamaVlm::vlm_message_to_common_chat_msg(const geniex_VlmChatMessage* input
     }
 
     output->role = input->role;
+    apply_tool_fields(*output, input->tool_calls, input->tool_call_count, input->tool_call_id, input->tool_name);
 
     if (input->contents && input->content_count > 0) {
         int         media_count = 0;
