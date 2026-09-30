@@ -31,6 +31,7 @@ option(GENIEX_PLUGIN_LLAMA_CPP  "Enable llama.cpp backend"       ON)
 option(GENIEX_PLUGIN_QAIRT      "Enable QAIRT backend"           ON)
 option(GENIEX_BENCHMARK         "Build benchmark example"        OFF)
 option(GENIEX_CPU_ONLY          "CPU inference only, baseline ISA" OFF)
+option(GENIEX_BUILD_TESTS       "Build SDK unit tests" OFF)
 
 message(STATUS "=============== Options ===============")
 message(STATUS "GENIEX_VERSION:          ${GENIEX_VERSION}")

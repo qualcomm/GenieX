@@ -31,3 +31,9 @@ endif()
 install(TARGETS geniex_llama_cpp
     LIBRARY DESTINATION lib/llama_cpp
     RUNTIME DESTINATION lib/llama_cpp)
+
+if(GENIEX_BUILD_TESTS)
+    add_executable(geniex_vlm_prefix_test ../../../../tests/vlm_prefix_test.cpp)
+    target_include_directories(geniex_vlm_prefix_test PRIVATE ../include)
+    add_test(NAME geniex_vlm_prefix_test COMMAND geniex_vlm_prefix_test)
+endif()

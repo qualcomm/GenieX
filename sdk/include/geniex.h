@@ -755,8 +755,9 @@ GENIEX_API int32_t geniex_llm_forward_logits(
 /* ========================================================================== */
 
 typedef struct {
-    const char* type;  // "text", "image", "audio", … (null-terminated UTF-8)
-    const char* text;  // payload: the actual text, URL, or special token
+    const char* type;      // "text", "image", "audio", … (null-terminated UTF-8)
+    const char* text;      // text payload, or media reference / current file path
+    const char* media_id;  // optional stable image/audio identity; defaults to text
 } geniex_VlmContent;
 
 /* ---------- Message ---------- */
@@ -841,6 +842,16 @@ typedef struct {
 /**
  * @brief Apply chat template to messages
  *
+ * For llama.cpp, text supplies a media path or a stable reference.
+ *
+ * Supply external paths through the generation config.
+ * Use media_id for stable identity when paths change between
+ * turns.
+ *
+ * ABI change: rebuild callers, plugins, and bindings together.
+ * Zero-initialize unused fields, including
+ * media_id.
+ *
  * @param handle[in]: VLM handle
  * @param input[in]: Input parameters for applying chat template
  * @param output[out]: Output data containing the formatted text
@@ -889,6 +900,17 @@ typedef struct {
 
 /**
  * @brief Generate text with streaming token callback
+ *
+ * The prompt must match the latest template result to use its
+ * media identities.
+ * image_paths and audio_paths supply files in order within each modality.
+ * Previously cached
+ * media may be omitted.
+ *
+ * Missing media needed for rebuilding returns GENIEX_ERROR_VLM_PREFIX_REUSE_FAILED
+ * and
+ * clears retained state. Supply the required files, apply the template again,
+ * and retry generation.
  *
  * @param handle[in]: VLM handle
  * @param input[in]: Input parameters for streaming generation

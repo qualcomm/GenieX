@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "chat.h"
 #include "htp_session.h"
@@ -11,6 +13,7 @@
 #include "plugin/IVlm.h"
 #include "sampling.h"
 #include "threadpool.h"
+#include "vlm_prefix.h"
 
 // Forward declarations for llama.cpp types
 struct llama_context;
@@ -30,11 +33,25 @@ class LlamaVlm : public IVlm {
     bool supports_vision = false;
     bool supports_audio  = false;
 
-    // Append-only KV reuse: skip the common prefix + last generation, feed only
-    // the rest. Recurrent models can't roll back, so we never re-feed old tokens.
-    int32_t     n_past = 0;
-    std::string past_prompt;  // last turn's full prompt
-    std::string past_gen;     // last turn's generated text
+    struct Media {
+        VlmPrefixChunk::Kind kind = VlmPrefixChunk::Kind::Text;
+        std::string          id;
+        std::string          path;
+        bool                 explicit_id   = false;
+        uint32_t             width         = 0;
+        uint32_t             height        = 0;
+        size_t               audio_samples = 0;
+    };
+
+    struct Pending {
+        std::string        prompt;
+        std::vector<Media> media;
+    };
+
+    int32_t                     n_past = 0;
+    std::vector<VlmPrefixChunk> cached_chunks;
+    std::vector<Media>          cached_media;
+    Pending                     pending;
 
     // Tracks whether this instance pinned an HTP session; releases on last handoff.
     htp::SessionGuard htp_guard_;
@@ -55,7 +72,8 @@ class LlamaVlm : public IVlm {
 
    private:
     void set_sampler(const geniex_SamplerConfig* cfg);
-    bool vlm_message_to_common_chat_msg(const geniex_VlmChatMessage* input, common_chat_msg* output);
+    bool vlm_message_to_common_chat_msg(
+        const geniex_VlmChatMessage* input, common_chat_msg* output, size_t media_offset);
 };
 
 }  // namespace geniex

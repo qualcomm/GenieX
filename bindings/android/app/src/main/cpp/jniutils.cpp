@@ -682,6 +682,17 @@ static geniex_VlmContent extract_vlm_content(JNIEnv* env, jobject jcontent) {
         }
     }
 
+    jmethodID midGetMediaId = env->GetMethodID(cls, "getMediaId", "()Ljava/lang/String;");
+    if (midGetMediaId) {
+        jstring jmediaId = (jstring)env->CallObjectMethod(jcontent, midGetMediaId);
+        if (jmediaId) {
+            out.media_id = hold_c_str(jstring2str(env, jmediaId));
+            env->DeleteLocalRef(jmediaId);
+        }
+    } else {
+        env->ExceptionClear();
+    }
+
     env->DeleteLocalRef(cls);
     return out;
 }

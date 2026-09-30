@@ -4,6 +4,8 @@
 package handler
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,6 +17,11 @@ import (
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 	"github.com/qualcomm/GenieX/cli/server/utils"
 )
+
+func mediaCacheKey(source string) string {
+	sum := sha256.Sum256([]byte(source))
+	return hex.EncodeToString(sum[:])
+}
 
 // Flattens a message's content union to plain text. Returns "" for a nil
 // content — an assistant turn that only issues tool calls carries none.
@@ -223,8 +230,9 @@ func buildVLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []g
 					}
 					tempFiles = append(tempFiles, file)
 					contents = append(contents, geniex_sdk.VlmContent{
-						Type: geniex_sdk.VlmContentTypeImage,
-						Text: file,
+						Type:    geniex_sdk.VlmContentTypeImage,
+						Text:    file,
+						MediaID: mediaCacheKey(ct.GetImageURL().URL),
 					})
 				case "input_audio":
 					audio := ct.GetInputAudio()
@@ -240,8 +248,9 @@ func buildVLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []g
 					}
 					tempFiles = append(tempFiles, file)
 					contents = append(contents, geniex_sdk.VlmContent{
-						Type: geniex_sdk.VlmContentTypeAudio,
-						Text: file,
+						Type:    geniex_sdk.VlmContentTypeAudio,
+						Text:    file,
+						MediaID: mediaCacheKey(data),
 					})
 				default:
 					slog.Error("Not support content part type", "type", *ct.GetType())
