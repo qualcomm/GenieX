@@ -1,0 +1,30 @@
+{
+  "name": "basic",
+  "description": "Built-in smoke eval: 24 unambiguous tasks across arithmetic, knowledge, reasoning, and language. Meant for quick cross-model comparison, not leaderboard-grade benchmarking.",
+  "tasks": [
+    { "id": "math-1", "type": "exact_match", "category": "math", "prompt": "What is 17 + 25? Answer with only the number.", "expected": "42" },
+    { "id": "math-2", "type": "exact_match", "category": "math", "prompt": "What is 12 * 12? Answer with only the number.", "expected": "144" },
+    { "id": "math-3", "type": "exact_match", "category": "math", "prompt": "What is 1000 - 249? Answer with only the number.", "expected": "751" },
+    { "id": "math-4", "type": "multiple_choice", "category": "math", "prompt": "A shirt costs $20 and is discounted by 25%. What is the sale price?", "choices": ["$5", "$12", "$15", "$18"], "answer": "C" },
+    { "id": "math-5", "type": "multiple_choice", "category": "math", "prompt": "Which number is prime?", "choices": ["21", "27", "29", "33"], "answer": "C" },
+    { "id": "math-6", "type": "exact_match", "category": "math", "prompt": "What is the remainder when 17 is divided by 5? Answer with only the number.", "expected": "2" },
+    { "id": "know-1", "type": "exact_match", "category": "knowledge", "prompt": "What is the capital city of Japan? Answer with only the city name.", "expected": "Tokyo" },
+    { "id": "know-2", "type": "multiple_choice", "category": "knowledge", "prompt": "Which planet is known as the Red Planet?", "choices": ["Venus", "Mars", "Jupiter", "Mercury"], "answer": "B" },
+    { "id": "know-3", "type": "multiple_choice", "category": "knowledge", "prompt": "What gas do plants primarily absorb from the atmosphere for photosynthesis?", "choices": ["Oxygen", "Carbon dioxide", "Nitrogen", "Hydrogen"], "answer": "B" },
+    { "id": "know-4", "type": "multiple_choice", "category": "knowledge", "prompt": "Who wrote the play 'Romeo and Juliet'?", "choices": ["Charles Dickens", "William Shakespeare", "Jane Austen", "Mark Twain"], "answer": "B" },
+    { "id": "know-5", "type": "exact_match", "category": "knowledge", "prompt": "What is the chemical symbol for gold? Answer with only the symbol.", "expected": "Au" },
+    { "id": "know-6", "type": "multiple_choice", "category": "knowledge", "prompt": "Which ocean is the largest by surface area?", "choices": ["Atlantic", "Indian", "Arctic", "Pacific"], "answer": "D" },
+    { "id": "reason-1", "type": "multiple_choice", "category": "reasoning", "prompt": "All bloops are razzies. All razzies are lazzies. Are all bloops definitely lazzies?", "choices": ["Yes", "No", "Cannot be determined"], "answer": "A" },
+    { "id": "reason-2", "type": "exact_match", "category": "reasoning", "prompt": "Tom is taller than Sam. Sam is taller than Jim. Who is the shortest? Answer with only the name.", "expected": "Jim" },
+    { "id": "reason-3", "type": "multiple_choice", "category": "reasoning", "prompt": "A farmer has 17 sheep. All but 9 run away. How many sheep are left?", "choices": ["8", "9", "17", "0"], "answer": "B" },
+    { "id": "reason-4", "type": "exact_match", "category": "reasoning", "prompt": "What is the next number in the sequence 2, 4, 8, 16? Answer with only the number.", "expected": "32" },
+    { "id": "reason-5", "type": "multiple_choice", "category": "reasoning", "prompt": "If today is Wednesday, what day will it be in 100 days?", "choices": ["Monday", "Tuesday", "Friday", "Sunday"], "answer": "C" },
+    { "id": "reason-6", "type": "multiple_choice", "category": "reasoning", "prompt": "Which weighs more: a kilogram of feathers or a kilogram of iron?", "choices": ["The feathers", "The iron", "They weigh the same"], "answer": "C" },
+    { "id": "lang-1", "type": "exact_match", "category": "language", "prompt": "What is the past tense of the verb 'go'? Answer with only the word.", "expected": "went" },
+    { "id": "lang-2", "type": "multiple_choice", "category": "language", "prompt": "Which word is a synonym of 'happy'?", "choices": ["Angry", "Joyful", "Tired", "Hungry"], "answer": "B" },
+    { "id": "lang-3", "type": "exact_match", "category": "language", "prompt": "Unscramble the letters 'TCA' to form an English animal name. Answer with only the word.", "expected": "cat" },
+    { "id": "lang-4", "type": "multiple_choice", "category": "language", "prompt": "Which sentence is grammatically correct?", "choices": ["She don't like apples.", "She doesn't likes apples.", "She doesn't like apples.", "She not like apples."], "answer": "C" },
+    { "id": "lang-5", "type": "contains", "category": "language", "prompt": "What is the plural of the word 'child'?", "expected": "children" },
+    { "id": "lang-6", "type": "multiple_choice", "category": "language", "prompt": "What is the antonym of 'ancient'?", "choices": ["Old", "Modern", "Antique", "Historic"], "answer": "B" }
+  ]
+}
