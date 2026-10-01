@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//scripts:cgo_test.bzl", "go_cgo_test")
+
+go_library(
+    name = "jev",
+    srcs = [
+        "action.go",
+        "agent.go",
+        "approval.go",
+        "parse.go",
+        "prompt.go",
+    ],
+    importpath = "github.com/qualcomm/GenieX/cli/internal/jev",
+    visibility = ["//cli:__subpackages__"],
+    deps = ["//bindings/go/jev"],
+)
+
+go_cgo_test(
+    name = "jev_test",
+    srcs = ["agent_test.go"],
+    embed = [":jev"],
+)

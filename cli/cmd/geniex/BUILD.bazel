@@ -7,6 +7,7 @@ go_library(
         "config.go",
         "help.go",
         "infer.go",
+        "jev.go",
         "main.go",
         "model.go",
         "run.go",
@@ -18,9 +19,12 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//bindings/go:geniex_sdk_go",
+        "//bindings/go/jev",
         "//cli/cmd/geniex/common",
         "//cli/internal/config",
         "//cli/internal/downloader",
+        "//cli/internal/jev",
+        "//cli/internal/jev/browser",
         "//cli/internal/record",
         "//cli/internal/render",
         "//cli/internal/store",
@@ -45,6 +49,7 @@ go_cgo_test(
     name = "geniex_test",
     srcs = [
         "infer_test.go",
+        "jev_test.go",
         "model_test.go",
     ],
     embed = [":geniex_lib"],

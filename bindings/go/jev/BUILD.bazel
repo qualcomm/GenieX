@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//scripts:cgo_test.bzl", "go_cgo_test")
+
+go_library(
+    name = "jev",
+    srcs = [
+        "action.go",
+        "choice.go",
+        "decode.go",
+        "decider.go",
+        "llm.go",
+        "parse.go",
+        "prompt.go",
+        "shortlist.go",
+        "timing.go",
+        "triage.go",
+        "vlm.go",
+    ],
+    importpath = "github.com/qualcomm/GenieX/bindings/go/jev",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//bindings/go:geniex_sdk_go",
+    ],
+)
+
+go_cgo_test(
+    name = "jev_test",
+    srcs = [
+        "decider_test.go",
+        "decision_test.go",
+        "shortlist_test.go",
+    ],
+    embed = [":jev"],
+)

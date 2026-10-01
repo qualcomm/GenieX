@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//scripts:cgo_test.bzl", "go_cgo_test")
+
+go_library(
+    name = "browser",
+    srcs = ["browser.go"],
+    importpath = "github.com/qualcomm/GenieX/cli/internal/jev/browser",
+    visibility = ["//cli:__subpackages__"],
+    deps = [
+        "//cli/internal/jev",
+        "@org_golang_x_net//websocket",
+    ],
+)
+
+go_cgo_test(
+    name = "browser_test",
+    srcs = ["browser_test.go"],
+    embed = [":browser"],
+)
