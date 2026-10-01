@@ -115,6 +115,25 @@ geniex serve
 
 响应中的 `choices[0].text` 即原始补全内容，可直接插入光标处。`stream`、`stop`、`echo` 及采样参数（`temperature`、`top_p`、`top_k`、`min_p`、`repetition_penalty`、`seed`）与 `/v1/chat/completions` 行为一致；不支持 `suffix` —— 请改用模型的 FIM 标记把后缀编码进 `prompt`。
 
+## **POST /v1/systemone**
+
+使用**已导入 GenieX 缓存**的 Nimble 模型，对候选答案直接打分。请求和响应采用 TypeSafe Jev API 的结构，但底层运行的是本地 Nimble，概率并非 Jev 的校准结果。这不是 OpenAI Chat API：`choice` 返回选项概率，`noul` 返回条件为真的概率，`score` 返回评分等级的期望值。
+
+```sh
+curl http://127.0.0.1:18181/v1/systemone -H 'Content-Type: application/json' -d '{
+  "model": "local/nimble:Q4_K_M",
+  "compute": "cpu",
+  "nctx": 8192,
+  "state": "Our checkout has returned 500 errors since 9am.",
+  "questions": {
+    "label": {"type": "choice", "instructions": "Which label fits this ticket?", "criteria": {"billing": "Payments and refunds", "bug": "Software errors"}},
+    "urgent": {"type": "noul", "instructions": "Is a critical business operation currently blocked?"}
+  }
+}'
+```
+
+请传入 `geniex list` 显示的**缓存模型名称**，不能使用 GGUF 文件路径或 TypeSafe 的 `jev-latest` 模型 ID。本地实现支持 2–26 个 choice 选项（TypeSafe 最多支持 255 个）、2–10 个 score 等级、最多 64 道题。选项字母必须是单 token；`answers` 中的概率仅在给定选项内归一化，不能直接沿用 Jev 的概率阈值。直接读取 logits 不生成文本，因此 `usage.output_tokens` 为 0。
+
 ## **Python 客户端（OpenAI SDK）**
 
 由于服务器使用 OpenAI 协议，可直接将官方 `openai` Python 客户端指向本地端点，复用任意已有的 OpenAI 代码。先通过 `pip install openai` 安装，然后创建 client：

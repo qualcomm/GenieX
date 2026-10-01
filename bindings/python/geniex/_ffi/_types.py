@@ -204,6 +204,18 @@ class geniex_LlmForwardLogitsOutput(Structure):
     ]
 
 
+class geniex_LlmScoreInput(Structure):
+    _fields_ = [
+        ('prompt_utf8', c_char_p),
+        ('candidates', POINTER(c_char_p)),
+        ('candidate_count', c_int32),
+    ]
+
+
+class geniex_LlmScoreOutput(Structure):
+    _fields_ = [('logits', POINTER(c_float)), ('input_tokens', c_int32)]
+
+
 class geniex_LlmChatMessage(Structure):
     _fields_ = [
         ('role', c_char_p),

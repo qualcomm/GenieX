@@ -27,6 +27,8 @@ from ._types import (
     geniex_LlmGenerateInput,
     geniex_LlmGenerateOutput,
     geniex_LlmModelInfo,
+    geniex_LlmScoreInput,
+    geniex_LlmScoreOutput,
     geniex_ModelDetail,
     geniex_ModelListDetailedOutput,
     geniex_ModelPaths,
@@ -201,6 +203,9 @@ def _bind_all() -> None:
         POINTER(geniex_LlmForwardLogitsOutput),
     ]
     lib.geniex_llm_forward_logits.restype = c_int32
+
+    lib.geniex_llm_score.argtypes = [c_void_p, POINTER(geniex_LlmScoreInput), POINTER(geniex_LlmScoreOutput)]
+    lib.geniex_llm_score.restype = c_int32
 
     lib.geniex_llm_apply_chat_template.argtypes = [
         c_void_p,

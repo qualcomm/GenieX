@@ -58,6 +58,8 @@ class LlamaLlm : public ILlm {
 
     virtual int32_t forward_logits(const geniex_LlmForwardLogitsInput*, geniex_LlmForwardLogitsOutput*) override;
 
+    virtual int32_t score(const geniex_LlmScoreInput*, geniex_LlmScoreOutput*) override;
+
    private:
     void set_sampler(const geniex_SamplerConfig* cfg);
 

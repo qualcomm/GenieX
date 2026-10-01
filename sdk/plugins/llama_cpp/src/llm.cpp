@@ -572,6 +572,53 @@ int32_t LlamaLlm::forward_logits(const geniex_LlmForwardLogitsInput* input, geni
     output->n_rows     = all_positions ? n_tok : 1;
     return GENIEX_SUCCESS;
 }
+
+int32_t LlamaLlm::score(const geniex_LlmScoreInput* input, geniex_LlmScoreOutput* output) {
+    if (!this->ctx || !this->model) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
+    if (!input || !input->prompt_utf8 || !input->candidates || input->candidate_count < 1 || !output) {
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    }
+
+    const llama_vocab* vocab = llama_model_get_vocab(this->model);
+    const std::string  prompt(input->prompt_utf8);
+    const auto         tokens = common_tokenize(vocab, prompt, true, true);
+    if (tokens.empty() || tokens.size() > llama_n_ctx(this->ctx)) {
+        return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+    }
+
+    std::vector<llama_token> candidates;
+    for (int i = 0; i < input->candidate_count; ++i) {
+        if (!input->candidates[i] || !input->candidates[i][0]) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        const std::string code(input->candidates[i]);
+        const auto        literal = common_tokenize(vocab, code, false, false);
+        const auto        joined  = common_tokenize(vocab, prompt + code, true, true);
+        if (literal.size() != 1 || joined.size() != tokens.size() + 1 ||
+            !std::equal(tokens.begin(), tokens.end(), joined.begin()) || joined.back() != literal[0] ||
+            std::find(candidates.begin(), candidates.end(), literal[0]) != candidates.end()) {
+            GENIEX_LOG_WARN("score: candidate '{}' is not a unique single token after the prompt", code);
+            return GENIEX_ERROR_COMMON_INVALID_INPUT;
+        }
+        candidates.push_back(literal[0]);
+    }
+
+    geniex_LlmForwardLogitsInput request{};
+    request.input_ids       = tokens.data();
+    request.input_ids_count = static_cast<int32_t>(tokens.size());
+    geniex_LlmForwardLogitsOutput result{};
+    const int32_t                 rc = forward_logits(&request, &result);
+    if (rc != GENIEX_SUCCESS) return rc;
+
+    float* scores = static_cast<float*>(malloc(candidates.size() * sizeof(float)));
+    if (!scores) {
+        free(result.logits);
+        return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
+    }
+    for (size_t i = 0; i < candidates.size(); ++i) scores[i] = result.logits[candidates[i]];
+    free(result.logits);
+    output->logits       = scores;
+    output->input_tokens = static_cast<int32_t>(tokens.size());
+    return GENIEX_SUCCESS;
+}
 }  // namespace geniex
 
 // Private

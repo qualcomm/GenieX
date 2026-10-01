@@ -750,6 +750,24 @@ typedef struct {
 GENIEX_API int32_t geniex_llm_forward_logits(
     geniex_LLM* handle, const geniex_LlmForwardLogitsInput* input, geniex_LlmForwardLogitsOutput* output);
 
+/** Score single-token candidate strings after a UTF-8 prompt without sampling.
+ *  The plugin tokenizes the prompt (with model special tokens) and verifies
+ *  that each candidate appends exactly one ordinary token. Only backends with
+ *  raw-logit support implement this operation. */
+typedef struct {
+    const char*        prompt_utf8;
+    const char* const* candidates;
+    int32_t            candidate_count;
+} geniex_LlmScoreInput;
+
+typedef struct {
+    float*  logits;       /** One logit per candidate; caller frees with geniex_free. */
+    int32_t input_tokens; /** Number of prompt tokens evaluated. */
+} geniex_LlmScoreOutput;
+
+GENIEX_API int32_t geniex_llm_score(
+    geniex_LLM* handle, const geniex_LlmScoreInput* input, geniex_LlmScoreOutput* output);
+
 /* ========================================================================== */
 /*                              MULTIMODAL MODELS (VLM)                          */
 /* ========================================================================== */

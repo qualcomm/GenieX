@@ -45,6 +45,10 @@ class ILlm {
     virtual int32_t forward_logits(const geniex_LlmForwardLogitsInput*, geniex_LlmForwardLogitsOutput*) {
         return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
     }
+
+    virtual int32_t score(const geniex_LlmScoreInput*, geniex_LlmScoreOutput*) {
+        return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
+    }
 };
 
 }  // namespace geniex

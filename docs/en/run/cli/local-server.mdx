@@ -158,6 +158,30 @@ Generates a raw continuation of `prompt` with no chat template applied — the p
 
 The response `choices[0].text` is the raw completion, ready to insert at the cursor. `stream`, `stop`, `echo` and the sampler knobs (`temperature`, `top_p`, `top_k`, `min_p`, `repetition_penalty`, `seed`) work as on `/v1/chat/completions`; `suffix` is not supported — encode the suffix with the model's FIM tokens inside `prompt` instead.
 
+## **POST /v1/systemone**
+
+The TypeSafe Jev API request/response shape, backed by a Nimble model **already imported into the GenieX cache**. Unlike Jev, this runs locally on Nimble weights and does not provide Jev-calibrated probabilities. It returns `choice`, `noul` (probability of true), or `score` (expected rubric index) without generating an explanation. This is not an OpenAI chat endpoint.
+
+```sh
+curl http://127.0.0.1:18181/v1/systemone -H 'Content-Type: application/json' -d '{
+  "model": "local/nimble:Q4_K_M",
+  "compute": "cpu",
+  "nctx": 8192,
+  "state": "Our checkout has returned 500 errors since 9am.",
+  "questions": {
+    "label": {
+      "type": "choice",
+      "instructions": "Which label fits this ticket?",
+      "criteria": {"billing": "Payments and refunds", "bug": "Software errors", "account": "Login and account access"}
+    },
+    "urgent": {"type": "noul", "instructions": "Is a critical business operation currently blocked?"},
+    "severity": {"type": "score", "instructions": "How severe is the issue?", "criteria": ["Low", "Moderate", "Critical"]}
+  }
+}'
+```
+
+Use the model's **GenieX cache name** (shown by `geniex list`), not a GGUF path or TypeSafe's `jev-latest` model ID. This local backend supports 2–26 choices (TypeSafe supports up to 255), 2–10 score levels, and up to 64 questions. Each answer letter must be one model token; unsupported models or templates return an error. The response includes `answers` and `usage` (`output_tokens` is 0 for direct-logit scoring). Probabilities are normalized over the allowed options; tune any decision thresholds using this local model, not Jev's values.
+
 ## **Python client (OpenAI SDK)**
 
 Because the server speaks the OpenAI protocol, you can point the official `openai` Python client at the local endpoint and reuse any existing OpenAI code. Install with `pip install openai`, then create a client:

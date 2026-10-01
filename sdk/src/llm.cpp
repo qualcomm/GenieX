@@ -248,3 +248,18 @@ int32_t geniex_llm_forward_logits(
         return GENIEX_ERROR_COMMON_UNKNOWN;
     }
 }
+
+int32_t geniex_llm_score(geniex_LLM* h, const geniex_LlmScoreInput* input, geniex_LlmScoreOutput* output) {
+    if (!input || !output || !input->prompt_utf8 || !input->candidates || input->candidate_count <= 0) {
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    }
+    std::memset(output, 0, sizeof(*output));
+    try {
+        auto backend = reinterpret_cast<ILlm*>(h);
+        if (!backend) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
+        return backend->score(input, output);
+    } catch (const std::exception& e) {
+        GENIEX_LOG_ERROR("llm score error: {}", e.what());
+        return GENIEX_ERROR_COMMON_UNKNOWN;
+    }
+}

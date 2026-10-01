@@ -73,6 +73,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ForwardLogitsResponse"
 
+  /v1/systemone:
+    post:
+      summary: Score typed decisions with Nimble
+      description: |
+        TypeSafe Jev API request/response shape, backed locally by a Nimble
+        llama_cpp LLM in the GenieX model cache. Scores one letter token per
+        answer without generating text. The Nimble system prompt is supplied
+        by the server. Model probabilities are normalized over allowed choices;
+        they are not Jev's calibrated probabilities. This local backend limits
+        choices to 26 and questions to 64 (Jev supports up to 255 choices).
+      operationId: PostV1SystemOne
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SystemOneRequest"
+      responses:
+        "200":
+          description: Typed decisions and probabilities
+          content:
+            application/json:
+              schema:
+                type: object
+        "400":
+          description: Unsupported model or non-single-token candidate
+        "413":
+          description: Request exceeds 1 MiB
+        "422":
+          description: Invalid request or question schema
+
   /v1/models:
     get:
       summary: Lists the currently available models
@@ -114,6 +145,55 @@ paths:
 
 components:
   schemas:
+    # ---------- System One ----------
+    SystemOneRequest:
+      type: object
+      required: [model, state, questions]
+      example:
+        model: "local/nimble:Q4_K_M"
+        state: "Our checkout has returned 500 errors since 9am."
+        questions:
+          label:
+            type: choice
+            instructions: "Which label fits this ticket?"
+            criteria:
+              billing: "Payments and refunds"
+              bug: "Software errors"
+              account: "Login and account access"
+      properties:
+        model:
+          type: string
+          description: Nimble model name in the GenieX cache (not a Jev model ID or file path).
+        state:
+          description: Nonempty string, object, or array to classify.
+          oneOf:
+            - type: string
+            - type: object
+            - type: array
+        questions:
+          type: object
+          description: 1–64 named questions. Options preserve their input order (2–26 each).
+          additionalProperties:
+            type: object
+            required: [type, instructions]
+            properties:
+              type:
+                type: string
+                enum: [choice, noul, score]
+              instructions:
+                description: Nonempty string, object, or array defining the question.
+              criteria:
+                description: "choice: option/description object; noul: optional false/true descriptions; score: ordered description array."
+        nctx:
+          type: integer
+          description: Context size; defaults to the server setting.
+        ngl:
+          type: integer
+        compute:
+          type: string
+        power_mode:
+          type: string
+
     # ---------- Logits ----------
     ForwardLogitsRequest:
       type: object
