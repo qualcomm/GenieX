@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <exception>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -84,10 +85,15 @@ std::optional<common_params_speculative> build_speculative_params(const geniex_M
 
 llama_context_params build_context_params(
     const geniex_ModelConfig& config, int32_t n_ctx_default, Device device, const common_params_speculative* spec) {
+    // NPU column is a starting ceiling, not a hard cap: ggml-hexagon's per-ubatch compute buffer
+    // can fail to fastrpc_mmap as one contiguous block well below this on some HTP targets (e.g.
+    // IQ9), independent of n_batch/n_ctx and regardless of GGML_HEXAGON_MBUF. When the caller
+    // hasn't pinned n_ubatch, init_context_with_ubatch_ladder() below halves this value and
+    // retries on failure. See qcom-ai-hub/geniex#1683.
     static const uint32_t ubatch_matrix[3][3] = {
-        {2048, 512, 1024},  // Linux
-        {2048, 512, 1024},  // Windows
-        {1024, 512, 1024}   // Android
+        {2048, 512, 256},  // Linux
+        {2048, 512, 256},  // Windows
+        {1024, 512, 1024}  // Android
     };
     static const bool fa_matrix[3][3] = {
         {true, false, true},  // Linux
@@ -135,6 +141,67 @@ llama_context_params build_context_params(
         cpar.n_outputs_max,
         cpar.n_outputs_max_per_seq);
     return cpar;
+}
+
+namespace {
+// Smallest n_ubatch confirmed to still pass on IQ9 for the models tested so far
+// (gemma-4-E4B, Qwen3-ASR-1.7B). See qcom-ai-hub/geniex#1683.
+constexpr uint32_t kUbatchLadderFloor = 128;
+
+// ggml-hexagon's per-ubatch compute buffer isn't actually fastrpc_mmap'd during
+// llama_init_from_model() — that only reserves the schedule; the real HTP mapping is deferred to
+// the first llama_decode() call, so a context that "succeeded" can still fail on the caller's
+// first real prompt. Force that allocation to happen now, in a single dummy-token decode, while
+// the ladder below can still see the failure and retry. Resets the KV cache afterward so the
+// caller's real generation starts clean. See qcom-ai-hub/geniex#1683.
+bool warmup_decode(llama_context* ctx) {
+    // ggml-hexagon throws std::runtime_error straight out of llama_decode() on a buffer-mapping
+    // failure rather than returning an error code (see ggml-hexagon.cpp's fastrpc_mmap wrapper) —
+    // must catch it here or it unwinds straight past the ladder below.
+    try {
+        llama_token tok   = 0;
+        llama_batch batch = llama_batch_get_one(&tok, 1);
+        int32_t     ret   = llama_decode(ctx, batch);
+        llama_memory_clear(llama_get_memory(ctx), /*data=*/true);
+        return ret == 0;
+    } catch (const std::exception& e) {
+        GENIEX_LOG_WARN("[Optimise] warmup decode threw: {}", e.what());
+        return false;
+    }
+}
+}  // namespace
+
+llama_context* init_context_with_ubatch_ladder(llama_model* model, const geniex_ModelConfig& config,
+    int32_t n_ctx_default, Device device, const common_params_speculative* spec, llama_context_params* out_cpar) {
+    llama_context_params cpar = build_context_params(config, n_ctx_default, device, spec);
+
+    // Only NPU hits the contiguous-allocation failure this ladder works around, and only when the
+    // caller hasn't already pinned n_ubatch themselves (an explicit override is a deliberate choice,
+    // not a default we get to second-guess). Skip the warmup probe entirely here too — it's extra
+    // decode-at-load-time cost/risk this fix has no reason to impose outside the NPU case it targets.
+    if (device != Device::NPU || config.n_ubatch > 0) {
+        llama_context* ctx = llama_init_from_model(model, cpar);
+        if (out_cpar) *out_cpar = cpar;
+        return ctx;
+    }
+
+    for (;;) {
+        llama_context* ctx = llama_init_from_model(model, cpar);
+        if (ctx && warmup_decode(ctx)) {
+            if (out_cpar) *out_cpar = cpar;
+            return ctx;
+        }
+        if (ctx) llama_free(ctx);
+        if (cpar.n_ubatch <= kUbatchLadderFloor) {
+            if (out_cpar) *out_cpar = cpar;
+            return nullptr;
+        }
+        uint32_t next_ubatch = std::max(kUbatchLadderFloor, cpar.n_ubatch / 2);
+        GENIEX_LOG_WARN("[Optimise] context init/warmup failed at n_ubatch={}; retrying with n_ubatch={}",
+            cpar.n_ubatch,
+            next_ubatch);
+        cpar.n_ubatch = next_ubatch;
+    }
 }
 
 ggml_threadpool_params build_threadpool_params(int n_threads, Device device) {

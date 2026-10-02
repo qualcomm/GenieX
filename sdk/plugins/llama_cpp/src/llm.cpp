@@ -102,8 +102,9 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
     // needs its rollback snapshots and per-draft logits rows sized up front.
     std::optional<common_params_speculative> spar = build_speculative_params(config);
 
-    llama_context_params cpar = build_context_params(config, /*n_ctx_default=*/4096, device, spar ? &*spar : nullptr);
-    this->ctx                 = llama_init_from_model(this->model, cpar);
+    llama_context_params cpar;
+    this->ctx = init_context_with_ubatch_ladder(
+        this->model, config, /*n_ctx_default=*/4096, device, spar ? &*spar : nullptr, &cpar);
     if (!this->ctx) {
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }

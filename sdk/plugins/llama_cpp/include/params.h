@@ -59,6 +59,16 @@ llama_model_params   build_model_params(const geniex_ModelConfig& config, Device
 llama_context_params build_context_params(const geniex_ModelConfig& config, int32_t n_ctx_default, Device device,
     const common_params_speculative* spec = nullptr);
 
+// Like build_context_params + llama_init_from_model, but on NPU halves n_ubatch and retries when
+// init fails, down to a floor of 128. HTP's fastrpc/CMA pool can fail to satisfy a given ubatch's
+// compute buffer as one contiguous block depending on what else is resident (model size, KV cache,
+// other sessions), so no single static n_ubatch default is safe for every model/device combo. Skips
+// the ladder (single attempt only) when the caller pinned n_ubatch explicitly via config, or on
+// CPU/GPU where this failure mode doesn't apply. On success, *out_cpar reflects the n_ubatch that
+// actually worked. See qcom-ai-hub/geniex#1683.
+llama_context* init_context_with_ubatch_ladder(llama_model* model, const geniex_ModelConfig& config,
+    int32_t n_ctx_default, Device device, const common_params_speculative* spec, llama_context_params* out_cpar);
+
 // Parse spec_type / spec_n_* into llama.cpp's own speculative params. Returns
 // nullopt when speculative decoding is disabled or no type name resolves.
 std::optional<common_params_speculative> build_speculative_params(const geniex_ModelConfig& config);

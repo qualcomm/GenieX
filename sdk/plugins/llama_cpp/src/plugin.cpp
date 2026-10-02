@@ -63,6 +63,19 @@ class LlamaPlugin : public Plugin {
         llama_log_set(ggml_to_geniex_log, nullptr);
         mtmd_helper_log_set(ggml_to_geniex_log, nullptr);
 
+        // ggml-hexagon's default 1 GiB host-buffer mmap cap can exceed what the fastrpc/CMA pool
+        // can satisfy as one contiguous chunk on some HTP targets (e.g. IQ9), failing to map a
+        // model's own weight buffer even with session contention already solved. Cap it lower so
+        // large weight tensors get chunked, unless the caller already set an override.
+        // See qcom-ai-hub/geniex#1683.
+        if (!std::getenv("GGML_HEXAGON_MBUF")) {
+#if defined(WIN32)
+            _putenv_s("GGML_HEXAGON_MBUF", "64");
+#else
+            setenv("GGML_HEXAGON_MBUF", "64", 1);
+#endif
+        }
+
         std::filesystem::path backend_dir;
 #if defined(_WIN32)
         // On Windows, use wide string API to properly handle Unicode paths
