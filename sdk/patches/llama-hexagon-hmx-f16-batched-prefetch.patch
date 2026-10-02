@@ -1,0 +1,13 @@
+diff --git a/ggml/src/ggml-hexagon/htp/matmul-ops.c b/ggml/src/ggml-hexagon/htp/matmul-ops.c
+index a09bc7a28..526f200b0 100644
+--- a/ggml/src/ggml-hexagon/htp/matmul-ops.c
++++ b/ggml/src/ggml-hexagon/htp/matmul-ops.c
+@@ -3356,7 +3356,7 @@ static int hmx_mm_f16_f32_batched(struct htp_context *ctx, const hmx_mm_f16_f32_
+                 }
+                 if (n_chunk_n_cols < (size_t) params->n) {
+                     const size_t n_cols_second = hex_smin((size_t) params->n - n_chunk_n_cols, n_chunk_n_cols);
+-                    dma_queue_push(weight_dma, dma_make_data(vtcm_scratch1, weight_group + params->weight_stride * sizeof(__fp16)),
++                    dma_queue_push(weight_dma, dma_make_data(vtcm_scratch1, weight_group + n_chunk_n_cols * params->weight_stride * sizeof(__fp16)),
+                                       fp16_row_bytes, weight_row_bytes, fp16_row_bytes, n_cols_second);
+                 }
+ 

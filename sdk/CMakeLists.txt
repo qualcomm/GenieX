@@ -150,6 +150,12 @@ enable_testing()
 #   per-model (llama-hexagon-power-mode.patch alone only reads it once, from
 #   GGML_HEXAGON_POWER_MODE, at backend-registry construction). See
 #   sdk/plugins/llama_cpp/src/htp_session.cpp for the caller.
+# * llama-hexagon-hmx-f16-batched-prefetch.patch fixes the prefetch source of
+#   the second weight chunk in the batched F16 HMX matmul (GQA broadcast). It
+#   read one row past the first chunk, so the second chunk's output was wrong
+#   whenever the weights span more than one chunk (attention prefill without
+#   flash attention at long KV). Upstream ggml-org/llama.cpp#29626 carries the
+#   same fix; delete this file once the submodule is bumped past it.
 # * llama-opencl-adreno-cpy-constreg.patch works around an Adreno OpenCL
 #   compiler crash: kernel_cpy_f32_f32_pack's min(ne00, get_local_size(0))
 #   emits an IMINrr with two constant-class operands, which the driver's
@@ -175,7 +181,8 @@ if(GENIEX_PLUGIN_LLAMA_CPP)
         list(APPEND _LLAMA_PATCHES
             "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-release-sessions.patch"
             "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode.patch"
-            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode-setter.patch")
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode-setter.patch"
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-hmx-f16-batched-prefetch.patch")
     endif()
     if(GGML_OPENCL)
         list(APPEND _LLAMA_PATCHES
