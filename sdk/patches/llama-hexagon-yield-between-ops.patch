@@ -1,0 +1,94 @@
+diff --git a/ggml/src/ggml-hexagon/htp/cpy-ops.c b/ggml/src/ggml-hexagon/htp/cpy-ops.c
+index 4453dda3a..a9b5befa2 100644
+--- a/ggml/src/ggml-hexagon/htp/cpy-ops.c
++++ b/ggml/src/ggml-hexagon/htp/cpy-ops.c
+@@ -478,12 +478,22 @@ static int exec_cpy(struct htp_ops_context * octx, bool * use_dma) {
+             return HTP_STATUS_OK;
+         }
+ 
+-        ct.elem_start      = elem_start;
+-        ct.nelem           = nelem;
+-        ct.elem_per_thread = fastdiv(nelem + n_threads - 1, &octx->n_threads_div);
+-
+         work_queue_func_t copy_fun = (src0->type == HTP_TYPE_F32) ? cpy_thread_f32_reshape : cpy_thread_f16_reshape;
+-        work_queue_run(octx->ctx->work_queue, copy_fun, &ct, n_threads);
++
++        // geniex: copy in 128 KiB chunks and yield VTCM and HMX between them.
++        // A transposed copy can take tens of ms, too long for a client with a deadline.
++        const uint32_t chunk_elems = (128u * 1024u) / ct.dst_type_size;
++        for (uint32_t done = 0; done < nelem;) {
++            ct.elem_start      = elem_start + done;
++            ct.nelem           = MIN(nelem - done, chunk_elems);
++            ct.elem_per_thread = fastdiv(ct.nelem + n_threads - 1, &octx->n_threads_div);
++            work_queue_run(octx->ctx->work_queue, copy_fun, &ct, n_threads);
++            done += ct.nelem;
++            if (done < nelem) {
++                // The copy state is in DDR; work_queue_run joins all workers before release.
++                htp_vtcm_yield(octx->ctx);
++            }
++        }
+     } else {
+         return HTP_STATUS_NO_SUPPORT;
+     }
+diff --git a/ggml/src/ggml-hexagon/htp/htp-ctx.h b/ggml/src/ggml-hexagon/htp/htp-ctx.h
+index 814feef7c..023407e1e 100644
+--- a/ggml/src/ggml-hexagon/htp/htp-ctx.h
++++ b/ggml/src/ggml-hexagon/htp/htp-ctx.h
+@@ -144,6 +144,9 @@ static inline void htp_ops_context_set_status(struct htp_ops_context * octx, int
+     }
+ }
+ 
++// geniex: call only when all workers have finished and no live data remains in VTCM.
++void htp_vtcm_yield(struct htp_context * ctx);
++
+ int op_matmul(struct htp_ops_context * octx);
+ int op_matmul_id(struct htp_ops_context * octx);
+ int op_matmul_nx(struct htp_ops_context * octx);
+diff --git a/ggml/src/ggml-hexagon/htp/main.c b/ggml/src/ggml-hexagon/htp/main.c
+index f7e3301ca..615bddbb2 100644
+--- a/ggml/src/ggml-hexagon/htp/main.c
++++ b/ggml/src/ggml-hexagon/htp/main.c
+@@ -1225,6 +1225,32 @@ static int proc_op_req(struct htp_ops_context * octx, struct htp_buf_desc * bufs
+     return octx->status;
+ }
+ 
++// geniex: hand VTCM and HMX to a client that asked for them, without waiting
++// for the end of the batch. A batch can be a whole graph, and a client with a
++// deadline (e.g. a functional-safety self-test that the host treats as a fatal
++// DSP fault when it times out) cannot wait that long. VTCM only holds per-op
++// scratch, so yielding between ops is safe.
++void htp_vtcm_yield(struct htp_context * ctx) {
++    if (!ctx->vtcm_needs_release) {
++        return;
++    }
++
++    // The hmx-queue thread holds the HMX lock and the workers spin while active
++    if (ctx->hmx_queue) {
++        hmx_queue_suspend(ctx->hmx_queue);
++        hmx_queue_flush(ctx->hmx_queue);
++    }
++    work_queue_suspend(ctx->work_queue);
++
++    vtcm_release(ctx);
++    vtcm_acquire(ctx);
++
++    work_queue_wakeup(ctx->work_queue);
++    if (ctx->hmx_queue) {
++        hmx_queue_wakeup(ctx->hmx_queue);
++    }
++}
++
+ static void process_opbatch(struct htp_context * ctx, const struct htp_opbatch_req * req, const struct dspqueue_buffer * dbuf) {
+     dspqueue_t queue = ctx->dsp_queue;
+     int err;
+@@ -1314,6 +1340,10 @@ static void process_opbatch(struct htp_context * ctx, const struct htp_opbatch_r
+                 pds[i].pmu[j] = prof.pmu_counters[j];
+             }
+         }
++
++        if (i + 1 < n_ops) {
++            htp_vtcm_yield(ctx);
++        }
+     }
+ 
+     if (ctx->hmx_queue) {

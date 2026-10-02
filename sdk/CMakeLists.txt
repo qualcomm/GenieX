@@ -85,12 +85,26 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux"
     # rust-lld pointed at the host (x86_64) gcc-ld, which breaks once a
     # dependency is emitted as a shared object.
     # gcc-13 matches the on-device libstdc++ ABI (#458); the *-unknown-* names
-    # are symlinks from the toolchain image.
+    # are symlinks from the toolchain image. A toolchain file may name its own
+    # compiler and archiver instead (cmake/arm64-oe-linux.cmake does).
+    if(NOT DEFINED GENIEX_RUST_CC)
+        set(GENIEX_RUST_CC aarch64-linux-gnu-gcc-13)
+    endif()
+    if(NOT DEFINED GENIEX_RUST_AR)
+        set(GENIEX_RUST_AR aarch64-linux-gnu-ar)
+    endif()
     set(RUST_CARGO_ENV
         CARGO_TARGET_DIR=${RUST_TARGET_ROOT}
-        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc-13
-        CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc-13
-        AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar)
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=${GENIEX_RUST_CC}
+        CC_aarch64_unknown_linux_gnu=${GENIEX_RUST_CC}
+        AR_aarch64_unknown_linux_gnu=${GENIEX_RUST_AR})
+    # A compiler that is not a sysroot-baked wrapper needs the sysroot spelled
+    # out, for cc-rs builds and for the final link alike.
+    if(CMAKE_SYSROOT)
+        list(APPEND RUST_CARGO_ENV
+            CFLAGS_aarch64_unknown_linux_gnu=--sysroot=${CMAKE_SYSROOT}
+            "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS=-C link-arg=--sysroot=${CMAKE_SYSROOT}")
+    endif()
     set(RUST_CARGO_TARGET_FLAGS --target aarch64-unknown-linux-gnu)
     set(RUST_TARGET_DIR "${RUST_TARGET_ROOT}/aarch64-unknown-linux-gnu/${RUST_PROFILE}")
 else()
@@ -150,6 +164,31 @@ enable_testing()
 #   per-model (llama-hexagon-power-mode.patch alone only reads it once, from
 #   GGML_HEXAGON_POWER_MODE, at backend-registry construction). See
 #   sdk/plugins/llama_cpp/src/htp_session.cpp for the caller.
+# * llama-hexagon-sdk-select.patch is a permanent GenieX addition that lets the
+#   HTP skels target DSP firmware older than upstream assumes. It adds cache
+#   variables, all defaulting to upstream behavior:
+#   GGML_HEXAGON_HTP_SDK_ROOT / GGML_HEXAGON_HTP_TOOLS_ROOT (build only the
+#   skels with another SDK; the CPU-side library needs SDK 6.x headers),
+#   GGML_HEXAGON_TOOLV (prebuilt lib dir prefix; Hexagon SDK 5.5.x is toolv87,
+#   not toolv19), GGML_HEXAGON_HTP_ARCHS (SDK 5.5.x has no QuRT for v79/v81),
+#   and GGML_HEXAGON_SWIV_UTILITY (embed the SWIV CRC that functional-safety
+#   firmware requires before it loads a library). It also finds qaic in the
+#   SDK 5.5.x layout, maps the two HMX voltage corners SDK 5.5.x lacks to the
+#   next lower ones, and lets g++ before 13 compile the CPU-side library
+#   (no _Float16 in C++). Skels built against SDK 6.x headers import
+#   compute_resource_attr_init_v2, which such firmware does not export.
+# * llama-hexagon-yield-between-ops.patch is a permanent GenieX addition that
+#   makes the HTP skel honor a VTCM/HMX release request between ops instead of
+#   only between op batches. A batch can be a whole graph, so a long prefill
+#   kept both resources for its full duration; on functional-safety firmware
+#   the periodic DSP self-test then times out and the host shuts the DSP down.
+#   It also splits non-contiguous copies into 128 KiB chunks and yields between
+#   them: one transposed copy in a vision encoder takes about 70 ms.
+# * llama-hexagon-hmx-pad-k.patch lets the flat 2D HMX matmul take F16/F32
+#   weights whose K is not a multiple of 32 by padding K with zeros. Without it
+#   they fall back to HVX: the SigLIP so400m FFN down projection (K = 4304)
+#   takes about 100 ms per op instead of 3 ms, long enough to trip the
+#   functional-safety self-test above.
 # * llama-opencl-adreno-cpy-constreg.patch works around an Adreno OpenCL
 #   compiler crash: kernel_cpy_f32_f32_pack's min(ne00, get_local_size(0))
 #   emits an IMINrr with two constant-class operands, which the driver's
@@ -175,7 +214,10 @@ if(GENIEX_PLUGIN_LLAMA_CPP)
         list(APPEND _LLAMA_PATCHES
             "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-release-sessions.patch"
             "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode.patch"
-            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode-setter.patch")
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode-setter.patch"
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-sdk-select.patch"
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-yield-between-ops.patch"
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-hmx-pad-k.patch")
     endif()
     if(GGML_OPENCL)
         list(APPEND _LLAMA_PATCHES

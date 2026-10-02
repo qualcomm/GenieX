@@ -1,0 +1,148 @@
+diff --git a/ggml/src/ggml-hexagon/CMakeLists.txt b/ggml/src/ggml-hexagon/CMakeLists.txt
+index 845b922bf..ed1c5dd4a 100644
+--- a/ggml/src/ggml-hexagon/CMakeLists.txt
++++ b/ggml/src/ggml-hexagon/CMakeLists.txt
+@@ -17,14 +17,31 @@ if (NOT IS_DIRECTORY "${HEXAGON_TOOLS_ROOT}")
+     endif()
+ endif()
+ 
+-message(STATUS "hexagon: using ${HEXAGON_SDK_ROOT} and ${HEXAGON_TOOLS_ROOT} for building libggml-htp skels")
+-
+ include(${HEXAGON_SDK_ROOT}/build/cmake/hexagon_fun.cmake)
++include(${CMAKE_CURRENT_SOURCE_DIR}/htp/cmake-qaic.cmake)
+ include(ExternalProject)
+ 
+ option(GGML_HEXAGON_HTP_DEBUG  "ggml-hexagon: enable HTP debug output" OFF)
+ set(GGML_HEXAGON_HTP_CERT  "$ENV{HEXAGON_HTP_CERT}" CACHE PATH "ggml-hexagon: enable HTP library signing using certificate")
+ 
++# geniex: the defaults match upstream (Hexagon SDK 6.x, all archs). Older DSP
++# firmware needs the skels built against the SDK it was built with: e.g.
++# SDK 5.5.x ships toolv87 prebuilts and has no QuRT for v79/v81.
++set(GGML_HEXAGON_TOOLV     "toolv19"         CACHE STRING "ggml-hexagon: Hexagon SDK prebuilt lib dir prefix (toolv19, toolv87, ...)")
++set(GGML_HEXAGON_HTP_ARCHS "v73;v75;v79;v81" CACHE STRING "ggml-hexagon: Hexagon archs to build libggml-htp skels for")
++# geniex: the skels may need an older SDK than the CPU-side library, which
++# uses FastRPC declarations (remote_system_request, FASTRPC_MAP_FD_DELAYED_EXTENDED,
++# fastrpc_domain) that only SDK 6.x headers carry. Both default to the SDK above.
++set(GGML_HEXAGON_HTP_SDK_ROOT   "${HEXAGON_SDK_ROOT}"   CACHE PATH "ggml-hexagon: Hexagon SDK used to build the libggml-htp skels")
++set(GGML_HEXAGON_HTP_TOOLS_ROOT "${HEXAGON_TOOLS_ROOT}" CACHE PATH "ggml-hexagon: Hexagon tools used to build the libggml-htp skels")
++if (NOT GGML_HEXAGON_HTP_SDK_ROOT STREQUAL HEXAGON_SDK_ROOT)
++    message(STATUS "hexagon: using ${HEXAGON_SDK_ROOT} for building libggml-hexagon")
++endif()
++message(STATUS "hexagon: using ${GGML_HEXAGON_HTP_SDK_ROOT} and ${GGML_HEXAGON_HTP_TOOLS_ROOT} for building libggml-htp skels")
++# geniex: functional-safety DSP firmware only loads libraries that carry an
++# SWIV CRC section. Point this at swiv_build_utility.py to embed one.
++set(GGML_HEXAGON_SWIV_UTILITY "$ENV{SWIV_BUILD_UTILITY}" CACHE FILEPATH "ggml-hexagon: embed an SWIV CRC into HTP libraries using this script")
++
+ add_library(htp_iface OBJECT
+     ${CMAKE_CURRENT_BINARY_DIR}/htp_iface_stub.c)
+ 
+@@ -55,6 +72,14 @@ ggml_add_backend_library(${TARGET_NAME}
+     ../../include/ggml-hexagon.h)
+ 
+ target_link_libraries(${TARGET_NAME} PRIVATE htp_iface)
++
++# geniex: g++ before 13 has no _Float16 in C++; __fp16 is the same IEEE half
++# and the shared htp headers only take its size on the CPU side.
++include(CheckCXXSourceCompiles)
++check_cxx_source_compiles("int main() { return sizeof(_Float16) == 2 ? 0 : 1; }" GGML_HEXAGON_HAVE_CXX_FLOAT16)
++if (NOT GGML_HEXAGON_HAVE_CXX_FLOAT16)
++    target_compile_definitions(${TARGET_NAME} PRIVATE _Float16=__fp16)
++endif()
+ target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/htp ${CMAKE_CURRENT_BINARY_DIR})
+ 
+ # Build HTP skels
+@@ -67,19 +92,19 @@ function(build_htp_skel V)
+             -DCMAKE_BUILD_TYPE=Release
+             -DCMAKE_TOOLCHAIN_FILE=${CMAKE_CURRENT_SOURCE_DIR}/htp/cmake-toolchain.cmake
+             -DCMAKE_INSTALL_LIBDIR=${CMAKE_CURRENT_BINARY_DIR}
+-            -DHEXAGON_SDK_ROOT=${HEXAGON_SDK_ROOT}
+-            -DHEXAGON_TOOLS_ROOT=${HEXAGON_TOOLS_ROOT}
++            -DHEXAGON_SDK_ROOT=${GGML_HEXAGON_HTP_SDK_ROOT}
++            -DHEXAGON_TOOLS_ROOT=${GGML_HEXAGON_HTP_TOOLS_ROOT}
+             -DHEXAGON_HTP_DEBUG=${GGML_HEXAGON_HTP_DEBUG}
+             -DDSP_VERSION=${V}
+-            -DPREBUILT_LIB_DIR="toolv19_${V}")
++            -DHEXAGON_SWIV_UTILITY=${GGML_HEXAGON_SWIV_UTILITY}
++            -DPREBUILT_LIB_DIR="${GGML_HEXAGON_TOOLV}_${V}")
+     list(APPEND HTP_SKELS ${CMAKE_CURRENT_BINARY_DIR}/libggml-htp-${V}.so)
+     set(HTP_SKELS ${HTP_SKELS} PARENT_SCOPE)
+ endfunction()
+ 
+-build_htp_skel(v73)
+-build_htp_skel(v75)
+-build_htp_skel(v79)
+-build_htp_skel(v81)
++foreach(V IN LISTS GGML_HEXAGON_HTP_ARCHS)
++    build_htp_skel(${V})
++endforeach()
+ 
+ # Install Hexagon skels required at runtime
+ install(FILES ${HTP_SKELS} TYPE LIB)
+diff --git a/ggml/src/ggml-hexagon/htp/CMakeLists.txt b/ggml/src/ggml-hexagon/htp/CMakeLists.txt
+index 821f08c0b..1e5f5a9f0 100644
+--- a/ggml/src/ggml-hexagon/htp/CMakeLists.txt
++++ b/ggml/src/ggml-hexagon/htp/CMakeLists.txt
+@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.22.2)
+ project(ggml-htp C CXX ASM)
+ 
+ include(${HEXAGON_SDK_ROOT}/build/cmake/hexagon_fun.cmake)
++include(${CMAKE_CURRENT_SOURCE_DIR}/cmake-qaic.cmake)
+ 
+ include_directories(
+     ${HEXAGON_SDK_ROOT}/incs
+@@ -52,8 +53,29 @@ target_compile_definitions(${HTP_LIB} PRIVATE
+     $<IF:$<BOOL:${HEXAGON_HTP_DEBUG}>,FARF_HIGH=1,>)
+ 
+ 
++# geniex: Hexagon SDK 5.5.x predates two HMX voltage corners that the power
++# profiles name. Fall back to the nearest lower corner that SDK does define.
++file(STRINGS ${HEXAGON_SDK_ROOT}/incs/HAP_power.h _hap_exp_vcorners REGEX "HAP_DCVS_EXP_VCORNER_(MIN_SVS|SVS_L2) *=")
++if (NOT _hap_exp_vcorners MATCHES "HAP_DCVS_EXP_VCORNER_MIN_SVS")
++    target_compile_definitions(${HTP_LIB} PRIVATE HAP_DCVS_EXP_VCORNER_MIN_SVS=HAP_DCVS_EXP_VCORNER_MIN)
++endif()
++if (NOT _hap_exp_vcorners MATCHES "HAP_DCVS_EXP_VCORNER_SVS_L2")
++    target_compile_definitions(${HTP_LIB} PRIVATE HAP_DCVS_EXP_VCORNER_SVS_L2=HAP_DCVS_EXP_VCORNER_SVS_L1)
++endif()
++
+ build_idl(htp_iface.idl ${HTP_LIB})
+ 
+ set_target_properties(${HTP_LIB} PROPERTIES EXPORT_COMPILE_COMMANDS ON)
+ 
++# geniex: embed the SWIV CRC in place so every consumer of the library
++# (install, signing) sees the verified image.
++if (HEXAGON_SWIV_UTILITY)
++    find_package(Python3 REQUIRED COMPONENTS Interpreter)
++    add_custom_command(TARGET ${HTP_LIB} POST_BUILD
++        COMMAND ${Python3_EXECUTABLE} ${HEXAGON_SWIV_UTILITY} -i $<TARGET_FILE:${HTP_LIB}> -o $<TARGET_FILE:${HTP_LIB}>.swiv
++        COMMAND ${CMAKE_COMMAND} -E rename $<TARGET_FILE:${HTP_LIB}>.swiv $<TARGET_FILE:${HTP_LIB}>
++        COMMENT "embedding SWIV CRC into lib${HTP_LIB}.so"
++        VERBATIM)
++endif()
++
+ install(TARGETS ${HTP_LIB})
+diff --git a/ggml/src/ggml-hexagon/htp/cmake-qaic.cmake b/ggml/src/ggml-hexagon/htp/cmake-qaic.cmake
+new file mode 100644
+index 000000000..5e8d54ed8
+--- /dev/null
++++ b/ggml/src/ggml-hexagon/htp/cmake-qaic.cmake
+@@ -0,0 +1,20 @@
++# geniex: Hexagon SDK 6.x ships the IDL compiler as ipc/fastrpc/qaic/bin/qaic,
++# which is where build_idl() from hexagon_fun.cmake looks. SDK 5.5.x ships one
++# binary per host OS instead and leaves creating bin/ to its own Makefile.
++# Stage a copy in the build tree rather than writing into the SDK.
++#
++# Include after hexagon_fun.cmake.
++
++if (NOT EXISTS "${HEXAGON_SDK_ROOT}/ipc/fastrpc/qaic/bin")
++    if (CMAKE_HOST_WIN32)
++        set(_qaic_host_dir "${HEXAGON_SDK_ROOT}/ipc/fastrpc/qaic/WinNT")
++    else()
++        set(_qaic_host_dir "${HEXAGON_SDK_ROOT}/ipc/fastrpc/qaic/Ubuntu20")
++    endif()
++    if (NOT IS_DIRECTORY "${_qaic_host_dir}")
++        message(FATAL_ERROR "qaic not found under ${HEXAGON_SDK_ROOT}/ipc/fastrpc/qaic")
++    endif()
++    file(COPY "${_qaic_host_dir}/" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/qaic/bin")
++    set(proj-qaic_src "${CMAKE_CURRENT_BINARY_DIR}/qaic")
++    unset(_qaic_host_dir)
++endif()

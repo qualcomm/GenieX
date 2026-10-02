@@ -133,6 +133,44 @@ cmake --build build-linux-cpu -j
 cmake --install build-linux-cpu --prefix pkg-geniex
 ```
 
+#### Older or functional-safety DSP firmware
+
+The HTP skels (`libggml-htp-vNN.so`) default to Hexagon SDK 6.x and all four archs. These cache
+variables retarget them (added by `sdk/patches/llama-hexagon-sdk-select.patch`):
+
+| Variable | Default | Set it when |
+| --- | --- | --- |
+| `GGML_HEXAGON_HTP_SDK_ROOT` / `GGML_HEXAGON_HTP_TOOLS_ROOT` | `HEXAGON_SDK_ROOT` / `HEXAGON_TOOLS_ROOT` | The skels need an older SDK. The CPU-side `libggml-hexagon.so` still needs SDK 6.x headers, so `HEXAGON_SDK_ROOT` stays on 6.x. |
+| `GGML_HEXAGON_TOOLV` | `toolv19` | Building against Hexagon SDK 5.5.x: `toolv87` (or `toolv86` with Hexagon Tools 8.6.x). |
+| `GGML_HEXAGON_HTP_ARCHS` | `v73;v75;v79;v81` | The SDK has no QuRT for some archs. SDK 5.5.x stops at `v75`. |
+| `GGML_HEXAGON_SWIV_UTILITY` | `$SWIV_BUILD_UTILITY` | The firmware verifies a CRC before loading a library. Path to `swiv_build_utility.py` (Qualcomm ASIV Build Tool, not shipped here). |
+
+Symptoms on the device, from the FastRPC user library's log (`journalctl` on Linux) when `remote_handle64_open` returns `0x80000406`:
+
+- `undefined symbol ... compute_resource_attr_init_v2` — the skel was built against SDK 6.x headers; build against SDK 5.5.x.
+- `ELF verification: section header for CRC segment not found` — set `GGML_HEXAGON_SWIV_UTILITY`.
+
+The `arm64-oe-linux-fusa-{debug,release}` presets bundle this for a board whose rootfs is also older
+than the container targets (e.g. glibc 2.35 / libstdc++ 6.0.29, where a gcc-13 build fails to load with
+`GLIBCXX_3.4.30 not found`). They build outside the container with the board image's own OpenEmbedded
+gcc and sysroot (`sdk/cmake/arm64-oe-linux.cmake`), `llama_cpp` plugin only, Hexagon on, OpenCL and QAIRT off:
+
+```bash
+export OE_TOOLCHAIN_ROOT=/path/to/oe-sdk        # sysroots/x86_64-qtisdk-linux + sysroots/armv8a-oe-linux
+export HEXAGON_SDK_ROOT=/path/to/Hexagon_SDK/6.6.0.0
+export HEXAGON_TOOLS_ROOT=$HEXAGON_SDK_ROOT/tools/HEXAGON_Tools/19.0.07
+export HEXAGON_SDK5_ROOT=/path/to/Hexagon_SDK/5.5.7.0
+export HEXAGON_TOOLS5_ROOT=$HEXAGON_SDK5_ROOT/tools/HEXAGON_Tools/8.7.06
+export SWIV_BUILD_UTILITY=/path/to/swiv_build_utility.py
+# cargo with the aarch64-unknown-linux-gnu target must be on PATH
+
+cmake --preset arm64-oe-linux-fusa-release -B build-oe .
+cmake --build build-oe -j
+cmake --install build-oe --prefix pkg-geniex
+```
+
+With Hexagon Tools 8.6.x instead of the 8.7.06 bundled in SDK 5.5.x, add `-DGGML_HEXAGON_TOOLV=toolv86`.
+
 ### Android (cross-compile from Linux)
 
 Build the SDK inside the derived Snapdragon Android toolchain container — it extends [ghcr.io/snapdragon-toolchain/arm64-android](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/README.md#android) with `build-essential`, `ccache`, `rustup`, and the `aarch64-linux-android` Rust target baked in (see [`.github/docker/toolchain-android.Dockerfile`](../.github/docker/toolchain-android.Dockerfile)). Run from the repo root.

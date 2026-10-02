@@ -34,12 +34,14 @@ if(GGML_HEXAGON)
     set(_HEXAGON_BDIR ${CMAKE_BINARY_DIR}/third-party/llama.cpp/ggml/src/ggml-hexagon)
     set(_INSTALL_COMMANDS)
     set(_HTP_PREFIX_DIRS)
-    foreach(_V IN ITEMS v73 v75 v79 v81)
+    set(_HTP_TARGETS)
+    foreach(_V IN LISTS GGML_HEXAGON_HTP_ARCHS)
         list(APPEND _INSTALL_COMMANDS
             COMMAND ${CMAKE_COMMAND} --install
                 ${_HEXAGON_BDIR}/htp-${_V}-prefix/src/htp-${_V}-build
         )
         list(APPEND _HTP_PREFIX_DIRS ${_HEXAGON_BDIR}/htp-${_V}-prefix)
+        list(APPEND _HTP_TARGETS htp-${_V})
     endforeach()
     # Scrub the ExternalProject workspaces once the skels are copied into
     # ${_HEXAGON_BDIR} — inf2cat's recursive scan of /driver: must not see
@@ -49,7 +51,7 @@ if(GGML_HEXAGON)
     )
     add_custom_target(install-htp-skels
         ${_INSTALL_COMMANDS}
-        DEPENDS htp-v73 htp-v75 htp-v79 htp-v81
+        DEPENDS ${_HTP_TARGETS}
         COMMENT "Installing HTP skel libraries"
     )
     # inf2cat signing depends on the .so files being in ${_HEXAGON_BDIR} and
@@ -61,7 +63,7 @@ if(GGML_HEXAGON)
 
     # Install HTP skels and catalog into pkg layout alongside ggml-hexagon.
     set(_HTP_FILES)
-    foreach(_V IN ITEMS v73 v75 v79 v81)
+    foreach(_V IN LISTS GGML_HEXAGON_HTP_ARCHS)
         list(APPEND _HTP_FILES ${_HEXAGON_BDIR}/libggml-htp-${_V}.so)
     endforeach()
     install(FILES ${_HTP_FILES} DESTINATION lib/llama_cpp)
@@ -73,6 +75,7 @@ if(GGML_HEXAGON)
     unset(_V)
     unset(_INSTALL_COMMANDS)
     unset(_HTP_PREFIX_DIRS)
+    unset(_HTP_TARGETS)
     unset(_HTP_FILES)
 endif()
 
