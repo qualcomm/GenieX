@@ -282,14 +282,6 @@ impl HttpTransport for ReqwestTransport {
                 .map_err(|e| Error::Http(format!("flush sink: {e}")))?;
 
             if written != len {
-                if attempt < self.retries {
-                    attempt += 1;
-                    tokio::time::sleep(self.retry_backoff).await;
-                    crate::logging::warn(&format!(
-                        "short read retry {attempt}: got {written} / expected {len}"
-                    ));
-                    continue;
-                }
                 return Err(Error::Http(format!(
                     "short read {url} {range}: got {written} / expected {len}"
                 )));
