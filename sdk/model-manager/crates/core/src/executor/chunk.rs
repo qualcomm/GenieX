@@ -138,7 +138,7 @@ pub fn bitmap_complete(bitmap: &[u8]) -> bool {
     !bitmap.is_empty() && bitmap.iter().all(|b| *b == PROGRESS_DONE_BYTE)
 }
 
-/// Ensure the destination file exists and is at least `file_size` bytes,
+/// Ensure the destination file exists and has exactly `file_size` bytes,
 /// so range workers can seek + write without races on file growth.
 pub fn preallocate(output_path: &Path, file_size: u64) -> Result<()> {
     if let Some(parent) = output_path.parent() {
@@ -150,7 +150,7 @@ pub fn preallocate(output_path: &Path, file_size: u64) -> Result<()> {
         .read(true)
         .open(output_path)?;
     let cur = f.metadata()?.len();
-    if cur < file_size {
+    if cur != file_size {
         f.set_len(file_size)?;
     }
     Ok(())
@@ -250,19 +250,14 @@ mod tests {
     }
 
     #[test]
-    fn preallocate_grows_but_never_truncates() {
+    fn preallocate_sets_exact_size() {
         let dir = tempdir().unwrap();
         let path = dir.path().join("f.bin");
         preallocate(&path, 1024).unwrap();
         assert_eq!(fs::metadata(&path).unwrap().len(), 1024);
 
-        // Writing some data then preallocating to a smaller size is a no-op.
         fs::write(&path, vec![0xABu8; 2048]).unwrap();
         preallocate(&path, 512).unwrap();
-        assert_eq!(
-            fs::metadata(&path).unwrap().len(),
-            2048,
-            "preallocate must not shrink",
-        );
+        assert_eq!(fs::metadata(&path).unwrap().len(), 512);
     }
 }
