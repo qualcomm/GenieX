@@ -58,7 +58,8 @@ jobs:
     needs: [gate]
     if: needs.gate.outputs.run == 'true'
     uses: ./.github/workflows/_build-sdk.yml
-    secrets: inherit
+    secrets:
+      HEXAGON_HTP_CERT_PFX: ${{ secrets.HEXAGON_HTP_CERT_PFX }}
     with:
       upload_artifact: true
       version_tag: ${{ inputs.version_tag || github.ref_name }}
@@ -67,7 +68,6 @@ jobs:
     needs: [build-sdk]
     if: ${{ !cancelled() && needs.build-sdk.result == 'success' }}
     uses: ./.github/workflows/_unit-test.yml
-    secrets: inherit
     with:
       language: go
       gate_on_changed_files: false
@@ -76,7 +76,6 @@ jobs:
     needs: [build-sdk]
     if: ${{ !cancelled() && needs.build-sdk.result == 'success' }}
     uses: ./.github/workflows/_unit-test.yml
-    secrets: inherit
     with:
       language: python
       gate_on_changed_files: false
@@ -85,7 +84,6 @@ jobs:
     needs: [build-sdk]
     if: ${{ !cancelled() && needs.build-sdk.result == 'success' }}
     uses: ./.github/workflows/_unit-test.yml
-    secrets: inherit
     with:
       language: sdk
       # Linux disabled until the llama_cpp plugin can load without OpenCL.
@@ -96,6 +94,7 @@ jobs:
     needs: [build-sdk]
     if: ${{ !cancelled() && needs.build-sdk.result == 'success' }}
     uses: ./.github/workflows/_qdc-test.yml
-    secrets: inherit
+    secrets:
+      QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
     with:
       gate_on_changed_files: false

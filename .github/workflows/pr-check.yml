@@ -37,14 +37,14 @@ jobs:
   lint:
     name: lint
     uses: ./.github/workflows/_lint.yml
-    secrets: inherit
 
   build-sdk:
     name: build-sdk
     needs: [lint]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_build-sdk.yml
-    secrets: inherit
+    secrets:
+      HEXAGON_HTP_CERT_PFX: ${{ secrets.HEXAGON_HTP_CERT_PFX }}
     with:
       upload_artifact: true
 
@@ -53,7 +53,6 @@ jobs:
     needs: [lint]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_build-python-sdist.yml
-    secrets: inherit
     with:
       upload_artifact: true
 
@@ -62,13 +61,11 @@ jobs:
     needs: [lint]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_test-rust.yml
-    secrets: inherit
 
   build-cli:
     name: build-cli
     needs: [build-sdk]
     uses: ./.github/workflows/_build-cli.yml
-    secrets: inherit
     with:
       upload_artifact: true
 
@@ -76,7 +73,6 @@ jobs:
     name: build-android-aar
     needs: [build-sdk]
     uses: ./.github/workflows/_build-android-aar.yml
-    secrets: inherit
     with:
       upload_artifact: true
 
@@ -84,7 +80,9 @@ jobs:
     name: build-docker
     needs: [build-sdk]
     uses: ./.github/workflows/_build-docker.yml
-    secrets: inherit
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     with:
       push: false
 
@@ -93,7 +91,6 @@ jobs:
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_unit-test.yml
-    secrets: inherit
     with:
       language: go
       gate_on_changed_files: true
@@ -103,7 +100,6 @@ jobs:
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_unit-test.yml
-    secrets: inherit
     with:
       language: python
       gate_on_changed_files: true
@@ -113,7 +109,6 @@ jobs:
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_unit-test.yml
-    secrets: inherit
     with:
       language: sdk
       # Linux currently can't run the llama_cpp plugin tests (libOpenCL.so.1
@@ -127,6 +122,7 @@ jobs:
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_qdc-test.yml
-    secrets: inherit
+    secrets:
+      QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
     with:
       gate_on_changed_files: true

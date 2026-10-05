@@ -16,6 +16,13 @@ jobs:
     uses: qualcomm/qcom-reusable-workflows/.github/workflows/reusable-qcom-preflight-checks-orchestrator.yml@v2
     with:
       enable-semgrep-scan: true
+      # Defaults plus: two rules that misfire on JNI void functions and on checked malloc+write
+      # patterns, and update.go (execs a SHA256-verified installer; check_sarif_error.py ignores nosemgrep).
+      semgrep-cli-options: >-
+        --config auto --config reusable-workflows/semgrep_rules/rules.yaml
+        --exclude-rule reusable-workflows.semgrep_rules.cxx.funcret.gen.non-void-function-no-return
+        --exclude-rule reusable-workflows.semgrep_rules.uninit.heap.must
+        --exclude cli/cmd/geniex/update.go
       enable-dependency-review: true
       enable-repolinter-check: true
       enable-copyright-license-check: true

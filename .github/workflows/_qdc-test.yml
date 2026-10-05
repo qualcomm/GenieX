@@ -12,6 +12,9 @@ on:
         required: false
         type: boolean
         default: true
+    secrets:
+      QDC_API_KEY:
+        required: false
 
 permissions:
   contents: read

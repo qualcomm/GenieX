@@ -79,7 +79,8 @@ jobs:
     name: build-sdk
     needs: [resolve-tag]
     uses: ./.github/workflows/_build-sdk.yml
-    secrets: inherit
+    secrets:
+      HEXAGON_HTP_CERT_PFX: ${{ secrets.HEXAGON_HTP_CERT_PFX }}
     with:
       version_tag: ${{ needs.resolve-tag.outputs.tag }}
       upload_artifact: true
@@ -88,7 +89,6 @@ jobs:
     name: build-android-aar
     needs: [build-sdk]
     uses: ./.github/workflows/_build-android-aar.yml
-    secrets: inherit
     with:
       upload_artifact: true
 
@@ -96,7 +96,6 @@ jobs:
     name: build-python-sdist
     needs: [resolve-tag]
     uses: ./.github/workflows/_build-python-sdist.yml
-    secrets: inherit
     with:
       version_tag: ${{ needs.resolve-tag.outputs.tag }}
       upload_artifact: true
@@ -172,7 +171,6 @@ jobs:
     name: build-cli
     needs: [resolve-tag, overlay-htp]
     uses: ./.github/workflows/_build-cli.yml
-    secrets: inherit
     with:
       version_tag: ${{ needs.resolve-tag.outputs.tag }}
       build_installer: true
@@ -451,7 +449,9 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/_build-docker.yml
-    secrets: inherit
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     with:
       version_tag: ${{ needs.resolve-tag.outputs.tag }}
       push: true

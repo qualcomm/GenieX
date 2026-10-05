@@ -27,6 +27,11 @@ on:
         required: false
         type: boolean
         default: true
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
 
 permissions:
   contents: read

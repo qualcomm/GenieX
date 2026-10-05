@@ -35,7 +35,8 @@ permissions:
 jobs:
   build-sdk:
     uses: ./.github/workflows/_build-sdk.yml
-    secrets: inherit
+    secrets:
+      HEXAGON_HTP_CERT_PFX: ${{ secrets.HEXAGON_HTP_CERT_PFX }}
     with:
       upload_artifact: true
 
