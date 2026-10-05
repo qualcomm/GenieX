@@ -1,0 +1,3 @@
+# Vendored third-party code; not ours to modify (see CLAUDE.md).
+sdk/include/external/
+third-party/
