@@ -121,6 +121,41 @@
       }
     },
     {
+      "name": "hexagon-sdk5-fusa",
+      "hidden": true,
+      "cacheVariables": {
+        "GENIEX_PLUGIN_LLAMA_CPP": "ON",
+        "GENIEX_PLUGIN_QAIRT": "OFF",
+        "GGML_HEXAGON": "ON",
+        "GGML_OPENCL": "OFF",
+        "GGML_OPENMP": "OFF",
+        "GENIEX_BENCHMARK": "ON",
+        "HEXAGON_SDK_ROOT": "$env{HEXAGON_SDK_ROOT}",
+        "HEXAGON_TOOLS_ROOT": "$env{HEXAGON_TOOLS_ROOT}",
+        "GGML_HEXAGON_HTP_SDK_ROOT": "$env{HEXAGON_SDK5_ROOT}",
+        "GGML_HEXAGON_HTP_TOOLS_ROOT": "$env{HEXAGON_TOOLS5_ROOT}",
+        "GGML_HEXAGON_TOOLV": "toolv87",
+        "GGML_HEXAGON_HTP_ARCHS": "v73",
+        "GGML_HEXAGON_SWIV_UTILITY": "$env{SWIV_BUILD_UTILITY}"
+      }
+    },
+    {
+      "name": "arm64-oe-linux",
+      "hidden": true,
+      "architecture": {
+        "value": "arm64",
+        "strategy": "external"
+      },
+      "toolset": {
+        "value": "host=x86_64",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm64-oe-linux.cmake",
+        "PREBUILT_LIB_DIR": "linux_aarch64"
+      }
+    },
+    {
       "name": "arm64-linux-cpu",
       "hidden": true,
       "architecture": {
@@ -175,6 +210,14 @@
       "inherits": ["arm64-linux-snapdragon", "snapdragon", "release", "base"]
     },
     {
+      "name": "arm64-oe-linux-fusa-debug",
+      "inherits": ["arm64-oe-linux", "hexagon-sdk5-fusa", "debug", "base"]
+    },
+    {
+      "name": "arm64-oe-linux-fusa-release",
+      "inherits": ["arm64-oe-linux", "hexagon-sdk5-fusa", "release", "base"]
+    },
+    {
       "name": "arm64-linux-cpu-debug",
       "inherits": ["arm64-linux-cpu", "cpu-only", "debug", "base"]
     },
@@ -227,6 +270,16 @@
     {
       "name": "arm64-linux-snapdragon-release",
       "configurePreset": "arm64-linux-snapdragon-release",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-oe-linux-fusa-debug",
+      "configurePreset": "arm64-oe-linux-fusa-debug",
+      "jobs": 0
+    },
+    {
+      "name": "arm64-oe-linux-fusa-release",
+      "configurePreset": "arm64-oe-linux-fusa-release",
       "jobs": 0
     },
     {

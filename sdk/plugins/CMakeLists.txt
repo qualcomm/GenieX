@@ -25,8 +25,12 @@ endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Qualcomm Linux does not ship libgomp; bundle it so the wheel is self-contained.
+    set(_sysroot_flag)
+    if(CMAKE_SYSROOT)
+        set(_sysroot_flag --sysroot=${CMAKE_SYSROOT})
+    endif()
     execute_process(
-        COMMAND ${CMAKE_C_COMPILER} -print-file-name=libgomp.so.1
+        COMMAND ${CMAKE_C_COMPILER} ${_sysroot_flag} -print-file-name=libgomp.so.1
         OUTPUT_VARIABLE _libgomp_path
         OUTPUT_STRIP_TRAILING_WHITESPACE
         RESULT_VARIABLE _rc)
