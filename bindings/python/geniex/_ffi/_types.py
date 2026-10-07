@@ -191,6 +191,7 @@ class geniex_LlmForwardLogitsInput(Structure):
         ('input_ids_count', c_int32),
         ('all_positions', c_bool),
         ('top_n', c_int32),  # 0: full vocab per row. >0: keep only the top-N logits per row.
+        ('prompt_utf8', c_char_p),
     ]
 
 

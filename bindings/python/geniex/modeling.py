@@ -327,32 +327,43 @@ class GenieXLLM:
         _check(lib.geniex_llm_reset(self._handle))
 
     def forward_logits(
-        self, input_ids: list[int], *, all_positions: bool = False, top_n: int = 0
+        self,
+        input_ids: list[int] | None = None,
+        *,
+        prompt: str | None = None,
+        all_positions: bool = False,
+        top_n: int = 0,
     ) -> list[list[float]] | list[list[tuple[int, float]]]:
-        """Run a single forward pass over ``input_ids`` and return raw logits.
+        """Run a single forward pass over ``input_ids`` (or ``prompt``) and return raw logits.
+
+        Pass either pre-tokenized ``input_ids`` or a ``prompt`` string; when both
+        are given ``input_ids`` wins. A ``prompt`` is tokenized by the plugin the
+        same way ``generate`` does, including the model's special tokens (the
+        qairt plugin does not support it).
 
         With ``all_positions=False`` (default) there is one row (the last
         token's logits); with ``all_positions=True`` there is one row per input
         token. ``top_n=0`` (default) returns each row as ``vocab_size`` floats
         (column index is the token id). ``top_n>0`` returns each row as a list
-        of ``(token_id, logit)`` pairs sorted by descending logit. The caller
-        owns any special tokens; none are added. Intended for on-target accuracy
-        metrics (perplexity, MMLU, MMMU).
+        of ``(token_id, logit)`` pairs sorted by descending logit. With
+        ``input_ids`` the caller owns any special tokens; none are added.
+        Intended for on-target accuracy metrics (perplexity, MMLU, MMMU) and
+        classification or routing.
         """
-        if not input_ids:
-            raise ValueError('input_ids must be non-empty')
+        if not input_ids and prompt is None:
+            raise ValueError('input_ids or prompt must be provided')
         if top_n < 0:
             raise ValueError('top_n must be >= 0')
         lib = load_library()
 
-        n = len(input_ids)
-        IdArray = c_int32 * n
-        ids = IdArray(*[int(t) for t in input_ids])
+        n = len(input_ids) if input_ids else 0
+        ids = (c_int32 * n)(*[int(t) for t in input_ids or []])
         inp = geniex_LlmForwardLogitsInput(
-            input_ids=cast(ids, POINTER(c_int32)),
+            input_ids=cast(ids, POINTER(c_int32)) if n else None,
             input_ids_count=n,
             all_positions=all_positions,
             top_n=top_n,
+            prompt_utf8=None if prompt is None else prompt.encode(),
         )
         out = geniex_LlmForwardLogitsOutput()
         _check(lib.geniex_llm_forward_logits(self._handle, byref(inp), byref(out)))

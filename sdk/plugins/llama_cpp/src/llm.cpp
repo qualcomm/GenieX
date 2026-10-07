@@ -495,17 +495,32 @@ int32_t LlamaLlm::get_model_info(geniex_LlmModelInfo* output) {
 int32_t LlamaLlm::forward_logits(const geniex_LlmForwardLogitsInput* input, geniex_LlmForwardLogitsOutput* output) {
     if (!this->ctx || !this->model) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
-    if (!input->input_ids || input->input_ids_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+
+    const bool has_input_ids   = input->input_ids != nullptr && input->input_ids_count > 0;
+    const bool has_prompt_utf8 = input->prompt_utf8 != nullptr;
+    if (!has_input_ids && !has_prompt_utf8) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
     const llama_vocab* vocab   = llama_model_get_vocab(this->model);
     const int          n_vocab = llama_vocab_n_tokens(vocab);
     const int          n_ctx   = llama_n_ctx(this->ctx);
     const int          n_batch = llama_n_batch(this->ctx);
-    const int          n_tok   = input->input_ids_count;
+
+    std::vector<llama_token> tokens;
+    if (has_input_ids) {
+        tokens.assign(input->input_ids, input->input_ids + input->input_ids_count);
+    } else {
+        try {
+            tokens = common_tokenize(vocab, std::string(input->prompt_utf8), true, true);
+        } catch (const std::exception& e) {
+            return GENIEX_ERROR_LLM_TOKENIZATION_FAILED;
+        }
+        if (tokens.empty()) return GENIEX_ERROR_LLM_TOKENIZATION_FAILED;
+    }
+    const int n_tok = static_cast<int>(tokens.size());
 
     for (int i = 0; i < n_tok; i++) {
-        if (input->input_ids[i] < 0 || input->input_ids[i] >= n_vocab) {
-            GENIEX_LOG_ERROR("forward_logits: token ID out of range: {}", input->input_ids[i]);
+        if (tokens[i] < 0 || tokens[i] >= n_vocab) {
+            GENIEX_LOG_ERROR("forward_logits: token ID out of range: {}", tokens[i]);
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
     }
@@ -529,7 +544,7 @@ int32_t LlamaLlm::forward_logits(const geniex_LlmForwardLogitsInput* input, geni
         batch.n_tokens = n;
         for (int j = 0; j < n; j++) {
             const int abs_pos  = start + j;
-            batch.token[j]     = input->input_ids[abs_pos];
+            batch.token[j]     = tokens[abs_pos];
             batch.pos[j]       = abs_pos;
             batch.n_seq_id[j]  = 1;
             batch.seq_id[j][0] = 0;

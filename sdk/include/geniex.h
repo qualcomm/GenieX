@@ -710,15 +710,21 @@ GENIEX_API int32_t geniex_llm_get_model_info(geniex_LLM* handle, geniex_LlmModel
 
 /* ====================  Forward Logits  =================================== */
 
-/** Input for a single non-autoregressive forward pass over pre-tokenized input.
+/** Input for a single non-autoregressive forward pass.
  *
- * The caller owns any special tokens (BOS/EOS); none are added automatically,
- * matching geniex_LlmGenerateInput's input_ids contract. */
+ * Provide either pre-tokenized input_ids or prompt_utf8. If input_ids is
+ * non-NULL and input_ids_count > 0 it is used and prompt_utf8 is ignored,
+ * matching geniex_LlmGenerateInput. Providing neither is invalid.
+ *
+ * With input_ids the caller owns any special tokens (BOS/EOS); none are added
+ * automatically. With prompt_utf8 the plugin tokenizes the text the same way
+ * geniex_llm_generate does, adding the model's special tokens. */
 typedef struct {
-    const int32_t* input_ids;       /** Pre-tokenized token IDs (non-NULL). */
-    int32_t        input_ids_count; /** Token count (>= 1). */
+    const int32_t* input_ids;       /** Pre-tokenized token IDs (optional if prompt_utf8 is set). */
+    int32_t        input_ids_count; /** Token count (>= 1 when input_ids is used). */
     bool           all_positions;   /** false: last token's row only. true: every position. */
     int32_t        top_n;           /** 0: full vocab per row. >0: keep only the top-N logits per row. */
+    const char*    prompt_utf8;     /** UTF-8 prompt to tokenize (optional, can be NULL). */
 } geniex_LlmForwardLogitsInput;
 
 /** Output of geniex_llm_forward_logits. Zero-initialized by the bridge before
@@ -731,7 +737,7 @@ typedef struct {
 typedef struct {
     float*   logits;     /** Caller frees with geniex_free. */
     int32_t* token_ids;  /** NULL when top_n == 0; else [n_rows, row_width]; caller frees with geniex_free. */
-    int32_t  n_rows;     /** all_positions ? input_ids_count : 1. */
+    int32_t  n_rows;     /** all_positions ? token count (input_ids_count, or the tokenized prompt length) : 1. */
     int32_t  row_width;  /** top_n > 0 ? min(top_n, vocab_size) : vocab_size. */
     int32_t  vocab_size; /** Full vocabulary size, regardless of top_n. */
 } geniex_LlmForwardLogitsOutput;
@@ -751,13 +757,14 @@ typedef struct {
  * all-positions output small (full vocab per row is hundreds of MB).
  *
  * @param handle[in]:  LLM handle.
- * @param input[in]:   Pre-tokenized input and the all_positions flag.
+ * @param input[in]:   Pre-tokenized input_ids or a prompt_utf8 string, and the all_positions flag.
  * @param output[out]: Filled-in logits buffer (caller frees output->logits with geniex_free).
  *
  * @return geniex_ErrorCode:
  *   - GENIEX_SUCCESS                              on success.
  *   - GENIEX_ERROR_COMMON_NOT_INITIALIZED         when handle is NULL / model not ready.
- *   - GENIEX_ERROR_COMMON_INVALID_INPUT           when input/output is NULL or input_ids is empty.
+ *   - GENIEX_ERROR_COMMON_INVALID_INPUT           when input/output is NULL or neither input_ids nor prompt_utf8 is given.
+ *   - GENIEX_ERROR_LLM_TOKENIZATION_FAILED        when prompt_utf8 cannot be tokenized or yields no tokens.
  *   - GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED     when the plugin cannot produce logits.
  *   - GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH when input_ids exceeds the max context length.
  */

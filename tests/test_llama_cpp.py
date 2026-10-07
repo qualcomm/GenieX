@@ -257,6 +257,26 @@ def test_llm_logits_parity(llama_cpp_llm_paths, device_map):
 
 
 @pytest.mark.llm
+@pytest.mark.parametrize('device_map', ['cpu'])
+def test_llm_forward_logits_prompt(llama_cpp_llm_paths, device_map):
+    prompt = 'The capital of France is'
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        _LLM.id,
+        precision=_LLM.precision,
+        device_map=device_map,
+    ) as llm:
+        n_prompt = llm.generate(prompt, max_new_tokens=1, temperature=GREEDY_TEMPERATURE, seed=0).profile.prompt_tokens
+        rows = llm.forward_logits(prompt=prompt, all_positions=True)
+        last = llm.forward_logits(prompt=prompt)
+        with pytest.raises(ValueError):
+            llm.forward_logits()
+    assert len(rows) == n_prompt
+    assert len(last) == 1
+    assert len(last[0]) == len(rows[0])
+    assert last[0] == pytest.approx(rows[-1], abs=1e-3)
+
+
+@pytest.mark.llm
 @pytest.mark.parametrize('device_map', ['npu'])
 @pytest.mark.skipif(_IS_QCS9075M, reason='draft-mtp not yet supported upstream on QCS9075M / HTP')
 def test_mtp_multi_turn(llama_cpp_mtp_paths, device_map):

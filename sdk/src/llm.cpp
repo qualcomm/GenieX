@@ -220,7 +220,8 @@ int32_t geniex_llm_forward_logits(
     GENIEX_LOG_TRACE("llm forward_logits");
 
     if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
-    if (!input->input_ids || input->input_ids_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    const bool has_input_ids = input->input_ids && input->input_ids_count > 0;
+    if (!has_input_ids && !input->prompt_utf8) return GENIEX_ERROR_COMMON_INVALID_INPUT;
     if (input->top_n < 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
     std::memset(output, 0, sizeof(*output));
 
