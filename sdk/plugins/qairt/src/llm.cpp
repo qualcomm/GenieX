@@ -102,8 +102,23 @@ int32_t QairtLlm::create(const geniex_LlmCreateInput* input) {
     model_cfg.forecast_prefix_path =
         qairt::runtime::find_optional_file(model_dir, "forecast-prefix/kv-cache.primary.qnn-htp");
 
-    // Create LLMPipeline via the model_id-driven dispatcher
-    auto pipe = makeLLMPipeline(runtime_cfg, model_cfg);
+    // Legacy Genie exports such as Phi-3.5-Mini-Instruct have no metadata.json.
+    // The generic pipeline derives their tensor layout from the compiled graphs.
+    const bool legacy_bundle = !fs::exists(model_dir / "metadata.json");
+    if (legacy_bundle && !qairt::has_basic_genie_dialog(model_dir)) {
+        GENIEX_LOG_ERROR("QAIRT bundle has no metadata.json or basic genie_config.json: {}", model_dir.string());
+        return GENIEX_ERROR_COMMON_MODEL_LOAD;
+    }
+    if (legacy_bundle) {
+        if (!qairt::ensure_legacy_tokenizer_config(model_dir)) {
+            GENIEX_LOG_ERROR("Legacy QAIRT bundle lacks tokenizer_config.json: {}", model_dir.string());
+            return GENIEX_ERROR_COMMON_FILE_NOT_FOUND;
+        }
+        GENIEX_LOG_INFO("Loading legacy basic Genie bundle without metadata.json");
+    }
+
+    auto pipe =
+        legacy_bundle ? auto_llm::makePipeline(runtime_cfg, model_cfg) : makeLLMPipeline(runtime_cfg, model_cfg);
     if (!pipe) {
         GENIEX_LOG_ERROR("Failed to create QAIRT LLM pipeline from bundle: {}", model_dir.string());
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
