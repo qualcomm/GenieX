@@ -321,7 +321,9 @@ int32_t QairtLlm::get_model_info(geniex_LlmModelInfo* output) {
 int32_t QairtLlm::forward_logits(const geniex_LlmForwardLogitsInput* input, geniex_LlmForwardLogitsOutput* output) {
     if (!pipeline_) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
-    if (!input->input_ids || input->input_ids_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    if (!input->input_ids || input->input_ids_count <= 0) {
+        return input->prompt_utf8 ? GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED : GENIEX_ERROR_COMMON_INVALID_INPUT;
+    }
 
     std::vector<int32_t> input_ids(input->input_ids, input->input_ids + input->input_ids_count);
 
