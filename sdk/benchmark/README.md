@@ -170,14 +170,17 @@ Run `geniex-bench --help` for the full flag list.
   mix populations.
 - with `--accuracy`, each measured run also prints `[info] stop_reason=<reason>`
   (the SDK's own stop reason: `eos` / `length` / `user` / `stop_sequence` /
-  `context_length`). `--max-gen-time-s N`, `--no-progress-timeout-s N`, and
-  `--repetition-max-repeats N` (all default 0 = disabled) make the run loop
-  self-abort a diverging/stuck generation from inside the decode loop instead
-  of relying on an external hard kill: a wall-clock cap per `generate()` call,
-  a no-new-token-for-N-seconds gap (covers a stuck prefill→first-token gap
-  too), and a simple consecutive-repeat counter on the decoded token string,
-  respectively. A tripped guard prints `[warn] self-abort: reason=<wall-time|
-  no-progress|repetition|signal> after=<N>tok elapsed=<M>ms`, exits 0, and
+  `context_length`). `--max-gen-time-s N`, `--no-progress-timeout-s N`,
+  `--repetition-max-repeats N`, and `--ngram-max-repeats N` (all default 0 =
+  disabled) make the run loop self-abort a diverging/stuck generation from
+  inside the decode loop instead of relying on an external hard kill: a
+  wall-clock cap per `generate()` call, a no-new-token-for-N-seconds gap
+  (covers a stuck prefill→first-token gap too), a consecutive-repeat counter
+  on the decoded token string, and a phrase-level loop detector (a block of up
+  to 256 tokens repeating N times back to back; loops spanning fewer than 64
+  tokens in total are ignored), respectively. A tripped guard prints
+  `[warn] self-abort: reason=<wall-time|no-progress|repetition|ngram|signal>
+  after=<N>tok elapsed=<M>ms`, exits 0, and
   keeps whatever partial text was generated — the same clean path the SDK
   uses for a plain max-tokens stop. `reason=signal` means an external
   `SIGTERM`/`SIGABRT` arrived while a token callback was in flight (see
@@ -249,7 +252,8 @@ per output line, then the usual `[ok  ]` summary line:
 ```
 
 When one of `--max-gen-time-s` / `--no-progress-timeout-s` /
-`--repetition-max-repeats` trips (or an external `SIGTERM`/`SIGABRT` lands
+`--repetition-max-repeats` / `--ngram-max-repeats` trips (or an external
+`SIGTERM`/`SIGABRT` lands
 mid-generation), a `[warn] self-abort: ...` line appears between `[info]` and
 the (partial) `[gen ]` lines, and the process still exits 0:
 

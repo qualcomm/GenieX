@@ -105,6 +105,8 @@ typedef struct {
     int32_t no_progress_timeout_s;  /* --no-progress-timeout-s: abort if no new token for N seconds */
     int32_t repetition_max_repeats; /* --repetition-max-repeats: abort after N consecutive repeats of the same token
                                        string */
+    int32_t ngram_max_repeats;      /* --ngram-max-repeats: abort after a block of up to 256 tokens repeats N times
+                                       back to back (phrase-level loops) */
 
     /* Prefill-only raw-logits mode (--logits): one forward pass over the prompt,
      * no decode loop. Bypasses the timing/warmup/repeat machinery entirely. */

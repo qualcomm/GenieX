@@ -130,8 +130,12 @@ static void usage(const char* argv0) {
         "  --repetition-max-repeats N\n"
         "                         with --accuracy: self-abort once the same decoded\n"
         "                         token string repeats N times consecutively (0 =\n"
-        "                         disabled, default). Simple consecutive-repeat\n"
-        "                         counter; smarter n-gram detection is a follow-up.\n"
+        "                         disabled, default). Single-token loops only; see\n"
+        "                         --ngram-max-repeats for phrase-level loops.\n"
+        "  --ngram-max-repeats N  with --accuracy: self-abort once a block of up to 256\n"
+        "                         tokens repeats N times back to back (0 = disabled,\n"
+        "                         default). Blocks shorter than 64 tokens in total\n"
+        "                         (period x N) are ignored.\n"
         "  --logits               prefill-only raw-logits mode: run one forward pass\n"
         "                         (geniex_llm_forward_logits, no decode loop) over N\n"
         "                         random token ids (-p N, like the timing default) and\n"
@@ -307,6 +311,7 @@ void parse_args(int argc, char** argv, options_t* o) {
     o->max_gen_time_s          = 0;
     o->no_progress_timeout_s   = 0;
     o->repetition_max_repeats  = 0;
+    o->ngram_max_repeats       = 0;
     o->logits_mode             = false;
     o->logits_last_only        = false;
     o->logits_top_n            = 20;
@@ -401,6 +406,8 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->no_progress_timeout_s = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--repetition-max-repeats") == 0) {
             o->repetition_max_repeats = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--ngram-max-repeats") == 0) {
+            o->ngram_max_repeats = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--logits") == 0) {
             o->logits_mode = true;
         } else if (strcmp(a, "--logits-last-only") == 0) {
@@ -507,4 +514,5 @@ void parse_args(int argc, char** argv, options_t* o) {
     require_min(o->max_gen_time_s, 0, "--max-gen-time-s");
     require_min(o->no_progress_timeout_s, 0, "--no-progress-timeout-s");
     require_min(o->repetition_max_repeats, 0, "--repetition-max-repeats");
+    require_min(o->ngram_max_repeats, 0, "--ngram-max-repeats");
 }

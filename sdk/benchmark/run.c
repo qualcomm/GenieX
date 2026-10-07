@@ -61,6 +61,9 @@ static int64_t now_us(void) {
 /* Per-generate()-call state for on_token's self-abort guard. Allocated fresh
  * for every call in run_llm/run_vlm so one prompt's repeat/timing state never
  * leaks into the next. `o` is only read, never owned. */
+#define NGRAM_MAX_PERIOD 256 /* longest looping block (in tokens) --ngram-max-repeats can see */
+#define NGRAM_MIN_SPAN 64    /* ignore loops whose total span (period x repeats) is shorter than this */
+
 typedef struct {
     const options_t* o;
     int64_t          gen_start_us;
@@ -68,7 +71,9 @@ typedef struct {
     char             last_token_buf[256];
     int32_t          repeat_count;
     int32_t          n_tokens;
-    const char*      abort_reason; /* "wall-time" | "no-progress" | "repetition" | "signal"; NULL if not tripped */
+    uint64_t         hist[NGRAM_MAX_PERIOD + 1]; /* ring of the last tokens' hashes */
+    int32_t     match[NGRAM_MAX_PERIOD + 1];     /* match[p]: consecutive tokens equal to the one p positions earlier */
+    const char* abort_reason; /* "wall-time" | "no-progress" | "repetition" | "ngram" | "signal"; NULL if not tripped */
 } token_guard_t;
 
 static void token_guard_init(token_guard_t* g, const options_t* o) {
@@ -76,6 +81,37 @@ static void token_guard_init(token_guard_t* g, const options_t* o) {
     g->o             = o;
     g->gen_start_us  = now_us();
     g->last_token_us = g->gen_start_us;
+}
+
+static uint64_t hash_token(const char* s) {
+    uint64_t h = 1469598103934665603ULL; /* FNV-1a */
+    for (; *s; s++) {
+        h = (h ^ (uint8_t)*s) * 1099511628211ULL;
+    }
+    return h;
+}
+
+/* Feed one token; true once a block of <= NGRAM_MAX_PERIOD tokens has repeated
+ * o->ngram_max_repeats times back to back. A block with period p repeated k
+ * times is a run of p*(k-1) positions that each equal the token p earlier. */
+static bool ngram_loop_detected(token_guard_t* g, const char* token) {
+    int32_t   n       = g->n_tokens; /* index of this token */
+    uint64_t  h       = hash_token(token);
+    const int ring    = NGRAM_MAX_PERIOD + 1;
+    g->hist[n % ring] = h;
+    bool hit          = false;
+    for (int32_t p = 1; p <= NGRAM_MAX_PERIOD && p <= n; p++) {
+        if (g->hist[(n - p) % ring] == h) {
+            g->match[p]++;
+        } else {
+            g->match[p] = 0;
+        }
+        if ((int64_t)p * g->o->ngram_max_repeats >= NGRAM_MIN_SPAN &&
+            g->match[p] >= p * (g->o->ngram_max_repeats - 1)) {
+            hit = true;
+        }
+    }
+    return hit;
 }
 
 /* --max-gen-time-s / --no-progress-timeout-s / --repetition-max-repeats /
@@ -115,6 +151,11 @@ static bool on_token(const char* token, void* user_data) {
             g->abort_reason = "repetition";
             return false;
         }
+    }
+
+    if (o->ngram_max_repeats > 0 && ngram_loop_detected(g, token)) {
+        g->abort_reason = "ngram";
+        return false;
     }
 
     g->last_token_us = t_now;
