@@ -19,7 +19,7 @@
 #include "dispatch.h"               // provided by geniex-qairt/models/
 #include "geniex-proc/tokenizer.h"  // ApplyChatTemplateOptions
 #include "geniex-proc/types.h"      // ChatMessage, MMContent, Role::, Modality::
-#include "llm/llm_spec_loader.h"    // parseGenieSamplerConfig
+#include "llm/llm_spec_loader.h"    // parseQAIRTMetadata
 #include "logging.h"
 #include "metadata_utils.h"
 #include "path_utils.h"
@@ -61,7 +61,7 @@ int32_t QairtVlm::create(const geniex_VlmCreateInput* input) {
     const auto chat_template_metadata = qairt::read_chat_template_metadata(model_dir);
     default_system_prompt_            = chat_template_metadata.default_system_prompt;
     if (default_system_prompt_.empty()) default_system_prompt_ = kDefaultSystemPrompt;
-    bundle_sampler_ = parseGenieSamplerConfig(model_dir);
+    bundle_sampler_ = parseQAIRTMetadata(model_dir).sampler;
 
     QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(model_dir);
 

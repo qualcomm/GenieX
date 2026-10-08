@@ -22,7 +22,7 @@
 #include "dispatch.h"               // provided by geniex-qairt/models/
 #include "geniex-proc/tokenizer.h"  // ApplyChatTemplateOptions
 #include "geniex-proc/types.h"      // ChatMessage, Role
-#include "llm/llm_spec_loader.h"    // parseGenieSamplerConfig
+#include "llm/llm_spec_loader.h"    // parseQAIRTMetadata
 #include "logging.h"
 #include "metadata_utils.h"
 #include "pipeline/llm_pipeline.h"
@@ -63,12 +63,12 @@ int32_t QairtLlm::create(const geniex_LlmCreateInput* input) {
     const auto chat_template_metadata = qairt::read_chat_template_metadata(model_dir);
     default_system_prompt_            = chat_template_metadata.default_system_prompt;
     if (default_system_prompt_.empty()) default_system_prompt_ = kDefaultSystemPrompt;
-    bundle_sampler_ = parseGenieSamplerConfig(model_dir);
+    bundle_sampler_ = parseQAIRTMetadata(model_dir).sampler;
 
     QnnRuntimeConfig runtime_cfg = qairt::runtime::make_qnn_runtime_config(model_dir);
 
     // Bundle layout comes from the QAIRT core: `modelConfigFromDirectory` reads
-    // genie_config.json's `dialog.engine.model.binary.ctx-bins` and takes only
+    // metadata.json's `geniex.ctx_bins` and takes only
     // those files, in order, as context-binary shards. Do not glob `*.bin` —
     // bundles also ship CPU-side payloads as `.bin` (e.g. Gemma4's embedding
     // LUTs), which QNN cannot deserialize as context binaries.
