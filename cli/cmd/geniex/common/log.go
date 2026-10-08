@@ -45,9 +45,25 @@ func ApplySlog() {
 func ApplyLogLevel() {
 	ApplySlog()
 
-	if level := config.Get().Log; level != LogLevelTrace {
+	level := config.Get().Log
+	if level != LogLevelTrace {
 		geniex_sdk.SetLog(level != LogLevelNone)
 	}
+	// Also sets the QNN log level (qairt); "none" has no callback, so QNN stays at ERROR.
+	if sdkLevel, ok := sdkLogLevels[level]; ok {
+		if err := geniex_sdk.SetLogLevel(sdkLevel); err != nil {
+			slog.Warn("could not set SDK log level", "err", err)
+		}
+	}
+}
+
+// Values of geniex_LogLevel (sdk/include/geniex.h).
+var sdkLogLevels = map[string]int{
+	LogLevelTrace: 0,
+	LogLevelDebug: 1,
+	LogLevelInfo:  2,
+	LogLevelWarn:  3,
+	LogLevelError: 4,
 }
 
 var slogLevels = map[string]slog.Level{

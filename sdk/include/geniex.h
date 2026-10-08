@@ -207,6 +207,20 @@ GENIEX_API int32_t geniex_deinit(void);
 GENIEX_API int32_t geniex_set_log(geniex_log_callback callback);
 
 /**
+ * @brief Set the minimum level forwarded to the logging callback, call before init
+ *
+ * Also sets the QNN backend's log level in the qairt plugin; DEBUG and TRACE slow decode.
+ * Default is GENIEX_LOG_LEVEL_TRACE. With no callback the plugin runs QNN at ERROR.
+ *
+ * @param level[in]: The minimum level to forward.
+ *
+ * @return geniex_ErrorCode: GENIEX_SUCCESS on success, negative on failure.
+ *
+ * @thread_safety: Thread-safe
+ */
+GENIEX_API int32_t geniex_set_log_level(geniex_LogLevel level);
+
+/**
  * @brief Load the QAIRT runtime from `path` instead of the one bundled with the plugin
  *
  * Optional: a QAIRT runtime ships with the qairt plugin and is used by default, so

@@ -73,6 +73,9 @@ static void usage(const char* argv0) {
         "                         sustained_high_performance, burst (default)\n"
         "  --warmup N             default 1\n"
         "  --no-warmup            equivalent to --warmup 0\n"
+        "  --log LEVEL            none, error, warn (default: error), info, debug, trace. For qairt\n"
+        "                         this also sets the QNN backend's log level; debug/trace\n"
+        "                         slow decode by ~15%% or more, so don't time with them\n"
         "  --temperature F        default 0.0\n"
         "  --top-p F              default 0.0 (defers to the bundle's dialog.sampler.top-p,\n"
         "                         then the plugin default, e.g. 0.95 for qairt/llama_cpp)\n"
@@ -108,7 +111,10 @@ static void usage(const char* argv0) {
         "                         bundle's own chat template before generation --\n"
         "                         same templating `geniex infer` uses -- so pass the\n"
         "                         raw user turn, not pre-templated text.\n"
-        "  --system-prompt TEXT   with --accuracy --prompt-file: system message added\n"
+        "  --chat-template        with --prompt-file: run the prompt through the bundle's\n"
+        "                         chat template as one user turn, keeping the normal\n"
+        "                         warmup/repeat timing (--accuracy implies it)\n"
+        "  --system-prompt TEXT   with --chat-template or --accuracy: system message added\n"
         "                         ahead of the prompt in the chat template\n"
         "  --think / --no-think  with --accuracy --prompt-file: enable_thinking for\n"
         "                         the chat template (default: think)\n"
@@ -281,6 +287,7 @@ void parse_args(int argc, char** argv, options_t* o) {
     o->repeat                  = 5;
     o->reset_between_runs      = true;
     o->accuracy                = false;
+    o->chat_template           = false;
     o->system_prompt           = NULL;
     o->enable_thinking         = true;
     o->logits_mode             = false;
@@ -297,6 +304,7 @@ void parse_args(int argc, char** argv, options_t* o) {
     o->draft_min               = 0;
     o->draft_p_min             = 0.0f;
     o->power_mode              = NULL;
+    o->log_level               = "error";
     o->qairt_lib               = NULL;
     o->output_json             = NULL;
     o->output_md               = NULL;
@@ -324,6 +332,8 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->tokenizer_path = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--mmproj-path") == 0) {
             o->mmproj_path = arg_value(argc, argv, &i, a);
+        } else if (strcmp(a, "--log") == 0) {
+            o->log_level = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--vlm") == 0) {
             o->force_vlm = true;
         } else if (strcmp(a, "--image") == 0) {
@@ -360,6 +370,8 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->reset_between_runs = false;
         } else if (strcmp(a, "--accuracy") == 0) {
             o->accuracy = true;
+        } else if (strcmp(a, "--chat-template") == 0) {
+            o->chat_template = true;
         } else if (strcmp(a, "--system-prompt") == 0) {
             o->system_prompt = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--think") == 0) {
@@ -423,8 +435,12 @@ void parse_args(int argc, char** argv, options_t* o) {
     if (o->accuracy) {
         o->warmup = 0;
         o->repeat = 1;
-    } else if (o->system_prompt) {
-        fprintf(stderr, "ERROR: --system-prompt requires --accuracy --prompt-file\n");
+    } else if (o->system_prompt && !o->chat_template) {
+        fprintf(stderr, "ERROR: --system-prompt requires --accuracy or --chat-template with --prompt-file\n");
+        exit(2);
+    }
+    if (o->chat_template && !o->prompt_buf) {
+        fprintf(stderr, "ERROR: --chat-template requires --prompt-file\n");
         exit(2);
     }
 

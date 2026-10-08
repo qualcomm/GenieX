@@ -38,8 +38,9 @@ geniex_LogLevel toSdkLevel(LogLevel lvl) noexcept {
 }
 
 void filteringSink(LogLevel level, const char* message) {
-    if (::geniex_log != nullptr && message != nullptr) {
-        ::geniex_log(toSdkLevel(level), message);
+    const geniex_LogLevel sdk_level = toSdkLevel(level);
+    if (::geniex_log != nullptr && message != nullptr && sdk_level >= ::geniex_log_level) {
+        ::geniex_log(sdk_level, message);
     }
 }
 

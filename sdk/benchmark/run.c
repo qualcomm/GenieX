@@ -286,7 +286,7 @@ void run_llm(const options_t* o, const device_t* dev, run_result_t* out) {
             memset(&gout, 0, sizeof(gout));
             char* templated_prompt = NULL;
             if (cur_prompt) {
-                if (o->accuracy) {
+                if (o->accuracy || o->chat_template) {
                     templated_prompt = build_llm_accuracy_prompt(llm, o, cur_prompt);
                     if (!templated_prompt) {
                         free(tokens);

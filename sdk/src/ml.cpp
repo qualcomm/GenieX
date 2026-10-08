@@ -133,11 +133,17 @@ int32_t geniex_deinit(void) {
 
 geniex_log_callback geniex_log = default_log_handler;
 
-// Every level is forwarded to the callback; the embedder filters.
+// Every level is forwarded by default; see geniex_set_log_level.
 geniex_LogLevel geniex_log_level = GENIEX_LOG_LEVEL_TRACE;
 
 int32_t geniex_set_log(geniex_log_callback callback) {
     geniex_log = callback;
+    return GENIEX_SUCCESS;
+}
+
+int32_t geniex_set_log_level(geniex_LogLevel level) {
+    if (level < GENIEX_LOG_LEVEL_TRACE || level > GENIEX_LOG_LEVEL_ERROR) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    geniex_log_level = level;
     return GENIEX_SUCCESS;
 }
 

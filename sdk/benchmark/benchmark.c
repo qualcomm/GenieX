@@ -243,6 +243,21 @@ int main(int argc, char** argv) {
      * process, so matrix mode cannot switch runtimes between cells. */
     if (o.qairt_lib) check(geniex_set_qairt_runtime_path(o.qairt_lib), "geniex_set_qairt_runtime_path");
 
+    /* Also sets the QNN log level (qairt); debug/trace slow decode. */
+    if (strcmp(o.log_level, "none") == 0) {
+        check(geniex_set_log(NULL), "geniex_set_log");
+    } else {
+        static const char* const names[] = {"trace", "debug", "info", "warn", "error"};
+        int                      lvl     = -1;
+        for (int k = 0; k < 5; ++k)
+            if (strcmp(o.log_level, names[k]) == 0) lvl = k;
+        if (lvl < 0) {
+            fprintf(stderr, "ERROR: invalid --log '%s' (none|error|warn|info|debug|trace)\n", o.log_level);
+            return 2;
+        }
+        check(geniex_set_log_level((geniex_LogLevel)lvl), "geniex_set_log_level");
+    }
+
     check(geniex_init(), "geniex_init");
 
     int rc;

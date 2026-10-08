@@ -55,6 +55,8 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved) {
 
     // Route SDK logs to logcat before geniex_init() so initialization logs surface too.
     geniex_set_log(android_sdk_log_to_logcat);
+    // Also sets the QNN backend's log level (qairt).
+    geniex_set_log_level(GENIEX_LOG_LEVEL_ERROR);
 
     geniex_init();
     return JNI_VERSION_1_6;

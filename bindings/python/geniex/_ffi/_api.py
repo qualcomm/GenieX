@@ -50,6 +50,16 @@ _LEVEL_WARN = 3
 _LEVEL_ERROR = 4
 _LEVEL_NONE = 5  # sentinel above ERROR silences SDK output entirely
 
+# The SDK has no 'none'; ERROR is its quietest level.
+_LEVEL_STR_TO_SDK = {
+    'trace': _LEVEL_TRACE,
+    'debug': _LEVEL_DEBUG,
+    'info': _LEVEL_INFO,
+    'warn': _LEVEL_WARN,
+    'error': _LEVEL_ERROR,
+    'none': _LEVEL_ERROR,
+}
+
 _LEVEL_STR_TO_PY = {
     'trace': logging.DEBUG,
     'debug': logging.DEBUG,
@@ -93,6 +103,13 @@ def set_log_level(level: str) -> None:
     if level_norm not in _LEVEL_STR_TO_PY:
         return
     _logger.setLevel(_LEVEL_STR_TO_PY[level_norm])
+    _set_sdk_log_level(level_norm)
+
+
+def _set_sdk_log_level(level: str) -> None:
+    """Forward ``level`` to the SDK (also sets the QNN log level)."""
+    sdk_level = _LEVEL_STR_TO_SDK.get(level, _LEVEL_ERROR)
+    load_library().geniex_set_log_level(c_int32(sdk_level))
 
 
 def install_log_callback() -> None:
@@ -111,6 +128,8 @@ def install_log_callback() -> None:
         requested = 'none'
     if requested in _LEVEL_STR_TO_PY:
         _logger.setLevel(_LEVEL_STR_TO_PY[requested])
+    # Default error: QNN DEBUG slows qairt decode.
+    _set_sdk_log_level(requested)
 
 
 class GenieXError(Exception):
@@ -148,6 +167,9 @@ def _bind_all() -> None:
 
     lib.geniex_set_log.argtypes = [geniex_log_callback]
     lib.geniex_set_log.restype = c_int32
+
+    lib.geniex_set_log_level.argtypes = [c_int32]
+    lib.geniex_set_log_level.restype = c_int32
 
     lib.geniex_init.argtypes = []
     lib.geniex_init.restype = c_int32

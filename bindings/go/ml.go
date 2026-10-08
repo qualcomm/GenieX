@@ -90,6 +90,14 @@ func SetLog(enable bool) {
 	}
 }
 
+// SetLogLevel sets the minimum geniex_LogLevel (0 trace .. 4 error). Call before Init.
+func SetLogLevel(level int) error {
+	if res := C.geniex_set_log_level(C.geniex_LogLevel(level)); res < 0 {
+		return fmt.Errorf("geniex_set_log_level(%d) failed: %d", level, int(res))
+	}
+	return nil
+}
+
 // SetQairtRuntimePath loads the QAIRT runtime from path instead of the one bundled
 // with the qairt plugin, for running against another QAIRT version without
 // rebuilding. path is either a QAIRT SDK root or a flat folder of QNN libraries;

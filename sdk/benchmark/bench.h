@@ -87,7 +87,9 @@ typedef struct {
     int32_t      warmup;
     int32_t      repeat;
     bool         reset_between_runs; /* true => geniex_llm_reset() before each run, freeing KV */
+    const char*  log_level;          /* --log: none|error|warn|info|debug|trace, default error */
     bool         accuracy;           /* true => single run (warmup=0, repeat=1), print generated text */
+    bool         chat_template;      /* --chat-template: template --prompt-file text, keep timing runs */
     /* --accuracy --prompt-file only: run each prompt through the bundle's own
      * chat template (geniex_llm_apply_chat_template) before generation, so the
      * benchmark exercises the same templating production inference uses

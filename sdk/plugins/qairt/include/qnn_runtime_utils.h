@@ -148,6 +148,23 @@ inline std::string collect_adsp_library_path(const std::filesystem::path& root) 
     return joined;
 }
 
+// QNN log level for the SDK log sink; ERROR when there is no callback.
+inline QnnLog_Level_t qnn_log_level_for(geniex_log_callback sink, geniex_LogLevel level) {
+    if (sink == nullptr) return QNN_LOG_LEVEL_ERROR;
+    switch (level) {
+        case GENIEX_LOG_LEVEL_ERROR:
+            return QNN_LOG_LEVEL_ERROR;
+        case GENIEX_LOG_LEVEL_WARN:
+            return QNN_LOG_LEVEL_WARN;
+        case GENIEX_LOG_LEVEL_INFO:
+            return QNN_LOG_LEVEL_INFO;
+        case GENIEX_LOG_LEVEL_TRACE:
+        case GENIEX_LOG_LEVEL_DEBUG:
+            break;
+    }
+    return QNN_LOG_LEVEL_DEBUG;
+}
+
 // Returns a QnnRuntimeConfig for the given model directory.
 //
 // geniex_set_qairt_runtime_path() is the override, with GENIEX_QAIRT_LIB (which the CLI's
@@ -160,7 +177,7 @@ inline QnnRuntimeConfig make_qnn_runtime_config(const std::filesystem::path& mod
 
     QnnRuntimeConfig runtime_cfg{};
 
-    runtime_cfg.log_level = (::geniex_log != nullptr) ? QNN_LOG_LEVEL_DEBUG : QNN_LOG_LEVEL_ERROR;
+    runtime_cfg.log_level = qnn_log_level_for(::geniex_log, ::geniex_log_level);
 
     const char* source       = "geniex_set_qairt_runtime_path";
     fs::path    qnn_lib_root = path_from_utf8(geniex_get_qairt_runtime_path());
