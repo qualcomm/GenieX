@@ -5,6 +5,7 @@ go_library(
     name = "geniex_lib",
     srcs = [
         "config.go",
+        "eval.go",
         "help.go",
         "infer.go",
         "main.go",
@@ -21,6 +22,7 @@ go_library(
         "//cli/cmd/geniex/common",
         "//cli/internal/config",
         "//cli/internal/downloader",
+        "//cli/internal/eval",
         "//cli/internal/record",
         "//cli/internal/render",
         "//cli/internal/store",
