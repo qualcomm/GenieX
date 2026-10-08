@@ -10,13 +10,15 @@
 //! that endpoint instead of the URL's host. That's the same plumbing
 //! reqwest uses for `HTTPS_PROXY`, so if this works, env-based proxy works.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use model_manager_core::transport::{HttpTransport, ReqwestTransport, TransportConfig};
 use tokio::io::AsyncWriteExt;
 use url::Url;
 use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 fn fast_cfg() -> TransportConfig {
     TransportConfig {
@@ -95,6 +97,35 @@ async fn get_range_short_read_errors() {
         msg.contains("short read"),
         "expected short read, got: {msg}"
     );
+}
+
+#[tokio::test]
+async fn short_read_is_not_retried_into_the_same_sink() {
+    let server = MockServer::start().await;
+    let attempts = Arc::new(AtomicUsize::new(0));
+    let attempts_for_response = attempts.clone();
+    Mock::given(method("GET"))
+        .and(path("/short-then-complete"))
+        .respond_with(move |_: &Request| {
+            if attempts_for_response.fetch_add(1, Ordering::SeqCst) == 0 {
+                ResponseTemplate::new(206).set_body_bytes(b"abc".to_vec())
+            } else {
+                ResponseTemplate::new(206).set_body_bytes(b"abcdefgh".to_vec())
+            }
+        })
+        .mount(&server)
+        .await;
+
+    let mut cfg = fast_cfg();
+    cfg.retries = Some(1);
+    let t = ReqwestTransport::with_config(cfg).unwrap();
+    let url = Url::parse(&format!("{}/short-then-complete", server.uri())).unwrap();
+    let mut sink = Vec::new();
+    let err = t.get_range(&url, None, 0, 8, &mut sink).await.unwrap_err();
+
+    assert!(err.to_string().contains("short read"), "{err}");
+    assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    assert_eq!(sink, b"abc");
 }
 
 #[tokio::test]
