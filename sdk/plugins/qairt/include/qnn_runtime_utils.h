@@ -65,7 +65,7 @@ inline std::filesystem::path path_from_utf8(const char* utf8) {
 }
 
 // NOTE: no `collect_bin_files()` helper here on purpose. Context-binary shards must
-// come from genie_config.json's `ctx-bins` via the core's `modelConfigFromDirectory()`,
+// come from metadata.json's `geniex.ctx_bins` via the core's `modelConfigFromDirectory()`,
 // never from a `*.bin` glob: bundles also ship CPU-side payloads as `.bin`.
 
 inline std::optional<std::string> find_optional_file(const std::filesystem::path& dir, const char* filename) {
