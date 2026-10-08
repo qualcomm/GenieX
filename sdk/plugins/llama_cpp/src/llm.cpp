@@ -58,12 +58,11 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
     }
 
     // FIX: gpt oss offload patch
+    std::string model_path_lower(input->model_path);
+    std::transform(model_path_lower.begin(), model_path_lower.end(), model_path_lower.begin(), ::tolower);
+    const bool is_gpt_oss_model =
+        (model_path_lower.find("gpt") != std::string::npos) && (model_path_lower.find("oss") != std::string::npos);
     {
-        std::string model_path_lower(input->model_path);
-        std::transform(model_path_lower.begin(), model_path_lower.end(), model_path_lower.begin(), ::tolower);
-        bool is_gpt_oss_model =
-            (model_path_lower.find("gpt") != std::string::npos) && (model_path_lower.find("oss") != std::string::npos);
-
         if (is_gpt_oss_model) {
             tensor_overrides[0]        = {"\\.ffn_(up|down|gate)_exps\\.(weight|bias)", ggml_backend_cpu_buffer_type()};
             tensor_overrides[1]        = {nullptr, nullptr};  // Null terminator
@@ -103,7 +102,12 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
     std::optional<common_params_speculative> spar = build_speculative_params(config);
 
     llama_context_params cpar = build_context_params(config, /*n_ctx_default=*/4096, device, spar ? &*spar : nullptr);
-    this->ctx                 = llama_init_from_model(this->model, cpar);
+    // GPU keeps flash attention off by default; GPT-OSS is the exception.
+    if (device == Device::GPU && is_gpt_oss_model) {
+        cpar.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_ENABLED;
+        GENIEX_LOG_INFO("GPT OSS model detected - flash attention enabled on GPU");
+    }
+    this->ctx = llama_init_from_model(this->model, cpar);
     if (!this->ctx) {
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
     }
