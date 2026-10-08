@@ -250,6 +250,7 @@ class geniex_VlmContent(Structure):
     _fields_ = [
         ('type', c_char_p),
         ('text', c_char_p),
+        ('media_id', c_char_p),
     ]
 
 

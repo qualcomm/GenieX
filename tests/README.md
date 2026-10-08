@@ -79,6 +79,28 @@ pytest tests -m "api or (llama_cpp and device_cpu)"
 GENIEX_DEVICE_TEST=1 pytest tests
 ```
 
+## Multimodal prefix regressions
+
+`pytest tests/test_vlm_prefix.py` compares reused-cache generation with a clean
+prefill for identical, appended, edited, trimmed, reordered, and replaced image
+histories. It also checks removed reasoning, missing-media recovery, stable IDs,
+template ordering, and exact prompt/descriptor pairing.
+
+To use local GGUF files, set `GENIEX_TEST_VLM_MODEL` and
+`GENIEX_TEST_VLM_MMPROJ`. For a recurrent model without partial rollback, also set
+`GENIEX_TEST_VLM_REBUILDS=1` to require full-prefill behavior. Set
+`GENIEX_TEST_VLM_THINKING=1` for local models with thinking templates; otherwise
+thinking checks require detected thinking support.
+
+Set `GENIEX_TEST_VLM_EXACT_OUTPUT=1` to compare greedy output byte-for-byte.
+Quantized kernels can produce different logits at different batch sizes. For
+causal models, `GENIEX_TEST_VLM_UBATCH=1` uses matched microbatches and enables
+exact-output checks. Do not use that setting for media requiring noncausal decode.
+
+The model-free matcher tests include audio identity and actual KV-position
+boundaries. Build them with `-DGENIEX_BUILD_TESTS=ON`, then run
+`ctest --test-dir sdk/build -R geniex_vlm_prefix_test --output-on-failure`.
+
 ## Models
 
 `tests/models.json` is the matrix. Each role maps to a list of entries and

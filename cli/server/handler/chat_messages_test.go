@@ -152,6 +152,21 @@ func TestBuildVLMMessagesDecodesBase64Audio(t *testing.T) {
 	if messages[0].Contents[0].Text != tempFiles[0] {
 		t.Errorf("content path = %q, want %q", messages[0].Contents[0].Text, tempFiles[0])
 	}
+	c2, param2 := bindRequest(t, body)
+	repeated, repeatedFiles, ok := buildVLMMessages(c2, param2)
+	for _, file := range repeatedFiles {
+		defer os.Remove(file)
+	}
+	if !ok || len(repeated) != 1 || len(repeated[0].Contents) != 1 {
+		t.Fatalf("repeat request failed: %+v", repeated)
+	}
+	first, second := messages[0].Contents[0], repeated[0].Contents[0]
+	if first.MediaID == "" || first.MediaID != second.MediaID {
+		t.Errorf("media identity changed across requests: %q, %q", first.MediaID, second.MediaID)
+	}
+	if first.Text == second.Text {
+		t.Error("expected independently materialized media paths")
+	}
 }
 
 // An assistant turn may carry prose alongside its tool calls; both must survive.

@@ -101,6 +101,15 @@ prompt = model.tokenizer.apply_chat_template(
 print(model.generate(prompt, images=["/path/to/image.jpg"]).text)
 ```
 
+For llama.cpp, pass the full message history on later turns. Unchanged media stays in the KV
+cache, so its path may be omitted from `generate(images=...)`. For temporary
+media paths, set `media_id` on the content part to the same stable value on each
+turn. Keep the current file available when an edit or reset requires prefill.
+Models that cannot truncate their cache rebuild from the full input. A failed
+rebuild clears the retained state and returns `GENIEX_ERROR_VLM_PREFIX_REUSE_FAILED`.
+The `media_id` field changes the native C struct layout; rebuild the SDK, plugins,
+and bindings together instead of mixing binaries from before and after this change.
+
 ### Model management
 
 The same model manager the CLI uses is available programmatically:

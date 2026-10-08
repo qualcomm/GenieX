@@ -24,7 +24,7 @@ from geniex.auto import (
     _resolve_model_sources,
 )
 from geniex.generation.output import ProfileData
-from geniex.modeling import _apply_meta, _messages_have_modality
+from geniex.modeling import GenieXVLM, _apply_meta, _build_vlm_messages, _messages_have_modality
 
 # ---------------------------------------------------------------------------
 # #725: model_name mismatch against bundle metadata.json
@@ -176,7 +176,7 @@ def test_apply_meta_none_leaves_profile_unchanged():
 
 
 # ---------------------------------------------------------------------------
-# #726 / #727: VLM messages → modality detection helper
+# VLM media identity reaches the C message structure
 # ---------------------------------------------------------------------------
 
 
@@ -252,67 +252,45 @@ def test_messages_have_modality_empty():
     assert _messages_have_modality([], 'image') is False
 
 
-# ---------------------------------------------------------------------------
-# #726 / #727: VLM.generate predicates can be unit-tested via a stub
-# ---------------------------------------------------------------------------
+def test_vlm_media_identity_passes_to_c():
+    messages = [
+        {
+            'role': 'user',
+            'content': [
+                {'type': 'image', 'image': '/tmp/image.png', 'media_id': 'stable-image'},
+                {'type': 'text', 'text': 'describe'},
+            ],
+        }
+    ]
+    c_messages, count, refs = _build_vlm_messages(messages)
+    assert count == 1
+    assert refs
+    assert c_messages[0].contents[0].text == b'/tmp/image.png'
+    assert c_messages[0].contents[0].media_id == b'stable-image'
+    assert c_messages[0].contents[1].media_id is None
 
 
-class _StubVLM:
-    """Minimal stand-in for GenieXVLM.generate that exercises only the
-    Python-side validation block before the C call."""
-
-    def __init__(self, has_image=False, has_audio=False):
-        self._last_template_has_image = has_image
-        self._last_template_has_audio = has_audio
-
-    @staticmethod
-    def _validate(images, audios, has_image, has_audio):
-        # Mirror the validation in GenieXVLM.generate so we can test it
-        # without spinning up the C runtime.
-        if not images and has_image:
-            raise ValueError(
-                'messages reference image content but generate(images=[...]) '
-                'is empty. Pass image paths via images=[...].'
-            )
-        if not audios and has_audio:
-            raise ValueError(
-                'messages reference audio content but generate(audios=[...]) '
-                'is empty. Pass audio paths via audios=[...].'
-            )
-        for path in images:
-            if not os.path.isfile(path):
-                raise FileNotFoundError(f'Image file not found: {path}')
-        for path in audios:
-            if not os.path.isfile(path):
-                raise FileNotFoundError(f'Audio file not found: {path}')
+@pytest.mark.parametrize('modality', ['image', 'audio'])
+def test_qairt_missing_current_media_still_raises(modality):
+    vlm = GenieXVLM(None, meta={'backend': 'qairt'})
+    setattr(vlm, f'_last_template_has_{modality}', True)
+    with pytest.raises(ValueError, match=f'messages reference {modality} content'):
+        vlm.generate('prompt')
 
 
-def test_missing_images_with_image_messages_raises():
-    with pytest.raises(ValueError, match=r'messages reference image content'):
-        _StubVLM._validate([], [], has_image=True, has_audio=False)
+def test_llama_cpp_defers_historical_media_validation_to_sdk(monkeypatch):
+    vlm = GenieXVLM(None, meta={'backend': 'llama_cpp'})
+    vlm._last_template_has_image = True
+    vlm._last_template_has_audio = True
+    monkeypatch.setattr(vlm, '_generate_blocking', lambda *args: 'sdk result')
+    assert vlm.generate('prompt') == 'sdk result'
 
 
-def test_missing_audios_with_audio_messages_raises():
-    with pytest.raises(ValueError, match=r'messages reference audio content'):
-        _StubVLM._validate([], [], has_image=False, has_audio=True)
-
-
-def test_nonexistent_image_path_raises(tmp_path):
-    missing = tmp_path / 'missing.png'
-    with pytest.raises(FileNotFoundError, match=r'Image file not found'):
-        _StubVLM._validate([str(missing)], [], has_image=False, has_audio=False)
-
-
-def test_nonexistent_audio_path_raises(tmp_path):
-    missing = tmp_path / 'missing.wav'
-    with pytest.raises(FileNotFoundError, match=r'Audio file not found'):
-        _StubVLM._validate([], [str(missing)], has_image=False, has_audio=False)
-
-
-def test_existing_image_path_passes(tmp_path):
-    img = tmp_path / 'img.png'
-    img.write_bytes(b'\x89PNG')
-    _StubVLM._validate([str(img)], [], has_image=True, has_audio=False)
+@pytest.mark.parametrize('parameter', ['images', 'audios'])
+def test_nonexistent_media_path_raises(tmp_path, parameter):
+    vlm = GenieXVLM(None, meta={'backend': 'llama_cpp'})
+    with pytest.raises(FileNotFoundError, match='file not found'):
+        vlm.generate('prompt', **{parameter: [str(tmp_path / 'missing')]})
 
 
 # ---------------------------------------------------------------------------

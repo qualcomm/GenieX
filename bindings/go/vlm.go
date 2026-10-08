@@ -66,8 +66,9 @@ const (
 )
 
 type VlmContent struct {
-	Type VlmContentType
-	Text string
+	Type    VlmContentType
+	Text    string
+	MediaID string
 }
 
 type vlmContents []VlmContent
@@ -81,8 +82,9 @@ func (vcs vlmContents) toCPtr() (*C.geniex_VlmContent, C.int64_t) {
 	cContents := unsafe.Slice((*C.geniex_VlmContent)(raw), count)
 	for i, vc := range vcs {
 		cContents[i] = C.geniex_VlmContent{
-			_type: cStringIfSet(string(vc.Type)),
-			text:  cStringIfSet(vc.Text),
+			_type:    cStringIfSet(string(vc.Type)),
+			text:     cStringIfSet(vc.Text),
+			media_id: cStringIfSet(vc.MediaID),
 		}
 	}
 	return (*C.geniex_VlmContent)(raw), C.int64_t(count)
@@ -96,6 +98,7 @@ func freeVlmContents(cPtr *C.geniex_VlmContent, count C.int64_t) {
 	for i := range cContents {
 		cFreeIfSet(unsafe.Pointer(cContents[i]._type))
 		cFreeIfSet(unsafe.Pointer(cContents[i].text))
+		cFreeIfSet(unsafe.Pointer(cContents[i].media_id))
 	}
 	C.free(unsafe.Pointer(cPtr))
 }

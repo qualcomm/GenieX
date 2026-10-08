@@ -443,7 +443,8 @@ def _build_vlm_messages(messages: list[dict]):
             for item in content:
                 ctype = item.get('type', 'text').encode()
                 text_val = (item.get('text') or item.get('image') or item.get('audio') or '').encode()
-                items.append(geniex_VlmContent(type=ctype, text=text_val))
+                media_id = item.get('media_id')
+                items.append(geniex_VlmContent(type=ctype, text=text_val, media_id=_enc(media_id)))
             contents = ContentArray(*items)
             _content_refs.append(contents)
             c_msgs_list.append(geniex_VlmChatMessage(role=role, contents=contents, content_count=n, **tools))
@@ -460,10 +461,6 @@ class GenieXVLM:
     def __init__(self, handle: c_void_p, meta: dict | None = None) -> None:
         self._handle = handle
         self._meta = meta
-        # Track whether the most recent apply_chat_template saw any
-        # multimodal content blocks — used by generate() to detect callers
-        # who built a messages payload with image/audio refs but forgot to
-        # pass images=[...] / audios=[...].
         self._last_template_has_image = False
         self._last_template_has_audio = False
         self.tokenizer = ModelTokenizer(self)
@@ -545,16 +542,11 @@ class GenieXVLM:
         stop = stop or []
         images = images or []
         audios = audios or []
-        if not images and self._last_template_has_image:
-            raise ValueError(
-                'messages reference image content but generate(images=[...]) '
-                'is empty. Pass image paths via images=[...].'
-            )
-        if not audios and self._last_template_has_audio:
-            raise ValueError(
-                'messages reference audio content but generate(audios=[...]) '
-                'is empty. Pass audio paths via audios=[...].'
-            )
+        if (self._meta or {}).get('backend') != 'llama_cpp':
+            if not images and self._last_template_has_image:
+                raise ValueError('messages reference image content; pass image paths via images=[...].')
+            if not audios and self._last_template_has_audio:
+                raise ValueError('messages reference audio content; pass audio paths via audios=[...].')
         for path in images:
             if not os.path.isfile(path):
                 raise FileNotFoundError(f'Image file not found: {path}')
