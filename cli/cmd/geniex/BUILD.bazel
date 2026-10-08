@@ -10,6 +10,7 @@ go_library(
         "main.go",
         "model.go",
         "run.go",
+        "run_history.go",
         "serve.go",
         "update.go",
         "version.go",
@@ -46,6 +47,8 @@ go_cgo_test(
     srcs = [
         "infer_test.go",
         "model_test.go",
+        "run_history_test.go",
+        "run_test.go",
     ],
     embed = [":geniex_lib"],
     gotags = [
@@ -54,6 +57,9 @@ go_cgo_test(
     ],
     deps = [
         "//cli/internal/testutil",
+        "@com_github_openai_openai_go_v3//:openai-go",
+        "@com_github_openai_openai_go_v3//option",
+        "@com_github_openai_openai_go_v3//packages/ssestream",
     ],
 )
 
