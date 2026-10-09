@@ -158,29 +158,39 @@ Generates a raw continuation of `prompt` with no chat template applied — the p
 
 The response `choices[0].text` is the raw completion, ready to insert at the cursor. `stream`, `stop`, `echo` and the sampler knobs (`temperature`, `top_p`, `top_k`, `min_p`, `repetition_penalty`, `seed`) work as on `/v1/chat/completions`; `suffix` is not supported — encode the suffix with the model's FIM tokens inside `prompt` instead.
 
-## **POST /v1/systemone**
+## **POST /v1/decisions**
 
-The TypeSafe Jev API request/response shape, backed by a Nimble model **already imported into the GenieX cache**. Unlike Jev, this runs locally on Nimble weights and does not provide Jev-calibrated probabilities. It returns `choice`, `noul` (probability of true), or `score` (expected rubric index) without generating an explanation. This is not an OpenAI chat endpoint.
+Evaluate ordered `predicate`, `choice`, and `score` questions using a `llama_cpp` LLM **already imported into the GenieX cache**. This endpoint follows the OpenAI Decisions request and response shape, scoring candidate tokens directly from native logits without generating explanations. Probabilities are normalized over the supplied answers and are not calibrated; image input is unsupported.
 
 ```sh
-curl http://127.0.0.1:18181/v1/systemone -H 'Content-Type: application/json' -d '{
-  "model": "local/nimble:Q4_K_M",
+curl http://127.0.0.1:18181/v1/decisions -H 'Content-Type: application/json' -d '{
+  "model": "local/decision-model:Q4_K_M",
   "compute": "cpu",
   "nctx": 8192,
-  "state": "Our checkout has returned 500 errors since 9am.",
-  "questions": {
-    "label": {
+  "input": "Our checkout has returned 500 errors since 9am.",
+  "questions": [
+    {
+      "name": "label",
       "type": "choice",
       "instructions": "Which label fits this ticket?",
-      "criteria": {"billing": "Payments and refunds", "bug": "Software errors", "account": "Login and account access"}
+      "choices": [
+        {"value": "billing", "description": "Payments and refunds"},
+        {"value": "bug", "description": "Software errors"},
+        {"value": "account", "description": "Login and account access"}
+      ]
     },
-    "urgent": {"type": "noul", "instructions": "Is a critical business operation currently blocked?"},
-    "severity": {"type": "score", "instructions": "How severe is the issue?", "criteria": ["Low", "Moderate", "Critical"]}
-  }
+    {"name": "urgent", "type": "predicate", "instructions": "Is a critical business operation currently blocked?"},
+    {
+      "name": "severity",
+      "type": "score",
+      "instructions": "How severe is the issue?",
+      "levels": [{"label": "low"}, {"label": "moderate"}, {"label": "critical"}]
+    }
+  ]
 }'
 ```
 
-Use the model's **GenieX cache name** (shown by `geniex list`), not a GGUF path or TypeSafe's `jev-latest` model ID. This local backend supports 2–26 choices (TypeSafe supports up to 255), 2–10 score levels, and up to 64 questions. Each answer letter must be one model token; unsupported models or templates return an error. The response includes `answers` and `usage` (`output_tokens` is 0 for direct-logit scoring). Probabilities are normalized over the allowed options; tune any decision thresholds using this local model, not Jev's values.
+`input` can be a nonempty text string or user messages containing text / `input_text` parts; `input_image` is rejected because local scoring is text-only. Each question may have an optional unique `name` (omitted names return `null`); choose 2–26 choice values and 2–10 score levels, with at most 64 questions. The response has an ordered `answers` array: predicates return the probability of true, choices return the selected value and each value's probability, and scores return the expected zero-based level index with level probabilities. `usage.input_tokens` counts the scoring inputs and `output_tokens` is 0. Replace the example `model` with a cached GenieX model name from `geniex list`, not a GGUF path.
 
 ## **Python client (OpenAI SDK)**
 

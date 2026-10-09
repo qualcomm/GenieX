@@ -41,7 +41,7 @@ func RegisterAPIv1(r *gin.Engine) {
 
 	// ==== raw logits (prefill-only forward pass; not OpenAI generative logprobs) ====
 	g.POST("/logits", handler.ForwardLogits)
-	g.POST("/systemone", handler.SystemOne)
+	g.POST("/decisions", handler.Decisions)
 
 	// ==== model management ====
 	g.GET("/models/*model", handler.RetrieveModel)

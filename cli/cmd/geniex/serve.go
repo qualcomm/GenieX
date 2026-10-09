@@ -57,7 +57,7 @@ func serve() *cobra.Command {
 	// Bound explicitly so the plugin's own spelling is the only one that works;
 	// AutomaticEnv would otherwise make GENIEX_QAIRTLIB a silent second alias.
 	viper.BindEnv("qairtlib", "GENIEX_QAIRT_LIB")
-	viper.BindPFlag("enablehttps", serveCmd.Flags().Lookup("https"))
+	viper.BindPFlag("https", serveCmd.Flags().Lookup("https"))
 	viper.BindPFlag("certfile", serveCmd.Flags().Lookup("certfile"))
 	viper.BindPFlag("keyfile", serveCmd.Flags().Lookup("keyfile"))
 

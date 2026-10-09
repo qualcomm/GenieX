@@ -73,37 +73,34 @@ paths:
               schema:
                 $ref: "#/components/schemas/ForwardLogitsResponse"
 
-  /v1/systemone:
+  /v1/decisions:
     post:
-      summary: Score typed decisions with Nimble
+      summary: Evaluate questions with the OpenAI Decisions API
       description: |
-        TypeSafe Jev API request/response shape, backed locally by a Nimble
-        llama_cpp LLM in the GenieX model cache. Scores one letter token per
-        answer without generating text. The Nimble system prompt is supplied
-        by the server. Model probabilities are normalized over allowed choices;
-        they are not Jev's calibrated probabilities. This local backend limits
-        choice options to 26, score levels to 10, and questions to 64 (Jev
-        supports up to 255 choice options).
-      operationId: PostV1SystemOne
+        Scores questions against shared text input using a cached local
+        llama_cpp LLM and native logits. This server accepts text only; image
+        input is unsupported. Candidate probabilities are normalized over the
+        supplied choices or levels and are not calibrated.
+      operationId: PostV1Decisions
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SystemOneRequest"
+              $ref: "#/components/schemas/DecisionRequest"
       responses:
         "200":
-          description: Typed decisions and probabilities
+          description: Answers in question order with token usage
           content:
             application/json:
               schema:
-                type: object
+                $ref: "#/components/schemas/DecisionResponse"
         "400":
-          description: Unsupported model or non-single-token candidate
+          description: Unsupported model or model scoring error
         "413":
           description: Request exceeds 1 MiB
         "422":
-          description: Invalid request or question schema
+          description: Invalid request or unsupported input modality
 
   /v1/models:
     get:
@@ -146,58 +143,303 @@ paths:
 
 components:
   schemas:
-    # ---------- System One ----------
-    SystemOneRequest:
+    # ---------- Decisions ----------
+    DecisionRequest:
       type: object
-      required: [model, state, questions]
+      required: [model, input, questions]
       example:
-        model: "local/nimble:Q4_K_M"
-        state: "Our checkout has returned 500 errors since 9am."
+        model: "local/decision-model:Q4_K_M"
+        input: "Our checkout has returned 500 errors since 9am."
         questions:
-          label:
+          - name: "label"
             type: choice
             instructions: "Which label fits this ticket?"
-            criteria:
-              billing: "Payments and refunds"
-              bug: "Software errors"
-              account: "Login and account access"
+            choices:
+              - value: "billing"
+                description: "Payments and refunds"
+              - value: "bug"
+                description: "Software errors"
+              - value: "account"
+                description: "Login and account access"
+          - name: "urgent"
+            type: predicate
+            instructions: "Is a critical business operation currently blocked?"
+          - name: "severity"
+            type: score
+            instructions: "How severe is the issue?"
+            levels:
+              - label: "low"
+              - label: "moderate"
+              - label: "critical"
       properties:
         model:
           type: string
-          description: Nimble model name in the GenieX cache (not a Jev model ID or file path).
-        state:
-          description: Nonempty string, object, or array to classify.
+          description: Replace the example name with a cached GenieX llama_cpp LLM from geniex list.
+        input:
+          description: Nonempty text or user messages containing text only. Images are unsupported.
           oneOf:
             - type: string
-            - type: object
+              minLength: 1
             - type: array
+              minItems: 1
+              items:
+                $ref: "#/components/schemas/DecisionInputMessage"
         questions:
-          type: object
-          description: >
-            1–64 named questions. Choice options preserve order (2–26), score
-            levels preserve order (2–10), and noul has false/true candidates.
-          additionalProperties:
-            type: object
-            required: [type, instructions]
-            properties:
-              type:
-                type: string
-                enum: [choice, noul, score]
-              instructions:
-                description: Nonempty string, object, or array defining the question.
-              criteria:
-                description: >
-                  choice: 2–26 option/description entries; noul: optional
-                  false/true descriptions; score: 2–10 ordered level descriptions.
+          type: array
+          minItems: 1
+          maxItems: 64
+          description: Ordered questions with unique optional names.
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/DecisionPredicateQuestion"
+              - $ref: "#/components/schemas/DecisionChoiceQuestion"
+              - $ref: "#/components/schemas/DecisionScoreQuestion"
         nctx:
           type: integer
           description: Context size; defaults to the server setting.
         ngl:
           type: integer
+          description: Number of GPU layers; defaults to the server setting.
         compute:
           type: string
+          description: Compute-unit alias; defaults to the server setting.
         power_mode:
           type: string
+          description: Power mode; defaults to the server setting.
+
+    DecisionInputMessage:
+      type: object
+      required: [content]
+      properties:
+        type:
+          type: string
+          enum: [message]
+          default: message
+        role:
+          type: string
+          enum: [user]
+          default: user
+        content:
+          description: Text or an ordered array of input_text parts. Images are unsupported.
+          oneOf:
+            - type: string
+            - type: array
+              minItems: 1
+              items:
+                $ref: "#/components/schemas/DecisionInputTextPart"
+
+    DecisionInputTextPart:
+      type: object
+      required: [type, text]
+      properties:
+        type:
+          type: string
+          enum: [input_text]
+        text:
+          type: string
+
+    DecisionPredicateQuestion:
+      type: object
+      required: [type, instructions]
+      properties:
+        type:
+          type: string
+          enum: [predicate]
+        name:
+          type: string
+          description: Optional unique question name; response name is null if omitted.
+        instructions:
+          type: string
+          minLength: 1
+
+    DecisionChoiceQuestion:
+      type: object
+      required: [type, instructions, choices]
+      properties:
+        type:
+          type: string
+          enum: [choice]
+        name:
+          type: string
+          description: Optional unique question name; response name is null if omitted.
+        instructions:
+          type: string
+          minLength: 1
+        choices:
+          type: array
+          minItems: 2
+          maxItems: 26
+          items:
+            $ref: "#/components/schemas/DecisionChoice"
+
+    DecisionChoice:
+      type: object
+      required: [value]
+      properties:
+        value:
+          oneOf:
+            - type: string
+            - type: boolean
+        description:
+          type: string
+
+    DecisionScoreQuestion:
+      type: object
+      required: [type, instructions, levels]
+      properties:
+        type:
+          type: string
+          enum: [score]
+        name:
+          type: string
+          description: Optional unique question name; response name is null if omitted.
+        instructions:
+          type: string
+          minLength: 1
+        levels:
+          type: array
+          minItems: 2
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/DecisionScoreLevel"
+
+    DecisionScoreLevel:
+      type: object
+      required: [label]
+      properties:
+        label:
+          type: string
+          minLength: 1
+        description:
+          type: string
+
+    DecisionResponse:
+      type: object
+      required: [answers, model, usage]
+      properties:
+        answers:
+          type: array
+          description: One answer for each question, in question order.
+          items:
+            oneOf:
+              - $ref: "#/components/schemas/DecisionPredicateAnswer"
+              - $ref: "#/components/schemas/DecisionChoiceAnswer"
+              - $ref: "#/components/schemas/DecisionScoreAnswer"
+        model:
+          type: string
+        usage:
+          $ref: "#/components/schemas/DecisionUsage"
+
+    DecisionPredicateAnswer:
+      type: object
+      required: [type, name, probability]
+      properties:
+        type:
+          type: string
+          enum: [predicate]
+        name:
+          type: string
+          nullable: true
+        probability:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    DecisionChoiceAnswer:
+      type: object
+      required: [type, name, choice, probabilities, confidence]
+      properties:
+        type:
+          type: string
+          enum: [choice]
+        name:
+          type: string
+          nullable: true
+        choice:
+          oneOf:
+            - type: string
+            - type: boolean
+        probabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/DecisionChoiceProbability"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    DecisionChoiceProbability:
+      type: object
+      required: [value, probability]
+      properties:
+        value:
+          oneOf:
+            - type: string
+            - type: boolean
+        probability:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    DecisionScoreAnswer:
+      type: object
+      required: [type, name, score, probabilities, confidence]
+      properties:
+        type:
+          type: string
+          enum: [score]
+        name:
+          type: string
+          nullable: true
+        score:
+          type: number
+        probabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/DecisionScoreProbability"
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    DecisionScoreProbability:
+      type: object
+      required: [value, label, probability]
+      properties:
+        value:
+          type: integer
+          minimum: 0
+        label:
+          type: string
+        probability:
+          type: number
+          minimum: 0
+          maximum: 1
+
+    DecisionUsage:
+      type: object
+      required: [input_tokens, input_tokens_details, output_tokens, output_tokens_details, total_tokens]
+      properties:
+        input_tokens:
+          type: integer
+        input_tokens_details:
+          type: object
+          required: [cache_write_tokens, cached_tokens]
+          properties:
+            cache_write_tokens:
+              type: integer
+            cached_tokens:
+              type: integer
+        output_tokens:
+          type: integer
+        output_tokens_details:
+          type: object
+          required: [reasoning_tokens]
+          properties:
+            reasoning_tokens:
+              type: integer
+        total_tokens:
+          type: integer
 
     # ---------- Logits ----------
     ForwardLogitsRequest:

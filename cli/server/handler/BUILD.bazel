@@ -12,7 +12,7 @@ go_library(
         "completion.go",
         "logits.go",
         "model.go",
-        "systemone.go",
+        "decisions.go",
     ],
     importpath = "github.com/qualcomm/GenieX/cli/server/handler",
     visibility = ["//visibility:public"],
@@ -39,7 +39,7 @@ go_cgo_test(
         "chat_stream_test.go",
         "chat_test.go",
         "completion_test.go",
-        "systemone_test.go",
+        "decisions_test.go",
     ],
     embed = [":handler"],
 )
