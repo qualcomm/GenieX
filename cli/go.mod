@@ -12,7 +12,7 @@ require (
 	github.com/jedib0t/go-pretty/v6 v6.7.2
 	github.com/lmittmann/tint v1.1.2
 	github.com/mattn/go-runewidth v0.0.16
-	github.com/openai/openai-go/v3 v3.17.0
+	github.com/openai/openai-go/v3 v3.73.0
 	github.com/qualcomm/GenieX/bindings/go v0.0.0
 	github.com/schollz/progressbar/v3 v3.19.2-0.20260717173216-87dbc50586f3
 	github.com/spf13/cobra v1.10.1
@@ -20,10 +20,10 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/valyala/fasthttp v1.68.0
 	golang.org/x/image v0.38.0
-	golang.org/x/mod v0.33.0
-	golang.org/x/sync v0.20.0
-	golang.org/x/sys v0.46.0
-	golang.org/x/term v0.44.0
+	golang.org/x/mod v0.38.0
+	golang.org/x/sync v0.22.0
+	golang.org/x/sys v0.47.0
+	golang.org/x/term v0.45.0
 )
 
 replace github.com/qualcomm/GenieX/bindings/go => ../bindings/go
@@ -44,6 +44,7 @@ require (
 	github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect
 	github.com/charmbracelet/x/term v0.2.1 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
+	github.com/coder/websocket v1.8.15 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
@@ -78,7 +79,7 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
-	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
@@ -88,8 +89,8 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.20.0 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 )
