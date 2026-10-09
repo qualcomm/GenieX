@@ -143,6 +143,36 @@ geniex model list
 geniex model list --all
 ```
 
+### **`geniex jev`**
+
+Run a local structured decision or an experimental browser task. `classify`, `choose`, and `triage` print one locally validated JSON candidate and never execute side effects.
+
+```bash
+geniex jev <model> classify \
+  --label capital_of_france \
+  --label capital_of_germany \
+  --label unknown \
+  --instruction "Choose the label that correctly answers the question." \
+  --context "What is the capital of France?"
+```
+
+Use browser dry-run mode to inspect proposed actions without executing them:
+
+```bash
+geniex jev <vlm> browser \
+  --task "Find the documentation" \
+  --url https://github.com/qualcomm/GenieX \
+  --dry-run
+```
+
+| Flag group | Flags |
+|---|---|
+| Structured decision | `--label`, `--option`, `--instruction`, `--context` / `--context-file`, `--message`, `--confidence`, `--min-selections`, `--max-selections`, `--benchmark` |
+| Browser | `--task`, `--url`, `--browser`, `--browser-path`, `--attach`, `--profile`, `--trace-dir`, `--headless`, `--dry-run`, `--max-steps`, `--auto` |
+| Model tuning | `--compute`, `--ngl`, `--nctx`, `--max-tokens`, `--image-max-length`, `--threads`, `--threads-batch`, `--batch`, `--ubatch` |
+
+<Warning>The experimental browser mode uses an explicit approval gate for consequential actions. Review its [structured-decision and browser-agent safety model](../../../../notes/jev.md) before using it with authenticated or sensitive pages.</Warning>
+
 ## **`geniex serve`**
 
 Start the OpenAI-compatible local server. See [Local server](/en/run/cli/local-server) for the API.
