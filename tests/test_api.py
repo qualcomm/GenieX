@@ -48,6 +48,12 @@ def test_compute_unit_list_shape_for_each_runtime(geniex_session):
             assert isinstance(label, str)
 
 
+@pytest.mark.snapdragon
+def test_llama_cpp_reports_htp0_compute_unit(geniex_session):
+    compute_units = geniex.get_compute_unit_list('llama_cpp')
+    assert 'HTP0' in [compute_unit for compute_unit, _ in compute_units], compute_units
+
+
 def test_init_deinit_is_idempotent_within_session(geniex_session):
     geniex.init()
     geniex.init()

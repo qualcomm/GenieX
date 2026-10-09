@@ -43,6 +43,14 @@ $env:HF_HUB_DOWNLOAD_CONCURRENCY = "1"
 & "$PY_DIR\python.exe" -c "import geniex; geniex.init(); geniex.deinit()" 2>&1
 
 Set-Location "$ROOT\tests"
+& "$PY_DIR\python.exe" -m pytest test_api.py::test_llama_cpp_reports_htp0_compute_unit -v `
+    --tb=short `
+    --junitxml="$LOG\htp-smoke-results.xml" 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Stop-Transcript | Out-Null
+    exit $LASTEXITCODE
+}
+
 & "$PY_DIR\python.exe" -m pytest . -v `
     --tb=short `
     --junitxml="$LOG\device-results.xml" `

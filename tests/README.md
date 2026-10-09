@@ -32,6 +32,12 @@ model-manager-pull check that runs first:
 | `test_vlm_quality_keywords`      | Golden-retriever caption must match one of the canonical keywords. |
 | `test_mtp_multi_turn`            | (llama_cpp only) same "Alice" convo with `spec_type='draft-mtp'`.  |
 
+Before the Windows QDC runner downloads any model, it runs the model-free
+`test_llama_cpp_reports_htp0_compute_unit` probe. The check requires a
+Snapdragon host and verifies that the `llama_cpp` plugin reports `HTP0`; a
+failure identifies missing HTP registration or runtime setup before the
+heavier model matrix begins.
+
 Behavioural cases are parametrised over `(model, device_map)` pairs from
 `models.json`, so which backends run is a property of the model entry.
 Template / contract cases (ChatML sentinels, `enable_thinking`, tools
