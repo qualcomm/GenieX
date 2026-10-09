@@ -38,6 +38,7 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
     const Device              device = classify_device(input->device_id, input->config.n_gpu_layers);
     const geniex_ModelConfig& config = input->config;
     llama_model_params        mpar   = build_model_params(config, device);
+    npu_warmup_enabled               = (device == Device::NPU);
 
     // MoE override + null terminator; must outlive the load_from_file call below.
     llama_model_tensor_buft_override tensor_overrides[2];
@@ -314,7 +315,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
     int32_t          res = GENIEX_SUCCESS;
     common::Profiler profiler;
-    profiler.prompt_start();
+
 
     // Discard tokens past the first n_keep to fit n_fit more; returns the count discarded, 0 once down to n_keep.
     auto slide_window = [&](int n_fit) -> int {
@@ -346,16 +347,27 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     // Decode one batch (caller chunks long inputs) and advance n_past. overflow_err
     // is returned when the context is exhausted even after shifting, letting the
     // caller distinguish a too-long prompt (prefill) from a full window (decode).
-    auto process = [&](const llama_token* tokens, int n_tokens, int32_t overflow_err) -> int32_t {
+    auto process = [&](const llama_token* tokens, int n_tokens, int32_t overflow_err, bool measure_prompt) -> int32_t {
+        auto decode_batch = [&](llama_batch& batch) -> int {
+            if (measure_prompt) {
+                profiler.prompt_start();
+            }
+            const int rc = llama_decode(this->ctx, batch);
+            if (measure_prompt) {
+                profiler.prompt_end();
+            }
+            return rc;
+        };
+
         int rc;
         if (spec_prefill) {
             llama_batch batch = llama_batch_init(n_tokens, /*embd=*/0, /*n_seq_max=*/1);
             for (int i = 0; i < n_tokens; ++i) {
                 common_batch_add(batch, tokens[i], this->n_past + i, {0}, /*logits=*/i == n_tokens - 1);
             }
-            rc = llama_decode(this->ctx, batch);
+            rc = decode_batch(batch);
             while (rc == 1 && can_shift && slide_window(n_tokens) > 0) {
-                rc = llama_decode(this->ctx, batch);
+                rc = decode_batch(batch);
             }
             if (rc == 0 && !common_speculative_process(this->spec, batch)) {
                 rc = -1;
@@ -363,9 +375,9 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
             llama_batch_free(batch);
         } else {
             llama_batch batch = llama_batch_get_one(const_cast<llama_token*>(tokens), n_tokens);
-            rc                = llama_decode(this->ctx, batch);
+            rc                = decode_batch(batch);
             while (rc == 1 && can_shift && slide_window(n_tokens) > 0) {
-                rc = llama_decode(this->ctx, batch);
+                rc = decode_batch(batch);
             }
         }
         switch (rc) {
@@ -380,6 +392,24 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         return GENIEX_SUCCESS;
     };
 
+    if (npu_warmup_enabled && !npu_warmup_done && !embd_inp.empty()) {
+        GENIEX_LOG_INFO("[llama.cpp] warming up HTP before measured generation");
+        const int warmup_tokens = std::min(128, static_cast<int>(embd_inp.size()));
+        const int32_t warmup_res =
+            process(embd_inp.data(), warmup_tokens, GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG, false);
+        if (warmup_res != GENIEX_SUCCESS) {
+            this->reset();
+            return warmup_res;
+        }
+        // llama_decode() may left HTP work queued. Synchronize before
+        // clearing the KV cache or resetting performance counters.
+        llama_synchronize(this->ctx);
+        this->reset();
+        llama_perf_context_reset(this->ctx);
+        npu_warmup_done = true;
+        GENIEX_LOG_INFO("[llama.cpp] HTP warm-up complete; starting measured generation");
+    }
+
     // Process input (prefilling)
 
     for (llama_token id : prompt_ids) {
@@ -392,10 +422,10 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
     // process() reports the one matching the phase.
     for (int i = 0; i < (int)embd_inp.size() && res == GENIEX_SUCCESS; i += n_batch) {
         int n_eval = std::min(n_batch, (int)embd_inp.size() - i);
-        res        = process(embd_inp.data() + i, n_eval, GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG);
+        res        = process(embd_inp.data() + i, n_eval, GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG, true);
     }
 
-    profiler.prompt_end();
+
     profiler.update_prompt_tokens(prompt_len - this->n_past_global);
     profiler.decode_start();
 
@@ -458,7 +488,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
                 break;
             }
 
-            res = process(&id, 1, GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH);
+            res = process(&id, 1, GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH, false);
         }
     }
 

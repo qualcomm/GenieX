@@ -32,6 +32,9 @@ class LlamaLlm : public ILlm {
     common_speculative* spec        = nullptr;
     int32_t             spec_n_max  = 0;
 
+    bool npu_warmup_enabled = false;
+    bool npu_warmup_done    = false;
+
     int                      n_past_global = 0;
     int                      n_past        = 0;   // for context shifting
     std::vector<llama_token> past_prompt_tokens;  // for prefix match
