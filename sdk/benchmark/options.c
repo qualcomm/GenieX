@@ -118,6 +118,24 @@ static void usage(const char* argv0) {
         "                         ahead of the prompt in the chat template\n"
         "  --think / --no-think  with --accuracy --prompt-file: enable_thinking for\n"
         "                         the chat template (default: think)\n"
+        "  --max-gen-time-s N     with --accuracy: self-abort a generate() call once it\n"
+        "                         runs longer than N wall-clock seconds (0 = disabled,\n"
+        "                         default). Prints `[warn] self-abort: reason=wall-time\n"
+        "                         ...` and keeps the partial output instead of being\n"
+        "                         killed from outside.\n"
+        "  --no-progress-timeout-s N\n"
+        "                         with --accuracy: self-abort if no new token arrives\n"
+        "                         within N seconds of the previous one, or of\n"
+        "                         generation start (0 = disabled, default)\n"
+        "  --repetition-max-repeats N\n"
+        "                         with --accuracy: self-abort once the same decoded\n"
+        "                         token string repeats N times consecutively (0 =\n"
+        "                         disabled, default). Single-token loops only; see\n"
+        "                         --ngram-max-repeats for phrase-level loops.\n"
+        "  --ngram-max-repeats N  with --accuracy: self-abort once a block of up to 256\n"
+        "                         tokens repeats N times back to back (0 = disabled,\n"
+        "                         default). Blocks shorter than 64 tokens in total\n"
+        "                         (period x N) are ignored.\n"
         "  --logits               prefill-only raw-logits mode: run one forward pass\n"
         "                         (geniex_llm_forward_logits, no decode loop) over N\n"
         "                         random token ids (-p N, like the timing default) and\n"
@@ -290,6 +308,10 @@ void parse_args(int argc, char** argv, options_t* o) {
     o->chat_template           = false;
     o->system_prompt           = NULL;
     o->enable_thinking         = true;
+    o->max_gen_time_s          = 0;
+    o->no_progress_timeout_s   = 0;
+    o->repetition_max_repeats  = 0;
+    o->ngram_max_repeats       = 0;
     o->logits_mode             = false;
     o->logits_last_only        = false;
     o->logits_top_n            = 20;
@@ -378,6 +400,14 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->enable_thinking = true;
         } else if (strcmp(a, "--no-think") == 0) {
             o->enable_thinking = false;
+        } else if (strcmp(a, "--max-gen-time-s") == 0) {
+            o->max_gen_time_s = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--no-progress-timeout-s") == 0) {
+            o->no_progress_timeout_s = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--repetition-max-repeats") == 0) {
+            o->repetition_max_repeats = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--ngram-max-repeats") == 0) {
+            o->ngram_max_repeats = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--logits") == 0) {
             o->logits_mode = true;
         } else if (strcmp(a, "--logits-last-only") == 0) {
@@ -481,4 +511,8 @@ void parse_args(int argc, char** argv, options_t* o) {
     /* Run-count sanity, checked for both modes. */
     require_min(o->repeat, 1, "--repetitions");
     require_min(o->n_prompt, 1, "--n-prompt");
+    require_min(o->max_gen_time_s, 0, "--max-gen-time-s");
+    require_min(o->no_progress_timeout_s, 0, "--no-progress-timeout-s");
+    require_min(o->repetition_max_repeats, 0, "--repetition-max-repeats");
+    require_min(o->ngram_max_repeats, 0, "--ngram-max-repeats");
 }

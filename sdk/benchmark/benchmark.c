@@ -33,6 +33,21 @@
 
 #include "bench.h"
 
+/* Set by the SIGTERM/SIGABRT handler below; checked by run.c's on_token guard.
+ * See bench.h for why this makes an external signal resolve into the same
+ * clean self-abort path as the in-process wall-time/no-progress/repetition
+ * detectors. */
+volatile sig_atomic_t g_abort_requested = 0;
+
+/* Async-signal-safe: touches only the flag above, no I/O or allocation. Only
+ * helps while the decode loop is actively calling on_token -- a true hang
+ * before the first callback (stuck in plugin init/prefill) has no cooperative
+ * point and still needs an external hard kill. */
+static void handle_abort_signal(int sig) {
+    (void)sig;
+    g_abort_requested = 1;
+}
+
 /* Run one (plugin, device, model) cell using the already-`geniex_init`'d
  * runtime. Returns 0 on success, non-zero on failure. The caller owns
  * `geniex_init` / `geniex_deinit` so multiple cells in matrix mode share
@@ -238,6 +253,12 @@ static int run_matrix(options_t* base) {
 int main(int argc, char** argv) {
     options_t o;
     parse_args(argc, argv, &o);
+
+    /* Install before geniex_init(): a signal arriving during plugin init,
+     * though not actionable until the first on_token call, should still be
+     * recorded. */
+    signal(SIGTERM, handle_abort_signal);
+    signal(SIGABRT, handle_abort_signal);
 
     /* Before init, and run-wide rather than per cell: the QNN libraries load once per
      * process, so matrix mode cannot switch runtimes between cells. */

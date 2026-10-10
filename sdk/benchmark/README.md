@@ -168,6 +168,24 @@ Run `geniex-bench --help` for the full flag list.
   `runs` array. Every other mode feeds the file verbatim as one prompt,
   because the segments differ in length and a tok/s median across them would
   mix populations.
+- with `--accuracy`, each measured run also prints `[info] stop_reason=<reason>`
+  (the SDK's own stop reason: `eos` / `length` / `user` / `stop_sequence` /
+  `context_length`). `--max-gen-time-s N`, `--no-progress-timeout-s N`,
+  `--repetition-max-repeats N`, and `--ngram-max-repeats N` (all default 0 =
+  disabled) make the run loop self-abort a diverging/stuck generation from
+  inside the decode loop instead of relying on an external hard kill: a
+  wall-clock cap per `generate()` call, a no-new-token-for-N-seconds gap
+  (covers a stuck prefill→first-token gap too), a consecutive-repeat counter
+  on the decoded token string, and a phrase-level loop detector (a block of up
+  to 256 tokens repeating N times back to back; loops spanning fewer than 64
+  tokens in total are ignored), respectively. A tripped guard prints
+  `[warn] self-abort: reason=<wall-time|no-progress|repetition|ngram|signal>
+  after=<N>tok elapsed=<M>ms`, exits 0, and
+  keeps whatever partial text was generated — the same clean path the SDK
+  uses for a plain max-tokens stop. `reason=signal` means an external
+  `SIGTERM`/`SIGABRT` arrived while a token callback was in flight (see
+  below); it has no effect on a hang before the first callback (e.g. stuck
+  plugin init/prefill), which still needs a hard kill from outside.
 - with `--accuracy`, each prompt-file segment is run through the bundle's own
   chat template (`geniex_llm_apply_chat_template`) before generation — the
   same templating `geniex infer` uses — so pass the raw user turn, not
@@ -227,9 +245,23 @@ that binary, not necessarily anything relevant to that cell.
 per output line, then the usual `[ok  ]` summary line:
 
 ```
+[info] stop_reason=eos
 [gen ] The capital of France is Paris.
 [gen ] Answer: Paris
 [ok  ] cell  plugin=llama_cpp device=cpu ngl=0 ttft=475.6ms prefill=25.3tps decode=18.2tps gen=24 tok
+```
+
+When one of `--max-gen-time-s` / `--no-progress-timeout-s` /
+`--repetition-max-repeats` / `--ngram-max-repeats` trips (or an external
+`SIGTERM`/`SIGABRT` lands
+mid-generation), a `[warn] self-abort: ...` line appears between `[info]` and
+the (partial) `[gen ]` lines, and the process still exits 0:
+
+```
+[info] stop_reason=user
+[warn] self-abort: reason=repetition after=342tok elapsed=4110ms
+[gen ] The the the the the the the the the the ...
+[ok  ] cell  plugin=llama_cpp device=cpu ngl=0 ttft=475.6ms prefill=25.3tps decode=74.1tps gen=342 tok
 ```
 
 ## Logits mode JSON shape

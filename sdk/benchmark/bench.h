@@ -20,6 +20,7 @@
 #include <geniex.h>
 #include <geniex_model.h>
 #include <power_mode_alias.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -96,6 +97,16 @@ typedef struct {
      * instead of feeding the file verbatim. */
     const char* system_prompt;   /* --system-prompt; NULL = no system message */
     bool        enable_thinking; /* --think / --no-think; default true, matches `geniex infer` */
+
+    /* --accuracy self-abort guard (run.c's token_guard_t): detect divergence
+     * / a stuck generate() call from inside the decode loop instead of
+     * relying on an external hard kill. All default 0 = disabled. */
+    int32_t max_gen_time_s;         /* --max-gen-time-s: wall-clock cap per generate() call */
+    int32_t no_progress_timeout_s;  /* --no-progress-timeout-s: abort if no new token for N seconds */
+    int32_t repetition_max_repeats; /* --repetition-max-repeats: abort after N consecutive repeats of the same token
+                                       string */
+    int32_t ngram_max_repeats;      /* --ngram-max-repeats: abort after a block of up to 256 tokens repeats N times
+                                       back to back (phrase-level loops) */
 
     /* Prefill-only raw-logits mode (--logits): one forward pass over the prompt,
      * no decode loop. Bypasses the timing/warmup/repeat machinery entirely. */
@@ -178,6 +189,15 @@ typedef struct {
 
 /* Report label for a cell: the --cell-id / matrix col 1 value, or "cell". */
 static inline const char* cell_name(const options_t* o) { return o->cell_id ? o->cell_id : "cell"; }
+
+/* Set by benchmark.c's SIGTERM/SIGABRT handler (async-signal-safe: only this
+ * flag is touched there). run.c's on_token guard checks it every call so an
+ * externally-sent signal during active decoding resolves into the same
+ * clean, partial-output-preserving self-abort path as the in-process
+ * detectors, instead of a hard kill. Has no effect before the first callback
+ * (e.g. stuck prefill/plugin init) -- that case still needs an external hard
+ * kill. */
+extern volatile sig_atomic_t g_abort_requested;
 
 /* ------------------------------- util.c ------------------------------- */
 
