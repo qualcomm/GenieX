@@ -73,9 +73,17 @@ static void usage(const char* argv0) {
         "                         sustained_high_performance, burst (default)\n"
         "  --warmup N             default 1\n"
         "  --no-warmup            equivalent to --warmup 0\n"
-        "  --temperature F        default 0.0\n"
+        "  --temperature F        default 0.0 (defers to the bundle's dialog.sampler.temp,\n"
+        "                         then the plugin default, e.g. 0.8 for qairt/llama_cpp)\n"
         "  --top-p F              default 0.0 (defers to the bundle's dialog.sampler.top-p,\n"
         "                         then the plugin default, e.g. 0.95 for qairt/llama_cpp)\n"
+        "  --top-k N              default 0 (defers to the bundle, then the plugin default,\n"
+        "                         e.g. 40 for qairt/llama_cpp)\n"
+        "  --min-p F              default 0.0 (defers to the bundle, then the plugin default)\n"
+        "  --repetition-penalty F default 0.0 (defers to the bundle, then the plugin default,\n"
+        "                         e.g. 1.0 -- no penalty)\n"
+        "  --presence-penalty F   default 0.0\n"
+        "  --frequency-penalty F  default 0.0\n"
         "  --seed N               default 42; also seeds rand() for prompt ids\n"
         "  --prompt-file PATH     opt out of random-ids prefill: read a UTF-8 prompt\n"
         "                         from PATH and feed it via prompt_utf8 instead. The\n"
@@ -276,6 +284,11 @@ void parse_args(int argc, char** argv, options_t* o) {
     o->max_new_tokens          = 128;
     o->temperature             = 0.0f;
     o->top_p                   = 0.0f;
+    o->top_k                   = 0;
+    o->min_p                   = 0.0f;
+    o->repetition_penalty      = 0.0f;
+    o->presence_penalty        = 0.0f;
+    o->frequency_penalty       = 0.0f;
     o->seed                    = 42;
     o->warmup                  = 1;
     o->repeat                  = 5;
@@ -348,6 +361,16 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->temperature = (float)atof(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--top-p") == 0) {
             o->top_p = (float)atof(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--top-k") == 0) {
+            o->top_k = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--min-p") == 0) {
+            o->min_p = (float)atof(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--repetition-penalty") == 0) {
+            o->repetition_penalty = (float)atof(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--presence-penalty") == 0) {
+            o->presence_penalty = (float)atof(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "--frequency-penalty") == 0) {
+            o->frequency_penalty = (float)atof(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--seed") == 0) {
             o->seed = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--warmup") == 0) {

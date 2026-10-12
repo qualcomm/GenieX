@@ -58,9 +58,11 @@ static void fill_sampler(geniex_SamplerConfig* s, const options_t* o) {
     memset(s, 0, sizeof(*s));
     s->temperature        = o->temperature;
     s->top_p              = o->top_p;
-    s->top_k              = 0;
-    s->min_p              = 0.0f;
-    s->repetition_penalty = 1.0f;
+    s->top_k              = o->top_k;
+    s->min_p              = o->min_p;
+    s->repetition_penalty = o->repetition_penalty;
+    s->presence_penalty   = o->presence_penalty;
+    s->frequency_penalty  = o->frequency_penalty;
     s->seed               = o->seed;
 }
 

@@ -110,7 +110,9 @@ int write_cell_json(const options_t* o, const device_t* dev, int64_t model_size_
     fprintf(f, "    \"params\": {\n");
     fprintf(f,
         "      \"warmup\": %d, \"repetitions\": %d, \"n_prompt\": %d, \"n_gen\": %d,\n"
-        "      \"temperature\": %.6f, \"top_p\": %.6f, \"seed\": %d, \"n_ctx\": %d, \"n_threads\": %d, "
+        "      \"temperature\": %.6f, \"top_p\": %.6f, \"top_k\": %d, \"min_p\": %.6f,\n"
+        "      \"repetition_penalty\": %.6f, \"presence_penalty\": %.6f, \"frequency_penalty\": %.6f,\n"
+        "      \"seed\": %d, \"n_ctx\": %d, \"n_threads\": %d, "
         "\"n_ubatch\": %d, \"n_gpu_layers\": %d",
         o->warmup,
         o->repeat,
@@ -118,6 +120,11 @@ int write_cell_json(const options_t* o, const device_t* dev, int64_t model_size_
         o->max_new_tokens,
         (double)o->temperature,
         (double)o->top_p,
+        o->top_k,
+        (double)o->min_p,
+        (double)o->repetition_penalty,
+        (double)o->presence_penalty,
+        (double)o->frequency_penalty,
         o->seed,
         o->n_ctx,
         o->n_threads,

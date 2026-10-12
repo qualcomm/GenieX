@@ -83,6 +83,11 @@ typedef struct {
     int32_t      max_new_tokens;
     float        temperature;
     float        top_p;
+    int32_t      top_k;
+    float        min_p;
+    float        repetition_penalty;
+    float        presence_penalty;
+    float        frequency_penalty;
     int32_t      seed;
     int32_t      warmup;
     int32_t      repeat;
