@@ -193,7 +193,9 @@ The cross-repo checkout reuses `secrets.GH_PAT` (already scoped for cross-repo a
 
 ## Windows installer signing gate
 
-The Windows installer is published before it is Authenticode-signed, so `geniex update` gates on `windows-signed.txt` to avoid pushing an unsigned build. On Windows, once a newer version is found, the updater GETs this file (see [`cli/cmd/geniex/update.go`](../cli/cmd/geniex/update.go), `isWindowsSigned`): contents `true` → proceed with the download; anything else or missing → treat as up-to-date and skip.
+The Windows ARM64 build is Authenticode-signed in the release pipeline: the `sign-windows` job downloads `sdk-windows-arm64` + `cli-setup-windows-arm64`, signs every `.exe`/`.dll` PE with `signtool` (RFC3161 timestamping), verifies each signature with [`scripts/verify-windows-signatures.ps1`](../scripts/verify-windows-signatures.ps1), and re-uploads the signed artifacts. The job is a hard gate — if `WINDOWS_CODESIGN_PFX` / `WINDOWS_CODESIGN_PASSWORD` secrets are not configured, the release fails rather than shipping binaries that Windows Smart App Control / SmartScreen blocks (qualcomm/GenieX#1398). Secrets: `WINDOWS_CODESIGN_PFX` (base64 of the `.pfx`), `WINDOWS_CODESIGN_PASSWORD`, optional `WINDOWS_CODESIGN_TIMESTAMP_URL` (default `http://timestamp.digicert.com`).
+
+`geniex update` still gates on `windows-signed.txt` to avoid pushing an unsigned build. On Windows, once a newer version is found, the updater GETs this file (see [`cli/cmd/geniex/update.go`](../cli/cmd/geniex/update.go), `isWindowsSigned`): contents `true` → proceed with the download; anything else or missing → treat as up-to-date and skip.
 
 Release-side: upload `windows-signed.txt` with `true` after the latest stable installer is signed; set it back to a non-`true` value before publishing the next, not-yet-signed installer.
 
@@ -208,7 +210,7 @@ Release-side: upload `windows-signed.txt` with `true` after the latest stable in
   - test `llama_cpp` npu on qualcomm pc
 - create a offical release tag on same commit
 - signed windows installer
-  - send unsigned installer to wido team
+  - the `sign-windows` job signs the installer + SDK DLLs with the cert from `WINDOWS_CODESIGN_PFX`; verify the run's "Verify Authenticode signatures" step passed
   - replace installer on s3
   - update sha256
   - update `windows-signed.txt` to true, see [§ Windows installer signing gate](#windows-installer-signing-gate)
