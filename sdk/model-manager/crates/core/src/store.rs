@@ -371,8 +371,9 @@ fn migrate_legacy_qairt_precision(m: &mut ModelManifest) -> bool {
 }
 
 /// Split "org/repo:quant" into ("org/repo", Some("quant")) or ("org/repo", None).
+/// The scheme colon of a pasted URL ("https://...") is not a separator.
 fn split_quant(s: &str) -> (&str, Option<String>) {
-    if let Some(pos) = s.rfind(':') {
+    if let Some(pos) = s.rfind(':').filter(|&p| !s[p + 1..].starts_with("//")) {
         let name = &s[..pos];
         let quant = &s[pos + 1..];
         if quant.is_empty() {
@@ -495,6 +496,18 @@ mod tests {
                 .name,
             "ggml-org/Qwen3"
         );
+    }
+
+    #[test]
+    fn get_paths_accepts_a_pasted_hf_url() {
+        let (store, _tmp) = make_store();
+        store
+            .write_manifest(&sample_manifest("ggml-org/Qwen3"))
+            .unwrap();
+        let (quant, _) = store
+            .get_paths("https://huggingface.co/ggml-org/Qwen3")
+            .unwrap();
+        assert_eq!(quant, "Q4_K_M");
     }
 
     #[test]
