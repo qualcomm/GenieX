@@ -41,9 +41,7 @@ func tagStreamError(err error) error {
 		var body struct {
 			Code *int32 `json:"code"`
 		}
-		// code < 0 means the server error was not an SDKError (SDKErrorCode
-		// returns -1); keep the original stream error in that case.
-		if sonic.Unmarshal(se.Event.Data, &body) == nil && body.Code != nil && *body.Code >= 0 {
+		if sonic.Unmarshal(se.Event.Data, &body) == nil && body.Code != nil && *body.Code != -1 {
 			return geniex_sdk.SDKError(*body.Code)
 		}
 	}
@@ -127,8 +125,10 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 
 	// repl
 	var history []openai.ChatCompletionMessageParamUnion
+	protected := 0
 	if systemPrompt != "" {
 		history = append(history, openai.SystemMessage(systemPrompt))
+		protected = 1
 	}
 
 	processor := &common.Processor{
@@ -136,14 +136,20 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 		Verbose:   verbose,
 		TestMode:  testMode,
 		Reset: func() error {
-			history = nil
 			_, err := client.Chat.Completions.New(ctx, openai.ChatCompletionNewParams{
 				Messages: nil,
 				Model:    name,
 			})
+			if err == nil {
+				history = history[:0]
+				if protected == 1 {
+					history = append(history, openai.SystemMessage(systemPrompt))
+				}
+			}
 			return err
 		},
 		Run: func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
+			var userMessage openai.ChatCompletionMessageParamUnion
 			if len(images) > 0 || len(audios) > 0 {
 				contents := make([]openai.ChatCompletionContentPartUnionParam, 0)
 				contents = append(contents, openai.ChatCompletionContentPartUnionParam{
@@ -169,87 +175,114 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 						},
 					})
 				}
-				history = append(history, openai.UserMessage(contents))
+				userMessage = openai.UserMessage(contents)
 			} else {
-				history = append(history, openai.UserMessage(prompt))
+				userMessage = openai.UserMessage(prompt)
 			}
+			pending := append(append([]openai.ChatCompletionMessageParamUnion(nil), history...), userMessage)
+			type attemptResult struct {
+				text     string
+				profile  geniex_sdk.ProfileData
+				complete bool
+			}
+			var emitted bool
+			result, kept, dropped, err := retryChatHistory(pending, protected,
+				func(messages []openai.ChatCompletionMessageParamUnion) (attemptResult, error) {
+					emitted = false
 
-			start := time.Now()
-			acc := openai.ChatCompletionAccumulator{}
-			stream := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
-				Messages:            history,
-				Model:               name,
-				StreamOptions:       openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Opt(true)},
-				Temperature:         openai.Float(float64(temperature)),
-				TopP:                openai.Float(float64(topP)),
-				PresencePenalty:     openai.Float(float64(presencePenalty)),
-				FrequencyPenalty:    openai.Float(float64(frequencyPenalty)),
-				Seed:                openai.Int(int64(seed)),
-				MaxCompletionTokens: openai.Int(int64(maxTokens)),
-			},
+					start := time.Now()
+					acc := openai.ChatCompletionAccumulator{}
+					stream := client.Chat.Completions.NewStreaming(ctx, openai.ChatCompletionNewParams{
+						Messages:            messages,
+						Model:               name,
+						StreamOptions:       openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Opt(true)},
+						Temperature:         openai.Float(float64(temperature)),
+						TopP:                openai.Float(float64(topP)),
+						PresencePenalty:     openai.Float(float64(presencePenalty)),
+						FrequencyPenalty:    openai.Float(float64(frequencyPenalty)),
+						Seed:                openai.Int(int64(seed)),
+						MaxCompletionTokens: openai.Int(int64(maxTokens)),
+					},
 
-				option.WithJSONSet("enable_think", enableThink),
-				option.WithJSONSet("top_k", topK),
-				option.WithJSONSet("min_p", minP),
-				option.WithJSONSet("repetition_penalty", repetitionPenalty),
-				option.WithJSONSet("grammar_path", grammarPath),
-				option.WithJSONSet("grammar_string", grammarString),
-				option.WithJSONSet("ngl", ngl),
-				option.WithJSONSet("nctx", nctx),
-				option.WithJSONSet("compute", computeUnit),
-				option.WithJSONSet("vit_compute", vitComputeUnit),
-				option.WithJSONSet("spec_type", specType),
-				option.WithJSONSet("spec_draft_model", draftModel),
-				option.WithJSONSet("spec_n_max", draftTokens),
-				option.WithJSONSet("spec_n_min", draftMin),
-				option.WithJSONSet("spec_p_min", draftPMin),
-				option.WithJSONSet("power_mode", powerMode))
+						option.WithJSONSet("enable_think", enableThink),
+						option.WithJSONSet("top_k", topK),
+						option.WithJSONSet("min_p", minP),
+						option.WithJSONSet("repetition_penalty", repetitionPenalty),
+						option.WithJSONSet("grammar_path", grammarPath),
+						option.WithJSONSet("grammar_string", grammarString),
+						option.WithJSONSet("ngl", ngl),
+						option.WithJSONSet("nctx", nctx),
+						option.WithJSONSet("compute", computeUnit),
+						option.WithJSONSet("vit_compute", vitComputeUnit),
+						option.WithJSONSet("spec_type", specType),
+						option.WithJSONSet("spec_draft_model", draftModel),
+						option.WithJSONSet("spec_n_max", draftTokens),
+						option.WithJSONSet("spec_n_min", draftMin),
+						option.WithJSONSet("spec_p_min", draftPMin),
+						option.WithJSONSet("power_mode", powerMode))
+					defer stream.Close()
 
-			var firstToken time.Time
-			var profileData geniex_sdk.ProfileData
-			for stream.Next() {
-				if firstToken.IsZero() {
-					firstToken = time.Now()
-				}
+					var firstToken time.Time
+					var profileData geniex_sdk.ProfileData
+					for stream.Next() {
+						if firstToken.IsZero() {
+							firstToken = time.Now()
+						}
 
-				chunk := stream.Current()
-				acc.AddChunk(chunk)
-				if len(chunk.Choices) > 0 {
-					if !onToken(chunk.Choices[0].Delta.Content) {
-						stream.Close()
-						break
+						chunk := stream.Current()
+						acc.AddChunk(chunk)
+						if len(chunk.Choices) > 0 {
+							content := chunk.Choices[0].Delta.Content
+							if content != "" {
+								emitted = true
+							}
+							if !onToken(content) {
+								stream.Close()
+								break
+							}
+						}
+						if chunk.Usage.PromptTokens > 0 {
+							profileData.PromptTokens = chunk.Usage.PromptTokens
+							profileData.GeneratedTokens = chunk.Usage.CompletionTokens
+							det := chunk.Usage.CompletionTokensDetails
+							profileData.DraftNAccepted = det.AcceptedPredictionTokens
+							profileData.DraftNTotal = det.AcceptedPredictionTokens + det.RejectedPredictionTokens
+						}
 					}
-				}
-				if chunk.Usage.PromptTokens > 0 {
-					profileData.PromptTokens = chunk.Usage.PromptTokens
-					profileData.GeneratedTokens = chunk.Usage.CompletionTokens
-					det := chunk.Usage.CompletionTokensDetails
-					profileData.DraftNAccepted = det.AcceptedPredictionTokens
-					profileData.DraftNTotal = det.AcceptedPredictionTokens + det.RejectedPredictionTokens
-				}
+
+					// zero token generated
+					if firstToken.IsZero() {
+						firstToken = time.Now()
+					}
+
+					end := time.Now()
+					profileData.TTFT = firstToken.Sub(start).Microseconds()
+					profileData.PromptTime = profileData.TTFT
+					profileData.DecodeTime = end.Sub(firstToken).Microseconds()
+					profileData.DecodingSpeed = float64(profileData.GeneratedTokens) / float64(end.Sub(firstToken).Seconds())
+
+					if stream.Err() != nil {
+						return attemptResult{profile: profileData}, tagStreamError(stream.Err())
+					}
+
+					if len(acc.Choices) > 0 {
+						return attemptResult{text: acc.Choices[0].Message.Content, profile: profileData, complete: true}, nil
+					}
+
+					return attemptResult{profile: profileData}, nil
+				}, func(err error) bool {
+					return !emitted && errors.Is(err, geniex_sdk.ErrLlmGenerationPromptTooLong)
+				})
+			if err != nil {
+				return result.text, result.profile, err
 			}
-
-			// zero token generated
-			if firstToken.IsZero() {
-				firstToken = time.Now()
+			if dropped > 0 {
+				fmt.Println(render.GetTheme().Info.Sprint("Older messages were removed to fit the context window."))
 			}
-
-			end := time.Now()
-			profileData.TTFT = firstToken.Sub(start).Microseconds()
-			profileData.PromptTime = profileData.TTFT
-			profileData.DecodeTime = end.Sub(firstToken).Microseconds()
-			profileData.DecodingSpeed = float64(profileData.GeneratedTokens) / float64(end.Sub(firstToken).Seconds())
-
-			if stream.Err() != nil {
-				return "", profileData, tagStreamError(stream.Err())
+			if result.complete {
+				history = append(kept, openai.AssistantMessage(result.text))
 			}
-
-			if len(acc.Choices) > 0 {
-				history = append(history, openai.AssistantMessage(acc.Choices[0].Message.Content))
-				return acc.Choices[0].Message.Content, profileData, nil
-			}
-
-			return "", profileData, nil
+			return result.text, result.profile, nil
 		},
 	}
 	if len(prompt) > 0 || input != "" {
