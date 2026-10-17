@@ -54,6 +54,7 @@ static void usage(const char* argv0) {
         "                         clear error otherwise.\n"
         "  -n, --n-gen N          tokens to generate per run; default 128\n"
         "  -c, --ctx-size N       model n_ctx (0 = from model, default 0)\n"
+        "  -ub, --ubatch-size N   llama_cpp physical batch size (default: SDK/device setting)\n"
         "  -t, --threads N        generation threads (0 = SDK default)\n"
         "  -ngl, --n-gpu-layers N llama_cpp layers to offload; overrides the\n"
         "                         device alias default (-1 = all layers)\n"
@@ -417,6 +418,9 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->logits_top_n = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "-c") == 0 || strcmp(a, "--ctx-size") == 0) {
             o->n_ctx = atoi(arg_value(argc, argv, &i, a));
+        } else if (strcmp(a, "-ub") == 0 || strcmp(a, "--ubatch-size") == 0) {
+            o->n_ubatch = atoi(arg_value(argc, argv, &i, a));
+            require_min(o->n_ubatch, 1, a);
         } else if (strcmp(a, "-t") == 0 || strcmp(a, "--threads") == 0) {
             o->n_threads = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "-ngl") == 0 || strcmp(a, "--n-gpu-layers") == 0) {

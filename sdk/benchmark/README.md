@@ -11,8 +11,9 @@ loops, aggregation and report writing in their own files. See
 
 Flag naming follows llama.cpp's
 [`llama-bench`](../../third-party/llama.cpp/tools/llama-bench/README.md) —
-`-r / --repetitions`, `-n / --n-gen`, `-c / --ctx-size`, `-t / --threads`,
-`-m / --model`, `--n-gpu-layers`, `--no-warmup` — so users moving between
+`-r / --repetitions`, `-n / --n-gen`, `-c / --ctx-size`,
+`-ub / --ubatch-size`, `-t / --threads`, `-m / --model`,
+`--n-gpu-layers`, `--no-warmup` — so users moving between
 the two tools read the same vocabulary.
 
 It accepts either a **local model path** (a geniex bundle dir, or a `.gguf`
@@ -20,6 +21,11 @@ file / its folder) or a **model-manager id** (`org/repo[:quant]`); ids are
 resolved via the `geniex_model_*` C API — downloading on first use and
 reusing the cached copy thereafter. Runs on Windows, Android, and Linux —
 the same binary feeds Geniex Bench.
+
+For llama_cpp HTP allocation testing, `--ubatch-size N` overrides the SDK's physical
+batch default. For example, compare `--ubatch-size 128` and
+`--ubatch-size 1024` with the same model and device; omit the flag to test the
+platform default.
 
 ## Build
 

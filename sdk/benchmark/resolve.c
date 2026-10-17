@@ -16,7 +16,7 @@
 static bool g_mm_inited = false;
 
 void apply_chipset_defaults(options_t* o, const device_t* dev) {
-    o->n_ubatch = 0;
+    if (o->n_ubatch > 0) return;  // An explicit --ubatch-size takes precedence.
     if (!o->plugin || strcmp(o->plugin, "llama_cpp") != 0 || !dev->id || strcmp(dev->id, "GPUOpenCL") != 0 ||
         dev->ngl == 0) {
         return;
