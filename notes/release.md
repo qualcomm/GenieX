@@ -182,12 +182,12 @@ The cross-repo checkout reuses `secrets.GH_PAT` (already scoped for cross-repo a
 
 ### Promoting self-signed → Microsoft-signed
 
-1. Download `libggml-htp-to-sign-<sha>.zip` from the draft release.
+1. Download `libggml-htp-to-sign-<sha>.zip` from the draft release of this repo's own Release run. Do not build the files elsewhere (for example the internal `build-llama-cpp-windows.yml`): the HTP skels depend on the Hexagon tools version, and a different one produced garbled long-context output (#1708). The release CI uses the versions pinned in `.github/actions/setup-snapdragon-sdks`.
 2. Submit for Microsoft signing.
    a. Put the `.cat` `.inf` and all `.so` files into `ATT\libggml-htp\` in samba;
    b. Submit Jenkins pipeline, fill path with `\path\to\ATT`, other field use default or first param.
    c. Get signed files from `ATT\Glymur\01000\ExtractedDrivers`.
-   d. Repack the signed files (without `.inf`) into a zip with the same layout at the root.
+   d. Repack the signed files, including `libggml-htp.inf`, into a zip with the same layout at the root (the six files listed above).
 3. Commit the result to `qcom-ai-hub/geniex` at `sdk/signed-htp/libggml-htp-<sha>.zip` on the `chore/signed-htp-lfs-store` branch — `git lfs install` locally, push the zip directly, or open a PR against that branch and squash-merge.
 4. Re-run the Release workflow for the same tag.
 
