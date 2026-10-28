@@ -6,7 +6,11 @@ if(GENIEX_PLUGIN_QAIRT)
     add_subdirectory(./qairt)
 endif()
 
-if(WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+if(GENIEX_PLUGIN_PHONON)
+    add_subdirectory(./phonon)
+endif()
+
+if(GENIEX_PLUGIN_LLAMA_CPP AND WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
     find_file(_openmp_dll
         NAMES libomp140.aarch64.dll libomp.dll
         HINTS
@@ -23,7 +27,7 @@ if(WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
             RENAME "libomp140.aarch64.dll")
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+if(GENIEX_PLUGIN_LLAMA_CPP AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Qualcomm Linux does not ship libgomp; bundle it so the wheel is self-contained.
     execute_process(
         COMMAND ${CMAKE_C_COMPILER} -print-file-name=libgomp.so.1
@@ -40,7 +44,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             RENAME "libgomp.so.1")
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+if(GENIEX_PLUGIN_LLAMA_CPP AND CMAKE_SYSTEM_NAME STREQUAL "Android")
     file(GLOB_RECURSE _android_libomp
         "$ENV{ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/*/libomp.so")
     list(FILTER _android_libomp INCLUDE REGEX "/lib/linux/aarch64/libomp.so$")

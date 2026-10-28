@@ -93,6 +93,15 @@ Plugin* PluginFactory::get_instance() {
     return cached_plugin.get();
 }
 
+ITts* PluginFactory::create_tts_v1() {
+    // In-process legacy registration has no optional export table.
+    if (!handle) return nullptr;
+    void* symbol = nullptr;
+    load_symbol("geniex_create_tts_v1", symbol);
+    auto factory = reinterpret_cast<CreateTtsV1>(symbol);
+    return factory ? factory() : nullptr;
+}
+
 // PluginFactory private
 
 void PluginFactory::load_library(const std::filesystem::path& path) {

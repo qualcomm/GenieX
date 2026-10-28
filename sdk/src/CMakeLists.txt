@@ -83,10 +83,12 @@ install(FILES "${CMAKE_SOURCE_DIR}/model-manager/include/geniex_model.h"
     DESTINATION include)
 
 install(TARGETS geniex
+    ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION lib)
 
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/geniex.h
+    ${CMAKE_SOURCE_DIR}/include/geniex_tts.h
     ${CMAKE_SOURCE_DIR}/include/power_mode_alias.h
     DESTINATION include)

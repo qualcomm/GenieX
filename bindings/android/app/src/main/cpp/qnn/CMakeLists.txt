@@ -15,6 +15,7 @@ set(JNI_SOURCES
         ${PARENT_DIR}/llm_bridge_jni.cpp
         ${PARENT_DIR}/vlm_bridge_jni.cpp
         ${PARENT_DIR}/model_manager_jni.cpp
+        ${PARENT_DIR}/tts_bridge_jni.cpp
 )
 
 add_library(npu_jni SHARED ${JNI_SOURCES})

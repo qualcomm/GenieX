@@ -210,6 +210,10 @@ See [GenieX releases](https://github.com/qualcomm/GenieX/releases) for new model
 
 ## 🤝 Contributing
 
+An opt-in [experimental Phonon TTS backend](sdk/plugins/phonon/README.md) adds
+PCM audio streaming through an additive speech API. It currently requires a
+source build and compiled QNN bundles; it is not part of the CLI model catalogue.
+
 Contributions are welcome! Before opening a PR, please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for branch naming, commit / PR title format, pre-commit checks, and the FFI-update rule for public SDK headers.
 
 | | |

@@ -1,0 +1,44 @@
+name: TTS API contracts
+
+on:
+  pull_request:
+    paths:
+      - 'sdk/**'
+      - 'bindings/python/geniex/**'
+      - 'bindings/python/tests/unit/test_tts.py'
+      - '.github/workflows/tts-contracts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Build model-free SDK and test plugins
+        shell: pwsh
+        run: |
+          cmake -S sdk -B build-tts -DGENIEX_PLUGIN_LLAMA_CPP=OFF -DGENIEX_PLUGIN_QAIRT=OFF -DGENIEX_TTS_TESTS=ON
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build build-tts --config Release --parallel 4
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ctest --test-dir build-tts -C Release --output-on-failure
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Exercise Python audio FFI
+        shell: pwsh
+        run: |
+          python -m pip install pytest tqdm
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:PYTHONPATH = "$PWD/bindings/python"
+          $env:GENIEX_LIB_PATH = "$PWD/build-tts/src/Release/geniex.dll"
+          $env:GENIEX_PLUGIN_PATH = "$PWD/build-tts/tests/tts/scan-Release"
+          $env:GENIEX_TTS_CONTRACT_TEST = '1'
+          python -m pytest bindings/python/tests/unit/test_tts.py
+          exit $LASTEXITCODE

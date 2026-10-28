@@ -22,6 +22,7 @@ go_library(
         "llm.go",
         "ml.go",
         "model_manager.go",
+        "tts.go",
         "vlm.go",
     ],
     cdeps = ["//sdk"],
@@ -35,6 +36,7 @@ go_cgo_test(
     srcs = [
         "common_test.go",
         "model_manager_test.go",
+        "tts_test.go",
     ],
     embed = [":geniex_sdk_go"],
 )

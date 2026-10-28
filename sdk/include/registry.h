@@ -13,6 +13,7 @@
 #include <unordered_map>
 
 #include "build_config.h"
+#include "plugin/ITts.h"
 #include "plugin/Plugin.h"
 
 namespace geniex {
@@ -38,6 +39,7 @@ class PluginFactory {
     PluginFactory& operator=(const PluginFactory&) = delete;
 
     Plugin*         get_instance();  // return raw pointer, but internal manage lifecycle
+    ITts*           create_tts_v1();
     const PluginId& get_plugin_id() const { return plugin_id; }
 
     // Cached instance without constructing one; nullptr if never instantiated.
@@ -107,6 +109,8 @@ class Registry {
             return plugin->create_llm();
         } else if constexpr (std::is_same_v<M, IVlm>) {
             return plugin->create_vlm();
+        } else if constexpr (std::is_same_v<M, ITts>) {
+            return it->second->create_tts_v1();
         } else {
             throw std::runtime_error("Unsupported modality type");
         }

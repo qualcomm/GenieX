@@ -354,6 +354,29 @@ def _bind_all() -> None:
 _bound = False
 
 
+def bind_tts():
+    """Bind the additive TTS API on demand; old SDKs can still serve LLM/VLM."""
+    from ._types import geniex_TtsCreateInput, geniex_TtsSynthesizeInput, geniex_TtsSynthesizeOutput
+
+    lib = load_library()
+    try:
+        lib.geniex_tts_create.argtypes = [POINTER(geniex_TtsCreateInput), POINTER(c_void_p)]
+        lib.geniex_tts_create.restype = c_int32
+        lib.geniex_tts_destroy.argtypes = [c_void_p]
+        lib.geniex_tts_destroy.restype = c_int32
+        lib.geniex_tts_synthesize.argtypes = [
+            c_void_p,
+            POINTER(geniex_TtsSynthesizeInput),
+            POINTER(geniex_TtsSynthesizeOutput),
+        ]
+        lib.geniex_tts_synthesize.restype = c_int32
+        lib.geniex_tts_cancel.argtypes = [c_void_p]
+        lib.geniex_tts_cancel.restype = c_int32
+    except AttributeError as exc:
+        raise RuntimeError('This GenieX SDK does not provide the experimental TTS API') from exc
+    return lib
+
+
 def _ensure_bound() -> None:
     global _bound
     if not _bound:

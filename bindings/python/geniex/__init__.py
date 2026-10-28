@@ -19,6 +19,7 @@ from .auto import AutoModelForCausalLM, AutoModelForVision2Seq, resolve_device_m
 from .chat_template import ChatTemplateGrammar, ChatTemplateOutput, GrammarTrigger
 from .generation import GenerateOutput, ProfileData, TextIteratorStreamer
 from .modeling import GenieXLLM, GenieXVLM
+from .tts import GenieXTTS, SpeechResult
 
 __all__ = [
     '__version__',
@@ -30,6 +31,8 @@ __all__ = [
     'GenieXError',
     'GenieXLLM',
     'GenieXVLM',
+    'GenieXTTS',
+    'SpeechResult',
     'GenerateOutput',
     'ProfileData',
     'TextIteratorStreamer',

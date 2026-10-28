@@ -14,6 +14,7 @@ from ctypes import (
     c_int32,
     c_int64,
     c_uint32,
+    c_uint64,
     c_void_p,
 )
 
@@ -23,6 +24,40 @@ from ctypes import (
 
 # bool (*geniex_token_callback)(const char* token, void* user_data)
 geniex_token_callback = CFUNCTYPE(c_bool, c_char_p, c_void_p)
+
+geniex_audio_callback = CFUNCTYPE(c_bool, POINTER(c_float), c_uint32, c_uint32, c_void_p)
+
+
+class geniex_TtsCreateInput(Structure):
+    _fields_ = [('struct_size', c_uint32), ('flags', c_uint32)] + [
+        (name, c_char_p)
+        for name in ('plugin_id', 'model_path', 'device', 'runtime_path', 'text_library', 'language', 'soc_model')
+    ]
+
+
+class geniex_TtsSynthesizeInput(Structure):
+    _fields_ = [
+        ('struct_size', c_uint32),
+        ('text', c_char_p),
+        ('voice', c_char_p),
+        ('on_audio', geniex_audio_callback),
+        ('user_data', c_void_p),
+    ]
+
+
+class geniex_TtsSynthesizeOutput(Structure):
+    _fields_ = [
+        ('struct_size', c_uint32),
+        ('sample_rate', c_uint32),
+        ('samples', c_uint64),
+        ('first_audio_ms', c_double),
+        ('generation_ms', c_double),
+        ('prefill_npu_ms', c_double),
+        ('step_npu_ms', c_double),
+        ('prefill_calls', c_uint32),
+        ('step_calls', c_uint32),
+    ]
+
 
 # ---------------------------------------------------------------------------
 # geniex_ProfileData
