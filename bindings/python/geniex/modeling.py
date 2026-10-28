@@ -9,6 +9,10 @@ from ctypes import POINTER, byref, c_char_p, c_float, c_int32, c_void_p, cast, c
 from ._ffi._api import GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH, _check, _str_list_to_c, load_library
 from ._ffi._types import (
     geniex_ChatTemplateGrammar,
+    geniex_DecideInput,
+    geniex_DecideOption,
+    geniex_DecideOutput,
+    geniex_DecideQuestion,
     geniex_GenerationConfig,
     geniex_GrammarTrigger,
     geniex_KvCacheLoadInput,
@@ -35,6 +39,7 @@ from ._ffi._types import (
     geniex_VlmGenerateOutput,
 )
 from .chat_template import ChatTemplateGrammar, ChatTemplateOutput, GrammarTrigger
+from .decision import DecideInput, DecideOutput
 from .generation.output import GenerateOutput, ProfileData
 from .generation.streamer import TextIteratorStreamer
 from .tokenizer import ModelTokenizer
@@ -85,6 +90,83 @@ def _tool_fields(msg: dict, keepalive: list) -> dict:
 
 def _decode_optional_utf8(p) -> str | None:
     return string_at(p).decode('utf-8', errors='replace') if p else None
+
+
+def _build_decide_input(value: DecideInput) -> tuple[geniex_DecideInput, list[object]]:
+    """Build one caller-owned C decision request and its keepalive graph."""
+    keepalive: list[object] = []
+    c_questions = []
+    for question in value.questions:
+        OptionArray = geniex_DecideOption * len(question.options)
+        options = OptionArray(
+            *[
+                geniex_DecideOption(
+                    key=option.key.encode(),
+                    key_is_bool=option.key_is_bool,
+                    description=_enc(option.description),
+                )
+                for option in question.options
+            ]
+        )
+        keepalive.append(options)
+        c_questions.append(
+            geniex_DecideQuestion(
+                id=_enc(question.id),
+                question_type=question.question_type.encode(),
+                instructions=question.instructions.encode(),
+                options=options,
+                option_count=len(options),
+            )
+        )
+    QuestionArray = geniex_DecideQuestion * len(c_questions)
+    questions = QuestionArray(*c_questions)
+    images, image_count = _str_list_to_c(value.image_paths)
+    audios, audio_count = _str_list_to_c(value.audio_paths)
+    keepalive.extend((questions, images, audios))
+    return (
+        geniex_DecideInput(
+            state=value.state.encode(),
+            questions=questions,
+            question_count=len(questions),
+            question_index=value.question_index,
+            image_paths=images,
+            image_count=image_count,
+            audio_paths=audios,
+            audio_count=audio_count,
+        ),
+        keepalive,
+    )
+
+
+def _run_decide(handle: c_void_p, value: DecideInput, function_name: str, allow_media: bool) -> DecideOutput:
+    if not handle:
+        raise ValueError('model is not initialized')
+    if not value.questions or not 0 <= value.question_index < len(value.questions):
+        raise ValueError('decision requires a valid question index')
+    if not allow_media and (value.image_paths or value.audio_paths):
+        raise ValueError('text decisions cannot include media')
+    c_input, _keepalive = _build_decide_input(value)
+    c_output = geniex_DecideOutput()
+    lib = load_library()
+    try:
+        _check(getattr(lib, function_name)(handle, byref(c_input), byref(c_output)))
+        count = int(c_output.option_count)
+        logits = list(c_output.logits[:count]) if c_output.logits else []
+        probabilities = list(c_output.probabilities[:count]) if c_output.probabilities else []
+        return DecideOutput(
+            logits=logits,
+            probabilities=probabilities,
+            input_tokens=int(c_output.input_tokens),
+            temperature=float(c_output.temperature),
+            decision_type=_decode_utf8(c_output.decision_type),
+        )
+    finally:
+        if c_output.logits:
+            lib.geniex_free(c_output.logits)
+        if c_output.probabilities:
+            lib.geniex_free(c_output.probabilities)
+        if c_output.decision_type:
+            lib.geniex_free(c_output.decision_type)
 
 
 def _copy_chat_template_grammar(grammar: geniex_ChatTemplateGrammar) -> ChatTemplateGrammar:
@@ -455,6 +537,10 @@ class GenieXLLM:
         lib = load_library()
         _check(lib.geniex_llm_reset(self._handle))
 
+    def decide(self, value: DecideInput) -> DecideOutput:
+        """Run one SDK logits-based decision over the selected question."""
+        return _run_decide(self._handle, value, 'geniex_llm_decide', allow_media=False)
+
     def forward_logits(
         self, input_ids: list[int], *, all_positions: bool = False, top_n: int = 0
     ) -> list[list[float]] | list[list[tuple[int, float]]]:
@@ -784,6 +870,10 @@ class GenieXVLM:
         """Clear KV cache and reset sampler state."""
         lib = load_library()
         _check(lib.geniex_vlm_reset(self._handle))
+
+    def decide(self, value: DecideInput) -> DecideOutput:
+        """Run one SDK logits-based multimodal decision over the selected question."""
+        return _run_decide(self._handle, value, 'geniex_vlm_decide', allow_media=True)
 
     def close(self) -> None:
         """Release the C handle. Idempotent."""

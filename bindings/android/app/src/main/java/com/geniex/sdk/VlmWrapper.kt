@@ -161,6 +161,15 @@ private constructor(
     /** Resets the VLM state. */
     suspend fun reset(): Int = withContext(dispatcher) { vlm.reset(handle) }
 
+    /** Runs one SDK logits-based multimodal decision over the selected question. */
+    suspend fun decide(input: DecideInput): Result<DecideOutput> = withContext(dispatcher) {
+        if (handle == 0L) {
+            Result.failure(IllegalStateException("Vlm not initialized"))
+        } else {
+            runCatching { vlm.decide(handle, input) }
+        }
+    }
+
     /**
      * Stops an ongoing streaming generation if any.
      *

@@ -26,7 +26,22 @@ struct GenerationConfigStorage {
     }
 };
 
+struct DecideInputStorage {
+    geniex_DecideInput                            value{};
+    std::deque<std::string>                       strings;
+    std::vector<geniex_DecideQuestion>            questions;
+    std::vector<std::vector<geniex_DecideOption>> options;
+    std::vector<const char*>                      image_paths;
+    std::vector<const char*>                      audio_paths;
+
+    geniex_DecideInput* get();
+};
+
 GenerationConfigStorage extract_generation_config(JNIEnv* env, jobject configObj);
+
+DecideInputStorage extract_decide_input(JNIEnv* env, jobject inputObj);
+
+jobject decide_output_to_java(JNIEnv* env, const geniex_DecideOutput& output);
 
 geniex_ModelConfig extract_model_config(JNIEnv* env, jobject configObj);
 
