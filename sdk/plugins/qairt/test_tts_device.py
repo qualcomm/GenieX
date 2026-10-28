@@ -5,9 +5,47 @@ See README.md. Run in a fresh process with profiling and trusted DLL paths set.
 """
 
 import argparse
+import ctypes
 import json
 import os
 from pathlib import Path
+
+
+def loaded_qnn_libraries():
+    """Inspect this process, not a launcher or a different installed SDK."""
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    psapi = ctypes.WinDLL("psapi", use_last_error=True)
+    kernel.GetCurrentProcess.restype = wintypes.HANDLE
+    psapi.EnumProcessModulesEx.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.HMODULE),
+        wintypes.DWORD,
+        ctypes.POINTER(wintypes.DWORD),
+        wintypes.DWORD,
+    ]
+    psapi.GetModuleFileNameExW.argtypes = [
+        wintypes.HANDLE,
+        wintypes.HMODULE,
+        wintypes.LPWSTR,
+        wintypes.DWORD,
+    ]
+    modules = (wintypes.HMODULE * 1024)()
+    needed = wintypes.DWORD()
+    process = kernel.GetCurrentProcess()
+    assert psapi.EnumProcessModulesEx(
+        process, modules, ctypes.sizeof(modules), ctypes.byref(needed), 3
+    )
+    assert needed.value <= ctypes.sizeof(modules)
+    result = {}
+    for module in modules[: needed.value // ctypes.sizeof(wintypes.HMODULE)]:
+        name = ctypes.create_unicode_buffer(32768)
+        assert psapi.GetModuleFileNameExW(process, module, name, len(name))
+        path = Path(name.value)
+        if path.name.lower().startswith("qnn"):
+            result[path.name.lower()] = str(path.resolve())
+    return result
 
 
 def main():
@@ -17,6 +55,7 @@ def main():
     parser.add_argument("--text-library", required=True)
     parser.add_argument("--soc", required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--dependency-dir", action="append", default=[])
     args = parser.parse_args()
     dll_handles = []
     if os.name == "nt":
@@ -25,6 +64,7 @@ def main():
             Path(args.text_library).resolve().parent,
             Path(os.environ["GENIEX_LIB_PATH"]).resolve().parent,
         ]
+        dirs.extend(Path(p) for p in args.dependency_dir)
         dll_handles = [os.add_dll_directory(str(p.resolve())) for p in dirs]
 
     from geniex import (
@@ -63,9 +103,8 @@ def main():
                 "reject_cpu": -100002,
                 "reject_gpu": -100002,
                 "wrong_soc": -100201,
-                "conflicting_runtime_assertion": -100008,
+                "conflicting_runtime_assertion": -100001,
                 "missing_text_frontend": -100201,
-                "verification_requires_profile": -100001,
             }
             assert exc.code == expected[label], (label, exc.code)
             records.append(
@@ -87,20 +126,31 @@ def main():
                 bundle,
                 text_library=str(Path(bundle).resolve() / "no-text.dll"),
             )
-            os.environ["PHONON_QNN_PROFILE"] = "0"
-            try:
-                expect_failure("verification_requires_profile", bundle)
-            finally:
-                os.environ["PHONON_QNN_PROFILE"] = "1"
             with GenieXTTS(
                 bundle,
                 text_library=args.text_library,
                 soc_model=args.soc,
                 verify_npu=True,
             ) as model:
-                assert [
-                    device for device, _ in get_compute_unit_list("phonon_qnn")
-                ] == ["npu"]
+                if os.name == "nt":
+                    libraries = loaded_qnn_libraries()
+                    assert "qnnhtp.dll" in libraries and "qnnsystem.dll" in libraries
+                    assert (
+                        "qnncpu.dll" not in libraries and "qnngpu.dll" not in libraries
+                    )
+                    for name in ("qnnhtp.dll", "qnnsystem.dll"):
+                        assert Path(libraries[name]).parent.samefile(args.runtime)
+                    records.append(
+                        dict(
+                            test="shared_htp_runtime_loaded",
+                            bundle=bundle,
+                            libraries=libraries,
+                            passed=True,
+                        )
+                    )
+                assert [device for device, _ in get_compute_unit_list("qairt")] == [
+                    "NPU"
+                ]
                 records.append(
                     dict(test="only_npu_advertised", bundle=bundle, passed=True)
                 )

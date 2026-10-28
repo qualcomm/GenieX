@@ -2,6 +2,7 @@
 
 set(BUILD_EXAMPLES OFF)
 set(GENIEX_BUILD_VLM ON)
+set(GENIEX_BUILD_TTS ON)
 
 # Keep Rust artifact paths short on Windows to avoid MAX_PATH linker failures
 # in third-party/tokenizers-cpp when building QAIRT dependencies.
@@ -24,7 +25,7 @@ add_subdirectory(./src)
 # are no per-ABI variants to install side by side.
 set(QAIRT_PLUGIN_DIR "lib/qairt")
 
-set(QAIRT_LIBS geniex_core geniex-proc geniex-proc-vision geniex-proc-audio geniex_vlm)
+set(QAIRT_LIBS geniex_core geniex-proc geniex-proc-vision geniex-proc-audio geniex_vlm geniex_tts)
 foreach(dep IN LISTS QAIRT_LIBS)
     if(TARGET ${dep})
         install(TARGETS ${dep}

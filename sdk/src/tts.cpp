@@ -49,6 +49,9 @@ int32_t geniex_tts_synthesize(
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     try {
         return reinterpret_cast<geniex::ITts*>(handle)->synthesize(input, output);
+    } catch (const std::invalid_argument& e) {
+        GENIEX_LOG_ERROR("TTS synthesis input: {}", e.what());
+        return GENIEX_ERROR_COMMON_INVALID_INPUT;
     } catch (const std::exception& e) {
         GENIEX_LOG_ERROR("TTS synthesis: {}", e.what());
         return GENIEX_ERROR_COMMON_UNKNOWN;

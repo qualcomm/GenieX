@@ -1,5 +1,5 @@
 add_library(geniex_qairt SHARED
-    plugin.cpp llm.cpp vlm.cpp log_filter.cpp)
+    plugin.cpp llm.cpp vlm.cpp tts.cpp log_filter.cpp)
 
 target_compile_features(geniex_qairt PRIVATE cxx_std_20)
 target_compile_definitions(geniex_qairt PUBLIC GENIEX_SHARED)
@@ -17,7 +17,7 @@ target_include_directories(geniex_qairt
     PRIVATE ${CMAKE_SOURCE_DIR}/third-party/geniex-qairt/models)
 
 target_link_libraries(geniex_qairt
-    PRIVATE geniex geniex_core geniex-proc geniex_vlm)
+    PRIVATE geniex geniex_core geniex-proc geniex_vlm geniex_tts)
 
 install(TARGETS geniex_qairt
     LIBRARY DESTINATION lib/qairt

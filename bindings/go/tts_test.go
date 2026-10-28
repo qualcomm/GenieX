@@ -62,7 +62,7 @@ func TestTTSPhononNPU(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer DeInit()
-	model, err := NewTTS(TtsCreateInput{PluginID: "phonon_qnn", ModelPath: bundle, Device: "npu",
+	model, err := NewTTS(TtsCreateInput{PluginID: "qairt", ModelPath: bundle, Device: "npu",
 		RuntimePath: os.Getenv("GENIEX_PHONON_TEST_RUNTIME"), TextLibrary: os.Getenv("GENIEX_PHONON_TEST_TEXT_LIBRARY"),
 		Language: "en", SocModel: os.Getenv("GENIEX_PHONON_TEST_SOC"), VerifyNPU: true})
 	if err != nil {

@@ -30,6 +30,12 @@ def main():
         default="Hello from Phonon, running locally through GenieX on the Snapdragon NPU.",
     )
     parser.add_argument("--repeats", type=int, default=6)
+    parser.add_argument(
+        "--dependency-dir",
+        action="append",
+        default=[],
+        help="Additional trusted build-tree DLL directory",
+    )
     parser.add_argument("--out", type=Path, default=Path("phonon-results"))
     args = parser.parse_args()
     if args.repeats < 1:
@@ -40,6 +46,7 @@ def main():
     dll_handles = []
     if sys.platform == "win32":
         paths = [args.runtime, str(Path(args.text_library).resolve().parent)]
+        paths.extend(args.dependency_dir)
         lib = os.environ.get("GENIEX_LIB_PATH")
         if lib:
             paths.append(lib if Path(lib).is_dir() else str(Path(lib).parent))

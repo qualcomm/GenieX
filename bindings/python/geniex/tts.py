@@ -36,7 +36,7 @@ class GenieXTTS:
     """One loaded speech model. Use as a context manager, before geniex.deinit().
 
     ``device='npu'`` is the only Phonon device. ``verify_npu=True`` additionally
-    requires PHONON_QNN_PROFILE=1 and positive prefill and step accelerator times.
+    requires positive prefill and step accelerator times from shared QNN profiling.
     cancel() is thread safe. Do not close from inside an audio callback.
     Select the shared runtime with set_qairt_runtime_path() before SDK init.
     runtime_path is an optional consistency assertion, not an override.
@@ -52,7 +52,7 @@ class GenieXTTS:
         language='en',
         device='npu',
         verify_npu=True,
-        plugin_id='phonon_qnn',
+        plugin_id='qairt',
     ):
         ensure_init()
         self._lib = bind_tts()

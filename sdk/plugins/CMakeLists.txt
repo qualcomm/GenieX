@@ -6,9 +6,6 @@ if(GENIEX_PLUGIN_QAIRT)
     add_subdirectory(./qairt)
 endif()
 
-if(GENIEX_PLUGIN_PHONON)
-    add_subdirectory(./phonon)
-endif()
 
 if(GENIEX_PLUGIN_LLAMA_CPP AND WIN32 AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
     find_file(_openmp_dll
