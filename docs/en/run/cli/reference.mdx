@@ -35,7 +35,7 @@ For GGUF models the CLI prompts you to pick a precision:
 
 ```powershell
 Choose a precision version to download
-> Q4_0       [1.2 GiB] (default)
+> Q4_0       [1.2 GiB]
   Q8_0       [2.0 GiB]
   F16        [3.8 GiB]
 ```
@@ -73,14 +73,14 @@ geniex infer ai-hub-models/Qwen3-4B --compute npu
 
 ```bash
 # Explicit device list — spread across multiple HTP cores (llama.cpp + multi-DSP devices only)
-GGML_HEXAGON_NDEV=4 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 --compute HTP0,HTP1,HTP2,HTP3
+GGML_HEXAGON_DEVICES=4 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 --compute HTP0,HTP1,HTP2,HTP3
 ```
 
-<Note>Set `GGML_HEXAGON_NDEV` to match the number of device IDs in `--compute`. `qairt` models coerce a device list to NPU with a warning. See [Spreading across multiple HTP cores](/en/tutorials/speculative-decoding-mtp#spreading-across-multiple-htp-cores) for MTP performance numbers.</Note>
+<Note>Set `GGML_HEXAGON_DEVICES` to match the number of device IDs in `--compute`. `qairt` models coerce a device list to NPU with a warning. See [Spreading across multiple HTP cores](/en/tutorials/speculative-decoding-mtp#spreading-across-multiple-htp-cores) for MTP performance numbers.</Note>
 
-<Note>For VLMs on `--compute npu`, the vision encoder shares the language model's HTP session by default, which can abort on some devices. Run it on a second session with `GGML_HEXAGON_NDEV=2 geniex infer <vlm> --compute HTP0 --vit-compute HTP1`. See [Troubleshooting](/en/resources/troubleshooting).</Note>
+<Note>For VLMs on `--compute npu`, the vision encoder shares the language model's HTP session by default, which can abort on some devices. Run it on a second session with `GGML_HEXAGON_DEVICES=2 geniex infer <vlm> --compute HTP0 --vit-compute HTP1`. See [Troubleshooting](/en/resources/troubleshooting).</Note>
 
-<Warning>Qualcomm AI Hub Models run on NPU only. Using `--compute cpu` or `--compute gpu` returns an error.</Warning>
+<Warning>Qualcomm AI Hub Models run on NPU only. `--compute cpu` or `--compute gpu` is ignored with a warning and the model runs on NPU.</Warning>
 
 ### **`geniex infer` — VLM**
 
@@ -217,7 +217,6 @@ Control how the model selects tokens during generation.
 | `--seed` | int | — | Random seed for reproducible outputs. |
 | `--grammar-path` | string | — | Path to a GBNF grammar file for constrained generation. |
 | `--grammar-string` | string | — | Inline grammar in GBNF string format. |
-| `--enable-json` | — | — | Force JSON-only output. |
 
 ### Model flags
 
@@ -257,7 +256,7 @@ See the [Benchmarking tutorial](/en/tutorials/benchmarking) for download instruc
 
 | Flag | Default | Description |
 |---|---|---|
-| `--plugin` | — | `llama_cpp` \| `qairt`. Required. |
+| `--plugin` | — | `llama_cpp` \| `qairt`. Required for a filesystem path; optional for a model-manager id. |
 | `--device` | `auto` | `cpu` \| `gpu` \| `npu` \| `hybrid`. |
 | `-m` / `--model` | — | Local path (`.gguf` or bundle dir) or model-manager id (`org/repo[:quant]`). Required. |
 | `-p` | `512` | Random-token prefill length. |

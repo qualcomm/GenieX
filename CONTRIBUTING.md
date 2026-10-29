@@ -2,7 +2,7 @@
 
 Thanks for your interest in contributing! Whether you're fixing a typo, adding a backend, or landing a new feature, this guide takes you from `git clone` to a merged PR. The same rules apply to external and internal contributors — this is the single source of truth.
 
-The commit and PR rules are **SemVer-driven**: they must encode enough information for [`/release`](.claude/commands/release.md) (and future automation) to derive the next version tag deterministically. The full tag procedure lives in [notes/release.md](notes/release.md).
+The commit and PR rules are **SemVer-driven**: they must encode enough information for [`/release`](.claude/skills/release/SKILL.md) (and future automation) to derive the next version tag. The full tag procedure lives in [notes/release.md](notes/release.md).
 
 ## Getting started
 
@@ -29,7 +29,7 @@ git clone --recursive https://github.com/qualcomm/GenieX.git
   bazelisk coverage //... --combined_report=lcov
   ```
 
-  The [`coverage`](.claude/skills/coverage/SKILL.md) skill wraps this and renders HTML.
+  Rendering the HTML report: [notes/build.md § Test coverage](notes/build.md#test-coverage).
 
 - **SDK / plugins (Python)** — end-to-end pytest suite driven through the public binding. Model-free checks run anywhere; model and device cells need Snapdragon hardware (see [tests/README.md](tests/README.md)):
 
@@ -39,7 +39,7 @@ git clone --recursive https://github.com/qualcomm/GenieX.git
   GENIEX_DEVICE_TEST=1 pytest tests                    # full matrix, Snapdragon only
   ```
 
-GitHub runners cover the API and llama_cpp CPU cells. On real QDC hardware, PRs run a windows + android smoke tier via [pr-check.yml](.github/workflows/pr-check.yml); the full matrix (adds linux and the `nightly` models) runs nightly and on tags via [test.yml](.github/workflows/test.yml).
+GitHub runners cover the API and llama_cpp CPU cells (windows-arm64). On real QDC hardware, PRs run a windows + android smoke tier via [pr-check.yml](.github/workflows/pr-check.yml); the full matrix (adds linux and the `nightly` models) runs nightly and on rc / stable tags via [test.yml](.github/workflows/test.yml).
 
 ## Project structure
 
@@ -49,7 +49,7 @@ GitHub runners cover the API and llama_cpp CPU cells. On real QDC hardware, PRs 
 | [cli/](cli/)     | Go CLI (`cmd/`, `internal/`, `server/`, `release/`), built with Bazel.         |
 | [bindings/](bindings/) | Language bindings: `android/`, `go/`, `python/`, `python-llama-cpp/`, `python-qairt/`. |
 | [docs/](docs/)   | Documentation site (Mintlify).                                                 |
-| [examples/](examples/) | Sample usage (`android/`, `python/`).                                    |
+| [examples/](examples/) | Sample usage (`python/`, `sdk/`). The Android demo app lives in [qualcomm/ai-hub-apps](https://github.com/qualcomm/ai-hub-apps). |
 | [tests/](tests/) | SDK/plugin pytest suite + Go CLI black-box tests + QDC device harness.          |
 | [scripts/](scripts/)   | Bazel helper rules.                                                      |
 | [third-party/](third-party/) | Vendored `llama.cpp` and `geniex-qairt` submodules.               |
@@ -71,7 +71,7 @@ Format: `<type>/<short-topic>`. Base branch is `main`.
 | `ci`      | CI config only.                            | `ci/add-windows-runner`     |
 | `release` | Long-lived release-prep branches (rare).   | `release/0.5`               |
 
-Personal dev branches like `perry/dev/<topic>` are allowed for shared WIP. Tag policy (which channels may be cut from which branches) lives in [notes/release.md](notes/release.md).
+Personal dev branches like `<name>/dev/<topic>` are allowed for shared WIP. Tag policy (which channels may be cut from which branches) lives in [notes/release.md](notes/release.md).
 
 ### Commits — Conventional Commits
 
@@ -82,7 +82,7 @@ Personal dev branches like `perry/dev/<topic>` are allowed for shared WIP. Tag p
 <footer>          # optional; BREAKING CHANGE, issue refs, Signed-off-by
 ```
 
-Every commit MUST use one of these types. CI and `/release` derive the SemVer bump from the type.
+Every commit MUST use one of these types. `/release` uses them as the first hint for the SemVer bump (it still reads the diff).
 
 | Type       | Meaning                                      | Bump               |
 |------------|----------------------------------------------|--------------------|
@@ -101,7 +101,7 @@ Every commit MUST use one of these types. CI and `/release` derive the SemVer bu
 - **Body** — omit by default; add only when the "why" is non-obvious. Don't restate the diff. No co-authors, no emojis.
 - **Breaking changes** — mark with `!` after the type/scope (`feat(cli)!: rename --model flag`) or a `BREAKING CHANGE:` footer. **Pre-1.0 rule:** the leading `X` in `vX.Y.Z` stays `0` until the first stable public release, so breaking changes bump **MINOR**, not MAJOR, while `X = 0`.
 
-If local history is messy before opening a PR, tidy it with the [`reshape-pr-commits`](.claude/skills/reshape-pr-commits/SKILL.md) skill or `git rebase -i`.
+If local history is messy before opening a PR, tidy it with `git rebase -i` (keep `-s` on every rewritten commit).
 
 ### Sign your commits (DCO)
 
@@ -121,9 +121,10 @@ Run the same checks CI runs before you commit. The authoritative list is [.githu
 
 | Language | Scope                                              | Command                                          |
 |----------|----------------------------------------------------|--------------------------------------------------|
-| C/C++    | touched files under `sdk/`, `cli/`, `bindings/python/` | `clang-format-18 -i <file>`                  |
-| Python   | `bindings/python/**/*.py`                          | `ruff check --fix <file> && ruff format <file>`  |
+| C/C++    | touched files, excluding `third-party/`, `sdk/build/`, `sdk/include/external/`, `sdk/plugins/qnn/libs/` | `clang-format-18 -i <file>` |
+| Python   | `bindings/python/**/*.py`, `tests/**/*.py`         | `ruff check --fix <file> && ruff format <file>` (ruff 0.6.9) |
 | Go       | `cli/`                                             | `go mod tidy` (commit the `go.mod`/`go.sum` diff) |
+| Rust     | `sdk/model-manager/`                               | `cargo fmt --manifest-path sdk/model-manager/Cargo.toml --all` |
 
 When CI adds a check, this section needs no edit — the workflow is the source of truth.
 
@@ -152,11 +153,11 @@ The user-facing control is `GENIEX_LOG` (`trace`/`debug`/`info`/`warn`/`error`/`
 
 ## Opening a PR
 
-- **Base**: `main`. **Merge strategy**: rebase.
+- **Base**: `main`.
 - **Title**: MUST follow the Conventional Commits format above — reviewers and agents reject titles that don't.
-- **Body**: `## Summary`, a `## Test plan` checklist, and a `Closes #<issue>` line. Follow the shape of recent merged PRs.
-- **Checks**: the PR graph ([pr-check.yml](.github/workflows/pr-check.yml)) runs lint → build-sdk → CLI/Python/Android builds → docker. In parallel, [qcom-preflight-checks.yml](.github/workflows/qcom-preflight-checks.yml) runs Semgrep, DCO sign-off, copyright/license, commit-email, and dependency review. Resolve anything they flag before merge.
-- **Reviewers**: no required reviewers today; request review from the owner of the area you touched — see [CODEOWNERS](CODEOWNERS).
+- **Body**: `## Summary` (one bullet per change) and a `## Test plan` with only the checks CI doesn't show. Add `Closes #<issue>` when the issue is in this repo.
+- **Checks**: draft PRs run lint only; marking ready runs the full graph in [pr-check.yml](.github/workflows/pr-check.yml) (SDK build, CLI / Python / Android / Docker builds, unit tests, QDC smoke tier). [qcom-preflight-checks.yml](.github/workflows/qcom-preflight-checks.yml) adds Semgrep, copyright/license, commit-email, and dependency review; the DCO app checks sign-offs. Resolve anything they flag before merge.
+- **Reviewers**: request review from [CODEOWNERS](CODEOWNERS).
 
 ## Reporting issues
 
@@ -170,4 +171,4 @@ Participation is governed by our [Code of Conduct](CODE-OF-CONDUCT.md). Be respe
 
 ## Releases
 
-See [notes/release.md](notes/release.md). The [`/release`](.claude/commands/release.md) command walks through the tag format, channel semantics (`alpha`/`beta`/`rc`/stable), and decision procedure.
+See [notes/release.md](notes/release.md). The [`/release`](.claude/skills/release/SKILL.md) skill applies its decision procedure and guardrails.

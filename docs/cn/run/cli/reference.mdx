@@ -35,7 +35,7 @@ geniex pull local/my-model --local-path /path/to/model-dir
 
 ```powershell
 Choose a precision version to download
-> Q4_0       [1.2 GiB] (default)
+> Q4_0       [1.2 GiB]
   Q8_0       [2.0 GiB]
   F16        [3.8 GiB]
 ```
@@ -73,14 +73,14 @@ geniex infer ai-hub-models/Qwen3-4B --compute npu
 
 ```bash
 # 显式设备列表——分散到多个 HTP 核心（仅限 llama.cpp + 多 DSP 设备）
-GGML_HEXAGON_NDEV=4 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 --compute HTP0,HTP1,HTP2,HTP3
+GGML_HEXAGON_DEVICES=4 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 --compute HTP0,HTP1,HTP2,HTP3
 ```
 
-<Note>将 `GGML_HEXAGON_NDEV` 设置为与 `--compute` 中设备 ID 数量一致。`qairt` 模型会将设备列表强制转为 NPU 并输出警告。性能数据参见 [MTP 教程](/en/tutorials/speculative-decoding-mtp#spreading-across-multiple-htp-cores)。</Note>
+<Note>将 `GGML_HEXAGON_DEVICES` 设置为与 `--compute` 中设备 ID 数量一致。`qairt` 模型会将设备列表强制转为 NPU 并输出警告。性能数据参见 [MTP 教程](/en/tutorials/speculative-decoding-mtp#spreading-across-multiple-htp-cores)。</Note>
 
-<Note>VLM 使用 `--compute npu` 时，视觉编码器默认与语言模型共用同一个 HTP session，在部分设备上可能崩溃。可用 `GGML_HEXAGON_NDEV=2 geniex infer <vlm> --compute HTP0 --vit-compute HTP1` 让它独占第二个 session。详见[故障排查](/cn/resources/troubleshooting)。</Note>
+<Note>VLM 使用 `--compute npu` 时，视觉编码器默认与语言模型共用同一个 HTP session，在部分设备上可能崩溃。可用 `GGML_HEXAGON_DEVICES=2 geniex infer <vlm> --compute HTP0 --vit-compute HTP1` 让它独占第二个 session。详见[故障排查](/cn/resources/troubleshooting)。</Note>
 
-<Warning>Qualcomm AI Hub 模型仅在 NPU 上运行。使用 `--compute cpu` 或 `--compute gpu` 会返回错误。</Warning>
+<Warning>Qualcomm AI Hub 模型仅在 NPU 上运行。`--compute cpu` 或 `--compute gpu` 会被忽略并输出警告，模型仍在 NPU 上运行。</Warning>
 
 ### **`geniex infer` — VLM**
 
@@ -196,7 +196,6 @@ geniex --log debug list
 | `--seed` | int | — | 随机种子，用于可复现输出。 |
 | `--grammar-path` | string | — | GBNF 语法文件路径，用于约束生成。 |
 | `--grammar-string` | string | — | 内联 GBNF 格式语法字符串。 |
-| `--enable-json` | — | — | 强制仅输出 JSON。 |
 
 ### 模型标志
 
