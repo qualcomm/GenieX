@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -15,6 +16,7 @@
 #include <vector>
 
 #include "common.h"
+#include "geniex_model.h"
 #include "ggml-backend.h"
 #include "logging.h"
 #include "speculative.h"
@@ -406,6 +408,38 @@ std::optional<std::vector<ggml_backend_dev_t>> resolve_devices(const char* devic
         devices.push_back(nullptr);  // NULL terminator for llama_model_params::devices
     }
     return devices;
+}
+
+// IQ9: HTP0 row-splits across both NSPs (small models, mmproj), HTP1-HTP3 are single sessions on NSP0 and HTP4-HTP6
+// on NSP1, for layer-splitting models too large for one session.
+constexpr const char* kIq9HexagonDevices = "HTP0[0-1:0],HTP1[0:1],HTP2[0:2],HTP3[0:3],HTP4[1:1],HTP5[1:2],HTP6[1:3]";
+
+const char* linux_hexagon_devices() {
+    if (!std::filesystem::exists("/dev/fastrpc-cdsp1")) return "2";
+    char* chipset = nullptr;
+    geniex_model_detect_chipset(/*offline=*/1, &chipset);
+    const bool iq9 = chipset && std::string_view(chipset) == "qualcomm-qcs9075";
+    if (chipset) geniex_free(chipset);
+    return iq9 ? kIq9HexagonDevices : "HTP0[0-1:0],HTP1[0-1:1]";
+}
+
+void select_iq9_npu_devices(std::vector<ggml_backend_dev_t>& selection, const char* model_path) {
+    const char* env = std::getenv("GGML_HEXAGON_DEVICES");
+    if (!env || std::strcmp(env, kIq9HexagonDevices) != 0 || !model_path) return;
+    // resolve_devices() output is null-terminated: plain `npu` is {HTP0, nullptr}.
+    if (selection.size() != 2 || !selection[0] || std::strcmp(ggml_backend_dev_name(selection[0]), "HTP0") != 0) return;
+
+    std::error_code ec;
+    const uintmax_t size = std::filesystem::file_size(model_path, ec);
+    if (ec || size < (2ull << 30)) return;
+    // Keep the per-NSP grouping: alternating cdsp/cdsp1 between consecutive layers aborts with dsp-rsp
+    // INTERNAL-ERROR. Up to ~8 GiB (4B-13B Q4) two sessions per NSP fit and leave HTP0 to the mmproj; larger
+    // models (e.g. Qwen3-30B-A3B) need all seven.
+    const char* devices = size >= (8ull << 30) ? "HTP0,HTP1,HTP2,HTP3,HTP4,HTP5,HTP6" : "HTP1,HTP2,HTP4,HTP5";
+    auto        split   = resolve_devices(devices);
+    if (!split || split->empty()) return;
+    GENIEX_LOG_INFO("IQ9 NPU: {} MiB model, layer-splitting across {}", size >> 20, devices);
+    selection = std::move(*split);
 }
 
 void apply_device_selection(llama_model_params& mpar, std::vector<ggml_backend_dev_t>& selection, Device device) {

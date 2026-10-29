@@ -63,6 +63,7 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
     if (!selection) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
+    select_iq9_npu_devices(*selection, input->model_path);
     apply_device_selection(mpar, *selection, device);
 
     // FIX: HTP backend patch
