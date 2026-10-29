@@ -32,6 +32,14 @@
         "devices": ["npu"]
       }
     ],
+    "llama_cpp_mtp_qwen35": [
+      {
+        "id": "bartowski/Qwen_Qwen3.5-0.8B-GGUF",
+        "precision": "Q8_0",
+        "hub": "hf",
+        "devices": ["cpu", "npu"]
+      }
+    ],
     "llama_cpp_mtp_draft": [
       {
         "id": "RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf",

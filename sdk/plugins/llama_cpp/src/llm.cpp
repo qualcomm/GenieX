@@ -143,6 +143,9 @@ int32_t LlamaLlm::reset() {
     this->past_prompt_tokens.clear();
 
     llama_memory_clear(llama_get_memory(this->ctx), /*clear data=*/true);
+    if (this->draft_ctx) {
+        llama_memory_clear(llama_get_memory(this->draft_ctx), /*clear data=*/true);
+    }
 
     return GENIEX_SUCCESS;
 }
@@ -326,7 +329,8 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
             if (match_len < this->n_past_global - this->n_past) {
                 GENIEX_LOG_WARN("prefix match: matched prefix is outside the cache; resetting state");
                 this->reset();
-            } else if (!llama_memory_seq_rm(mem, 0, match_len, -1)) {
+            } else if (!llama_memory_seq_rm(mem, 0, match_len, -1) ||
+                       (this->draft_ctx && !llama_memory_seq_rm(llama_get_memory(this->draft_ctx), 0, match_len, -1))) {
                 GENIEX_LOG_WARN("prefix match: rollback to token {} failed; resetting state", match_len);
                 this->reset();
             } else {
@@ -835,6 +839,12 @@ int32_t LlamaLlm::decode_speculative(const geniex_GenerationConfig& cfg, const s
         common_speculative_draft(this->spec);
         draft_n_total += (int64_t)draft.size();
 
+        // Drafting wrote unverified positions into the drafter's KV. Replay
+        // the verification batch from the same committed prefix as the target.
+        if (mem_dft) {
+            llama_memory_seq_rm(mem_dft, seq_id, this->n_past, -1);
+        }
+
         // Verification batch: [id_last, draft0, draft1, ...], all needing logits.
         batch.clear();
         llama_pos pos = this->n_past;
@@ -943,8 +953,9 @@ int32_t LlamaLlm::setup_speculative(
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
 
-        llama_model_params dmpar     = build_model_params(config, device);
-        auto               selection = resolve_devices(device_id);
+        llama_model_params dmpar = build_model_params(config, device);
+        dmpar.load_mtp           = is_mtp;
+        auto selection           = resolve_devices(device_id);
         if (selection) {
             apply_device_selection(dmpar, *selection, device);
         }

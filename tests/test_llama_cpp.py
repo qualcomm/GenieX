@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import platform
 import random
 import re
@@ -40,6 +41,7 @@ GENIEX_ERROR_VLM_IMAGE_LOAD = -201001
 _LLM = primary('llama_cpp_llm')
 _VLM = primary('llama_cpp_vlm')
 _MTP_TARGET = primary('llama_cpp_mtp_target')
+_MTP_QWEN35 = primary('llama_cpp_mtp_qwen35')
 _LLM_MATRIX = matrix('llama_cpp_llm')
 _VLM_MATRIX = matrix('llama_cpp_vlm')
 # Scored against a cpu reference run of the primary model, so not matrix-driven.
@@ -446,6 +448,65 @@ def test_mtp_multi_turn(llama_cpp_mtp_paths, device_map):
     assert (
         'alice' in replies[-1].lower()
     ), f'device_map={device_map!r} expected reply to recall "Alice", got={replies[-1]!r}'
+
+
+@pytest.mark.llm
+@pytest.mark.parametrize('device_map', _MTP_QWEN35.devices)
+@pytest.mark.parametrize('scenario', ['reset', 'identical', 'edit', 'replace'])
+def test_mtp_qwen35_cache_lifecycle(cached, device_map, scenario):
+    # Qwen3.5 keeps its MTP head in nextn.* tensors and has a separate drafter
+    # KV cache. Gemma's shared-cache MTP path does not exercise these contracts.
+    if device_map == 'npu' and _IS_QCS9075M:
+        pytest.skip('draft-mtp not yet supported upstream on QCS9075M / HTP')
+    model_path = os.environ.get('GENIEX_TEST_MTP_MODEL') or cached(_MTP_QWEN35).model_path
+    config = dict(
+        model_name=_MTP_QWEN35.id,
+        device_map=f'llama_cpp:{device_map}',
+        n_ctx=512,
+        n_batch=128,
+        n_ubatch=128,
+        n_threads=4,
+    )
+    questions = {
+        'reset': 'Count from one to ten, separated by commas.',
+        'identical': 'Count from one to ten, separated by commas.',
+        'edit': 'Count from one to eight, separated by commas.',
+        'replace': 'What is two plus two?',
+    }
+    with geniex.AutoModelForCausalLM.from_pretrained(model_path, spec_type='none', **config) as plain:
+        prompts = [
+            plain.tokenizer.apply_chat_template(
+                [
+                    {'role': 'system', 'content': 'Answer briefly without explaining.'},
+                    {'role': 'user', 'content': question},
+                ],
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=False,
+            )
+            for question in ['Count from one to ten, separated by commas.', questions[scenario]]
+        ]
+        expected = []
+        for prompt in prompts:
+            plain.reset()
+            expected.append(plain.generate(prompt, temperature=GREEDY_TEMPERATURE, max_new_tokens=64).text)
+
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        model_path,
+        spec_type='draft-mtp',
+        spec_draft_model=model_path,
+        spec_n_max=3,
+        **config,
+    ) as llm:
+        for index, prompt in enumerate(prompts):
+            if scenario == 'reset':
+                llm.reset()
+            out = llm.generate(prompt, temperature=GREEDY_TEMPERATURE, max_new_tokens=64)
+            assert out.text, f'{scenario}: empty completion on call {index + 1}'
+            # Setup silently falls back to plain decoding on error. Require
+            # actual drafting so a disabled MTP path cannot make this pass.
+            assert out.profile.draft_n_total > 0, f'{scenario}: MTP was not active'
+            assert out.text == expected[index], f'{scenario}: call {index + 1} differs from a clean plain decode'
 
 
 _MEDIA_MARKER = '<__media__>'
