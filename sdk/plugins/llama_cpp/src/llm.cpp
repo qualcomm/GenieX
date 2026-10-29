@@ -13,6 +13,7 @@
 
 #include "chat.h"
 #include "common.h"
+#include "geniex_model.h"
 #include "htp_session.h"
 #include "logging.h"
 #include "params.h"
@@ -90,6 +91,26 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
             GENIEX_LOG_INFO("gpt-oss on GPU: flash attention enabled");
         }
     }
+#if defined(_WIN32)
+    // Gemma 4 26B-A4B (the only MoE gemma4) on X2 Elite NPU: weights already take ~13.8 GiB of the ~15.1 GiB HTP
+    // mapping cap, so the default 1024 ubatch compute buffer pushes ctx >= 3584 over it and fastrpc_mmap fails.
+    // X Elite runs it fine at 1024 up to 32k ctx. See qcom-ai-hub/geniex#1736.
+    if (device == Device::NPU && config.n_ubatch <= 0) {
+        char arch[32]    = {};
+        char experts[16] = {};
+        llama_model_meta_val_str(this->model, "general.architecture", arch, sizeof(arch));
+        llama_model_meta_val_str(this->model, "gemma4.expert_count", experts, sizeof(experts));
+        if (strcmp(arch, "gemma4") == 0 && atoi(experts) > 1) {
+            char* chipset = nullptr;
+            geniex_model_detect_chipset(/*offline=*/1, &chipset);
+            if (chipset && strcmp(chipset, "qualcomm-snapdragon-x2-elite") == 0) {
+                cpar.n_ubatch = 512;
+                GENIEX_LOG_INFO("gemma4 MoE on {} NPU: n_ubatch capped to 512", chipset);
+            }
+            if (chipset) geniex_free(chipset);
+        }
+    }
+#endif
     this->ctx = llama_init_from_model(this->model, cpar);
     if (!this->ctx) {
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
