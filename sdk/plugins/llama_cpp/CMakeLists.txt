@@ -78,6 +78,50 @@ if(GGML_HEXAGON)
     unset(_HTP_FILES)
 endif()
 
+# Adreno precompiled OpenCL kernel library (Software Center
+# Adreno_Kernel_Library_GGML). ggml-opencl loads it by bare name and falls
+# back to its builtin kernels when it is missing or has no kernel for the
+# GPU; only X2 GPUs have matching kernels today. The plugin's DLL directory
+# is lib/llama_cpp, so it installs next to ggml-opencl.dll. Pinned so a
+# release is reproducible; Windows/latest.zip moves.
+if(WIN32 AND GGML_OPENCL AND GGML_OPENCL_USE_ADRENO_BIN_KERNELS)
+    set(_AK_VERSION 0.0.15)
+    set(_AK_SHA256 325c89a3bce51abe95f40c6bacece005d5ca9cf6166eb5f17d33592cd13ab795)
+    set(_AK_URL "https://softwarecenter.qualcomm.com/api/download/software/tools/Adreno_Kernel_Library_GGML/Windows/${_AK_VERSION}/adreno-opencl-kernels-${_AK_VERSION}.zip")
+    set(_AK_DIR ${CMAKE_BINARY_DIR}/adreno-opencl-kernels-${_AK_VERSION})
+    set(_AK_ZIP ${_AK_DIR}.zip)
+
+    # Skips the download when the zip is already there with the pinned hash.
+    file(DOWNLOAD ${_AK_URL} ${_AK_ZIP}
+        EXPECTED_HASH SHA256=${_AK_SHA256}
+        TLS_VERIFY ON
+        STATUS _AK_STATUS)
+    list(GET _AK_STATUS 0 _AK_CODE)
+    if(NOT _AK_CODE EQUAL 0)
+        message(FATAL_ERROR "Adreno kernel library download failed: ${_AK_STATUS}")
+    endif()
+    if(NOT EXISTS ${_AK_DIR}/adreno-opencl-kernels.dll)
+        file(ARCHIVE_EXTRACT INPUT ${_AK_ZIP} DESTINATION ${_AK_DIR})
+    endif()
+    if(NOT EXISTS ${_AK_DIR}/adreno-opencl-kernels.dll)
+        message(FATAL_ERROR "adreno-opencl-kernels.dll missing from ${_AK_ZIP}")
+    endif()
+    message(STATUS "Adreno kernel library ${_AK_VERSION}: ${_AK_DIR}")
+
+    install(FILES ${_AK_DIR}/adreno-opencl-kernels.dll DESTINATION lib/llama_cpp)
+    install(FILES ${_AK_DIR}/license.txt
+        DESTINATION lib/llama_cpp
+        RENAME adreno-opencl-kernels-license.txt)
+
+    unset(_AK_VERSION)
+    unset(_AK_SHA256)
+    unset(_AK_URL)
+    unset(_AK_DIR)
+    unset(_AK_ZIP)
+    unset(_AK_STATUS)
+    unset(_AK_CODE)
+endif()
+
 # llama.cpp benefits from relaxed-FP (FMA contraction, reassociation)
 if(WIN32 AND CMAKE_C_COMPILER_ID MATCHES "Clang")
     foreach(_t IN ITEMS llama ggml ggml-base ggml-cpu ggml-vulkan ggml-opencl ggml-hexagon mtmd)
