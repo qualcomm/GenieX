@@ -57,7 +57,11 @@ pub fn parse_range(req: &Request) -> (usize, usize) {
     (start, end - start + 1)
 }
 
+/// 206 with the requested slice, or 200 with all of `body` when unranged.
 pub fn range_slice(body: &[u8], req: &Request) -> ResponseTemplate {
+    if !req.headers.contains_key("range") {
+        return ResponseTemplate::new(200).set_body_bytes(body.to_vec());
+    }
     let (start, len) = parse_range(req);
     ResponseTemplate::new(206).set_body_bytes(body[start..start + len].to_vec())
 }

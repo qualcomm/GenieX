@@ -242,7 +242,8 @@ pub(crate) async fn build_source(
             req.hint.clone(),
         ))),
         PullIntent::ModelScope { repo, token } => {
-            let src = ModelScopeSource::new(repo.clone(), token.clone(), req.hint.clone())?;
+            let src =
+                ModelScopeSource::new(repo.clone(), token.clone(), transport, req.hint.clone())?;
             Ok(Box::new(src))
         }
         PullIntent::AiHub {

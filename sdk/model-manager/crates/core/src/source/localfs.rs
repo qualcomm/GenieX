@@ -11,7 +11,6 @@
 //! - AI Hub extracted directory (`metadata.json` + `.bin` shards)
 //! - AI Hub local `.zip`
 
-use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -22,16 +21,17 @@ use url::Url;
 
 use crate::error::{Error, Result};
 use crate::gguf;
-use crate::manifest::{ModelManifest, ModelType};
-use crate::manifest_builder::{infer_manifest_from_names, untagged_gguf_names, ManifestHint};
+use crate::manifest::ModelType;
+use crate::manifest_builder::ManifestHint;
 use crate::transport::{HttpTransport, LocalFileTransport};
 
 use super::ai_hub::remote_zip::{fetch_central_directory, Method, ZipEntry};
 use super::ai_hub::{parse_archive_metadata, prepare_flat_entries, zip_files, Archive};
-use super::{basename, files_for_manifest, qairt_plan, BytesSource, FileSpec, ModelSource, Plan};
+use super::{
+    basename, files_for_manifest, qairt_plan, resolve_manifest, BytesSource, FileSpec, ModelSource,
+    Plan, RepoFiles, MANIFEST_FILE,
+};
 
-const MANIFEST_FILE: &str = "geniex.json";
-const CONFIG_FILE: &str = "config.json";
 const AIHUB_METADATA_FILE: &str = "metadata.json";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,18 +101,17 @@ fn has_extension(path: &Path, ext: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Regular files directly under `dir`, except `geniex.json`, sorted by name.
+/// Regular files directly under `dir`, sorted by name.
 fn list_files(dir: &Path) -> Result<Vec<(String, u64)>> {
     let mut out = Vec::new();
     for entry in fs::read_dir(dir)?.flatten() {
         if !entry.file_type().is_ok_and(|t| t.is_file()) {
             continue;
         }
-        let Ok(name) = entry.file_name().into_string() else {
-            continue;
-        };
-        if name != MANIFEST_FILE {
-            out.push((name, entry.metadata().map(|m| m.len()).unwrap_or(0)));
+        if let Ok(name) = entry.file_name().into_string() {
+            // DirEntry's cached size can be stale on Windows.
+            let size = fs::metadata(entry.path()).map(|m| m.len()).unwrap_or(0);
+            out.push((name, size));
         }
     }
     out.sort();
@@ -139,41 +138,42 @@ impl LocalFsSource {
 impl ModelSource for LocalFsSource {
     async fn plan(&self) -> Result<Plan> {
         match detect_local_kind(&self.source_dir)? {
-            LocalKind::HfGguf => self.plan_hf_gguf(),
+            LocalKind::HfGguf => self.plan_hf_gguf().await,
             LocalKind::AiHubExtracted => self.plan_ai_hub_extracted(),
             LocalKind::AiHubZip => self.plan_ai_hub_zip().await,
         }
     }
 }
 
+#[async_trait]
+impl RepoFiles for LocalFsSource {
+    async fn read(&self, name: &str) -> Result<Vec<u8>> {
+        Ok(fs::read(self.source_dir.join(name))?)
+    }
+
+    async fn header_quant(&self, name: &str, _size: u64) -> Option<String> {
+        gguf::quant_from_file(&self.source_dir.join(name))
+    }
+}
+
 impl LocalFsSource {
-    fn plan_hf_gguf(&self) -> Result<Plan> {
-        let listing = list_files(&self.source_dir)?;
-        let sizes: HashMap<String, i64> = listing
-            .iter()
-            .map(|(n, s)| (n.clone(), *s as i64))
+    async fn plan_hf_gguf(&self) -> Result<Plan> {
+        let mut listing: Vec<(String, i64)> = list_files(&self.source_dir)?
+            .into_iter()
+            .map(|(n, s)| (n, s as i64))
             .collect();
-        let names: Vec<String> = listing.into_iter().map(|(n, _)| n).collect();
-
-        let manifest_path = self.source_dir.join(MANIFEST_FILE);
-        let mut manifest: ModelManifest = if manifest_path.exists() {
-            serde_json::from_str(&fs::read_to_string(&manifest_path)?)?
-        } else {
-            let mut hint = self.hint.clone();
-            if names.iter().any(|n| n == CONFIG_FILE) {
-                hint.config_json_bytes = fs::read(self.source_dir.join(CONFIG_FILE)).ok();
-            }
-            for name in untagged_gguf_names(&names) {
-                if let Some(q) = gguf::quant_from_file(&self.source_dir.join(name)) {
-                    hint.header_quants.insert(name.clone(), q);
-                }
-            }
-            infer_manifest_from_names(&self.model_name, &names, &sizes, hint)?
-        };
-        manifest.name = self.model_name.clone();
-
+        // A symlinked geniex.json still counts as shipped.
+        if !listing.iter().any(|(n, _)| n == MANIFEST_FILE)
+            && self.source_dir.join(MANIFEST_FILE).exists()
+        {
+            listing.push((MANIFEST_FILE.to_string(), 0));
+        }
+        let manifest = resolve_manifest(self, &self.model_name, &listing, &self.hint).await?;
         let files = files_for_manifest(&manifest, |name| {
-            let size = sizes.get(name).copied().unwrap_or(0) as u64;
+            let size = listing
+                .iter()
+                .find(|(n, _)| n == name)
+                .map_or(0, |(_, s)| *s as u64);
             let path = self.source_dir.join(name);
             Ok((size, BytesSource::Local { path }))
         })?;
@@ -185,6 +185,7 @@ impl LocalFsSource {
     fn plan_ai_hub_extracted(&self) -> Result<Plan> {
         let files = list_files(&self.source_dir)?
             .into_iter()
+            .filter(|(name, _)| name != MANIFEST_FILE)
             .map(|(name, size)| FileSpec {
                 bytes: BytesSource::Local {
                     path: self.source_dir.join(&name),

@@ -30,8 +30,59 @@ use url::Url;
 
 use crate::error::{Error, Result};
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
+use crate::manifest_builder::{infer_manifest_from_names, untagged_gguf_names, ManifestHint};
 
 pub(crate) const QAIRT_PLUGIN_ID: &str = "qairt";
+pub(crate) const MANIFEST_FILE: &str = "geniex.json";
+const CONFIG_FILE: &str = "config.json";
+
+/// Small-file access to a repo listing, for [`resolve_manifest`].
+#[async_trait]
+pub(crate) trait RepoFiles: Sync {
+    async fn read(&self, name: &str) -> Result<Vec<u8>>;
+    async fn header_quant(&self, name: &str, size: u64) -> Option<String>;
+}
+
+/// The repo's own `geniex.json` when it loads, else a manifest inferred
+/// from `listing` (`(name, size)`), named `name` either way.
+pub(crate) async fn resolve_manifest(
+    repo: &impl RepoFiles,
+    name: &str,
+    listing: &[(String, i64)],
+    hint: &ManifestHint,
+) -> Result<ModelManifest> {
+    let has = |file: &str| listing.iter().any(|(n, _)| n == file);
+    if has(MANIFEST_FILE) {
+        let shipped = repo
+            .read(MANIFEST_FILE)
+            .await
+            .and_then(|b| serde_json::from_slice::<ModelManifest>(&b).map_err(Error::Json));
+        match shipped {
+            Ok(mut m) => {
+                m.name = name.to_string();
+                return Ok(m);
+            }
+            Err(e) => crate::logging::warn(&format!(
+                "{name}: shipped {MANIFEST_FILE} unusable ({e}); inferring"
+            )),
+        }
+    }
+
+    let files: Vec<&(String, i64)> = listing.iter().filter(|(n, _)| n != MANIFEST_FILE).collect();
+    let names: Vec<String> = files.iter().map(|(n, _)| n.clone()).collect();
+    let sizes: HashMap<String, i64> = files.into_iter().cloned().collect();
+    let mut hint = hint.clone();
+    if has(CONFIG_FILE) {
+        hint.config_json_bytes = repo.read(CONFIG_FILE).await.ok();
+    }
+    for file in untagged_gguf_names(&names) {
+        let size = sizes.get(file).copied().unwrap_or(0).max(0) as u64;
+        if let Some(q) = repo.header_quant(file, size).await {
+            hint.header_quants.insert(file.clone(), q);
+        }
+    }
+    infer_manifest_from_names(name, &names, &sizes, hint)
+}
 
 /// Last path component of `path`, treating both `/` and `\` as separators.
 pub(crate) fn basename(path: &str) -> &str {

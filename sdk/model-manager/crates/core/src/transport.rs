@@ -108,12 +108,7 @@ impl ReqwestTransport {
         let retries = cfg.retries.unwrap_or(DEFAULT_RETRIES);
         let retry_backoff = cfg.retry_backoff.unwrap_or(DEFAULT_RETRY_BACKOFF);
 
-        let mut builder = Client::builder()
-            .user_agent(USER_AGENT)
-            .connect_timeout(connect)
-            .read_timeout(read)
-            .redirect(reqwest::redirect::Policy::limited(10))
-            .use_preconfigured_tls(build_tls_config()?);
+        let mut builder = client_builder(connect, read)?;
         if let Some(p) = cfg.proxy_override {
             let proxy =
                 reqwest::Proxy::all(&p).map_err(|e| Error::Http(format!("proxy {p}: {e}")))?;
@@ -132,6 +127,23 @@ impl ReqwestTransport {
     fn is_transient(status: StatusCode) -> bool {
         status.is_server_error() || status == StatusCode::TOO_MANY_REQUESTS
     }
+}
+
+fn client_builder(connect: Duration, read: Duration) -> Result<reqwest::ClientBuilder> {
+    Ok(Client::builder()
+        .user_agent(USER_AGENT)
+        .connect_timeout(connect)
+        .read_timeout(read)
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .use_preconfigured_tls(build_tls_config()?))
+}
+
+/// Client with the transport's default timeouts, for hub calls that need
+/// headers [`HttpTransport`] doesn't expose.
+pub(crate) fn default_client() -> Result<Client> {
+    client_builder(DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT)?
+        .build()
+        .map_err(|e| Error::Http(format!("build reqwest client: {e}")))
 }
 
 /// rustls config whose cert verifier defers to the OS trust store, so

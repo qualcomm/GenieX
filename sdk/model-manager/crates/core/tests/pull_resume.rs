@@ -13,8 +13,8 @@ use model_manager_core::pull::pull_with_source;
 use model_manager_core::source::hf::HfSource;
 use model_manager_core::store::{INFLIGHT_DIR, MANIFEST_FILE};
 use model_manager_core::test_support::{
-    fast_transport, make_body, mount_head, mount_ranged, mount_status, parse_range,
-    pin_small_chunks, range_slice, temp_store,
+    fast_transport, make_body, mount_head, mount_ranged, parse_range, pin_small_chunks,
+    range_slice, temp_store,
 };
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -30,13 +30,6 @@ async fn pull_resumes_after_mid_download_failure() {
 
     let api = serde_json::json!({ "siblings": [{ "rfilename": file_name, "size": body.len() }] });
     mount_ranged(&server, &format!("/api/models/{repo}"), api.to_string()).await;
-    mount_status(
-        &server,
-        "HEAD",
-        &format!("/{repo}/resolve/main/geniex.json"),
-        404,
-    )
-    .await;
     mount_head(&server, &file_path, body.len()).await;
 
     let failed_once = Arc::new(AtomicBool::new(false));

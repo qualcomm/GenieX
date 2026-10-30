@@ -1,13 +1,9 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! HuggingFace [`ModelSource`].
-//!
-//! One call to `/api/models/{repo}` gives siblings + sizes. If the
-//! repo ships a `geniex.json` we use it verbatim; otherwise we
-//! synthesise via [`crate::manifest_builder::infer_manifest_from_names`].
+//! HuggingFace [`ModelSource`]: one `/api/models/{repo}` call lists the
+//! files, then [`resolve_manifest`] picks or infers the manifest.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -16,15 +12,12 @@ use url::Url;
 
 use crate::error::{Error, Result};
 use crate::gguf;
-use crate::manifest::ModelManifest;
-use crate::manifest_builder::{infer_manifest_from_names, untagged_gguf_names, ManifestHint};
-use crate::transport::{fetch_capped, HttpTransport, ReqwestTransport};
+use crate::manifest_builder::ManifestHint;
+use crate::transport::{fetch_capped, HttpTransport};
 
-use super::{files_for_manifest, BytesSource, ModelSource, Plan};
+use super::{files_for_manifest, resolve_manifest, BytesSource, ModelSource, Plan, RepoFiles};
 
 pub const DEFAULT_HF_ENDPOINT: &str = "https://huggingface.co";
-const MANIFEST_FILE: &str = "geniex.json";
-const CONFIG_FILE: &str = "config.json";
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 
 pub struct HfSource {
@@ -36,13 +29,6 @@ pub struct HfSource {
 }
 
 impl HfSource {
-    pub fn new(repo: String, token: Option<String>, hint: ManifestHint) -> Result<Self> {
-        let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
-        let endpoint = crate::config::StoreConfig::hf_endpoint();
-        Self::with_endpoint_and_transport(repo, &endpoint, token, transport, hint)
-    }
-
-    /// Escape hatch for tests / alternate endpoints / shared transports.
     pub fn with_endpoint_and_transport(
         repo: String,
         endpoint: &str,
@@ -73,30 +59,26 @@ impl HfSource {
             .map_err(|e| Error::invalid_url(format!("HF file {}/{name}", self.repo), e))
     }
 
-    async fn fetch_small(&self, url: &Url, limit: u64) -> Result<Vec<u8>> {
-        fetch_capped(self.transport.as_ref(), url, self.token.as_deref(), limit).await
+    async fn fetch_small(&self, url: &Url) -> Result<Vec<u8>> {
+        fetch_capped(
+            self.transport.as_ref(),
+            url,
+            self.token.as_deref(),
+            MAX_MANIFEST_BYTES,
+        )
+        .await
+    }
+}
+
+#[async_trait]
+impl RepoFiles for HfSource {
+    async fn read(&self, name: &str) -> Result<Vec<u8>> {
+        self.fetch_small(&self.file_url(name)?).await
     }
 
-    /// Recover the quant of GGUFs whose filename doesn't carry one. Usually
-    /// zero extra requests; a failure leaves the file to the `DEFAULT` bucket.
-    async fn probe_header_quants(
-        &self,
-        file_names: &[String],
-        sizes: &HashMap<String, i64>,
-    ) -> HashMap<String, String> {
-        let mut out = HashMap::new();
-        for name in untagged_gguf_names(file_names) {
-            let Ok(url) = self.file_url(name) else {
-                continue;
-            };
-            let size = sizes.get(name).copied().unwrap_or(0).max(0) as u64;
-            let quant =
-                gguf::probe_quant(self.transport.as_ref(), &url, self.token.as_deref(), size).await;
-            if let Some(q) = quant {
-                out.insert(name.clone(), q);
-            }
-        }
-        out
+    async fn header_quant(&self, name: &str, size: u64) -> Option<String> {
+        let url = self.file_url(name).ok()?;
+        gguf::probe_quant(self.transport.as_ref(), &url, self.token.as_deref(), size).await
     }
 }
 
@@ -116,62 +98,20 @@ struct ApiSibling {
 #[async_trait]
 impl ModelSource for HfSource {
     async fn plan(&self) -> Result<Plan> {
-        let api_url = self.api_url()?;
-        let body = self.fetch_small(&api_url, MAX_MANIFEST_BYTES).await?;
+        let body = self.fetch_small(&self.api_url()?).await?;
         let parsed: ApiModelResponse = serde_json::from_slice(&body)?;
+        let listing: Vec<(String, i64)> = parsed
+            .siblings
+            .into_iter()
+            .map(|s| (s.rfilename, s.size.unwrap_or(0) as i64))
+            .collect();
 
-        let mut file_sizes: HashMap<String, i64> = HashMap::new();
-        let mut file_names: Vec<String> = Vec::new();
-        for s in parsed.siblings {
-            if s.rfilename == MANIFEST_FILE {
-                continue;
-            }
-            file_sizes.insert(s.rfilename.clone(), s.size.map(|n| n as i64).unwrap_or(0));
-            file_names.push(s.rfilename);
-        }
-
-        // HEAD rather than GET so we don't pull a nonexistent manifest's
-        // HTML 404 page into memory before failing JSON parse.
-        let ships_manifest = {
-            let url = self.file_url(MANIFEST_FILE)?;
-            self.transport
-                .head(&url, self.token.as_deref())
-                .await
-                .is_ok()
-        };
-        // Fetch `config.json` when siblings advertise one. Used by the
-        // modality classifier; fetch failure is non-fatal (we degrade to
-        // the mmproj filename heuristic).
-        let config_bytes: Option<Vec<u8>> =
-            if !ships_manifest && file_names.iter().any(|n| n == CONFIG_FILE) {
-                match self.file_url(CONFIG_FILE) {
-                    Ok(url) => self.fetch_small(&url, MAX_MANIFEST_BYTES).await.ok(),
-                    Err(_) => None,
-                }
-            } else {
-                None
-            };
-        let mut infer_hint = self.hint.clone();
-        infer_hint.config_json_bytes = config_bytes;
-        if !ships_manifest {
-            infer_hint.header_quants = self.probe_header_quants(&file_names, &file_sizes).await;
-        }
-
-        let mut manifest: ModelManifest = if ships_manifest {
-            let url = self.file_url(MANIFEST_FILE)?;
-            match self.fetch_small(&url, MAX_MANIFEST_BYTES).await {
-                Ok(bytes) => serde_json::from_slice(&bytes).map_err(Error::Json)?,
-                Err(_) => {
-                    infer_manifest_from_names(&self.repo, &file_names, &file_sizes, infer_hint)?
-                }
-            }
-        } else {
-            infer_manifest_from_names(&self.repo, &file_names, &file_sizes, infer_hint)?
-        };
-        manifest.name = self.repo.clone();
-
+        let manifest = resolve_manifest(self, &self.repo, &listing, &self.hint).await?;
         let files = files_for_manifest(&manifest, |name| {
-            let size = file_sizes.get(name).copied().unwrap_or(0).max(0) as u64;
+            let size = listing
+                .iter()
+                .find(|(n, _)| n == name)
+                .map_or(0, |(_, s)| *s as u64);
             let url = self.file_url(name)?;
             let auth = self.token.clone();
             Ok((size, BytesSource::Http { url, auth }))
@@ -184,7 +124,7 @@ impl ModelSource for HfSource {
 mod tests {
     use super::*;
     use crate::manifest::ModelType;
-    use crate::test_support::{fast_transport, gguf, mount_ranged, mount_status};
+    use crate::test_support::{fast_transport, gguf, mount_ranged};
     use wiremock::MockServer;
 
     /// Serve an HF repo listing `siblings` (name, bytes) with no `geniex.json`.
@@ -196,13 +136,6 @@ mod tests {
             .collect();
         let api = serde_json::json!({ "siblings": listing }).to_string();
         mount_ranged(&server, &format!("/api/models/{repo}"), api).await;
-        mount_status(
-            &server,
-            "HEAD",
-            &format!("/{repo}/resolve/main/geniex.json"),
-            404,
-        )
-        .await;
         for (name, body) in siblings {
             mount_ranged(
                 &server,
@@ -271,6 +204,22 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(plan.manifest.model_type, ModelType::Vlm);
+    }
+
+    #[tokio::test]
+    async fn plan_uses_shipped_manifest_and_infers_past_a_broken_one() {
+        let shipped: &[u8] = br#"{"Name":"x","ModelName":"Shipped","ModelType":"llm","PluginId":"llama_cpp","ModelFile":{"Q8_0":{"Name":"model-Q8_0.gguf","Downloaded":true,"Size":1}}}"#;
+        for (manifest, want) in [(shipped, "Shipped"), (b"not json", "Repo")] {
+            let plan = plan_for(
+                "org/Repo",
+                &[("geniex.json", manifest), ("model-Q8_0.gguf", &[0; 16])],
+            )
+            .await
+            .unwrap();
+            assert_eq!(plan.manifest.model_name, want);
+            assert_eq!(plan.manifest.name, "org/Repo");
+            assert!(plan.manifest.model_file.contains_key("Q8_0"));
+        }
     }
 
     #[tokio::test]

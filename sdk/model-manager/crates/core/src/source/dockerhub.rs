@@ -34,7 +34,7 @@ use url::Url;
 use crate::error::{parse_manifest, Error, Result};
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
 use crate::manifest_builder::extract_quant;
-use crate::transport::{build_tls_config, fetch_capped, HttpTransport, USER_AGENT};
+use crate::transport::{default_client, fetch_capped, HttpTransport};
 
 use super::{basename, BytesSource, FileSpec, ModelSource, Plan};
 
@@ -120,11 +120,7 @@ impl DockerHubSource {
         cfg: DockerHubConfig,
         transport: Arc<dyn HttpTransport>,
     ) -> Result<Self> {
-        let http = Client::builder()
-            .user_agent(USER_AGENT)
-            .use_preconfigured_tls(build_tls_config()?)
-            .build()
-            .map_err(|e| Error::Http(format!("build docker registry client: {e}")))?;
+        let http = default_client()?;
         let reference = if reference.trim().is_empty() {
             DEFAULT_REFERENCE.to_string()
         } else {
