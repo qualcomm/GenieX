@@ -4,11 +4,11 @@
 use std::os::raw::c_char;
 use std::path::Path;
 
-use model_manager_core::manifest::infer::quant_sort_key;
-use model_manager_core::manifest::{ModelManifest, ModelType};
+use crate::manifest::infer::quant_sort_key;
+use crate::manifest::{ModelManifest, ModelType};
 
-use crate::init::get_store;
-use crate::types::*;
+use crate::ffi::init::get_store;
+use crate::ffi::types::*;
 
 /// Mirrors `geniex_ModelType` in geniex_model.h.
 #[repr(C)]
@@ -221,8 +221,8 @@ pub unsafe extern "C" fn geniex_model_list_detailed_free(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use model_manager_core::manifest::ModelFileInfo;
-    use model_manager_core::test_support::{file_info, manifest};
+    use crate::manifest::ModelFileInfo;
+    use crate::test_support::{file_info, manifest};
     use std::ffi::CStr;
 
     /// Bindings hand this order to callers: stable, headed by the bare-name pick.

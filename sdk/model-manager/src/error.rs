@@ -5,7 +5,7 @@ use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// When adding a variant, also update the FFI code mapping in `crates/ffi/src/types.rs`.
+/// When adding a variant, also update the FFI code mapping in `ffi/types.rs`.
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("model '{0}' not found in local cache")]

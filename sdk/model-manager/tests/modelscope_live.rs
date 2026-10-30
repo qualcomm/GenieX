@@ -5,10 +5,10 @@
 //!
 //!   cargo test --test modelscope_live -- --ignored
 
-use model_manager_core::manifest::infer::ManifestHint;
-use model_manager_core::pull::{pull, PullIntent, PullRequest};
-use model_manager_core::store::Store;
-use model_manager_core::test_support::temp_store;
+use geniex_model::manifest::infer::ManifestHint;
+use geniex_model::pull::{pull, PullIntent, PullRequest};
+use geniex_model::store::Store;
+use geniex_model::test_support::temp_store;
 
 const QWEN3_REPO: &str = "Qwen/Qwen3-0.6B-GGUF";
 

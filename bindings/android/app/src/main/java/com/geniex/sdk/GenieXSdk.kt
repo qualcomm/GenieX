@@ -103,7 +103,7 @@ class GenieXSdk private constructor() {
         private const val TAG = "GenieXSdk"
         const val PLUGIN_ID_QAIRT = "qairt"
         const val PLUGIN_ID_LLAMA_CPP = "llama_cpp"
-        // Mirror of GENIEX_ERROR_COMMON_ALREADY_INITIALIZED from sdk/model-manager/crates/ffi/src/types.rs.
+        // Mirror of GENIEX_ERROR_COMMON_ALREADY_INITIALIZED from sdk/model-manager/src/ffi/types.rs.
         private const val GENIEX_ERROR_ALREADY_INITIALIZED = -100008
 
         init {

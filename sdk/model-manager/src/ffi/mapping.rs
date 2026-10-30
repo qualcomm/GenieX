@@ -3,10 +3,10 @@
 
 use std::os::raw::c_char;
 
-use model_manager_core::model_ref::{is_docker_hub_reference, resolve_alias};
+use crate::model_ref::{is_docker_hub_reference, resolve_alias};
 
-use crate::pull::GenieXHubSource;
-use crate::types::*;
+use crate::ffi::pull::GenieXHubSource;
+use crate::ffi::types::*;
 
 /// Must agree with the Docker routing in `Hub::resolve`.
 #[no_mangle]

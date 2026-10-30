@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Global log sink the FFI layer installs at init (core must not depend on
-//! ffi); falls back to stderr until then.
+//! Global log sink: `geniex_model_init` routes it to the SDK's C logger;
+//! until then (and in Rust tests) it falls back to stderr.
 
 use std::sync::OnceLock;
 

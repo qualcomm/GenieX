@@ -4,13 +4,11 @@
 //! End-to-end AI Hub pull against a wiremock'd release: the zip is
 //! range-read straight into a flat model dir and never lands on disk.
 
-use model_manager_core::error::Result;
-use model_manager_core::pull::pull_with_source;
-use model_manager_core::source::ai_hub::{list_supported_chipsets, AiHubConfig, AiHubSource};
-use model_manager_core::store::Store;
-use model_manager_core::test_support::{
-    build_zip, fast_transport, mount_ranged, temp_store, ZipMethod,
-};
+use geniex_model::error::Result;
+use geniex_model::pull::pull_with_source;
+use geniex_model::source::ai_hub::{list_supported_chipsets, AiHubConfig, AiHubSource};
+use geniex_model::store::Store;
+use geniex_model::test_support::{build_zip, fast_transport, mount_ranged, temp_store, ZipMethod};
 use serde_json::json;
 use wiremock::MockServer;
 

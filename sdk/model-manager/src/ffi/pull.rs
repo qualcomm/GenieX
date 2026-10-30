@@ -4,14 +4,14 @@
 use std::os::raw::{c_char, c_void};
 use std::path::PathBuf;
 
-use model_manager_core::config;
-use model_manager_core::executor::{FileProgress, ProgressCallback};
-use model_manager_core::manifest::infer::ManifestHint;
-use model_manager_core::manifest::ModelType;
-use model_manager_core::pull::{pull, Hub, PullIntent, PullRequest, PullTarget};
+use crate::config;
+use crate::executor::{FileProgress, ProgressCallback};
+use crate::manifest::infer::ManifestHint;
+use crate::manifest::ModelType;
+use crate::pull::{pull, Hub, PullIntent, PullRequest, PullTarget};
 
-use crate::init::{get_store, runtime_handle};
-use crate::types::*;
+use crate::ffi::init::{get_store, runtime_handle};
+use crate::ffi::types::*;
 
 /// Values MUST match `geniex_HubSource` in `include/geniex_model.h`.
 #[repr(C)]

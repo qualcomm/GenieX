@@ -56,5 +56,4 @@ jobs:
         run: |
           cargo test \
             --manifest-path sdk/model-manager/Cargo.toml \
-            --workspace \
             --locked

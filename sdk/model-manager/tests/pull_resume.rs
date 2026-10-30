@@ -8,11 +8,11 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use model_manager_core::manifest::infer::ManifestHint;
-use model_manager_core::pull::pull_with_source;
-use model_manager_core::source::hf::HfSource;
-use model_manager_core::store::{INFLIGHT_DIR, MANIFEST_FILE};
-use model_manager_core::test_support::{
+use geniex_model::manifest::infer::ManifestHint;
+use geniex_model::pull::pull_with_source;
+use geniex_model::source::hf::HfSource;
+use geniex_model::store::{INFLIGHT_DIR, MANIFEST_FILE};
+use geniex_model::test_support::{
     fast_transport, make_body, mount_head, mount_ranged, parse_range, pin_small_chunks,
     range_slice, temp_store,
 };

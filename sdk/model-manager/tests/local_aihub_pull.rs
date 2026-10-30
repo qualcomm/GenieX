@@ -7,11 +7,11 @@
 
 use std::path::Path;
 
-use model_manager_core::manifest::infer::ManifestHint;
-use model_manager_core::manifest::{ModelManifest, ModelType};
-use model_manager_core::pull::pull_with_source;
-use model_manager_core::source::localfs::LocalFsSource;
-use model_manager_core::test_support::{build_zip, fast_transport, temp_store, ZipMethod};
+use geniex_model::manifest::infer::ManifestHint;
+use geniex_model::manifest::{ModelManifest, ModelType};
+use geniex_model::pull::pull_with_source;
+use geniex_model::source::localfs::LocalFsSource;
+use geniex_model::test_support::{build_zip, fast_transport, temp_store, ZipMethod};
 use tempfile::tempdir;
 
 const BIN_A: &[u8] = b"shard-a-payload-AAAAAAAA";

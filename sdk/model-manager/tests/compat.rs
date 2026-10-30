@@ -4,7 +4,7 @@
 //! A Go-CLI-written `geniex.json` (fixture from a real `geniex pull qwen3`)
 //! round-trips through the Rust manifest without loss.
 
-use model_manager_core::manifest::{ModelManifest, ModelType};
+use geniex_model::manifest::{ModelManifest, ModelType};
 
 const GO_MANIFEST: &str = include_str!("fixtures/go_manifest.json");
 

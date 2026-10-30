@@ -14,6 +14,8 @@ pub mod source;
 pub mod store;
 pub mod transport;
 
+mod ffi;
+
 #[cfg(any(test, feature = "test-support"))]
 #[doc(hidden)]
 pub mod test_support;

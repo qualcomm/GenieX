@@ -3,14 +3,14 @@
 
 use std::os::raw::c_char;
 
-use model_manager_core::manifest::infer::ManifestHint;
-use model_manager_core::pull::PullRequest;
-use model_manager_core::query::query;
+use crate::manifest::infer::ManifestHint;
+use crate::pull::PullRequest;
+use crate::query::query;
 
-use crate::init::{get_store, runtime_handle};
-use crate::pull::{extract_name_and_intent, GenieXModelPullInput};
-use crate::store::{to_ffi_type, GenieXModelType};
-use crate::types::*;
+use crate::ffi::init::{get_store, runtime_handle};
+use crate::ffi::pull::{extract_name_and_intent, GenieXModelPullInput};
+use crate::ffi::store::{to_ffi_type, GenieXModelType};
+use crate::ffi::types::*;
 
 /// Mirrors `geniex_QuantCandidate`.
 #[repr(C)]

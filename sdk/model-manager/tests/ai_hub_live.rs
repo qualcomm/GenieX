@@ -11,12 +11,12 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use model_manager_core::executor::ProgressCallback;
-use model_manager_core::pull::pull_with_source;
-use model_manager_core::source::ai_hub::{AiHubConfig, AiHubSource};
-use model_manager_core::source::ModelSource;
-use model_manager_core::test_support::temp_store;
-use model_manager_core::transport::{HttpTransport, ReqwestTransport};
+use geniex_model::executor::ProgressCallback;
+use geniex_model::pull::pull_with_source;
+use geniex_model::source::ai_hub::{AiHubConfig, AiHubSource};
+use geniex_model::source::ModelSource;
+use geniex_model::test_support::temp_store;
+use geniex_model::transport::{HttpTransport, ReqwestTransport};
 
 const AI_HUB_BASE_URL: &str =
     "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models";

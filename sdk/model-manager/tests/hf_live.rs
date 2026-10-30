@@ -5,10 +5,10 @@
 //!
 //!   cargo test --test hf_live -- --ignored
 
-use model_manager_core::manifest::infer::ManifestHint;
-use model_manager_core::pull::{pull, PullIntent, PullRequest};
-use model_manager_core::store::Store;
-use model_manager_core::test_support::temp_store;
+use geniex_model::manifest::infer::ManifestHint;
+use geniex_model::pull::{pull, PullIntent, PullRequest};
+use geniex_model::store::Store;
+use geniex_model::test_support::temp_store;
 
 async fn pull_hf(repo: &str, quant: Option<&str>) -> (Store, tempfile::TempDir) {
     let (store, tmp) = temp_store();

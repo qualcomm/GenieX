@@ -72,8 +72,8 @@ jobs:
           include: |-
             ^sdk/(src|include|plugins|patches|cmake)/
             ^sdk/CMake(Lists\.txt|Presets\.json)$
-            ^sdk/model-manager/crates/core/src/source/ai_hub/
-            ^sdk/model-manager/crates/ffi/src/chipset\.rs$
+            ^sdk/model-manager/src/source/ai_hub/
+            ^sdk/model-manager/src/(host\.rs|ffi/chipset\.rs)$
             ^sdk/benchmark/qdc/_qdc\.py$
             ^third-party/
             ^\.gitmodules$

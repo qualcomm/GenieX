@@ -7,8 +7,8 @@
 
 use std::time::Duration;
 
-use model_manager_core::test_support::fast_transport_config as fast_cfg;
-use model_manager_core::transport::{HttpTransport, ReqwestTransport};
+use geniex_model::test_support::fast_transport_config as fast_cfg;
+use geniex_model::transport::{HttpTransport, ReqwestTransport};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use url::Url;

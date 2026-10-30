@@ -5,11 +5,11 @@ use std::os::raw::c_char;
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
-use model_manager_core::{config::StoreConfig, store::Store};
+use crate::{config::StoreConfig, store::Store};
 use tokio::runtime::{Builder, Handle, Runtime};
 
-use crate::logging;
-use crate::types::*;
+use crate::ffi::logging;
+use crate::ffi::types::*;
 
 static STORE: OnceLock<Store> = OnceLock::new();
 static RUNTIME: OnceLock<Runtime> = OnceLock::new();

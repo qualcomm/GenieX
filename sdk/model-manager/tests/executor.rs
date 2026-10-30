@@ -8,12 +8,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use model_manager_core::error::Error;
-use model_manager_core::executor::{
+use geniex_model::error::Error;
+use geniex_model::executor::{
     chunk as chunklib, Executor, ExecutorConfig, FileProgress, ProgressCallback,
 };
-use model_manager_core::source::{BytesSource, FileSpec};
-use model_manager_core::test_support::{
+use geniex_model::source::{BytesSource, FileSpec};
+use geniex_model::test_support::{
     deflate_raw, fast_transport, make_body, mount_head, mount_ranged, pin_small_chunks,
     range_slice, url,
 };

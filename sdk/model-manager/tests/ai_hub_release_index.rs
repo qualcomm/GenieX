@@ -4,8 +4,8 @@
 //! `releases/latest/` primary + `releases/<version>/` fallback, and
 //! `GENIEX_AIHUBVERSION` skipping `latest/`.
 
-use model_manager_core::source::ai_hub::{list_hub_models, AiHubConfig};
-use model_manager_core::test_support::{mount_ranged, mount_status, EnvGuard};
+use geniex_model::source::ai_hub::{list_hub_models, AiHubConfig};
+use geniex_model::test_support::{mount_ranged, mount_status, EnvGuard};
 use wiremock::MockServer;
 
 const LATEST: &str = "/qai-hub-models/releases/latest/manifest.json";

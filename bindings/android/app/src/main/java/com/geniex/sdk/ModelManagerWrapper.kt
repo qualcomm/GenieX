@@ -134,7 +134,7 @@ object ModelManagerWrapper {
     class GenieXModelError(val code: Int, message: String) : RuntimeException("$message (rc=$code)")
 
     private const val GENIEX_SUCCESS = 0
-    // From sdk/model-manager/crates/ffi/src/types.rs — keep in sync.
+    // From sdk/model-manager/src/ffi/types.rs — keep in sync.
     private const val GENIEX_ERROR_CANCELLED = -100006
     private const val GENIEX_ERROR_ALREADY_INITIALIZED = -100008
 }

@@ -799,13 +799,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "model-manager-core"
+name = "model-manager"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "flate2",
  "fs2",
- "model-manager-core",
+ "model-manager",
  "reqwest",
  "rustls",
  "rustls-platform-verifier",
@@ -819,14 +819,6 @@ dependencies = [
  "webpki-roots 0.26.11",
  "wiremock",
  "zip",
-]
-
-[[package]]
-name = "model-manager-ffi"
-version = "0.1.0"
-dependencies = [
- "model-manager-core",
- "tokio",
 ]
 
 [[package]]

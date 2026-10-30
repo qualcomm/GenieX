@@ -6,9 +6,9 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-use model_manager_core::error::Error;
+use crate::error::Error;
 
-use crate::logging;
+use crate::ffi::logging;
 
 thread_local! {
     /// Kept alive so `geniex_model_last_error_message` can hand out a stable pointer.
@@ -182,7 +182,7 @@ pub trait OrReport<T> {
     fn or_report(self) -> Result<T, i32>;
 }
 
-impl<T> OrReport<T> for model_manager_core::error::Result<T> {
+impl<T> OrReport<T> for crate::error::Result<T> {
     fn or_report(self) -> Result<T, i32> {
         self.map_err(|e| report(&e))
     }

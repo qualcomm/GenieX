@@ -3,11 +3,11 @@
 
 use std::os::raw::c_char;
 
-use model_manager_core::source::ai_hub::{list_hub_models, AiHubConfig};
+use crate::source::ai_hub::{list_hub_models, AiHubConfig};
 
-use crate::init::{get_store, runtime_handle};
-use crate::store::{to_ffi_type, GenieXModelType};
-use crate::types::*;
+use crate::ffi::init::{get_store, runtime_handle};
+use crate::ffi::store::{to_ffi_type, GenieXModelType};
+use crate::ffi::types::*;
 
 #[repr(C)]
 pub struct GenieXHubModelInfo {
