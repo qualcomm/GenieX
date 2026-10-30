@@ -49,8 +49,6 @@ use crate::store::{Store, INFLIGHT_DIR, MANIFEST_FILE};
 use crate::transport::{HttpTransport, ReqwestTransport};
 use crate::validation::validate_model_name;
 
-pub use crate::resume::PROGRESS_SUFFIX;
-
 pub struct PullRequest {
     /// "org/repo" (already resolved from any short alias by the caller).
     pub model_name: String,

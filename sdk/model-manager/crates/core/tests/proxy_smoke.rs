@@ -16,16 +16,11 @@ use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[tokio::test]
-async fn head_returns_size_and_accepts_ranges() {
+async fn head_returns_size() {
     let server = MockServer::start().await;
     Mock::given(method("HEAD"))
         .and(path("/file.bin"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .append_header("Content-Length", "1024")
-                .append_header("Accept-Ranges", "bytes")
-                .append_header("ETag", "\"abc\""),
-        )
+        .respond_with(ResponseTemplate::new(200).append_header("Content-Length", "1024"))
         .mount(&server)
         .await;
 
@@ -33,8 +28,6 @@ async fn head_returns_size_and_accepts_ranges() {
     let url = Url::parse(&format!("{}/file.bin", server.uri())).unwrap();
     let info = t.head(&url, None).await.unwrap();
     assert_eq!(info.size, 1024);
-    assert!(info.accepts_ranges);
-    assert_eq!(info.etag.as_deref(), Some("\"abc\""));
 }
 
 #[tokio::test]

@@ -28,8 +28,6 @@ use crate::resume::marker_path;
 use crate::source::{BytesSource, FileSpec};
 use crate::transport::{HttpTransport, LocalFileTransport};
 
-pub use crate::resume::PROGRESS_SUFFIX;
-
 /// Per-file download progress. `total_bytes == -1` means the total is unknown.
 #[derive(Debug, Clone)]
 pub struct FileProgress {

@@ -66,8 +66,6 @@ pub struct GenieXFileProgress {
 
 pub fn err_to_code(e: &Error) -> i32 {
     match e {
-        Error::NotInitialized => GENIEX_ERROR_COMMON_NOT_INITIALIZED,
-        Error::AlreadyInitialized => GENIEX_ERROR_COMMON_ALREADY_INITIALIZED,
         Error::ModelNotFound(_) => GENIEX_ERROR_COMMON_FILE_NOT_FOUND,
         Error::HubModelNotFound(_) => GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND,
         Error::QuantNotFound(_, _)

@@ -34,7 +34,6 @@ pub struct ChunkRange {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChunkPlan {
-    pub file_size: u64,
     pub chunk_size: u64,
     pub chunks: Vec<ChunkRange>,
 }
@@ -50,7 +49,6 @@ pub fn plan_chunks(file_size: u64) -> ChunkPlan {
 /// zero-length chunk so its marker records completion.
 pub(crate) fn single_chunk_plan(file_size: u64) -> ChunkPlan {
     ChunkPlan {
-        file_size,
         chunk_size: file_size,
         chunks: vec![ChunkRange {
             index: 0,
@@ -81,11 +79,7 @@ pub fn plan_chunks_with_floor(file_size: u64, min_chunk_size: u64) -> ChunkPlan 
             });
         }
     }
-    ChunkPlan {
-        file_size,
-        chunk_size,
-        chunks,
-    }
+    ChunkPlan { chunk_size, chunks }
 }
 
 fn effective_min_chunk_size() -> u64 {

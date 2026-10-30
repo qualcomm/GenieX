@@ -25,12 +25,6 @@ pub enum Error {
     #[error("quantization '{0}' exists but is not downloaded for model '{1}'")]
     QuantNotDownloaded(String, String),
 
-    #[error("model manager not initialized; call geniex_model_init() first")]
-    NotInitialized,
-
-    #[error("model manager already initialized; call geniex_model_deinit() first")]
-    AlreadyInitialized,
-
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 

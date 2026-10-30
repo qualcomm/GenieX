@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use reqwest::header::{ACCEPT_RANGES, AUTHORIZATION, CONTENT_LENGTH, ETAG, RANGE};
+use reqwest::header::{AUTHORIZATION, CONTENT_LENGTH, RANGE};
 use reqwest::{Client, StatusCode};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 use url::Url;
@@ -31,8 +31,6 @@ use crate::error::{Error, Result};
 #[derive(Debug, Clone)]
 pub struct HeadInfo {
     pub size: u64,
-    pub accepts_ranges: bool,
-    pub etag: Option<String>,
 }
 
 #[async_trait]
@@ -216,27 +214,13 @@ impl HttpTransport for ReqwestTransport {
                 });
             }
 
-            let headers = resp.headers();
-            let size = headers
+            let size = resp
+                .headers()
                 .get(CONTENT_LENGTH)
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.parse::<u64>().ok())
                 .ok_or_else(|| Error::Http(format!("HEAD {url}: missing Content-Length")))?;
-            let accepts_ranges = headers
-                .get(ACCEPT_RANGES)
-                .and_then(|v| v.to_str().ok())
-                .map(|s| s.eq_ignore_ascii_case("bytes"))
-                .unwrap_or(false);
-            let etag = headers
-                .get(ETAG)
-                .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_string());
-
-            return Ok(HeadInfo {
-                size,
-                accepts_ranges,
-                etag,
-            });
+            return Ok(HeadInfo { size });
         }
     }
 
@@ -373,11 +357,7 @@ impl LocalFileTransport {
 #[async_trait]
 impl HttpTransport for LocalFileTransport {
     async fn head(&self, _url: &Url, _auth: Option<&str>) -> Result<HeadInfo> {
-        Ok(HeadInfo {
-            size: self.len,
-            accepts_ranges: true,
-            etag: None,
-        })
+        Ok(HeadInfo { size: self.len })
     }
 
     async fn get_range(
@@ -437,7 +417,6 @@ mod tests {
 
         let info = t.head(&dummy, None).await.unwrap();
         assert_eq!(info.size, 6);
-        assert!(info.accepts_ranges);
 
         let mut buf = Vec::new();
         t.get_range(&dummy, None, 2, 4, &mut buf).await.unwrap();
