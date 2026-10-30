@@ -12,7 +12,7 @@
  *
  * Memory convention (mirrors geniex.h):
  *   - All output char* fields are heap-allocated; free them with geniex_free().
- *   - Dedicated _free helpers (geniex_model_paths_free, geniex_model_list_free)
+ *   - Dedicated _free helpers (geniex_model_paths_free, geniex_model_list_detailed_free, ...)
  *     free their members and zero the struct.
  *   - Input pointers are caller-owned and never freed by this library.
  *
@@ -41,7 +41,7 @@ extern "C" {
  *
  * Calling this function more than once per process is a programmer error;
  * a warning is logged via geniex_set_log and
- * GENIEX_ERROR_COMMON_INVALID_INPUT is returned. The first successful
+ * GENIEX_ERROR_COMMON_ALREADY_INITIALIZED is returned. The first successful
  * call is authoritative.
  *
  * HuggingFace tokens are a per-pull concern — see

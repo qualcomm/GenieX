@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 //! `releases/latest/` primary + `releases/<version>/` fallback, and
-//! `GENIEX_AIHUBVERSION` skipping `latest/` (qcom-ai-hub/geniex#1434).
+//! `GENIEX_AIHUBVERSION` skipping `latest/`.
 
 use model_manager_core::source::ai_hub::{list_hub_models, AiHubConfig};
 use model_manager_core::test_support::{mount_ranged, mount_status, EnvGuard};

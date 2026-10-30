@@ -10,7 +10,6 @@ use model_manager_core::pull::{pull, PullIntent, PullRequest};
 use model_manager_core::store::Store;
 use model_manager_core::test_support::temp_store;
 
-/// Pull `repo` (optionally one `quant`) into a fresh store.
 async fn pull_hf(repo: &str, quant: Option<&str>) -> (Store, tempfile::TempDir) {
     let (store, tmp) = temp_store();
     let req = PullRequest {
@@ -66,7 +65,7 @@ async fn end_to_end_pull_qwen3_q4_0() {
     assert_quant_file(&store, repo, "Q4_0", "q4_0");
 }
 
-/// Ships an `fp16` shard next to its Q* shards (#1339). ~3.1 GB.
+/// Ships an `fp16` shard next to its Q* shards. ~3.1 GB.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn end_to_end_pull_qwen2_fp16() {

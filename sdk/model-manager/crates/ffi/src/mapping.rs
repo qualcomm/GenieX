@@ -8,15 +8,7 @@ use model_manager_core::mapping::{is_docker_hub_reference, resolve_alias};
 use crate::pull::GenieXHubSource;
 use crate::types::*;
 
-/// Resolve the hub a pull/query would *actually* use for `model_name`, given
-/// the caller's requested `hub_in`. Mirrors the `use_docker` decision inside
-/// `extract_name_and_intent`: an explicit `GENIEX_HUB_DOCKER` stays Docker, and
-/// `GENIEX_HUB_AUTO` becomes Docker when the name carries a Docker Hub prefix
-/// (`docker.io/…`). Every other input is returned unchanged.
-///
-/// Bindings call this to decide binding-side flow (e.g. skip the GGUF precision
-/// picker for Docker Hub, whose `:<tag>` is a registry reference, not a quant)
-/// without re-implementing the prefix table the SDK owns. No network I/O.
+/// Must stay in sync with the `use_docker` decision in `extract_name_and_intent`.
 #[no_mangle]
 pub extern "C" fn geniex_model_resolve_hub(
     model_name: *const c_char,

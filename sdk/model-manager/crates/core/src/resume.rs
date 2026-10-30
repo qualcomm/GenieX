@@ -1,32 +1,19 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Filter `FileSpec`s that still need fetching on a resumed pull.
-//!
-//! The executor does the final chunk-level resume decision from the
-//! `.progress` bitmap, but a restarted pull still benefits from
-//! short-circuiting files whose bitmap is already all `0x01` — each
-//! otherwise round-trips one HEAD per file just to confirm size.
-//!
-//! Also recognises a legacy "published but no marker" state: a prior
-//! pull left the output file in place with no `.progress` sibling.
-//! Treat that as done rather than re-HEADing.
+//! Skip files already complete on disk so a resumed pull doesn't HEAD them again.
 
 use std::path::{Path, PathBuf};
 
 use crate::executor::chunk;
 use crate::source::FileSpec;
 
-/// Suffix appended to a file name for its `.progress` marker.
 pub const PROGRESS_SUFFIX: &str = ".progress";
 
 pub(crate) fn marker_path(dest_dir: &Path, name: &str) -> PathBuf {
     dest_dir.join(format!("{name}{PROGRESS_SUFFIX}"))
 }
 
-/// Return the subset of `files` that still need to be sent to the
-/// executor. Files are included when the on-disk marker/payload state
-/// does not already confirm them as done.
 pub fn filter_pending(files: &[FileSpec], dest_dir: &Path) -> Vec<FileSpec> {
     files
         .iter()
@@ -42,6 +29,7 @@ fn needs_fetch(spec: &FileSpec, dest_dir: &Path) -> bool {
     }
     let marker = marker_path(dest_dir, name);
     let output = dest_dir.join(name);
+    // A published file has no `.progress` sibling.
     if !marker.exists() && output.exists() {
         let on_disk = std::fs::metadata(&output).map(|m| m.len()).unwrap_or(0);
         return on_disk != spec.size;

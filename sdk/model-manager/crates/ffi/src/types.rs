@@ -11,9 +11,7 @@ use model_manager_core::error::Error;
 use crate::logging;
 
 thread_local! {
-    /// Detailed message for the most recent failure on this thread, kept as a
-    /// live CString so `geniex_model_last_error_message` can hand out a stable
-    /// pointer valid until the next failing call.
+    /// Kept alive so `geniex_model_last_error_message` can hand out a stable pointer.
     static LAST_ERROR: RefCell<Option<CString>> = const { RefCell::new(None) };
 }
 
@@ -26,8 +24,6 @@ fn clear_last_error() {
     LAST_ERROR.with(|slot| *slot.borrow_mut() = None);
 }
 
-/// Return the calling thread's last recorded error message, or NULL.
-/// Library-owned; valid until the next failing geniex_model_* call.
 #[no_mangle]
 pub extern "C" fn geniex_model_last_error_message() -> *const c_char {
     LAST_ERROR.with(|slot| {
@@ -37,7 +33,7 @@ pub extern "C" fn geniex_model_last_error_message() -> *const c_char {
     })
 }
 
-/// Error codes mirroring geniex_ErrorCode from geniex.h.
+/// Mirrors geniex_ErrorCode from geniex.h.
 pub const GENIEX_SUCCESS: i32 = 0;
 pub const GENIEX_ERROR_COMMON_UNKNOWN: i32 = -100000;
 pub const GENIEX_ERROR_COMMON_INVALID_INPUT: i32 = -100001;
@@ -55,8 +51,7 @@ pub const GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE: i32 = -100015;
 pub const GENIEX_ERROR_COMMON_INSUFFICIENT_DISK_SPACE: i32 = -100017;
 pub const GENIEX_ERROR_COMMON_MODEL_INVALID: i32 = -100203;
 
-/// C-compatible per-file progress entry. Must mirror `geniex_FileProgress`
-/// in geniex_model.h.
+/// Must mirror `geniex_FileProgress` in geniex_model.h.
 #[repr(C)]
 pub struct GenieXFileProgress {
     pub file_name: *const c_char,
@@ -72,8 +67,6 @@ pub fn err_to_code(e: &Error) -> i32 {
         | Error::QuantNotDownloaded(_, _)
         | Error::InvalidModelName(_)
         | Error::InvalidUrl { .. } => GENIEX_ERROR_COMMON_INVALID_INPUT,
-        // Split HTTP status into actionable buckets; everything else (other
-        // statuses, timeout/DNS/proxy, freeform) stays a generic network error.
         Error::HttpStatus { status, .. } if *status == 401 || *status == 403 => {
             GENIEX_ERROR_COMMON_AUTH
         }
@@ -85,46 +78,31 @@ pub fn err_to_code(e: &Error) -> i32 {
         Error::HttpStatus { .. } | Error::HttpTimeout(_) | Error::Http(_) => {
             GENIEX_ERROR_COMMON_NETWORK
         }
-        // A local geniex.json that fails to deserialize is a manifest-parse
-        // failure, same category as a malformed remote index.
         Error::ManifestParse { .. } | Error::Json(_) => GENIEX_ERROR_COMMON_MANIFEST_PARSE,
         Error::ChipsetUnavailable { .. } => GENIEX_ERROR_COMMON_CHIPSET_UNAVAILABLE,
         Error::InsufficientDiskSpace { .. } => GENIEX_ERROR_COMMON_INSUFFICIENT_DISK_SPACE,
         Error::Cancelled => GENIEX_ERROR_COMMON_CANCELLED,
-        // Inference failed because the source has no files we recognize as a
-        // model — surface it as an invalid-model error, not a generic unknown.
         Error::ManifestInferenceFailed(_) => GENIEX_ERROR_COMMON_MODEL_INVALID,
-        // Io / Hub are genuinely freeform; keep them as unknown.
         Error::Io(_) | Error::Hub(_) => GENIEX_ERROR_COMMON_UNKNOWN,
     }
 }
 
-/// Log `e` via the geniex log callback, stash its message as this thread's
-/// last error, and return the corresponding code.
 pub fn report(e: &Error) -> i32 {
     report_msg(&e.to_string(), err_to_code(e))
 }
 
-/// Log `msg`, record it as the last error, and return `code`.
 pub fn report_msg(msg: &str, code: i32) -> i32 {
     logging::error(msg);
     set_last_error(msg);
     code
 }
 
-/// Wrap an FFI entry point so panics can't cross the C boundary.
-///
-/// The body returns `Result<i32, i32>`: `Ok(code)` (usually `GENIEX_SUCCESS`)
-/// is returned as-is, `Err(code)` is returned as-is — this lets bodies use
-/// `?` on `cstr_to_str` / `get_store` / etc. Any panic is logged and
-/// converted to `GENIEX_ERROR_COMMON_UNKNOWN`.
+/// Keeps panics from unwinding across the C boundary; `Ok` and `Err` both carry the return code.
 pub fn ffi_guard<F>(f: F) -> i32
 where
     F: FnOnce() -> Result<i32, i32>,
 {
-    // Clear any message left by a prior call on this thread so
-    // geniex_model_last_error_message only ever reflects THIS call's outcome
-    // (set again by report() / the panic arm below on failure).
+    // The last error must reflect only this call.
     clear_last_error();
     match catch_unwind(AssertUnwindSafe(f)) {
         Ok(Ok(code)) | Ok(Err(code)) => code,
@@ -141,9 +119,6 @@ where
     }
 }
 
-/// Convert a raw C string pointer to a `&str`. `Err(INVALID_INPUT)` if
-/// the pointer is null or the bytes aren't UTF-8.
-///
 /// # Safety
 /// `ptr` must be null or point to a NUL-terminated C string valid for
 /// the lifetime `'a`.
@@ -156,22 +131,18 @@ pub unsafe fn cstr_to_str<'a>(ptr: *const c_char) -> Result<&'a str, i32> {
         .map_err(|_| GENIEX_ERROR_COMMON_INVALID_INPUT)
 }
 
-/// Allocate a CString from a Rust &str and return its raw pointer.
-/// The caller frees it via `geniex_free` (or a dedicated `_free` helper).
+/// Freed via `geniex_free` or a dedicated `_free` helper.
 pub fn str_to_cptr(s: &str) -> *mut c_char {
     CString::new(s).unwrap_or_default().into_raw()
 }
 
-/// Free a CString pointer allocated by `str_to_cptr`.
 pub unsafe fn free_cptr(ptr: *mut c_char) {
     if !ptr.is_null() {
         drop(CString::from_raw(ptr));
     }
 }
 
-/// Hand ownership of `v` off to C: shrink, forget, and hand back `(ptr, len)`.
-/// Empty vec becomes `(null_mut, 0)`. Every geniex_model_*_free must reclaim
-/// via [`from_c_array`] with the same `(T, len)`.
+/// Every geniex_model_*_free must reclaim via [`from_c_array`] with the same `(T, len)`.
 pub fn into_c_array<T>(mut v: Vec<T>) -> (*mut T, i32) {
     v.shrink_to_fit();
     let len = v.len() as i32;
@@ -183,13 +154,10 @@ pub fn into_c_array<T>(mut v: Vec<T>) -> (*mut T, i32) {
     (ptr, len)
 }
 
-/// Hand `items` to C as an owned array of C strings.
 pub fn c_str_array<S: AsRef<str>>(items: &[S]) -> (*mut *mut c_char, i32) {
     into_c_array(items.iter().map(|s| str_to_cptr(s.as_ref())).collect())
 }
 
-/// Free an array from [`c_str_array`], strings included.
-///
 /// # Safety
 /// Same contract as [`from_c_array`].
 pub unsafe fn free_c_str_array(ptr: *mut *mut c_char, count: i32) {
@@ -198,8 +166,6 @@ pub unsafe fn free_c_str_array(ptr: *mut *mut c_char, count: i32) {
     }
 }
 
-/// Free an array from [`into_c_array`], releasing each element with `free`.
-///
 /// # Safety
 /// Same contract as [`from_c_array`].
 pub unsafe fn free_c_list<T>(ptr: *mut T, count: i32, mut free: impl FnMut(&mut T)) {
@@ -208,13 +174,11 @@ pub unsafe fn free_c_list<T>(ptr: *mut T, count: i32, mut free: impl FnMut(&mut 
     }
 }
 
-/// `out` as a writable reference, or `INVALID_INPUT` when null.
 pub fn out_mut<'a, T>(out: *mut T) -> Result<&'a mut T, i32> {
     unsafe { out.as_mut() }.ok_or(GENIEX_ERROR_COMMON_INVALID_INPUT)
 }
 
 pub trait OrReport<T> {
-    /// Record the error as the last error and turn it into its FFI code.
     fn or_report(self) -> Result<T, i32>;
 }
 
@@ -224,8 +188,6 @@ impl<T> OrReport<T> for model_manager_core::error::Result<T> {
     }
 }
 
-/// Reclaim a Vec previously handed to C by [`into_c_array`].
-///
 /// # Safety
 /// `ptr` must either be null, or come from [`into_c_array`] with the same
 /// `T` and matching `count`; the caller must guarantee it isn't freed twice.
@@ -237,11 +199,7 @@ pub unsafe fn from_c_array<T>(ptr: *mut T, count: i32) -> Option<Vec<T>> {
     Some(Vec::from_raw_parts(ptr, len, len))
 }
 
-/// Canonicalize the `:QUANT` suffix of a model name. Manifest keys are
-/// produced by `extract_quant`, which upper-cases (so `q4_0` -> `Q4_0`);
-/// without matching the lookup side, `pull <repo>:q4_0` fails for callers
-/// (Python, JNI) whose bindings don't already upper-case. Done here at
-/// the FFI boundary so the invariant is a single point of enforcement.
+/// Manifest keys from `extract_quant` are upper-case; normalize here so every binding matches.
 pub fn normalize_quant_suffix(name: &str) -> String {
     match name.rsplit_once(':') {
         Some((base, quant)) if !quant.is_empty() && !quant.starts_with("//") => {

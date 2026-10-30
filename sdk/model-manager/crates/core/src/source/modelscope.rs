@@ -3,10 +3,6 @@
 
 //! ModelScope [`ModelSource`].
 //!
-//! `/api/v1/models/{repo}/repo/files?Recursive=true` lists every file, then
-//! [`resolve_manifest`] picks or infers the manifest. Files are fetched
-//! from `/api/v1/models/{repo}/resolve/{revision}/{path}`.
-//!
 //! ModelScope answers neither `HEAD` on its API (404) nor a usable one on
 //! resolve (no `Content-Length`), so small documents use a plain GET and
 //! weight sizes come from the listing.
@@ -38,7 +34,6 @@ pub struct ModelScopeSource {
     http: Client,
     transport: Arc<dyn HttpTransport>,
     hint: ManifestHint,
-    /// Basename → repo-relative path, set by `plan` from the listing.
     paths: OnceLock<HashMap<String, String>>,
 }
 
@@ -139,7 +134,6 @@ impl RepoFiles for ModelScopeSource {
     }
 }
 
-/// File-listing response from `/api/v1/models/{repo}/repo/files`.
 /// The API capitalises its keys; the aliases accept lower-cased JSON too.
 #[derive(Debug, Deserialize)]
 struct ModelScopeFilesResponse {
@@ -165,7 +159,6 @@ struct ModelScopeFile {
     path: String,
     #[serde(rename = "Size", alias = "size", default)]
     size: Option<u64>,
-    /// `"blob"` for files, `"tree"` for directories.
     #[serde(rename = "Type", alias = "type", default)]
     file_type: String,
 }
@@ -228,7 +221,6 @@ mod tests {
     use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    /// Serve a repo of `(path, body)` files plus the `dirs` tree entries.
     async fn plan_for(repo: &str, files: &[(&str, &[u8])], dirs: &[&str]) -> Result<Plan> {
         let server = MockServer::start().await;
         let entry = |p: &str, size: usize, kind: &str| json!({"Name": basename(p), "Path": p, "Size": size, "Type": kind});

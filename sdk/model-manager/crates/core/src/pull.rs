@@ -1,33 +1,8 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Orchestrate a model download using the [`crate::source::ModelSource`]
-//! + [`crate::executor::Executor`] pair.
-//!
-//! Three-step contract:
-//!
-//! ```text
-//! ┌───────────────────┐   ┌───────────────────────────┐   ┌──────────────────┐
-//! │  1. Plan          │   │  2. Fetch bytes           │   │  3. Publish      │
-//! │                   │   │                           │   │                  │
-//! │  source.plan() →  │──▶│  executor.run(plan,       │──▶│  write manifest  │
-//! │   (manifest,      │   │    dest, on_progress)     │   │  atomically;     │
-//! │    Vec<FileSpec>) │   │                           │   │  drop markers    │
-//! └───────────────────┘   └───────────────────────────┘   └──────────────────┘
-//! ```
-//!
-//! Layout during/after a pull of `org/repo`:
-//!
-//! ```text
-//! models/
-//! └── org/repo/
-//!     ├── .lock                 # cross-process exclusive lock
-//!     ├── .inflight/            # present only during a pull (sentinel)
-//!     │   └── geniex.json       # staged manifest; renamed into place on success
-//!     ├── model.gguf            # downloaded file
-//!     ├── model.gguf.progress   # resume marker
-//!     └── geniex.json           # published only when every file is complete
-//! ```
+//! Plan, fetch, then publish the manifest; `.inflight/` marks a pull in
+//! progress and `geniex.json` appears only once every file is complete.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -50,35 +25,22 @@ use crate::transport::{HttpTransport, ReqwestTransport};
 use crate::validation::validate_model_name;
 
 pub struct PullRequest {
-    /// "org/repo" (already resolved from any short alias by the caller).
     pub model_name: String,
     pub intent: PullIntent,
     pub on_progress: Option<ProgressCallback>,
     pub hint: ManifestHint,
 }
 
-/// User intent, decoupled from the concrete [`ModelSource`] that will
-/// execute it. Each variant carries exactly the parameters that hub
-/// needs — no placeholders, no "unused for this hub" fields.
 pub enum PullIntent {
     HuggingFace {
-        /// "org/repo" on HF — usually identical to `PullRequest.model_name`
-        /// but the caller may have canonicalised.
         repo: String,
-        /// Bearer token; `None` means anonymous (with inevitable rate
-        /// limits). Intentionally per-pull rather than stored in the
-        /// Store, so callers can rotate credentials.
         token: Option<String>,
     },
     LocalFs {
         source_dir: PathBuf,
     },
     ModelScope {
-        /// "org/repo" on ModelScope — usually identical to
-        /// `PullRequest.model_name` but the caller may have canonicalised.
         repo: String,
-        /// Bearer token; `None` means anonymous. Reuses the same
-        /// optional-token plumbing as HuggingFace.
         token: Option<String>,
     },
     AiHub {
@@ -86,15 +48,12 @@ pub enum PullIntent {
         chipset: String,
     },
     DockerHub {
-        /// "ai/gemma3" — no registry host prefix.
         repo: String,
         /// Tag or `sha256:<hex>` digest; empty means `"latest"`.
         reference: String,
     },
 }
 
-/// Download a model, writing its manifest only after every file is
-/// present.
 pub async fn pull(store: &Store, mut req: PullRequest) -> Result<()> {
     let (source, transport) = prepare(store, &mut req)?;
     pull_with_source(
@@ -107,9 +66,6 @@ pub async fn pull(store: &Store, mut req: PullRequest) -> Result<()> {
     .await
 }
 
-/// Drive a pre-built [`ModelSource`] through the plan → fetch →
-/// publish pipeline. Exposed so tests can point at a custom source
-/// (e.g. a mock endpoint) without going through [`PullIntent`].
 pub async fn pull_with_source(
     store: &Store,
     model_name: &str,
@@ -147,9 +103,7 @@ pub async fn pull_with_source(
             fs::write(&staged, serde_json::to_string(&plan.manifest)?)?;
             fs::rename(&staged, &final_path)?;
 
-            // Once the manifest is published, per-file markers are
-            // redundant; the Go CLI does the same cleanup after a
-            // successful pull, so cache layouts stay interchangeable.
+            // The Go CLI drops these markers too; keeps cache layouts interchangeable.
             for f in &plan.files {
                 drop_marker(&dest_dir, &f.name);
             }
@@ -161,8 +115,6 @@ pub async fn pull_with_source(
         .await
 }
 
-/// Canonicalize `req.model_name` (bare names land under `qualcomm/`) and
-/// build its source on a fresh transport.
 pub(crate) fn prepare(
     store: &Store,
     req: &mut PullRequest,
@@ -216,12 +168,8 @@ fn build_source(
     }
 }
 
-// Transient Windows filesystem errors (AV scan, search indexer, pending
-// handle close) can make `remove_dir_all` fail right after a successful
-// pull, leaving an empty `.inflight/` behind — which `Store::list` then
-// treats as "still in progress" and silently drops the model from the
-// listing. Retry with short backoffs, and warn if the sentinel still
-// exists after the final attempt so the stale state is detectable.
+// AV scans / the indexer can briefly hold handles on Windows; a leftover
+// `.inflight/` would hide the model from `Store::list`, so retry.
 fn remove_inflight_dir(inflight_dir: &Path) {
     const DELAYS_MS: [u64; 3] = [50, 100, 200];
     for delay in DELAYS_MS {

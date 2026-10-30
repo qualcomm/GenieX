@@ -1,11 +1,7 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Infer a `ModelManifest` from a directory or a list of files.
-//!
-//! Used when the source (LocalFS or a HuggingFace repo) does not ship a
-//! `geniex.json` — we synthesize a minimal manifest so the rest of the
-//! pipeline can operate uniformly.
+//! Infer a `ModelManifest` for sources that ship no `geniex.json`.
 
 use std::collections::HashMap;
 
@@ -14,34 +10,21 @@ use serde::Deserialize;
 use crate::error::{Error, Result};
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
 
-/// Optional caller-supplied overrides used when inferring a manifest.
 #[derive(Debug, Default, Clone)]
 pub struct ManifestHint {
-    /// Force this `ModelType`; otherwise inferred via [`infer_model_type`].
     pub model_type: Option<ModelType>,
-    /// Restrict the inferred manifest to a single quantization. When set,
-    /// GGUFs whose extracted quant tag doesn't match are excluded from
-    /// `model_file`, so `pull` only fetches the requested quant. An
-    /// unrecognised value is an error rather than a silent no-op.
+    /// An unrecognised quant is an error, not a silent no-op.
     pub quant: Option<String>,
-    /// Raw bytes of a transformers-style `config.json` sibling, when the
-    /// source has one. Parsed by [`classify_from_config`] to decide LLM
-    /// vs VLM more reliably than the mmproj filename heuristic.
+    /// Transformers-style `config.json`, used to tell LLM from VLM.
     pub config_json_bytes: Option<Vec<u8>>,
-    /// Quant tag read out of a GGUF's `general.file_type`, keyed by filename,
-    /// for the files [`untagged_gguf_names`] reports.
+    /// Quant from a GGUF's `general.file_type`, keyed by filename.
     pub header_quants: HashMap<String, String>,
 }
 
-/// Quantization priority order (earlier = preferred). Consumed by
-/// [`extract_quant`] as a tiebreaker among composite tags in one filename
-/// and by [`quant_sort_key`] to order candidates so callers can grab the
-/// head as the recommended pick.
+/// Preferred quantizations, best first.
 pub const QUANT_PRIORITY: &[&str] = &["Q4_0", "Q4_K_M", "Q8_0"];
 
-/// Total order over quantization tags: [`QUANT_PRIORITY`] first, then the
-/// unlisted ones, each group alphabetical. A bare `org/repo` resolves through
-/// this ranking, so the head of a sorted list is the tag it loads.
+/// A bare `org/repo` loads the head of this order.
 pub fn quant_sort_key(quant: &str) -> (usize, &str) {
     let rank = QUANT_PRIORITY
         .iter()
@@ -50,16 +33,13 @@ pub fn quant_sort_key(quant: &str) -> (usize, &str) {
     (rank, quant)
 }
 
-/// Infer a manifest from an explicit list of filenames + their sizes.
-/// Used when the caller already holds the listing (HF `model_info`,
-/// LocalFS `read_dir`, etc.).
 pub fn infer_manifest_from_names(
     name: &str,
     file_names: &[String],
     sizes: &HashMap<String, i64>,
     hint: ManifestHint,
 ) -> Result<ModelManifest> {
-    let mut ggufs: HashMap<String, Vec<&String>> = HashMap::new(); // quant -> files
+    let mut ggufs: HashMap<String, Vec<&String>> = HashMap::new();
     let mut mmprojs: Vec<&String> = Vec::new();
     let mut tokenizers: Vec<&String> = Vec::new();
     let mut onnx_files: Vec<&String> = Vec::new();
@@ -95,7 +75,6 @@ pub fn infer_manifest_from_names(
         )));
     }
 
-    // If the caller asked for a specific quant, drop everything else.
     if let Some(ref wanted) = hint.quant {
         if !ggufs.is_empty() && !ggufs.contains_key(wanted) {
             let mut available: Vec<&String> = ggufs.keys().collect();
@@ -108,11 +87,7 @@ pub fn infer_manifest_from_names(
         ggufs.retain(|k, _| k == wanted);
     }
 
-    // Pick one entrypoint file per quant. Sharded GGUFs (`*-NNNNN-of-MMMMM.gguf`)
-    // are split across several files that share one quant; the first shard is
-    // the manifest entrypoint, the rest go to `extra_files` so the executor
-    // fetches them. Each bucket records its own single-file size; total_size()
-    // sums every bucket and would double-count if the entrypoint aggregated.
+    // The first shard is the entrypoint and keeps only its own size, or total_size() double-counts.
     let mut model_file: HashMap<String, ModelFileInfo> = HashMap::new();
     let mut shard_extras: Vec<&String> = Vec::new();
     for (quant, mut files) in ggufs {
@@ -121,8 +96,6 @@ pub fn infer_manifest_from_names(
         shard_extras.extend_from_slice(&files[1..]);
     }
 
-    // MMProj: 0 -> try single onnx/geniex; 1 -> use; >1 -> prefer FP16 over
-    // BF16/F32/etc, then largest.
     let mmproj_file = match mmprojs.len() {
         0 => {
             if onnx_files.len() == 1 {
@@ -148,7 +121,6 @@ pub fn infer_manifest_from_names(
         }
     };
 
-    // Tokenizer: 0 -> none; 1 -> use; >1 -> error (ambiguous).
     let tokenizer_file = match tokenizers.len() {
         0 => ModelFileInfo::default(),
         1 => file_info(tokenizers[0], sizes),
@@ -160,8 +132,6 @@ pub fn infer_manifest_from_names(
         }
     };
 
-    // ExtraFiles: trailing GGUF shards (the entrypoint shard lives in
-    // model_file) + all .npy + .geniex not used as mmproj.
     let mut extra_files: Vec<ModelFileInfo> = Vec::new();
     extra_files.extend(shard_extras.iter().map(|n| file_info(n, sizes)));
     extra_files.extend(npy_files.iter().map(|n| file_info(n, sizes)));
@@ -174,8 +144,6 @@ pub fn infer_manifest_from_names(
 
     let model_type = infer_model_type(&hint, file_names);
 
-    // Derive model_name: last path component of `name`, with -GGUF suffix
-    // stripped. e.g. "Qwen/Qwen3-4B-GGUF" -> "Qwen3-4B".
     let model_name = {
         let repo = name.rsplit('/').next().unwrap_or(name);
         repo.trim_end_matches("-GGUF")
@@ -198,15 +166,7 @@ pub fn infer_manifest_from_names(
     })
 }
 
-/// Tiered modality classifier. Order is deliberate: explicit user
-/// override wins, then positive signals from `config.json`, then the
-/// legacy `mmproj` filename rule (kept so pure-GGUF repos still work),
-/// then a LLM-biased default.
-///
-/// Why LLM-biased: mis-labeling an LLM as VLM breaks inference loudly
-/// (mmproj missing), while mis-labeling a VLM as LLM silently drops
-/// image input. Users can always override via `--model-type`, so we'd
-/// rather fail loud than carry image tensors nowhere.
+/// Defaults to LLM: a wrong VLM label fails loudly, a wrong LLM label silently drops images.
 pub(crate) fn infer_model_type(hint: &ManifestHint, file_names: &[String]) -> ModelType {
     if let Some(t) = hint.model_type.clone() {
         return t;
@@ -222,8 +182,6 @@ pub(crate) fn infer_model_type(hint: &ManifestHint, file_names: &[String]) -> Mo
     ModelType::Llm
 }
 
-/// Subset of HuggingFace `config.json` we inspect. Extra fields are
-/// ignored so we don't break on schema drift.
 #[derive(Debug, Default, Deserialize)]
 struct ConfigJson {
     #[serde(default)]
@@ -236,8 +194,6 @@ struct ConfigJson {
     mm_vision_tower: Option<serde_json::Value>,
 }
 
-/// Architecture substrings that mark a `*ForConditionalGeneration`
-/// class as vision-capable. Case-insensitive match.
 const VLM_ARCH_TOKENS: &[&str] = &[
     "VL",
     "Vision",
@@ -253,14 +209,9 @@ const VLM_ARCH_TOKENS: &[&str] = &[
     "Llama4",
 ];
 
-/// Explicit LLM architectures — checked before the VLM substring scan
-/// so names like "Gemma3ForCausalLM" don't match the generic "Gemma3"
-/// substring and get promoted to VLM.
+/// Checked before the VLM substring scan so text-only Gemma3 isn't promoted to VLM.
 const LLM_ARCH_EXPLICIT: &[&str] = &["Gemma3ForCausalLM"];
 
-/// Positive-signal classifier over a `config.json` byte blob. Returns
-/// `None` when the file parses but carries no modality-determining
-/// fields, so the caller can fall through to other tiers.
 fn classify_from_config(bytes: &[u8]) -> Option<ModelType> {
     let cfg: ConfigJson = serde_json::from_slice(bytes).ok()?;
 
@@ -305,8 +256,7 @@ fn classify_from_config(bytes: &[u8]) -> Option<ModelType> {
     None
 }
 
-/// Legacy mmproj-filename heuristic, retained as Tier 2 fallback for
-/// llama.cpp-converted GGUF repos that ship no `config.json`.
+/// Fallback for llama.cpp GGUF repos that ship no `config.json`.
 fn classify_from_filenames(file_names: &[String]) -> Option<ModelType> {
     if file_names
         .iter()
@@ -318,12 +268,6 @@ fn classify_from_filenames(file_names: &[String]) -> Option<ModelType> {
     }
 }
 
-/// Returns true when a `.gguf` filename refers to a multi-modal projector.
-/// Matches `mmproj`, `mmproj-*`, `mmproj.*`, `mmproj_*` (the llama.cpp
-/// default and underscore variants community repos sometimes use),
-/// `*-mmproj` / `*_mmproj` (qualcomm-ai-hub-community-style suffix), and
-/// `*-mmproj-*` / `*_mmproj_*` (infix). The check is case-insensitive —
-/// callers must pass a lowercased name.
 fn is_mmproj_filename(lname: &str) -> bool {
     debug_assert_eq!(
         lname,
@@ -341,21 +285,15 @@ fn is_mmproj_filename(lname: &str) -> bool {
         || stem.contains("_mmproj_")
 }
 
-/// True when a projector filename's precision tag is FP16/F16 — the
-/// native intermediate float format for vision encoders. Repos with
-/// multiple mmproj candidates (e.g. F16/BF16/F32) should prefer this one
-/// over a same-or-larger BF16/F32 copy.
 fn is_preferred_mmproj_precision(name: &str) -> bool {
     matches!(extract_quant(name).as_deref(), Some("F16") | Some("FP16"))
 }
 
-/// True for a `.gguf` holding weights — not a vision projector, not an MTP
-/// draft head. Callers must pass a lowercased name.
+/// Not a vision projector or an MTP draft head. Expects a lowercased name.
 fn is_weight_gguf(lname: &str) -> bool {
     lname.ends_with(".gguf") && !is_mmproj_filename(lname) && !lname.contains("mtp")
 }
 
-/// Weight GGUFs whose filename carries no quant tag.
 pub(crate) fn untagged_gguf_names(file_names: &[String]) -> Vec<&String> {
     file_names
         .iter()
@@ -363,14 +301,9 @@ pub(crate) fn untagged_gguf_names(file_names: &[String]) -> Vec<&String> {
         .collect()
 }
 
-/// Extract a quant tag like `Q4_K_M`, `IQ4_XS`, `TQ1_0`, `MXFP4`, `F16`,
-/// `FP16`, `BF16`, or `I8` from a filename. Case-insensitive; the returned
-/// tag is upper-cased. Returns the highest-priority match if multiple are
-/// present, else the first match, else None.
+/// Upper-cased quant tag; [`QUANT_PRIORITY`] wins when several match.
 pub(crate) fn extract_quant(name: &str) -> Option<String> {
-    // Walk the (uppercased, ASCII-only) name token by token. A quant tag
-    // must sit on a token boundary so that `IQ4_XS` doesn't get scanned as
-    // `Q4_XS` from index 1 — we anchor each candidate at a separator.
+    // Anchor at token boundaries so `IQ4_XS` isn't scanned as `Q4_XS`.
     let upper = name.to_ascii_uppercase();
     let bytes = upper.as_bytes();
     let mut composite: Vec<String> = Vec::new();
@@ -395,8 +328,7 @@ pub(crate) fn extract_quant(name: &str) -> Option<String> {
         if matched {
             continue;
         }
-        // Optional 1-byte prefix used by i-quants (`IQ*`) and ternary
-        // quants (`TQ*`). Anything else means this token isn't a quant.
+        // `IQ*` i-quants and `TQ*` ternary quants.
         let mut j = i;
         if (bytes[j] == b'I' || bytes[j] == b'T') && j + 1 < bytes.len() && bytes[j + 1] == b'Q' {
             j += 1;
@@ -430,9 +362,6 @@ pub(crate) fn extract_quant(name: &str) -> Option<String> {
     Some(composite.remove(0))
 }
 
-/// If the slice at `start` begins with `prefix` followed by ≥1 digit, return
-/// the end index of the full tag (including any trailing short `_XXX`
-/// segments); otherwise None.
 fn scan_token(bytes: &[u8], start: usize, prefix: &[u8]) -> Option<usize> {
     if !bytes[start..].starts_with(prefix) {
         return None;
@@ -447,8 +376,7 @@ fn scan_token(bytes: &[u8], start: usize, prefix: &[u8]) -> Option<usize> {
     Some(consume_short_suffix_segments(bytes, i))
 }
 
-/// Trailing `_XXX` segments. Each segment must be 1..=3 ASCII upper/digit
-/// chars — long alphabetic words like `_FINETUNE` are NOT part of the tag.
+/// Segments cap at 3 chars so words like `_FINETUNE` aren't part of the tag.
 fn consume_short_suffix_segments(bytes: &[u8], mut i: usize) -> usize {
     while i + 1 < bytes.len() && bytes[i] == b'_' {
         let seg_start = i + 1;
@@ -467,9 +395,6 @@ fn consume_short_suffix_segments(bytes: &[u8], mut i: usize) -> usize {
     i
 }
 
-/// True when index `i` of `bytes` sits at the start of a filename token —
-/// either the beginning of the string, or right after one of the common
-/// separators (`-`, `_`, `.`, path separators).
 fn is_token_start(bytes: &[u8], i: usize) -> bool {
     if i == 0 {
         return true;
@@ -532,26 +457,21 @@ mod tests {
             ("model-Q4_K_M.gguf", Some("Q4_K_M")),
             ("model-Q8_0.gguf", Some("Q8_0")),
             ("model.gguf", None),
-            // Case folding (qualcomm-ai-hub-community/gemma-4-E2B-it-qat-GGUF).
             ("gemma-4-E2B-q4_0-override.gguf", Some("Q4_0")),
             ("model-q4_k_m.gguf", Some("Q4_K_M")),
-            // i-quants and ternary quants are kept as-is.
             ("model-IQ4_XS.gguf", Some("IQ4_XS")),
             ("model-iq1_s.gguf", Some("IQ1_S")),
             ("model-TQ1_0.gguf", Some("TQ1_0")),
-            // Token boundaries: mid-token tags are not quants, path separators are boundaries.
             ("aQ4_0.gguf", None),
             ("noQuant.gguf", None),
             ("dir/Q4_0.gguf", Some("Q4_0")),
             ("dir\\Q4_0.gguf", Some("Q4_0")),
             ("model-Q4_K_M_finetune.gguf", Some("Q4_K_M")),
-            // MXFP (ggml-org/gpt-oss-*-GGUF), including shard suffixes.
             ("model-MXFP4.gguf", Some("MXFP4")),
             ("model-mxfp4.gguf", Some("MXFP4")),
             ("gpt-oss-20b-mxfp4-00001-of-00002.gguf", Some("MXFP4")),
             ("model-MXFP4_MOE.gguf", Some("MXFP4_MOE")),
             ("aMXFP4.gguf", None),
-            // Float and integer scalars.
             ("model-F16.gguf", Some("F16")),
             ("model-F32.gguf", Some("F32")),
             ("model-F64.gguf", Some("F64")),
@@ -608,7 +528,6 @@ mod tests {
 
     #[test]
     fn gemma4_qat_layout_picks_correct_entrypoint() {
-        // #1013: `-mmproj` suffix projector next to a lowercase `q4_0` weight.
         let m = infer_with(
             "qualcomm-ai-hub-community/gemma-4-E2B-it-qat-GGUF",
             &[
@@ -662,7 +581,6 @@ mod tests {
         assert_eq!(m.model_file["Q4_0"].name, "model-Q4_0.gguf");
         assert!(infer_with("Org/Repo-GGUF", &files, with_quant("Q2_K")).is_err());
 
-        // ggml-org/gpt-oss-20b-GGUF: a single unsharded MXFP4 weight.
         let m = infer_with(
             "Org/R",
             &[("gpt-oss-20b-mxfp4.gguf", 12_109_566_560)],

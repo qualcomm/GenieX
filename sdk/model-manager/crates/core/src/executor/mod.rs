@@ -1,11 +1,7 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Byte-moving executor for [`crate::source::Plan`]s: materialises each
-//! [`FileSpec`] into `dest_dir/<name>`. Raw byte ranges (HTTP or local)
-//! share one chunked pipeline with `.progress` bitmap resume; DEFLATE
-//! entries share one fetch-then-inflate pipeline; whole local files are
-//! copied directly.
+//! Materialises each [`FileSpec`] of a [`crate::source::Plan`] into `dest_dir/<name>`.
 
 pub mod chunk;
 
@@ -36,9 +32,7 @@ pub struct FileProgress {
     pub total_bytes: i64,
 }
 
-/// Called periodically during a pull. Returning `false` flips the
-/// cooperative cancel flag; every in-flight worker bails on its next
-/// chunk / entry boundary.
+/// Returning `false` cancels; workers stop at their next chunk / entry boundary.
 pub type ProgressCallback = Box<dyn Fn(&[FileProgress]) -> bool + Send + Sync>;
 
 #[derive(Debug, Clone)]
@@ -49,7 +43,6 @@ pub struct ExecutorConfig {
 }
 
 impl ExecutorConfig {
-    /// Resolve from `GENIEX_DL_*` env overrides.
     pub fn resolve(default_file_concurrency: usize) -> Self {
         let file_conc =
             env_positive("GENIEX_DL_FILE_CONCURRENCY").unwrap_or(default_file_concurrency);
@@ -107,9 +100,7 @@ impl FileState {
     fn snapshot(&self) -> FileProgress {
         let total = self.total_bytes.load(Ordering::Relaxed);
         let downloaded = self.downloaded_bytes.load(Ordering::Relaxed);
-        // Clamp: scaled DEFLATE counters can overshoot `total` by a
-        // rounding byte or two before the post-decode pin snaps them
-        // back. A UI showing "101%" is worse than showing "100%".
+        // Scaled DEFLATE counters can overshoot `total` by a rounding byte or two.
         let visible = if total == u64::MAX {
             downloaded
         } else {
@@ -231,8 +222,6 @@ impl Executor {
     }
 }
 
-/// Where a range pipeline reads its bytes: an HTTP object, or a local file
-/// served through [`LocalFileTransport`].
 struct RangeSrc {
     transport: Arc<dyn HttpTransport>,
     url: Url,
@@ -361,7 +350,6 @@ async fn copy_whole(job: &Job, src: &Path) -> Result<()> {
     finish_entry(job, size)
 }
 
-/// Chunked parallel range download with `.progress` bitmap resume.
 /// `single_chunk` keeps local copies sequential with a one-byte marker.
 async fn download_raw(
     job: &Job,

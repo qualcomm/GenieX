@@ -1,36 +1,15 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Pick one asset out of `release-assets.json` for a given chipset.
-//!
-//! Matches the Go CLI's selection logic in
-//! `cli/internal/model_hub/aihub/selector.go`:
-//!
-//! - Resolve the user-supplied chipset against `platform.json` aliases.
-//! - Filter to assets whose `runtime` is one of [`QAIRT_RUNTIMES`]. The
-//!   SDK only runs QAIRT (NPU) archives through this source; other assets
-//!   (ONNX, TFLite, QNN_DLC, llama.cpp GGUF) are rejected up front.
-//! - Filter to assets whose canonical chipset matches.
-//! - If multiple assets survive, prefer the newer `RUNTIME_GENIEX_QAIRT`
-//!   entry, then pick the lex-first precision string for a deterministic
-//!   default. Best-effort tiebreaker; precision is not exposed over FFI.
+//! Pick one QAIRT asset out of `release-assets.json` for a given chipset.
 
 use super::dto::{AssetDetails, ChipsetInfo, ModelReleaseAssets, PlatformInfo};
 use crate::error::{Error, Result};
 
-/// Runtime strings the public bucket uses for QAIRT (NPU) assets, in
-/// preference order.
-///
-/// AI Hub is mid-migration from the legacy `RUNTIME_GENIE` enum to the
-/// namespaced `RUNTIME_GENIEX_QAIRT`. Most models publish both, but neither
-/// alone is sufficient (bucket v0.60.0): `Gemma-4-E4B-it` ships only the
-/// new name, `Phi-3.5-Mini-Instruct` only the legacy one. Chipset coverage
-/// can also differ between the two for the same model, so both are kept as
-/// match candidates rather than picking one per model.
+/// Preference order. AI Hub is migrating `RUNTIME_GENIE` to `RUNTIME_GENIEX_QAIRT`;
+/// some models ship only one, and chipset coverage can differ, so both match.
 const QAIRT_RUNTIMES: &[&str] = &["RUNTIME_GENIEX_QAIRT", "RUNTIME_GENIE"];
 
-/// Rank of `runtime` within [`QAIRT_RUNTIMES`] for the preference sort;
-/// non-QAIRT runtimes sort last (they're filtered out before this runs).
 fn runtime_rank(runtime: &str) -> usize {
     QAIRT_RUNTIMES
         .iter()
@@ -38,13 +17,10 @@ fn runtime_rank(runtime: &str) -> usize {
         .unwrap_or(QAIRT_RUNTIMES.len())
 }
 
-/// Whether `runtime` names a QAIRT archive this source can install.
 pub fn is_qairt_runtime(runtime: &str) -> bool {
     QAIRT_RUNTIMES.contains(&runtime)
 }
 
-/// Domains the SDK currently supports — same subset the Go CLI accepts
-/// in `RuntimeForDomain`.
 const SUPPORTED_DOMAINS: &[&str] = &["MODEL_DOMAIN_GENERATIVE_AI", "MODEL_DOMAIN_MULTIMODAL"];
 
 pub fn is_domain_supported(domain: &str) -> bool {
@@ -64,22 +40,16 @@ fn find_chipset<'a>(plat: &'a PlatformInfo, chipset: &str) -> Option<&'a Chipset
     })
 }
 
-/// Match a chipset alias (case-insensitive, trimmed) to its canonical name
-/// from `platform.json`.
 pub fn resolve_chipset(plat: &PlatformInfo, chipset: &str) -> Result<String> {
     find_chipset(plat, chipset)
         .map(|cs| cs.name.clone())
         .ok_or_else(|| Error::Hub(format!("chipset {chipset:?} not found in platform.json")))
 }
 
-/// Resolve a chipset alias to the name AI Hub displays for it, e.g.
-/// `"sm8650"` → `"Snapdragon X Elite CRD"`; `None` when it isn't listed.
 pub fn resolve_chipset_display(plat: &PlatformInfo, chipset: &str) -> Option<String> {
     find_chipset(plat, chipset).map(|cs| cs.display_name().to_string())
 }
 
-/// Pick one asset matching `(chipset, QAIRT runtime)`. A miss lists the
-/// chipsets the model does ship installable assets for.
 pub fn match_asset<'a>(
     ra: &'a ModelReleaseAssets,
     plat: &PlatformInfo,
@@ -93,8 +63,6 @@ pub fn match_asset<'a>(
             is_qairt_runtime(&a.runtime) && canonical.is_some() && a.chipset.as_deref() == canonical
         })
         .collect();
-    // Prefer the newer runtime, then tiebreak on precision so the pick is
-    // deterministic when a model publishes the same chipset under both.
     candidates.sort_by(|a, b| {
         runtime_rank(&a.runtime)
             .cmp(&runtime_rank(&b.runtime))
@@ -109,8 +77,6 @@ pub fn match_asset<'a>(
         })
 }
 
-/// Display names of the chipsets a model ships QAIRT assets for. Other
-/// runtimes are skipped so the hint never names an uninstallable chipset.
 fn installable_chipsets(ra: &ModelReleaseAssets, plat: &PlatformInfo) -> Vec<String> {
     let names: std::collections::BTreeSet<String> = ra
         .assets
@@ -137,7 +103,6 @@ mod tests {
     const X_ELITE: &str = "qualcomm-snapdragon-x-elite";
     const CRD: &str = "Snapdragon X Elite CRD";
 
-    /// `(name, reference_device, aliases)` per chipset.
     fn platform(entries: &[(&str, &str, &[&str])]) -> PlatformInfo {
         PlatformInfo {
             chipsets: entries
@@ -152,7 +117,6 @@ mod tests {
         }
     }
 
-    /// `(chipset, runtime, precision)`.
     type Asset<'a> = (&'a str, &'a str, &'a str);
 
     fn assets(entries: &[Asset]) -> ModelReleaseAssets {
@@ -211,8 +175,7 @@ mod tests {
 
     #[test]
     fn match_asset_picks() {
-        // Gemma-4-E4B-it publishes only GENIEX_QAIRT, Phi-3.5-Mini-Instruct only legacy GENIE;
-        // a dual-published chipset prefers GENIEX_QAIRT though GENIE sorts first.
+        // A dual-published chipset prefers GENIEX_QAIRT though GENIE sorts first.
         let cases: [(&[Asset], &str, Asset); 5] = [
             (
                 &[
@@ -272,7 +235,6 @@ mod tests {
 
     #[test]
     fn match_asset_reports_installable_chipsets_on_miss() {
-        // Non-QAIRT runtimes must not appear, or the hint names an uninstallable chipset.
         let cases: [(PlatformInfo, &[Asset], &[&str]); 3] = [
             (
                 platform(&[("A", "", &[]), ("B", "", &[])]),

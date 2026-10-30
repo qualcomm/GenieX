@@ -1,15 +1,8 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Local filesystem [`ModelSource`].
-//!
-//! Given a `source_dir` (or a local archive file), reads its layout and
-//! produces a [`Plan`] whose [`BytesSource`]s point at on-disk bytes.
-//! Three layouts are recognised by [`detect_local_kind`]:
-//!
-//! - HF GGUF directory
-//! - AI Hub extracted directory (`metadata.json` + `.bin` shards)
-//! - AI Hub local `.zip`
+//! Local filesystem [`ModelSource`]: an HF GGUF directory, an extracted AI
+//! Hub directory, or an AI Hub `.zip`.
 
 use std::ffi::OsStr;
 use std::fs;
@@ -41,8 +34,6 @@ enum LocalKind {
     AiHubZip,
 }
 
-/// Inspect `path` and decide which loader to dispatch to. Returns
-/// [`Error::Hub`] with an actionable message when nothing matches.
 fn detect_local_kind(path: &Path) -> Result<LocalKind> {
     let meta = fs::metadata(path).map_err(|e| {
         Error::Hub(format!(
@@ -101,7 +92,6 @@ fn has_extension(path: &Path, ext: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Regular files directly under `dir`, sorted by name.
 fn list_files(dir: &Path) -> Result<Vec<(String, u64)>> {
     let mut out = Vec::new();
     for entry in fs::read_dir(dir)?.flatten() {
@@ -180,8 +170,6 @@ impl LocalFsSource {
         Ok(Plan { manifest, files })
     }
 
-    /// Already-extracted AI Hub asset: a flat directory with one or more
-    /// `.bin` shards, a `metadata.json`, and assorted siblings.
     fn plan_ai_hub_extracted(&self) -> Result<Plan> {
         let files = list_files(&self.source_dir)?
             .into_iter()
@@ -198,8 +186,6 @@ impl LocalFsSource {
         self.qairt_plan(metadata, files, "directory")
     }
 
-    /// AI Hub `.zip` on disk, parsed with the remote zip reader over a
-    /// [`LocalFileTransport`].
     async fn plan_ai_hub_zip(&self) -> Result<Plan> {
         let transport: Arc<dyn HttpTransport> =
             Arc::new(LocalFileTransport::open(&self.source_dir)?);
@@ -239,7 +225,6 @@ impl LocalFsSource {
     }
 }
 
-/// `metadata.json` out of a flat zip listing; `None` on any failure.
 async fn read_metadata_json(
     flat: &[(String, ZipEntry)],
     transport: &dyn HttpTransport,
@@ -295,7 +280,6 @@ mod tests {
         .await
     }
 
-    /// Plan a local zip; returns the zip path so callers can check sources.
     async fn plan_zip(
         entries: &[(&str, &[u8], ZipMethod)],
     ) -> (Result<Plan>, PathBuf, tempfile::TempDir) {

@@ -10,7 +10,7 @@ use model_manager_core::manifest_builder::quant_sort_key;
 use crate::init::get_store;
 use crate::types::*;
 
-/// C-compatible model type enum (mirrors `geniex_ModelType` in geniex_model.h).
+/// Mirrors `geniex_ModelType` in geniex_model.h.
 #[repr(C)]
 pub enum GenieXModelType {
     Llm = 0,
@@ -23,8 +23,6 @@ pub(crate) fn to_ffi_type(t: ModelType) -> GenieXModelType {
         ModelType::Vlm => GenieXModelType::Vlm,
     }
 }
-
-/* ---- geniex_ModelPaths ---- */
 
 #[repr(C)]
 pub struct GenieXModelPaths {
@@ -81,8 +79,7 @@ pub unsafe extern "C" fn geniex_model_paths_free(paths: *mut GenieXModelPaths) {
     *p = std::mem::zeroed();
 }
 
-/// Build the C view of one manifest: every heap member is owned by the caller
-/// and reclaimed by [`free_detail`].
+/// Heap members are reclaimed by [`free_detail`].
 fn detail_from_manifest(m: &ModelManifest) -> GenieXModelDetail {
     // model_file is a HashMap: its iteration order is reshuffled on every parse.
     let mut downloaded: Vec<&str> = m
@@ -114,8 +111,6 @@ unsafe fn free_detail(d: &mut GenieXModelDetail) {
     *d = std::mem::zeroed();
 }
 
-/* ---- geniex_model_get_detailed ---- */
-
 #[no_mangle]
 pub extern "C" fn geniex_model_get_detailed(
     model_name: *const c_char,
@@ -137,8 +132,6 @@ pub unsafe extern "C" fn geniex_model_detail_free(detail: *mut GenieXModelDetail
     }
 }
 
-/* ---- geniex_model_remove / clean ---- */
-
 #[no_mangle]
 pub extern "C" fn geniex_model_remove(model_name: *const c_char) -> i32 {
     ffi_guard(|| {
@@ -159,8 +152,6 @@ pub extern "C" fn geniex_model_clean(removed_count: *mut i32) -> i32 {
     })
 }
 
-/* ---- geniex_model_get_type ---- */
-
 #[no_mangle]
 pub extern "C" fn geniex_model_get_type(
     model_name: *const c_char,
@@ -173,8 +164,6 @@ pub extern "C" fn geniex_model_get_type(
         Ok(GENIEX_SUCCESS)
     })
 }
-
-/* ---- geniex_model_set_type ---- */
 
 #[no_mangle]
 pub extern "C" fn geniex_model_set_type(
@@ -192,8 +181,6 @@ pub extern "C" fn geniex_model_set_type(
     })
 }
 
-/* ---- geniex_model_list_detailed ---- */
-
 #[repr(C)]
 pub struct GenieXModelDetail {
     pub name: *mut c_char,
@@ -201,7 +188,6 @@ pub struct GenieXModelDetail {
     pub plugin_id: *mut c_char,
     pub model_type: GenieXModelType,
     pub total_size: i64,
-    /// Heap array of downloaded quant names; `precision_count` long.
     pub precisions: *mut *mut c_char,
     pub precision_count: i32,
 }

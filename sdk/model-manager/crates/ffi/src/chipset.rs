@@ -11,12 +11,9 @@ use model_manager_core::source::ai_hub::{
 use crate::init::{get_store, runtime_handle};
 use crate::types::*;
 
-/* ---- geniex_model_list_chipsets ---- */
-
 #[repr(C)]
 pub struct GenieXChipsetInfo {
     pub name: *mut c_char,
-    /// Heap array of alias strings; `alias_count` long.
     pub aliases: *mut *mut c_char,
     pub alias_count: i32,
 }
@@ -68,8 +65,6 @@ pub unsafe extern "C" fn geniex_model_list_chipsets_free(out: *mut GenieXChipset
     });
     *o = std::mem::zeroed();
 }
-
-/* ---- geniex_model_detect_chipset ---- */
 
 #[no_mangle]
 pub extern "C" fn geniex_model_detect_chipset(offline: i32, out_chipset: *mut *mut c_char) -> i32 {

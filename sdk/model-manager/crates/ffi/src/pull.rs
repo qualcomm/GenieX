@@ -15,8 +15,7 @@ use model_manager_core::pull::{pull, PullIntent, PullRequest};
 use crate::init::{get_store, runtime_handle};
 use crate::types::*;
 
-/// C-compatible hub source enum. Values MUST match `geniex_HubSource` in
-/// `include/geniex_model.h`.
+/// Values MUST match `geniex_HubSource` in `include/geniex_model.h`.
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq)]
 #[allow(dead_code)]
@@ -26,66 +25,32 @@ pub enum GenieXHubSource {
     ModelScope = 2,
     AiHub = 3,
     Volces = 4,
-    /// Docker Registry HTTP API V2 — publicly, models published under
-    /// `hub.docker.com/u/ai` (e.g. `ai/gemma3`).
     Docker = 5,
-    /// Local filesystem — intentionally 127, not 5, to keep "not a real
-    /// hub" visually separated from the network hub IDs above.
     LocalFs = 127,
 }
 
-/// Progress callback: invoked with an array of per-file `GenieXFileProgress`
-/// entries; return `false` to cancel. The pointer is only valid during the
-/// call — callbacks must not retain it.
 pub type GenieXDownloadProgressCb =
     Option<unsafe extern "C" fn(*const GenieXFileProgress, i32, *mut c_void) -> bool>;
 
 #[repr(C)]
 pub struct GenieXModelPullInput {
-    /// Must equal `size_of::<GenieXModelPullInput>()`. See the C header
-    /// doc on `geniex_ModelPullInput.struct_size` — this is the ABI
-    /// version gate: callers compiled against an older header won't
-    /// match any recognized size and are rejected before any field is
-    /// dereferenced.
     pub struct_size: u32,
     pub model_name: *const c_char,
     pub quant: *const c_char,
     pub hub: GenieXHubSource,
     pub local_path: *const c_char,
-    /// Hub bearer token (NULL = fall back to `GENIEX_HFTOKEN` env, then
-    /// anonymous). Only meaningful when `hub == GENIEX_HUB_HUGGINGFACE`
-    /// or `hub == GENIEX_HUB_MODELSCOPE`.
     pub hf_token: *const c_char,
-    /// Target chipset for AI Hub pulls. Required when
-    /// `hub == GENIEX_HUB_AIHUB`; ignored otherwise. Matched against the
-    /// `name` / `aliases` fields of `platform.json`.
     pub chipset: *const c_char,
-    /// AI Hub `display_name` of the model to download. Used when
-    /// `hub == GENIEX_HUB_AIHUB` or `hub == GENIEX_HUB_AUTO` resolves
-    /// to AI Hub. If NULL and `model_name` is in the form
-    /// `qualcomm/<repo>` or `qai-hub-models/<repo>`, `<repo>` is used
-    /// as the display_name; otherwise the caller must set this.
-    /// `model_name` still names the on-disk directory ("org/repo"
-    /// shape), mirroring the Go CLI's `storedName` / `displayName` split.
     pub display_name: *const c_char,
     pub on_progress: GenieXDownloadProgressCb,
     pub user_data: *mut c_void,
-    /// Optional model-type override (-1 = auto-detect, 0 = LLM, 1 = VLM).
-    /// Written into the manifest as the pull publishes, so callers that know
-    /// the type avoid a separate geniex_model_set_type round-trip.
     pub model_type: i32,
 }
 
-/// Struct sizes the Rust FFI knows how to read. The only entry today
-/// is the current layout; if we add fields in a forward-compatible
-/// way, append the *previous* size here so older callers still work.
-/// A caller that passes a size not in this list is rejected up front.
+/// ABI gate. When fields are appended, add the previous size so older callers keep working.
 const ACCEPTED_PULL_INPUT_SIZES: &[u32] = &[std::mem::size_of::<GenieXModelPullInput>() as u32];
 
-/// Route a hub selector + already-extracted parameters to a [`PullIntent`].
-/// Shared by `geniex_model_pull` and `geniex_model_query` so their hub
-/// resolution can't drift. `model_name` must already be canonicalised.
-/// Returns a negative error code when a required input is missing.
+/// Shared by pull and query so hub resolution can't drift. `model_name` must be canonicalised.
 pub(crate) fn build_pull_intent(
     hub: &GenieXHubSource,
     model_name: &str,
@@ -96,11 +61,7 @@ pub(crate) fn build_pull_intent(
 ) -> Result<PullIntent, i32> {
     let intent = match hub {
         GenieXHubSource::Auto => {
-            // "qualcomm/*" and "qai-hub-models/*" names, plus bare names
-            // (which canonicalize_model_name rewrote to "qualcomm/<name>"),
-            // route to AI Hub without the caller setting hub=AIHUB. The
-            // derived display_name is the repo after the slash; callers may
-            // still override via explicit_display_name.
+            // Bare names were canonicalised to "qualcomm/<name>", so they route to AI Hub too.
             if let Some(repo) = aihub_display_name_from_repo(model_name) {
                 PullIntent::AiHub {
                     display_name: explicit_display_name.unwrap_or_else(|| repo.to_string()),
@@ -126,9 +87,6 @@ pub(crate) fn build_pull_intent(
             PullIntent::LocalFs { source_dir: path }
         }
         GenieXHubSource::AiHub => {
-            // chipset NULL or empty → SDK auto-detects (currently
-            // Windows-on-Snapdragon only). display_name: explicit value
-            // wins; otherwise derive from any AI Hub org repo.
             let display_name = explicit_display_name
                 .or_else(|| aihub_display_name_from_repo(model_name).map(str::to_string))
                 .ok_or(GENIEX_ERROR_COMMON_INVALID_INPUT)?;
@@ -137,8 +95,7 @@ pub(crate) fn build_pull_intent(
                 chipset,
             }
         }
-        // Volces remains a placeholder — fall back to HuggingFace. Docker
-        // never reaches this point (it is routed in extract_name_and_intent).
+        // Volces falls back to HuggingFace; Docker is routed in extract_name_and_intent.
         _ => PullIntent::HuggingFace {
             repo: model_name.to_string(),
             token: hf_token,
@@ -147,19 +104,13 @@ pub(crate) fn build_pull_intent(
     Ok(intent)
 }
 
-/// Validate the ABI gate and extract the canonical model name + PullIntent
-/// shared by `geniex_model_pull` and `geniex_model_query` (both take a
-/// `GenieXModelPullInput`; query just ignores the quant / callback / model_type
-/// fields). `fn_name` only labels the struct_size error message.
-///
 /// # Safety
 /// `input` must be non-null and point to a valid `GenieXModelPullInput`.
 pub(crate) unsafe fn extract_name_and_intent(
     input: *const GenieXModelPullInput,
     fn_name: &str,
 ) -> Result<(String, PullIntent), i32> {
-    // ABI gate: read struct_size before any other field so a layout mismatch
-    // can't corrupt downstream reads.
+    // Read struct_size before any other field so a layout mismatch can't corrupt later reads.
     let struct_size = std::ptr::read(&(*input).struct_size);
     if !ACCEPTED_PULL_INPUT_SIZES.contains(&struct_size) {
         let msg = format!(
@@ -173,14 +124,12 @@ pub(crate) unsafe fn extract_name_and_intent(
     let inp = &*input;
     let raw_model_name = cstr_to_str(inp.model_name)?;
 
-    // Docker Hub routing is decided on the *original* string, before generic
-    // HF/AI-Hub canonicalisation below would discard the hub-identifying
-    // prefix — mirrors docker/model-runner's `IsHuggingFaceReference` check.
+    // Route Docker on the raw string; canonicalisation discards the hub prefix.
     let use_docker = matches!(inp.hub, GenieXHubSource::Docker)
         || (matches!(inp.hub, GenieXHubSource::Auto) && is_docker_hub_reference(raw_model_name));
     if use_docker {
         let repo = canonicalize_model_name(&docker_hub_repo_from_name(raw_model_name));
-        // `quant` doubles as the Docker tag/digest; empty ⇒ "latest".
+        // `quant` doubles as the Docker tag/digest.
         let reference = cstr_to_str(inp.quant)
             .ok()
             .filter(|s| !s.is_empty())
@@ -189,8 +138,7 @@ pub(crate) unsafe fn extract_name_and_intent(
         return Ok((repo.clone(), PullIntent::DockerHub { repo, reference }));
     }
 
-    // Same reason as Docker above: a pasted ModelScope model-page URL is the
-    // only auto-detectable ModelScope signal, and canonicalisation discards it.
+    // Likewise, a pasted ModelScope URL is only detectable before canonicalisation.
     let hub = if matches!(inp.hub, GenieXHubSource::Auto) && is_modelscope_reference(raw_model_name)
     {
         GenieXHubSource::ModelScope
@@ -198,7 +146,6 @@ pub(crate) unsafe fn extract_name_and_intent(
         inp.hub
     };
 
-    // Bare names (no '/') land under `qualcomm/<name>`.
     let model_name = canonicalize_model_name(raw_model_name);
 
     let hf_token = cstr_to_str(inp.hf_token)
@@ -272,8 +219,7 @@ pub extern "C" fn geniex_model_pull(input: *const GenieXModelPullInput) -> i32 {
                 ) as model_manager_core::executor::ProgressCallback
             });
 
-        // Upper-cased so lookup against `extract_quant`-produced keys matches
-        // for bindings that don't normalize themselves.
+        // Manifest keys from `extract_quant` are upper-case.
         let quant = unsafe { cstr_to_str(inp.quant) }
             .ok()
             .filter(|s| !s.is_empty())

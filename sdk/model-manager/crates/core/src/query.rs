@@ -2,11 +2,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 //! Resolve a model's remote candidate quantizations without downloading.
-//!
-//! Reuses [`crate::source::ModelSource::plan`] — the same "what does this
-//! model consist of" discovery that drives [`crate::pull`] — but stops
-//! after planning, so the caller can present a precision picker before
-//! committing to a download.
 
 use crate::error::Result;
 use crate::manifest::ModelType;
@@ -15,16 +10,13 @@ use crate::pull::{prepare, PullRequest};
 use crate::source::Plan;
 use crate::store::Store;
 
-/// One quantization the source advertises for a model. Candidates in
-/// [`ModelQuery::candidates`] are sorted so callers can grab the head as
-/// the recommended pick.
+/// Sorted in [`ModelQuery::candidates`]; the head is the recommended pick.
 #[derive(Debug, Clone)]
 pub struct QuantCandidate {
     pub quant: String,
     pub size: i64,
 }
 
-/// Result of a plan-only query against a hub.
 #[derive(Debug, Clone)]
 pub struct ModelQuery {
     pub model_name: String,
@@ -33,8 +25,6 @@ pub struct ModelQuery {
     pub candidates: Vec<QuantCandidate>,
 }
 
-/// Plan a model against its source and return the candidate quants. No
-/// bytes are fetched.
 pub async fn query(store: &Store, mut req: PullRequest) -> Result<ModelQuery> {
     let (source, _) = prepare(store, &mut req)?;
     let plan = source.plan().await?;

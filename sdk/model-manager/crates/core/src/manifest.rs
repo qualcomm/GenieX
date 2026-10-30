@@ -23,15 +23,8 @@ pub struct ModelFileInfo {
     pub size: i64,
 }
 
-/// Accept JSON `null` as the field's `Default` value.
-///
-/// The Go CLI writes manifests with `sonic.Marshal`, which emits nil
-/// slices/maps as `null` and, in older versions, emitted unset optional
-/// structs (e.g. `MMProjFile`) as `null` too. Plain `#[serde(default)]`
-/// only kicks in when the key is absent, so without this helper those
-/// manifests fail with `invalid type: null, expected ...` and the whole
-/// model gets skipped as corrupted. `list_models()` in Python surfaced
-/// the resulting gap vs the Go `geniex list`.
+/// Go's `sonic.Marshal` writes nil slices/maps (and old optional structs) as
+/// `null`; `#[serde(default)]` only covers absent keys.
 fn null_as_default<'de, T, D>(deserializer: D) -> Result<T, D::Error>
 where
     T: Default + Deserialize<'de>,
@@ -40,12 +33,7 @@ where
     Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
-/// On-disk manifest written next to a cached model as `geniex.json`.
-///
-/// Historical `DeviceId` and `MinSDKVersion` keys are accepted (serde
-/// silently drops unknown JSON fields on deserialize) but no longer
-/// serialised — qairt / llama_cpp plugins don't read them and AI Hub
-/// hub already tracks the chipset out-of-band.
+/// `geniex.json`. Legacy `DeviceId` / `MinSDKVersion` keys are ignored on read.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelManifest {
     #[serde(rename = "Name")]
@@ -56,7 +44,7 @@ pub struct ModelManifest {
     pub model_type: ModelType,
     #[serde(rename = "PluginId")]
     pub plugin_id: String,
-    /// DEPRECATED #1242: read-only compat for old QAIRT manifests; new ones key `ModelFile` by precision directly.
+    /// Read-only compat for old QAIRT manifests; new ones key `ModelFile` by precision.
     #[serde(
         rename = "Precision",
         default,
@@ -90,9 +78,7 @@ impl ModelManifest {
         self.downloaded_files().map(|f| f.size).sum()
     }
 
-    /// Fold in what an earlier pull of the same model left on disk: its
-    /// quants, extra files, and the shared mmproj/tokenizer when this
-    /// manifest has none.
+    /// Fold in what an earlier pull of the same model left on disk.
     pub(crate) fn merge_existing(&mut self, existing: ModelManifest) {
         for (quant, info) in existing.model_file {
             self.model_file.entry(quant).or_insert(info);

@@ -1,35 +1,7 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Host chipset auto-detection for AI Hub pulls.
-//!
-//! AI Hub packages qairt assets per (chipset, HTP arch) pair — for
-//! example `snapdragon-x-elite` and `snapdragon-x2-elite` are two
-//! different zips even though both are Qualcomm Compute laptops. Asking
-//! every SDK caller to hard-code a chipset string is painful, so this
-//! module takes a best-effort guess from the host.
-//!
-//! Current coverage:
-//!   * Windows on Snapdragon (X / X2 series) — resolved from the Adreno
-//!     GPU name via a `reg query` probe, with the CPU brand string as a
-//!     fallback. Every part in an X-series generation shares one NPU/HTP
-//!     architecture (so one AI Hub asset id covers the whole generation),
-//!     and the Adreno name carries that generation as a regular `X<gen>-`
-//!     token — so reading the GPU avoids extending a per-SKU CPU table
-//!     for each new part. The CPU brand-string probe (which maps known
-//!     Oryon SKUs, including X2 Plus, to the same ids) is the fallback.
-//!   * Linux on Qualcomm Dragonwing boards (QCS6490 / QCS9075) —
-//!     parsed from `/sys/firmware/devicetree/base/compatible`.
-//!   * Android on Snapdragon — parsed from the `ro.soc.model`
-//!     system property (e.g. `SM8650` → `qualcomm-snapdragon-8gen3`
-//!     via AI Hub's alias table; `SM8750` / `SM8850` map to their
-//!     `-ac` / `-ad` for-Galaxy aliases).
-//!   * Everything else — returns `None`. Callers must then pass
-//!     `chipset` explicitly.
-
-/// Probe the host for a chipset identifier that can be fed to
-/// `resolve_chipset`. Returns `None` when detection is not supported
-/// on this platform or when the probe fails.
+//! Best-effort host chipset detection for AI Hub pulls; `None` means the caller must pass one.
 pub fn detect_host_chipset() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
@@ -50,10 +22,6 @@ pub fn detect_host_chipset() -> Option<String> {
     }
 }
 
-/// Map a Qualcomm Oryon SKU number (extracted from the CPU brand
-/// string) to the matching AI Hub chipset alias. Covers the SKUs
-/// published as of QAIRT 2.45; unknown SKUs return `None` so we
-/// fall back to the caller-supplied chipset.
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub(crate) fn cpu_name_to_chipset_alias(brand: String) -> Option<String> {
     let sku = extract_oryon_sku(&brand)?;
@@ -97,11 +65,9 @@ fn is_oryon_sku(tok: &str) -> bool {
 
 #[cfg(target_os = "windows")]
 mod windows {
-    //! We read the CPU brand string from
-    //! `HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0\ProcessorNameString`
-    //! via `reg query`; it's been stable since Windows 2000 and
-    //! doesn't depend on `wmic.exe`, which was deprecated and is
-    //! missing on recent Windows 11 builds (24H2+).
+    //! Probes via `reg query`: `wmic.exe` is missing on Windows 11 24H2+.
+    //! The Adreno GPU name carries the X-series generation (`X<gen>-`), which
+    //! maps to one HTP arch, so it is tried before the per-SKU CPU brand table.
 
     use std::process::Command;
 
@@ -120,10 +86,6 @@ mod windows {
         (2, "qualcomm-snapdragon-x2-elite"),
     ];
 
-    /// Resolve the host chipset from the Adreno GPU. Finds the display
-    /// adapter whose `MatchingDeviceId` carries `VEN_QCOM`, reads its
-    /// `DriverDesc` (e.g. `Qualcomm(R) Adreno(TM) X2-45 GPU`), and maps
-    /// the `X<gen>-` prefix.
     pub(super) fn detect_gpu_chipset() -> Option<String> {
         let subkey = query_qualcomm_display_subkey()?;
         let desc = query_driver_desc(&subkey)?;
@@ -248,7 +210,6 @@ DriverDesc    REG_SZ    Qualcomm(R) Adreno(TM) X2-45 GPU\r\n\r\n";
 
         #[test]
         fn finds_qualcomm_display_subkey_by_vendor_not_slot() {
-            // X2 Plus dev board: Adreno plus two virtual display adapters.
             let three_adapters = "\r\n\
 HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0000\r\n    \
 MatchingDeviceId    REG_SZ    ACPI\\VEN_QCOM&DEV_0FF5&REV_0098\r\n\r\n\
@@ -299,20 +260,8 @@ HKEY_LOCAL_MACHINE\\...\\0001\r\n    MatchingDeviceId    REG_SZ    Root\\ThirdPa
 
 #[cfg(target_os = "linux")]
 mod linux {
-    //! Two probes, tried in order:
-    //!
-    //! 1. `/sys/firmware/devicetree/base/compatible` — NUL-separated
-    //!    `vendor,model` list, walked for `qcom,<soc>` matches. Example
-    //!    QCS9075 EVK: `qcom,qcs9075-addons-iq-9075-evk\0qcom,qcs9075\0qcom,sa8775p\0`.
-    //!
-    //! 2. `/sys/devices/soc0/{family,machine}` — fallback for boards
-    //!    whose DT compat lacks a per-SoC row (e.g. IQ-8275 EVK reports
-    //!    `arduino,monza\0qcom,monaco-monza\0qcom,qcs8300\0`; the real
-    //!    SoC id `QCS8275` only surfaces via socinfo). Guarded by
-    //!    `family == "Snapdragon"`.
-    //!
-    //! `/proc/cpuinfo` exposes only ARM-standard fields on these
-    //! kernels, so it is not consulted.
+    //! Devicetree `compatible` first; socinfo is the fallback for boards like
+    //! IQ-8275 whose compat list names only `qcs8300`, not the real `QCS8275`.
 
     use std::fs;
 
@@ -412,25 +361,9 @@ mod linux {
 }
 
 mod android {
-    //! Android exposes the SoC identifier through the property system,
-    //! not through the boot Device Tree (`/sys/firmware/devicetree/base`
-    //! exists but is not readable from app-context SELinux domains on
-    //! most shipping devices). We read `ro.soc.model` — the property
-    //! backing Java `Build.SOC_MODEL` since Android 12 — and, as a
-    //! vendor guard, `ro.soc.manufacturer` (backing `Build.SOC_MANUFACTURER`).
-    //!
-    //! The SoC model is returned to the caller as-is (e.g. `"SM8650"`).
-    //! AI Hub's `resolve_chipset` treats the lowercased SoC code as an
-    //! alias — `sm8650` → `qualcomm-snapdragon-8gen3`, etc.
-    //!
-    //! Exception: the catalogue only publishes the 8 Elite / 8 Elite
-    //! Gen 5 under their for-Galaxy variant aliases (`sm8750-ac`,
-    //! `sm8850-ad`), while `ro.soc.model` reports the bare `SM8750` /
-    //! `SM8850`. Those two are mapped explicitly.
-    //!
-    //! We accept both `"QTI"` (the actual value on recent Samsung
-    //! builds) and `"Qualcomm"` (the value documented in AOSP) as the
-    //! manufacturer — anything else falls through to `None`.
+    //! Reads `ro.soc.model`: the devicetree is unreadable from app SELinux domains.
+    //! The model doubles as an AI Hub alias, except SM8750/SM8850, which the
+    //! catalogue lists only as `-ac`/`-ad`. Samsung reports `QTI`, AOSP `Qualcomm`.
 
     #[cfg_attr(not(target_os = "android"), allow(dead_code))]
     pub(super) fn map_soc<'a>(manuf: &str, model: &'a str) -> Option<&'a str> {

@@ -1,26 +1,9 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Docker Hub [`ModelSource`] — pulls GGUF-packaged model artifacts
-//! published under <https://hub.docker.com/u/ai> (and any other
-//! Docker-format OCI registry) using the plain Docker Registry HTTP
-//! API V2, the same protocol `docker model pull ai/<repo>` uses under
-//! the hood (see `docker/model-runner`'s `pkg/distribution` package).
-//!
-//! Three network calls resolve a full [`Plan`] without ever streaming
-//! a weight blob:
-//!  1. Anonymous bearer token exchange (`GET {auth}?service=...&scope=...`).
-//!  2. Content-negotiated manifest GET (`GET /v2/{repo}/manifests/{ref}`).
-//!  3. A small config blob GET (`GET /v2/{repo}/blobs/{digest}`), which
-//!     carries the GGUF quantization tag and tells us whether the
-//!     model is a VLM (an `mmproj` layer is present).
-//!
-//! Only the Docker proprietary format (`application/vnd.docker.ai.*`
-//! media types, "v0.1" single-layer-per-format and "v0.2"
-//! layer-per-file with `org.cncf.model.filepath` annotations) is
-//! supported — this is what `docker model package` / the official
-//! `ai/*` Docker Hub images publish. CNCF ModelPack artifacts
-//! (`application/vnd.cncf.model.*`) are not yet handled.
+//! Docker Hub [`ModelSource`] over the Docker Registry HTTP API V2, as used
+//! by `docker model pull`. Only `application/vnd.docker.ai.*` artifacts
+//! (v0.1 and v0.2 packaging) are supported, not CNCF ModelPack.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -44,16 +27,10 @@ pub const DEFAULT_AUTH_SERVICE: &str = "registry.docker.io";
 const DEFAULT_REFERENCE: &str = "latest";
 const MAX_MANIFEST_BYTES: usize = 4 * 1024 * 1024;
 const MAX_CONFIG_BYTES: u64 = 4 * 1024 * 1024;
-/// An index is only ever chased one level deep — a Docker-format model
-/// image points straight at its manifest, never a nested index of
-/// indices.
+/// A Docker-format model index points straight at its manifest, never at another index.
 const MAX_INDEX_REDIRECTS: u32 = 1;
 
 mod media {
-    // Docker proprietary model media types (application/vnd.docker.ai.*).
-    // CONFIG_V01 (legacy, single-layer-per-format) is only "not
-    // CONFIG_V02" in production code, but the constant is kept for
-    // clarity in tests that build a v0.1-shaped manifest fixture.
     #[cfg(test)]
     pub const CONFIG_V01: &str = "application/vnd.docker.ai.model.config.v0.1+json";
     pub const CONFIG_V02: &str = "application/vnd.docker.ai.model.config.v0.2+json";
@@ -65,7 +42,6 @@ mod media {
     pub const LICENSE: &str = "application/vnd.docker.ai.license";
     pub const MODEL_FILE: &str = "application/vnd.docker.ai.model.file";
 
-    // Manifest / index media types accepted from the registry.
     pub const OCI_MANIFEST: &str = "application/vnd.oci.image.manifest.v1+json";
     pub const OCI_INDEX: &str = "application/vnd.oci.image.index.v1+json";
     pub const DOCKER_MANIFEST_V2: &str = "application/vnd.docker.distribution.manifest.v2+json";
@@ -73,8 +49,6 @@ mod media {
         "application/vnd.docker.distribution.manifest.list.v2+json";
 }
 
-/// The `org.cncf.model.filepath` annotation the "v0.2" layer-per-file
-/// packaging format stamps on each layer descriptor.
 const ANNOTATION_FILEPATH: &str = "org.cncf.model.filepath";
 
 #[derive(Debug, Clone)]
@@ -95,17 +69,11 @@ impl Default for DockerHubConfig {
 }
 
 pub struct DockerHubSource {
-    /// "ai/gemma3" — the Docker Hub repository, no registry host prefix.
     repo: String,
-    /// Tag or `sha256:<hex>` digest. Empty is treated as `"latest"`.
     reference: String,
     cfg: DockerHubConfig,
-    /// Reused for blob GETs so chunked download / retry behaviour stays
-    /// identical to every other source.
     transport: Arc<dyn HttpTransport>,
-    /// Manifest + token exchange need per-request `Accept` headers the
-    /// [`HttpTransport`] trait doesn't expose, so this source keeps a
-    /// small dedicated client for just those two calls.
+    /// Manifest and token calls need `Accept` headers [`HttpTransport`] lacks.
     http: Client,
 }
 
@@ -135,13 +103,7 @@ impl DockerHubSource {
         })
     }
 
-    /// Exchange an anonymous pull scope for a short-lived bearer token.
-    /// Public Docker Hub repositories (including everything under
-    /// `hub.docker.com/u/ai`) don't require credentials for this —  a
-    /// registry that doesn't require auth at all is tolerated by
-    /// treating a failed exchange as "no token" and letting the
-    /// manifest/blob request surface the real error if one turns out
-    /// to be required.
+    /// A failed exchange means "no token"; the manifest GET surfaces any real auth error.
     async fn fetch_token(&self) -> Option<String> {
         let scope = format!("repository:{}:pull", self.repo);
         let url = Url::parse_with_params(
@@ -308,7 +270,6 @@ struct RegistryManifest {
     config: Option<Descriptor>,
     #[serde(default)]
     layers: Vec<Descriptor>,
-    /// Only present on an index/manifest-list response.
     #[serde(default)]
     manifests: Vec<Descriptor>,
 }
@@ -341,13 +302,8 @@ struct TokenResponse {
     access_token: Option<String>,
 }
 
-/// Classify `layers` into a [`ModelManifest`] + [`FileSpec`] list.
-///
-/// `is_layer_per_file` selects the naming strategy: "v0.2" packaging
-/// names every file via its `org.cncf.model.filepath` annotation; the
-/// legacy "v0.1" packaging has exactly one layer per format and names
-/// them positionally (`model.gguf`, or `model-%05d-of-%05d.gguf` for
-/// shards), matching `docker/model-runner`'s `unpackLegacy`.
+/// v0.2 names files by their filepath annotation; v0.1 names them
+/// positionally, matching `docker/model-runner`'s `unpackLegacy`.
 fn build_plan(
     repo: &str,
     reference: &str,
@@ -392,9 +348,6 @@ fn build_plan(
         )));
     }
 
-    // Add a layer as both a `FileSpec` (byte-level fetch) and the
-    // `ModelFileInfo` the caller stores in the manifest, resolving the
-    // display name from either the OCI filepath annotation or `fallback`.
     let mut files: Vec<FileSpec> = Vec::new();
     let mut add_layer = |desc: &Descriptor, fallback: String| -> Result<ModelFileInfo> {
         let name = if is_layer_per_file {
@@ -421,8 +374,7 @@ fn build_plan(
         })
     };
 
-    // GGUF weight(s): single -> "model.gguf"; multi -> "model-NNNNN-of-MMMMM.gguf"
-    // (matches the Go CLI's unpackGGUFs naming).
+    // Shard names must match the Go CLI's unpackGGUFs.
     let mut extra_files: Vec<ModelFileInfo> = Vec::new();
     let n = gguf_layers.len();
     let mut gguf_entries = gguf_layers.iter().enumerate().map(|(i, desc)| {
@@ -446,7 +398,6 @@ fn build_plan(
         ModelFileInfo::default()
     };
 
-    // Docker's OCI convention allows at most one chat template and one license.
     if let Some(desc) = chat_template_layers.first() {
         extra_files.push(add_layer(desc, "template.jinja".to_string())?);
     }
@@ -514,7 +465,6 @@ mod tests {
             .unwrap()
     }
 
-    /// Plan `ai/<name>:latest` served with the given config blob and layers.
     async fn plan_for(
         name: &str,
         config_media: &str,

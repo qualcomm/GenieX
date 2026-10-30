@@ -27,15 +27,12 @@ pub struct ModelPaths {
 
 pub const MANIFEST_FILE: &str = "geniex.json";
 
-/// Maximum allowed size for a geniex.json manifest, to prevent OOM via
-/// a maliciously-crafted file. Real manifests are typically < 10 KB.
+/// Caps a crafted manifest's allocation; real ones are < 10 KB.
 const MANIFEST_MAX_BYTES: u64 = 1024 * 1024;
 
-/// On-disk filename used for the per-model exclusive lock.
 const LOCK_FILE: &str = ".lock";
 
-/// Sentinel directory name used during an in-progress pull; its presence
-/// marks a model as incomplete so `list()` can filter it out.
+/// Present while a pull is in progress; `list()` skips such models.
 pub const INFLIGHT_DIR: &str = ".inflight";
 
 pub struct Store {
@@ -52,18 +49,12 @@ impl Store {
         &self.cfg
     }
 
-    /// Run `f` while holding an exclusive file lock for this model.
-    ///
-    /// The lock is cross-process (uses `flock(LOCK_EX)` on Unix /
-    /// LockFileEx on Windows via `fs2`). This matches the Go CLI which
-    /// uses `github.com/gofrs/flock` for the same purpose.
+    /// Cross-process lock, compatible with the Go CLI's `gofrs/flock` on the same file.
     pub fn with_model_lock<T>(&self, name: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
         let _lock = self.acquire_model_lock(name)?;
         f()
     }
 
-    /// Async variant of [`Self::with_model_lock`]; the lock is taken
-    /// synchronously and held until the body completes.
     pub async fn with_model_lock_async<F, Fut, T>(&self, name: &str, f: F) -> Result<T>
     where
         F: FnOnce() -> Fut,
@@ -91,7 +82,6 @@ impl Store {
         let models_dir = self.cfg.models_dir();
         let mut manifests = Vec::new();
 
-        // Walk two levels: org/ and repo/
         let org_iter = match fs::read_dir(&models_dir) {
             Ok(it) => it,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(manifests),
@@ -110,7 +100,6 @@ impl Store {
                 if !repo_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
                     continue;
                 }
-                // Skip in-progress pulls.
                 if repo_entry.path().join(INFLIGHT_DIR).exists() {
                     continue;
                 }
@@ -121,8 +110,6 @@ impl Store {
                 match read_manifest(&manifest_path) {
                     Ok(m) => manifests.push(m),
                     Err(e) => {
-                        // Log + skip corrupted manifests rather than failing the
-                        // whole listing.
                         crate::logging::warn(&format!(
                             "skipping corrupted manifest {}: {}",
                             manifest_path.display(),
@@ -156,13 +143,7 @@ impl Store {
     }
 
     pub fn remove(&self, name_with_quant: &str) -> Result<()> {
-        // Accept an optional ":quant" suffix:
-        //   "org/repo"         -> remove the whole model directory
-        //   "org/repo:quant"   -> remove only that quant's .gguf and drop it
-        //                        from the manifest; delete the whole directory
-        //                        only when that was the last remaining quant,
-        //                        otherwise mmproj/tokenizer/extras stay shared
-        //                        with the other quants.
+        // With ":quant", keep the dir unless it was the last quant: extras are shared.
         let (name, quant) = parse_ref(name_with_quant);
         let name = name.as_str();
         validate_model_name(name)?;
@@ -206,7 +187,6 @@ impl Store {
         })
     }
 
-    /// Remove all cached models. Returns the count of removed model directories.
     pub fn clean(&self) -> Result<i32> {
         let manifests = self.list()?;
         let mut count = 0i32;
@@ -231,17 +211,11 @@ impl Store {
         })
     }
 
-    /// Read one cached model's manifest, accepting the same loose name forms as
-    /// [`Self::get_paths`]: a non-canonical name is canonicalized and any
-    /// ":quant" suffix is dropped, since a manifest covers every precision.
     pub fn resolve_manifest(&self, name_with_quant: &str) -> Result<ModelManifest> {
         self.get_manifest(&parse_ref(name_with_quant).0)
     }
 
-    /// Read one cached model's manifest for reporting, skipping a model whose
-    /// directory holds an in-progress pull so this agrees with [`Self::list`].
-    /// The load path ([`Self::get_paths`] / [`Self::get_model_type`]) keeps
-    /// resolving the already-cached precisions while another one is pulling.
+    /// Skips in-progress pulls to agree with [`Self::list`]; the load path does not.
     pub fn resolve_detail_manifest(&self, name_with_quant: &str) -> Result<ModelManifest> {
         let manifest = self.resolve_manifest(name_with_quant)?;
         if self
@@ -255,10 +229,6 @@ impl Store {
         Ok(manifest)
     }
 
-    /// Resolve a model name (with optional ":quant" suffix) to ModelPaths.
-    ///
-    /// Accepts a bare name (no '/') and canonicalises it to `qualcomm/<name>`
-    /// so callers can refer to AI Hub models without the prefix.
     pub fn get_paths(&self, name_with_quant: &str) -> Result<(String, ModelPaths)> {
         let (name, quant) = parse_ref(name_with_quant);
         let manifest = self.get_manifest(&name)?;
@@ -266,19 +236,13 @@ impl Store {
         resolve_model_paths(&manifest, &base_dir, quant.as_deref())
     }
 
-    /// `<models>/<name>`, after validating `name`.
     pub fn model_dir(&self, name: &str) -> Result<PathBuf> {
         validate_model_name(name)?;
         Ok(self.cfg.model_dir(name))
     }
 }
 
-/// Look up the file paths for one quant of a cached model.
-///
-/// When `quant` is `None` we fall back to the highest-priority downloaded
-/// quant. That fallback is a *cache-side* convenience — it picks among
-/// what's already local, not what a hub offers — and exists because
-/// keepalive / auto-load paths pass bare names.
+/// `quant: None` picks the best quant already on disk; auto-load passes bare names.
 pub(crate) fn resolve_model_paths(
     manifest: &ModelManifest,
     base_dir: &Path,
@@ -325,7 +289,6 @@ fn pick_downloaded_by_priority(manifest: &ModelManifest) -> Result<String> {
         .ok_or_else(|| Error::ModelNotFound(manifest.name.clone()))
 }
 
-/// Read and parse `geniex.json` with a hard size cap.
 fn read_manifest(path: &std::path::Path) -> Result<ModelManifest> {
     let file = fs::File::open(path)?;
     let mut reader = file.take(MANIFEST_MAX_BYTES);
@@ -340,7 +303,7 @@ fn read_manifest(path: &std::path::Path) -> Result<ModelManifest> {
     Ok(manifest)
 }
 
-// DEPRECATED-COMPAT #1242: rewrite pre-fix QAIRT shape ("N/A" key + top-level Precision) to the new shape.
+// Older QAIRT manifests keyed the model under "N/A" with a top-level precision.
 fn migrate_legacy_qairt_precision(m: &mut ModelManifest) -> bool {
     if m.plugin_id != "qairt" || m.precision.is_empty() {
         return false;
@@ -354,8 +317,7 @@ fn migrate_legacy_qairt_precision(m: &mut ModelManifest) -> bool {
     true
 }
 
-/// Split a loose model reference into its canonical name and optional quant.
-/// Canonicalizing first strips a pasted URL, and a `://` is never a quant cut.
+/// Canonicalizing first strips a pasted URL, so a `://` is never a quant cut.
 fn parse_ref(s: &str) -> (String, Option<String>) {
     let canonical = canonicalize_model_name(s);
     match canonical.rsplit_once(':') {
@@ -488,8 +450,7 @@ mod tests {
 
     #[test]
     fn remove_whole_model_or_its_last_quant_deletes_the_dir() {
-        // "name:quant" for the last quant must not leave an empty ModelFile
-        // (and must not put a colon in a Windows path, os error 267).
+        // A colon must never reach a Windows path (os error 267).
         let (store, _tmp) = stored(&["Org/C", "Org/WithQuant"]);
         for (name, arg) in [
             ("Org/C", "Org/C"),

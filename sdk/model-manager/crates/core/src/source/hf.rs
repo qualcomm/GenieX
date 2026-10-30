@@ -1,8 +1,7 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! HuggingFace [`ModelSource`]: one `/api/models/{repo}` call lists the
-//! files, then [`resolve_manifest`] picks or infers the manifest.
+//! HuggingFace [`ModelSource`].
 
 use std::sync::Arc;
 
@@ -127,7 +126,6 @@ mod tests {
     use crate::test_support::{fast_transport, gguf, mount_ranged};
     use wiremock::MockServer;
 
-    /// Serve an HF repo listing `siblings` (name, bytes) with no `geniex.json`.
     async fn plan_for(repo: &str, siblings: &[(&str, &[u8])]) -> Result<Plan> {
         let server = MockServer::start().await;
         let listing: Vec<_> = siblings

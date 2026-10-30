@@ -43,7 +43,6 @@ pub fn deflate_raw(data: &[u8]) -> Vec<u8> {
     enc.finish().unwrap()
 }
 
-/// `(start, len)` of a `Range: bytes=a-b` request.
 pub fn parse_range(req: &Request) -> (usize, usize) {
     let hdr = req.headers.get("range").expect("Range header");
     let (s, e) = hdr
@@ -78,8 +77,7 @@ pub async fn mount_head(server: &MockServer, at: &str, len: usize) {
         .await;
 }
 
-/// Serve `body` at `at` for HEAD plus ranged GET, the shape every
-/// [`HttpTransport`] fetch takes.
+/// Serve `body` at `at` for HEAD plus ranged GET.
 pub async fn mount_ranged(server: &MockServer, at: &str, body: impl Into<Vec<u8>>) {
     let body: Arc<Vec<u8>> = Arc::new(body.into());
     mount_head(server, at, body.len()).await;

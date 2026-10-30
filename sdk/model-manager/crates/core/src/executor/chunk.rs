@@ -1,17 +1,9 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Chunk planner + `.progress` bitmap.
-//!
-//! The chunking policy mirrors the Go CLI: `chunk_size =
-//! max(MIN_CHUNK_SIZE, size / MAX_CHUNKS_PER_FILE)`, so small files are a
-//! single chunk and very large files are capped at `MAX_CHUNKS_PER_FILE`
-//! chunks. Users can override the floor via `GENIEX_DL_CHUNK_SIZE`.
-//!
-//! The bitmap format is `ceil(size / chunk_size)` bytes where byte `i` is
-//! `0x01` iff chunk `i` has been fully written. This matches
-//! `cli/internal/model_hub/model_hub.go` so Go and Rust agents can resume
-//! each other's partial pulls.
+//! Chunk planner + `.progress` bitmap. Chunking and the bitmap layout (one byte per chunk,
+//! `0x01` = written) must match `cli/internal/model_hub/model_hub.go` so Go and Rust can
+//! resume each other's partial pulls.
 
 use std::fs;
 use std::io::{Seek, SeekFrom, Write};
@@ -38,15 +30,12 @@ pub struct ChunkPlan {
     pub chunks: Vec<ChunkRange>,
 }
 
-/// Build a chunk plan for `file_size`. A `file_size` of 0 yields a
-/// zero-chunk plan; the caller is responsible for still creating an empty
-/// output file.
+/// A `file_size` of 0 yields a zero-chunk plan; the caller still creates the empty file.
 pub fn plan_chunks(file_size: u64) -> ChunkPlan {
     plan_chunks_with_floor(file_size, effective_min_chunk_size())
 }
 
-/// One chunk covering the whole file; an empty file still gets one
-/// zero-length chunk so its marker records completion.
+/// An empty file still gets one zero-length chunk so its marker records completion.
 pub(crate) fn single_chunk_plan(file_size: u64) -> ChunkPlan {
     ChunkPlan {
         chunk_size: file_size,
@@ -58,7 +47,6 @@ pub(crate) fn single_chunk_plan(file_size: u64) -> ChunkPlan {
     }
 }
 
-/// Like [`plan_chunks`] but with an explicit floor. Exposed mainly for tests.
 pub fn plan_chunks_with_floor(file_size: u64, min_chunk_size: u64) -> ChunkPlan {
     let min = min_chunk_size.max(1);
     let chunk_size = if file_size == 0 {
@@ -86,9 +74,7 @@ fn effective_min_chunk_size() -> u64 {
     crate::config::env_positive(ENV_CHUNK_SIZE).unwrap_or(MIN_CHUNK_SIZE)
 }
 
-/// Load the `.progress` bitmap for a plan, creating a zero-initialised one
-/// if the file is missing or length-mismatched (which signals either a
-/// fresh pull or a chunk-size change since the last attempt).
+/// A length mismatch means the chunk size changed since the last attempt; start over.
 pub fn load_or_init_bitmap(marker_path: &Path, plan: &ChunkPlan) -> Result<Vec<u8>> {
     let expected = plan.chunks.len();
     match fs::read(marker_path) {
@@ -104,8 +90,6 @@ pub fn load_or_init_bitmap(marker_path: &Path, plan: &ChunkPlan) -> Result<Vec<u
     }
 }
 
-/// Return the subset of chunks that still need to be fetched, given a
-/// bitmap.
 pub fn pending_chunks(plan: &ChunkPlan, bitmap: &[u8]) -> Vec<ChunkRange> {
     plan.chunks
         .iter()
@@ -114,7 +98,6 @@ pub fn pending_chunks(plan: &ChunkPlan, bitmap: &[u8]) -> Vec<ChunkRange> {
         .collect()
 }
 
-/// Count bytes already committed according to the bitmap.
 pub fn bytes_already_done(plan: &ChunkPlan, bitmap: &[u8]) -> u64 {
     plan.chunks
         .iter()
@@ -123,8 +106,7 @@ pub fn bytes_already_done(plan: &ChunkPlan, bitmap: &[u8]) -> u64 {
         .sum()
 }
 
-/// Flip the marker byte for `index` to `0x01` in the on-disk bitmap. Uses
-/// positional write so concurrent workers do not step on each other.
+/// Positional write so concurrent workers don't step on each other.
 pub fn mark_chunk_done(marker_path: &Path, index: usize) -> Result<()> {
     let mut f = fs::OpenOptions::new()
         .write(true)
@@ -136,20 +118,16 @@ pub fn mark_chunk_done(marker_path: &Path, index: usize) -> Result<()> {
     Ok(())
 }
 
-/// True iff every chunk in the bitmap is marked done. Useful as the final
-/// "is this file fully downloaded" check.
 pub fn bitmap_complete(bitmap: &[u8]) -> bool {
     !bitmap.is_empty() && bitmap.iter().all(|b| *b == PROGRESS_DONE_BYTE)
 }
 
-/// A file is done when its marker is complete and its output has `size` bytes.
 pub(crate) fn marker_complete(marker: &Path, output: &Path, size: u64) -> bool {
     let bitmap = fs::read(marker).unwrap_or_default();
     bitmap_complete(&bitmap) && fs::metadata(output).map(|m| m.len()).ok() == Some(size)
 }
 
-/// Ensure the destination file exists and has exactly `file_size` bytes,
-/// so range workers can seek + write without races on file growth.
+/// Pre-sized so range workers can seek + write without racing on file growth.
 pub fn preallocate(output_path: &Path, file_size: u64) -> Result<()> {
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;

@@ -1,11 +1,7 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-/// Resolve a short model alias to its canonical "org/repo" name.
-///
-/// Currently single-entry — `qwen3` is kept as the canonical example so
-/// Python bindings and CLI smoke tests have something that resolves.
-/// Add more aliases inline as needed.
+/// `qwen3` stays so the Python bindings and CLI smoke tests have an alias that resolves.
 pub fn resolve_alias(alias: &str) -> Option<String> {
     match alias {
         "qwen3" => Some("ggml-org/Qwen3-1.7B-GGUF:Q4_K_M".to_string()),
@@ -13,26 +9,11 @@ pub fn resolve_alias(alias: &str) -> Option<String> {
     }
 }
 
-/// Orgs whose "<org>/<repo>" names are published on AI Hub rather than HF.
-/// Lowercased; lookup is case-insensitive. `qualcomm` is the canonical
-/// org; `ai-hub-models` is a user-convenience alias that
-/// [`canonicalize_model_name`] rewrites to `qualcomm`.
+/// Lowercased AI Hub orgs; `ai-hub-models` is an alias for `qualcomm`.
 const AI_HUB_ORGS: &[&str] = &["qualcomm", "ai-hub-models"];
 
-/// Canonicalise a user-supplied model name into the "org/repo" shape
-/// that [`crate::validation::validate_model_name`] expects.
-///
-/// A name without '/' is assumed to be a bare AI Hub model id
-/// (e.g. `llama_v3_2_3b_instruct`) and is rewritten to `qualcomm/<name>`.
-/// The `ai-hub-models/<repo>` alias (case-insensitive) is rewritten to
-/// the canonical `qualcomm/<repo>` so both prefixes share one cache
-/// entry. Anything else with a '/' is returned unchanged.
-///
-/// This is the single entry point callers should use before handing a
-/// name to `pull` / `get_paths` so the Store layout stays consistent.
+/// Call before `pull` / `get_paths` so every alias maps to one cache entry.
 pub fn canonicalize_model_name(name: &str) -> String {
-    // A pasted model-page URL carries a scheme + host the rest of the
-    // pipeline can't parse; strip it down to "org/repo" first.
     let name = name
         .strip_prefix("https://huggingface.co/")
         .or_else(|| name.strip_prefix("http://huggingface.co/"))
@@ -47,13 +28,7 @@ pub fn canonicalize_model_name(name: &str) -> String {
     }
 }
 
-/// If `model_name` is "<org>/<repo>" where `<org>` belongs to an AI Hub
-/// org, return `<repo>` — the value a caller should pass as AI Hub
-/// `display_name`. Returns `None` when the model is not AI Hub.
-///
-/// The split discards anything after a colon (`":<quant>"`) since AI Hub
-/// models don't use the HF-style quant suffix; the storage name keeps
-/// the suffix untouched on the caller side.
+/// The AI Hub `display_name` for an AI Hub org's model, ignoring any `:quant`.
 pub fn aihub_display_name_from_repo(model_name: &str) -> Option<&str> {
     let without_quant = model_name.split_once(':').map_or(model_name, |(n, _)| n);
     let (org, repo) = without_quant.split_once('/')?;
@@ -68,13 +43,7 @@ pub fn aihub_display_name_from_repo(model_name: &str) -> Option<&str> {
     }
 }
 
-/// URL-ish prefixes that unambiguously mark a reference as Docker Hub
-/// rather than a HuggingFace "org/repo" name that happens to share the
-/// same shape (an HF org could, in principle, be named `ai`). Checked
-/// against the *original* user input, mirroring the
-/// `https://huggingface.co/` strip above — never inferred from a bare
-/// "org/repo" name, since unlike the AI Hub orgs there's no dedicated
-/// namespace we can claim outright.
+/// A bare "ai/x" is never treated as Docker Hub: an HF org could be named `ai`.
 const DOCKER_HUB_PREFIXES: &[&str] = &[
     "docker.io/",
     "index.docker.io/",
@@ -84,42 +53,26 @@ const DOCKER_HUB_PREFIXES: &[&str] = &[
     "hub.docker.com/r/",
 ];
 
-/// Model-page URL prefixes that identify a ModelScope reference.
 const MODELSCOPE_URL_PREFIXES: &[&str] = &[
     "https://modelscope.cn/models/",
     "http://modelscope.cn/models/",
 ];
 
-/// Strip a recognised ModelScope model-page prefix, yielding "org/repo".
-/// `None` when `name` carries no such prefix.
 fn strip_modelscope_url_prefix(name: &str) -> Option<&str> {
     MODELSCOPE_URL_PREFIXES
         .iter()
         .find_map(|p| name.strip_prefix(p))
 }
 
-/// True when `name` is a pasted ModelScope model-page URL. Used to route
-/// `--model-hub auto` pulls to ModelScope without the caller passing
-/// `--model-hub modelscope`; a bare "org/repo" is never inferred, since
-/// ModelScope shares its namespace shape with HuggingFace.
 pub fn is_modelscope_reference(name: &str) -> bool {
     strip_modelscope_url_prefix(name).is_some()
 }
 
-/// True when `name` carries one of [`DOCKER_HUB_PREFIXES`]. Used to
-/// route `--model-hub auto` pulls to Docker Hub without the caller
-/// passing `--model-hub docker` explicitly.
 pub fn is_docker_hub_reference(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     DOCKER_HUB_PREFIXES.iter().any(|p| lower.starts_with(p))
 }
 
-/// Strip a recognised Docker Hub / registry prefix, returning the bare
-/// "org/repo" Docker reference (e.g. `"docker.io/ai/gemma3"` ->
-/// `"ai/gemma3"`). A name with no recognised prefix is returned
-/// unchanged, so this is also safe to call when the hub was selected
-/// explicitly via `--model-hub docker` and the user passed a bare
-/// `"ai/gemma3"`.
 pub fn docker_hub_repo_from_name(name: &str) -> String {
     let lower = name.to_ascii_lowercase();
     for p in DOCKER_HUB_PREFIXES {
@@ -218,7 +171,6 @@ mod tests {
             ("DOCKER.IO/ai/gemma3", false, true),
             ("index.docker.io/ai/gemma3", false, true),
             ("https://hub.docker.com/r/ai/gemma3", false, true),
-            // Bare "org/repo" is indistinguishable from a HuggingFace repo.
             ("ai/gemma3", false, false),
             ("ggml-org/Qwen3-1.7B-GGUF", false, false),
         ] {

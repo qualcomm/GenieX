@@ -13,21 +13,14 @@ use crate::types::*;
 
 static STORE: OnceLock<Store> = OnceLock::new();
 static RUNTIME: OnceLock<Runtime> = OnceLock::new();
-/// Serializes `geniex_model_init` callers so a TOCTOU between
-/// `STORE.get().is_some()` and `STORE.set(...)` can't leave two threads
-/// racing to initialize the same global.
+/// Closes the TOCTOU between `STORE.get()` and `STORE.set()`.
 static INIT_LOCK: Mutex<()> = Mutex::new(());
 
-/// Access the global store; returns an Err if not yet initialized.
 pub(crate) fn get_store() -> Result<&'static Store, i32> {
     STORE.get().ok_or(GENIEX_ERROR_COMMON_NOT_INITIALIZED)
 }
 
-/// Access the process-wide tokio runtime. Lazily built on first use so
-/// crates that only call sync APIs (like `geniex_model_list`) don't pay
-/// for a reactor. Panics only if the tokio runtime itself fails to
-/// spawn, which is a fatal OS-level error — the FFI guard converts the
-/// panic back to `GENIEX_ERROR_COMMON_UNKNOWN`.
+/// Lazy so sync-only callers don't pay for a reactor.
 pub(crate) fn runtime_handle() -> Handle {
     RUNTIME
         .get_or_init(|| {
@@ -46,23 +39,12 @@ pub(crate) fn runtime_handle() -> Handle {
         .clone()
 }
 
-/// Initialize the model manager.
-///
-/// `data_dir` precedence: argument → `GENIEX_DATADIR` env → `~/.cache/geniex`.
-///
-/// Re-initializing is a programmer error: a warning is logged and
-/// `GENIEX_ERROR_COMMON_ALREADY_INITIALIZED` is returned. The first
-/// successful call is authoritative. Concurrent callers serialize on an
-/// internal mutex so exactly one call observes the uninitialized state.
-///
-/// HuggingFace tokens are supplied per-pull (see
-/// `geniex_ModelPullInput.hf_token`), not at init time.
 #[no_mangle]
 pub extern "C" fn geniex_model_init(data_dir: *const c_char) -> i32 {
     ffi_guard(|| {
         logging::install_core_sink();
 
-        // Poisoned mutex ⇒ a previous init panicked; treat as "try again".
+        // Poisoned means a previous init panicked; retry.
         let _guard = INIT_LOCK.lock().unwrap_or_else(|p| p.into_inner());
 
         if STORE.get().is_some() {
@@ -79,15 +61,13 @@ pub extern "C" fn geniex_model_init(data_dir: *const c_char) -> i32 {
         }
 
         let store = Store::new(cfg).or_report()?;
-        // INIT_LOCK is held ⇒ this set() never races.
         let _ = STORE.set(store);
         logging::debug("geniex model manager initialized");
         Ok(GENIEX_SUCCESS)
     })
 }
 
-/// Deinitialize the model manager. No-op; the global Store is never freed,
-/// but the OnceLock guarantees no background threads were ever spawned.
+/// No-op: the global Store is never freed.
 #[no_mangle]
 pub extern "C" fn geniex_model_deinit() -> i32 {
     GENIEX_SUCCESS

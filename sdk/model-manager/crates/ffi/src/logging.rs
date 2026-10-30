@@ -1,18 +1,9 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Bridge to geniex's C log callback.
-//!
-//! On ELF targets we can reach the C++-side global `geniex_log` directly
-//! via an `extern "C" { static ... }` declaration, because the linker
-//! resolves the reference at shared-object link time.
-//!
-//! On Windows COFF that shortcut is not available: a static import from
-//! a sibling object file requires `__declspec(dllimport)` metadata that
-//! we cannot add to a Rust `extern static`, and lld-link rejects the
-//! reference with "undefined symbol". To stay portable the FFI crate
-//! calls into a thin C trampoline (defined in `sdk/src/logging_bridge.cpp`)
-//! that forwards the message to whatever `geniex_set_log` has installed.
+//! Bridge to geniex's C log callback through a C trampoline (`sdk/src/logging_bridge.cpp`):
+//! on Windows COFF a Rust `extern static` can't carry the `dllimport` needed to
+//! read `geniex_log` directly.
 
 use std::ffi::CString;
 use std::os::raw::{c_char, c_int};
@@ -29,8 +20,6 @@ pub enum GenieXLogLevel {
 }
 
 extern "C" {
-    // Defined in sdk/src/logging_bridge.cpp — a thin wrapper around the
-    // geniex_log function pointer.
     fn geniex_model_log_emit(level: c_int, msg: *const c_char);
 }
 
@@ -42,9 +31,7 @@ pub fn log(level: GenieXLogLevel, msg: &str) {
     }
 }
 
-/// Route core's pluggable log sink into the C log callback. Core can't
-/// depend on this crate (that would invert `ffi -> core`), so it exposes
-/// a sink we install once at init time.
+/// Core can't depend on ffi, so it exposes a sink installed here at init.
 pub fn install_core_sink() {
     use model_manager_core::logging::Level;
     model_manager_core::logging::set_sink(|level, msg| {

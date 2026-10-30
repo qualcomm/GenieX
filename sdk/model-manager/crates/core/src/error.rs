@@ -5,12 +5,7 @@ use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Library-internal error type.
-///
-/// Variants are the structured ones callers can match on for recovery;
-/// [`Error::Hub`] and [`Error::Http`] remain as free-form fallbacks for
-/// failures that don't fit any existing category. When adding a new
-/// variant, also update the FFI code mapping in `crates/ffi/src/types.rs`.
+/// When adding a variant, also update the FFI code mapping in `crates/ffi/src/types.rs`.
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("model '{0}' not found in local cache")]
@@ -31,19 +26,13 @@ pub enum Error {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
-    /// HTTP server returned a non-success status.
     #[error("HTTP {status} from {url}")]
     HttpStatus { url: String, status: u16 },
 
-    /// Timeout / DNS / proxy / connection reset. Wraps the reqwest-level
-    /// message so callers can log but still react uniformly on "network
-    /// is down".
+    /// Timeout / DNS / proxy / connection reset.
     #[error("network error: {0}")]
     HttpTimeout(String),
 
-    /// JSON document we fetched didn't parse against the expected schema
-    /// (AI Hub manifest, release-assets.json, platform.json, etc.). `what`
-    /// is a short tag identifying which document for log grepping.
     #[error("failed to parse {what}: {source}")]
     ManifestParse {
         what: &'static str,
@@ -51,9 +40,6 @@ pub enum Error {
         source: serde_json::Error,
     },
 
-    /// AI Hub has the model but no asset was published for the requested
-    /// chipset. `available` lists the chipsets this model does ship for,
-    /// so the caller can surface an actionable message.
     #[error(
         "chipset {requested:?} not available for this model; supported: {}",
         available.join(", ")
@@ -63,20 +49,12 @@ pub enum Error {
         available: Vec<String>,
     },
 
-    /// Freeform hub / extraction / validation error that doesn't fit a
-    /// structured variant. Prefer a dedicated variant when introducing
-    /// a new failure that callers might want to recover from.
     #[error("hub error: {0}")]
     Hub(String),
 
-    /// Freeform HTTP error that doesn't fit [`Error::HttpStatus`] /
-    /// [`Error::HttpTimeout`].
     #[error("http error: {0}")]
     Http(String),
 
-    /// URL syntax error. `context` names what was being built
-    /// (`"HF endpoint"`, `"docker manifest url"`, …) so the log line is
-    /// actionable without pattern-matching on the underlying message.
     #[error("invalid url ({context}): {source}")]
     InvalidUrl {
         context: String,
@@ -87,10 +65,7 @@ pub enum Error {
     #[error("download cancelled")]
     Cancelled,
 
-    /// Not enough free disk space to fetch the still-pending files.
-    /// `required` is the sum of their full sizes (a conservative
-    /// overestimate for a partially-resumed file); `available` is
-    /// `fs2::available_space` on the destination directory.
+    /// `required` sums full file sizes, overestimating for partially-resumed files.
     #[error(
         "not enough free disk space: this download needs {:.2} GiB but only {:.2} GiB is available",
         *required as f64 / (1024.0 * 1024.0 * 1024.0),
@@ -101,14 +76,11 @@ pub enum Error {
     #[error("invalid model name: '{0}' (must be 'org/repo' with no path traversal)")]
     InvalidModelName(String),
 
-    /// Sources are a local directory or a remote repo listing, so the message
-    /// stays neutral about which.
     #[error("could not infer a model manifest: {0}")]
     ManifestInferenceFailed(String),
 }
 
 impl Error {
-    /// Wrap a `url::ParseError` with `context` describing the URL role.
     pub fn invalid_url(context: impl Into<String>, source: url::ParseError) -> Self {
         Error::InvalidUrl {
             context: context.into(),
@@ -117,7 +89,6 @@ impl Error {
     }
 }
 
-/// Parse a serde-JSON document, tagging failures with `what` for log grep.
 pub fn parse_manifest<'a, T: serde::Deserialize<'a>>(
     what: &'static str,
     bytes: &'a [u8],

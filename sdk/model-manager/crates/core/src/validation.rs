@@ -5,13 +5,6 @@
 
 use crate::error::{Error, Result};
 
-/// Validate a "org/repo" model name.
-///
-/// Rules:
-/// - non-empty, <= 255 bytes total
-/// - exactly one '/' separator
-/// - each component is non-empty, not '.' or '..', and contains no
-///   '\\', '\0', or literal slashes beyond the separator
 pub fn validate_model_name(name: &str) -> Result<()> {
     if name.is_empty() || name.len() > 255 {
         return Err(Error::InvalidModelName(name.to_string()));

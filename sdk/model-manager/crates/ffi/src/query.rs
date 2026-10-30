@@ -12,14 +12,14 @@ use crate::pull::{extract_name_and_intent, GenieXModelPullInput};
 use crate::store::{to_ffi_type, GenieXModelType};
 use crate::types::*;
 
-/// One advertised quantization. Mirrors `geniex_QuantCandidate`.
+/// Mirrors `geniex_QuantCandidate`.
 #[repr(C)]
 pub struct GenieXQuantCandidate {
     pub quant: *mut c_char,
     pub size: i64,
 }
 
-/// Result of `geniex_model_query`. Mirrors `geniex_ModelQueryOutput`.
+/// Mirrors `geniex_ModelQueryOutput`.
 #[repr(C)]
 pub struct GenieXModelQueryOutput {
     pub model_name: *mut c_char,

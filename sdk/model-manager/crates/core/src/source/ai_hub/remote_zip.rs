@@ -1,33 +1,10 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! ZIP64-aware central directory parser driven by HTTP Range reads.
-//!
-//! Given a `Url` to a remote zip, [`fetch_central_directory`] returns
-//! the list of file entries with enough info to issue per-entry range
-//! GETs. No byte payload is downloaded — only the EOCD footer, the
-//! optional ZIP64 EOCD, the central directory itself (typically a few
-//! KB even for 4 GB+ archives), and one 30-byte local file header per
-//! entry.
-//!
-//! Scope is intentionally narrow:
-//! - method 0 (STORED) and method 8 (DEFLATE) — every AI Hub qairt
-//!   asset today is one or the other.
-//! - ZIP64 extensions for entries ≥ 4 GB (Qwen2.5-VL-7B's zip, 4.6 GB
-//!   compressed, uses them).
-//! - Split archives, encrypted entries, or crazy extra-field layouts
-//!   are rejected up front rather than guessed at.
-//!
-//! Wire-format references:
-//! - APPNOTE.TXT 6.3.10
-//! - End of central directory record (EOCD): signature 0x06054b50, fixed
-//!   22 bytes + variable comment.
-//! - ZIP64 EOCD locator: 0x07064b50, fixed 20 bytes, sits directly
-//!   before the EOCD.
-//! - ZIP64 EOCD: 0x06064b50, fixed 56 bytes + variable extensible data.
-//! - Central directory header: 0x02014b50, fixed 46 bytes + name +
-//!   extra + comment.
-//! - Local file header: 0x04034b50, fixed 30 bytes + name + extra.
+//! ZIP64-aware central directory parser over HTTP Range reads (APPNOTE.TXT 6.3.10).
+//! STORED and DEFLATE only; split archives are rejected.
+//! Fixed sizes: EOCD 22, ZIP64 locator 20 (directly before EOCD), ZIP64 EOCD 56,
+//! CD header 46, local header 30 bytes.
 
 use std::sync::Arc;
 
@@ -42,37 +19,26 @@ const ZIP64_EOCD_SIG: u32 = 0x0606_4b50;
 const CD_HEADER_SIG: u32 = 0x0201_4b50;
 const LOCAL_HEADER_SIG: u32 = 0x0403_4b50;
 
-/// How many bytes from the end to scan for the EOCD signature. The EOCD
-/// has a variable-length comment (up to 0xFFFF); practical archives
-/// never include one, but we scan a buffer that comfortably covers both
-/// it and the ZIP64 locator that sits in front.
+/// Covers a max-length (0xFFFF) EOCD comment plus the EOCD itself.
 const EOCD_SCAN_WINDOW: u64 = 64 * 1024 + 22;
 
-/// Compression methods we understand.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Method {
     Stored,
     Deflate,
 }
 
-/// One entry inside a remote zip, reduced to what the executor needs
-/// to issue a range GET for its payload bytes.
 #[derive(Debug, Clone)]
 pub struct ZipEntry {
-    /// Raw path-like name from the central directory; the caller is
-    /// expected to flatten to basename.
     pub name: String,
     pub method: Method,
-    /// Byte offset of the compressed payload, already advanced past
-    /// the local header's 30-byte prefix, name, and extra field.
+    /// Past the local header, its name, and its extra field.
     pub payload_offset: u64,
     pub compressed_size: u64,
     pub uncompressed_size: u64,
     pub is_dir: bool,
 }
 
-/// Fetch the central directory of the zip at `url` and return one
-/// [`ZipEntry`] per file record.
 pub async fn fetch_central_directory(
     transport: &Arc<dyn HttpTransport>,
     url: &Url,
@@ -85,8 +51,6 @@ pub async fn fetch_central_directory(
         )));
     }
 
-    // EOCD lives near the tail unless a trailing zip comment was used
-    // (never in practice for AI Hub assets).
     let tail_len = total.min(EOCD_SCAN_WINDOW);
     let tail_start = total - tail_len;
     let mut tail = Vec::with_capacity(tail_len as usize);
@@ -114,9 +78,7 @@ pub async fn fetch_central_directory(
     let mut cd_offset = read_u32(eocd, 16) as u64;
     let mut cd_entries = read_u16(eocd, 10) as u64;
 
-    // Per APPNOTE, the ZIP64 locator sits immediately before the EOCD
-    // and is present iff any of (cd_size, cd_offset, cd_entries) is
-    // maxed out in the 32-bit EOCD slots.
+    // The ZIP64 locator is present iff a 32-bit EOCD slot is maxed out.
     let needs_zip64 = cd_size == 0xFFFF_FFFF || cd_offset == 0xFFFF_FFFF || cd_entries == 0xFFFF;
     let eocd_abs_off = tail_start + eocd_off_in_tail as u64;
     if needs_zip64 {
@@ -135,8 +97,7 @@ pub async fn fetch_central_directory(
         }
         let z64_eocd_off = read_u64(locator, 8);
 
-        // The ZIP64 EOCD has a 56-byte fixed prefix plus extensible
-        // data we don't need — a 56-byte fetch is enough.
+        // The extensible data after the 56-byte prefix is not needed.
         let z64_end = z64_eocd_off.checked_add(56).ok_or_else(|| {
             Error::Hub(format!(
                 "zip at {url}: ZIP64 EOCD offset {z64_eocd_off} overflows"
@@ -175,8 +136,6 @@ pub async fn fetch_central_directory(
         )));
     }
 
-    // The CD itself is a few KB even for multi-GB archives (3.7 KB for
-    // the 27-entry Qwen2.5-VL-7B asset), so one range fetch is fine.
     let mut cd = Vec::with_capacity(cd_size as usize);
     transport
         .get_range(url, None, cd_offset, cd_size, &mut cd)
@@ -188,7 +147,6 @@ pub async fn fetch_central_directory(
         )));
     }
 
-    // CD header layout: 46 fixed bytes + name_len + extra_len + comment_len.
     let mut entries: Vec<ZipEntry> = Vec::with_capacity(cd_entries.min(cd_size / 46) as usize);
     let mut cursor: usize = 0;
     while cursor + 46 <= cd.len() {
@@ -217,10 +175,8 @@ pub async fn fetch_central_directory(
             .map_err(|_| Error::Hub("zip entry name is not UTF-8".to_string()))?
             .to_string();
 
-        // Per APPNOTE, a ZIP64 extra field (tag 0x0001) supplies 64-bit
-        // values for any 32-bit CD slot that reads 0xFFFFFFFF — only
-        // those overflowed slots are included, in this order:
-        // uncompressed, compressed, local_header_offset, disk.
+        // ZIP64 extra (tag 0x0001) holds only the slots that read 0xFFFFFFFF,
+        // in order: uncompressed, compressed, local_header_offset, disk.
         let extra = &cd[cursor + 46 + name_len..cursor + 46 + name_len + extra_len];
         let mut ex_cursor = 0usize;
         while ex_cursor + 4 <= extra.len() {
@@ -269,8 +225,7 @@ pub async fn fetch_central_directory(
         entries.push(ZipEntry {
             name,
             method,
-            // Local header offset for now; resolved to the payload
-            // byte offset below after fetching each local header.
+            // Resolved to the payload offset below.
             payload_offset: local_header_offset,
             compressed_size,
             uncompressed_size,
@@ -279,9 +234,7 @@ pub async fn fetch_central_directory(
         cursor += total_len;
     }
 
-    // payload_offset = local_header_offset + 30 + name_len + extra_len;
-    // those two length fields live in the local header, not the CD, so
-    // one 30-byte GET per entry is unavoidable.
+    // The local header's name/extra lengths can differ from the CD's, so read each one.
     let mut resolved: Vec<ZipEntry> = Vec::with_capacity(entries.len());
     for mut e in entries.drain(..) {
         if e.is_dir {

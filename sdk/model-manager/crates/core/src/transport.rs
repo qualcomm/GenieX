@@ -1,21 +1,9 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! HTTP transport layer — the minimum a hub needs from the network.
-//!
-//! `HttpTransport` has two methods: HEAD to discover size +
-//! `Accept-Ranges`, and a byte-range GET that streams into an
-//! `AsyncWrite`. Keeping it this thin means a new transport (proxied
-//! reqwest, a local MITM, a mocked test harness) is ~150 lines to add.
-//!
-//! The default [`ReqwestTransport`] honors `HTTP_PROXY` / `HTTPS_PROXY`
-//! / `NO_PROXY` env vars out of the box (reqwest default), which is
-//! the whole point of moving off hf-hub's ureq backend. rustls keeps
-//! us off any system OpenSSL dependency so the static
-//! `libgeniex_model.a` stays portable. TLS chain validation is
-//! delegated to the OS trust store via `rustls-platform-verifier` so
-//! corporate MITM proxies (whose private CA lives in the OS store, not
-//! in the Mozilla `webpki-roots` bundle) are trusted like Schannel does.
+//! HTTP transport: HEAD for size plus a streaming byte-range GET. rustls
+//! keeps the static library free of OpenSSL; certs are checked against the
+//! OS trust store so corporate MITM proxy CAs work.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -37,10 +25,7 @@ pub struct HeadInfo {
 pub trait HttpTransport: Send + Sync {
     async fn head(&self, url: &Url, auth: Option<&str>) -> Result<HeadInfo>;
 
-    /// Stream bytes `[offset, offset+len)` from `url` into `sink`. Must
-    /// write exactly `len` bytes; clean short reads and response-stream
-    /// errors are retried by the transport, while sink errors are surfaced
-    /// immediately.
+    /// Writes exactly `len` bytes; stream errors are retried, sink errors are not.
     async fn get_range(
         &self,
         url: &Url,
@@ -51,7 +36,6 @@ pub trait HttpTransport: Send + Sync {
     ) -> Result<()>;
 }
 
-/// GET a small object whole, refusing anything over `cap` bytes.
 pub(crate) async fn fetch_capped(
     transport: &dyn HttpTransport,
     url: &Url,
@@ -81,11 +65,7 @@ pub struct TransportConfig {
     pub read_timeout: Option<Duration>,
     pub retries: Option<u32>,
     pub retry_backoff: Option<Duration>,
-    /// Explicit proxy override. When `None`, reqwest reads
-    /// `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` / `ALL_PROXY` from the
-    /// environment automatically — which is the normal case. Setting
-    /// this short-circuits env discovery, used mainly for tests and for
-    /// users who want a per-process proxy distinct from the shell env.
+    /// Bypasses reqwest's `*_PROXY` env discovery when set.
     pub proxy_override: Option<String>,
 }
 
@@ -136,24 +116,16 @@ fn client_builder(connect: Duration, read: Duration) -> Result<reqwest::ClientBu
         .use_preconfigured_tls(build_tls_config()?))
 }
 
-/// Client with the transport's default timeouts, for hub calls that need
-/// headers [`HttpTransport`] doesn't expose.
 pub(crate) fn default_client() -> Result<Client> {
     client_builder(DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT)?
         .build()
         .map_err(|e| Error::Http(format!("build reqwest client: {e}")))
 }
 
-/// rustls config whose cert verifier defers to the OS trust store, so
-/// enterprise/MITM-proxy CAs installed in the system store are trusted.
-///
-/// Android exception: `rustls-platform-verifier` needs JNI-side init that
-/// the Android binding does not perform, so it would panic on first TLS
-/// handshake (#1065). Fall back to the bundled Mozilla `webpki-roots`
-/// there — we lose system-store CAs (corporate MITM) on Android only.
+/// On Android `rustls-platform-verifier` needs JNI init the binding never
+/// does and would panic on the first handshake, so use `webpki-roots` there.
 pub(crate) fn build_tls_config() -> Result<rustls::ClientConfig> {
-    // The ring crypto provider must be installed once per process before
-    // any rustls config is built; a second install is a harmless no-op.
+    // The ring provider must be installed before any rustls config is built.
     static PROVIDER_INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
     PROVIDER_INIT.get_or_init(|| {
         let _ = rustls::crypto::ring::default_provider().install_default();
@@ -267,8 +239,7 @@ impl HttpTransport for ReqwestTransport {
                 crate::logging::warn(&format!("get_range retry {attempt}: status {status}"));
                 continue;
             }
-            // 200 is accepted only for the initial request at offset zero;
-            // continuation requests must be 206.
+            // A 200 (whole body) is only valid when the range starts at zero.
             let ok = status == StatusCode::PARTIAL_CONTENT
                 || (status == StatusCode::OK && request_offset == 0);
             if !ok {
@@ -325,8 +296,7 @@ impl HttpTransport for ReqwestTransport {
     }
 }
 
-/// [`HttpTransport`] over one local file; the `Url` is ignored. Lets local
-/// zips and byte ranges reuse the remote zip parser and executor pipelines.
+/// [`HttpTransport`] over one local file (the `Url` is ignored), so local zips reuse the remote parser.
 #[derive(Debug)]
 pub struct LocalFileTransport {
     path: PathBuf,

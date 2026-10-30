@@ -9,11 +9,8 @@ use crate::init::{get_store, runtime_handle};
 use crate::store::{to_ffi_type, GenieXModelType};
 use crate::types::*;
 
-/* ---- geniex_model_list_hub ---- */
-
 #[repr(C)]
 pub struct GenieXHubModelInfo {
-    /// Pullable model name, e.g. `qualcomm/Qwen3-4B`.
     pub name: *mut c_char,
     pub model_type: GenieXModelType,
     pub chipsets: *mut *mut c_char,
@@ -26,9 +23,6 @@ pub struct GenieXHubModelList {
     pub count: i32,
 }
 
-/// List AI Hub models geniex can run. `chipset` is a NUL-terminated canonical
-/// chipset id to filter by, or NULL to list every model. Detecting the host
-/// chipset is the caller's job (see `geniex_model_detect_chipset`).
 #[no_mangle]
 pub extern "C" fn geniex_model_list_hub(
     chipset: *const c_char,

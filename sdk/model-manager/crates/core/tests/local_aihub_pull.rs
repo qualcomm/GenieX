@@ -25,7 +25,6 @@ fn write_extracted(dir: &Path, supports_vision: bool) {
     std::fs::write(dir.join("tokenizer.json"), b"{}").unwrap();
 }
 
-/// Pull `source` into a fresh store; returns its manifest and model dir.
 async fn pull_local(
     source: &Path,
     model_name: &str,
@@ -60,7 +59,7 @@ async fn pull_from_extracted_dir_produces_qairt_manifest() {
     let entry = &mf.model_file["N/A"];
     assert_eq!(entry.name, "shard_a.bin");
     assert!(entry.downloaded);
-    // Own size only; siblings carry theirs in extra_files (#952).
+    // Own size only; siblings carry theirs in extra_files.
     assert_eq!(entry.size, BIN_A.len() as i64);
     for want in ["shard_b.bin", "tokenizer.json", "metadata.json"] {
         assert!(extra_names(&mf).contains(&want), "missing {want}");

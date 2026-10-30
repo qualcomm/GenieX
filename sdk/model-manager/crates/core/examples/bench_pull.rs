@@ -1,29 +1,9 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Ad-hoc timing harness: pull one HF repo and print wall-clock +
-//! throughput. Useful when tuning `GENIEX_DL_*` knobs, sanity-checking
-//! proxy setup, or eyeballing throughput after a transport change.
-//!
-//! Usage (from the workspace root):
-//!
+//! Pull one HF repo and print wall-clock + throughput:
 //!   cargo run --release --example bench_pull -- <repo> [<quant>]
-//!
-//! `<repo>` is an HF "org/repo" string; `<quant>` narrows the manifest
-//! inference to a single quantization (e.g. `Q4_K_M`) so small runs
-//! don't fetch every GGUF in the repo.
-//!
-//! Env vars honoured:
-//!   GENIEX_DATADIR                    Output directory (defaults to a
-//!                                     temp dir that is wiped on start).
-//!   GENIEX_HFTOKEN                    HF bearer token (optional).
-//!   GENIEX_DL_FILE_CONCURRENCY        Executor tuning knobs.
-//!   GENIEX_DL_CHUNK_CONCURRENCY
-//!   GENIEX_DL_CHUNK_SIZE
-//!   HTTPS_PROXY / HTTP_PROXY / NO_PROXY   Read by reqwest automatically.
-//!
-//! Not a benchmark suite — no statistics, no warm-up, no locked-in
-//! baseline. It just prints numbers so you can decide for yourself.
+//! `GENIEX_DATADIR` unset uses a temp dir wiped on start.
 
 use std::path::PathBuf;
 use std::time::Instant;

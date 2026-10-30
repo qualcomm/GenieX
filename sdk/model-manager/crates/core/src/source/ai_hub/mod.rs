@@ -1,13 +1,8 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Qualcomm AI Hub [`ModelSource`].
-//!
-//! Resolves the asset URL for a `(display_name, chipset)` pair via the
-//! public S3 protojson chain, then reads the remote archive's ZIP64
-//! central directory over HTTP Range reads to produce a complete
-//! [`Plan`] — manifest + one per-entry [`BytesSource`] — without
-//! downloading the multi-GB payload.
+//! Qualcomm AI Hub [`ModelSource`]: plans per-entry Range reads from the
+//! remote archive's central directory without downloading the payload.
 
 pub mod detect;
 pub mod dto;
@@ -41,17 +36,16 @@ const PLATFORM_FILENAME: &str = "platform.json";
 const LATEST_DIR: &str = "latest";
 const MAX_INDEX_BYTES: u64 = 8 * 1024 * 1024;
 
-/// TTL for `latest/` index JSONs — short so new releases propagate.
+/// Short so new releases propagate.
 const INDEX_TTL: Duration = Duration::from_secs(60 * 60);
 
-/// TTL for per-model info.json (immutable per release).
+/// info.json is immutable per release.
 const INFO_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Debug, Clone)]
 pub struct AiHubConfig {
     pub endpoint: String,
-    /// Pinned release directory used as fallback for `latest/` fetches,
-    /// or the outright target when `GENIEX_AIHUBVERSION` is set.
+    /// Fallback for `latest/`, or the sole target when `GENIEX_AIHUBVERSION` is set.
     pub version: String,
     /// Empty → auto-detect via [`detect::detect_host_chipset`].
     pub chipset: String,
@@ -60,7 +54,6 @@ pub struct AiHubConfig {
 }
 
 impl AiHubConfig {
-    /// Endpoint, version and cache dir from the environment and `store`.
     pub fn from_store(store: &crate::store::Store, chipset: String) -> Self {
         let version = StoreConfig::ai_hub_version_override()
             .unwrap_or_else(StoreConfig::ai_hub_version_fallback);
@@ -90,7 +83,6 @@ impl AiHubConfig {
     }
 }
 
-/// Fetch and parse `platform.json` — the chipset catalogue.
 async fn fetch_platform_info(
     cfg: &AiHubConfig,
     transport: &Arc<dyn HttpTransport>,
@@ -99,7 +91,7 @@ async fn fetch_platform_info(
     parse_manifest("platform.json", &platform_bytes)
 }
 
-/// The `os.ostype` values this build runs on; `None` means "don't filter".
+/// `None` means "don't filter".
 fn host_ostypes() -> Option<&'static [&'static str]> {
     #[cfg(target_os = "windows")]
     {
@@ -122,8 +114,7 @@ fn host_ostypes() -> Option<&'static [&'static str]> {
     }
 }
 
-/// Drop chipsets that don't run on any `allowed` OS. A chipset with no
-/// device entry is kept, so a payload lacking `devices` stays unfiltered.
+/// A chipset with no device entry is kept, so a payload lacking `devices` stays unfiltered.
 fn filter_chipsets_for_host(plat: &PlatformInfo, allowed: &[&str]) -> Vec<ChipsetInfo> {
     plat.chipsets
         .iter()
@@ -144,8 +135,6 @@ fn filter_chipsets_for_host(plat: &PlatformInfo, allowed: &[&str]) -> Vec<Chipse
         .collect()
 }
 
-/// List the chipsets AI Hub supports on the host OS, sorted by display name
-/// (reference device, else canonical id) for a stable FFI order.
 pub async fn list_supported_chipsets(cfg: &AiHubConfig) -> Result<Vec<ChipsetInfo>> {
     let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
     let plat = fetch_platform_info(cfg, &transport).await?;
@@ -157,7 +146,6 @@ pub async fn list_supported_chipsets(cfg: &AiHubConfig) -> Result<Vec<ChipsetInf
     Ok(chipsets)
 }
 
-/// One AI Hub model geniex can run.
 #[derive(Debug, Clone)]
 pub struct HubModel {
     pub display_name: String,
@@ -166,15 +154,11 @@ pub struct HubModel {
     pub supported_chipsets: Vec<String>,
 }
 
-/// List AI Hub models with a QAIRT asset, sorted by name.
-/// `chipset` restricts to models compatible with it (any alias / display name
-/// from `platform.json`); `None` lists every one. Host detection is the
-/// caller's job — pass the chipset you want to match.
+/// `chipset` may be any alias or display name from `platform.json`; it is not auto-detected.
 pub async fn list_hub_models(cfg: &AiHubConfig, chipset: Option<&str>) -> Result<Vec<HubModel>> {
     let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
 
-    // `supported_chipsets` holds canonical ids, so map the caller's chipset
-    // (which may be an alias or reference-device name) through platform.json.
+    // `supported_chipsets` holds canonical ids.
     let canonical = match chipset {
         Some(chip) => {
             let plat = fetch_platform_info(cfg, &transport).await?;
@@ -189,7 +173,6 @@ pub async fn list_hub_models(cfg: &AiHubConfig, chipset: Option<&str>) -> Result
     Ok(select_hub_models(manifest, canonical.as_deref()))
 }
 
-/// Pure filter/sort behind [`list_hub_models`], split out for testing.
 fn select_hub_models(manifest: ReleaseManifest, device_chipset: Option<&str>) -> Vec<HubModel> {
     let mut models: Vec<HubModel> = manifest
         .models
@@ -220,11 +203,7 @@ fn select_hub_models(manifest: ReleaseManifest, device_chipset: Option<&str>) ->
     models
 }
 
-/// Detect the host chipset and resolve it to the reference device name AI
-/// Hub displays (e.g. `"Snapdragon X Elite CRD"`), the same name surfaced by
-/// [`list_supported_chipsets`]. Best-effort: returns `None` when the host
-/// cannot be probed, and falls back to the raw detected id when the chipset
-/// catalogue is unavailable or has no entry for it.
+/// Reference device name (e.g. `"Snapdragon X Elite CRD"`), else the raw detected id.
 pub async fn detect_host_chipset_reference(cfg: &AiHubConfig) -> Option<String> {
     let raw = detect::detect_host_chipset()?;
     let transport: Arc<dyn HttpTransport> = match ReqwestTransport::new() {
@@ -269,7 +248,6 @@ impl AiHubSource {
         }
     }
 
-    /// Fetch and parse per-model `info.json`; `None` on any failure.
     async fn fetch_info_json(&self, entry: &ManifestModelEntry) -> Option<InfoJson> {
         if entry.manifest_urls.info.is_empty() {
             return None;
@@ -306,9 +284,6 @@ impl ModelSource for AiHubSource {
             fetch_release_index(MANIFEST_FILENAME, &self.cfg, &self.transport).await?;
         let release_manifest: ReleaseManifest = parse_manifest("manifest.json", &manifest_bytes)?;
 
-        // Match by display_name first, then fall back to the snake_case
-        // `id`, so callers can use either "Llama-v3.2-3B-Instruct" or
-        // "llama_v3_2_3b_instruct".
         let entry = release_manifest
             .models
             .iter()
@@ -333,8 +308,7 @@ impl ModelSource for AiHubSource {
             )));
         }
 
-        // release-assets.json is per-model with a URL that rotates each
-        // release, so it's fetched uncached.
+        // Uncached: the per-model URL rotates each release.
         let release_assets_bytes = fetch_direct(release_assets_url, &self.transport).await?;
         let release_assets: ModelReleaseAssets =
             parse_manifest("release-assets.json", &release_assets_bytes)?;
@@ -366,8 +340,6 @@ impl ModelSource for AiHubSource {
             .precision
             .strip_prefix("PRECISION_")
             .unwrap_or(&asset.precision);
-        // GENERATIVE_AI covers both Qwen2.5-VL and text-only LLMs; info.json
-        // breaks the tie and is optional.
         let info = self.fetch_info_json(entry).await;
         let model_name = if entry.id.is_empty() {
             &self.display_name
@@ -390,7 +362,6 @@ pub(crate) enum Archive {
     Local(PathBuf),
 }
 
-/// One [`FileSpec`] per flattened zip entry, read in place from `archive`.
 pub(crate) fn zip_files(flat: Vec<(String, ZipEntry)>, archive: &Archive) -> Vec<FileSpec> {
     flat.into_iter()
         .map(|(name, e)| {
@@ -428,9 +399,6 @@ pub(crate) fn zip_files(flat: Vec<(String, ZipEntry)>, archive: &Archive) -> Vec
         .collect()
 }
 
-/// Reduce the raw central-directory entries to a flat list of
-/// `(basename, entry)` pairs, skipping directories + macOS AppleDouble
-/// metadata and rejecting basename collisions.
 pub(crate) fn prepare_flat_entries(raw: &[ZipEntry]) -> Result<Vec<(String, ZipEntry)>> {
     let mut seen: HashSet<String> = HashSet::new();
     let mut out: Vec<(String, ZipEntry)> = Vec::new();
@@ -464,9 +432,6 @@ fn is_macos_metadata(path: &str) -> bool {
     basename(&normalized).starts_with("._")
 }
 
-/// Fetch a release-index JSON. Serves the 1h cache when fresh, else
-/// tries `releases/latest/<filename>` with `releases/<version>/` as
-/// fallback. `GENIEX_AIHUBVERSION` skips `latest/` outright.
 async fn fetch_release_index(
     filename: &str,
     cfg: &AiHubConfig,
@@ -504,7 +469,6 @@ async fn fetch_release_index(
     Ok(bytes)
 }
 
-/// Fetch bytes with a plain mtime + TTL cache. No content inspection.
 async fn fetch_cached(
     url: &str,
     cache_path: &Path,
@@ -524,7 +488,6 @@ async fn fetch_cached(
     Ok(bytes)
 }
 
-/// Return cached bytes when the file's mtime is within `ttl`.
 fn read_cache_fresh(path: &Path, ttl: Duration) -> Option<Vec<u8>> {
     let meta = std::fs::metadata(path).ok()?;
     let mtime = meta.modified().ok()?;
@@ -534,8 +497,6 @@ fn read_cache_fresh(path: &Path, ttl: Duration) -> Option<Vec<u8>> {
     std::fs::read(path).ok()
 }
 
-/// Best-effort cache write. Failures are logged and swallowed — the
-/// caller always gets the freshly fetched bytes regardless.
 fn write_cache(path: &Path, data: &[u8]) {
     if let Some(parent) = path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
@@ -553,9 +514,6 @@ async fn fetch_direct(url: &str, transport: &Arc<dyn HttpTransport>) -> Result<V
     fetch_capped(transport.as_ref(), &parsed, None, MAX_INDEX_BYTES).await
 }
 
-/// Lowercase substrings in `info.description` / `info.headline` that
-/// mark an AI Hub model as vision-language. Kept together so the set
-/// is easy to audit when AI Hub updates its copy.
 const AI_HUB_VLM_KEYWORDS: &[&str] = &[
     "vision-language",
     "vision language",
@@ -570,8 +528,6 @@ const AI_HUB_VLM_KEYWORDS: &[&str] = &[
     "vlm",
 ];
 
-/// `genie.supports_vision` and `precision` from the `metadata.json` inside
-/// an AI Hub archive; each is absent when missing or mistyped.
 pub(crate) fn parse_archive_metadata(bytes: &[u8]) -> (Option<ModelType>, String) {
     let Ok(v) = serde_json::from_slice::<serde_json::Value>(bytes) else {
         return (None, String::new());
@@ -587,10 +543,7 @@ pub(crate) fn parse_archive_metadata(bytes: &[u8]) -> (Option<ModelType>, String
     (model_type, precision)
 }
 
-/// Modality classifier for the AI Hub source. `domain == MULTIMODAL`
-/// is retained as a positive signal; for `GENERATIVE_AI` models (which
-/// include Qwen2.5-VL), we keyword-match the info.json description +
-/// headline. Defaults to LLM when no positive signal is present.
+/// `GENERATIVE_AI` also covers VLMs such as Qwen2.5-VL, so info.json text breaks the tie.
 fn classify_ai_hub(info: Option<&InfoJson>, entry: &ManifestModelEntry) -> ModelType {
     if entry.domain == "MODEL_DOMAIN_MULTIMODAL" {
         return ModelType::Vlm;
