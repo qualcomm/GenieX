@@ -266,6 +266,88 @@ async fn http_deflate_decodes_and_marks_done() {
 }
 
 #[tokio::test]
+async fn local_sources_copy_bytes_and_mark_done() {
+    let src = tempdir().unwrap();
+    let plain = make_body(40 * 1024, 0x42);
+    let compressed = deflate_raw(&plain);
+    let mut archive = b"prefix-".to_vec();
+    let range_at = archive.len();
+    archive.extend_from_slice(&plain[..1000]);
+    let deflate_at = archive.len();
+    archive.extend_from_slice(&compressed);
+    let archive_path = src.path().join("archive.zip");
+    std::fs::write(&archive_path, &archive).unwrap();
+    let whole_path = src.path().join("whole.bin");
+    std::fs::write(&whole_path, &plain).unwrap();
+
+    let spec = |name: &str, size: usize, bytes| FileSpec {
+        name: name.to_string(),
+        size: size as u64,
+        bytes,
+    };
+    let files = [
+        spec(
+            "whole.bin",
+            plain.len(),
+            BytesSource::Local { path: whole_path },
+        ),
+        spec(
+            "range.bin",
+            1000,
+            BytesSource::LocalRange {
+                path: archive_path.clone(),
+                offset: range_at as u64,
+                len: 1000,
+            },
+        ),
+        spec(
+            "empty.bin",
+            0,
+            BytesSource::LocalRange {
+                path: archive_path.clone(),
+                offset: range_at as u64,
+                len: 0,
+            },
+        ),
+        spec(
+            "inflated.bin",
+            plain.len(),
+            BytesSource::LocalDeflate {
+                path: archive_path,
+                offset: deflate_at as u64,
+                compressed_len: compressed.len() as u64,
+            },
+        ),
+    ];
+    let dest = tempdir().unwrap();
+    let (cb, seen) = recording_callback();
+    Executor::with_config(fast_transport(), config(4, 4, 5))
+        .run(&files, dest.path(), Some(&cb))
+        .await
+        .expect("local copy");
+
+    let want: [(&str, &[u8]); 4] = [
+        ("whole.bin", &plain),
+        ("range.bin", &plain[..1000]),
+        ("empty.bin", b""),
+        ("inflated.bin", &plain),
+    ];
+    for (name, bytes) in want {
+        assert_eq!(
+            std::fs::read(dest.path().join(name)).unwrap(),
+            bytes,
+            "{name}"
+        );
+        let marker = std::fs::read(dest.path().join(format!("{name}.progress"))).unwrap();
+        assert_eq!(marker, [0x01], "{name} marker");
+    }
+    let history = seen.lock().unwrap();
+    for f in history.last().expect("callback must fire") {
+        assert_eq!(f.downloaded_bytes, f.total_bytes, "{}", f.file_name);
+    }
+}
+
+#[tokio::test]
 async fn http_deflate_progress_scales_to_uncompressed_size() {
     let plain = vec![b'A'; 64 * 1024];
     let compressed = deflate_raw(&plain);
