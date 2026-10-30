@@ -96,6 +96,14 @@ impl StopSignals {
     }
 }
 
+/// Keep the first error, but let a real failure replace a `Cancelled` that a
+/// sibling task returned only because that failure stopped it.
+fn record_err(slot: &mut Option<Error>, err: Error) {
+    if matches!(slot, None | Some(Error::Cancelled)) {
+        *slot = Some(err);
+    }
+}
+
 struct FileState {
     name: String,
     total_bytes: AtomicU64,
@@ -195,11 +203,11 @@ impl Executor {
                         Some(Ok(Ok(()))) => {}
                         Some(Ok(Err(e))) => {
                             stop.failed.cancel();
-                            first_err.get_or_insert(e);
+                            record_err(&mut first_err, e);
                         }
                         Some(Err(join_err)) => {
                             stop.failed.cancel();
-                            first_err.get_or_insert(Error::Http(format!("join: {join_err}")));
+                            record_err(&mut first_err, Error::Http(format!("join: {join_err}")));
                         }
                     }
                 }
@@ -418,17 +426,12 @@ async fn download_raw(
             if stop.halt_new_work() {
                 return Err(Error::Cancelled);
             }
-            let mut file = OpenOptions::new()
-                .write(true)
-                .read(true)
-                .open(&output)
-                .await?;
-            file.seek(std::io::SeekFrom::Start(range.offset)).await?;
-            let mut counted = CountingSink::new(&mut file, state, 1.0);
-            stop.race(src.fetch(range.offset, range.len, &mut counted))
-                .await?;
-            file.flush().await?;
-            chunk::mark_chunk_done(&marker, range.index)
+            let res = write_chunk(&src, &output, &range, state, &stop).await;
+            let res = res.and_then(|()| chunk::mark_chunk_done(&marker, range.index));
+            if res.is_err() {
+                stop.failed.cancel();
+            }
+            res
         });
     }
 
@@ -440,7 +443,7 @@ async fn download_raw(
             Err(join_err) => Error::Http(format!("chunk join: {join_err}")),
         };
         job.stop.failed.cancel();
-        first_err.get_or_insert(err);
+        record_err(&mut first_err, err);
     }
     if let Some(e) = first_err {
         return Err(e);
@@ -448,6 +451,26 @@ async fn download_raw(
     if job.stop.user.is_cancelled() {
         return Err(Error::Cancelled);
     }
+    Ok(())
+}
+
+async fn write_chunk(
+    src: &RangeSrc,
+    output: &Path,
+    range: &chunk::ChunkRange,
+    state: Arc<FileState>,
+    stop: &StopSignals,
+) -> Result<()> {
+    let mut file = OpenOptions::new()
+        .write(true)
+        .read(true)
+        .open(output)
+        .await?;
+    file.seek(std::io::SeekFrom::Start(range.offset)).await?;
+    let mut counted = CountingSink::new(&mut file, state, 1.0);
+    stop.race(src.fetch(range.offset, range.len, &mut counted))
+        .await?;
+    file.flush().await?;
     Ok(())
 }
 

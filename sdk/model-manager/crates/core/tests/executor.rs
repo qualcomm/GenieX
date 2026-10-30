@@ -14,8 +14,8 @@ use model_manager_core::executor::{
 };
 use model_manager_core::source::{BytesSource, FileSpec};
 use model_manager_core::test_support::{
-    deflate_raw, fast_transport, make_body, mount_head, mount_ranged, parse_range,
-    pin_small_chunks, range_slice, url,
+    deflate_raw, fast_transport, make_body, mount_head, mount_ranged, pin_small_chunks,
+    range_slice, url,
 };
 use tempfile::tempdir;
 use url::Url;
@@ -212,15 +212,12 @@ async fn chunk_failure_stops_queued_chunks_from_starting() {
         &server,
         "/flaky.bin",
         make_body(total_chunks * 16 * 1024, 0x5C),
-        |req, b| match parse_range(req) {
-            (0, _) => ResponseTemplate::new(500),
-            _ => range_slice(b, req),
-        },
+        |_, _| ResponseTemplate::new(500),
     )
     .await;
 
     let tmp = tempdir().unwrap();
-    Executor::with_config(fast_transport(), config(1, 2, 100))
+    let err = Executor::with_config(fast_transport(), config(1, 2, 100))
         .run(
             &[http_spec("flaky.bin", url(&server, "/flaky.bin"))],
             tmp.path(),
@@ -228,8 +225,9 @@ async fn chunk_failure_stops_queued_chunks_from_starting() {
         )
         .await
         .expect_err("the chunk failure must surface");
+    assert!(!matches!(err, Error::Cancelled), "got {err}");
     let hits = hits.load(Ordering::SeqCst);
-    assert!(hits < total_chunks, "queued chunks must bail ({hits} GETs)");
+    assert!(hits <= 2, "queued chunks must bail ({hits} GETs)");
 }
 
 #[tokio::test]
