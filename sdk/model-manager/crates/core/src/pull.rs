@@ -135,10 +135,8 @@ pub async fn pull_with_source(
 
             // A quant-specific plan carries only that quant; keep the ones on disk.
             let final_path = dest_dir.join(MANIFEST_FILE);
-            if let Ok(data) = fs::read_to_string(&final_path) {
-                if let Ok(existing) = serde_json::from_str(&data) {
-                    plan.manifest.merge_existing(existing);
-                }
+            if let Ok(existing) = store.get_manifest(&model_name_owned) {
+                plan.manifest.merge_existing(existing);
             }
 
             let pending = resume::filter_pending(&plan.files, &dest_dir);

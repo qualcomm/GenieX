@@ -122,3 +122,41 @@ async fn pull_from_local_zip_extracts_stored_and_deflate_entries() {
     );
     assert_eq!(std::fs::read(dest.join("weights.bin")).unwrap(), big);
 }
+
+#[tokio::test]
+async fn repull_migrates_a_legacy_qairt_manifest_before_merging() {
+    let staging = tempdir().unwrap();
+    write_extracted(staging.path(), false);
+    std::fs::write(
+        staging.path().join("metadata.json"),
+        br#"{"precision":"w4a16"}"#,
+    )
+    .unwrap();
+    let (store, cache) = temp_store();
+    let dest = cache.path().join("models").join("qualcomm/foo");
+    std::fs::create_dir_all(&dest).unwrap();
+    let legacy = r#"{"Name":"qualcomm/foo","ModelName":"foo","ModelType":"llm","PluginId":"qairt","Precision":"w4a16","ModelFile":{"N/A":{"Name":"shard_a.bin","Downloaded":true,"Size":24}}}"#;
+    std::fs::write(dest.join("geniex.json"), legacy).unwrap();
+
+    let src = LocalFsSource::new(
+        staging.path().to_path_buf(),
+        "qualcomm/foo".to_string(),
+        ManifestHint::default(),
+    );
+    pull_with_source(
+        &store,
+        "qualcomm/foo",
+        Box::new(src),
+        fast_transport(),
+        None,
+    )
+    .await
+    .unwrap();
+    let keys: Vec<String> = store
+        .get_manifest("qualcomm/foo")
+        .unwrap()
+        .model_file
+        .into_keys()
+        .collect();
+    assert_eq!(keys, ["w4a16"]);
+}
