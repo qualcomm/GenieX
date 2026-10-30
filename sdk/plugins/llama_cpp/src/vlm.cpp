@@ -67,6 +67,7 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
     if (!selection) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
+    select_iq9_npu_devices(*selection, input->model_path);
 
     // Pick the mmproj device from the caller's explicit selection, before apply_device_selection fills in defaults.
     const bool explicit_selection = !selection->empty();

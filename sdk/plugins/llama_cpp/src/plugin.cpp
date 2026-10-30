@@ -23,6 +23,7 @@
 #include "llm.h"
 #include "logging.h"
 #include "mtmd-helper.h"
+#include "params.h"
 #include "vlm.h"
 
 namespace {
@@ -65,14 +66,15 @@ class LlamaPlugin : public Plugin {
 
         // Expose a spare HTP device (HTP1) so the mmproj can run apart from the LM's HTP0
         // (see params.cpp resolve_vision_device); sharing HTP0 aborts on E4B / Qwen3-ASR input.
-        // On dual-NPU targets (IQ9) each device row-splits across both NPUs, one virtual session
-        // apiece. Read once at backend registration below. Callers can override.
+        // On dual-NPU targets each device row-splits across both NPUs, one virtual session
+        // apiece. IQ9 also exposes single sessions so >= 2 GiB models can layer-split across them
+        // (see params.cpp linux_hexagon_devices). Read once at backend registration below.
+        // Callers can override.
         if (!std::getenv("GGML_HEXAGON_DEVICES") && !std::getenv("GGML_HEXAGON_NDEV")) {
 #if defined(_WIN32)
             _putenv_s("GGML_HEXAGON_DEVICES", "2");
 #elif defined(__linux__) && !defined(__ANDROID__)
-            const char* devices = std::filesystem::exists("/dev/fastrpc-cdsp1") ? "HTP0[0-1:0],HTP1[0-1:1]" : "2";
-            setenv("GGML_HEXAGON_DEVICES", devices, 0);
+            setenv("GGML_HEXAGON_DEVICES", geniex::linux_hexagon_devices(), 0);
 #else
             setenv("GGML_HEXAGON_DEVICES", "2", 0);
 #endif

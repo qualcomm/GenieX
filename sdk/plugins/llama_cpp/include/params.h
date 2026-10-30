@@ -24,6 +24,15 @@ enum class Device { CPU, GPU, NPU };
 
 std::optional<std::vector<ggml_backend_dev_t>> resolve_devices(const char* device_id);
 
+// Default GGML_HEXAGON_DEVICES on Linux (non-Android) hosts. Dual-NPU targets get two devices that each row-split
+// across both NPUs; IQ9 (QCS9075) additionally exposes single sessions for select_iq9_npu_devices.
+const char* linux_hexagon_devices();
+
+// IQ9: an HTP session maps only ~1 GiB, so a >= 2 GiB model on the default HTP0 fails to load. When the caller asked
+// for plain `npu` (selection is just HTP0) and the IQ9 default layout is in effect, replace the selection with a
+// layer split over the single sessions sized to the model file. Leaves explicit device lists alone.
+void select_iq9_npu_devices(std::vector<ggml_backend_dev_t>& selection, const char* model_path);
+
 // Set mpar.devices from a resolve_devices() result. selection may be filled in place and must outlive the load,
 // since mpar.devices points into it.
 // - CPU load, no explicit device: empty (null-terminated) list. Left unset, llama.cpp enumerates every GPU-type
