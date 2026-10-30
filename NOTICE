@@ -1,277 +1,238 @@
-# Third-Party Licenses
+# Third-Party Notices
 
-This document provides information about third-party libraries used in the GenieX-CLI project and their respective licenses. All libraries listed below are licensed under permissive open-source licenses (MIT, Apache 2.0, BSD, or equivalent) that are compatible with GenieX-CLI's BSD 3-Clause license.
+This document identifies third-party components used by the GenieX SDK, CLI,
+and language bindings. GenieX's BSD 3-Clause license applies to its own code;
+it does not replace the licenses or agreements governing third-party components.
+The original copyright notices, license texts, and component-specific terms
+remain authoritative and must be preserved as required when redistributing them.
 
----
+Dependency versions are recorded in `cli/go.mod`, `sdk/model-manager/Cargo.lock`,
+the tokenizers-cpp Cargo lockfile, and the pinned git submodules. Optional,
+test-only, build-time, and platform-specific dependencies are not necessarily
+included in every runtime distribution.
 
-## Go Dependencies
+## Qualcomm AI Runtime (QAIRT)
 
-### gin-gonic/gin
+The open-source [geniex-qairt-plugin](https://github.com/qualcomm/geniex-qairt-plugin)
+is BSD-3-Clause, but its QAIRT SDK headers and prebuilt runtime libraries are
+**proprietary Qualcomm components governed by the Qualcomm AI Runtime SDK EULA**.
+They are not relicensed under GenieX's BSD license. This notice does not grant
+rights to redistribute them; follow the EULA supplied with the applicable SDK.
 
-- **License**: MIT License
-- **URL**: https://github.com/gin-gonic/gin
-- **Description**: HTTP web framework written in Go
-
-### spf13/cobra
-
-- **License**: Apache License 2.0
-- **URL**: https://github.com/spf13/cobra
-- **Description**: Commander for modern Go CLI applications
-
-### spf13/viper
-
-- **License**: MIT License
-- **URL**: https://github.com/spf13/viper
-- **Description**: Go configuration with fangs
-
-### AWS SDK for Go v2
-
-- **License**: Apache License 2.0
-- **URL**: https://github.com/aws/aws-sdk-go-v2
-- **Description**: AWS SDK for the Go programming language
-- **Packages**: aws-sdk-go-v2, aws-sdk-go-v2/config, aws-sdk-go-v2/service/s3
-
-### bytedance/sonic
-
-- **License**: Apache License 2.0
-- **URL**: https://github.com/bytedance/sonic
-- **Description**: Blazingly fast JSON serializing & deserializing library
-
-### charmbracelet/huh
-
-- **License**: MIT License
-- **URL**: https://github.com/charmbracelet/huh
-- **Description**: Build terminal forms and prompts
-
-### charmbracelet/lipgloss
-
-- **License**: MIT License
-- **URL**: https://github.com/charmbracelet/lipgloss
-- **Description**: Style definitions for nice terminal layouts
-
-### charmbracelet/bubbletea
-
-- **License**: MIT License
-- **URL**: https://github.com/charmbracelet/bubbletea
-- **Description**: Powerful little TUI framework
-
-### dustin/go-humanize
-
-- **License**: MIT License
-- **URL**: https://github.com/dustin/go-humanize
-- **Description**: Formatters for units to human friendly sizes
-
-### gofrs/flock
-
-- **License**: BSD 3-Clause License
-- **URL**: https://github.com/gofrs/flock
-- **Description**: Thread-safe file locking library
-
-### chzyer/readline
-
-- **License**: MIT License
-- **URL**: https://github.com/chzyer/readline
-- **Description**: Pure Go readline library with support for command line editing and history
-
-### openai/openai-go
-
-- **License**: Apache License 2.0
-- **URL**: https://github.com/openai/openai-go
-- **Description**: OpenAI Go API library
-
-### schollz/progressbar
-
-- **License**: MIT License
-- **URL**: https://github.com/schollz/progressbar
-- **Description**: Simple command line progress bar
-
-### valyala/fasthttp
-
-- **License**: MIT License
-- **URL**: https://github.com/valyala/fasthttp
-- **Description**: Fast HTTP implementation for Go
-
----
+See [the plugin's third-party notices](third-party/geniex-qairt/THIRD_PARTY_NOTICES.md)
+and `qnn-api/README.md` in that submodule for the SDK/runtime versions and terms.
+Other externally supplied Qualcomm SDK components retain their respective
+licenses and agreements.
 
 ## C/C++ Dependencies
 
-### ggml
+| Component | License | Use / authoritative license location |
+| --- | --- | --- |
+| [llama.cpp / ggml](https://github.com/ggml-org/llama.cpp) | MIT | [third-party/llama.cpp/LICENSE](third-party/llama.cpp/LICENSE); Copyright (c) 2023-2026 The ggml authors |
+| [fmt](https://github.com/fmtlib/fmt) | MIT with an optional binary-distribution exception | SDK logging; notice embedded in `sdk/include/external/fmt/format.h` |
+| [HowardHinnant/date](https://github.com/HowardHinnant/date) | MIT | Vendored header; notice embedded in `sdk/include/external/date.h` |
+| [cpp-httplib](https://github.com/yhirose/cpp-httplib) | MIT | SDK vendored header and llama.cpp; [third-party/llama.cpp/vendor/cpp-httplib/LICENSE](third-party/llama.cpp/vendor/cpp-httplib/LICENSE) |
+| [nlohmann/json](https://github.com/nlohmann/json) | MIT | SDK, llama.cpp, and geniex-proc; [third-party/llama.cpp/licenses/LICENSE-jsonhpp](third-party/llama.cpp/licenses/LICENSE-jsonhpp) |
+| [stb](https://github.com/nothings/stb) | MIT OR Unlicense | Image processing in llama.cpp/mtmd and geniex-proc; notices embedded in the headers |
+| [miniaudio](https://github.com/mackron/miniaudio) | MIT-0 OR Unlicense | llama.cpp/mtmd; notice embedded in `third-party/llama.cpp/vendor/miniaudio/miniaudio.h` |
+| [sheredom/subprocess.h](https://github.com/sheredom/subprocess.h) | Unlicense | llama.cpp common/mtmd; notice embedded in `third-party/llama.cpp/vendor/sheredom/subprocess.h` |
+| [xxHash](https://github.com/Cyan4973/xxHash) | BSD-2-Clause | [third-party/llama.cpp/vendor/hash/xxhash/LICENSE](third-party/llama.cpp/vendor/hash/xxhash/LICENSE) |
+| SHA-1 (Steve Reid), SHA-256 (Igor Pavlov) | Public domain | llama.cpp vendored hash implementations |
+| [rotate-bits](https://github.com/jb55/rotate-bits.h) | MIT | [third-party/llama.cpp/vendor/hash/rotate-bits/LICENSE.md](third-party/llama.cpp/vendor/hash/rotate-bits/LICENSE.md) |
+| [geniex-proc](https://github.com/qualcomm/geniex-proc) | BSD-3-Clause; derived llama.cpp portions retain MIT notices | QAIRT preprocessing/tokenization; [third-party notices](third-party/geniex-qairt/third-party/geniex-proc/THIRD_PARTY_NOTICES.md) |
+| [xtensor](https://github.com/xtensor-stack/xtensor), [xtl](https://github.com/xtensor-stack/xtl), [xtensor-io](https://github.com/xtensor-stack/xtensor-io), [xtensor-blas](https://github.com/xtensor-stack/xtensor-blas) | BSD-3-Clause | geniex-proc's vendored tensor libraries; see each directory's LICENSE and nested component notices |
+| [tokenizers-cpp](https://github.com/mlc-ai/tokenizers-cpp) | Apache-2.0 | geniex-proc tokenizer; `third-party/geniex-qairt/third-party/geniex-proc/third-party/tokenizers-cpp/LICENSE` |
+| [SentencePiece](https://github.com/google/sentencepiece) | Apache-2.0 | tokenizers-cpp; its protobuf-lite, Darts-clone, esaxx, and Abseil components retain their own licenses |
+| [msgpack-c](https://github.com/msgpack/msgpack-c) | BSL-1.0 and component-specific terms in COPYING/NOTICE | tokenizers-cpp's `msgpack/` directory |
+| [minja](https://github.com/google/minja) | MIT | geniex-proc chat templates; Copyright 2024 Google LLC; `third-party/geniex-qairt/third-party/geniex-proc/third-party/minja/LICENSE` |
 
-- **License**: MIT License
-- **Copyright**: Copyright (c) 2023-2024 The ggml authors
-- **URL**: https://github.com/ggml-org/ggml
-- **Description**: Tensor library for machine learning
-- **License File**: https://github.com/ggml-org/ggml/blob/master/LICENSE
+Optional system libraries, such as OpenBLAS, and externally supplied accelerator
+SDKs retain their own licenses. The presence of a vendored directory alone does
+not imply that every optional component is linked into GenieX.
 
-### pybind11
+## Go Dependencies
 
-- **License**: BSD 3-Clause License
-- **Copyright**: Copyright (c) 2016 Wenzel Jakob
-- **URL**: https://github.com/pybind/pybind11
-- **Description**: Seamless operability between C++11 and Python
-- **License File**: [pybind11 LICENSE](https://github.com/pybind/pybind11/blob/master/LICENSE)
+The following direct and indirect modules are declared in `cli/go.mod`.
+License labels identify the primary upstream licenses; notices for embedded or
+derived portions continue to apply separately.
 
-### xtensor
+### Direct dependencies
 
-- **License**: BSD 3-Clause License
-- **Copyright**: Copyright (c) 2016 Johan Mabille, Sylvain Corlay and Wolf Vollprecht, Copyright (c) 2016 QuantStack
-- **URL**: https://github.com/xtensor-stack/xtensor
-- **Description**: C++ tensors with broadcasting and lazy computing
-- **License File**: https://github.com/xtensor-stack/xtensor/blob/master/LICENSE
+| Module | License |
+| --- | --- |
+| `github.com/bytedance/sonic` | Apache-2.0 |
+| `github.com/charmbracelet/huh` | MIT |
+| `github.com/charmbracelet/huh/spinner` | MIT |
+| `github.com/dustin/go-humanize` | MIT |
+| `github.com/gin-gonic/gin` | MIT |
+| `github.com/gookit/color` | MIT |
+| `github.com/jedib0t/go-pretty/v6` | MIT |
+| `github.com/lmittmann/tint` | MIT |
+| `github.com/mattn/go-runewidth` | MIT |
+| `github.com/openai/openai-go/v3` | Apache-2.0 |
+| `github.com/schollz/progressbar/v3` | MIT |
+| `github.com/spf13/cobra` | Apache-2.0 |
+| `github.com/spf13/pflag` | BSD-3-Clause |
+| `github.com/spf13/viper` | MIT |
+| `github.com/valyala/fasthttp` | MIT |
+| `golang.org/x/image` | BSD-3-Clause |
+| `golang.org/x/mod` | BSD-3-Clause |
+| `golang.org/x/sync` | BSD-3-Clause |
+| `golang.org/x/sys` | BSD-3-Clause |
+| `golang.org/x/term` | BSD-3-Clause |
 
-### cpp-httplib
+`github.com/qualcomm/GenieX/bindings/go` is first-party GenieX code, licensed
+under BSD-3-Clause.
 
-- **License**: MIT License
-- **Copyright**: Copyright (c) 2017 yhirose
-- **URL**: https://github.com/yhirose/cpp-httplib
-- **Description**: C++ single-file header-only HTTP/HTTPS library
-- **Used in**: llama.cpp
-- **License File**: [third-party/llama.cpp/licenses/LICENSE-httplib](https://github.com/ggerganov/llama.cpp/blob/master/licenses/LICENSE-httplib)
+### Indirect dependencies
 
-### nlohmann/json
+| Module | License |
+| --- | --- |
+| `github.com/andybalholm/brotli` | MIT |
+| `github.com/atotto/clipboard` | BSD-3-Clause |
+| `github.com/aymanbagabas/go-osc52/v2` | MIT |
+| `github.com/bytedance/gopkg` | Apache-2.0 |
+| `github.com/bytedance/sonic/loader` | Apache-2.0 |
+| `github.com/catppuccin/go` | MIT |
+| `github.com/charmbracelet/bubbles` | MIT |
+| `github.com/charmbracelet/bubbletea` | MIT |
+| `github.com/charmbracelet/colorprofile` | MIT |
+| `github.com/charmbracelet/lipgloss` | MIT |
+| `github.com/charmbracelet/x/ansi` | MIT |
+| `github.com/charmbracelet/x/cellbuf` | MIT |
+| `github.com/charmbracelet/x/exp/strings` | MIT |
+| `github.com/charmbracelet/x/term` | MIT |
+| `github.com/cloudwego/base64x` | Apache-2.0 |
+| `github.com/coder/websocket` | ISC |
+| `github.com/erikgeiser/coninput` | MIT |
+| `github.com/fsnotify/fsnotify` | BSD-3-Clause |
+| `github.com/gabriel-vasile/mimetype` | MIT |
+| `github.com/gin-contrib/sse` | MIT |
+| `github.com/go-playground/locales` | MIT |
+| `github.com/go-playground/universal-translator` | MIT |
+| `github.com/go-playground/validator/v10` | MIT |
+| `github.com/go-viper/mapstructure/v2` | MIT |
+| `github.com/goccy/go-json` | MIT |
+| `github.com/goccy/go-yaml` | MIT |
+| `github.com/inconshreveable/mousetrap` | Apache-2.0 |
+| `github.com/json-iterator/go` | MIT |
+| `github.com/klauspost/compress` | BSD-3-Clause and component-specific licenses |
+| `github.com/klauspost/cpuid/v2` | MIT |
+| `github.com/leodido/go-urn` | MIT |
+| `github.com/lucasb-eyer/go-colorful` | MIT |
+| `github.com/mattn/go-isatty` | MIT |
+| `github.com/mattn/go-localereader` | MIT, declared in the upstream README |
+| `github.com/mitchellh/colorstring` | MIT |
+| `github.com/mitchellh/hashstructure/v2` | MIT |
+| `github.com/modern-go/concurrent` | Apache-2.0 |
+| `github.com/modern-go/reflect2` | Apache-2.0 |
+| `github.com/muesli/ansi` | MIT |
+| `github.com/muesli/cancelreader` | MIT |
+| `github.com/muesli/termenv` | MIT |
+| `github.com/pelletier/go-toml/v2` | MIT |
+| `github.com/quic-go/qpack` | MIT |
+| `github.com/quic-go/quic-go` | MIT |
+| `github.com/rivo/uniseg` | MIT |
+| `github.com/sagikazarmark/locafero` | MIT |
+| `github.com/sourcegraph/conc` | MIT |
+| `github.com/spf13/afero` | Apache-2.0 |
+| `github.com/spf13/cast` | MIT |
+| `github.com/subosito/gotenv` | MIT |
+| `github.com/tidwall/gjson` | MIT |
+| `github.com/tidwall/match` | MIT |
+| `github.com/tidwall/pretty` | MIT |
+| `github.com/tidwall/sjson` | MIT |
+| `github.com/twitchyliquid64/golang-asm` | BSD-3-Clause |
+| `github.com/ugorji/go/codec` | MIT |
+| `github.com/valyala/bytebufferpool` | MIT |
+| `github.com/xo/terminfo` | MIT |
+| `go.yaml.in/yaml/v3` | MIT and Apache-2.0 for the respective portions |
+| `golang.org/x/arch` | BSD-3-Clause |
+| `golang.org/x/crypto` | BSD-3-Clause |
+| `golang.org/x/net` | BSD-3-Clause |
+| `golang.org/x/text` | BSD-3-Clause |
+| `google.golang.org/protobuf` | BSD-3-Clause |
 
-- **License**: MIT License
-- **Copyright**: Copyright (c) 2013-2025 Niels Lohmann
-- **URL**: https://github.com/nlohmann/json
-- **Description**: JSON for Modern C++
-- **Used in**: llama.cpp
-- **License File**: [third-party/llama.cpp/licenses/LICENSE-jsonhpp](https://github.com/ggerganov/llama.cpp/blob/master/licenses/LICENSE-jsonhpp)
+## Rust Dependencies
 
----
+The model-manager is linked into the native SDK. The declarations in
+`sdk/model-manager/Cargo.toml` and its core crate identify these direct
+third-party dependencies:
+
+| Crate | License |
+| --- | --- |
+| serde, serde_json, thiserror | MIT OR Apache-2.0 |
+| tokio, tokio-util | MIT |
+| reqwest | MIT OR Apache-2.0 |
+| rustls | Apache-2.0 OR ISC OR MIT |
+| rustls-platform-verifier (non-Android only) | MIT OR Apache-2.0 |
+| webpki-roots (Android only) | CDLA-Permissive-2.0 |
+| async-trait, url, fs2, flate2 | MIT OR Apache-2.0 |
+
+The QAIRT plugin's tokenizers-cpp submodule also builds a Rust tokenizer.
+Important transitive components from both the model-manager and tokenizers-cpp
+lockfiles, and their distinct terms, include:
+
+| Component | License |
+| --- | --- |
+| ring | Apache-2.0 AND ISC; preserve its BoringSSL and other embedded-code notices |
+| rustls-webpki | ISC |
+| rustls-pki-types, tokio-rustls | MIT OR Apache-2.0 |
+| rustls-native-certs | Apache-2.0 OR ISC OR MIT |
+| webpki-root-certs | CDLA-Permissive-2.0 |
+| tokenizers | Apache-2.0 |
+| onig, onig_sys | MIT for the Rust bindings; the bundled Oniguruma library retains its BSD license |
+| ICU4X crates, including icu_locale_core, icu_normalizer, and icu_properties | Unicode-3.0 |
+| unicode-ident | (MIT OR Apache-2.0) AND Unicode-3.0 |
+
+The complete resolved graphs, including build, test, and platform dependencies,
+are in `sdk/model-manager/Cargo.lock` and
+`third-party/geniex-qairt/third-party/geniex-proc/third-party/tokenizers-cpp/rust/Cargo.lock`.
+Consult each resolved crate's own license files for its full terms. A license
+expression using **AND** requires both sets of terms; **OR** denotes alternatives.
 
 ## Python Dependencies
 
-### gradio
+The public Python binding uses ctypes rather than pybind11. Python dependencies
+are installed separately by the package manager and retain their upstream
+licenses.
 
-- **License**: Apache License 2.0
-- **URL**: https://github.com/gradio-app/gradio
-- **Description**: Build machine learning web apps
+| Component | License | Scope |
+| --- | --- | --- |
+| [tqdm](https://github.com/tqdm/tqdm) | MIT and MPL-2.0 for the respective portions | Runtime |
+| [ipywidgets](https://github.com/jupyter-widgets/ipywidgets) | BSD-3-Clause | Optional `notebook` extra |
+| [pytest](https://github.com/pytest-dev/pytest) | MIT | Optional `test` extra |
+| setuptools, wheel, tomli | MIT | Build environment |
 
-### requests
+The declarations in `bindings/python/pyproject.toml` also apply to the
+backend-specific Python distributions generated from that binding.
 
-- **License**: Apache License 2.0
-- **URL**: https://github.com/psf/requests
-- **Description**: HTTP library for Python
+## Android/Java Dependencies
 
-### Flask
+`bindings/android/app/build.gradle.kts` declares AndroidX core-ktx and Kotlinx
+Coroutines Android. The Kotlin standard library and these libraries use
+Apache-2.0. Their resolved transitive dependencies retain their own licenses.
 
-- **License**: BSD 3-Clause License
-- **URL**: https://github.com/pallets/flask
-- **Description**: Lightweight WSGI web application framework
+| Component | License | Upstream |
+| --- | --- | --- |
+| AndroidX core-ktx | Apache-2.0 | https://developer.android.com/jetpack/androidx |
+| Kotlin Standard Library | Apache-2.0 | https://github.com/JetBrains/kotlin |
+| Kotlinx Coroutines | Apache-2.0 | https://github.com/Kotlin/kotlinx.coroutines |
+| LLVM OpenMP runtime (`libomp.so`) | Apache-2.0 WITH LLVM-exception; upstream legacy notices also apply | https://github.com/llvm/llvm-project/tree/main/openmp |
 
-### faiss-cpu
+`bindings/android/app/extLibs/arm64-v8a/libomp.so` was copied from the Android
+NDK and is packaged into the AAR by the binding's Gradle build. Consult the
+supplying NDK's `NOTICE.toolchain` and the [OpenMP license](https://android.googlesource.com/toolchain/llvm-project/+/d8003a456d14a3deb8054cdaa529ffbf02d9b262/openmp/LICENSE.TXT)
+for the full license text and legacy Intel OpenMP copyright and license notices.
 
-- **License**: MIT License
-- **URL**: https://github.com/facebookresearch/faiss
-- **Description**: Library for efficient similarity search and clustering of dense vectors
+Version-catalog entries alone do not imply that a library is used by the binding.
 
-### sentence-transformers
+## Test Assets and Optional Tooling
 
-- **License**: Apache License 2.0
-- **URL**: https://github.com/UKPLab/sentence-transformers
-- **Description**: Compute dense vector representations for sentences and paragraphs
+Test assets have separate attributions in [tests/assets/NOTICE.md](tests/assets/NOTICE.md),
+including the CC BY 2.0 image used by VLM quality tests. Optional development,
+benchmark, and upstream example dependencies retain their own licenses and are
+not necessarily part of the standard runtime package.
 
-### langchain
-
-- **License**: MIT License
-- **URL**: https://github.com/langchain-ai/langchain
-- **Description**: Building applications with LLMs through composability
-
-### pydantic
-
-- **License**: MIT License
-- **URL**: https://github.com/pydantic/pydantic
-- **Description**: Data validation using Python type hints
-
-### python-docx
-
-- **License**: MIT License
-- **URL**: https://github.com/python-openxml/python-docx
-- **Description**: Create and modify Word documents with Python
-
-### psutil
-
-- **License**: BSD 3-Clause License
-- **URL**: https://github.com/giampaolo/psutil
-- **Description**: Cross-platform library for process and system monitoring
-
-### openai
-
-- **License**: Apache License 2.0
-- **URL**: https://github.com/openai/openai-python
-- **Description**: Python library for the OpenAI API
-
-### mcp
-
-- **License**: MIT License
-- **URL**: https://github.com/modelcontextprotocol/python-sdk
-- **Description**: Model Context Protocol Python SDK
-
----
-
-## Android/Java Dependencies (from bindings/android)
-
-### AndroidX Libraries
-
-- **License**: Apache License 2.0
-- **URL**: https://developer.android.com/jetpack/androidx
-- **Description**: Android Jetpack libraries
-- **Packages**: core-ktx, lifecycle-runtime-ktx, activity-compose, compose-bom, appcompat, constraintlayout
-
-### Kotlin Standard Library
-
-- **License**: Apache License 2.0
-- **URL**: https://github.com/JetBrains/kotlin
-- **Description**: Kotlin programming language standard library
-
-### AWS Android SDK S3
-
-- **License**: Apache License 2.0
-- **URL**: https://github.com/aws/aws-sdk-android
-- **Description**: AWS SDK for Android - S3 support
-
-### OkHttp
-
-- **License**: Apache License 2.0
-- **URL**: https://github.com/square/okhttp
-- **Description**: HTTP client for Android and Java
-
-### Gson
-
-- **License**: Apache License 2.0
-- **URL**: https://github.com/google/gson
-- **Description**: Java serialization/deserialization library to convert Java Objects into JSON
-
-### Glide
-
-- **License**: BSD, MIT, and Apache License 2.0 (Multi-license)
-- **URL**: https://github.com/bumptech/glide
-- **Description**: Fast and efficient image loading library for Android
-
-### Kotlinx Serialization
-
-- **License**: Apache License 2.0
-- **URL**: https://github.com/Kotlin/kotlinx.serialization
-- **Description**: Multiplatform serialization for Kotlin
-
-### Kotlinx Coroutines
-
-- **License**: Apache License 2.0
-- **URL**: https://github.com/Kotlin/kotlinx.coroutines
-- **Description**: Library support for Kotlin coroutines
-
-### Material Components for Android
-
-- **License**: Apache License 2.0
-- **URL**: https://github.com/material-components/material-components-android
-- **Description**: Modular and customizable Material Design UI components
-
----
-
-## Summary
-
-All third-party libraries used in GenieX-CLI are licensed under permissive open-source licenses that allow for commercial and non-commercial use, modification, and distribution, and are compatible with GenieX-CLI's BSD 3-Clause license. The primary licenses used are:
-
-- **MIT License**: Highly permissive, allows almost unrestricted use
-- **Apache License 2.0**: Permissive license with patent grant and attribution requirements
-- **BSD 3-Clause License**: Permissive license with attribution requirements
+Models downloaded at runtime likewise have licenses independent of GenieX.
+Retain each model's own accompanying license and notices.
