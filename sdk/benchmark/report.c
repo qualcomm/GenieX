@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 /* Output side: the stdout summary line, the per-cell JSON report, the
- * llama-bench-style Markdown row, and the --logits JSON report. */
+ * llama-bench-style Markdown row, and the --logits JSON report / raw dump. */
 
 #include <stdlib.h>
 #include <string.h>
@@ -232,6 +232,23 @@ int write_logits_json(const options_t* o, const device_t* dev, const geniex_LlmF
     fprintf(f, "    ]\n");
     fprintf(f, "}\n");
     fclose(f);
+    return 0;
+}
+
+/* Write the --output-logits result as a headerless row-major float32 array
+ * [n_rows, vocab_size], e.g. np.fromfile(path, np.float32).reshape(n_rows, -1). */
+int write_logits_raw(const char* path, const geniex_LlmForwardLogitsOutput* fout) {
+    FILE* f = fopen(path, "wb");
+    if (!f) {
+        fprintf(stderr, "ERROR: cannot open %s for write\n", path);
+        return 1;
+    }
+    const size_t n       = (size_t)fout->n_rows * (size_t)fout->row_width;
+    const size_t written = fwrite(fout->logits, sizeof(float), n, f);
+    if (fclose(f) != 0 || written != n) {
+        fprintf(stderr, "ERROR: cannot write %s\n", path);
+        return 1;
+    }
     return 0;
 }
 

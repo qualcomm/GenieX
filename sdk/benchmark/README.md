@@ -143,6 +143,13 @@ geniex-bench \
   --plugin llama_cpp --device npu \
   -m .../Qwen3-1.7B-Q4_0.gguf \
   --logits -p 128 --logits-top-n 20 --output-json logits.json
+
+# Same pass, but dump the full-vocabulary logits as raw float32 (np.fromfile)
+# instead of the top-N JSON; with --logits-last-only that is one row per run.
+geniex-bench \
+  --plugin llama_cpp --device npu \
+  -m .../Qwen3-1.7B-Q4_0.gguf \
+  --logits -p 128 --logits-last-only --output-logits logits.raw
 ```
 
 On Windows the same invocations work with `.exe` and backslash paths, e.g.:
@@ -194,7 +201,9 @@ Run `geniex-bench --help` for the full flag list.
   Without `--accuracy`, `--prompt-file` still feeds the file verbatim.
 - `--logits` runs one prefill-only forward pass (no decode loop, no timing) over
   `-p N` random ids and writes every position's top-N logits to `--output-json`
-  (`--logits-top-n`, default 20; `--logits-last-only` for the last row only).
+  (`--logits-top-n`, default 20; `--logits-last-only` for the last row only);
+  `--output-logits PATH` writes the full-vocabulary rows as raw float32 instead
+  (see [Raw logits file](#raw-logits-file)).
   Both llama_cpp and qairt support it; `--prompt-file` is rejected since the
   forward-logits API takes `input_ids` and the tool has no tokenizer.
 - llama_cpp gets a `[warmup=i]` / `[run=i]` suffix appended to the prompt
@@ -289,6 +298,23 @@ plus `rows`, one row per emitted position, each a top-N array of
   ]
 }
 ```
+
+## Raw logits file
+
+`--output-logits PATH` (single-cell, implies `--logits`) skips the top-N
+reduction and writes the full-vocabulary rows to `PATH` as a headerless, packed,
+row-major `float32` array `[n_rows, vocab_size]`. `n_rows` is `-p N`, or 1 with
+`--logits-last-only`; both are also printed on the `[ok  ]` line.
+
+```python
+import numpy as np
+
+logits = np.fromfile("logits.raw", dtype=np.float32).reshape(n_rows, -1)
+```
+
+A row is ~0.6 MB for a 152k vocabulary, so use `--logits-last-only` (or the
+top-N JSON) when the metric only needs the last position or a few candidate
+tokens, as MMLU answer scoring does.
 
 ## Markdown row shape
 
