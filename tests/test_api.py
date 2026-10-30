@@ -5,8 +5,13 @@
 
 from __future__ import annotations
 
+import os
+
 import geniex
 import pytest
+
+_CUDA_BUILD = os.environ.get('GENIEX_TEST_CUDA_BUILD') == '1'
+_requires_cuda_build = pytest.mark.skipif(not _CUDA_BUILD, reason='set GENIEX_TEST_CUDA_BUILD=1 for CUDA SDK builds')
 
 
 def test_version_nonempty(geniex_session):
@@ -20,6 +25,8 @@ def test_llama_cpp_plugin_version_nonempty(geniex_session):
 
 
 def test_qairt_plugin_version_nonempty(geniex_session):
+    if 'qairt' not in geniex.get_runtime_list():
+        pytest.skip('QAIRT is not included in this SDK build')
     # Plugin reports its own version; available on hosts without an NPU
     # because the value comes from the shipped library, not the device.
     v = geniex.get_plugin_version('qairt')
@@ -120,10 +127,10 @@ def test_resolve_hybrid_alias_offloads_all_layers(geniex_session):
     assert ngl is None
 
 
-def test_resolve_llama_cpp_auto_defaults_to_npu(geniex_session):
+def test_resolve_llama_cpp_auto_uses_build_default(geniex_session):
     runtime, device_id, ngl = geniex.resolve_device_map('llama_cpp')
     assert runtime == 'llama_cpp'
-    assert device_id == 'HTP0'
+    assert device_id == ('CUDA0' if _CUDA_BUILD else 'HTP0')
     assert ngl is None
 
 
@@ -138,3 +145,35 @@ def test_resolve_qairt_npu_alias_resolves_to_qairt(geniex_session):
     runtime, device_id, _ = geniex.resolve_device_map('qairt:npu')
     assert runtime == 'qairt'
     assert isinstance(device_id, str) and device_id
+
+
+@_requires_cuda_build
+def test_resolve_cuda_gpu_alias(geniex_session):
+    assert geniex.resolve_device_map('gpu') == ('llama_cpp', 'CUDA0', None)
+
+
+@_requires_cuda_build
+@pytest.mark.parametrize('mode', ['CUDA0', 'CUDA1', 'CUDA0,CUDA1', ' CUDA0 , CUDA1 '])
+def test_native_resolve_explicit_cuda_devices(geniex_session, mode):
+    # Exercise the native parser; Python's runtime:device shortcut bypasses it.
+    from geniex._ffi._api import resolve_device
+
+    expected = ','.join(part.strip() for part in mode.split(','))
+    assert resolve_device('llama_cpp', None, mode, -1) == (expected, -1, None)
+
+
+@_requires_cuda_build
+@pytest.mark.parametrize('mode', ['CUDA', 'CUDA-1', 'CUDAx', 'CUDA0,', 'CUDA0,,CUDA1'])
+def test_native_resolve_rejects_invalid_cuda_devices(geniex_session, mode):
+    from geniex._ffi._api import resolve_device
+
+    with pytest.raises(geniex.GenieXError):
+        resolve_device('llama_cpp', None, mode, -1)
+
+
+@_requires_cuda_build
+def test_cuda_build_preserves_qairt_default(geniex_session):
+    from geniex._ffi._api import resolve_device
+
+    # Alias resolution itself does not require QAIRT to be loaded.
+    assert resolve_device('qairt', None, 'auto', -1) == ('NPU', 0, None)
