@@ -467,139 +467,63 @@ impl HttpTransport for LocalFileTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transport::{ReqwestTransport, TransportConfig};
-    use std::io::Write as IoWrite;
-    use std::time::Duration;
-    use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+    use crate::test_support::{build_zip, fast_transport, mount_ranged, url, ZipMethod};
+    use wiremock::MockServer;
 
-    fn fast_transport() -> Arc<dyn HttpTransport> {
-        Arc::new(
-            ReqwestTransport::with_config(TransportConfig {
-                connect_timeout: Some(Duration::from_secs(2)),
-                read_timeout: Some(Duration::from_secs(5)),
-                retries: Some(0),
-                retry_backoff: Some(Duration::from_millis(10)),
-                proxy_override: None,
-            })
-            .unwrap(),
-        )
+    fn stored_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let entries: Vec<_> = entries
+            .iter()
+            .map(|(n, d)| (*n, *d, ZipMethod::Stored))
+            .collect();
+        build_zip(&entries)
     }
 
-    fn build_stored_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
-        let mut buf: Vec<u8> = Vec::new();
-        {
-            let cursor = std::io::Cursor::new(&mut buf);
-            let mut zw = zip::ZipWriter::new(cursor);
-            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Stored);
-            for (name, data) in entries {
-                zw.start_file(*name, opts).unwrap();
-                zw.write_all(data).unwrap();
-            }
-            zw.finish().unwrap();
-        }
-        buf
+    async fn parse_remote(body: Vec<u8>) -> Result<Vec<ZipEntry>> {
+        let server = MockServer::start().await;
+        mount_ranged(&server, "/a.zip", body).await;
+        fetch_central_directory(&fast_transport(), &url(&server, "/a.zip")).await
+    }
+
+    async fn parse_local(body: Vec<u8>) -> Result<Vec<ZipEntry>> {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("malformed.zip");
+        std::fs::write(&path, body).unwrap();
+        let transport: Arc<dyn HttpTransport> = Arc::new(LocalFileTransport::open(&path).unwrap());
+        let url = Url::parse("file:///malformed.zip").unwrap();
+        fetch_central_directory(&transport, &url).await
+    }
+
+    fn find(body: &[u8], sig: &[u8; 4], last: bool) -> usize {
+        let mut windows = body.windows(4);
+        let hit = if last {
+            windows.rposition(|w| w == sig)
+        } else {
+            windows.position(|w| w == sig)
+        };
+        hit.unwrap()
     }
 
     fn corrupt_zip64_extra(body: &mut Vec<u8>) {
-        let central = body
-            .windows(4)
-            .position(|window| window == b"PK\x01\x02")
-            .unwrap();
+        let central = find(body, b"PK\x01\x02", false);
         let name_len = u16::from_le_bytes([body[central + 28], body[central + 29]]) as usize;
-        let extra_len = u16::from_le_bytes([body[central + 30], body[central + 31]]) as usize;
-        assert_eq!(extra_len, 0);
-        body.splice(
-            central + 46 + name_len..central + 46 + name_len,
-            [1, 0, 0, 0],
+        assert_eq!(
+            u16::from_le_bytes([body[central + 30], body[central + 31]]),
+            0
         );
-        body[central + 20..central + 24].copy_from_slice(&u32::MAX.to_le_bytes());
-        body[central + 24..central + 28].copy_from_slice(&u32::MAX.to_le_bytes());
+        let extra_at = central + 46 + name_len;
+        body.splice(extra_at..extra_at, [1, 0, 0, 0]);
+        body[central + 20..central + 28].copy_from_slice(&[0xFF; 8]);
         body[central + 30..central + 32].copy_from_slice(&4u16.to_le_bytes());
-        let eocd = body
-            .windows(4)
-            .rposition(|window| window == b"PK\x05\x06")
-            .unwrap();
-        let cd_size = u32::from_le_bytes([
-            body[eocd + 12],
-            body[eocd + 13],
-            body[eocd + 14],
-            body[eocd + 15],
-        ]);
+        let eocd = find(body, b"PK\x05\x06", true);
+        let cd_size = u32::from_le_bytes(body[eocd + 12..eocd + 16].try_into().unwrap());
         body[eocd + 12..eocd + 16].copy_from_slice(&(cd_size + 4).to_le_bytes());
     }
 
-    fn build_deflate_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
-        let mut buf: Vec<u8> = Vec::new();
-        {
-            let cursor = std::io::Cursor::new(&mut buf);
-            let mut zw = zip::ZipWriter::new(cursor);
-            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Deflated);
-            for (name, data) in entries {
-                zw.start_file(*name, opts).unwrap();
-                zw.write_all(data).unwrap();
-            }
-            zw.finish().unwrap();
-        }
-        buf
-    }
-
-    async fn serve(body: Vec<u8>) -> (MockServer, Url) {
-        let server = MockServer::start().await;
-        Mock::given(method("HEAD"))
-            .and(path("/a.zip"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .append_header("Content-Length", body.len().to_string())
-                    .append_header("Accept-Ranges", "bytes"),
-            )
-            .mount(&server)
-            .await;
-        let body_arc = Arc::new(body);
-        let body_cl = body_arc.clone();
-        Mock::given(method("GET"))
-            .and(path("/a.zip"))
-            .respond_with(move |req: &Request| {
-                let hdr = req.headers.get("range").expect("range").to_str().unwrap();
-                let rest = hdr.strip_prefix("bytes=").unwrap();
-                let (s, e) = rest.split_once('-').unwrap();
-                let start: usize = s.parse().unwrap();
-                let end: usize = e.parse().unwrap();
-                let slice = body_cl[start..=end].to_vec();
-                ResponseTemplate::new(206).set_body_bytes(slice)
-            })
-            .mount(&server)
-            .await;
-        let url = Url::parse(&format!("{}/a.zip", server.uri())).unwrap();
-        (server, url)
-    }
-
-    #[tokio::test]
-    async fn parses_stored_zip() {
-        let body = build_stored_zip(&[("model.bin", b"HELLO"), ("tokenizer.json", b"{}")]);
-        let (_srv, url) = serve(body).await;
-        let transport = fast_transport();
-        let entries = fetch_central_directory(&transport, &url).await.unwrap();
-        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
-        assert!(names.contains(&"model.bin"));
-        assert!(names.contains(&"tokenizer.json"));
-        let bin = entries.iter().find(|e| e.name == "model.bin").unwrap();
-        assert_eq!(bin.method, Method::Stored);
-        assert_eq!(bin.uncompressed_size, 5);
-        assert_eq!(bin.compressed_size, 5);
-    }
-
     fn add_zip64_eocd(body: &mut Vec<u8>, cd_entries: u64, locator_off: Option<u64>) {
-        let eocd = body
-            .windows(4)
-            .rposition(|window| window == b"PK\x05\x06")
-            .unwrap();
+        let eocd = find(body, b"PK\x05\x06", true);
         let cd_size = u32::from_le_bytes(body[eocd + 12..eocd + 16].try_into().unwrap());
         let cd_offset = u32::from_le_bytes(body[eocd + 16..eocd + 20].try_into().unwrap());
-        let mut z64 = Vec::new();
-        z64.extend_from_slice(b"PK\x06\x06");
+        let mut z64 = b"PK\x06\x06".to_vec();
         z64.extend_from_slice(&44u64.to_le_bytes());
         z64.extend_from_slice(&[45, 0, 45, 0]);
         z64.extend_from_slice(&[0; 8]);
@@ -613,100 +537,71 @@ mod tests {
         z64.extend_from_slice(&1u32.to_le_bytes());
         let new_eocd = eocd + z64.len();
         body.splice(eocd..eocd, z64);
-        body[new_eocd + 12..new_eocd + 16].copy_from_slice(&u32::MAX.to_le_bytes());
-        body[new_eocd + 16..new_eocd + 20].copy_from_slice(&u32::MAX.to_le_bytes());
+        body[new_eocd + 12..new_eocd + 20].copy_from_slice(&[0xFF; 8]);
     }
 
-    async fn parse_local(body: Vec<u8>) -> Result<Vec<ZipEntry>> {
-        let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join("malformed.zip");
-        std::fs::write(&path, body).unwrap();
-        let transport: Arc<dyn HttpTransport> = Arc::new(LocalFileTransport::open(&path).unwrap());
-        let url = Url::parse("file:///malformed.zip").unwrap();
-        fetch_central_directory(&transport, &url).await
-    }
-
-    fn central_offset(body: &[u8]) -> usize {
-        body.windows(4)
-            .position(|window| window == b"PK\x01\x02")
-            .unwrap()
+    fn set_central_u32(body: &mut [u8], field: usize, v: u32) {
+        let central = find(body, b"PK\x01\x02", false);
+        body[central + field..central + field + 4].copy_from_slice(&v.to_le_bytes());
     }
 
     #[tokio::test]
-    async fn rejects_truncated_zip64_extra_metadata() {
-        let mut body = build_stored_zip(&[("model.bin", b"HELLO")]);
-        corrupt_zip64_extra(&mut body);
-        let err = parse_local(body).await.unwrap_err();
-        assert!(err.to_string().contains("ZIP64 extra"), "{err}");
-    }
+    async fn parses_stored_and_deflate_zips() {
+        let body = stored_zip(&[("model.bin", b"HELLO"), ("tokenizer.json", b"{}")]);
+        let entries = parse_remote(body).await.unwrap();
+        assert!(entries.iter().any(|e| e.name == "tokenizer.json"));
+        let bin = entries.iter().find(|e| e.name == "model.bin").unwrap();
+        assert_eq!(
+            (bin.method, bin.uncompressed_size, bin.compressed_size),
+            (Method::Stored, 5, 5)
+        );
 
-    #[tokio::test]
-    async fn tolerates_oversized_zip64_entry_count() {
-        let mut body = build_stored_zip(&[("model.bin", b"HELLO")]);
-        add_zip64_eocd(&mut body, u64::MAX, None);
-        let entries = parse_local(body).await.unwrap();
-        assert_eq!(entries.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn rejects_zip64_eocd_offset_overflow() {
-        let mut body = build_stored_zip(&[("model.bin", b"HELLO")]);
-        add_zip64_eocd(&mut body, 1, Some(u64::MAX - 10));
-        let err = parse_local(body).await.unwrap_err();
-        assert!(err.to_string().contains("overflows"), "{err}");
-    }
-
-    #[tokio::test]
-    async fn rejects_zip64_eocd_offset_out_of_range() {
-        let mut body = build_stored_zip(&[("model.bin", b"HELLO")]);
-        add_zip64_eocd(&mut body, 1, Some(1 << 40));
-        let err = parse_local(body).await.unwrap_err();
-        assert!(err.to_string().contains("exceeds archive size"), "{err}");
-    }
-
-    #[tokio::test]
-    async fn rejects_local_header_offset_out_of_range() {
-        let mut body = build_stored_zip(&[("model.bin", b"HELLO")]);
-        let central = central_offset(&body);
-        body[central + 42..central + 46].copy_from_slice(&0x7FFF_FFFFu32.to_le_bytes());
-        let err = parse_local(body).await.unwrap_err();
-        assert!(err.to_string().contains("local header range"), "{err}");
-    }
-
-    #[tokio::test]
-    async fn rejects_payload_range_out_of_range() {
-        let mut body = build_stored_zip(&[("model.bin", b"HELLO")]);
-        let central = central_offset(&body);
-        body[central + 20..central + 24].copy_from_slice(&0x7FFF_FFFFu32.to_le_bytes());
-        let err = parse_local(body).await.unwrap_err();
-        assert!(err.to_string().contains("payload range"), "{err}");
-    }
-
-    #[tokio::test]
-    async fn parses_deflate_zip() {
         let big = vec![b'A'; 8192];
-        let body = build_deflate_zip(&[("shard.bin", &big)]);
-        let (_srv, url) = serve(body).await;
-        let transport = fast_transport();
-        let entries = fetch_central_directory(&transport, &url).await.unwrap();
+        let body = build_zip(&[("shard.bin", &big, ZipMethod::Deflate)]);
+        let entries = parse_remote(body).await.unwrap();
         let e = entries.iter().find(|e| e.name == "shard.bin").unwrap();
-        assert_eq!(e.method, Method::Deflate);
-        assert_eq!(e.uncompressed_size, 8192);
+        assert_eq!((e.method, e.uncompressed_size), (Method::Deflate, 8192));
         assert!(e.compressed_size < e.uncompressed_size);
     }
 
     #[tokio::test]
     async fn rejects_malformed_tail() {
         let mut body = vec![0u8; 1024];
-        body[..4].copy_from_slice(b"PK\x03\x04"); // looks zip-ish at start
-        let (_srv, url) = serve(body).await;
-        let transport = fast_transport();
-        let err = fetch_central_directory(&transport, &url).await.unwrap_err();
-        let msg = format!("{err}");
-        assert!(msg.contains("EOCD"), "unexpected error: {msg}");
+        body[..4].copy_from_slice(b"PK\x03\x04");
+        let err = parse_remote(body).await.unwrap_err();
+        assert!(err.to_string().contains("EOCD"), "{err}");
     }
 
-    // ---------------- LocalFileTransport ----------------
+    #[tokio::test]
+    async fn rejects_malformed_metadata() {
+        type Mutate = fn(&mut Vec<u8>);
+        let cases: [(Mutate, &str); 5] = [
+            (corrupt_zip64_extra, "ZIP64 extra"),
+            (|b| add_zip64_eocd(b, 1, Some(u64::MAX - 10)), "overflows"),
+            (
+                |b| add_zip64_eocd(b, 1, Some(1 << 40)),
+                "exceeds archive size",
+            ),
+            (
+                |b| set_central_u32(b, 42, 0x7FFF_FFFF),
+                "local header range",
+            ),
+            (|b| set_central_u32(b, 20, 0x7FFF_FFFF), "payload range"),
+        ];
+        for (mutate, want) in cases {
+            let mut body = stored_zip(&[("model.bin", b"HELLO")]);
+            mutate(&mut body);
+            let err = parse_local(body).await.unwrap_err();
+            assert!(err.to_string().contains(want), "want {want:?}: {err}");
+        }
+    }
+
+    #[tokio::test]
+    async fn tolerates_oversized_zip64_entry_count() {
+        let mut body = stored_zip(&[("model.bin", b"HELLO")]);
+        add_zip64_eocd(&mut body, u64::MAX, None);
+        assert_eq!(parse_local(body).await.unwrap().len(), 1);
+    }
 
     #[tokio::test]
     async fn local_transport_serves_ranges_and_rejects_oob() {
@@ -729,12 +624,12 @@ mod tests {
             .get_range(&dummy, None, 5, 10, &mut buf)
             .await
             .unwrap_err();
-        assert!(format!("{err}").contains("exceeds"));
+        assert!(err.to_string().contains("exceeds"), "{err}");
     }
 
     #[test]
     fn local_transport_open_rejects_missing() {
         let err = LocalFileTransport::open(Path::new("/nonexistent/zzz.zip")).unwrap_err();
-        assert!(format!("{err}").contains("not accessible"));
+        assert!(err.to_string().contains("not accessible"), "{err}");
     }
 }

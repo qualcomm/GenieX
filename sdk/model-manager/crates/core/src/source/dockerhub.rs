@@ -508,147 +508,96 @@ fn build_plan(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transport::{HttpTransport, ReqwestTransport, TransportConfig};
-    use std::time::Duration;
+    use crate::test_support::{fast_transport, mount_ranged};
+    use serde_json::{json, Value};
     use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    fn fast_transport() -> Arc<dyn HttpTransport> {
-        Arc::new(
-            ReqwestTransport::with_config(TransportConfig {
-                connect_timeout: Some(Duration::from_secs(2)),
-                read_timeout: Some(Duration::from_secs(5)),
-                retries: Some(0),
-                retry_backoff: Some(Duration::from_millis(10)),
-                proxy_override: None,
-            })
-            .unwrap(),
-        )
+    fn layer(media_type: &str, digest: &str) -> Value {
+        json!({"mediaType": media_type, "digest": digest, "size": 10})
     }
 
-    fn descriptor(media_type: &str, digest: &str, size: u64) -> serde_json::Value {
-        serde_json::json!({
-            "mediaType": media_type,
-            "digest": digest,
-            "size": size,
-        })
-    }
-
-    async fn mount_auth(server: &MockServer) {
+    async fn source_for(server: &MockServer, repo: &str) -> DockerHubSource {
         Mock::given(method("GET"))
             .and(path("/token"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({"token": "tok"})),
-            )
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({"token": "tok"})))
             .mount(server)
             .await;
-    }
-
-    async fn mount_blob(server: &MockServer, repo: &str, digest: &str, body: &str) {
-        Mock::given(method("HEAD"))
-            .and(path(format!("/v2/{repo}/blobs/{digest}")))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .append_header("Content-Length", body.len().to_string())
-                    .append_header("Accept-Ranges", "bytes"),
-            )
-            .mount(server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path(format!("/v2/{repo}/blobs/{digest}")))
-            .respond_with(ResponseTemplate::new(206).set_body_bytes(body.as_bytes()))
-            .mount(server)
-            .await;
-    }
-
-    fn cfg_for(server: &MockServer) -> DockerHubConfig {
-        DockerHubConfig {
+        let cfg = DockerHubConfig {
             registry_endpoint: server.uri(),
             auth_endpoint: format!("{}/token", server.uri()),
             service: "registry.docker.io".to_string(),
-        }
+        };
+        DockerHubSource::with_config(repo.to_string(), String::new(), cfg, fast_transport())
+            .unwrap()
+    }
+
+    /// Plan `ai/<name>:latest` served with the given config blob and layers.
+    async fn plan_for(
+        name: &str,
+        config_media: &str,
+        config: Value,
+        layers: Vec<Value>,
+    ) -> Result<Plan> {
+        let server = MockServer::start().await;
+        let repo = format!("ai/{name}");
+        let config = json!({ "config": config }).to_string();
+        mount_ranged(
+            &server,
+            &format!("/v2/{repo}/blobs/sha256:cfg"),
+            config.clone(),
+        )
+        .await;
+        let manifest = json!({
+            "schemaVersion": 2,
+            "mediaType": media::OCI_MANIFEST,
+            "config": {"mediaType": config_media, "digest": "sha256:cfg", "size": config.len()},
+            "layers": layers,
+        });
+        Mock::given(method("GET"))
+            .and(path(format!("/v2/{repo}/manifests/latest")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(&manifest))
+            .mount(&server)
+            .await;
+        source_for(&server, &repo).await.plan().await
+    }
+
+    fn entry(plan: &Plan, quant: &str) -> String {
+        plan.manifest.model_file[quant].name.clone()
     }
 
     #[tokio::test]
     async fn plan_single_gguf_v01_layout() {
-        let server = MockServer::start().await;
-        mount_auth(&server).await;
-
-        let config_body = serde_json::json!({
-            "config": {"format": "gguf", "quantization": "Q4_K_M", "architecture": "gemma3"}
-        })
-        .to_string();
-        mount_blob(&server, "ai/gemma3", "sha256:cfg", &config_body).await;
-
-        let weight_body = "gguf-bytes";
-        mount_blob(&server, "ai/gemma3", "sha256:weight", weight_body).await;
-
-        let manifest = serde_json::json!({
-            "schemaVersion": 2,
-            "mediaType": media::OCI_MANIFEST,
-            "config": descriptor(media::CONFIG_V01, "sha256:cfg", config_body.len() as u64),
-            "layers": [descriptor(media::GGUF, "sha256:weight", weight_body.len() as u64)],
-        });
-        Mock::given(method("GET"))
-            .and(path("/v2/ai/gemma3/manifests/latest"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&manifest))
-            .mount(&server)
-            .await;
-
-        let src = DockerHubSource::with_config(
-            "ai/gemma3".to_string(),
-            "latest".to_string(),
-            cfg_for(&server),
-            fast_transport(),
+        let config = json!({"format": "gguf", "quantization": "Q4_K_M", "architecture": "gemma3"});
+        let plan = plan_for(
+            "gemma3",
+            media::CONFIG_V01,
+            config,
+            vec![layer(media::GGUF, "sha256:w")],
         )
+        .await
         .unwrap();
-        let plan = src.plan().await.unwrap();
         assert_eq!(plan.manifest.model_type, ModelType::Llm);
         assert_eq!(plan.manifest.model_name, "gemma3");
-        assert_eq!(
-            plan.manifest
-                .model_file
-                .get("Q4_K_M")
-                .map(|f| f.name.as_str()),
-            Some("model.gguf")
-        );
-        assert_eq!(plan.files.len(), 1);
-        assert_eq!(plan.files[0].name, "model.gguf");
+        assert_eq!(entry(&plan, "Q4_K_M"), "model.gguf");
+        let names: Vec<&str> = plan.files.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["model.gguf"]);
     }
 
     #[tokio::test]
     async fn plan_detects_vlm_via_mmproj_layer() {
-        let server = MockServer::start().await;
-        mount_auth(&server).await;
-
-        let config_body = serde_json::json!({"config": {"quantization": "F16"}}).to_string();
-        mount_blob(&server, "ai/gemma3-vl", "sha256:cfg", &config_body).await;
-        mount_blob(&server, "ai/gemma3-vl", "sha256:weight", "gguf-bytes").await;
-        mount_blob(&server, "ai/gemma3-vl", "sha256:mmproj", "mmproj-bytes").await;
-
-        let manifest = serde_json::json!({
-            "schemaVersion": 2,
-            "mediaType": media::OCI_MANIFEST,
-            "config": descriptor(media::CONFIG_V01, "sha256:cfg", config_body.len() as u64),
-            "layers": [
-                descriptor(media::GGUF, "sha256:weight", 10),
-                descriptor(media::MMPROJ, "sha256:mmproj", 5),
-            ],
-        });
-        Mock::given(method("GET"))
-            .and(path("/v2/ai/gemma3-vl/manifests/latest"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&manifest))
-            .mount(&server)
-            .await;
-
-        let src = DockerHubSource::with_config(
-            "ai/gemma3-vl".to_string(),
-            String::new(),
-            cfg_for(&server),
-            fast_transport(),
+        let layers = vec![
+            layer(media::GGUF, "sha256:w"),
+            layer(media::MMPROJ, "sha256:m"),
+        ];
+        let plan = plan_for(
+            "gemma3-vl",
+            media::CONFIG_V01,
+            json!({"quantization": "F16"}),
+            layers,
         )
+        .await
         .unwrap();
-        let plan = src.plan().await.unwrap();
         assert_eq!(plan.manifest.model_type, ModelType::Vlm);
         assert_eq!(plan.manifest.mmproj_file.name, "model.mmproj");
         assert_eq!(plan.files.len(), 2);
@@ -656,136 +605,61 @@ mod tests {
 
     #[tokio::test]
     async fn plan_shards_multiple_gguf_layers() {
-        let server = MockServer::start().await;
-        mount_auth(&server).await;
-
-        let config_body = serde_json::json!({"config": {"quantization": "Q8_0"}}).to_string();
-        mount_blob(&server, "ai/big", "sha256:cfg", &config_body).await;
-        mount_blob(&server, "ai/big", "sha256:w1", "aaa").await;
-        mount_blob(&server, "ai/big", "sha256:w2", "bbb").await;
-
-        let manifest = serde_json::json!({
-            "schemaVersion": 2,
-            "mediaType": media::OCI_MANIFEST,
-            "config": descriptor(media::CONFIG_V01, "sha256:cfg", config_body.len() as u64),
-            "layers": [
-                descriptor(media::GGUF, "sha256:w1", 3),
-                descriptor(media::GGUF, "sha256:w2", 3),
-            ],
-        });
-        Mock::given(method("GET"))
-            .and(path("/v2/ai/big/manifests/latest"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&manifest))
-            .mount(&server)
-            .await;
-
-        let src = DockerHubSource::with_config(
-            "ai/big".to_string(),
-            "latest".to_string(),
-            cfg_for(&server),
-            fast_transport(),
+        let layers = vec![
+            layer(media::GGUF, "sha256:w1"),
+            layer(media::GGUF, "sha256:w2"),
+        ];
+        let plan = plan_for(
+            "big",
+            media::CONFIG_V01,
+            json!({"quantization": "Q8_0"}),
+            layers,
         )
+        .await
         .unwrap();
-        let plan = src.plan().await.unwrap();
-        let entry = plan.manifest.model_file.get("Q8_0").unwrap();
-        assert_eq!(entry.name, "model-00001-of-00002.gguf");
-        assert_eq!(plan.manifest.extra_files.len(), 1);
-        assert_eq!(
-            plan.manifest.extra_files[0].name,
-            "model-00002-of-00002.gguf"
-        );
+        assert_eq!(entry(&plan, "Q8_0"), "model-00001-of-00002.gguf");
+        let extras: Vec<&str> = plan
+            .manifest
+            .extra_files
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect();
+        assert_eq!(extras, ["model-00002-of-00002.gguf"]);
     }
 
     #[tokio::test]
-    async fn plan_v02_uses_filepath_annotation() {
-        let server = MockServer::start().await;
-        mount_auth(&server).await;
-
-        let config_body = serde_json::json!({"config": {"quantization": "Q4_0"}}).to_string();
-        mount_blob(&server, "ai/nested", "sha256:cfg", &config_body).await;
-        mount_blob(&server, "ai/nested", "sha256:weight", "gguf-bytes").await;
-
-        let mut weight_desc = descriptor(media::GGUF, "sha256:weight", 10);
-        weight_desc["annotations"] =
-            serde_json::json!({ANNOTATION_FILEPATH: "weights/model-Q4_0.gguf"});
-
-        let manifest = serde_json::json!({
-            "schemaVersion": 2,
-            "mediaType": media::OCI_MANIFEST,
-            "config": descriptor(media::CONFIG_V02, "sha256:cfg", config_body.len() as u64),
-            "layers": [weight_desc],
-        });
-        Mock::given(method("GET"))
-            .and(path("/v2/ai/nested/manifests/latest"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&manifest))
-            .mount(&server)
-            .await;
-
-        let src = DockerHubSource::with_config(
-            "ai/nested".to_string(),
-            "latest".to_string(),
-            cfg_for(&server),
-            fast_transport(),
+    async fn plan_v02_flattens_filepath_annotation() {
+        let mut weight = layer(media::GGUF, "sha256:w");
+        weight["annotations"] = json!({ANNOTATION_FILEPATH: "weights/model-Q4_0.gguf"});
+        let plan = plan_for(
+            "nested",
+            media::CONFIG_V02,
+            json!({"quantization": "Q4_0"}),
+            vec![weight],
         )
+        .await
         .unwrap();
-        let plan = src.plan().await.unwrap();
-        // Annotation path is flattened to its basename — our on-disk layout
-        // is flat, same as the AI Hub and HF sources.
-        assert_eq!(
-            plan.manifest.model_file.get("Q4_0").unwrap().name,
-            "model-Q4_0.gguf"
-        );
+        assert_eq!(entry(&plan, "Q4_0"), "model-Q4_0.gguf");
     }
 
     #[tokio::test]
     async fn plan_rejects_safetensors_only_model() {
-        let server = MockServer::start().await;
-        mount_auth(&server).await;
-
-        let config_body = serde_json::json!({"config": {}}).to_string();
-        mount_blob(&server, "ai/st-only", "sha256:cfg", &config_body).await;
-
-        let manifest = serde_json::json!({
-            "schemaVersion": 2,
-            "mediaType": media::OCI_MANIFEST,
-            "config": descriptor(media::CONFIG_V01, "sha256:cfg", config_body.len() as u64),
-            "layers": [descriptor(media::SAFETENSORS, "sha256:weight", 10)],
-        });
-        Mock::given(method("GET"))
-            .and(path("/v2/ai/st-only/manifests/latest"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(&manifest))
-            .mount(&server)
-            .await;
-
-        let src = DockerHubSource::with_config(
-            "ai/st-only".to_string(),
-            "latest".to_string(),
-            cfg_for(&server),
-            fast_transport(),
-        )
-        .unwrap();
-        assert!(src.plan().await.is_err());
+        let layers = vec![layer(media::SAFETENSORS, "sha256:w")];
+        let err = plan_for("st-only", media::CONFIG_V01, json!({}), layers)
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("safetensors"), "{err}");
     }
 
     #[tokio::test]
     async fn plan_returns_hub_model_not_found_on_404() {
         let server = MockServer::start().await;
-        mount_auth(&server).await;
-        Mock::given(method("GET"))
-            .and(path("/v2/ai/missing/manifests/latest"))
-            .respond_with(ResponseTemplate::new(404))
-            .mount(&server)
-            .await;
-
-        let src = DockerHubSource::with_config(
-            "ai/missing".to_string(),
-            "latest".to_string(),
-            cfg_for(&server),
-            fast_transport(),
-        )
-        .unwrap();
-        let err = src.plan().await.unwrap_err();
-        assert!(matches!(err, Error::HubModelNotFound(_)));
+        let err = source_for(&server, "ai/missing")
+            .await
+            .plan()
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::HubModelNotFound(_)), "{err:?}");
     }
 
     #[test]

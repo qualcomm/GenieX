@@ -90,57 +90,32 @@ fn model_query_from_plan(model_name: String, plan: Plan) -> ModelQuery {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{ModelFileInfo, ModelManifest};
     use crate::source::Plan;
-    use std::collections::HashMap;
+    use crate::test_support::{file_info, manifest};
 
-    fn plan_with(quants: &[(&str, i64)]) -> Plan {
-        let mut model_file = HashMap::new();
-        for (q, size) in quants {
-            model_file.insert(
-                (*q).to_string(),
-                ModelFileInfo {
-                    name: format!("model-{q}.gguf"),
-                    downloaded: true,
-                    size: *size,
-                },
-            );
-        }
-        Plan {
-            manifest: ModelManifest {
-                name: "Org/Repo".to_string(),
-                model_name: "Repo".to_string(),
-                model_type: ModelType::Llm,
-                plugin_id: "llama_cpp".to_string(),
-                precision: String::new(),
-                model_file,
-                mmproj_file: ModelFileInfo::default(),
-                tokenizer_file: ModelFileInfo::default(),
-                extra_files: Vec::new(),
-            },
+    fn candidates(quants: &[(&str, i64)]) -> Vec<String> {
+        let plan = Plan {
+            manifest: manifest(
+                "Org/Repo",
+                quants
+                    .iter()
+                    .map(|(q, size)| (*q, file_info(&format!("model-{q}.gguf"), *size))),
+            ),
             files: Vec::new(),
-        }
+        };
+        let q = model_query_from_plan("Org/Repo".to_string(), plan);
+        q.candidates.into_iter().map(|c| c.quant).collect()
     }
 
     #[test]
     fn sorts_priority_first_then_size() {
-        // Q4_0 → Q4_K_M → Q8_0 by priority; unknown quants after, size-asc.
-        let q = model_query_from_plan(
-            "Org/Repo".to_string(),
-            plan_with(&[
-                ("Q8_0", 1_800),
-                ("Q5_K_M", 1_200),
-                ("Q4_K_M", 1_000),
-                ("Q4_0", 900),
-            ]),
-        );
-        let order: Vec<&str> = q.candidates.iter().map(|c| c.quant.as_str()).collect();
-        assert_eq!(order, vec!["Q4_0", "Q4_K_M", "Q8_0", "Q5_K_M"]);
-    }
-
-    #[test]
-    fn empty_model_file_yields_no_candidates() {
-        let q = model_query_from_plan("Org/Repo".to_string(), plan_with(&[]));
-        assert!(q.candidates.is_empty());
+        let got = candidates(&[
+            ("Q8_0", 1_800),
+            ("Q5_K_M", 1_200),
+            ("Q4_K_M", 1_000),
+            ("Q4_0", 900),
+        ]);
+        assert_eq!(got, ["Q4_0", "Q4_K_M", "Q8_0", "Q5_K_M"]);
+        assert!(candidates(&[]).is_empty());
     }
 }

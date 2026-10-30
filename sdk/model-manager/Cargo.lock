@@ -805,6 +805,7 @@ dependencies = [
  "async-trait",
  "flate2",
  "fs2",
+ "model-manager-core",
  "reqwest",
  "rustls",
  "rustls-platform-verifier",

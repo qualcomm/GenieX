@@ -14,6 +14,10 @@ pub mod source;
 pub mod store;
 pub mod transport;
 
+#[cfg(any(test, feature = "test-support"))]
+#[doc(hidden)]
+pub mod test_support;
+
 mod gguf;
 mod resume;
 mod validation;

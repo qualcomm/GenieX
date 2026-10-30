@@ -437,393 +437,283 @@ fn derive_model_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::{build_zip, ZipMethod};
     use std::fs;
-    use std::io::Write as IoWrite;
 
-    // ---------------- HF GGUF (existing behaviour) ----------------
+    const NO_VISION: &[u8] = br#"{"genie":{"supports_vision":false}}"#;
 
-    #[tokio::test]
-    async fn prefers_shipped_manifest_over_inference() {
-        let tmp = tempfile::tempdir().unwrap();
-        let src_dir = tmp.path().to_path_buf();
-        fs::write(src_dir.join("model-Q4_K_M.gguf"), b"fake").unwrap();
-        fs::write(
-            src_dir.join("geniex.json"),
-            r#"{
-              "Name":"Org/Repo",
-              "ModelName":"tiny",
-              "ModelType":"llm",
-              "PluginId":"llama_cpp",
-              "ModelFile":{"Q4_K_M":{"Name":"model-Q4_K_M.gguf","Downloaded":true,"Size":4}},
-              "MMProjFile":{"Name":"","Downloaded":false,"Size":0},
-              "TokenizerFile":{"Name":"","Downloaded":false,"Size":0},
-              "ExtraFiles":[]
-            }"#,
-        )
-        .unwrap();
-        let src = LocalFsSource::new(src_dir, "Org/Repo".to_string(), ManifestHint::default());
-        let plan = src.plan().await.unwrap();
-        assert_eq!(plan.manifest.model_name, "tiny");
-        assert_eq!(plan.files.len(), 1);
-        match &plan.files[0].bytes {
-            BytesSource::Local { path } => assert!(path.ends_with("model-Q4_K_M.gguf")),
-            _ => panic!("LocalFs should emit BytesSource::Local"),
+    fn write_all(dir: &Path, files: &[(&str, &[u8])]) {
+        for (name, body) in files {
+            fs::write(dir.join(name), body).unwrap();
         }
     }
 
-    #[tokio::test]
-    async fn config_json_beats_stray_mmproj_file() {
+    async fn plan_dir(files: &[(&str, &[u8])], name: &str) -> Result<Plan> {
         let tmp = tempfile::tempdir().unwrap();
-        let src_dir = tmp.path().to_path_buf();
-        fs::write(src_dir.join("model-Q4_K_M.gguf"), b"fake-weights").unwrap();
-        fs::write(src_dir.join("mmproj-x.gguf"), b"stray").unwrap();
-        fs::write(
-            src_dir.join("config.json"),
-            r#"{"architectures":["LlamaForCausalLM"]}"#,
+        write_all(tmp.path(), files);
+        LocalFsSource::new(
+            tmp.path().to_path_buf(),
+            name.to_string(),
+            ManifestHint::default(),
         )
-        .unwrap();
-        let src = LocalFsSource::new(src_dir, "Org/LLM".to_string(), ManifestHint::default());
-        let plan = src.plan().await.unwrap();
-        assert_eq!(plan.manifest.model_type, ModelType::Llm);
+        .plan()
+        .await
+    }
+
+    /// Plan a local zip; returns the zip path so callers can check sources.
+    async fn plan_zip(
+        entries: &[(&str, &[u8], ZipMethod)],
+    ) -> (Result<Plan>, PathBuf, tempfile::TempDir) {
+        let tmp = tempfile::tempdir().unwrap();
+        let zip_path = tmp.path().join("model.zip");
+        fs::write(&zip_path, build_zip(entries)).unwrap();
+        let src = LocalFsSource::new(
+            zip_path.clone(),
+            "qualcomm/foo".to_string(),
+            ManifestHint::default(),
+        );
+        (src.plan().await, zip_path, tmp)
+    }
+
+    fn extra_names(plan: &Plan) -> Vec<&str> {
+        plan.manifest
+            .extra_files
+            .iter()
+            .map(|f| f.name.as_str())
+            .collect()
     }
 
     #[tokio::test]
-    async fn infers_manifest_when_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let src_dir = tmp.path().to_path_buf();
-        fs::write(src_dir.join("model-Q4_K_M.gguf"), b"x").unwrap();
-        let src = LocalFsSource::new(
-            src_dir,
-            "Org/Repo-GGUF".to_string(),
-            ManifestHint::default(),
-        );
-        let plan = src.plan().await.unwrap();
+    async fn gguf_dir_prefers_shipped_manifest_over_inference() {
+        let shipped = br#"{
+          "Name":"Org/Repo","ModelName":"tiny","ModelType":"llm","PluginId":"llama_cpp",
+          "ModelFile":{"Q4_K_M":{"Name":"model-Q4_K_M.gguf","Downloaded":true,"Size":4}}
+        }"#;
+        let plan = plan_dir(
+            &[("model-Q4_K_M.gguf", b"fake"), ("geniex.json", shipped)],
+            "Org/Repo",
+        )
+        .await
+        .unwrap();
+        assert_eq!(plan.manifest.model_name, "tiny");
+        assert_eq!(plan.files.len(), 1);
+        assert!(matches!(
+            &plan.files[0].bytes,
+            BytesSource::Local { path } if path.ends_with("model-Q4_K_M.gguf")
+        ));
+    }
+
+    #[tokio::test]
+    async fn gguf_dir_infers_manifest_when_missing() {
+        let plan = plan_dir(&[("model-Q4_K_M.gguf", b"x")], "Org/Repo-GGUF")
+            .await
+            .unwrap();
         assert_eq!(plan.manifest.name, "Org/Repo-GGUF");
         assert!(plan.manifest.model_file.contains_key("Q4_K_M"));
     }
 
-    // ---------------- AI Hub extracted directory ----------------
-
-    fn write_aihub_dir(dir: &std::path::Path, supports_vision: Option<bool>) {
-        if let Some(v) = supports_vision {
-            let body = format!(r#"{{"genie":{{"supports_vision":{v}}}}}"#);
-            fs::write(dir.join("metadata.json"), body).unwrap();
-        }
-        fs::write(dir.join("weights_part_1.bin"), b"abc").unwrap();
-        fs::write(dir.join("weights_part_2.bin"), b"defgh").unwrap();
-        fs::write(dir.join("tokenizer.json"), b"{}").unwrap();
+    #[tokio::test]
+    async fn gguf_dir_config_json_beats_stray_mmproj_file() {
+        let files: &[(&str, &[u8])] = &[
+            ("model-Q4_K_M.gguf", b"fake-weights"),
+            ("mmproj-x.gguf", b"stray"),
+            ("config.json", br#"{"architectures":["LlamaForCausalLM"]}"#),
+        ];
+        let plan = plan_dir(files, "Org/LLM").await.unwrap();
+        assert_eq!(plan.manifest.model_type, ModelType::Llm);
     }
 
     #[tokio::test]
     async fn aihub_extracted_uses_qairt_and_lex_first_bin() {
-        let tmp = tempfile::tempdir().unwrap();
-        write_aihub_dir(tmp.path(), Some(false));
-        let src = LocalFsSource::new(
-            tmp.path().to_path_buf(),
-            "qualcomm/llama".to_string(),
-            ManifestHint::default(),
-        );
-        let plan = src.plan().await.unwrap();
+        let files: &[(&str, &[u8])] = &[
+            ("metadata.json", NO_VISION),
+            ("weights_part_1.bin", b"abc"),
+            ("weights_part_2.bin", b"defgh"),
+            ("tokenizer.json", b"{}"),
+        ];
+        let plan = plan_dir(files, "qualcomm/llama").await.unwrap();
         assert_eq!(plan.manifest.plugin_id, QAIRT_PLUGIN_ID);
-        let entry = plan.manifest.model_file.get("N/A").expect("entrypoint");
-        assert_eq!(entry.name, "weights_part_1.bin");
-        let extras: Vec<&str> = plan
-            .manifest
-            .extra_files
+        assert_eq!(plan.manifest.model_file["N/A"].name, "weights_part_1.bin");
+        for want in ["weights_part_2.bin", "tokenizer.json", "metadata.json"] {
+            assert!(extra_names(&plan).contains(&want), "missing {want}");
+        }
+        assert!(plan
+            .files
             .iter()
-            .map(|f| f.name.as_str())
-            .collect();
-        assert!(extras.contains(&"weights_part_2.bin"));
-        assert!(extras.contains(&"tokenizer.json"));
-        // metadata.json rides along as an extra — same shape the remote
-        // AI Hub puller produces so a cache populated by either path is
-        // byte-comparable on disk.
-        assert!(extras.contains(&"metadata.json"));
-        for f in &plan.files {
-            match &f.bytes {
-                BytesSource::Local { .. } => {}
-                _ => panic!("expected Local, got {:?}", f.bytes),
-            }
+            .all(|f| matches!(f.bytes, BytesSource::Local { .. })));
+    }
+
+    #[tokio::test]
+    async fn aihub_metadata_without_vision_flag_falls_back_to_llm() {
+        for meta in [&br#"{"name":"x"}"#[..], b"not json"] {
+            let plan = plan_dir(
+                &[("metadata.json", meta), ("model.bin", b"x")],
+                "qualcomm/foo",
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                plan.manifest.model_type,
+                ModelType::Llm,
+                "{:?}",
+                String::from_utf8_lossy(meta)
+            );
         }
     }
 
     #[tokio::test]
-    async fn aihub_extracted_supports_vision_true_yields_vlm() {
-        let tmp = tempfile::tempdir().unwrap();
-        write_aihub_dir(tmp.path(), Some(true));
-        let src = LocalFsSource::new(
-            tmp.path().to_path_buf(),
-            "qualcomm/qwen-vl".to_string(),
-            ManifestHint::default(),
-        );
-        let plan = src.plan().await.unwrap();
-        assert_eq!(plan.manifest.model_type, ModelType::Vlm);
-    }
-
-    #[tokio::test]
-    async fn aihub_extracted_keys_model_file_by_metadata_precision() {
-        let tmp = tempfile::tempdir().unwrap();
-        fs::write(
-            tmp.path().join("metadata.json"),
-            r#"{"precision":"w4a16","genie":{"supports_vision":false}}"#,
+    async fn aihub_keys_model_file_by_metadata_precision() {
+        let meta: &[u8] = br#"{"precision":"w4a16","genie":{"supports_vision":false}}"#;
+        let dir = plan_dir(
+            &[("metadata.json", meta), ("weights_part_1.bin", b"abc")],
+            "local/phi",
         )
+        .await
         .unwrap();
-        fs::write(tmp.path().join("weights_part_1.bin"), b"abc").unwrap();
-        let src = LocalFsSource::new(
-            tmp.path().to_path_buf(),
-            "local/phi_4_mini_instruct".to_string(),
-            ManifestHint::default(),
-        );
-        let plan = src.plan().await.unwrap();
-        assert!(!plan.manifest.model_file.contains_key("N/A"));
-        let entry = plan.manifest.model_file.get("w4a16").expect("w4a16 entry");
-        assert_eq!(entry.name, "weights_part_1.bin");
-    }
-
-    #[tokio::test]
-    async fn aihub_extracted_metadata_field_absent_falls_back_to_llm() {
-        let tmp = tempfile::tempdir().unwrap();
-        // metadata.json present but without genie.supports_vision.
-        fs::write(tmp.path().join("metadata.json"), r#"{"name":"x"}"#).unwrap();
-        fs::write(tmp.path().join("model.bin"), b"x").unwrap();
-        let src = LocalFsSource::new(
-            tmp.path().to_path_buf(),
-            "qualcomm/foo".to_string(),
-            ManifestHint::default(),
-        );
-        let plan = src.plan().await.unwrap();
-        assert_eq!(plan.manifest.model_type, ModelType::Llm);
-    }
-
-    #[tokio::test]
-    async fn aihub_extracted_unparseable_metadata_falls_back_to_llm() {
-        let tmp = tempfile::tempdir().unwrap();
-        fs::write(tmp.path().join("metadata.json"), b"not json").unwrap();
-        fs::write(tmp.path().join("model.bin"), b"x").unwrap();
-        let src = LocalFsSource::new(
-            tmp.path().to_path_buf(),
-            "qualcomm/foo".to_string(),
-            ManifestHint::default(),
-        );
-        let plan = src.plan().await.unwrap();
-        assert_eq!(plan.manifest.model_type, ModelType::Llm);
-    }
-
-    // ---------------- AI Hub local zip ----------------
-
-    fn build_zip(entries: &[(&str, &[u8])], compressed: bool) -> Vec<u8> {
-        let mut buf: Vec<u8> = Vec::new();
-        {
-            let cursor = std::io::Cursor::new(&mut buf);
-            let mut zw = zip::ZipWriter::new(cursor);
-            let method = if compressed {
-                zip::CompressionMethod::Deflated
-            } else {
-                zip::CompressionMethod::Stored
-            };
-            let opts: zip::write::SimpleFileOptions =
-                zip::write::SimpleFileOptions::default().compression_method(method);
-            for (name, data) in entries {
-                zw.start_file(*name, opts).unwrap();
-                zw.write_all(data).unwrap();
-            }
-            zw.finish().unwrap();
+        let (zip, _, _tmp) = plan_zip(&[
+            ("metadata.json", meta, ZipMethod::Stored),
+            ("weights_part_1.bin", b"abc", ZipMethod::Stored),
+        ])
+        .await;
+        for (layout, plan) in [("dir", dir), ("zip", zip.unwrap())] {
+            assert!(!plan.manifest.model_file.contains_key("N/A"), "{layout}");
+            assert_eq!(
+                plan.manifest.model_file["w4a16"].name, "weights_part_1.bin",
+                "{layout}"
+            );
         }
-        buf
     }
 
     #[tokio::test]
     async fn aihub_zip_stored_emits_local_range() {
-        let tmp = tempfile::tempdir().unwrap();
-        let zip_path = tmp.path().join("model.zip");
-        let body = build_zip(
-            &[
-                (
-                    "metadata.json",
-                    br#"{"genie":{"supports_vision":false}}"#.as_slice(),
-                ),
-                ("shard_a.bin", b"hello-shard-a"),
-                ("shard_b.bin", b"hello-shard-b"),
-            ],
-            false,
-        );
-        fs::write(&zip_path, &body).unwrap();
-        let src = LocalFsSource::new(
-            zip_path.clone(),
-            "qualcomm/foo".to_string(),
-            ManifestHint::default(),
-        );
-        let plan = src.plan().await.unwrap();
+        let (plan, zip_path, _tmp) = plan_zip(&[
+            ("metadata.json", NO_VISION, ZipMethod::Stored),
+            ("shard_a.bin", b"hello-shard-a", ZipMethod::Stored),
+            ("shard_b.bin", b"hello-shard-b", ZipMethod::Stored),
+        ])
+        .await;
+        let plan = plan.unwrap();
         assert_eq!(plan.manifest.plugin_id, QAIRT_PLUGIN_ID);
         assert_eq!(plan.manifest.model_type, ModelType::Llm);
-        let entry = plan.manifest.model_file.get("N/A").expect("entrypoint");
-        assert_eq!(entry.name, "shard_a.bin");
+        assert_eq!(plan.manifest.model_file["N/A"].name, "shard_a.bin");
         for f in &plan.files {
-            match &f.bytes {
-                BytesSource::LocalRange { path, .. } => assert_eq!(path, &zip_path),
-                BytesSource::Local { .. }
-                | BytesSource::LocalDeflate { .. }
-                | BytesSource::Http { .. }
-                | BytesSource::HttpRange { .. }
-                | BytesSource::HttpDeflate { .. } => {
-                    panic!("expected LocalRange for STORED, got {:?}", f.bytes)
-                }
-            }
+            assert!(
+                matches!(&f.bytes, BytesSource::LocalRange { path, .. } if *path == zip_path),
+                "{:?}",
+                f.bytes
+            );
         }
-    }
-
-    #[tokio::test]
-    async fn aihub_zip_keys_model_file_by_metadata_precision() {
-        let tmp = tempfile::tempdir().unwrap();
-        let zip_path = tmp.path().join("model.zip");
-        let body = build_zip(
-            &[
-                (
-                    "metadata.json",
-                    br#"{"precision":"w4a16","genie":{"supports_vision":false}}"#.as_slice(),
-                ),
-                ("shard_a.bin", b"hello-shard-a"),
-            ],
-            false,
-        );
-        fs::write(&zip_path, &body).unwrap();
-        let src = LocalFsSource::new(
-            zip_path.clone(),
-            "local/phi_4_mini_instruct".to_string(),
-            ManifestHint::default(),
-        );
-        let plan = src.plan().await.unwrap();
-        assert!(!plan.manifest.model_file.contains_key("N/A"));
-        let entry = plan.manifest.model_file.get("w4a16").expect("w4a16 entry");
-        assert_eq!(entry.name, "shard_a.bin");
     }
 
     #[tokio::test]
     async fn aihub_zip_deflate_emits_local_deflate_and_reads_metadata() {
-        let tmp = tempfile::tempdir().unwrap();
-        let zip_path = tmp.path().join("model.zip");
-        // Bigger payload so DEFLATE actually compresses (small inputs
-        // can round-trip as STORED depending on the encoder).
         let big = vec![b'A'; 8192];
-        let body = build_zip(
-            &[
-                (
-                    "metadata.json",
-                    br#"{"genie":{"supports_vision":true}}"#.as_slice(),
-                ),
-                ("weights.bin", &big),
-            ],
-            true,
-        );
-        fs::write(&zip_path, &body).unwrap();
-        let src = LocalFsSource::new(
-            zip_path.clone(),
-            "qualcomm/qwen-vl".to_string(),
-            ManifestHint::default(),
-        );
-        let plan = src.plan().await.unwrap();
+        let (plan, zip_path, _tmp) = plan_zip(&[
+            (
+                "metadata.json",
+                br#"{"genie":{"supports_vision":true}}"#,
+                ZipMethod::Deflate,
+            ),
+            ("weights.bin", &big, ZipMethod::Deflate),
+        ])
+        .await;
+        let plan = plan.unwrap();
         assert_eq!(plan.manifest.model_type, ModelType::Vlm);
-        let weights = plan
-            .files
-            .iter()
-            .find(|f| f.name == "weights.bin")
-            .expect("weights present");
-        match &weights.bytes {
-            BytesSource::LocalDeflate { path, .. } => assert_eq!(path, &zip_path),
-            other => panic!("expected LocalDeflate, got {other:?}"),
-        }
+        let weights = plan.files.iter().find(|f| f.name == "weights.bin").unwrap();
+        assert!(
+            matches!(&weights.bytes, BytesSource::LocalDeflate { path, .. } if *path == zip_path),
+            "{:?}",
+            weights.bytes
+        );
     }
 
     #[tokio::test]
     async fn aihub_zip_no_bin_returns_helpful_error() {
-        let tmp = tempfile::tempdir().unwrap();
-        let zip_path = tmp.path().join("model.zip");
-        let body = build_zip(
-            &[("metadata.json", b"{}".as_slice()), ("README.md", b"hi")],
-            false,
-        );
-        fs::write(&zip_path, &body).unwrap();
-        let src = LocalFsSource::new(
-            zip_path,
-            "qualcomm/foo".to_string(),
-            ManifestHint::default(),
-        );
-        let err = src.plan().await.unwrap_err();
-        let msg = format!("{err}");
-        assert!(msg.contains(".bin"), "msg: {msg}");
+        let (plan, _, _tmp) = plan_zip(&[
+            ("metadata.json", b"{}", ZipMethod::Stored),
+            ("README.md", b"hi", ZipMethod::Stored),
+        ])
+        .await;
+        let err = plan.unwrap_err();
+        assert!(err.to_string().contains(".bin"), "{err}");
     }
-
-    // ---------------- Detect-level errors ----------------
-
-    #[tokio::test]
-    async fn safetensors_only_dir_returns_unsupported() {
-        let tmp = tempfile::tempdir().unwrap();
-        fs::write(tmp.path().join("config.json"), b"{}").unwrap();
-        fs::write(tmp.path().join("model.safetensors"), b"x").unwrap();
-        let src = LocalFsSource::new(
-            tmp.path().to_path_buf(),
-            "Org/Repo".to_string(),
-            ManifestHint::default(),
-        );
-        let err = src.plan().await.unwrap_err();
-        let msg = format!("{err}");
-        assert!(msg.contains("safetensors"), "msg: {msg}");
-    }
-
-    // ---------------- detect_local_kind ----------------
 
     #[test]
     fn detect_local_kind_covers_layouts() {
         let tmp = tempfile::tempdir().unwrap();
-
-        let zip = tmp.path().join("model.zip");
-        fs::write(&zip, b"PK\x03\x04").unwrap();
-        assert_eq!(detect_local_kind(&zip).unwrap(), LocalKind::AiHubZip);
-
-        let zip_upper = tmp.path().join("Model.ZIP");
-        fs::write(&zip_upper, b"x").unwrap();
-        assert_eq!(detect_local_kind(&zip_upper).unwrap(), LocalKind::AiHubZip);
-
-        let aihub = tmp.path().join("aihub");
-        fs::create_dir_all(&aihub).unwrap();
-        fs::write(aihub.join("metadata.json"), b"{}").unwrap();
-        fs::write(aihub.join("weights_part_1.bin"), b"x").unwrap();
-        // AI Hub wins even with a sibling GGUF.
-        fs::write(aihub.join("extra.gguf"), b"y").unwrap();
-        assert_eq!(
-            detect_local_kind(&aihub).unwrap(),
-            LocalKind::AiHubExtracted
+        let mkdir = |name: &str, files: &[(&str, &[u8])]| {
+            let dir = tmp.path().join(name);
+            fs::create_dir_all(&dir).unwrap();
+            write_all(&dir, files);
+            dir
+        };
+        write_all(
+            tmp.path(),
+            &[("model.zip", b"PK\x03\x04"), ("Model.ZIP", b"x")],
         );
-
-        let gguf = tmp.path().join("gguf");
-        fs::create_dir_all(&gguf).unwrap();
-        fs::write(gguf.join("model-Q4_K_M.gguf"), b"x").unwrap();
-        assert_eq!(detect_local_kind(&gguf).unwrap(), LocalKind::HfGguf);
+        let cases = [
+            (tmp.path().join("model.zip"), LocalKind::AiHubZip),
+            (tmp.path().join("Model.ZIP"), LocalKind::AiHubZip),
+            (
+                mkdir(
+                    "aihub",
+                    &[
+                        ("metadata.json", b"{}"),
+                        ("weights_part_1.bin", b"x"),
+                        ("extra.gguf", b"y"),
+                    ],
+                ),
+                LocalKind::AiHubExtracted,
+            ),
+            (
+                mkdir("gguf", &[("model-Q4_K_M.gguf", b"x")]),
+                LocalKind::HfGguf,
+            ),
+        ];
+        for (path, want) in cases {
+            assert_eq!(
+                detect_local_kind(&path).unwrap(),
+                want,
+                "{}",
+                path.display()
+            );
+        }
     }
 
     #[test]
     fn detect_local_kind_error_messages_are_actionable() {
         let tmp = tempfile::tempdir().unwrap();
-
-        let missing = detect_local_kind(Path::new("/nonexistent/path/12345xyz")).unwrap_err();
-        assert!(format!("{missing}").contains("not accessible"));
-
-        let non_zip = tmp.path().join("model.tar.gz");
-        fs::write(&non_zip, b"x").unwrap();
-        assert!(format!("{}", detect_local_kind(&non_zip).unwrap_err()).contains("not a .zip"));
-
-        let safetensors = tmp.path().join("st");
-        fs::create_dir_all(&safetensors).unwrap();
-        fs::write(safetensors.join("config.json"), b"{}").unwrap();
-        fs::write(safetensors.join("model.safetensors"), b"x").unwrap();
-        assert!(format!("{}", detect_local_kind(&safetensors).unwrap_err()).contains("safetensors"));
-
-        let unknown = tmp.path().join("unk");
-        fs::create_dir_all(&unknown).unwrap();
-        fs::write(unknown.join("readme.txt"), b"hi").unwrap();
-        let msg = format!("{}", detect_local_kind(&unknown).unwrap_err());
-        assert!(
-            msg.contains("AI Hub extracted") && msg.contains("HF GGUF") && msg.contains(".zip")
-        );
+        let mkdir = |name: &str, files: &[(&str, &[u8])]| {
+            let dir = tmp.path().join(name);
+            fs::create_dir_all(&dir).unwrap();
+            write_all(&dir, files);
+            dir
+        };
+        write_all(tmp.path(), &[("model.tar.gz", b"x")]);
+        let cases: [(PathBuf, &[&str]); 4] = [
+            (
+                PathBuf::from("/nonexistent/path/12345xyz"),
+                &["not accessible"],
+            ),
+            (tmp.path().join("model.tar.gz"), &["not a .zip"]),
+            (
+                mkdir("st", &[("config.json", b"{}"), ("model.safetensors", b"x")]),
+                &["safetensors"],
+            ),
+            (
+                mkdir("unk", &[("readme.txt", b"hi")]),
+                &["AI Hub extracted", "HF GGUF", ".zip"],
+            ),
+        ];
+        for (path, wants) in cases {
+            let msg = detect_local_kind(&path).unwrap_err().to_string();
+            for want in wants {
+                assert!(
+                    msg.contains(want),
+                    "{}: want {want:?} in {msg}",
+                    path.display()
+                );
+            }
+        }
     }
 }

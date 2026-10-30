@@ -110,78 +110,41 @@ fn default_data_dir() -> PathBuf {
 mod tests {
     use super::*;
     use crate::source::hf::DEFAULT_HF_ENDPOINT;
+    use crate::source::modelscope::DEFAULT_MODELSCOPE_ENDPOINT;
+    use crate::test_support::EnvGuard;
 
-    struct EnvGuard {
-        key: &'static str,
-        prev: Option<String>,
-    }
-
-    impl EnvGuard {
-        fn set(key: &'static str, value: &str) -> Self {
-            let prev = std::env::var(key).ok();
-            std::env::set_var(key, value);
-            Self { key, prev }
-        }
-        fn unset(key: &'static str) -> Self {
-            let prev = std::env::var(key).ok();
-            std::env::remove_var(key);
-            Self { key, prev }
-        }
-    }
-
-    impl Drop for EnvGuard {
-        fn drop(&mut self) {
-            match &self.prev {
-                Some(v) => std::env::set_var(self.key, v),
-                None => std::env::remove_var(self.key),
+    #[test]
+    fn hub_endpoints_cover_unset_custom_and_trailing_slash() {
+        type Getter = fn() -> String;
+        let hubs: [(&str, Getter, &str, &str); 2] = [
+            (
+                "HF_ENDPOINT",
+                StoreConfig::hf_endpoint,
+                DEFAULT_HF_ENDPOINT,
+                "https://hf-mirror.com",
+            ),
+            (
+                "MODELSCOPE_ENDPOINT",
+                StoreConfig::modelscope_endpoint,
+                DEFAULT_MODELSCOPE_ENDPOINT,
+                "https://modelscope.example.com",
+            ),
+        ];
+        for (var, get, default, custom) in hubs {
+            let with_slash = format!("{custom}/");
+            for (value, want) in [
+                (None, default),
+                (Some(custom), custom),
+                (Some(with_slash.as_str()), custom),
+                (Some("  "), default),
+            ] {
+                let env = EnvGuard::lock();
+                let _env = match value {
+                    Some(v) => env.set(var, v),
+                    None => env.unset(var),
+                };
+                assert_eq!(get(), want, "{var}={value:?}");
             }
-        }
-    }
-
-    #[test]
-    fn hf_endpoint_covers_unset_custom_and_trailing_slash() {
-        {
-            let _g = EnvGuard::unset("HF_ENDPOINT");
-            assert_eq!(StoreConfig::hf_endpoint(), DEFAULT_HF_ENDPOINT);
-        }
-        {
-            let _g = EnvGuard::set("HF_ENDPOINT", "https://hf-mirror.com");
-            assert_eq!(StoreConfig::hf_endpoint(), "https://hf-mirror.com");
-        }
-        {
-            let _g = EnvGuard::set("HF_ENDPOINT", "https://hf-mirror.com/");
-            assert_eq!(StoreConfig::hf_endpoint(), "https://hf-mirror.com");
-        }
-        {
-            let _g = EnvGuard::set("HF_ENDPOINT", "  ");
-            assert_eq!(StoreConfig::hf_endpoint(), DEFAULT_HF_ENDPOINT);
-        }
-    }
-
-    #[test]
-    fn modelscope_endpoint_covers_unset_custom_and_trailing_slash() {
-        let default = crate::source::modelscope::DEFAULT_MODELSCOPE_ENDPOINT;
-        {
-            let _g = EnvGuard::unset("MODELSCOPE_ENDPOINT");
-            assert_eq!(StoreConfig::modelscope_endpoint(), default);
-        }
-        {
-            let _g = EnvGuard::set("MODELSCOPE_ENDPOINT", "https://modelscope.example.com");
-            assert_eq!(
-                StoreConfig::modelscope_endpoint(),
-                "https://modelscope.example.com"
-            );
-        }
-        {
-            let _g = EnvGuard::set("MODELSCOPE_ENDPOINT", "https://modelscope.example.com/");
-            assert_eq!(
-                StoreConfig::modelscope_endpoint(),
-                "https://modelscope.example.com"
-            );
-        }
-        {
-            let _g = EnvGuard::set("MODELSCOPE_ENDPOINT", "  ");
-            assert_eq!(StoreConfig::modelscope_endpoint(), default);
         }
     }
 }

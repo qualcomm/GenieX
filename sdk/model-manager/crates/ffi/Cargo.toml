@@ -10,3 +10,6 @@ crate-type = ["staticlib"]
 [dependencies]
 model-manager-core = { path = "../core" }
 tokio = { workspace = true }
+
+[dev-dependencies]
+model-manager-core = { path = "../core", features = ["test-support"] }

@@ -227,37 +227,9 @@ fn ftype_name(v: u32) -> Option<&'static str> {
 }
 
 #[cfg(test)]
-pub(crate) mod testdata {
-    fn put_str(out: &mut Vec<u8>, s: &str) {
-        out.extend_from_slice(&(s.len() as u64).to_le_bytes());
-        out.extend_from_slice(s.as_bytes());
-    }
-
-    pub(crate) fn gguf_header_prefix(kv_count: u64) -> Vec<u8> {
-        let mut out = Vec::new();
-        out.extend_from_slice(b"GGUF");
-        out.extend_from_slice(&3u32.to_le_bytes());
-        out.extend_from_slice(&0u64.to_le_bytes());
-        out.extend_from_slice(&kv_count.to_le_bytes());
-        out
-    }
-
-    pub(crate) fn gguf_head(ftype: u32, pad_bytes: usize) -> Vec<u8> {
-        let mut out = gguf_header_prefix(2);
-        put_str(&mut out, "general.name");
-        out.extend_from_slice(&8u32.to_le_bytes());
-        put_str(&mut out, &"x".repeat(pad_bytes));
-        put_str(&mut out, "general.file_type");
-        out.extend_from_slice(&4u32.to_le_bytes());
-        out.extend_from_slice(&ftype.to_le_bytes());
-        out
-    }
-}
-
-#[cfg(test)]
 mod tests {
-    use super::testdata::{gguf_head, gguf_header_prefix};
     use super::*;
+    use crate::test_support::gguf::{head, header_prefix};
 
     fn found(buf: &[u8]) -> Option<&'static str> {
         match scan(buf) {
@@ -268,14 +240,14 @@ mod tests {
 
     #[test]
     fn reads_file_type_from_a_v3_head() {
-        assert_eq!(found(&gguf_head(15, 0)), Some("Q4_K_M"));
-        assert_eq!(found(&gguf_head(1, 0)), Some("F16"));
-        assert_eq!(found(&gguf_head(32, 64)), Some("BF16"));
+        for (ftype, pad, want) in [(15, 0, "Q4_K_M"), (1, 0, "F16"), (32, 64, "BF16")] {
+            assert_eq!(found(&head(ftype, pad)), Some(want), "ftype {ftype}");
+        }
     }
 
     #[test]
     fn skips_over_a_preceding_token_array() {
-        let mut out = gguf_header_prefix(2);
+        let mut out = header_prefix(2);
         let key = b"tokenizer.ggml.tokens";
         out.extend_from_slice(&(key.len() as u64).to_le_bytes());
         out.extend_from_slice(key);
@@ -295,30 +267,27 @@ mod tests {
     }
 
     #[test]
-    fn truncated_head_asks_for_more() {
-        let full = gguf_head(15, 0);
-        assert!(matches!(scan(&full[..full.len() - 2]), Scan::NeedMore));
+    fn incomplete_heads_ask_for_more() {
+        let full = head(15, 0);
+        let mut absurd_len = header_prefix(1);
+        absurd_len.extend_from_slice(&u64::MAX.to_le_bytes());
+        for buf in [&full[..full.len() - 2], &absurd_len] {
+            assert!(matches!(scan(buf), Scan::NeedMore));
+        }
     }
 
     #[test]
-    fn non_gguf_bytes_are_final() {
-        assert!(matches!(scan(b"PK\x03\x04not a model"), Scan::Absent));
+    fn non_gguf_or_missing_file_type_is_final() {
         let mut big_endian = b"GGUF".to_vec();
         big_endian.extend_from_slice(&3u32.to_be_bytes());
-        assert!(matches!(scan(&big_endian), Scan::Absent));
-    }
-
-    #[test]
-    fn unknown_or_absent_file_type_is_final() {
-        assert!(matches!(scan(&gguf_head(9999, 0)), Scan::Absent));
-        assert!(matches!(scan(&gguf_header_prefix(0)), Scan::Absent));
-    }
-
-    #[test]
-    fn absurd_lengths_do_not_allocate() {
-        let mut out = gguf_header_prefix(1);
-        out.extend_from_slice(&u64::MAX.to_le_bytes());
-        assert!(matches!(scan(&out), Scan::NeedMore));
+        for buf in [
+            b"PK\x03\x04not a model".to_vec(),
+            big_endian,
+            head(9999, 0),
+            header_prefix(0),
+        ] {
+            assert!(matches!(scan(&buf), Scan::Absent), "{buf:?}");
+        }
     }
 
     #[tokio::test]

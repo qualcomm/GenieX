@@ -1,33 +1,19 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Integration tests for [`ReqwestTransport`]: proxy routing, HEAD parsing,
-//! and range GET semantics. Uses `wiremock` to stand up a fake upstream.
-//!
-//! The "proxy" test cheats a little — a real forward HTTP proxy is heavier
-//! than we need here. Instead we verify the lower-level claim: setting
-//! `TransportConfig::proxy_override` makes reqwest route the request to
-//! that endpoint instead of the URL's host. That's the same plumbing
-//! reqwest uses for `HTTPS_PROXY`, so if this works, env-based proxy works.
+//! [`ReqwestTransport`] against a fake upstream: HEAD parsing, range GET
+//! semantics and retries, and `proxy_override` routing (the same plumbing
+//! reqwest uses for `HTTPS_PROXY`).
 
 use std::time::Duration;
 
-use model_manager_core::transport::{HttpTransport, ReqwestTransport, TransportConfig};
+use model_manager_core::test_support::fast_transport_config as fast_cfg;
+use model_manager_core::transport::{HttpTransport, ReqwestTransport};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use url::Url;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
-
-fn fast_cfg() -> TransportConfig {
-    TransportConfig {
-        connect_timeout: Some(Duration::from_secs(2)),
-        read_timeout: Some(Duration::from_secs(5)),
-        retries: Some(0),
-        retry_backoff: Some(Duration::from_millis(10)),
-        proxy_override: None,
-    }
-}
 
 #[tokio::test]
 async fn head_returns_size_and_accepts_ranges() {
@@ -198,8 +184,6 @@ async fn get_range_stream_error_exhausts_retries() {
 #[tokio::test]
 async fn get_range_short_read_errors() {
     let server = MockServer::start().await;
-    // Claim 100 bytes, send only 50 → engine must surface an error so the
-    // outer loop can retry or fail loudly. (We set retries=0 above.)
     Mock::given(method("GET"))
         .and(path("/short"))
         .respond_with(ResponseTemplate::new(206).set_body_bytes(vec![0u8; 50]))
@@ -222,11 +206,6 @@ async fn get_range_short_read_errors() {
 
 #[tokio::test]
 async fn proxy_override_routes_through_configured_host() {
-    // The "proxy server" is just a wiremock that answers HEADs. When
-    // reqwest is configured with proxy=all, every request goes there —
-    // URL host is irrelevant. We assert the proxy received the hit by
-    // counting matched requests on the proxy mock, and verify that a
-    // stub upstream on a *different* mock server was NEVER hit.
     let proxy = MockServer::start().await;
     let upstream = MockServer::start().await;
 
@@ -240,8 +219,6 @@ async fn proxy_override_routes_through_configured_host() {
         .mount(&proxy)
         .await;
 
-    // Upstream would answer 500 if it were hit — but the proxy should
-    // intercept first, so it should never be reached.
     Mock::given(method("HEAD"))
         .respond_with(ResponseTemplate::new(500))
         .expect(0)
@@ -255,14 +232,10 @@ async fn proxy_override_routes_through_configured_host() {
     let url = Url::parse(&format!("{}/somewhere", upstream.uri())).unwrap();
     let info = t.head(&url, None).await.unwrap();
     assert_eq!(info.size, 42);
-    // Drops of proxy + upstream run the `.expect(n)` assertions in their
-    // Drop impls.
 }
 
 #[tokio::test]
 async fn bearer_token_is_forwarded() {
-    use wiremock::matchers::header;
-
     let server = MockServer::start().await;
     Mock::given(method("HEAD"))
         .and(path("/auth"))

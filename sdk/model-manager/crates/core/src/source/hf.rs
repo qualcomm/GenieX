@@ -239,237 +239,108 @@ fn size_for(map: &HashMap<String, i64>, name: &str) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transport::{HttpTransport, ReqwestTransport, TransportConfig};
-    use std::time::Duration;
-    use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use crate::manifest::ModelType;
+    use crate::test_support::{fast_transport, gguf, mount_ranged, mount_status};
+    use wiremock::MockServer;
 
-    fn fast_transport() -> Arc<dyn HttpTransport> {
-        Arc::new(
-            ReqwestTransport::with_config(TransportConfig {
-                connect_timeout: Some(Duration::from_secs(2)),
-                read_timeout: Some(Duration::from_secs(5)),
-                retries: Some(0),
-                retry_backoff: Some(Duration::from_millis(10)),
-                proxy_override: None,
-            })
-            .unwrap(),
-        )
-    }
-
-    /// Register `HEAD` + `GET` handlers for a sibling URL so
-    /// `fetch_small` can pull its bytes.
-    async fn mount_file(server: &MockServer, rel_path: &str, body: &str) {
-        Mock::given(method("HEAD"))
-            .and(path(rel_path))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .append_header("Content-Length", body.len().to_string())
-                    .append_header("Accept-Ranges", "bytes"),
-            )
-            .mount(server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path(rel_path))
-            .respond_with(ResponseTemplate::new(206).set_body_bytes(body.as_bytes()))
-            .mount(server)
-            .await;
-    }
-
-    #[tokio::test]
-    async fn plan_rejects_safetensors_only_repo_with_a_format_hint() {
-        // openai/gpt-oss-safeguard-20b: safetensors + tokenizer, no GGUF. The
-        // failure has to name the formats we accept.
+    /// Serve an HF repo listing `siblings` (name, bytes) with no `geniex.json`.
+    async fn plan_for(repo: &str, siblings: &[(&str, &[u8])]) -> Result<Plan> {
         let server = MockServer::start().await;
-        let api_body = r#"{
-          "siblings": [
-            {"rfilename": "config.json", "size": 128},
-            {"rfilename": "model-00001-of-00002.safetensors", "size": 1024},
-            {"rfilename": "tokenizer.json", "size": 256}
-          ]
-        }"#;
-        let repo = "openai/gpt-oss-safeguard-20b";
-        mount_file(&server, &format!("/api/models/{repo}"), api_body).await;
-        mount_file(
+        let listing: Vec<_> = siblings
+            .iter()
+            .map(|(n, b)| serde_json::json!({"rfilename": n, "size": b.len()}))
+            .collect();
+        let api = serde_json::json!({ "siblings": listing }).to_string();
+        mount_ranged(&server, &format!("/api/models/{repo}"), api).await;
+        mount_status(
             &server,
-            &format!("/{repo}/resolve/main/config.json"),
-            r#"{"architectures":["GptOssForCausalLM"]}"#,
+            "HEAD",
+            &format!("/{repo}/resolve/main/geniex.json"),
+            404,
         )
         .await;
-        Mock::given(method("HEAD"))
-            .and(path(format!("/{repo}/resolve/main/geniex.json")))
-            .respond_with(ResponseTemplate::new(404))
-            .mount(&server)
+        for (name, body) in siblings {
+            mount_ranged(
+                &server,
+                &format!("/{repo}/resolve/main/{name}"),
+                body.to_vec(),
+            )
             .await;
-
-        let src = HfSource::with_endpoint_and_transport(
+        }
+        HfSource::with_endpoint_and_transport(
             repo.to_string(),
             &server.uri(),
             None,
             fast_transport(),
             ManifestHint::default(),
-        )
-        .unwrap();
-        let err = src.plan().await.unwrap_err();
-        assert!(matches!(err, Error::ManifestInferenceFailed(_)), "{err:?}");
-        let msg = err.to_string();
-        assert!(msg.contains(repo), "{msg}");
-        assert!(msg.contains("GGUF"), "{msg}");
-        assert!(msg.contains("QAIRT"), "{msg}");
-    }
-
-    #[tokio::test]
-    async fn plan_classifies_vlm_via_config_json() {
-        // #17 — HF repo with safetensors + config.json carrying
-        // `vision_config` is classified as VLM without any mmproj file.
-        let server = MockServer::start().await;
-        // infer_manifest_from_names requires at least one recognised
-        // weight file; include a GGUF alongside safetensors so inference
-        // succeeds and we can observe the modality verdict.
-        let api_body = r#"{
-          "siblings": [
-            {"rfilename": "config.json", "size": 128},
-            {"rfilename": "model-Q4_K_M.gguf", "size": 1024}
-          ]
-        }"#;
-        let config_body =
-            r#"{"architectures":["Qwen2_5_VLForConditionalGeneration"],"vision_config":{}}"#;
-        mount_file(&server, "/api/models/tests/VLM", api_body).await;
-        mount_file(&server, "/tests/VLM/resolve/main/config.json", config_body).await;
-        Mock::given(method("HEAD"))
-            .and(path("/tests/VLM/resolve/main/geniex.json"))
-            .respond_with(ResponseTemplate::new(404))
-            .mount(&server)
-            .await;
-
-        let src = HfSource::with_endpoint_and_transport(
-            "tests/VLM".to_string(),
-            &server.uri(),
-            None,
-            fast_transport(),
-            ManifestHint::default(),
-        )
-        .unwrap();
-        let plan = src.plan().await.unwrap();
-        assert_eq!(plan.manifest.model_type, crate::manifest::ModelType::Vlm);
-    }
-
-    #[tokio::test]
-    async fn plan_classifies_llm_when_config_overrides_stray_mmproj() {
-        // #18 — config says LlamaForCausalLM; a stray `mmproj-x.gguf`
-        // sibling must NOT promote this to VLM.
-        let server = MockServer::start().await;
-        let api_body = r#"{
-          "siblings": [
-            {"rfilename": "config.json", "size": 64},
-            {"rfilename": "model-Q4_K_M.gguf", "size": 1024},
-            {"rfilename": "model-Q8_0.gguf", "size": 2048},
-            {"rfilename": "mmproj-x.gguf", "size": 128}
-          ]
-        }"#;
-        let config_body = r#"{"architectures":["LlamaForCausalLM"]}"#;
-        mount_file(&server, "/api/models/tests/LLM", api_body).await;
-        mount_file(&server, "/tests/LLM/resolve/main/config.json", config_body).await;
-        Mock::given(method("HEAD"))
-            .and(path("/tests/LLM/resolve/main/geniex.json"))
-            .respond_with(ResponseTemplate::new(404))
-            .mount(&server)
-            .await;
-
-        let src = HfSource::with_endpoint_and_transport(
-            "tests/LLM".to_string(),
-            &server.uri(),
-            None,
-            fast_transport(),
-            ManifestHint::default(),
-        )
-        .unwrap();
-        let plan = src.plan().await.unwrap();
-        assert_eq!(plan.manifest.model_type, crate::manifest::ModelType::Llm);
+        )?
+        .plan()
+        .await
     }
 
     #[tokio::test]
     async fn plan_synthesises_manifest_when_repo_lacks_one() {
-        let server = MockServer::start().await;
-        let body = r#"{
-          "siblings": [
-            {"rfilename": "model-Q4_K_M.gguf", "size": 1024}
-          ]
-        }"#;
-        Mock::given(method("HEAD"))
-            .and(path("/api/models/tests/Tiny-GGUF"))
-            .respond_with(
-                ResponseTemplate::new(200)
-                    .append_header("Content-Length", body.len().to_string())
-                    .append_header("Accept-Ranges", "bytes"),
-            )
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path("/api/models/tests/Tiny-GGUF"))
-            .respond_with(ResponseTemplate::new(206).set_body_bytes(body.as_bytes()))
-            .mount(&server)
-            .await;
-        // HEAD for geniex.json → 404 means "repo does not ship one".
-        Mock::given(method("HEAD"))
-            .and(path("/tests/Tiny-GGUF/resolve/main/geniex.json"))
-            .respond_with(ResponseTemplate::new(404))
-            .mount(&server)
-            .await;
-
-        let src = HfSource::with_endpoint_and_transport(
-            "tests/Tiny-GGUF".to_string(),
-            &server.uri(),
-            None,
-            fast_transport(),
-            ManifestHint::default(),
-        )
-        .unwrap();
-        let plan = src.plan().await.unwrap();
+        let plan = plan_for("tests/Tiny-GGUF", &[("model-Q4_K_M.gguf", &[0; 1024])])
+            .await
+            .unwrap();
         assert_eq!(plan.manifest.name, "tests/Tiny-GGUF");
         assert!(plan.manifest.model_file.contains_key("Q4_K_M"));
         assert_eq!(plan.files.len(), 1);
         assert_eq!(plan.files[0].name, "model-Q4_K_M.gguf");
-        match &plan.files[0].bytes {
-            BytesSource::Http { url, .. } => {
-                assert!(url.path().ends_with("model-Q4_K_M.gguf"));
-            }
-            _ => panic!("HF file should be BytesSource::Http"),
+        assert!(matches!(
+            &plan.files[0].bytes,
+            BytesSource::Http { url, .. } if url.path().ends_with("model-Q4_K_M.gguf")
+        ));
+    }
+
+    #[tokio::test]
+    async fn plan_rejects_safetensors_only_repo_with_a_format_hint() {
+        let repo = "openai/gpt-oss-safeguard-20b";
+        let err = plan_for(
+            repo,
+            &[
+                ("config.json", br#"{"architectures":["GptOssForCausalLM"]}"#),
+                ("model-00001-of-00002.safetensors", &[0; 1024]),
+                ("tokenizer.json", b"{}"),
+            ],
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, Error::ManifestInferenceFailed(_)), "{err:?}");
+        let msg = err.to_string();
+        for want in [repo, "GGUF", "QAIRT"] {
+            assert!(msg.contains(want), "missing {want:?}: {msg}");
         }
     }
 
     #[tokio::test]
-    async fn plan_reads_quant_from_the_header_when_the_name_lacks_one() {
-        let server = MockServer::start().await;
-        let head = crate::gguf::testdata::gguf_head(15, 0);
-        let api_body = format!(
-            r#"{{"siblings": [{{"rfilename": "REAP-48-v2.gguf", "size": {}}}]}}"#,
-            head.len()
-        );
-        mount_file(&server, "/api/models/tests/Untagged", &api_body).await;
-        Mock::given(method("HEAD"))
-            .and(path("/tests/Untagged/resolve/main/geniex.json"))
-            .respond_with(ResponseTemplate::new(404))
-            .mount(&server)
-            .await;
-        Mock::given(method("GET"))
-            .and(path("/tests/Untagged/resolve/main/REAP-48-v2.gguf"))
-            .respond_with(ResponseTemplate::new(206).set_body_bytes(head))
-            .mount(&server)
-            .await;
-
-        let src = HfSource::with_endpoint_and_transport(
-            "tests/Untagged".to_string(),
-            &server.uri(),
-            None,
-            fast_transport(),
-            ManifestHint::default(),
+    async fn plan_classifies_modality_from_config_json() {
+        let vlm_config =
+            br#"{"architectures":["Qwen2_5_VLForConditionalGeneration"],"vision_config":{}}"#;
+        let plan = plan_for(
+            "tests/VLM",
+            &[
+                ("config.json", vlm_config),
+                ("model-Q4_K_M.gguf", &[0; 1024]),
+            ],
         )
+        .await
         .unwrap();
-        let plan = src.plan().await.unwrap();
+        assert_eq!(plan.manifest.model_type, ModelType::Vlm);
+    }
+
+    #[tokio::test]
+    async fn plan_reads_quant_from_the_header_when_the_name_lacks_one() {
+        let head = gguf::head(15, 0);
+        let plan = plan_for("tests/Untagged", &[("REAP-48-v2.gguf", &head)])
+            .await
+            .unwrap();
         assert_eq!(
-            plan.manifest.model_file.get("Q4_K_M").map(|f| &f.name),
-            Some(&"REAP-48-v2.gguf".to_string())
+            plan.manifest
+                .model_file
+                .get("Q4_K_M")
+                .map(|f| f.name.as_str()),
+            Some("REAP-48-v2.gguf")
         );
     }
 }

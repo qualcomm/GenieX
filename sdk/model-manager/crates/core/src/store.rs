@@ -388,282 +388,154 @@ fn split_quant(s: &str) -> (&str, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{ModelFileInfo, ModelType};
-    use std::collections::HashMap;
+    use crate::manifest::ModelFileInfo;
+    use crate::test_support::{file_info, manifest, temp_store};
 
-    /// The returned TempDir must stay bound for the test's duration: dropping it
-    /// removes the store directory.
-    fn make_store() -> (Store, tempfile::TempDir) {
-        let tmp = tempfile::tempdir().unwrap();
-        let cfg = StoreConfig::new(tmp.path().to_path_buf());
-        (Store::new(cfg).unwrap(), tmp)
+    fn sample(name: &str) -> ModelManifest {
+        manifest(name, [("Q4_K_M", file_info("model-Q4_K_M.gguf", 100))])
     }
 
-    fn sample_manifest(name: &str) -> ModelManifest {
-        let mut model_file = HashMap::new();
-        model_file.insert(
-            "Q4_K_M".to_string(),
-            ModelFileInfo {
-                name: "model-Q4_K_M.gguf".to_string(),
-                downloaded: true,
-                size: 100,
-            },
-        );
-        ModelManifest {
-            name: name.to_string(),
-            model_name: "test-1b".to_string(),
-            model_type: ModelType::Llm,
-            plugin_id: "llama_cpp".to_string(),
-            precision: String::new(),
-            model_file,
-            mmproj_file: ModelFileInfo::default(),
-            tokenizer_file: ModelFileInfo::default(),
-            extra_files: vec![],
+    fn stored(names: &[&str]) -> (Store, tempfile::TempDir) {
+        let (store, tmp) = temp_store();
+        for name in names {
+            store.write_manifest(&sample(name)).unwrap();
         }
+        (store, tmp)
     }
 
     #[test]
     fn bare_name_pick_is_the_head_of_the_reported_order() {
-        let mut m = sample_manifest("Org/Repo");
-        // IQ4_XS sorts first alphabetically but is unlisted; Q8_0 is not downloaded.
+        let mut m = sample("Org/Repo");
+        m.model_file
+            .insert("IQ4_XS".into(), file_info("model-IQ4_XS.gguf", 50));
         m.model_file.insert(
-            "IQ4_XS".to_string(),
+            "Q8_0".into(),
             ModelFileInfo {
-                name: "model-IQ4_XS.gguf".to_string(),
-                downloaded: true,
-                size: 50,
-            },
-        );
-        m.model_file.insert(
-            "Q8_0".to_string(),
-            ModelFileInfo {
-                name: "model-Q8_0.gguf".to_string(),
                 downloaded: false,
-                size: 200,
+                ..file_info("model-Q8_0.gguf", 200)
             },
         );
-
+        // Unlisted IQ4_XS sorts after Q4_K_M; Q8_0 is not downloaded.
         let mut reported: Vec<&str> = m
             .model_file
             .iter()
-            .filter(|(_, fi)| fi.downloaded)
+            .filter(|(_, f)| f.downloaded)
             .map(|(q, _)| q.as_str())
             .collect();
-        reported.sort_by(|a, b| quant_sort_key(a).cmp(&quant_sort_key(b)));
-        assert_eq!(reported, vec!["Q4_K_M", "IQ4_XS"]);
-
+        reported.sort_by_key(|q| quant_sort_key(q));
+        assert_eq!(reported, ["Q4_K_M", "IQ4_XS"]);
         assert_eq!(pick_downloaded_by_priority(&m).unwrap(), reported[0]);
     }
 
     #[test]
-    fn roundtrip_manifest() {
-        let (store, _tmp) = make_store();
-        let m = sample_manifest("TestOrg/TestRepo");
-        store.write_manifest(&m).unwrap();
-        let loaded = store.get_manifest("TestOrg/TestRepo").unwrap();
-        assert_eq!(loaded.name, "TestOrg/TestRepo");
+    fn roundtrip_and_list() {
+        let (store, _tmp) = stored(&["TestOrg/TestRepo", "Org/B"]);
+        assert_eq!(
+            store.get_manifest("TestOrg/TestRepo").unwrap().name,
+            "TestOrg/TestRepo"
+        );
+        assert_eq!(store.list().unwrap().len(), 2);
     }
 
     #[test]
-    fn resolve_manifest_canonicalizes_and_drops_quant() {
-        let (store, _tmp) = make_store();
-        store
-            .write_manifest(&sample_manifest("qualcomm/Bare"))
-            .unwrap();
-        // bare name -> qualcomm/<name>, and the ":quant" suffix is ignored
-        assert_eq!(
-            store.resolve_manifest("Bare").unwrap().name,
-            "qualcomm/Bare"
-        );
-        assert_eq!(
-            store.resolve_manifest("Bare:Q4_K_M").unwrap().name,
-            "qualcomm/Bare"
-        );
+    fn resolve_manifest_accepts_loose_names() {
+        let (store, _tmp) = stored(&["qualcomm/Bare", "ggml-org/Qwen3"]);
+        for (input, want) in [
+            ("Bare", "qualcomm/Bare"),
+            ("Bare:Q4_K_M", "qualcomm/Bare"),
+            ("https://huggingface.co/ggml-org/Qwen3", "ggml-org/Qwen3"),
+        ] {
+            assert_eq!(store.resolve_manifest(input).unwrap().name, want, "{input}");
+        }
         assert!(store.resolve_manifest("Org/Missing").is_err());
+        assert_eq!(store.get_model_type("Bare:Q4_K_M").unwrap(), ModelType::Llm);
     }
 
     #[test]
-    fn resolve_manifest_accepts_a_pasted_hf_url() {
-        let (store, _tmp) = make_store();
-        store
-            .write_manifest(&sample_manifest("ggml-org/Qwen3"))
-            .unwrap();
-        assert_eq!(
-            store
-                .resolve_manifest("https://huggingface.co/ggml-org/Qwen3")
-                .unwrap()
-                .name,
-            "ggml-org/Qwen3"
-        );
-    }
-
-    #[test]
-    fn resolve_detail_manifest_skips_inflight() {
-        let (store, _tmp) = make_store();
-        store
-            .write_manifest(&sample_manifest("Org/Pulling"))
-            .unwrap();
+    fn inflight_models_are_hidden_from_listing_but_loadable() {
+        let (store, _tmp) = stored(&["Org/Pulling", "Org/Done"]);
         fs::create_dir_all(store.cfg.model_dir("Org/Pulling").join(INFLIGHT_DIR)).unwrap();
-        // hidden from list + get_detailed, but still loadable through get_paths
         assert!(store.resolve_detail_manifest("Org/Pulling").is_err());
         assert!(store.resolve_manifest("Org/Pulling").is_ok());
-    }
-
-    #[test]
-    fn list_returns_written_manifests() {
-        let (store, _tmp) = make_store();
-        store.write_manifest(&sample_manifest("Org/A")).unwrap();
-        store.write_manifest(&sample_manifest("Org/B")).unwrap();
-        let list = store.list().unwrap();
-        assert_eq!(list.len(), 2);
-    }
-
-    #[test]
-    fn get_model_type_tolerates_a_precision_suffix() {
-        let (store, _tmp) = make_store();
-        store
-            .write_manifest(&sample_manifest("qualcomm/Typed"))
-            .unwrap();
-        // get_paths accepts "<name>:<quant>"; get_type must not diverge
-        assert_eq!(
-            store.get_model_type("Typed:Q4_K_M").unwrap(),
-            ModelType::Llm
-        );
-    }
-
-    #[test]
-    fn remove_deletes_directory() {
-        let (store, _tmp) = make_store();
-        store.write_manifest(&sample_manifest("Org/C")).unwrap();
-        store.remove("Org/C").unwrap();
-        assert!(!store.cfg.model_dir("Org/C").exists());
-    }
-
-    #[test]
-    fn set_model_type_roundtrips() {
-        let (store, _tmp) = make_store();
-        store.write_manifest(&sample_manifest("Org/Typed")).unwrap();
-        assert_eq!(store.get_model_type("Org/Typed").unwrap(), ModelType::Llm);
-        store.set_model_type("Org/Typed", ModelType::Vlm).unwrap();
-        assert_eq!(store.get_model_type("Org/Typed").unwrap(), ModelType::Vlm);
-    }
-
-    #[test]
-    fn set_model_type_missing_model_errors() {
-        let (store, _tmp) = make_store();
-        let err = store
-            .set_model_type("Org/Absent", ModelType::Vlm)
-            .unwrap_err();
-        assert!(matches!(err, Error::ModelNotFound(_)), "got {err:?}");
-    }
-
-    #[test]
-    fn remove_last_quant_deletes_whole_dir() {
-        // Single-quant manifest: rm "name:Q4_K_M" should nuke the whole dir
-        // rather than leave an orphan manifest with an empty ModelFile map.
-        // Also guards against the Windows os-error-267 regression (colon in path).
-        let (store, _tmp) = make_store();
-        store
-            .write_manifest(&sample_manifest("Org/WithQuant"))
-            .unwrap();
-        store.remove("Org/WithQuant:Q4_K_M").unwrap();
-        assert!(!store.cfg.model_dir("Org/WithQuant").exists());
-    }
-
-    fn multi_quant_manifest(name: &str) -> ModelManifest {
-        let mut m = sample_manifest(name);
-        m.model_file.insert(
-            "Q8_0".to_string(),
-            ModelFileInfo {
-                name: "model-Q8_0.gguf".to_string(),
-                downloaded: true,
-                size: 200,
-            },
-        );
-        m.mmproj_file = ModelFileInfo {
-            name: "mmproj.gguf".to_string(),
-            downloaded: true,
-            size: 50,
-        };
-        m
-    }
-
-    fn touch(p: &std::path::Path) {
-        fs::write(p, b"x").unwrap();
-    }
-
-    #[test]
-    fn remove_quant_keeps_other_quants_and_shared_files() {
-        let (store, _tmp) = make_store();
-        let m = multi_quant_manifest("Org/Multi");
-        store.write_manifest(&m).unwrap();
-        let dir = store.cfg.model_dir("Org/Multi");
-        touch(&dir.join("model-Q4_K_M.gguf"));
-        touch(&dir.join("model-Q8_0.gguf"));
-        touch(&dir.join("mmproj.gguf"));
-
-        store.remove("Org/Multi:Q4_K_M").unwrap();
-
-        assert!(dir.exists());
-        assert!(!dir.join("model-Q4_K_M.gguf").exists());
-        assert!(dir.join("model-Q8_0.gguf").exists());
-        assert!(dir.join("mmproj.gguf").exists());
-        let after = store.get_manifest("Org/Multi").unwrap();
-        assert!(!after.model_file.contains_key("Q4_K_M"));
-        assert!(after.model_file.contains_key("Q8_0"));
-    }
-
-    #[test]
-    fn remove_unknown_quant_errors() {
-        let (store, _tmp) = make_store();
-        store
-            .write_manifest(&multi_quant_manifest("Org/Multi2"))
-            .unwrap();
-        let err = store.remove("Org/Multi2:Q2_K").unwrap_err();
-        assert!(matches!(err, Error::QuantNotFound(..)), "got {err:?}");
-        // Nothing should have been touched.
-        assert!(store
-            .cfg
-            .model_dir("Org/Multi2")
-            .join(MANIFEST_FILE)
-            .exists());
-    }
-
-    #[test]
-    fn clean_returns_count() {
-        let (store, _tmp) = make_store();
-        store.write_manifest(&sample_manifest("Org/D")).unwrap();
-        store.write_manifest(&sample_manifest("Org/E")).unwrap();
-        let n = store.clean().unwrap();
-        assert_eq!(n, 2);
-    }
-
-    #[test]
-    fn list_skips_inflight() {
-        let (store, _tmp) = make_store();
-        // write a valid manifest + an inflight marker in the same dir
-        store.write_manifest(&sample_manifest("Org/F")).unwrap();
-        let dir = store.cfg.model_dir("Org/F");
-        fs::create_dir_all(dir.join(INFLIGHT_DIR)).unwrap();
-        let list = store.list().unwrap();
-        assert!(list.iter().all(|m| m.name != "Org/F"));
+        let listed: Vec<String> = store.list().unwrap().into_iter().map(|m| m.name).collect();
+        assert_eq!(listed, ["Org/Done"]);
     }
 
     #[test]
     fn list_skips_corrupted() {
-        let (store, _tmp) = make_store();
-        store.write_manifest(&sample_manifest("Org/Good")).unwrap();
+        let (store, _tmp) = stored(&["Org/Good"]);
         let bad_dir = store.cfg.model_dir("Org/Bad");
         fs::create_dir_all(&bad_dir).unwrap();
         fs::write(bad_dir.join(MANIFEST_FILE), "not valid json").unwrap();
-        let list = store.list().unwrap();
-        assert_eq!(list.len(), 1);
-        assert_eq!(list[0].name, "Org/Good");
+        let listed: Vec<String> = store.list().unwrap().into_iter().map(|m| m.name).collect();
+        assert_eq!(listed, ["Org/Good"]);
+    }
+
+    #[test]
+    fn set_model_type_roundtrips_and_requires_the_model() {
+        let (store, _tmp) = stored(&["Org/Typed"]);
+        assert_eq!(store.get_model_type("Org/Typed").unwrap(), ModelType::Llm);
+        store.set_model_type("Org/Typed", ModelType::Vlm).unwrap();
+        assert_eq!(store.get_model_type("Org/Typed").unwrap(), ModelType::Vlm);
+        let err = store
+            .set_model_type("Org/Absent", ModelType::Vlm)
+            .unwrap_err();
+        assert!(matches!(err, Error::ModelNotFound(_)), "{err:?}");
+    }
+
+    #[test]
+    fn remove_whole_model_or_its_last_quant_deletes_the_dir() {
+        // "name:quant" for the last quant must not leave an empty ModelFile
+        // (and must not put a colon in a Windows path, os error 267).
+        let (store, _tmp) = stored(&["Org/C", "Org/WithQuant"]);
+        for (name, arg) in [
+            ("Org/C", "Org/C"),
+            ("Org/WithQuant", "Org/WithQuant:Q4_K_M"),
+        ] {
+            store.remove(arg).unwrap();
+            assert!(!store.cfg.model_dir(name).exists(), "{arg}");
+        }
+    }
+
+    #[test]
+    fn remove_quant_keeps_other_quants_and_shared_files() {
+        let (store, _tmp) = temp_store();
+        let mut m = sample("Org/Multi");
+        m.model_file
+            .insert("Q8_0".into(), file_info("model-Q8_0.gguf", 200));
+        m.mmproj_file = file_info("mmproj.gguf", 50);
+        store.write_manifest(&m).unwrap();
+        let dir = store.cfg.model_dir("Org/Multi");
+        for f in ["model-Q4_K_M.gguf", "model-Q8_0.gguf", "mmproj.gguf"] {
+            fs::write(dir.join(f), b"x").unwrap();
+        }
+
+        let err = store.remove("Org/Multi:Q2_K").unwrap_err();
+        assert!(matches!(err, Error::QuantNotFound(..)), "{err:?}");
+        assert!(dir.join(MANIFEST_FILE).exists());
+
+        store.remove("Org/Multi:Q4_K_M").unwrap();
+        assert!(!dir.join("model-Q4_K_M.gguf").exists());
+        assert!(dir.join("model-Q8_0.gguf").exists());
+        assert!(dir.join("mmproj.gguf").exists());
+        let quants: Vec<String> = store
+            .get_manifest("Org/Multi")
+            .unwrap()
+            .model_file
+            .into_keys()
+            .collect();
+        assert_eq!(quants, ["Q8_0"]);
+    }
+
+    #[test]
+    fn clean_returns_count() {
+        let (store, _tmp) = stored(&["Org/D", "Org/E"]);
+        assert_eq!(store.clean().unwrap(), 2);
     }
 
     #[test]
     fn rejects_invalid_names() {
-        let (store, _tmp) = make_store();
+        let (store, _tmp) = temp_store();
         assert!(store.get_manifest("../etc").is_err());
         assert!(store.remove("a/..").is_err());
         assert!(store.model_file_path("Org/Foo", "../outside").is_err());
@@ -671,38 +543,37 @@ mod tests {
 
     #[test]
     fn rejects_oversized_manifest() {
-        let (store, _tmp) = make_store();
+        let (store, _tmp) = temp_store();
         let dir = store.cfg.model_dir("Org/Huge");
         fs::create_dir_all(&dir).unwrap();
-        let big = "x".repeat((MANIFEST_MAX_BYTES + 1) as usize);
-        fs::write(dir.join(MANIFEST_FILE), big).unwrap();
-        // Size-capped reader will truncate, then JSON parse fails — either way, Err.
+        fs::write(
+            dir.join(MANIFEST_FILE),
+            "x".repeat(MANIFEST_MAX_BYTES as usize + 1),
+        )
+        .unwrap();
         assert!(store.get_manifest("Org/Huge").is_err());
     }
 
     #[test]
     fn legacy_qairt_manifest_migrates_on_read_and_rewrites_disk() {
-        let (store, _tmp) = make_store();
+        let (store, _tmp) = temp_store();
         let dir = store.cfg.model_dir("qualcomm/Legacy");
         fs::create_dir_all(&dir).unwrap();
         let legacy = r#"{
             "Name":"qualcomm/Legacy","ModelName":"legacy","ModelType":"llm",
             "PluginId":"qairt","Precision":"W4A16",
-            "ModelFile":{"N/A":{"Name":"model-00.bin","Downloaded":true,"Size":10}},
-            "MMProjFile":{"Name":"","Downloaded":false,"Size":0},
-            "TokenizerFile":{"Name":"","Downloaded":false,"Size":0},
-            "ExtraFiles":[]
+            "ModelFile":{"N/A":{"Name":"model-00.bin","Downloaded":true,"Size":10}}
         }"#;
         fs::write(dir.join(MANIFEST_FILE), legacy).unwrap();
 
         let loaded = store.get_manifest("qualcomm/Legacy").unwrap();
         assert_eq!(loaded.precision, "");
-        assert!(loaded.model_file.contains_key("W4A16"));
-        assert!(!loaded.model_file.contains_key("N/A"));
+        assert_eq!(loaded.model_file.keys().collect::<Vec<_>>(), ["W4A16"]);
 
         let on_disk = fs::read_to_string(dir.join(MANIFEST_FILE)).unwrap();
-        assert!(on_disk.contains(r#""W4A16":"#), "on-disk: {on_disk}");
-        assert!(!on_disk.contains(r#""N/A""#), "on-disk: {on_disk}");
-        assert!(!on_disk.contains(r#""Precision""#), "on-disk: {on_disk}");
+        assert!(on_disk.contains(r#""W4A16":"#), "{on_disk}");
+        for gone in [r#""N/A""#, r#""Precision""#] {
+            assert!(!on_disk.contains(gone), "{gone} in {on_disk}");
+        }
     }
 }

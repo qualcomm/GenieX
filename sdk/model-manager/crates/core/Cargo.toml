@@ -15,6 +15,12 @@ rustls = { workspace = true }
 async-trait = { workspace = true }
 url = { workspace = true }
 flate2 = { workspace = true }
+tempfile = { version = "3", optional = true }
+wiremock = { workspace = true, optional = true }
+zip = { workspace = true, optional = true }
+
+[features]
+test-support = ["dep:tempfile", "dep:wiremock", "dep:zip"]
 
 # On Android, rustls-platform-verifier requires JNI-side init (JavaVM +
 # Context) plus a Kotlin companion library before any TLS handshake, or it
@@ -29,8 +35,8 @@ rustls-platform-verifier = { workspace = true }
 webpki-roots = { workspace = true }
 
 [dev-dependencies]
+model-manager-core = { path = ".", features = ["test-support"] }
 tempfile = "3"
 wiremock = { workspace = true }
 tokio = { workspace = true, features = ["test-util", "net"] }
 zip = { workspace = true }
-flate2 = { workspace = true }

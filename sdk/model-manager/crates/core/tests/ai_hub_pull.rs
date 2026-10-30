@@ -1,223 +1,138 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! End-to-end AI Hub pull against a wiremock'd server.
-//!
-//! Serves three protojson documents (manifest.json, release-assets.json,
-//! platform.json) plus a real zip containing a STORED `.bin` shard and
-//! a DEFLATE tokenizer. Confirms the resulting model directory matches
-//! what the Go CLI's `Store.PullZipAsset` would produce, *without the
-//! zip ever landing on disk*: entrypoint basename in
-//! `ModelFile[<precision>]`, extras populated, plugin_id = `"qairt"`.
+//! End-to-end AI Hub pull against a wiremock'd release: the zip is
+//! range-read straight into a flat model dir and never lands on disk.
 
-use std::io::Write;
-use std::sync::Arc;
-use std::time::Duration;
-
-use model_manager_core::config::StoreConfig;
+use model_manager_core::error::Result;
 use model_manager_core::pull::pull_with_source;
 use model_manager_core::source::ai_hub::{list_supported_chipsets, AiHubConfig, AiHubSource};
 use model_manager_core::store::Store;
-use model_manager_core::transport::{HttpTransport, ReqwestTransport, TransportConfig};
-use tempfile::tempdir;
-use wiremock::matchers::{method, path};
-use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+use model_manager_core::test_support::{
+    build_zip, fast_transport, mount_ranged, temp_store, ZipMethod,
+};
+use serde_json::json;
+use wiremock::MockServer;
 
-fn fast_transport() -> Arc<dyn HttpTransport> {
-    Arc::new(
-        ReqwestTransport::with_config(TransportConfig {
-            connect_timeout: Some(Duration::from_secs(2)),
-            read_timeout: Some(Duration::from_secs(5)),
-            retries: Some(0),
-            retry_backoff: Some(Duration::from_millis(10)),
-            proxy_override: None,
-        })
-        .unwrap(),
-    )
+const VERSION: &str = "v0.99.0";
+
+fn release(server: &MockServer) -> String {
+    format!("{}/qai-hub-models/releases/{VERSION}", server.uri())
 }
 
-fn parse_range(req: &Request) -> (u64, u64) {
-    let hdr = req
-        .headers
-        .get("range")
-        .expect("Range header")
-        .to_str()
-        .unwrap();
-    let rest = hdr.strip_prefix("bytes=").unwrap();
-    let (s, e) = rest.split_once('-').unwrap();
-    let start: u64 = s.parse().unwrap();
-    let end: u64 = e.parse().unwrap();
-    (start, end - start + 1)
+fn rel_path(at: &str) -> String {
+    format!("/qai-hub-models/releases/{VERSION}/{at}")
 }
 
-async fn install_static(server: &MockServer, p: &str, body: Vec<u8>) {
-    Mock::given(method("HEAD"))
-        .and(path(p.to_string()))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .append_header("Content-Length", body.len().to_string())
-                .append_header("Accept-Ranges", "bytes"),
-        )
-        .mount(server)
-        .await;
-
-    let body_arc = Arc::new(body);
-    let body_cl = body_arc.clone();
-    Mock::given(method("GET"))
-        .and(path(p.to_string()))
-        .respond_with(move |req: &Request| {
-            let (start, len) = parse_range(req);
-            let slice = body_cl[start as usize..(start + len) as usize].to_vec();
-            ResponseTemplate::new(206).set_body_bytes(slice)
-        })
-        .mount(server)
-        .await;
-}
-
-/// Build a zip whose `.bin` entrypoint is STORED and tokenizer is
-/// DEFLATE. This exercises both `BytesSource::HttpRange` and
-/// `BytesSource::HttpDeflate` in the same pull.
-fn build_zip() -> Vec<u8> {
-    let mut buf: Vec<u8> = Vec::new();
-    {
-        let cursor = std::io::Cursor::new(&mut buf);
-        let mut zw = zip::ZipWriter::new(cursor);
-        let stored: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Stored);
-        zw.start_file("weights/model-00.bin", stored).unwrap();
-        zw.write_all(b"BIN_SHARD_CONTENTS").unwrap();
-        let deflated: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
-        zw.start_file("tokenizer.json", deflated).unwrap();
-        // Enough repetition to actually compress.
-        zw.write_all(&vec![b'{'; 4096]).unwrap();
-        zw.finish().unwrap();
+/// Serve a one-model `testnet` release with `chipsets` and `assets`.
+async fn serve_release(
+    server: &MockServer,
+    chipsets: serde_json::Value,
+    assets: serde_json::Value,
+) {
+    let base = release(server);
+    let manifest = json!({
+        "platform_url": format!("{base}/platform.json"),
+        "models": [{
+            "id": "testnet",
+            "display_name": "TestNet",
+            "domain": "MODEL_DOMAIN_GENERATIVE_AI",
+            "manifest_urls": { "release_assets": format!("{base}/models/testnet/release-assets.json") },
+        }],
+    });
+    let docs = [
+        ("manifest.json", manifest),
+        ("platform.json", json!({ "chipsets": chipsets })),
+        (
+            "models/testnet/release-assets.json",
+            json!({ "model_id": "testnet", "assets": assets }),
+        ),
+    ];
+    for (at, doc) in docs {
+        mount_ranged(server, &rel_path(at), doc.to_string()).await;
     }
-    buf
+}
+
+fn config(server: &MockServer, chipset: &str, cache: &std::path::Path) -> AiHubConfig {
+    AiHubConfig {
+        endpoint: format!("{}/qai-hub-models", server.uri()),
+        version: VERSION.to_string(),
+        chipset: chipset.to_string(),
+        cache_dir: cache.join("aihub-cache"),
+        skip_cache: true,
+    }
+}
+
+async fn pull_testnet(
+    server: &MockServer,
+    chipset: &str,
+) -> (Result<()>, Store, tempfile::TempDir) {
+    let (store, tmp) = temp_store();
+    let transport = fast_transport();
+    let src = AiHubSource::with_transport(
+        "TestNet".to_string(),
+        "tests/TestNet".to_string(),
+        config(server, chipset, tmp.path()),
+        transport.clone(),
+    );
+    let res = pull_with_source(&store, "tests/TestNet", Box::new(src), transport, None).await;
+    (res, store, tmp)
 }
 
 #[tokio::test]
 async fn ai_hub_pull_writes_manifest_and_extracts_flat() {
     let server = MockServer::start().await;
-    let base = server.uri();
-    let version = "v0.99.0";
-
-    let manifest_json = format!(
-        r#"{{
-          "platform_url": "{base}/qai-hub-models/releases/{version}/platform.json",
-          "models": [
-            {{
-              "id": "testnet",
-              "display_name": "TestNet",
-              "domain": "MODEL_DOMAIN_GENERATIVE_AI",
-              "manifest_urls": {{
-                "release_assets": "{base}/qai-hub-models/releases/{version}/models/testnet/release-assets.json"
-              }}
-            }}
-          ]
-        }}"#
-    );
-    let platform_json = r#"{
-      "chipsets": [
-        { "name": "SM8650", "aliases": ["Snapdragon 8 Gen 3", "sd8g3"] }
-      ]
-    }"#;
-    let zip_bytes = build_zip();
-    let asset_url =
-        format!("{base}/qai-hub-models/releases/{version}/models/testnet/assets/SM8650.zip");
-    let release_assets_json = format!(
-        r#"{{
-          "model_id": "testnet",
-          "assets": [
-            {{
-              "chipset": "SM8650",
-              "runtime": "RUNTIME_GENIEX_QAIRT",
-              "precision": "PRECISION_W4A16",
-              "download_url": "{asset_url}",
-              "uncompressed_size": {}
-            }}
-          ]
-        }}"#,
-        zip_bytes.len()
-    );
-
-    install_static(
+    let zip = build_zip(&[
+        (
+            "weights/model-00.bin",
+            b"BIN_SHARD_CONTENTS",
+            ZipMethod::Stored,
+        ),
+        ("tokenizer.json", &[b'{'; 4096], ZipMethod::Deflate),
+    ]);
+    let asset_url = format!("{}/models/testnet/assets/SM8650.zip", release(&server));
+    serve_release(
         &server,
-        &format!("/qai-hub-models/releases/{version}/manifest.json"),
-        manifest_json.into_bytes(),
+        json!([{ "name": "SM8650", "aliases": ["Snapdragon 8 Gen 3", "sd8g3"] }]),
+        json!([{
+            "chipset": "SM8650",
+            "runtime": "RUNTIME_GENIEX_QAIRT",
+            "precision": "PRECISION_W4A16",
+            "download_url": asset_url,
+            "uncompressed_size": zip.len(),
+        }]),
     )
     .await;
-    install_static(
-        &server,
-        &format!("/qai-hub-models/releases/{version}/platform.json"),
-        platform_json.as_bytes().to_vec(),
-    )
-    .await;
-    install_static(
-        &server,
-        &format!("/qai-hub-models/releases/{version}/models/testnet/release-assets.json"),
-        release_assets_json.into_bytes(),
-    )
-    .await;
-    install_static(
-        &server,
-        &format!("/qai-hub-models/releases/{version}/models/testnet/assets/SM8650.zip"),
-        zip_bytes.clone(),
-    )
-    .await;
+    mount_ranged(&server, &rel_path("models/testnet/assets/SM8650.zip"), zip).await;
 
-    let tmp = tempdir().unwrap();
-    let store_cfg = StoreConfig::new(tmp.path().to_path_buf());
-    let store = Store::new(store_cfg).unwrap();
+    let (res, store, tmp) = pull_testnet(&server, "sd8g3").await;
+    res.expect("ai hub pull");
 
-    let cfg = AiHubConfig {
-        endpoint: format!("{base}/qai-hub-models"),
-        version: version.to_string(),
-        chipset: "sd8g3".to_string(),
-        cache_dir: tmp.path().join("aihub-cache"),
-        skip_cache: true,
-    };
-
-    let transport = fast_transport();
-    let src = AiHubSource::with_transport(
-        "TestNet".to_string(),
-        "tests/TestNet".to_string(),
-        cfg,
-        transport.clone(),
-    );
-    pull_with_source(&store, "tests/TestNet", Box::new(src), transport, None)
-        .await
-        .expect("ai hub pull");
-
-    // Flat-extracted payload + synthesised manifest, no zip on disk.
     let model_dir = tmp.path().join("models/tests/TestNet");
-    assert!(
-        model_dir.join("model-00.bin").exists(),
-        "entrypoint .bin missing"
-    );
-    assert!(
-        model_dir.join("tokenizer.json").exists(),
-        "extra tokenizer missing"
-    );
-    let entries: Vec<_> = std::fs::read_dir(&model_dir)
+    let mut on_disk: Vec<String> = std::fs::read_dir(&model_dir)
         .unwrap()
         .flatten()
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .collect();
+    on_disk.sort();
+    assert!(on_disk.contains(&"model-00.bin".to_string()), "{on_disk:?}");
     assert!(
-        !entries.iter().any(|n| n.ends_with(".zip")),
-        "no zip should exist on disk after range-read pipeline: {entries:?}",
+        on_disk.contains(&"tokenizer.json".to_string()),
+        "{on_disk:?}"
     );
+    assert!(!on_disk.iter().any(|n| n.ends_with(".zip")), "{on_disk:?}");
 
     let mf = store.get_manifest("tests/TestNet").unwrap();
-    assert_eq!(mf.plugin_id, "qairt");
-    assert_eq!(mf.precision, "");
-    let entry = mf.model_file.get("W4A16").expect("W4A16 quant entry");
+    assert_eq!(
+        (mf.plugin_id.as_str(), mf.precision.as_str()),
+        ("qairt", "")
+    );
+    let entry = &mf.model_file["W4A16"];
     assert_eq!(entry.name, "model-00.bin");
     assert!(entry.downloaded);
     assert!(
         mf.extra_files.iter().any(|f| f.name == "tokenizer.json"),
-        "tokenizer.json missing from extras: {:?}",
+        "{:?}",
         mf.extra_files
     );
 }
@@ -225,120 +140,50 @@ async fn ai_hub_pull_writes_manifest_and_extracts_flat() {
 #[tokio::test]
 async fn ai_hub_pull_errors_when_chipset_unknown() {
     let server = MockServer::start().await;
-    let base = server.uri();
-    let version = "v0.99.0";
-
-    let manifest_json = format!(
-        r#"{{
-          "platform_url": "{base}/qai-hub-models/releases/{version}/platform.json",
-          "models": [
-            {{
-              "id": "testnet",
-              "display_name": "TestNet",
-              "domain": "MODEL_DOMAIN_GENERATIVE_AI",
-              "manifest_urls": {{
-                "release_assets": "{base}/qai-hub-models/releases/{version}/models/testnet/release-assets.json"
-              }}
-            }}
-          ]
-        }}"#
-    );
-    let platform_json = r#"{ "chipsets": [ { "name": "SM8650", "aliases": [] } ] }"#;
-    // Legacy runtime enum on purpose: AI Hub still publishes `RUNTIME_GENIE`
-    // for some models, so the selector must keep accepting it.
-    let release_assets_json = format!(
-        r#"{{
-          "model_id": "testnet",
-          "assets": [
-            {{
-              "chipset": "SM8650",
-              "runtime": "RUNTIME_GENIE",
-              "precision": "PRECISION_FP16",
-              "download_url": "{base}/unused.zip"
-            }}
-          ]
-        }}"#
-    );
-
-    install_static(
+    serve_release(
         &server,
-        &format!("/qai-hub-models/releases/{version}/manifest.json"),
-        manifest_json.into_bytes(),
-    )
-    .await;
-    install_static(
-        &server,
-        &format!("/qai-hub-models/releases/{version}/platform.json"),
-        platform_json.as_bytes().to_vec(),
-    )
-    .await;
-    install_static(
-        &server,
-        &format!("/qai-hub-models/releases/{version}/models/testnet/release-assets.json"),
-        release_assets_json.into_bytes(),
+        json!([{ "name": "SM8650", "aliases": [] }]),
+        json!([{
+            "chipset": "SM8650",
+            "runtime": "RUNTIME_GENIE",
+            "precision": "PRECISION_FP16",
+            "download_url": format!("{}/unused.zip", server.uri()),
+        }]),
     )
     .await;
 
-    let tmp = tempdir().unwrap();
-    let store_cfg = StoreConfig::new(tmp.path().to_path_buf());
-    let store = Store::new(store_cfg).unwrap();
-
-    let cfg = AiHubConfig {
-        endpoint: format!("{base}/qai-hub-models"),
-        version: version.to_string(),
-        chipset: "UnknownChip".to_string(),
-        cache_dir: tmp.path().join("aihub-cache"),
-        skip_cache: true,
-    };
-
-    let transport = fast_transport();
-    let src = AiHubSource::with_transport(
-        "TestNet".to_string(),
-        "tests/TestNet".to_string(),
-        cfg,
-        transport.clone(),
-    );
-    let err = pull_with_source(&store, "tests/TestNet", Box::new(src), transport, None)
-        .await
-        .expect_err("expected chipset mismatch error");
-    assert!(
-        format!("{err}").contains("not available"),
-        "unexpected error: {err}"
-    );
+    let (res, _store, _tmp) = pull_testnet(&server, "UnknownChip").await;
+    let err = res.expect_err("expected chipset mismatch error");
+    assert!(err.to_string().contains("not available"), "{err}");
 }
 
 #[tokio::test]
 async fn list_supported_chipsets_returns_names_and_aliases() {
     let server = MockServer::start().await;
-    let base = server.uri();
-    let version = "v0.99.0";
-
-    let platform_json = r#"{
-      "chipsets": [
+    let platform = json!({ "chipsets": [
         { "name": "SM8650", "aliases": ["Snapdragon 8 Gen 3", "sd8g3"] },
-        { "name": "SM8750", "aliases": ["sd8elite"] }
-      ]
-    }"#;
-    install_static(
-        &server,
-        &format!("/qai-hub-models/releases/{version}/platform.json"),
-        platform_json.as_bytes().to_vec(),
-    )
-    .await;
+        { "name": "SM8750", "aliases": ["sd8elite"] },
+    ]});
+    mount_ranged(&server, &rel_path("platform.json"), platform.to_string()).await;
 
-    let tmp = tempdir().unwrap();
-    let cfg = AiHubConfig {
-        endpoint: format!("{base}/qai-hub-models"),
-        version: version.to_string(),
-        chipset: String::new(),
-        cache_dir: tmp.path().join("aihub-cache"),
-        skip_cache: true,
-    };
-
-    let chipsets = list_supported_chipsets(&cfg).await.expect("list chipsets");
-    assert_eq!(chipsets.len(), 2);
-    assert_eq!(chipsets[0].name, "SM8650");
-    assert_eq!(chipsets[0].aliases, vec!["Snapdragon 8 Gen 3", "sd8g3"]);
-    assert_eq!(chipsets[1].name, "SM8750");
-    assert_eq!(chipsets[1].aliases, vec!["sd8elite"]);
+    let tmp = tempfile::tempdir().unwrap();
+    let chipsets = list_supported_chipsets(&config(&server, "", tmp.path()))
+        .await
+        .expect("list chipsets");
+    let got: Vec<(&str, Vec<&str>)> = chipsets
+        .iter()
+        .map(|c| {
+            (
+                c.name.as_str(),
+                c.aliases.iter().map(String::as_str).collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        got,
+        [
+            ("SM8650", vec!["Snapdragon 8 Gen 3", "sd8g3"]),
+            ("SM8750", vec!["sd8elite"])
+        ]
+    );
 }
