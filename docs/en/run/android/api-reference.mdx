@@ -252,6 +252,54 @@ sealed class LlmStreamResult {
 
 ---
 
+## **JEV structured decisions**
+
+`com.geniex.sdk.jev.JevDecider` runs typed, non-executing structured decisions over an existing `LlmWrapper` or `VlmWrapper`. Create it with the runtime ID used to load the model:
+
+```kotlin
+val llmDecider = JevDecider.forLlm(llmWrapper, runtimeId = "llama_cpp")
+val vlmDecider = JevDecider.forVlm(vlmWrapper, runtimeId = "qairt")
+```
+
+When `runtimeId == "llama_cpp"`, JEV supplies a generated GBNF grammar as defense in depth. Other runtimes use unconstrained generation followed by the same strict host-side validation. A caller-supplied sampler grammar is never forwarded.
+
+### Factory methods
+
+| Method | Description |
+|---|---|
+| `JevDecider.forLlm(wrapper, runtimeId, config)` | Creates a decider for text-only requests. Images are rejected. |
+| `JevDecider.forVlm(wrapper, runtimeId, config)` | Creates a decider that can include image paths. |
+
+`config` defaults to `GenerationConfig()`. JEV disables streaming, clears audio inputs, owns the sampler grammar, and uses 128 output tokens unless the request specifies `maxTokens`.
+
+### Decision methods
+
+All methods are suspending functions and return Kotlin `Result` values.
+
+| Method | Input | Output | Description |
+|---|---|---|---|
+| `classify(spec)` | `ClassificationSpec` | `Result<ClassificationResult>` | Select exactly one ID from `labels`. |
+| `choose(spec)` | `MultipleChoiceSpec` | `Result<MultipleChoiceResult>` | Select a validated number of stable option IDs. |
+| `triage(spec)` | `TriageSpec` | `Result<TriageResult>` | Produce the built-in customer-support triage record. |
+
+```kotlin
+val result = llmDecider.choose(
+    JevDecider.MultipleChoiceSpec(
+        options = listOf(
+            JevDecider.Option("retry", "Try the operation again"),
+            JevDecider.Option("escalate", "Send to a specialist"),
+        ),
+        instructions = "Choose the next support action.",
+        context = "The first attempt failed.",
+    )
+).getOrThrow()
+println(result.selectedIds)
+```
+
+Labels and option IDs must be nonblank and unique. Returned objects must contain exactly the expected fields, duplicate top-level keys and trailing content are rejected, and every returned identifier is checked against the caller's allowed set. Requested confidence is a self-reported value from 0 through 1.
+
+---
+
 ## **llama.cpp (GGUF models)**
 
 Runs any GGUF model on CPU, Adreno GPU, or Hexagon NPU. Compute-unit selection is controlled by `compute_unit`.

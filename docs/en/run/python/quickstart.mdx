@@ -170,6 +170,35 @@ A photograph captures a stunning landscape featuring a traditional Japanese temp
 "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
 ```
 
+## **Structured decisions (JEV)**
+
+`JevDecider` turns an already-loaded LLM or VLM into a typed classifier. It accepts only caller-supplied identifiers, strictly validates the returned JSON, and exposes no browser, shell, or other side-effect API. On `llama_cpp`, it also generates a GBNF grammar to constrain decoding; other runtimes still receive the same strict host-side validation.
+
+```python
+from geniex import AutoModelForCausalLM
+from geniex.jev import ClassificationSpec, JevDecider
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B-GGUF",
+    device_map="auto",
+)
+decider = JevDecider(model)
+
+result = decider.classify(ClassificationSpec(
+    labels=["billing", "technical", "account"],
+    instructions="Classify the support request by destination queue.",
+    context="I was charged twice for my subscription.",
+    request_confidence=True,
+))
+print(result.label)
+if result.confidence:
+    print(result.confidence.value, result.confidence.provenance)
+
+model.close()
+```
+
+JEV also provides `choose()` for one or more stable option IDs and `triage()` for the built-in customer-support triage record. For image-assisted decisions, load a VLM and pass absolute paths through the spec's `images` field. See [JEV structured decisions](/en/run/python/api-reference#jev-structured-decisions) for every type and validation rule.
+
 ## **Jupyter notebook walkthrough**
 
 For laptop users, follow the step-by-step Jupyter notebook at [examples/python/windows.ipynb](https://github.com/qualcomm/GenieX/blob/main/examples/python/windows.ipynb) — it covers environment setup and inference end-to-end.

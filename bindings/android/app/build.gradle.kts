@@ -100,4 +100,6 @@ tasks.matching { it.name == "preBuild" }.configureEach {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
+    testImplementation(libs.junit)
+    testImplementation("org.json:json:20240303")
 }

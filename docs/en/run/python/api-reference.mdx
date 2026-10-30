@@ -161,6 +161,59 @@ Same as [`GenieXLLM`](#geniexllm).
 
 ---
 
+## JEV structured decisions
+
+`JevDecider` runs typed, non-executing structured decisions over an existing [`GenieXLLM`](#geniexllm) or [`GenieXVLM`](#geniexvlm). Import JEV types from `geniex.jev`:
+
+```python
+from geniex.jev import ClassificationSpec, JevDecider
+
+decider = JevDecider(model)
+result = decider.classify(ClassificationSpec(
+    labels=["safe", "review"],
+    instructions="Choose the appropriate review route.",
+    context="Caller-supplied content to classify",
+))
+print(result.label)
+```
+
+### `JevDecider(model, generation_config=None)`
+
+| Parameter | Type | Description |
+|---|---|---|
+| `model` | `GenieXLLM \| GenieXVLM` | An already-loaded model. |
+| `generation_config` | `GenerationConfig \| None` | Optional sampler defaults. JEV always disables streaming, owns the grammar, and defaults to 128 output tokens. |
+
+For `llama_cpp` models, JEV supplies a generated GBNF grammar as defense in depth. For other runtimes, generation is unconstrained but the same exact-shape and semantic validation is applied locally. Caller-supplied grammar is never forwarded.
+
+### Decision methods
+
+| Method | Input | Output | Description |
+|---|---|---|---|
+| `classify(spec)` | `ClassificationSpec` | `ClassificationResult` | Select exactly one ID from `labels`. |
+| `choose(spec)` | `MultipleChoiceSpec` | `MultipleChoiceResult` | Select a validated number of stable option IDs. |
+| `triage(spec)` | `TriageSpec` | `TriageResult` | Produce the built-in customer-support triage record. |
+
+`ClassificationSpec` accepts `labels`, `instructions`, optional `context`, `images`, `max_new_tokens`, and `request_confidence`.
+
+`MultipleChoiceSpec` accepts `options: list[Option]`, `instructions`, optional `context`, `images`, `max_new_tokens`, `min_selections`, `max_selections`, and `request_confidence`. When both selection bounds are zero, exactly one option is selected.
+
+`TriageSpec` accepts `message`, optional `images`, and `max_new_tokens`. It returns `intent`, `is_urgent`, `frustration`, `refund_requested`, and `churn_risk`.
+
+### Result and helper types
+
+| Type | Attributes |
+|---|---|
+| `Option` | `id: str`, `text: str` |
+| `ClassificationResult` | `label: str`, `confidence: Confidence \| None` |
+| `MultipleChoiceResult` | `selected_ids: list[str]`, `confidence: Confidence \| None` |
+| `Confidence` | `value: float` from 0 through 1, `provenance: str` (`"self_reported"`) |
+| `TriageResult` | `intent`, `is_urgent`, `frustration`, `refund_requested`, `churn_risk` |
+
+Labels and option IDs must be nonempty and unique. Text-only models reject images. Returned objects must contain exactly the expected fields, duplicate keys and trailing content are rejected, and every returned identifier is checked against the caller's allowed set.
+
+---
+
 ## ModelTokenizer
 
 Accessed via `model.tokenizer`. Provides a `transformers`-compatible chat template interface.

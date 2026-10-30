@@ -94,6 +94,29 @@ The flow is the same regardless of model: **init the SDK → pull weights → lo
   </Step>
 </Steps>
 
+## **Structured decisions (JEV)**
+
+Wrap the loaded model with `JevDecider` to return a typed, strictly validated decision instead of free-form text. Pass the same runtime ID used to create the wrapper so JEV can apply a generated grammar on `llama_cpp`; all runtimes receive host-side JSON and identifier validation.
+
+```kotlin
+import com.geniex.sdk.jev.JevDecider
+
+val decider = JevDecider.forLlm(llm, runtimeId = "llama_cpp")
+val result = decider.classify(
+    JevDecider.ClassificationSpec(
+        labels = listOf("billing", "technical", "account"),
+        instructions = "Classify the support request by destination queue.",
+        context = "I was charged twice for my subscription.",
+        requestConfidence = true,
+    )
+).getOrThrow()
+
+println(result.label)
+result.confidence?.let { println("${it.value} (${it.provenance})") }
+```
+
+Use `JevDecider.forVlm(vlm, runtimeId)` for image-assisted decisions. JEV also provides `choose()` for stable option IDs and `triage()` for the built-in customer-support triage record. See [JEV structured decisions](/en/run/android/api-reference#jev-structured-decisions) for the full API.
+
 ## **Switching models**
 
 Swapping models is mostly a matter of changing the `model_name` and the `runtime_id`. There are two runtimes:
