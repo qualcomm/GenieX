@@ -34,7 +34,7 @@ use url::Url;
 use crate::error::{parse_manifest, Error, Result};
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
 use crate::manifest_builder::extract_quant;
-use crate::transport::{build_tls_config, HttpTransport, USER_AGENT};
+use crate::transport::{build_tls_config, fetch_capped, HttpTransport, USER_AGENT};
 
 use super::{basename, BytesSource, FileSpec, ModelSource, Plan};
 
@@ -236,22 +236,6 @@ impl DockerHubSource {
         ))
         .map_err(|e| Error::invalid_url("docker blob url", e))
     }
-
-    async fn fetch_blob(&self, digest: &str, token: Option<&str>, cap: u64) -> Result<Vec<u8>> {
-        let url = self.blob_url(digest)?;
-        let head = self.transport.head(&url, token).await?;
-        if head.size > cap {
-            return Err(Error::Hub(format!(
-                "blob {digest} is {} bytes, exceeds {cap} byte cap",
-                head.size
-            )));
-        }
-        let mut buf: Vec<u8> = Vec::with_capacity(head.size as usize);
-        self.transport
-            .get_range(&url, token, 0, head.size, &mut buf)
-            .await?;
-        Ok(buf)
-    }
 }
 
 #[async_trait]
@@ -286,9 +270,13 @@ impl ModelSource for DockerHubSource {
                 self.repo
             ))
         })?;
-        let config_bytes = self
-            .fetch_blob(&config_desc.digest, token.as_deref(), MAX_CONFIG_BYTES)
-            .await?;
+        let config_bytes = fetch_capped(
+            self.transport.as_ref(),
+            &self.blob_url(&config_desc.digest)?,
+            token.as_deref(),
+            MAX_CONFIG_BYTES,
+        )
+        .await?;
         let config_file: DockerConfigFile = parse_manifest("docker model config", &config_bytes)?;
 
         let is_layer_per_file = config_desc.media_type == media::CONFIG_V02;
@@ -417,7 +405,7 @@ fn build_plan(
             desc.annotations
                 .get(ANNOTATION_FILEPATH)
                 .filter(|fp| !fp.is_empty())
-                .map(|fp| basename(fp))
+                .map(|fp| basename(fp).to_string())
                 .unwrap_or(fallback)
         } else {
             fallback
@@ -488,11 +476,9 @@ fn build_plan(
     } else {
         ModelType::Llm
     };
-    let model_name = repo.rsplit('/').next().unwrap_or(repo).to_string();
-
     let manifest = ModelManifest {
         name: repo.to_string(),
-        model_name,
+        model_name: basename(repo).to_string(),
         model_type,
         plugin_id: "llama_cpp".to_string(),
         precision: config.quantization.clone(),

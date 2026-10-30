@@ -29,50 +29,77 @@ use async_trait::async_trait;
 use url::Url;
 
 use crate::error::{Error, Result};
-use crate::manifest::{ModelFileInfo, ModelManifest};
+use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
+
+pub(crate) const QAIRT_PLUGIN_ID: &str = "qairt";
 
 /// Last path component of `path`, treating both `/` and `\` as separators.
-/// Empty path returns an empty string.
-pub(crate) fn basename(path: &str) -> String {
-    path.rsplit(['/', '\\']).next().unwrap_or("").to_string()
+pub(crate) fn basename(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or("")
 }
 
-/// Split a flat list of `(name, T)` entries into a `model_file` map keyed
-/// by `"N/A"` (AI Hub / QAIRT layout) and an `extra_files` vec. The
-/// entrypoint is the lex-first entry whose name ends in `.bin`.
-///
-/// `size_of` extracts the on-disk size for each entry (kept generic so
-/// remote `ZipEntry` and local `(name, u64)` tuples both work).
-pub(crate) fn split_entrypoint_and_extras<T>(
-    entries: &[(String, T)],
-    missing_bin_err: impl FnOnce() -> String,
-    size_of: impl Fn(&T) -> i64,
-) -> Result<(HashMap<String, ModelFileInfo>, Vec<ModelFileInfo>)> {
-    let entrypoint_idx = entries
-        .iter()
-        .position(|(name, _)| name.to_ascii_lowercase().ends_with(".bin"))
-        .ok_or_else(|| Error::Hub(missing_bin_err()))?;
-    let (entry_name, entry_val) = &entries[entrypoint_idx];
-    let mut model_file = HashMap::new();
-    model_file.insert(
-        "N/A".to_string(),
-        ModelFileInfo {
-            name: entry_name.clone(),
-            downloaded: true,
-            size: size_of(entry_val),
-        },
-    );
-    let extra_files: Vec<ModelFileInfo> = entries
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| *i != entrypoint_idx)
-        .map(|(_, (name, val))| ModelFileInfo {
-            name: name.clone(),
-            downloaded: true,
-            size: size_of(val),
+/// One [`FileSpec`] per file the manifest marks downloaded; `spec` maps a
+/// file name to its size and byte source.
+pub(crate) fn files_for_manifest(
+    manifest: &ModelManifest,
+    mut spec: impl FnMut(&str) -> Result<(u64, BytesSource)>,
+) -> Result<Vec<FileSpec>> {
+    manifest
+        .downloaded_files()
+        .filter(|f| !f.name.is_empty())
+        .map(|f| {
+            let (size, bytes) = spec(&f.name)?;
+            Ok(FileSpec {
+                name: f.name.clone(),
+                size,
+                bytes,
+            })
         })
-        .collect();
-    Ok((model_file, extra_files))
+        .collect()
+}
+
+/// QAIRT plan over every file in `files`: the first `.bin` is the
+/// entrypoint, keyed by `precision` (`"N/A"` when unknown); the rest are
+/// extras.
+pub(crate) fn qairt_plan(
+    name: &str,
+    model_name: &str,
+    model_type: ModelType,
+    precision: &str,
+    files: Vec<FileSpec>,
+    no_bin: impl FnOnce() -> String,
+) -> Result<Plan> {
+    let entry = files
+        .iter()
+        .position(|f| f.name.to_ascii_lowercase().ends_with(".bin"))
+        .ok_or_else(|| Error::Hub(no_bin()))?;
+    let info = |f: &FileSpec| ModelFileInfo {
+        name: f.name.clone(),
+        downloaded: true,
+        size: f.size as i64,
+    };
+    let key = if precision.is_empty() {
+        "N/A"
+    } else {
+        precision
+    };
+    let manifest = ModelManifest {
+        name: name.to_string(),
+        model_name: model_name.to_string(),
+        model_type,
+        plugin_id: QAIRT_PLUGIN_ID.to_string(),
+        precision: String::new(),
+        model_file: HashMap::from([(key.to_string(), info(&files[entry]))]),
+        mmproj_file: ModelFileInfo::default(),
+        tokenizer_file: ModelFileInfo::default(),
+        extra_files: files
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != entry)
+            .map(|(_, f)| info(f))
+            .collect(),
+    };
+    Ok(Plan { manifest, files })
 }
 
 #[async_trait]

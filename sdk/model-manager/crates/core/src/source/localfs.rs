@@ -22,20 +22,17 @@ use url::Url;
 
 use crate::error::{Error, Result};
 use crate::gguf;
-use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
+use crate::manifest::{ModelManifest, ModelType};
 use crate::manifest_builder::{infer_manifest_from_names, untagged_gguf_names, ManifestHint};
 use crate::transport::{HttpTransport, LocalFileTransport};
 
-use super::ai_hub::remote_zip::{fetch_central_directory, Method};
-use super::ai_hub::{
-    classify_from_metadata_json, precision_from_metadata_json, prepare_flat_entries,
-};
-use super::{BytesSource, FileSpec, ModelSource, Plan};
+use super::ai_hub::remote_zip::{fetch_central_directory, Method, ZipEntry};
+use super::ai_hub::{parse_archive_metadata, prepare_flat_entries, zip_files, Archive};
+use super::{basename, files_for_manifest, qairt_plan, BytesSource, FileSpec, ModelSource, Plan};
 
 const MANIFEST_FILE: &str = "geniex.json";
 const CONFIG_FILE: &str = "config.json";
 const AIHUB_METADATA_FILE: &str = "metadata.json";
-const QAIRT_PLUGIN_ID: &str = "qairt";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum LocalKind {
@@ -70,36 +67,18 @@ fn detect_local_kind(path: &Path) -> Result<LocalKind> {
         )));
     }
 
-    let mut has_bin = false;
-    let mut has_metadata = false;
-    let mut has_gguf = false;
-    let mut has_safetensors = false;
-    for entry in fs::read_dir(path)?.flatten() {
-        let Ok(ft) = entry.file_type() else { continue };
-        if !ft.is_file() {
-            continue;
-        }
-        let Some(name) = entry.file_name().to_str().map(str::to_ascii_lowercase) else {
-            continue;
-        };
-        if name == AIHUB_METADATA_FILE {
-            has_metadata = true;
-        } else if name.ends_with(".bin") {
-            has_bin = true;
-        } else if name.ends_with(".gguf") {
-            has_gguf = true;
-        } else if name.ends_with(".safetensors") {
-            has_safetensors = true;
-        }
-    }
-
-    if has_metadata && has_bin {
+    let names: Vec<String> = list_files(path)?
+        .into_iter()
+        .map(|(n, _)| n.to_ascii_lowercase())
+        .collect();
+    let has = |ext: &str| names.iter().any(|n| n.ends_with(ext));
+    if has(".bin") && names.iter().any(|n| n == AIHUB_METADATA_FILE) {
         return Ok(LocalKind::AiHubExtracted);
     }
-    if has_gguf {
+    if has(".gguf") {
         return Ok(LocalKind::HfGguf);
     }
-    if has_safetensors {
+    if has(".safetensors") {
         return Err(Error::Hub(format!(
             "local path {} looks like a HuggingFace safetensors snapshot, \
              which is not supported as a local pull source yet",
@@ -120,6 +99,24 @@ fn has_extension(path: &Path, ext: &str) -> bool {
         .and_then(OsStr::to_str)
         .map(|e| e.eq_ignore_ascii_case(ext))
         .unwrap_or(false)
+}
+
+/// Regular files directly under `dir`, except `geniex.json`, sorted by name.
+fn list_files(dir: &Path) -> Result<Vec<(String, u64)>> {
+    let mut out = Vec::new();
+    for entry in fs::read_dir(dir)?.flatten() {
+        if !entry.file_type().is_ok_and(|t| t.is_file()) {
+            continue;
+        }
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        if name != MANIFEST_FILE {
+            out.push((name, entry.metadata().map(|m| m.len()).unwrap_or(0)));
+        }
+    }
+    out.sort();
+    Ok(out)
 }
 
 pub struct LocalFsSource {
@@ -150,293 +147,130 @@ impl ModelSource for LocalFsSource {
 }
 
 impl LocalFsSource {
-    /// HF / GGUF directory — the original `LocalFsSource` behaviour.
     fn plan_hf_gguf(&self) -> Result<Plan> {
-        let mut file_names: Vec<String> = Vec::new();
-        let mut sizes: HashMap<String, i64> = HashMap::new();
-        for entry in std::fs::read_dir(&self.source_dir)?.flatten() {
-            let ft = match entry.file_type() {
-                Ok(t) => t,
-                Err(_) => continue,
-            };
-            if !ft.is_file() {
-                continue;
-            }
-            if let Some(name) = entry.file_name().to_str().map(str::to_string) {
-                if name == MANIFEST_FILE {
-                    continue;
-                }
-                let size = std::fs::metadata(entry.path())
-                    .map(|m| m.len() as i64)
-                    .unwrap_or(-1);
-                sizes.insert(name.clone(), size);
-                file_names.push(name);
-            }
-        }
+        let listing = list_files(&self.source_dir)?;
+        let sizes: HashMap<String, i64> = listing
+            .iter()
+            .map(|(n, s)| (n.clone(), *s as i64))
+            .collect();
+        let names: Vec<String> = listing.into_iter().map(|(n, _)| n).collect();
 
         let manifest_path = self.source_dir.join(MANIFEST_FILE);
         let mut manifest: ModelManifest = if manifest_path.exists() {
-            let data = std::fs::read_to_string(&manifest_path)?;
-            serde_json::from_str(&data)?
+            serde_json::from_str(&fs::read_to_string(&manifest_path)?)?
         } else {
-            let mut infer_hint = self.hint.clone();
-            if file_names.iter().any(|n| n == CONFIG_FILE) {
-                infer_hint.config_json_bytes =
-                    std::fs::read(self.source_dir.join(CONFIG_FILE)).ok();
+            let mut hint = self.hint.clone();
+            if names.iter().any(|n| n == CONFIG_FILE) {
+                hint.config_json_bytes = fs::read(self.source_dir.join(CONFIG_FILE)).ok();
             }
-            for name in untagged_gguf_names(&file_names) {
+            for name in untagged_gguf_names(&names) {
                 if let Some(q) = gguf::quant_from_file(&self.source_dir.join(name)) {
-                    infer_hint.header_quants.insert(name.clone(), q);
+                    hint.header_quants.insert(name.clone(), q);
                 }
             }
-            infer_manifest_from_names(&self.model_name, &file_names, &sizes, infer_hint)?
+            infer_manifest_from_names(&self.model_name, &names, &sizes, hint)?
         };
         manifest.name = self.model_name.clone();
 
-        let mut files: Vec<FileSpec> = Vec::new();
-        let mut push = |name: &str| {
-            if name.is_empty() {
-                return;
-            }
+        let files = files_for_manifest(&manifest, |name| {
+            let size = sizes.get(name).copied().unwrap_or(0) as u64;
             let path = self.source_dir.join(name);
-            let size = sizes.get(name).copied().unwrap_or(-1).max(0) as u64;
-            files.push(FileSpec {
-                name: name.to_string(),
-                size,
-                bytes: BytesSource::Local { path },
-            });
-        };
-        for f in manifest.model_file.values() {
-            if f.downloaded {
-                push(&f.name);
-            }
-        }
-        if manifest.mmproj_file.downloaded {
-            push(&manifest.mmproj_file.name);
-        }
-        if manifest.tokenizer_file.downloaded {
-            push(&manifest.tokenizer_file.name);
-        }
-        for f in &manifest.extra_files {
-            if f.downloaded {
-                push(&f.name);
-            }
-        }
-
+            Ok((size, BytesSource::Local { path }))
+        })?;
         Ok(Plan { manifest, files })
     }
 
-    /// Already-extracted AI Hub asset on disk. Layout matches what
-    /// `aihub.ExtractFlat` produces: a flat directory containing one or
-    /// more `.bin` shards, a `metadata.json`, and assorted siblings.
+    /// Already-extracted AI Hub asset: a flat directory with one or more
+    /// `.bin` shards, a `metadata.json`, and assorted siblings.
     fn plan_ai_hub_extracted(&self) -> Result<Plan> {
-        let mut entries: Vec<(String, u64)> = Vec::new();
-        for entry in std::fs::read_dir(&self.source_dir)?.flatten() {
-            let ft = match entry.file_type() {
-                Ok(t) => t,
-                Err(_) => continue,
-            };
-            if !ft.is_file() {
-                continue;
-            }
-            let Some(name) = entry.file_name().to_str().map(str::to_string) else {
-                continue;
-            };
-            if name == MANIFEST_FILE {
-                continue;
-            }
-            let size = std::fs::metadata(entry.path())
-                .map(|m| m.len())
-                .unwrap_or(0);
-            entries.push((name, size));
-        }
-        if entries.is_empty() {
-            return Err(Error::Hub(format!(
-                "AI Hub directory {} is empty",
-                self.source_dir.display()
-            )));
-        }
-        // Lex-first `.bin` mirrors the remote AiHub puller.
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
-        let display = self.source_dir.display().to_string();
-        let (mut model_file, extra_files) = super::split_entrypoint_and_extras(
-            &entries,
-            || format!("AI Hub directory {display} has no .bin shard"),
-            |s| *s as i64,
-        )?;
-
-        let metadata_bytes = std::fs::read(self.source_dir.join(AIHUB_METADATA_FILE)).ok();
-        let model_type = metadata_bytes
-            .as_deref()
-            .and_then(classify_from_metadata_json)
-            .or_else(|| self.hint.model_type.clone())
-            .unwrap_or(ModelType::Llm);
-
-        // Key by real precision, matching the remote AI Hub puller (#1242).
-        if let Some(precision_label) = metadata_bytes
-            .as_deref()
-            .and_then(precision_from_metadata_json)
-        {
-            if let Some(entry) = model_file.remove("N/A") {
-                model_file.insert(precision_label, entry);
-            }
-        }
-
-        let manifest = ModelManifest {
-            name: self.model_name.clone(),
-            model_name: derive_model_name(&self.model_name),
-            model_type,
-            plugin_id: QAIRT_PLUGIN_ID.to_string(),
-            precision: String::new(),
-            model_file,
-            mmproj_file: ModelFileInfo::default(),
-            tokenizer_file: ModelFileInfo::default(),
-            extra_files,
-        };
-
-        let files: Vec<FileSpec> = entries
+        let files = list_files(&self.source_dir)?
             .into_iter()
-            .map(|(name, size)| {
-                let path = self.source_dir.join(&name);
-                FileSpec {
-                    name,
-                    size,
-                    bytes: BytesSource::Local { path },
-                }
+            .map(|(name, size)| FileSpec {
+                bytes: BytesSource::Local {
+                    path: self.source_dir.join(&name),
+                },
+                name,
+                size,
             })
             .collect();
-
-        Ok(Plan { manifest, files })
+        let metadata = fs::read(self.source_dir.join(AIHUB_METADATA_FILE)).ok();
+        self.qairt_plan(metadata, files, "directory")
     }
 
-    /// AI Hub `.zip` archive on disk. Reuses the trait-based ZIP64
-    /// parser from the remote source via a [`LocalFileTransport`].
-    /// STORED entries emit [`BytesSource::LocalRange`]; DEFLATE entries
-    /// emit [`BytesSource::LocalDeflate`].
+    /// AI Hub `.zip` on disk, parsed with the remote zip reader over a
+    /// [`LocalFileTransport`].
     async fn plan_ai_hub_zip(&self) -> Result<Plan> {
-        let zip_path = self.source_dir.clone();
-        let transport: Arc<dyn HttpTransport> = Arc::new(LocalFileTransport::open(&zip_path)?);
-        // The URL is unused by LocalFileTransport but the parser's
-        // signature requires one; pick a stable dummy that round-trips
-        // through `Url::parse`.
-        let dummy = Url::parse("file:///local-archive").expect("valid dummy url");
-        let raw = fetch_central_directory(&transport, &dummy).await?;
-        let flat = prepare_flat_entries(&raw)?;
-        if flat.is_empty() {
-            return Err(Error::Hub(format!(
-                "AI Hub archive {} contains no usable entries",
-                zip_path.display()
-            )));
-        }
+        let transport: Arc<dyn HttpTransport> =
+            Arc::new(LocalFileTransport::open(&self.source_dir)?);
+        let url = Url::parse("file:///local-archive").expect("static url");
+        let flat = prepare_flat_entries(&fetch_central_directory(&transport, &url).await?)?;
+        let metadata = read_metadata_json(&flat, transport.as_ref(), &url).await;
+        let files = zip_files(flat, &Archive::Local(self.source_dir.clone()));
+        self.qairt_plan(metadata, files, "archive")
+    }
 
-        // Read metadata.json out of the zip once, for both modality and precision.
-        let metadata_bytes = read_metadata_json_bytes(&flat, &transport, &dummy).await;
-        let model_type = metadata_bytes
+    fn qairt_plan(
+        &self,
+        metadata: Option<Vec<u8>>,
+        files: Vec<FileSpec>,
+        kind: &str,
+    ) -> Result<Plan> {
+        let (model_type, precision) = metadata
             .as_deref()
-            .and_then(classify_from_metadata_json)
+            .map(parse_archive_metadata)
+            .unwrap_or_default();
+        let model_type = model_type
             .or_else(|| self.hint.model_type.clone())
             .unwrap_or(ModelType::Llm);
-
-        let zip_display = zip_path.display().to_string();
-        let (mut model_file, extra_files) = super::split_entrypoint_and_extras(
-            &flat,
-            || format!("AI Hub archive {zip_display} has no .bin shard"),
-            |e| e.uncompressed_size as i64,
-        )?;
-
-        // Key by real precision, matching the remote AI Hub puller (#1242).
-        if let Some(precision_label) = metadata_bytes
-            .as_deref()
-            .and_then(precision_from_metadata_json)
-        {
-            if let Some(entry) = model_file.remove("N/A") {
-                model_file.insert(precision_label, entry);
-            }
-        }
-
-        let manifest = ModelManifest {
-            name: self.model_name.clone(),
-            model_name: derive_model_name(&self.model_name),
+        qairt_plan(
+            &self.model_name,
+            basename(&self.model_name),
             model_type,
-            plugin_id: QAIRT_PLUGIN_ID.to_string(),
-            precision: String::new(),
-            model_file,
-            mmproj_file: ModelFileInfo::default(),
-            tokenizer_file: ModelFileInfo::default(),
-            extra_files,
-        };
-
-        let files: Vec<FileSpec> = flat
-            .into_iter()
-            .map(|(name, e)| {
-                let bytes = match e.method {
-                    Method::Stored => BytesSource::LocalRange {
-                        path: zip_path.clone(),
-                        offset: e.payload_offset,
-                        len: e.compressed_size,
-                    },
-                    Method::Deflate => BytesSource::LocalDeflate {
-                        path: zip_path.clone(),
-                        offset: e.payload_offset,
-                        compressed_len: e.compressed_size,
-                    },
-                };
-                FileSpec {
-                    name,
-                    size: e.uncompressed_size,
-                    bytes,
-                }
-            })
-            .collect();
-
-        Ok(Plan { manifest, files })
+            &precision,
+            files,
+            || {
+                format!(
+                    "AI Hub {kind} {} has no .bin shard",
+                    self.source_dir.display()
+                )
+            },
+        )
     }
 }
 
-/// Slurp `metadata.json` out of a flat zip listing; `None` on any failure
-/// (missing entry, read/decode error) — callers derive modality and precision from the bytes.
-async fn read_metadata_json_bytes(
-    flat: &[(String, super::ai_hub::remote_zip::ZipEntry)],
-    transport: &Arc<dyn HttpTransport>,
+/// `metadata.json` out of a flat zip listing; `None` on any failure.
+async fn read_metadata_json(
+    flat: &[(String, ZipEntry)],
+    transport: &dyn HttpTransport,
     url: &Url,
 ) -> Option<Vec<u8>> {
     let (_, entry) = flat.iter().find(|(name, _)| name == AIHUB_METADATA_FILE)?;
-    let mut compressed: Vec<u8> = Vec::with_capacity(entry.compressed_size as usize);
+    let mut raw = Vec::with_capacity(entry.compressed_size as usize);
     transport
         .get_range(
             url,
             None,
             entry.payload_offset,
             entry.compressed_size,
-            &mut compressed,
+            &mut raw,
         )
         .await
         .ok()?;
-    let bytes: Vec<u8> = match entry.method {
-        Method::Stored => compressed,
+    match entry.method {
+        Method::Stored => Some(raw),
         Method::Deflate => {
-            use flate2::write::DeflateDecoder;
             use std::io::Write as _;
-            let mut buf: Vec<u8> = Vec::with_capacity(entry.uncompressed_size as usize);
-            let mut dec = DeflateDecoder::new(&mut buf);
-            dec.write_all(&compressed).ok()?;
-            dec.finish().ok()?;
-            buf
+            let mut dec = flate2::write::DeflateDecoder::new(Vec::new());
+            dec.write_all(&raw).ok()?;
+            dec.finish().ok()
         }
-    };
-    Some(bytes)
-}
-
-/// Last path component of `name` (the `org/repo` string). Mirrors
-/// what `infer_manifest_from_names` does so the on-disk `model_name`
-/// stays consistent across local-vs-remote pulls of the same model.
-fn derive_model_name(name: &str) -> String {
-    name.rsplit('/').next().unwrap_or(name).to_string()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::source::QAIRT_PLUGIN_ID;
     use crate::test_support::{build_zip, ZipMethod};
     use std::fs;
 

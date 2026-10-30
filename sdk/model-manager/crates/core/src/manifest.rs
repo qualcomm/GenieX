@@ -78,24 +78,15 @@ pub struct ModelManifest {
 }
 
 impl ModelManifest {
+    pub fn downloaded_files(&self) -> impl Iterator<Item = &ModelFileInfo> {
+        self.model_file
+            .values()
+            .chain([&self.mmproj_file, &self.tokenizer_file])
+            .chain(&self.extra_files)
+            .filter(|f| f.downloaded)
+    }
+
     pub fn total_size(&self) -> i64 {
-        let mut total = 0i64;
-        for f in self.model_file.values() {
-            if f.downloaded {
-                total += f.size;
-            }
-        }
-        if self.mmproj_file.downloaded {
-            total += self.mmproj_file.size;
-        }
-        if self.tokenizer_file.downloaded {
-            total += self.tokenizer_file.size;
-        }
-        for f in &self.extra_files {
-            if f.downloaded {
-                total += f.size;
-            }
-        }
-        total
+        self.downloaded_files().map(|f| f.size).sum()
     }
 }

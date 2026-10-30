@@ -219,23 +219,7 @@ mod windows {
         if !out.status.success() {
             return None;
         }
-        parse_reg_query(&String::from_utf8_lossy(&out.stdout))
-    }
-
-    fn parse_reg_query(stdout: &str) -> Option<String> {
-        for line in stdout.lines() {
-            let trimmed = line.trim_start();
-            if !trimmed.starts_with(VALUE) {
-                continue;
-            }
-            if let Some((_, value)) = trimmed.split_once("REG_SZ") {
-                let v = value.trim();
-                if !v.is_empty() {
-                    return Some(v.to_string());
-                }
-            }
-        }
-        None
+        parse_reg_sz(&String::from_utf8_lossy(&out.stdout), VALUE)
     }
 
     #[cfg(test)]
@@ -248,10 +232,10 @@ mod windows {
 HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\r\n    \
 ProcessorNameString    REG_SZ    Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz\r\n\r\n";
             assert_eq!(
-                parse_reg_query(cpu).as_deref(),
+                parse_reg_sz(cpu, VALUE).as_deref(),
                 Some("Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz")
             );
-            assert!(parse_reg_query("").is_none());
+            assert!(parse_reg_sz("", VALUE).is_none());
 
             let gpu = "\
 HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-...}\\0000\r\n    \

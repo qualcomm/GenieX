@@ -144,3 +144,14 @@ pub struct ChipsetInfo {
     #[serde(default)]
     pub aliases: Vec<String>,
 }
+
+impl ChipsetInfo {
+    /// The reference device when the bucket names one, else the canonical id.
+    pub fn display_name(&self) -> &str {
+        if self.reference_device.is_empty() {
+            &self.name
+        } else {
+            &self.reference_device
+        }
+    }
+}

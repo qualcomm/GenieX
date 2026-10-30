@@ -29,7 +29,7 @@ use crate::manifest::ModelManifest;
 use crate::manifest_builder::{infer_manifest_from_names, ManifestHint};
 use crate::transport::{build_tls_config, USER_AGENT};
 
-use super::{BytesSource, FileSpec, ModelSource, Plan};
+use super::{files_for_manifest, BytesSource, ModelSource, Plan};
 
 pub const DEFAULT_MODELSCOPE_ENDPOINT: &str = "https://modelscope.cn";
 const DEFAULT_REVISION: &str = "master";
@@ -271,62 +271,16 @@ impl ModelSource for ModelScopeSource {
         }
         manifest.name = self.repo.clone();
 
-        // Only materialise files the manifest actually uses; readmes and
-        // unused quantization shards in the listing are left behind.
-        let mut files: Vec<FileSpec> = Vec::new();
-        let mut push = |name: &str, size: Option<u64>| -> Result<()> {
-            if name.is_empty() {
-                return Ok(());
-            }
-            let path = by_basename
+        let files = files_for_manifest(&manifest, |name| {
+            let (path, size) = by_basename
                 .get(name)
-                .map(|(p, _)| p.clone())
-                .unwrap_or_else(|| name.to_string());
-            let url = self.file_url(&path)?;
-            files.push(FileSpec {
-                name: name.to_string(),
-                size: size.unwrap_or(0),
-                bytes: BytesSource::Http {
-                    url,
-                    auth: self.token.clone(),
-                },
-            });
-            Ok(())
-        };
-
-        for f in manifest.model_file.values() {
-            if f.downloaded {
-                push(&f.name, size_for(&file_sizes, &f.name))?;
-            }
-        }
-        if manifest.mmproj_file.downloaded {
-            push(
-                &manifest.mmproj_file.name,
-                size_for(&file_sizes, &manifest.mmproj_file.name),
-            )?;
-        }
-        if manifest.tokenizer_file.downloaded {
-            push(
-                &manifest.tokenizer_file.name,
-                size_for(&file_sizes, &manifest.tokenizer_file.name),
-            )?;
-        }
-        for f in &manifest.extra_files {
-            if f.downloaded {
-                push(&f.name, size_for(&file_sizes, &f.name))?;
-            }
-        }
-
+                .map(|(p, s)| (p.as_str(), s.unwrap_or(0)))
+                .unwrap_or((name, 0));
+            let url = self.file_url(path)?;
+            let auth = self.token.clone();
+            Ok((size, BytesSource::Http { url, auth }))
+        })?;
         Ok(Plan { manifest, files })
-    }
-}
-
-fn size_for(map: &HashMap<String, i64>, name: &str) -> Option<u64> {
-    let v = map.get(name).copied().unwrap_or(-1);
-    if v < 0 {
-        None
-    } else {
-        Some(v as u64)
     }
 }
 

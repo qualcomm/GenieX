@@ -18,9 +18,9 @@ use crate::error::{Error, Result};
 use crate::gguf;
 use crate::manifest::ModelManifest;
 use crate::manifest_builder::{infer_manifest_from_names, untagged_gguf_names, ManifestHint};
-use crate::transport::{HttpTransport, ReqwestTransport};
+use crate::transport::{fetch_capped, HttpTransport, ReqwestTransport};
 
-use super::{BytesSource, FileSpec, ModelSource, Plan};
+use super::{files_for_manifest, BytesSource, ModelSource, Plan};
 
 pub const DEFAULT_HF_ENDPOINT: &str = "https://huggingface.co";
 const MANIFEST_FILE: &str = "geniex.json";
@@ -74,18 +74,7 @@ impl HfSource {
     }
 
     async fn fetch_small(&self, url: &Url, limit: u64) -> Result<Vec<u8>> {
-        let head = self.transport.head(url, self.token.as_deref()).await?;
-        if head.size > limit {
-            return Err(Error::Hub(format!(
-                "file at {url} is {} bytes, exceeds {limit} byte cap",
-                head.size
-            )));
-        }
-        let mut buf: Vec<u8> = Vec::with_capacity(head.size as usize);
-        self.transport
-            .get_range(url, self.token.as_deref(), 0, head.size, &mut buf)
-            .await?;
-        Ok(buf)
+        fetch_capped(self.transport.as_ref(), url, self.token.as_deref(), limit).await
     }
 
     /// Recover the quant of GGUFs whose filename doesn't carry one. Usually
@@ -181,58 +170,13 @@ impl ModelSource for HfSource {
         };
         manifest.name = self.repo.clone();
 
-        // Only materialise files the manifest actually uses; readmes and
-        // unused quantization shards in `siblings` are left behind.
-        let mut files: Vec<FileSpec> = Vec::new();
-        let mut push = |name: &str, size: Option<u64>| -> Result<()> {
-            if name.is_empty() {
-                return Ok(());
-            }
+        let files = files_for_manifest(&manifest, |name| {
+            let size = file_sizes.get(name).copied().unwrap_or(0).max(0) as u64;
             let url = self.file_url(name)?;
-            files.push(FileSpec {
-                name: name.to_string(),
-                size: size.unwrap_or(0),
-                bytes: BytesSource::Http {
-                    url,
-                    auth: self.token.clone(),
-                },
-            });
-            Ok(())
-        };
-
-        for f in manifest.model_file.values() {
-            if f.downloaded {
-                push(&f.name, size_for(&file_sizes, &f.name))?;
-            }
-        }
-        if manifest.mmproj_file.downloaded {
-            push(
-                &manifest.mmproj_file.name,
-                size_for(&file_sizes, &manifest.mmproj_file.name),
-            )?;
-        }
-        if manifest.tokenizer_file.downloaded {
-            push(
-                &manifest.tokenizer_file.name,
-                size_for(&file_sizes, &manifest.tokenizer_file.name),
-            )?;
-        }
-        for f in &manifest.extra_files {
-            if f.downloaded {
-                push(&f.name, size_for(&file_sizes, &f.name))?;
-            }
-        }
-
+            let auth = self.token.clone();
+            Ok((size, BytesSource::Http { url, auth }))
+        })?;
         Ok(Plan { manifest, files })
-    }
-}
-
-fn size_for(map: &HashMap<String, i64>, name: &str) -> Option<u64> {
-    let v = map.get(name).copied().unwrap_or(-1);
-    if v < 0 {
-        None
-    } else {
-        Some(v as u64)
     }
 }
 

@@ -24,18 +24,16 @@ use url::Url;
 
 use crate::config::StoreConfig;
 use crate::error::{parse_manifest, Error, Result};
-use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
-use crate::transport::{HttpTransport, ReqwestTransport};
+use crate::manifest::ModelType;
+use crate::transport::{fetch_capped, HttpTransport, ReqwestTransport};
 
 use self::dto::{
     ChipsetInfo, InfoJson, ManifestModelEntry, ModelReleaseAssets, PlatformInfo, ReleaseManifest,
 };
 use self::remote_zip::{fetch_central_directory, Method, ZipEntry};
-// `is_qairt_runtime` is shared with the download selector so the listing
-// filter and the asset picker cannot drift apart.
-use self::selector::{is_qairt_runtime, match_asset, UnavailableChipset};
+use self::selector::{is_qairt_runtime, match_asset};
 
-use super::{basename, BytesSource, FileSpec, ModelSource, Plan};
+use super::{basename, qairt_plan, BytesSource, FileSpec, ModelSource, Plan};
 
 const MANIFEST_FILENAME: &str = "manifest.json";
 const PLATFORM_FILENAME: &str = "platform.json";
@@ -142,19 +140,7 @@ pub async fn list_supported_chipsets(cfg: &AiHubConfig) -> Result<Vec<ChipsetInf
         Some(allowed) => filter_chipsets_for_host(&plat, allowed),
         None => plat.chipsets,
     };
-    chipsets.sort_by(|a, b| {
-        let an = if a.reference_device.is_empty() {
-            &a.name
-        } else {
-            &a.reference_device
-        };
-        let bn = if b.reference_device.is_empty() {
-            &b.name
-        } else {
-            &b.reference_device
-        };
-        an.to_ascii_lowercase().cmp(&bn.to_ascii_lowercase())
-    });
+    chipsets.sort_by_key(|c| c.display_name().to_ascii_lowercase());
     Ok(chipsets)
 }
 
@@ -353,98 +339,80 @@ impl ModelSource for AiHubSource {
             self.cfg.chipset.clone()
         };
 
-        let asset = match match_asset(&release_assets, &platform, &chipset) {
-            Ok(a) => a,
-            Err(UnavailableChipset {
-                requested,
-                available,
-            }) => {
-                return Err(Error::ChipsetUnavailable {
-                    requested,
-                    available,
-                });
-            }
-        };
-
+        let asset = match_asset(&release_assets, &platform, &chipset)?;
         let download_url = Url::parse(&asset.download_url).map_err(|e| {
             Error::invalid_url(format!("asset download_url {:?}", asset.download_url), e)
         })?;
 
-        // Only the ZIP64 footer + central directory are fetched here;
-        // per-entry payloads stay remote until the executor requests
-        // them.
         let raw_entries = fetch_central_directory(&self.transport, &download_url).await?;
-        let flat_entries = prepare_flat_entries(&raw_entries)?;
-
-        // Lex-first `.bin` matches the Go CLI's `ExtractFlat`.
-        let (mut model_file, extra_files) = super::split_entrypoint_and_extras(
-            &flat_entries,
-            || "no .bin shard in archive".to_string(),
-            |e| e.uncompressed_size as i64,
-        )?;
-
-        let precision_label = asset
+        let files = zip_files(
+            prepare_flat_entries(&raw_entries)?,
+            &Archive::Remote(download_url),
+        );
+        let precision = asset
             .precision
             .strip_prefix("PRECISION_")
-            .unwrap_or(&asset.precision)
-            .to_string();
-
-        // Key by real precision so /v1/models ids round-trip to /v1/chat/completions (#1242).
-        if !precision_label.is_empty() {
-            if let Some(entry) = model_file.remove("N/A") {
-                model_file.insert(precision_label.clone(), entry);
-            }
-        }
-
-        // `domain` alone can't distinguish Qwen2.5-VL from text-only LLMs
-        // (both report MODEL_DOMAIN_GENERATIVE_AI), so we also read the
-        // per-model info.json. Failure is non-fatal: `classify_ai_hub`
-        // falls back to the domain-only signal.
+            .unwrap_or(&asset.precision);
+        // GENERATIVE_AI covers both Qwen2.5-VL and text-only LLMs; info.json
+        // breaks the tie and is optional.
         let info = self.fetch_info_json(entry).await;
-        let model_type = classify_ai_hub(info.as_ref(), entry);
-        let manifest = ModelManifest {
-            name: self.model_name.clone(),
-            model_name: if entry.id.is_empty() {
-                self.display_name.clone()
-            } else {
-                entry.id.clone()
-            },
-            model_type,
-            plugin_id: "qairt".to_string(),
-            precision: String::new(),
-            model_file,
-            mmproj_file: ModelFileInfo::default(),
-            tokenizer_file: ModelFileInfo::default(),
-            extra_files,
+        let model_name = if entry.id.is_empty() {
+            &self.display_name
+        } else {
+            &entry.id
         };
-
-        let files: Vec<FileSpec> = flat_entries
-            .into_iter()
-            .map(|(name, e)| {
-                let bytes = match e.method {
-                    Method::Stored => BytesSource::HttpRange {
-                        url: download_url.clone(),
-                        auth: None,
-                        offset: e.payload_offset,
-                        len: e.compressed_size,
-                    },
-                    Method::Deflate => BytesSource::HttpDeflate {
-                        url: download_url.clone(),
-                        auth: None,
-                        offset: e.payload_offset,
-                        compressed_len: e.compressed_size,
-                    },
-                };
-                FileSpec {
-                    name,
-                    size: e.uncompressed_size,
-                    bytes,
-                }
-            })
-            .collect();
-
-        Ok(Plan { manifest, files })
+        qairt_plan(
+            &self.model_name,
+            model_name,
+            classify_ai_hub(info.as_ref(), entry),
+            precision,
+            files,
+            || "no .bin shard in archive".to_string(),
+        )
     }
+}
+
+pub(crate) enum Archive {
+    Remote(Url),
+    Local(PathBuf),
+}
+
+/// One [`FileSpec`] per flattened zip entry, read in place from `archive`.
+pub(crate) fn zip_files(flat: Vec<(String, ZipEntry)>, archive: &Archive) -> Vec<FileSpec> {
+    flat.into_iter()
+        .map(|(name, e)| {
+            let (offset, len) = (e.payload_offset, e.compressed_size);
+            let bytes = match (archive, e.method) {
+                (Archive::Remote(url), Method::Stored) => BytesSource::HttpRange {
+                    url: url.clone(),
+                    auth: None,
+                    offset,
+                    len,
+                },
+                (Archive::Remote(url), Method::Deflate) => BytesSource::HttpDeflate {
+                    url: url.clone(),
+                    auth: None,
+                    offset,
+                    compressed_len: len,
+                },
+                (Archive::Local(path), Method::Stored) => BytesSource::LocalRange {
+                    path: path.clone(),
+                    offset,
+                    len,
+                },
+                (Archive::Local(path), Method::Deflate) => BytesSource::LocalDeflate {
+                    path: path.clone(),
+                    offset,
+                    compressed_len: len,
+                },
+            };
+            FileSpec {
+                name,
+                size: e.uncompressed_size,
+                bytes,
+            }
+        })
+        .collect()
 }
 
 /// Reduce the raw central-directory entries to a flat list of
@@ -460,7 +428,7 @@ pub(crate) fn prepare_flat_entries(raw: &[ZipEntry]) -> Result<Vec<(String, ZipE
         if is_macos_metadata(&e.name) {
             continue;
         }
-        let base = basename(&e.name);
+        let base = basename(&e.name).to_string();
         if base.is_empty() || base == "." || base == ".." {
             continue;
         }
@@ -569,18 +537,7 @@ fn write_cache(path: &Path, data: &[u8]) {
 
 async fn fetch_direct(url: &str, transport: &Arc<dyn HttpTransport>) -> Result<Vec<u8>> {
     let parsed = Url::parse(url).map_err(|e| Error::invalid_url(format!("url {url:?}"), e))?;
-    let head = transport.head(&parsed, None).await?;
-    if head.size > MAX_INDEX_BYTES {
-        return Err(Error::Hub(format!(
-            "index at {url} is {} bytes, exceeds {MAX_INDEX_BYTES}-byte cap",
-            head.size
-        )));
-    }
-    let mut buf: Vec<u8> = Vec::with_capacity(head.size as usize);
-    transport
-        .get_range(&parsed, None, 0, head.size, &mut buf)
-        .await?;
-    Ok(buf)
+    fetch_capped(transport.as_ref(), &parsed, None, MAX_INDEX_BYTES).await
 }
 
 /// Lowercase substrings in `info.description` / `info.headline` that
@@ -600,45 +557,21 @@ const AI_HUB_VLM_KEYWORDS: &[&str] = &[
     "vlm",
 ];
 
-/// Modality classifier driven by the `metadata.json` shipped *inside*
-/// an AI Hub archive. Mirrors the Go CLI's `detectModelTypeFromDir`:
-/// only `genie.supports_vision` is consulted today. Returns `None` when
-/// the bytes don't parse or the field is absent so the caller can fall
-/// back to a default (LLM) — matching the Go behaviour where an absent
-/// or unparseable file degrades to LLM rather than aborting the pull.
-pub(crate) fn classify_from_metadata_json(bytes: &[u8]) -> Option<ModelType> {
-    #[derive(serde::Deserialize)]
-    struct Outer {
-        #[serde(default)]
-        genie: Option<GenieSection>,
-    }
-    #[derive(serde::Deserialize)]
-    struct GenieSection {
-        #[serde(default)]
-        supports_vision: Option<bool>,
-    }
-    let outer: Outer = serde_json::from_slice(bytes).ok()?;
-    let supports_vision = outer.genie?.supports_vision?;
-    Some(if supports_vision {
-        ModelType::Vlm
-    } else {
-        ModelType::Llm
-    })
-}
-
-/// `metadata.json`'s top-level `"precision"` (e.g. `"w4a16"`); `None` if missing/empty.
-pub(crate) fn precision_from_metadata_json(bytes: &[u8]) -> Option<String> {
-    #[derive(serde::Deserialize)]
-    struct Outer {
-        #[serde(default)]
-        precision: String,
-    }
-    let outer: Outer = serde_json::from_slice(bytes).ok()?;
-    if outer.precision.is_empty() {
-        None
-    } else {
-        Some(outer.precision)
-    }
+/// `genie.supports_vision` and `precision` from the `metadata.json` inside
+/// an AI Hub archive; each is absent when missing or mistyped.
+pub(crate) fn parse_archive_metadata(bytes: &[u8]) -> (Option<ModelType>, String) {
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(bytes) else {
+        return (None, String::new());
+    };
+    let model_type = v["genie"]["supports_vision"].as_bool().map(|vision| {
+        if vision {
+            ModelType::Vlm
+        } else {
+            ModelType::Llm
+        }
+    });
+    let precision = v["precision"].as_str().unwrap_or_default().to_string();
+    (model_type, precision)
 }
 
 /// Modality classifier for the AI Hub source. `domain == MULTIMODAL`

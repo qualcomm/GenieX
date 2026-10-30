@@ -15,7 +15,7 @@
 //!   entry, then pick the lex-first precision string for a deterministic
 //!   default. Best-effort tiebreaker; precision is not exposed over FFI.
 
-use super::dto::{AssetDetails, ModelReleaseAssets, PlatformInfo};
+use super::dto::{AssetDetails, ChipsetInfo, ModelReleaseAssets, PlatformInfo};
 use crate::error::{Error, Result};
 
 /// Runtime strings the public bucket uses for QAIRT (NPU) assets, in
@@ -51,93 +51,48 @@ pub fn is_domain_supported(domain: &str) -> bool {
     SUPPORTED_DOMAINS.contains(&domain)
 }
 
-/// Match a chipset alias (case-insensitive, trimmed) to its canonical name
-/// from `platform.json`. Returns an error if the chipset is not in the list.
-pub fn resolve_chipset(plat: &PlatformInfo, chipset: &str) -> Result<String> {
-    let target = chipset.trim().to_ascii_lowercase();
-    if target.is_empty() {
-        return Err(Error::Hub("empty chipset".to_string()));
-    }
-    for cs in &plat.chipsets {
-        if cs.name.to_ascii_lowercase() == target
-            || cs.reference_device.to_ascii_lowercase() == target
-        {
-            return Ok(cs.name.clone());
-        }
-        for a in &cs.aliases {
-            if a.to_ascii_lowercase() == target {
-                return Ok(cs.name.clone());
-            }
-        }
-    }
-    Err(Error::Hub(format!(
-        "chipset {chipset:?} not found in platform.json"
-    )))
-}
-
-/// Resolve a chipset alias (case-insensitive, trimmed) to the reference
-/// device name AI Hub displays for it, e.g. `"qualcomm-snapdragon-x-elite"`
-/// or `"sm8650"` → `"Snapdragon X Elite CRD"`. Falls back to the canonical
-/// id when the bucket omits a reference device. Returns `None` when the
-/// chipset is not in `platform.json`.
-pub fn resolve_chipset_display(plat: &PlatformInfo, chipset: &str) -> Option<String> {
-    let target = chipset.trim().to_ascii_lowercase();
+fn find_chipset<'a>(plat: &'a PlatformInfo, chipset: &str) -> Option<&'a ChipsetInfo> {
+    let target = chipset.trim();
     if target.is_empty() {
         return None;
     }
-    for cs in &plat.chipsets {
-        let hit = cs.name.to_ascii_lowercase() == target
-            || cs.reference_device.to_ascii_lowercase() == target
-            || cs.aliases.iter().any(|a| a.to_ascii_lowercase() == target);
-        if hit {
-            if cs.reference_device.is_empty() {
-                return Some(cs.name.clone());
-            }
-            return Some(cs.reference_device.clone());
-        }
-    }
-    None
+    plat.chipsets.iter().find(|cs| {
+        std::iter::once(&cs.name)
+            .chain([&cs.reference_device])
+            .chain(&cs.aliases)
+            .any(|n| n.eq_ignore_ascii_case(target))
+    })
 }
 
-/// Pick one asset matching `(chipset, QAIRT runtime)`. Returns the list of
-/// supported chipsets (for actionable error messages) when nothing matches.
+/// Match a chipset alias (case-insensitive, trimmed) to its canonical name
+/// from `platform.json`.
+pub fn resolve_chipset(plat: &PlatformInfo, chipset: &str) -> Result<String> {
+    find_chipset(plat, chipset)
+        .map(|cs| cs.name.clone())
+        .ok_or_else(|| Error::Hub(format!("chipset {chipset:?} not found in platform.json")))
+}
+
+/// Resolve a chipset alias to the name AI Hub displays for it, e.g.
+/// `"sm8650"` → `"Snapdragon X Elite CRD"`; `None` when it isn't listed.
+pub fn resolve_chipset_display(plat: &PlatformInfo, chipset: &str) -> Option<String> {
+    find_chipset(plat, chipset).map(|cs| cs.display_name().to_string())
+}
+
+/// Pick one asset matching `(chipset, QAIRT runtime)`. A miss lists the
+/// chipsets the model does ship installable assets for.
 pub fn match_asset<'a>(
     ra: &'a ModelReleaseAssets,
     plat: &PlatformInfo,
     chipset: &str,
-) -> std::result::Result<&'a AssetDetails, UnavailableChipset> {
-    if ra.assets.is_empty() {
-        return Err(UnavailableChipset {
-            requested: chipset.to_string(),
-            available: Vec::new(),
-        });
-    }
-
-    let canonical = match resolve_chipset(plat, chipset) {
-        Ok(c) => c,
-        Err(_) => {
-            return Err(UnavailableChipset {
-                requested: chipset.to_string(),
-                available: collect_chipsets(ra, plat),
-            });
-        }
-    };
-
+) -> Result<&'a AssetDetails> {
+    let canonical = find_chipset(plat, chipset).map(|cs| cs.name.as_str());
     let mut candidates: Vec<&AssetDetails> = ra
         .assets
         .iter()
         .filter(|a| {
-            is_qairt_runtime(&a.runtime) && a.chipset.as_deref() == Some(canonical.as_str())
+            is_qairt_runtime(&a.runtime) && canonical.is_some() && a.chipset.as_deref() == canonical
         })
         .collect();
-
-    if candidates.is_empty() {
-        return Err(UnavailableChipset {
-            requested: chipset.to_string(),
-            available: collect_chipsets(ra, plat),
-        });
-    }
-
     // Prefer the newer runtime, then tiebreak on precision so the pick is
     // deterministic when a model publishes the same chipset under both.
     candidates.sort_by(|a, b| {
@@ -145,55 +100,37 @@ pub fn match_asset<'a>(
             .cmp(&runtime_rank(&b.runtime))
             .then_with(|| a.precision.cmp(&b.precision))
     });
-    Ok(candidates[0])
+    candidates
+        .first()
+        .copied()
+        .ok_or_else(|| Error::ChipsetUnavailable {
+            requested: chipset.to_string(),
+            available: installable_chipsets(ra, plat),
+        })
 }
 
-/// Collect the chipsets a model ships *installable* (QAIRT) assets for,
-/// rendered as the reference device names callers see in
-/// `list_supported_chipsets` (so error messages match the picker). Falls
-/// back to the canonical id when `platform.json` has no reference device
-/// for it.
-///
-/// Only accepted runtimes are counted: listing every chipset in
-/// `release-assets.json` regardless of runtime produced self-contradictory
-/// errors that named the very chipset the caller had just requested.
-fn collect_chipsets(ra: &ModelReleaseAssets, plat: &PlatformInfo) -> Vec<String> {
-    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    for a in ra.assets.iter().filter(|a| is_qairt_runtime(&a.runtime)) {
-        if let Some(cs) = a.chipset.as_deref() {
-            let display = plat
-                .chipsets
+/// Display names of the chipsets a model ships QAIRT assets for. Other
+/// runtimes are skipped so the hint never names an uninstallable chipset.
+fn installable_chipsets(ra: &ModelReleaseAssets, plat: &PlatformInfo) -> Vec<String> {
+    let names: std::collections::BTreeSet<String> = ra
+        .assets
+        .iter()
+        .filter(|a| is_qairt_runtime(&a.runtime))
+        .filter_map(|a| a.chipset.as_deref())
+        .map(|cs| {
+            plat.chipsets
                 .iter()
-                .find(|c| c.name == cs && !c.reference_device.is_empty())
-                .map(|c| c.reference_device.clone())
-                .unwrap_or_else(|| cs.to_string());
-            seen.insert(display);
-        }
-    }
-    seen.into_iter().collect()
-}
-
-#[derive(Debug)]
-pub struct UnavailableChipset {
-    pub requested: String,
-    pub available: Vec<String>,
-}
-
-impl std::fmt::Display for UnavailableChipset {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "device {:?} not available; model supports: {}",
-            self.requested,
-            self.available.join(", ")
-        )
-    }
+                .find(|c| c.name == cs)
+                .map_or(cs, |c| c.display_name())
+                .to_string()
+        })
+        .collect();
+    names.into_iter().collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::ai_hub::dto::ChipsetInfo;
 
     const QAIRT: &str = "RUNTIME_GENIEX_QAIRT";
     const GENIE: &str = "RUNTIME_GENIE";
@@ -361,7 +298,10 @@ mod tests {
         ];
         for (plat, published, want) in cases {
             let err = match_asset(&assets(published), &plat, "unknown").unwrap_err();
-            assert_eq!(err.available, want, "{published:?}");
+            let Error::ChipsetUnavailable { available, .. } = err else {
+                panic!("{err:?}");
+            };
+            assert_eq!(available, want, "{published:?}");
         }
     }
 }

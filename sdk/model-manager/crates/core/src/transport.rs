@@ -53,6 +53,24 @@ pub trait HttpTransport: Send + Sync {
     ) -> Result<()>;
 }
 
+/// GET a small object whole, refusing anything over `cap` bytes.
+pub(crate) async fn fetch_capped(
+    transport: &dyn HttpTransport,
+    url: &Url,
+    auth: Option<&str>,
+    cap: u64,
+) -> Result<Vec<u8>> {
+    let size = transport.head(url, auth).await?.size;
+    if size > cap {
+        return Err(Error::Hub(format!(
+            "{url} is {size} bytes, exceeds {cap} byte cap"
+        )));
+    }
+    let mut buf = Vec::with_capacity(size as usize);
+    transport.get_range(url, auth, 0, size, &mut buf).await?;
+    Ok(buf)
+}
+
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const DEFAULT_READ_TIMEOUT: Duration = Duration::from_secs(60);
 const DEFAULT_RETRIES: u32 = 3;

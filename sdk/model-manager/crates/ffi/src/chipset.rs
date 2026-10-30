@@ -53,14 +53,8 @@ pub extern "C" fn geniex_model_list_chipsets(out: *mut GenieXChipsetList) -> i32
         let infos: Vec<GenieXChipsetInfo> = chipsets
             .iter()
             .map(|c| {
-                // Surface reference_device as `name` and demote the canonical
-                // chipset id into the alias list; fall back to the id when no
-                // reference device exists.
-                let display = if c.reference_device.is_empty() {
-                    c.name.as_str()
-                } else {
-                    c.reference_device.as_str()
-                };
+                // The canonical id is demoted into the alias list.
+                let display = c.display_name();
                 let mut alias_strs: Vec<&str> = Vec::with_capacity(c.aliases.len() + 1);
                 if !c.aliases.iter().any(|a| a == &c.name) {
                     alias_strs.push(c.name.as_str());
