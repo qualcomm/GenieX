@@ -1,9 +1,7 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Chunk planner + `.progress` bitmap. Chunking and the bitmap layout (one byte per chunk,
-//! `0x01` = written) must match `cli/internal/model_hub/model_hub.go` so Go and Rust can
-//! resume each other's partial pulls.
+//! Chunk planner + `.progress` bitmap: one byte per chunk, `0x01` = written.
 
 use std::fs;
 use std::io::{Seek, SeekFrom, Write};

@@ -23,7 +23,6 @@ impl StoreConfig {
         Self { data_dir }
     }
 
-    /// Same layout as the Go CLI so both share the cache.
     pub fn ai_hub_cache_dir(&self) -> PathBuf {
         self.data_dir.join("aihub")
     }
@@ -37,7 +36,6 @@ impl StoreConfig {
     }
 }
 
-/// Mirrors `cli/internal/config/config.go:DefaultAIHubBaseURL`.
 const DEFAULT_AI_HUB_BASE_URL: &str =
     "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models";
 

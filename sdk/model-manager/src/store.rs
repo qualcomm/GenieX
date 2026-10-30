@@ -48,7 +48,6 @@ impl Store {
         &self.cfg
     }
 
-    /// Cross-process lock, compatible with the Go CLI's `gofrs/flock` on the same file.
     pub fn with_model_lock<T>(&self, name: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
         let _lock = self.acquire_model_lock(name)?;
         f()

@@ -310,8 +310,7 @@ typedef struct {
      * `hub == GENIEX_HUB_AUTO` resolves to AI Hub. If NULL and `model_name`
      * is `qualcomm/<repo>` or `qai-hub-models/<repo>`, `<repo>` is used as
      * the display_name; otherwise the caller must set this. `model_name`
-     * still names the on-disk directory ("org/repo" shape), matching the
-     * Go CLI's storedName/displayName split.
+     * still names the on-disk directory ("org/repo" shape).
      */
     const char*                 display_name;
     geniex_download_progress_cb on_progress; /**< NULL to suppress progress reporting           */

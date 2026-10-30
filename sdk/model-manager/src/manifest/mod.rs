@@ -15,7 +15,6 @@ pub enum ModelType {
     Vlm,
 }
 
-// JSON field names match Go's sonic.Marshal output (PascalCase struct field names).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ModelFileInfo {
     #[serde(rename = "Name")]
@@ -26,8 +25,8 @@ pub struct ModelFileInfo {
     pub size: i64,
 }
 
-/// Go's `sonic.Marshal` writes nil slices/maps (and old optional structs) as
-/// `null`; `#[serde(default)]` only covers absent keys.
+/// Shipped manifests may write empty fields as `null`; `#[serde(default)]` only
+/// covers absent keys.
 fn null_as_default<'de, T, D>(deserializer: D) -> Result<T, D::Error>
 where
     T: Default + Deserialize<'de>,
@@ -36,7 +35,7 @@ where
     Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
-/// `geniex.json`. Legacy `DeviceId` / `MinSDKVersion` keys are ignored on read.
+/// `geniex.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelManifest {
     #[serde(rename = "Name")]

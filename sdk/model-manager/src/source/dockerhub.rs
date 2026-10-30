@@ -374,7 +374,6 @@ fn build_plan(
         })
     };
 
-    // Shard names must match the Go CLI's unpackGGUFs.
     let mut extra_files: Vec<ModelFileInfo> = Vec::new();
     let n = gguf_layers.len();
     let mut gguf_entries = gguf_layers.iter().enumerate().map(|(i, desc)| {

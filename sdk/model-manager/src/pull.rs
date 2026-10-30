@@ -184,7 +184,6 @@ pub async fn pull_with_source(
             fs::write(&staged, serde_json::to_string(&plan.manifest)?)?;
             fs::rename(&staged, &final_path)?;
 
-            // The Go CLI drops these markers too; keeps cache layouts interchangeable.
             for f in &plan.files {
                 drop_marker(&dest_dir, &f.name);
             }
