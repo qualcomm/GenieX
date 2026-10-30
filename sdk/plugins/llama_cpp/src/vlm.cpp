@@ -834,10 +834,11 @@ bool LlamaVlm::vlm_message_to_common_chat_msg(const geniex_VlmChatMessage* input
     apply_tool_fields(*output, input->tool_calls, input->tool_call_count, input->tool_call_id, input->tool_name);
 
     if (input->contents && input->content_count > 0) {
-        int         media_count = 0;
-        std::string consolidated_text;
-
-        // First pass: validate types and count media, concatenate text content
+        // Keep content parts in order, emitting one mtmd marker per non-text part, so interleaved text (e.g.
+        // per-frame timestamps) stays next to its media. mtmd binds bitmaps to markers in prompt order, so callers
+        // must pass media paths in content order. Non-text parts are folded into the string because
+        // common_chat_template_apply ignores them.
+        std::string final_content;
         for (int64_t j = 0; j < input->content_count; ++j) {
             // Type is required for each content part
             if (!input->contents[j].type || strlen(input->contents[j].type) == 0) {
@@ -845,24 +846,13 @@ bool LlamaVlm::vlm_message_to_common_chat_msg(const geniex_VlmChatMessage* input
             }
 
             if (strcmp(input->contents[j].type, "text") == 0) {
-                // Concatenate all text content
                 if (input->contents[j].text) {
-                    consolidated_text += input->contents[j].text;
+                    final_content += input->contents[j].text;
                 }
             } else {
-                // Count non-text content as media
-                media_count++;
+                final_content += mtmd_default_marker();
             }
         }
-
-        // We consolidate all content into a single content, this aligns with mtmd-cli.cpp
-        // It would be meaningless to pass "non-text" type to common_chat_template_apply, as all non-text content in the
-        // content_parts will be ignored by llama.cpp by the time I am writing this comment.
-        std::string final_content;
-        for (int i = 0; i < media_count; ++i) {
-            final_content += mtmd_default_marker();
-        }
-        final_content += consolidated_text;
 
         output->content = final_content;
     }

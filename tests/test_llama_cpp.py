@@ -668,6 +668,33 @@ def test_mtmd_markers(llama_cpp_vlm_paths, test_image, quality_image, device_map
 
 @pytest.mark.vlm
 @pytest.mark.parametrize('device_map', ['cpu'])
+def test_mtmd_markers_keep_content_order(llama_cpp_vlm_paths, test_image, quality_image, device_map):
+    # Interleaved text (e.g. per-frame video timestamps) must stay next to its media.
+    content = [
+        {'type': 'text', 'text': 'Frame A:'},
+        {'type': 'image', 'image': test_image},
+        {'type': 'text', 'text': 'Frame B:'},
+        {'type': 'image', 'image': quality_image},
+        {'type': 'text', 'text': 'compare them'},
+    ]
+    with geniex.AutoModelForVision2Seq.from_pretrained(
+        _VLM.id,
+        precision=_VLM.precision,
+        device_map=device_map,
+    ) as vlm:
+        prompt = vlm.tokenizer.apply_chat_template(
+            [{'role': 'user', 'content': content}],
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+    first = prompt.index(_MEDIA_MARKER)
+    second = prompt.index(_MEDIA_MARKER, first + len(_MEDIA_MARKER))
+    assert prompt.count(_MEDIA_MARKER) == 2, prompt
+    assert prompt.index('Frame A:') < first < prompt.index('Frame B:') < second < prompt.index('compare them'), prompt
+
+
+@pytest.mark.vlm
+@pytest.mark.parametrize('device_map', ['cpu'])
 def test_mtmd_generate_rejects_undecodable_image_and_recovers(llama_cpp_vlm_paths, test_image, device_map, tmp_path):
     corrupt = tmp_path / 'corrupt.jpg'
     corrupt.write_bytes(b'not a decodable image')
