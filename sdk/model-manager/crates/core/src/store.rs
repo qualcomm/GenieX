@@ -11,8 +11,7 @@ use crate::config::StoreConfig;
 use crate::error::{Error, Result};
 use crate::manifest::infer::quant_sort_key;
 use crate::manifest::{ModelManifest, ModelType};
-use crate::model_ref::canonicalize_model_name;
-use crate::validation::validate_model_name;
+use crate::model_ref::{validate_name, ModelRef};
 
 #[derive(Debug, Clone)]
 pub struct ModelPaths {
@@ -65,7 +64,7 @@ impl Store {
     }
 
     fn acquire_model_lock(&self, name: &str) -> Result<fs::File> {
-        validate_model_name(name)?;
+        validate_name(name)?;
         let dir = self.cfg.model_dir(name);
         fs::create_dir_all(&dir)?;
         let lock_path = dir.join(LOCK_FILE);
@@ -124,7 +123,7 @@ impl Store {
     }
 
     pub fn get_manifest(&self, name: &str) -> Result<ModelManifest> {
-        validate_model_name(name)?;
+        validate_name(name)?;
         let path = self.cfg.model_dir(name).join(MANIFEST_FILE);
         if !path.exists() {
             return Err(Error::ModelNotFound(name.to_string()));
@@ -133,7 +132,7 @@ impl Store {
     }
 
     pub fn write_manifest(&self, manifest: &ModelManifest) -> Result<()> {
-        validate_model_name(&manifest.name)?;
+        validate_name(&manifest.name)?;
         let dir = self.cfg.model_dir(&manifest.name);
         fs::create_dir_all(&dir)?;
         let path = dir.join(MANIFEST_FILE);
@@ -144,9 +143,8 @@ impl Store {
 
     pub fn remove(&self, name_with_quant: &str) -> Result<()> {
         // With ":quant", keep the dir unless it was the last quant: extras are shared.
-        let (name, quant) = parse_ref(name_with_quant);
+        let ModelRef { name, quant } = ModelRef::parse(name_with_quant)?;
         let name = name.as_str();
-        validate_model_name(name)?;
         self.with_model_lock(name, || {
             let dir = self.cfg.model_dir(name);
             let Some(quant) = quant else {
@@ -202,8 +200,7 @@ impl Store {
     }
 
     pub fn set_model_type(&self, name: &str, model_type: ModelType) -> Result<()> {
-        let (name, _) = parse_ref(name);
-        validate_model_name(&name)?;
+        let name = ModelRef::parse(name)?.name;
         self.with_model_lock(&name, || {
             let mut manifest = self.get_manifest(&name)?;
             manifest.model_type = model_type;
@@ -212,7 +209,7 @@ impl Store {
     }
 
     pub fn resolve_manifest(&self, name_with_quant: &str) -> Result<ModelManifest> {
-        self.get_manifest(&parse_ref(name_with_quant).0)
+        self.get_manifest(&ModelRef::parse(name_with_quant)?.name)
     }
 
     /// Skips in-progress pulls to agree with [`Self::list`]; the load path does not.
@@ -230,14 +227,14 @@ impl Store {
     }
 
     pub fn get_paths(&self, name_with_quant: &str) -> Result<(String, ModelPaths)> {
-        let (name, quant) = parse_ref(name_with_quant);
+        let ModelRef { name, quant } = ModelRef::parse(name_with_quant)?;
         let manifest = self.get_manifest(&name)?;
         let base_dir = self.cfg.model_dir(&name);
         resolve_model_paths(&manifest, &base_dir, quant.as_deref())
     }
 
     pub fn model_dir(&self, name: &str) -> Result<PathBuf> {
-        validate_model_name(name)?;
+        validate_name(name)?;
         Ok(self.cfg.model_dir(name))
     }
 }
@@ -315,18 +312,6 @@ fn migrate_legacy_qairt_precision(m: &mut ModelManifest) -> bool {
     let key = std::mem::take(&mut m.precision);
     m.model_file.insert(key, entry);
     true
-}
-
-/// Canonicalizing first strips a pasted URL, so a `://` is never a quant cut.
-fn parse_ref(s: &str) -> (String, Option<String>) {
-    let canonical = canonicalize_model_name(s);
-    match canonical.rsplit_once(':') {
-        Some((name, quant)) if !quant.starts_with("//") => {
-            let quant = (!quant.is_empty()).then(|| quant.to_string());
-            (name.to_string(), quant)
-        }
-        _ => (canonical, None),
-    }
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@ use model_manager_core::model_ref::{is_docker_hub_reference, resolve_alias};
 use crate::pull::GenieXHubSource;
 use crate::types::*;
 
-/// Must stay in sync with the `use_docker` decision in `extract_name_and_intent`.
+/// Must agree with the Docker routing in `Hub::resolve`.
 #[no_mangle]
 pub extern "C" fn geniex_model_resolve_hub(
     model_name: *const c_char,

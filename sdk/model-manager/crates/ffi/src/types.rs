@@ -199,16 +199,6 @@ pub unsafe fn from_c_array<T>(ptr: *mut T, count: i32) -> Option<Vec<T>> {
     Some(Vec::from_raw_parts(ptr, len, len))
 }
 
-/// Manifest keys from `extract_quant` are upper-case; normalize here so every binding matches.
-pub fn normalize_quant_suffix(name: &str) -> String {
-    match name.rsplit_once(':') {
-        Some((base, quant)) if !quant.is_empty() && !quant.starts_with("//") => {
-            format!("{base}:{}", quant.to_ascii_uppercase())
-        }
-        _ => name.to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,32 +234,6 @@ mod tests {
         ];
         for (err, want) in cases {
             assert_eq!(err_to_code(&err), want, "{err:?}");
-        }
-    }
-
-    #[test]
-    fn normalize_quant_suffix_upper_cases_only_after_colon() {
-        for (name, want) in [
-            (
-                "ggml-org/Qwen3-0.6B-GGUF:q4_0",
-                "ggml-org/Qwen3-0.6B-GGUF:Q4_0",
-            ),
-            (
-                "ggml-org/Qwen3-0.6B-GGUF:Q4_0",
-                "ggml-org/Qwen3-0.6B-GGUF:Q4_0",
-            ),
-            (
-                "ggml-org/gpt-oss-20b-GGUF:mxfp4",
-                "ggml-org/gpt-oss-20b-GGUF:MXFP4",
-            ),
-            ("ggml-org/Qwen3-0.6B-GGUF", "ggml-org/Qwen3-0.6B-GGUF"),
-            ("Org/Repo:", "Org/Repo:"),
-            (
-                "https://huggingface.co/ggml-org/Qwen3",
-                "https://huggingface.co/ggml-org/Qwen3",
-            ),
-        ] {
-            assert_eq!(normalize_quant_suffix(name), want, "{name}");
         }
     }
 }

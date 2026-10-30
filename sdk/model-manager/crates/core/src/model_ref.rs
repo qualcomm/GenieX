@@ -1,6 +1,49 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
+//! Everything a caller can type as a model name, parsed in one place.
+
+use crate::error::{Error, Result};
+
+/// A cached model: canonical `org/repo` plus an optional upper-cased quant.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelRef {
+    pub name: String,
+    pub quant: Option<String>,
+}
+
+impl ModelRef {
+    /// Accepts a bare name, `org/repo[:quant]`, or a pasted HF / ModelScope
+    /// URL. A `://` is never a quant cut, and the quant is upper-cased to
+    /// match manifest keys.
+    pub fn parse(s: &str) -> Result<Self> {
+        let canonical = canonicalize_model_name(s);
+        let (name, quant) = match canonical.rsplit_once(':') {
+            Some((name, quant)) if !quant.starts_with("//") => {
+                let quant = (!quant.is_empty()).then(|| quant.to_ascii_uppercase());
+                (name.to_string(), quant)
+            }
+            _ => (canonical, None),
+        };
+        validate_name(&name)?;
+        Ok(Self { name, quant })
+    }
+}
+
+/// Reject anything but a plain `org/repo` so a name can't escape the models dir.
+pub fn validate_name(name: &str) -> Result<()> {
+    let ok = name.len() <= 255
+        && name.matches('/').count() == 1
+        && name
+            .split('/')
+            .all(|c| !c.is_empty() && c != "." && c != ".." && !c.contains(['\\', '\0']));
+    if ok {
+        Ok(())
+    } else {
+        Err(Error::InvalidModelName(name.to_string()))
+    }
+}
+
 /// `qwen3` stays so the Python bindings and CLI smoke tests have an alias that resolves.
 pub fn resolve_alias(alias: &str) -> Option<String> {
     match alias {
@@ -12,8 +55,8 @@ pub fn resolve_alias(alias: &str) -> Option<String> {
 /// Lowercased AI Hub orgs; `ai-hub-models` is an alias for `qualcomm`.
 const AI_HUB_ORGS: &[&str] = &["qualcomm", "ai-hub-models"];
 
-/// Call before `pull` / `get_paths` so every alias maps to one cache entry.
-pub fn canonicalize_model_name(name: &str) -> String {
+/// Bare names land under `qualcomm/`, so every alias maps to one cache entry.
+pub(crate) fn canonicalize_model_name(name: &str) -> String {
     let name = name
         .strip_prefix("https://huggingface.co/")
         .or_else(|| name.strip_prefix("http://huggingface.co/"))
@@ -29,7 +72,7 @@ pub fn canonicalize_model_name(name: &str) -> String {
 }
 
 /// The AI Hub `display_name` for an AI Hub org's model, ignoring any `:quant`.
-pub fn aihub_display_name_from_repo(model_name: &str) -> Option<&str> {
+pub(crate) fn aihub_display_name_from_repo(model_name: &str) -> Option<&str> {
     let without_quant = model_name.split_once(':').map_or(model_name, |(n, _)| n);
     let (org, repo) = without_quant.split_once('/')?;
     if org.is_empty() || repo.is_empty() {
@@ -64,7 +107,7 @@ fn strip_modelscope_url_prefix(name: &str) -> Option<&str> {
         .find_map(|p| name.strip_prefix(p))
 }
 
-pub fn is_modelscope_reference(name: &str) -> bool {
+pub(crate) fn is_modelscope_reference(name: &str) -> bool {
     strip_modelscope_url_prefix(name).is_some()
 }
 
@@ -73,7 +116,7 @@ pub fn is_docker_hub_reference(name: &str) -> bool {
     DOCKER_HUB_PREFIXES.iter().any(|p| lower.starts_with(p))
 }
 
-pub fn docker_hub_repo_from_name(name: &str) -> String {
+pub(crate) fn docker_hub_repo_from_name(name: &str) -> String {
     let lower = name.to_ascii_lowercase();
     for p in DOCKER_HUB_PREFIXES {
         if lower.starts_with(p) {
@@ -192,6 +235,47 @@ mod tests {
             "ai/gemma3",
         ] {
             assert_eq!(docker_hub_repo_from_name(name), "ai/gemma3", "{name}");
+        }
+    }
+
+    #[test]
+    fn parse_cases() {
+        let url = "https://huggingface.co/ggml-org/Qwen3";
+        for (input, name, quant) in [
+            ("Bare", "qualcomm/Bare", None),
+            ("Bare:q4_k_m", "qualcomm/Bare", Some("Q4_K_M")),
+            ("Org/Repo:", "Org/Repo", None),
+            (url, "ggml-org/Qwen3", None),
+            (&format!("{url}:Q8_0"), "ggml-org/Qwen3", Some("Q8_0")),
+            ("ai-hub-models/X:w4a16", "qualcomm/X", Some("W4A16")),
+        ] {
+            let r = ModelRef::parse(input).unwrap();
+            assert_eq!(
+                (r.name.as_str(), r.quant.as_deref()),
+                (name, quant),
+                "{input}"
+            );
+        }
+        for bad in [
+            "a/b/c",
+            "../etc",
+            "a/..",
+            "a\\b/c",
+            "https://example.com/x/y",
+        ] {
+            assert!(ModelRef::parse(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn validate_name_rules() {
+        for ok in ["Qwen/Qwen3-4B-Instruct", "a/b"] {
+            assert!(validate_name(ok).is_ok(), "{ok:?}");
+        }
+        for bad in [
+            "../etc", "a/..", "./b", "a\\b", "", "onlyone", "a/b/c", "a//b", "a/b\0",
+        ] {
+            assert!(validate_name(bad).is_err(), "{bad:?}");
         }
     }
 }

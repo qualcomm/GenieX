@@ -46,8 +46,8 @@ pub extern "C" fn geniex_model_get_paths(
 ) -> i32 {
     ffi_guard(|| {
         let out = out_mut(out_paths)?;
-        let name = normalize_quant_suffix(unsafe { cstr_to_str(model_name) }?);
-        let (_, paths) = get_store()?.get_paths(&name).or_report()?;
+        let name = unsafe { cstr_to_str(model_name) }?;
+        let (_, paths) = get_store()?.get_paths(name).or_report()?;
         let opt_path =
             |p: Option<&std::path::PathBuf>| p.map_or(std::ptr::null_mut(), |p| path_to_cptr(p));
         *out = GenieXModelPaths {
@@ -135,8 +135,8 @@ pub unsafe extern "C" fn geniex_model_detail_free(detail: *mut GenieXModelDetail
 #[no_mangle]
 pub extern "C" fn geniex_model_remove(model_name: *const c_char) -> i32 {
     ffi_guard(|| {
-        let name = normalize_quant_suffix(unsafe { cstr_to_str(model_name) }?);
-        get_store()?.remove(&name).or_report()?;
+        let name = unsafe { cstr_to_str(model_name) }?;
+        get_store()?.remove(name).or_report()?;
         Ok(GENIEX_SUCCESS)
     })
 }

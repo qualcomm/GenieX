@@ -13,7 +13,10 @@ use crate::error::{Error, Result};
 use crate::executor::resume;
 use crate::executor::{Executor, ProgressCallback};
 use crate::manifest::infer::ManifestHint;
-use crate::model_ref::canonicalize_model_name;
+use crate::model_ref::{
+    aihub_display_name_from_repo, canonicalize_model_name, docker_hub_repo_from_name,
+    is_docker_hub_reference, is_modelscope_reference, validate_name,
+};
 use crate::source::ai_hub::{AiHubConfig, AiHubSource};
 use crate::source::dockerhub::DockerHubSource;
 use crate::source::hf::HfSource;
@@ -22,7 +25,6 @@ use crate::source::modelscope::ModelScopeSource;
 use crate::source::ModelSource;
 use crate::store::{Store, INFLIGHT_DIR, MANIFEST_FILE};
 use crate::transport::{HttpTransport, ReqwestTransport};
-use crate::validation::validate_model_name;
 
 pub struct PullRequest {
     pub model_name: String,
@@ -31,6 +33,7 @@ pub struct PullRequest {
     pub hint: ManifestHint,
 }
 
+#[derive(Debug)]
 pub enum PullIntent {
     HuggingFace {
         repo: String,
@@ -54,6 +57,84 @@ pub enum PullIntent {
     },
 }
 
+/// The hub a caller asked for; `Auto` routes by the name's shape.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Hub {
+    Auto,
+    HuggingFace,
+    ModelScope,
+    AiHub,
+    DockerHub,
+    LocalFs,
+}
+
+/// Caller-supplied pull parameters, before routing.
+#[derive(Debug, Clone, Default)]
+pub struct PullTarget {
+    pub token: Option<String>,
+    pub chipset: String,
+    pub display_name: Option<String>,
+    pub local_path: Option<PathBuf>,
+    /// Docker Hub tag or digest; empty means `"latest"`.
+    pub reference: String,
+}
+
+impl Hub {
+    /// Route `raw` to a canonical model name and the [`PullIntent`] that fetches it.
+    pub fn resolve(self, raw: &str, target: PullTarget) -> Result<(String, PullIntent)> {
+        let invalid = |why: &str| Error::InvalidModelName(format!("{raw}: {why}"));
+        // Docker and ModelScope URLs are recognisable only before canonicalisation.
+        if self == Hub::DockerHub || (self == Hub::Auto && is_docker_hub_reference(raw)) {
+            let repo = canonicalize_model_name(&docker_hub_repo_from_name(raw));
+            validate_name(&repo)?;
+            let reference = if target.reference.is_empty() {
+                "latest".to_string()
+            } else {
+                target.reference
+            };
+            return Ok((repo.clone(), PullIntent::DockerHub { repo, reference }));
+        }
+        let hub = if self == Hub::Auto && is_modelscope_reference(raw) {
+            Hub::ModelScope
+        } else {
+            self
+        };
+        let name = canonicalize_model_name(raw);
+        validate_name(&name)?;
+        let ai_hub_name = || {
+            target
+                .display_name
+                .clone()
+                .or_else(|| aihub_display_name_from_repo(&name).map(str::to_string))
+        };
+        let token = target.token.clone();
+        let intent = match hub {
+            Hub::Auto if aihub_display_name_from_repo(&name).is_some() => PullIntent::AiHub {
+                display_name: ai_hub_name().unwrap_or_default(),
+                chipset: target.chipset,
+            },
+            Hub::AiHub => PullIntent::AiHub {
+                display_name: ai_hub_name().ok_or_else(|| invalid("no AI Hub display name"))?,
+                chipset: target.chipset,
+            },
+            Hub::ModelScope => PullIntent::ModelScope {
+                repo: name.clone(),
+                token,
+            },
+            Hub::LocalFs => PullIntent::LocalFs {
+                source_dir: target
+                    .local_path
+                    .ok_or_else(|| invalid("local pull needs a path"))?,
+            },
+            Hub::Auto | Hub::HuggingFace | Hub::DockerHub => PullIntent::HuggingFace {
+                repo: name.clone(),
+                token,
+            },
+        };
+        Ok((name, intent))
+    }
+}
+
 pub async fn pull(store: &Store, mut req: PullRequest) -> Result<()> {
     let (source, transport) = prepare(store, &mut req)?;
     pull_with_source(
@@ -73,7 +154,7 @@ pub async fn pull_with_source(
     transport: Arc<dyn HttpTransport>,
     on_progress: Option<&ProgressCallback>,
 ) -> Result<()> {
-    validate_model_name(model_name)?;
+    validate_name(model_name)?;
     let model_name_owned = model_name.to_string();
     store
         .with_model_lock_async(model_name, || async move {
@@ -120,7 +201,7 @@ pub(crate) fn prepare(
     req: &mut PullRequest,
 ) -> Result<(Box<dyn ModelSource>, Arc<dyn HttpTransport>)> {
     req.model_name = canonicalize_model_name(&req.model_name);
-    validate_model_name(&req.model_name)?;
+    validate_name(&req.model_name)?;
     let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
     Ok((build_source(req, store, transport.clone())?, transport))
 }
@@ -209,6 +290,151 @@ fn drop_marker(dest_dir: &Path, file_name: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn route(hub: Hub, raw: &str, target: PullTarget) -> (String, String) {
+        let (name, intent) = hub.resolve(raw, target).unwrap();
+        let routed = match intent {
+            PullIntent::HuggingFace { repo, .. } => format!("hf {repo}"),
+            PullIntent::ModelScope { repo, .. } => format!("ms {repo}"),
+            PullIntent::AiHub { display_name, .. } => format!("aihub {display_name}"),
+            PullIntent::DockerHub { repo, reference } => format!("docker {repo}@{reference}"),
+            PullIntent::LocalFs { source_dir } => format!("local {}", source_dir.display()),
+        };
+        (name, routed)
+    }
+
+    #[test]
+    fn resolve_routes_hubs() {
+        use Hub::*;
+        let none = PullTarget::default;
+        let named = || PullTarget {
+            display_name: Some("Explicit".into()),
+            ..PullTarget::default()
+        };
+        let cases = [
+            (
+                Auto,
+                "ggml-org/Qwen3-1.7B-GGUF",
+                none(),
+                "ggml-org/Qwen3-1.7B-GGUF",
+                "hf ggml-org/Qwen3-1.7B-GGUF",
+            ),
+            (
+                Auto,
+                "Qwen3-4B",
+                none(),
+                "qualcomm/Qwen3-4B",
+                "aihub Qwen3-4B",
+            ),
+            (
+                Auto,
+                "ai-hub-models/Qwen3-4B",
+                named(),
+                "qualcomm/Qwen3-4B",
+                "aihub Explicit",
+            ),
+            (
+                Auto,
+                "https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF",
+                none(),
+                "Qwen/Qwen3-0.6B-GGUF",
+                "ms Qwen/Qwen3-0.6B-GGUF",
+            ),
+            (
+                Auto,
+                "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF",
+                none(),
+                "Qwen/Qwen3-0.6B-GGUF",
+                "hf Qwen/Qwen3-0.6B-GGUF",
+            ),
+            (
+                Auto,
+                "docker.io/ai/gemma3",
+                none(),
+                "ai/gemma3",
+                "docker ai/gemma3@latest",
+            ),
+            (Auto, "ai/gemma3", none(), "ai/gemma3", "hf ai/gemma3"),
+            (
+                DockerHub,
+                "ai/gemma3",
+                PullTarget {
+                    reference: "Q4_K_M".into(),
+                    ..none()
+                },
+                "ai/gemma3",
+                "docker ai/gemma3@Q4_K_M",
+            ),
+            (
+                ModelScope,
+                "Qwen/Qwen3-0.6B-GGUF",
+                none(),
+                "Qwen/Qwen3-0.6B-GGUF",
+                "ms Qwen/Qwen3-0.6B-GGUF",
+            ),
+            (
+                HuggingFace,
+                "qualcomm/Qwen3-4B",
+                none(),
+                "qualcomm/Qwen3-4B",
+                "hf qualcomm/Qwen3-4B",
+            ),
+            (AiHub, "Org/Any", named(), "Org/Any", "aihub Explicit"),
+            (
+                LocalFs,
+                "Org/Local",
+                PullTarget {
+                    local_path: Some("/m".into()),
+                    ..none()
+                },
+                "Org/Local",
+                "local /m",
+            ),
+        ];
+        for (hub, raw, target, want_name, want_route) in cases {
+            let (name, routed) = route(hub, raw, target);
+            assert_eq!(
+                (name.as_str(), routed.as_str()),
+                (want_name, want_route),
+                "{hub:?} {raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_rejects_missing_inputs_and_bad_names() {
+        let none = PullTarget::default;
+        for (hub, raw) in [
+            (Hub::AiHub, "ggml-org/Qwen3"),
+            (Hub::LocalFs, "Org/Local"),
+            (Hub::Auto, "a/b/c"),
+            (Hub::DockerHub, "docker.io/../x"),
+        ] {
+            let err = hub.resolve(raw, none()).unwrap_err();
+            assert!(
+                matches!(err, Error::InvalidModelName(_)),
+                "{hub:?} {raw}: {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_keeps_the_token_for_hf_and_modelscope() {
+        for hub in [Hub::HuggingFace, Hub::ModelScope] {
+            let target = PullTarget {
+                token: Some("tok".into()),
+                ..PullTarget::default()
+            };
+            let (_, intent) = hub.resolve("Qwen/Qwen3-0.6B-GGUF", target).unwrap();
+            let token = match intent {
+                PullIntent::HuggingFace { token, .. } | PullIntent::ModelScope { token, .. } => {
+                    token
+                }
+                _ => None,
+            };
+            assert_eq!(token.as_deref(), Some("tok"), "{hub:?}");
+        }
+    }
 
     #[test]
     fn remove_inflight_dir_handles_empty_nonempty_and_missing() {

@@ -17,5 +17,3 @@ pub mod transport;
 #[cfg(any(test, feature = "test-support"))]
 #[doc(hidden)]
 pub mod test_support;
-
-mod validation;
