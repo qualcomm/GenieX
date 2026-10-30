@@ -104,10 +104,14 @@ pub fn err_to_code(e: &Error) -> i32 {
 /// Log `e` via the geniex log callback, stash its message as this thread's
 /// last error, and return the corresponding code.
 pub fn report(e: &Error) -> i32 {
-    let msg = format!("{e}");
-    logging::error(&msg);
-    set_last_error(&msg);
-    err_to_code(e)
+    report_msg(&e.to_string(), err_to_code(e))
+}
+
+/// Log `msg`, record it as the last error, and return `code`.
+pub fn report_msg(msg: &str, code: i32) -> i32 {
+    logging::error(msg);
+    set_last_error(msg);
+    code
 }
 
 /// Wrap an FFI entry point so panics can't cross the C boundary.

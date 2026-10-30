@@ -162,12 +162,12 @@ pub(crate) unsafe fn extract_name_and_intent(
     // can't corrupt downstream reads.
     let struct_size = std::ptr::read(&(*input).struct_size);
     if !ACCEPTED_PULL_INPUT_SIZES.contains(&struct_size) {
-        crate::logging::error(&format!(
+        let msg = format!(
             "{fn_name}: unsupported struct_size {struct_size}; expected one of \
              {ACCEPTED_PULL_INPUT_SIZES:?} (recompile your binding against the \
              current geniex_model.h)",
-        ));
-        return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
+        );
+        return Err(report_msg(&msg, GENIEX_ERROR_COMMON_INVALID_INPUT));
     }
 
     let inp = &*input;
@@ -338,5 +338,17 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(intent, PullIntent::ModelScope { token: Some(t), .. } if t == "tok"));
+    }
+
+    #[test]
+    fn struct_size_mismatch_sets_last_error() {
+        let mut input: GenieXModelPullInput = unsafe { std::mem::zeroed() };
+        input.struct_size = 1;
+        let code = ffi_guard(|| unsafe { extract_name_and_intent(&input, "pull") }.map(|_| 0));
+        assert_eq!(code, GENIEX_ERROR_COMMON_INVALID_INPUT);
+        let ptr = geniex_model_last_error_message();
+        assert!(!ptr.is_null(), "last error not set");
+        let msg = unsafe { std::ffi::CStr::from_ptr(ptr) };
+        assert!(msg.to_string_lossy().contains("struct_size 1"), "{msg:?}");
     }
 }
