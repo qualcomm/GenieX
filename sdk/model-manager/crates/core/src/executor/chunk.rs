@@ -46,6 +46,20 @@ pub fn plan_chunks(file_size: u64) -> ChunkPlan {
     plan_chunks_with_floor(file_size, effective_min_chunk_size())
 }
 
+/// One chunk covering the whole file; an empty file still gets one
+/// zero-length chunk so its marker records completion.
+pub(crate) fn single_chunk_plan(file_size: u64) -> ChunkPlan {
+    ChunkPlan {
+        file_size,
+        chunk_size: file_size,
+        chunks: vec![ChunkRange {
+            index: 0,
+            offset: 0,
+            len: file_size,
+        }],
+    }
+}
+
 /// Like [`plan_chunks`] but with an explicit floor. Exposed mainly for tests.
 pub fn plan_chunks_with_floor(file_size: u64, min_chunk_size: u64) -> ChunkPlan {
     let min = min_chunk_size.max(1);

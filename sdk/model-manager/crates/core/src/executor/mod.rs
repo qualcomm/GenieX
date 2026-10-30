@@ -1,40 +1,31 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-//! Byte-moving executor for [`crate::source::Plan`]s.
-//!
-//! The executor is hub-agnostic: it takes a slice of [`FileSpec`]s and
-//! materialises each one into `dest_dir/<name>`. Four branches cover
-//! every hub we support today:
-//!
-//! - [`BytesSource::Http`] — chunked parallel download with `.progress`
-//!   bitmap resume. One URL per file (HF).
-//! - [`BytesSource::HttpRange`] — same chunking/resume machinery but
-//!   every range request is offset into a larger remote object (a
-//!   STORED zip entry inside an AI Hub asset).
-//! - [`BytesSource::HttpDeflate`] — single-range fetch + inline flate2
-//!   decode. Resume is entry-granular because DEFLATE is not seekable.
-//! - [`BytesSource::Local`] — plain copy for `LocalFsSource` directories.
-//! - [`BytesSource::LocalRange`] / [`BytesSource::LocalDeflate`] —
-//!   byte ranges inside a local zip, with optional DEFLATE decode.
-//!   Used when the user pulls from an AI Hub `.zip` on disk.
+//! Byte-moving executor for [`crate::source::Plan`]s: materialises each
+//! [`FileSpec`] into `dest_dir/<name>`. Raw byte ranges (HTTP or local)
+//! share one chunked pipeline with `.progress` bitmap resume; DEFLATE
+//! entries share one fetch-then-inflate pipeline; whole local files are
+//! copied directly.
 
 pub mod chunk;
 
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::fs::OpenOptions;
-use tokio::io::{AsyncSeekExt, AsyncWriteExt};
+use tokio::io::{AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+use url::Url;
 
 use crate::error::{Error, Result};
+use crate::resume::marker_path;
 use crate::source::{BytesSource, FileSpec};
-use crate::transport::HttpTransport;
+use crate::transport::{HttpTransport, LocalFileTransport};
 
 pub use crate::resume::PROGRESS_SUFFIX;
 
@@ -94,6 +85,14 @@ impl StopSignals {
 
     fn halt_new_work(&self) -> bool {
         self.user.is_cancelled() || self.failed.is_cancelled()
+    }
+
+    async fn race(&self, fetch: impl Future<Output = Result<()>>) -> Result<()> {
+        tokio::select! {
+            biased;
+            _ = self.user.cancelled() => Err(Error::Cancelled),
+            res = fetch => res,
+        }
     }
 }
 
@@ -231,6 +230,66 @@ impl Executor {
     }
 }
 
+/// Where a range pipeline reads its bytes: an HTTP object, or a local file
+/// served through [`LocalFileTransport`].
+struct RangeSrc {
+    transport: Arc<dyn HttpTransport>,
+    url: Url,
+    auth: Option<String>,
+    offset: u64,
+}
+
+impl RangeSrc {
+    fn http(
+        transport: &Arc<dyn HttpTransport>,
+        url: Url,
+        auth: Option<String>,
+        offset: u64,
+    ) -> Self {
+        Self {
+            transport: transport.clone(),
+            url,
+            auth,
+            offset,
+        }
+    }
+
+    fn local(path: &Path, offset: u64) -> Result<Self> {
+        Ok(Self {
+            transport: Arc::new(LocalFileTransport::open(path)?),
+            url: Url::parse("file:///local").expect("static url"),
+            auth: None,
+            offset,
+        })
+    }
+
+    async fn fetch(
+        &self,
+        offset: u64,
+        len: u64,
+        sink: &mut (dyn AsyncWrite + Unpin + Send),
+    ) -> Result<()> {
+        self.transport
+            .get_range(
+                &self.url,
+                self.auth.as_deref(),
+                self.offset + offset,
+                len,
+                sink,
+            )
+            .await
+    }
+}
+
+struct Job {
+    name: String,
+    state: Arc<FileState>,
+    output: PathBuf,
+    marker: PathBuf,
+    chunk_sem: Arc<Semaphore>,
+    stop: StopSignals,
+}
+
 async fn run_one(
     spec: FileSpec,
     state: Arc<FileState>,
@@ -239,24 +298,19 @@ async fn run_one(
     chunk_sem: Arc<Semaphore>,
     stop: StopSignals,
 ) -> Result<()> {
-    match spec.bytes.clone() {
+    let job = Job {
+        output: dest_dir.join(&spec.name),
+        marker: marker_path(dest_dir, &spec.name),
+        name: spec.name,
+        state,
+        chunk_sem,
+        stop,
+    };
+    let known = |n: u64| (n > 0).then_some(n);
+    match spec.bytes {
         BytesSource::Http { url, auth } => {
-            download_range_based(
-                RangeJob {
-                    name: spec.name.clone(),
-                    size_hint: spec.size,
-                    state,
-                    transport,
-                    chunk_sem,
-                    stop,
-                    url,
-                    auth,
-                    base_offset: 0,
-                    size_provided: spec.size > 0,
-                },
-                dest_dir,
-            )
-            .await
+            let src = RangeSrc::http(&transport, url, auth, 0);
+            download_raw(&job, src, known(spec.size), false).await
         }
         BytesSource::HttpRange {
             url,
@@ -264,23 +318,17 @@ async fn run_one(
             offset,
             len,
         } => {
-            let size = if len > 0 { len } else { spec.size };
-            download_range_based(
-                RangeJob {
-                    name: spec.name.clone(),
-                    size_hint: size,
-                    state,
-                    transport,
-                    chunk_sem,
-                    stop,
-                    url,
-                    auth,
-                    base_offset: offset,
-                    size_provided: true,
-                },
-                dest_dir,
+            let src = RangeSrc::http(&transport, url, auth, offset);
+            download_raw(
+                &job,
+                src,
+                known(if len > 0 { len } else { spec.size }),
+                false,
             )
             .await
+        }
+        BytesSource::LocalRange { path, offset, len } => {
+            download_raw(&job, RangeSrc::local(&path, offset)?, Some(len), true).await
         }
         BytesSource::HttpDeflate {
             url,
@@ -288,254 +336,84 @@ async fn run_one(
             offset,
             compressed_len,
         } => {
-            download_http_deflate(
-                DeflateJob {
-                    name: spec.name.clone(),
-                    uncompressed_size: spec.size,
-                    compressed_len,
-                    offset,
-                    state,
-                    transport,
-                    stop,
-                    url,
-                    auth,
-                },
-                dest_dir,
-            )
-            .await
-        }
-        BytesSource::Local { path } => {
-            let dest = dest_dir.join(&spec.name);
-            if let Some(parent) = dest.parent() {
-                tokio::fs::create_dir_all(parent).await?;
-            }
-            tokio::fs::copy(&path, &dest).await?;
-            let size = tokio::fs::metadata(&dest)
-                .await
-                .map(|m| m.len())
-                .unwrap_or(0);
-            state.total_bytes.store(size, Ordering::Relaxed);
-            state.downloaded_bytes.store(size, Ordering::Relaxed);
-            let marker = PathBuf::from(format!("{}{}", dest.display(), PROGRESS_SUFFIX));
-            tokio::fs::write(&marker, [chunk::PROGRESS_DONE_BYTE]).await?;
-            Ok(())
-        }
-        BytesSource::LocalRange { path, offset, len } => {
-            copy_local_range(&spec.name, path, offset, len, state, dest_dir).await
+            let src = RangeSrc::http(&transport, url, auth, offset);
+            download_deflate(&job, src, compressed_len, spec.size).await
         }
         BytesSource::LocalDeflate {
             path,
             offset,
             compressed_len,
         } => {
-            decode_local_deflate(
-                &spec.name,
-                spec.size,
-                path,
-                offset,
-                compressed_len,
-                state,
-                dest_dir,
-            )
-            .await
+            let src = RangeSrc::local(&path, offset)?;
+            download_deflate(&job, src, compressed_len, spec.size).await
         }
+        BytesSource::Local { path } => copy_whole(&job, &path).await,
     }
 }
 
-/// Copy `[offset, offset+len)` from a local file into `dest_dir/name`.
-/// Single-shot read — local IO doesn't benefit from chunked parallelism
-/// the way remote ranges do.
-async fn copy_local_range(
-    name: &str,
-    src_path: PathBuf,
-    offset: u64,
-    len: u64,
-    state: Arc<FileState>,
-    dest_dir: &Path,
-) -> Result<()> {
-    state.total_bytes.store(len, Ordering::Relaxed);
-    let output_path = dest_dir.join(name);
-    if let Some(parent) = output_path.parent() {
-        tokio::fs::create_dir_all(parent).await?;
-    }
-    let marker_path = PathBuf::from(format!("{}{}", output_path.display(), PROGRESS_SUFFIX));
-
-    let written = tokio::task::spawn_blocking(move || -> Result<u64> {
-        use std::io::{Read, Seek, SeekFrom, Write};
-        let mut src = std::fs::File::open(&src_path)?;
-        src.seek(SeekFrom::Start(offset))?;
-        let mut limited = src.take(len);
-        let mut out = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&output_path)?;
-        let mut buf = vec![0u8; 64 * 1024];
-        let mut total: u64 = 0;
-        loop {
-            let n = limited.read(&mut buf)?;
-            if n == 0 {
-                break;
-            }
-            out.write_all(&buf[..n])?;
-            total += n as u64;
-        }
-        out.sync_all()?;
-        Ok(total)
-    })
-    .await
-    .map_err(|e| Error::Http(format!("local range join: {e}")))??;
-
-    if written != len {
-        return Err(Error::Hub(format!(
-            "local range short read for {name}: got {written} / expected {len}"
-        )));
-    }
-    state.downloaded_bytes.store(len, Ordering::Relaxed);
-    tokio::fs::write(&marker_path, [chunk::PROGRESS_DONE_BYTE]).await?;
+fn finish_entry(job: &Job, size: u64) -> Result<()> {
+    job.state.downloaded_bytes.store(size, Ordering::Relaxed);
+    std::fs::write(&job.marker, [chunk::PROGRESS_DONE_BYTE])?;
     Ok(())
 }
 
-/// DEFLATE-decode `[offset, offset+compressed_len)` from a local zip
-/// into `dest_dir/name`. Mirrors the remote [`download_http_deflate`]
-/// path: read the compressed slice into RAM, hand it to a blocking
-/// `flate2::DeflateDecoder`. RAM is bounded by `compressed_len` per
-/// in-flight entry; `file_concurrency` bounds parallelism.
-async fn decode_local_deflate(
-    name: &str,
-    uncompressed_size: u64,
-    src_path: PathBuf,
-    offset: u64,
-    compressed_len: u64,
-    state: Arc<FileState>,
-    dest_dir: &Path,
-) -> Result<()> {
-    state
-        .total_bytes
-        .store(uncompressed_size, Ordering::Relaxed);
-    let output_path = dest_dir.join(name);
-    if let Some(parent) = output_path.parent() {
+async fn copy_whole(job: &Job, src: &Path) -> Result<()> {
+    if let Some(parent) = job.output.parent() {
         tokio::fs::create_dir_all(parent).await?;
     }
-    let marker_path = PathBuf::from(format!("{}{}", output_path.display(), PROGRESS_SUFFIX));
-
-    let name_owned = name.to_string();
-    let out_path = output_path.clone();
-    let decoded_size = tokio::task::spawn_blocking(move || -> Result<u64> {
-        use flate2::write::DeflateDecoder;
-        use std::io::{Read, Seek, SeekFrom, Write as IoWrite};
-        let mut src = std::fs::File::open(&src_path)?;
-        src.seek(SeekFrom::Start(offset))?;
-        let mut compressed = vec![0u8; compressed_len as usize];
-        src.read_exact(&mut compressed)?;
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&out_path)?;
-        let mut dec = DeflateDecoder::new(&mut file);
-        dec.write_all(&compressed)
-            .map_err(|e| Error::Hub(format!("inflate {}: {e}", out_path.display())))?;
-        let written = dec.total_out();
-        dec.finish()
-            .map_err(|e| Error::Hub(format!("inflate finish {}: {e}", out_path.display())))?;
-        file.sync_all()?;
-        Ok(written)
-    })
-    .await
-    .map_err(|e| Error::Http(format!("local deflate join: {e}")))??;
-
-    if decoded_size != uncompressed_size {
-        return Err(Error::Hub(format!(
-            "local deflate short decode for {name_owned}: got {decoded_size} / expected {uncompressed_size}"
-        )));
-    }
-    state
-        .downloaded_bytes
-        .store(uncompressed_size, Ordering::Relaxed);
-    tokio::fs::write(&marker_path, [chunk::PROGRESS_DONE_BYTE]).await?;
-    Ok(())
+    let size = tokio::fs::copy(src, &job.output).await?;
+    job.state.total_bytes.store(size, Ordering::Relaxed);
+    finish_entry(job, size)
 }
 
-/// Arguments for [`download_range_based`], grouped so the caller list
-/// stays readable and the two [`BytesSource`] variants that dispatch to
-/// it (`Http`, `HttpRange`) can share one shape.
-struct RangeJob {
-    name: String,
-    size_hint: u64,
-    state: Arc<FileState>,
-    transport: Arc<dyn HttpTransport>,
-    chunk_sem: Arc<Semaphore>,
-    stop: StopSignals,
-    url: url::Url,
-    auth: Option<String>,
-    /// Added to every range request. `Http` uses 0; `HttpRange` uses the
-    /// entry's start inside the outer zip.
-    base_offset: u64,
-    /// True when `size_hint` is authoritative (e.g. from a zip central
-    /// directory), false when we should HEAD to discover it.
-    size_provided: bool,
-}
-
-/// Chunked parallel download for `Http` and `HttpRange`.
-async fn download_range_based(job: RangeJob, dest_dir: &Path) -> Result<()> {
-    let RangeJob {
-        name,
-        size_hint,
-        state,
-        transport,
-        chunk_sem,
-        stop,
-        url,
-        auth,
-        base_offset,
-        size_provided,
-    } = job;
-    let size = if size_provided && size_hint > 0 {
-        size_hint
-    } else {
-        let info = transport.head(&url, auth.as_deref()).await?;
-        info.size
+/// Chunked parallel range download with `.progress` bitmap resume.
+/// `single_chunk` keeps local copies sequential with a one-byte marker.
+async fn download_raw(
+    job: &Job,
+    src: RangeSrc,
+    size: Option<u64>,
+    single_chunk: bool,
+) -> Result<()> {
+    let size = match size {
+        Some(s) => s,
+        None => {
+            src.transport
+                .head(&src.url, src.auth.as_deref())
+                .await?
+                .size
+        }
     };
-    state.total_bytes.store(size, Ordering::Relaxed);
+    job.state.total_bytes.store(size, Ordering::Relaxed);
 
-    let output_path = dest_dir.join(&name);
-    let marker_path = PathBuf::from(format!("{}{}", output_path.display(), PROGRESS_SUFFIX));
-
-    let plan = chunk::plan_chunks(size);
-    let mut bitmap = chunk::load_or_init_bitmap(&marker_path, &plan)?;
-    let output_size = tokio::fs::metadata(&output_path)
-        .await
-        .ok()
-        .map(|m| m.len());
+    let plan = if single_chunk {
+        chunk::single_chunk_plan(size)
+    } else {
+        chunk::plan_chunks(size)
+    };
+    let mut bitmap = chunk::load_or_init_bitmap(&job.marker, &plan)?;
+    let output_size = tokio::fs::metadata(&job.output).await.ok().map(|m| m.len());
     if chunk::bitmap_complete(&bitmap) && output_size != Some(size) {
         bitmap.fill(0);
-        tokio::fs::write(&marker_path, &bitmap).await?;
+        tokio::fs::write(&job.marker, &bitmap).await?;
     }
-    chunk::preallocate(&output_path, size)?;
-
-    let already = chunk::bytes_already_done(&plan, &bitmap);
-    state.downloaded_bytes.store(already, Ordering::Relaxed);
+    chunk::preallocate(&job.output, size)?;
+    job.state
+        .downloaded_bytes
+        .store(chunk::bytes_already_done(&plan, &bitmap), Ordering::Relaxed);
 
     let pending = chunk::pending_chunks(&plan, &bitmap);
     if pending.is_empty() {
         return Ok(());
     }
-
-    let mut chunk_tasks: JoinSet<Result<()>> = JoinSet::new();
+    let src = Arc::new(src);
+    let mut tasks: JoinSet<Result<()>> = JoinSet::new();
     for range in pending {
-        if stop.halt_new_work() {
+        if job.stop.halt_new_work() {
             break;
         }
-        let sem = chunk_sem.clone();
-        let transport = transport.clone();
-        let auth = auth.clone();
-        let url = url.clone();
-        let output_path = output_path.clone();
-        let marker_path = marker_path.clone();
-        let state = state.clone();
-        let stop = stop.clone();
-        chunk_tasks.spawn(async move {
+        let (sem, src, stop) = (job.chunk_sem.clone(), src.clone(), job.stop.clone());
+        let (output, marker, state) = (job.output.clone(), job.marker.clone(), job.state.clone());
+        tasks.spawn(async move {
             if stop.halt_new_work() {
                 return Err(Error::Cancelled);
             }
@@ -546,211 +424,106 @@ async fn download_range_based(job: RangeJob, dest_dir: &Path) -> Result<()> {
             if stop.halt_new_work() {
                 return Err(Error::Cancelled);
             }
-
             let mut file = OpenOptions::new()
                 .write(true)
                 .read(true)
-                .open(&output_path)
+                .open(&output)
                 .await?;
             file.seek(std::io::SeekFrom::Start(range.offset)).await?;
-
-            let mut counted = CountingSink::new(&mut file, state.clone());
-            let fetch = transport.get_range(
-                &url,
-                auth.as_deref(),
-                base_offset + range.offset,
-                range.len,
-                &mut counted,
-            );
-            tokio::select! {
-                biased;
-                _ = stop.user.cancelled() => return Err(Error::Cancelled),
-                res = fetch => res?,
-            }
-            drop(counted);
+            let mut counted = CountingSink::new(&mut file, state, 1.0);
+            stop.race(src.fetch(range.offset, range.len, &mut counted))
+                .await?;
             file.flush().await?;
-            drop(file);
-
-            chunk::mark_chunk_done(&marker_path, range.index)?;
-            Ok(())
+            chunk::mark_chunk_done(&marker, range.index)
         });
     }
 
     let mut first_err: Option<Error> = None;
-    while let Some(res) = chunk_tasks.join_next().await {
-        match res {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => {
-                stop.failed.cancel();
-                first_err.get_or_insert(e);
-            }
-            Err(join_err) => {
-                stop.failed.cancel();
-                first_err.get_or_insert(Error::Http(format!("chunk join: {join_err}")));
-            }
-        }
+    while let Some(res) = tasks.join_next().await {
+        let err = match res {
+            Ok(Ok(())) => continue,
+            Ok(Err(e)) => e,
+            Err(join_err) => Error::Http(format!("chunk join: {join_err}")),
+        };
+        job.stop.failed.cancel();
+        first_err.get_or_insert(err);
     }
-
     if let Some(e) = first_err {
         return Err(e);
     }
-    if stop.user.is_cancelled() {
+    if job.stop.user.is_cancelled() {
         return Err(Error::Cancelled);
     }
     Ok(())
 }
 
-/// Arguments for [`download_http_deflate`].
-struct DeflateJob {
-    name: String,
-    uncompressed_size: u64,
-    compressed_len: u64,
-    offset: u64,
-    state: Arc<FileState>,
-    transport: Arc<dyn HttpTransport>,
-    stop: StopSignals,
-    url: url::Url,
-    auth: Option<String>,
+/// DEFLATE entries resume all-or-nothing: flate2 streams aren't seekable.
+async fn download_deflate(job: &Job, src: RangeSrc, compressed_len: u64, size: u64) -> Result<()> {
+    job.state.total_bytes.store(size, Ordering::Relaxed);
+    let marker = std::fs::read(&job.marker).unwrap_or_default();
+    let output_size = std::fs::metadata(&job.output).ok().map(|m| m.len());
+    if marker.first() == Some(&chunk::PROGRESS_DONE_BYTE) && output_size == Some(size) {
+        job.state.downloaded_bytes.store(size, Ordering::Relaxed);
+        return Ok(());
+    }
+    if job.stop.halt_new_work() {
+        return Err(Error::Cancelled);
+    }
+
+    // Credit the compressed fetch at the uncompressed scale the UI reports.
+    let scale = if compressed_len == 0 {
+        1.0
+    } else {
+        size as f64 / compressed_len as f64
+    };
+    let mut compressed = Vec::with_capacity(compressed_len as usize);
+    let mut counted = CountingSink::new(&mut compressed, job.state.clone(), scale);
+    job.stop
+        .race(src.fetch(0, compressed_len, &mut counted))
+        .await?;
+    if job.stop.user.is_cancelled() {
+        return Err(Error::Cancelled);
+    }
+
+    let decoded = inflate_to_file(compressed, job.output.clone()).await?;
+    if decoded != size {
+        return Err(Error::Hub(format!(
+            "deflate short decode for {}: got {decoded} / expected {size}",
+            job.name
+        )));
+    }
+    finish_entry(job, size)
 }
 
-/// DEFLATE-decoding download for AI Hub `.bin` shards. Entry-granular
-/// resume: any partial state from a previous crash is discarded and
-/// the whole entry is refetched, because flate2 streams aren't
-/// seekable mid-entry.
-async fn download_http_deflate(job: DeflateJob, dest_dir: &Path) -> Result<()> {
-    let DeflateJob {
-        name,
-        uncompressed_size,
-        compressed_len,
-        offset,
-        state,
-        transport,
-        stop,
-        url,
-        auth,
-    } = job;
-    state
-        .total_bytes
-        .store(uncompressed_size, Ordering::Relaxed);
-    let output_path = dest_dir.join(&name);
-    let marker_path = PathBuf::from(format!("{}{}", output_path.display(), PROGRESS_SUFFIX));
-
-    // DEFLATE entries are entry-granular: a 0x01 marker means the file
-    // is fully decoded, anything else (partial, missing, stale) means
-    // refetch the whole entry — flate2 streams aren't seekable, so
-    // mid-entry resume isn't possible.
-    if let Ok(data) = std::fs::read(&marker_path) {
-        if data.first().copied() == Some(chunk::PROGRESS_DONE_BYTE)
-            && output_path.exists()
-            && std::fs::metadata(&output_path)
-                .map(|m| m.len())
-                .unwrap_or(0)
-                == uncompressed_size
-        {
-            state
-                .downloaded_bytes
-                .store(uncompressed_size, Ordering::Relaxed);
-            return Ok(());
+async fn inflate_to_file(compressed: Vec<u8>, output: PathBuf) -> Result<u64> {
+    tokio::task::spawn_blocking(move || -> Result<u64> {
+        use std::io::Write;
+        if let Some(parent) = output.parent() {
+            std::fs::create_dir_all(parent)?;
         }
-    }
-
-    if stop.halt_new_work() {
-        return Err(Error::Cancelled);
-    }
-
-    // Buffering the compressed slice caps RAM at `compressed_len` per
-    // in-flight deflate entry; `file_concurrency` bounds how many run
-    // in parallel. Streaming decode on `spawn_blocking` because flate2
-    // is sync.
-    //
-    // `downloaded_bytes` is advanced during the fetch (not the decode)
-    // using a scale factor so the progress callback sees a smooth
-    // compressed → uncompressed mapping. DEFLATE's 1:N ratio is stable
-    // within a shard, so the scaled number matches the final
-    // uncompressed size to within a rounding byte.
-    let mut compressed: Vec<u8> = Vec::with_capacity(compressed_len as usize);
-    {
-        let scale = if compressed_len == 0 {
-            1.0
-        } else {
-            uncompressed_size as f64 / compressed_len as f64
-        };
-        let mut counted = CountingSink::scaled(&mut compressed, state.clone(), scale);
-        let fetch =
-            transport.get_range(&url, auth.as_deref(), offset, compressed_len, &mut counted);
-        tokio::select! {
-            biased;
-            _ = stop.user.cancelled() => return Err(Error::Cancelled),
-            res = fetch => res?,
-        }
-    }
-
-    if stop.user.is_cancelled() {
-        return Err(Error::Cancelled);
-    }
-
-    if let Some(parent) = output_path.parent() {
-        tokio::fs::create_dir_all(parent).await?;
-    }
-    let out_path = output_path.clone();
-    let decoded_size = tokio::task::spawn_blocking(move || -> Result<u64> {
-        use flate2::write::DeflateDecoder;
-        use std::io::Write as IoWrite;
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&out_path)?;
-        let mut dec = DeflateDecoder::new(&mut file);
+        let mut file = std::fs::File::create(&output)?;
+        let mut dec = flate2::write::DeflateDecoder::new(&mut file);
         dec.write_all(&compressed)
-            .map_err(|e| Error::Hub(format!("inflate {}: {e}", out_path.display())))?;
+            .map_err(|e| Error::Hub(format!("inflate {}: {e}", output.display())))?;
         let written = dec.total_out();
         dec.finish()
-            .map_err(|e| Error::Hub(format!("inflate finish {}: {e}", out_path.display())))?;
+            .map_err(|e| Error::Hub(format!("inflate finish {}: {e}", output.display())))?;
         file.sync_all()?;
         Ok(written)
     })
     .await
-    .map_err(|e| Error::Http(format!("deflate join: {e}")))??;
-
-    if decoded_size != uncompressed_size {
-        return Err(Error::Hub(format!(
-            "deflate short decode for {}: got {decoded_size} / expected {uncompressed_size}",
-            name
-        )));
-    }
-    // Snap downloaded_bytes to the exact expected size — the scaled
-    // fetch counter is within a rounding byte but not precise.
-    state
-        .downloaded_bytes
-        .store(uncompressed_size, Ordering::Relaxed);
-
-    std::fs::write(&marker_path, [chunk::PROGRESS_DONE_BYTE])?;
-
-    Ok(())
+    .map_err(|e| Error::Http(format!("deflate join: {e}")))?
 }
 
-struct CountingSink<'a, W: tokio::io::AsyncWrite + Unpin + Send> {
+/// Credits `written * scale` bytes to `downloaded_bytes` on every write.
+struct CountingSink<'a, W: AsyncWrite + Unpin + Send> {
     inner: &'a mut W,
     state: Arc<FileState>,
-    /// Multiplier applied to each write's byte count before crediting
-    /// `downloaded_bytes`. `1.0` for raw range downloads (written bytes
-    /// = visible progress); for DEFLATE fetches it's
-    /// `uncompressed_size / compressed_len`, so the progress callback
-    /// sees the fetch advance at the scale the UI expects.
     scale: f64,
 }
 
-impl<'a, W: tokio::io::AsyncWrite + Unpin + Send> CountingSink<'a, W> {
-    fn new(inner: &'a mut W, state: Arc<FileState>) -> Self {
-        Self {
-            inner,
-            state,
-            scale: 1.0,
-        }
-    }
-
-    fn scaled(inner: &'a mut W, state: Arc<FileState>, scale: f64) -> Self {
+impl<'a, W: AsyncWrite + Unpin + Send> CountingSink<'a, W> {
+    fn new(inner: &'a mut W, state: Arc<FileState>, scale: f64) -> Self {
         Self {
             inner,
             state,
@@ -759,7 +532,7 @@ impl<'a, W: tokio::io::AsyncWrite + Unpin + Send> CountingSink<'a, W> {
     }
 }
 
-impl<'a, W: tokio::io::AsyncWrite + Unpin + Send> tokio::io::AsyncWrite for CountingSink<'a, W> {
+impl<W: AsyncWrite + Unpin + Send> AsyncWrite for CountingSink<'_, W> {
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,

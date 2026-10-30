@@ -308,8 +308,7 @@ fn drop_marker(dest_dir: &Path, file_name: &str) {
     if file_name.is_empty() {
         return;
     }
-    let marker = dest_dir.join(format!("{file_name}{PROGRESS_SUFFIX}"));
-    let _ = fs::remove_file(&marker);
+    let _ = fs::remove_file(resume::marker_path(dest_dir, file_name));
 }
 
 #[cfg(test)]

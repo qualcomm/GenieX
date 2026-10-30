@@ -29,15 +29,12 @@
 //!   extra + comment.
 //! - Local file header: 0x04034b50, fixed 30 bytes + name + extra.
 
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use tokio::io::{AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 use url::Url;
 
 use crate::error::{Error, Result};
-use crate::transport::{HeadInfo, HttpTransport};
+use crate::transport::HttpTransport;
 
 const EOCD_SIG: u32 = 0x0605_4b50;
 const ZIP64_EOCD_LOCATOR_SIG: u32 = 0x0706_4b50;
@@ -377,97 +374,11 @@ fn read_zip64_u64(buf: &[u8], off: usize) -> Option<u64> {
     Some(read_u64(bytes, 0))
 }
 
-/// [`HttpTransport`] adapter that serves a single local file. Used by the
-/// LocalFS source to feed [`fetch_central_directory`] when the archive is
-/// already on disk; the `Url` argument is ignored.
-#[derive(Debug)]
-pub struct LocalFileTransport {
-    path: PathBuf,
-    len: u64,
-}
-
-impl LocalFileTransport {
-    pub fn open(path: &Path) -> Result<Self> {
-        let meta = std::fs::metadata(path).map_err(|e| {
-            Error::Hub(format!(
-                "local archive {} is not accessible: {e}",
-                path.display()
-            ))
-        })?;
-        if !meta.is_file() {
-            return Err(Error::Hub(format!(
-                "local archive {} is not a regular file",
-                path.display()
-            )));
-        }
-        Ok(Self {
-            path: path.to_path_buf(),
-            len: meta.len(),
-        })
-    }
-}
-
-#[async_trait]
-impl HttpTransport for LocalFileTransport {
-    async fn head(&self, _url: &Url, _auth: Option<&str>) -> Result<HeadInfo> {
-        Ok(HeadInfo {
-            size: self.len,
-            accepts_ranges: true,
-            etag: None,
-        })
-    }
-
-    async fn get_range(
-        &self,
-        _url: &Url,
-        _auth: Option<&str>,
-        offset: u64,
-        len: u64,
-        sink: &mut (dyn AsyncWrite + Unpin + Send),
-    ) -> Result<()> {
-        if len == 0 {
-            return Ok(());
-        }
-        let end = offset
-            .checked_add(len)
-            .ok_or_else(|| Error::Hub(format!("range {offset}+{len} overflows u64")))?;
-        if end > self.len {
-            return Err(Error::Hub(format!(
-                "local range {offset}+{len} exceeds archive size {}",
-                self.len
-            )));
-        }
-
-        let mut file = tokio::fs::File::open(&self.path).await?;
-        file.seek(std::io::SeekFrom::Start(offset)).await?;
-        let mut remaining = len;
-        let mut buf = vec![0u8; 64 * 1024];
-        while remaining > 0 {
-            let want = remaining.min(buf.len() as u64) as usize;
-            let n = tokio::io::AsyncReadExt::read(&mut file, &mut buf[..want]).await?;
-            if n == 0 {
-                return Err(Error::Hub(format!(
-                    "local archive {}: unexpected EOF at offset {}",
-                    self.path.display(),
-                    offset + (len - remaining)
-                )));
-            }
-            sink.write_all(&buf[..n])
-                .await
-                .map_err(|e| Error::Http(format!("write sink: {e}")))?;
-            remaining -= n as u64;
-        }
-        sink.flush()
-            .await
-            .map_err(|e| Error::Http(format!("flush sink: {e}")))?;
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_support::{build_zip, fast_transport, mount_ranged, url, ZipMethod};
+    use crate::transport::LocalFileTransport;
     use wiremock::MockServer;
 
     fn stored_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
@@ -601,35 +512,5 @@ mod tests {
         let mut body = stored_zip(&[("model.bin", b"HELLO")]);
         add_zip64_eocd(&mut body, u64::MAX, None);
         assert_eq!(parse_local(body).await.unwrap().len(), 1);
-    }
-
-    #[tokio::test]
-    async fn local_transport_serves_ranges_and_rejects_oob() {
-        let tmp = tempfile::tempdir().unwrap();
-        let p = tmp.path().join("a.bin");
-        std::fs::write(&p, b"abcdef").unwrap();
-        let t = LocalFileTransport::open(&p).unwrap();
-        let dummy = Url::parse("file:///dummy").unwrap();
-
-        let info = t.head(&dummy, None).await.unwrap();
-        assert_eq!(info.size, 6);
-        assert!(info.accepts_ranges);
-
-        let mut buf = Vec::new();
-        t.get_range(&dummy, None, 2, 4, &mut buf).await.unwrap();
-        assert_eq!(buf, b"cdef");
-
-        let mut buf = Vec::new();
-        let err = t
-            .get_range(&dummy, None, 5, 10, &mut buf)
-            .await
-            .unwrap_err();
-        assert!(err.to_string().contains("exceeds"), "{err}");
-    }
-
-    #[test]
-    fn local_transport_open_rejects_missing() {
-        let err = LocalFileTransport::open(Path::new("/nonexistent/zzz.zip")).unwrap_err();
-        assert!(err.to_string().contains("not accessible"), "{err}");
     }
 }

@@ -12,17 +12,21 @@
 //! pull left the output file in place with no `.progress` sibling.
 //! Treat that as done rather than re-HEADing.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::source::FileSpec;
 
 /// Suffix appended to a file name for its `.progress` marker.
 pub const PROGRESS_SUFFIX: &str = ".progress";
 
+pub(crate) fn marker_path(dest_dir: &Path, name: &str) -> PathBuf {
+    dest_dir.join(format!("{name}{PROGRESS_SUFFIX}"))
+}
+
 /// Return the subset of `files` that still need to be sent to the
 /// executor. Files are included when the on-disk marker/payload state
 /// does not already confirm them as done.
-pub fn filter_pending<'a>(files: &'a [FileSpec], dest_dir: &Path) -> Vec<FileSpec> {
+pub fn filter_pending(files: &[FileSpec], dest_dir: &Path) -> Vec<FileSpec> {
     files
         .iter()
         .filter(|f| needs_fetch(f, dest_dir))
@@ -35,7 +39,7 @@ fn needs_fetch(spec: &FileSpec, dest_dir: &Path) -> bool {
     if name.is_empty() {
         return false;
     }
-    let marker = dest_dir.join(format!("{name}{PROGRESS_SUFFIX}"));
+    let marker = marker_path(dest_dir, name);
     let output = dest_dir.join(name);
     if !marker.exists() && output.exists() {
         let on_disk = std::fs::metadata(&output).map(|m| m.len()).unwrap_or(0);
