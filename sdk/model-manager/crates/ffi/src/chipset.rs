@@ -3,7 +3,6 @@
 
 use std::os::raw::c_char;
 
-use model_manager_core::config::StoreConfig;
 use model_manager_core::source::ai_hub::{
     detect::detect_host_chipset, detect_host_chipset_reference, list_supported_chipsets,
     AiHubConfig,
@@ -28,14 +27,6 @@ pub struct GenieXChipsetList {
     pub count: i32,
 }
 
-fn ai_hub_cfg_for_chipset_query(store: &model_manager_core::store::Store) -> AiHubConfig {
-    let endpoint = StoreConfig::ai_hub_base_url();
-    let cache_dir = store.config().ai_hub_cache_dir();
-    let version =
-        StoreConfig::ai_hub_version_override().unwrap_or_else(StoreConfig::ai_hub_version_fallback);
-    AiHubConfig::new(endpoint, version, String::new(), cache_dir, false)
-}
-
 #[no_mangle]
 pub extern "C" fn geniex_model_list_chipsets(out: *mut GenieXChipsetList) -> i32 {
     ffi_guard(|| {
@@ -45,7 +36,7 @@ pub extern "C" fn geniex_model_list_chipsets(out: *mut GenieXChipsetList) -> i32
         let store = get_store()?;
         let chipsets = runtime_handle()
             .block_on(async {
-                let cfg = ai_hub_cfg_for_chipset_query(store);
+                let cfg = AiHubConfig::from_store(store, String::new());
                 list_supported_chipsets(&cfg).await
             })
             .map_err(|e| report(&e))?;
@@ -113,7 +104,7 @@ pub extern "C" fn geniex_model_detect_chipset(offline: i32, out_chipset: *mut *m
         } else {
             let store = get_store()?;
             runtime_handle().block_on(async {
-                let cfg = ai_hub_cfg_for_chipset_query(store);
+                let cfg = AiHubConfig::from_store(store, String::new());
                 detect_host_chipset_reference(&cfg).await
             })
         };

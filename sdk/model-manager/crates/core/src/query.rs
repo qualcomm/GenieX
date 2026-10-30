@@ -8,17 +8,12 @@
 //! after planning, so the caller can present a precision picker before
 //! committing to a download.
 
-use std::sync::Arc;
-
 use crate::error::Result;
 use crate::manifest::ModelType;
 use crate::manifest_builder::quant_sort_key;
-use crate::mapping::canonicalize_model_name;
-use crate::pull::{build_source, PullRequest};
+use crate::pull::{prepare, PullRequest};
 use crate::source::Plan;
 use crate::store::Store;
-use crate::transport::{HttpTransport, ReqwestTransport};
-use crate::validation::validate_model_name;
 
 /// One quantization the source advertises for a model. Candidates in
 /// [`ModelQuery::candidates`] are sorted so callers can grab the head as
@@ -41,11 +36,7 @@ pub struct ModelQuery {
 /// Plan a model against its source and return the candidate quants. No
 /// bytes are fetched.
 pub async fn query(store: &Store, mut req: PullRequest) -> Result<ModelQuery> {
-    req.model_name = canonicalize_model_name(&req.model_name);
-    validate_model_name(&req.model_name)?;
-
-    let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
-    let source = build_source(&req, store, transport).await?;
+    let (source, _) = prepare(store, &mut req)?;
     let plan = source.plan().await?;
     Ok(model_query_from_plan(req.model_name, plan))
 }

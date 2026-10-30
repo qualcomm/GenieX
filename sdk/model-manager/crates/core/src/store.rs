@@ -12,7 +12,7 @@ use crate::error::{Error, Result};
 use crate::manifest::{ModelManifest, ModelType};
 use crate::manifest_builder::quant_sort_key;
 use crate::mapping::canonicalize_model_name;
-use crate::validation::{validate_model_name, validate_relative_file};
+use crate::validation::validate_model_name;
 
 #[derive(Debug, Clone)]
 pub struct ModelPaths {
@@ -58,26 +58,19 @@ impl Store {
     /// LockFileEx on Windows via `fs2`). This matches the Go CLI which
     /// uses `github.com/gofrs/flock` for the same purpose.
     pub fn with_model_lock<T>(&self, name: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
-        let lock_file = self.acquire_model_lock(name)?;
-        let result = f();
-        drop(lock_file); // explicit for clarity; Drop releases the OS lock
-        result
+        let _lock = self.acquire_model_lock(name)?;
+        f()
     }
 
-    /// Async variant of [`Self::with_model_lock`]. Acquires the OS lock
-    /// synchronously (it's a single syscall + file create, fast enough
-    /// on a tokio worker thread), then runs the async body while
-    /// holding it. Lock is released when the returned future completes
-    /// and the `lock_file` RAII handle drops.
+    /// Async variant of [`Self::with_model_lock`]; the lock is taken
+    /// synchronously and held until the body completes.
     pub async fn with_model_lock_async<F, Fut, T>(&self, name: &str, f: F) -> Result<T>
     where
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = Result<T>>,
     {
-        let lock_file = self.acquire_model_lock(name)?;
-        let result = f().await;
-        drop(lock_file);
-        result
+        let _lock = self.acquire_model_lock(name)?;
+        f().await
     }
 
     fn acquire_model_lock(&self, name: &str) -> Result<fs::File> {
@@ -280,12 +273,10 @@ impl Store {
         resolve_model_paths(&manifest, &base_dir, quant.as_deref())
     }
 
-    pub fn model_file_path(&self, name: &str, file: &str) -> Result<PathBuf> {
+    /// `<models>/<name>`, after validating `name`.
+    pub fn model_dir(&self, name: &str) -> Result<PathBuf> {
         validate_model_name(name)?;
-        if !file.is_empty() {
-            validate_relative_file(file)?;
-        }
-        Ok(self.cfg.model_file_path(name, file))
+        Ok(self.cfg.model_dir(name))
     }
 }
 
@@ -538,7 +529,7 @@ mod tests {
         let (store, _tmp) = temp_store();
         assert!(store.get_manifest("../etc").is_err());
         assert!(store.remove("a/..").is_err());
-        assert!(store.model_file_path("Org/Foo", "../outside").is_err());
+        assert!(store.model_dir("../etc").is_err());
     }
 
     #[test]

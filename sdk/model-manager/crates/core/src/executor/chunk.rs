@@ -89,11 +89,7 @@ pub fn plan_chunks_with_floor(file_size: u64, min_chunk_size: u64) -> ChunkPlan 
 }
 
 fn effective_min_chunk_size() -> u64 {
-    std::env::var(ENV_CHUNK_SIZE)
-        .ok()
-        .and_then(|s| s.parse::<u64>().ok())
-        .filter(|v| *v > 0)
-        .unwrap_or(MIN_CHUNK_SIZE)
+    crate::config::env_positive(ENV_CHUNK_SIZE).unwrap_or(MIN_CHUNK_SIZE)
 }
 
 /// Load the `.progress` bitmap for a plan, creating a zero-initialised one

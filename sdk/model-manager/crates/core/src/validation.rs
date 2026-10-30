@@ -32,27 +32,6 @@ pub fn validate_model_name(name: &str) -> Result<()> {
     Ok(())
 }
 
-/// Validate a file name relative to a model directory.
-///
-/// Rules:
-/// - not absolute (no leading '/' or '\\')
-/// - no component equal to '..'
-/// - no NUL byte
-pub fn validate_relative_file(name: &str) -> Result<()> {
-    if name.is_empty() {
-        return Err(Error::InvalidFileName(name.to_string()));
-    }
-    if name.starts_with('/') || name.starts_with('\\') || name.contains('\0') {
-        return Err(Error::InvalidFileName(name.to_string()));
-    }
-    for component in name.split(['/', '\\']) {
-        if component == ".." {
-            return Err(Error::InvalidFileName(name.to_string()));
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -66,16 +45,6 @@ mod tests {
             "../etc", "a/..", "./b", "a\\b", "", "onlyone", "a/b/c", "a//b", "a/b\0",
         ] {
             assert!(validate_model_name(bad).is_err(), "{bad:?}");
-        }
-    }
-
-    #[test]
-    fn relative_file_rules() {
-        for ok in ["model.gguf", "sub/model.gguf"] {
-            assert!(validate_relative_file(ok).is_ok(), "{ok:?}");
-        }
-        for bad in ["/abs", "..", "a/../b", "foo\0.txt"] {
-            assert!(validate_relative_file(bad).is_err(), "{bad:?}");
         }
     }
 }

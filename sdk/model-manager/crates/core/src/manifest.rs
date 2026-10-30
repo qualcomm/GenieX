@@ -89,4 +89,27 @@ impl ModelManifest {
     pub fn total_size(&self) -> i64 {
         self.downloaded_files().map(|f| f.size).sum()
     }
+
+    /// Fold in what an earlier pull of the same model left on disk: its
+    /// quants, extra files, and the shared mmproj/tokenizer when this
+    /// manifest has none.
+    pub(crate) fn merge_existing(&mut self, existing: ModelManifest) {
+        for (quant, info) in existing.model_file {
+            self.model_file.entry(quant).or_insert(info);
+        }
+        let known: std::collections::HashSet<String> =
+            self.extra_files.iter().map(|f| f.name.clone()).collect();
+        self.extra_files.extend(
+            existing
+                .extra_files
+                .into_iter()
+                .filter(|f| !known.contains(&f.name)),
+        );
+        if self.mmproj_file.name.is_empty() {
+            self.mmproj_file = existing.mmproj_file;
+        }
+        if self.tokenizer_file.name.is_empty() {
+            self.tokenizer_file = existing.tokenizer_file;
+        }
+    }
 }

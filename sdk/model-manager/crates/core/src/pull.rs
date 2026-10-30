@@ -101,13 +101,7 @@ pub enum PullIntent {
 /// Async-native; sync callers should use [`pull_blocking`] (which
 /// drives this on the FFI runtime).
 pub async fn pull(store: &Store, mut req: PullRequest) -> Result<()> {
-    // Bare AI Hub ids (no '/') are stored under `qualcomm/<name>` so they
-    // satisfy validate_model_name's org/repo invariant.
-    req.model_name = canonicalize_model_name(&req.model_name);
-    validate_model_name(&req.model_name)?;
-
-    let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
-    let source: Box<dyn ModelSource> = build_source(&req, store, transport.clone()).await?;
+    let (source, transport) = prepare(store, &mut req)?;
     pull_with_source(
         store,
         &req.model_name,
@@ -132,47 +126,18 @@ pub async fn pull_with_source(
     let model_name_owned = model_name.to_string();
     store
         .with_model_lock_async(model_name, || async move {
-            let dest_dir = store.model_file_path(&model_name_owned, "")?;
-            fs::create_dir_all(&dest_dir)?;
+            let dest_dir = store.model_dir(&model_name_owned)?;
             let inflight_dir = dest_dir.join(INFLIGHT_DIR);
             fs::create_dir_all(&inflight_dir)?;
 
             let mut plan = source.plan().await?;
             plan.manifest.name = model_name_owned.clone();
 
-            // Merge with any existing manifest so pulling an extra quant keeps
-            // the quants already on disk instead of orphaning them. A
-            // quant-specific plan only carries the requested quant; fold in the
-            // model_file entries (and extra shards) the plan doesn't cover.
+            // A quant-specific plan carries only that quant; keep the ones on disk.
             let final_path = dest_dir.join(MANIFEST_FILE);
             if let Ok(data) = fs::read_to_string(&final_path) {
-                if let Ok(existing) = serde_json::from_str::<crate::manifest::ModelManifest>(&data)
-                {
-                    for (quant, info) in existing.model_file {
-                        plan.manifest.model_file.entry(quant).or_insert(info);
-                    }
-                    let known: std::collections::HashSet<&str> = plan
-                        .manifest
-                        .extra_files
-                        .iter()
-                        .map(|f| f.name.as_str())
-                        .collect::<std::collections::HashSet<_>>();
-                    let mut merged_extras: Vec<_> = existing
-                        .extra_files
-                        .into_iter()
-                        .filter(|f| !known.contains(f.name.as_str()))
-                        .collect();
-                    plan.manifest.extra_files.append(&mut merged_extras);
-
-                    // Preserve already-downloaded shared files the new quant's
-                    // plan didn't surface, so re-pulling a different quant of a
-                    // VLM doesn't orphan its mmproj / tokenizer.
-                    if plan.manifest.mmproj_file.name.is_empty() {
-                        plan.manifest.mmproj_file = existing.mmproj_file;
-                    }
-                    if plan.manifest.tokenizer_file.name.is_empty() {
-                        plan.manifest.tokenizer_file = existing.tokenizer_file;
-                    }
+                if let Ok(existing) = serde_json::from_str(&data) {
+                    plan.manifest.merge_existing(existing);
                 }
             }
 
@@ -219,7 +184,19 @@ pub fn pull_blocking(
     handle.block_on(pull(store, req))
 }
 
-pub(crate) async fn build_source(
+/// Canonicalize `req.model_name` (bare names land under `qualcomm/`) and
+/// build its source on a fresh transport.
+pub(crate) fn prepare(
+    store: &Store,
+    req: &mut PullRequest,
+) -> Result<(Box<dyn ModelSource>, Arc<dyn HttpTransport>)> {
+    req.model_name = canonicalize_model_name(&req.model_name);
+    validate_model_name(&req.model_name)?;
+    let transport: Arc<dyn HttpTransport> = Arc::new(ReqwestTransport::new()?);
+    Ok((build_source(req, store, transport.clone())?, transport))
+}
+
+fn build_source(
     req: &PullRequest,
     store: &Store,
     transport: Arc<dyn HttpTransport>,
@@ -249,20 +226,12 @@ pub(crate) async fn build_source(
         PullIntent::AiHub {
             display_name,
             chipset,
-        } => {
-            let endpoint = StoreConfig::ai_hub_base_url();
-            let cache_dir = store.config().ai_hub_cache_dir();
-            let version = StoreConfig::ai_hub_version_override()
-                .unwrap_or_else(StoreConfig::ai_hub_version_fallback);
-            let cfg = AiHubConfig::new(endpoint, version, chipset.clone(), cache_dir, false);
-            let src = AiHubSource::with_transport(
-                display_name.clone(),
-                req.model_name.clone(),
-                cfg,
-                transport,
-            );
-            Ok(Box::new(src))
-        }
+        } => Ok(Box::new(AiHubSource::with_transport(
+            display_name.clone(),
+            req.model_name.clone(),
+            AiHubConfig::from_store(store, chipset.clone()),
+            transport,
+        ))),
         PullIntent::DockerHub { repo, reference } => {
             let src = DockerHubSource::new(repo.clone(), reference.clone(), transport)?;
             Ok(Box::new(src))

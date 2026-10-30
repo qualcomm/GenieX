@@ -38,19 +38,15 @@ impl StoreConfig {
     }
 
     pub fn hf_endpoint() -> String {
-        match std::env::var("HF_ENDPOINT") {
-            Ok(v) if !v.trim().is_empty() => v.trim().trim_end_matches('/').to_string(),
-            _ => crate::source::hf::DEFAULT_HF_ENDPOINT.to_string(),
-        }
+        env_endpoint("HF_ENDPOINT", crate::source::hf::DEFAULT_HF_ENDPOINT)
     }
 
-    /// ModelScope public API base URL. Honours the same `MODELSCOPE_ENDPOINT`
-    /// variable as the ModelScope SDK; defaults to `https://modelscope.cn`.
+    /// Honours the ModelScope SDK's own `MODELSCOPE_ENDPOINT`.
     pub fn modelscope_endpoint() -> String {
-        match std::env::var("MODELSCOPE_ENDPOINT") {
-            Ok(v) if !v.trim().is_empty() => v.trim().trim_end_matches('/').to_string(),
-            _ => crate::source::modelscope::DEFAULT_MODELSCOPE_ENDPOINT.to_string(),
-        }
+        env_endpoint(
+            "MODELSCOPE_ENDPOINT",
+            crate::source::modelscope::DEFAULT_MODELSCOPE_ENDPOINT,
+        )
     }
 
     /// AI Hub public assets base URL. Mirrors the Go CLI's
@@ -86,10 +82,6 @@ impl StoreConfig {
     pub fn model_dir(&self, name: &str) -> PathBuf {
         self.models_dir().join(name)
     }
-
-    pub fn model_file_path(&self, name: &str, file: &str) -> PathBuf {
-        self.model_dir(name).join(file)
-    }
 }
 
 /// Mirrors `cli/internal/config/config.go:DefaultAIHubBaseURL`.
@@ -98,6 +90,21 @@ const DEFAULT_AI_HUB_BASE_URL: &str =
 
 /// Fallback for [`StoreConfig::ai_hub_version_fallback`].
 const DEFAULT_AI_HUB_VERSION: &str = "v0.60.0";
+
+fn env_endpoint(var: &str, default: &str) -> String {
+    match std::env::var(var) {
+        Ok(v) if !v.trim().is_empty() => v.trim().trim_end_matches('/').to_string(),
+        _ => default.to_string(),
+    }
+}
+
+/// A positive integer from `var`, else `None`.
+pub(crate) fn env_positive<T: std::str::FromStr + PartialOrd + Default>(var: &str) -> Option<T> {
+    std::env::var(var)
+        .ok()
+        .and_then(|s| s.parse::<T>().ok())
+        .filter(|v| *v > T::default())
+}
 
 fn default_data_dir() -> PathBuf {
     let home = std::env::var("HOME")

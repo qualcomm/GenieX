@@ -107,9 +107,6 @@ pub enum Error {
     #[error("invalid model name: '{0}' (must be 'org/repo' with no path traversal)")]
     InvalidModelName(String),
 
-    #[error("invalid file name: '{0}' (must be relative, no '..', no NUL)")]
-    InvalidFileName(String),
-
     /// Sources are a local directory or a remote repo listing, so the message
     /// stays neutral about which.
     #[error("could not infer a model manifest: {0}")]

@@ -22,6 +22,7 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+use crate::config::env_positive;
 use crate::error::{Error, Result};
 use crate::resume::marker_path;
 use crate::source::{BytesSource, FileSpec};
@@ -52,21 +53,15 @@ pub struct ExecutorConfig {
 impl ExecutorConfig {
     /// Resolve from `GENIEX_DL_*` env overrides.
     pub fn resolve(default_file_concurrency: usize) -> Self {
-        let file_conc = env_usize("GENIEX_DL_FILE_CONCURRENCY").unwrap_or(default_file_concurrency);
-        let chunk_conc = env_usize("GENIEX_DL_CHUNK_CONCURRENCY").unwrap_or(8);
+        let file_conc =
+            env_positive("GENIEX_DL_FILE_CONCURRENCY").unwrap_or(default_file_concurrency);
+        let chunk_conc = env_positive("GENIEX_DL_CHUNK_CONCURRENCY").unwrap_or(8);
         Self {
             file_concurrency: file_conc.max(1),
             chunk_concurrency: chunk_conc.max(1),
             progress_interval: Duration::from_millis(100),
         }
     }
-}
-
-fn env_usize(key: &str) -> Option<usize> {
-    std::env::var(key)
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .filter(|v| *v > 0)
 }
 
 #[derive(Clone)]

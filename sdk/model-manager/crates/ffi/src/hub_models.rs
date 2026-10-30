@@ -3,7 +3,6 @@
 
 use std::os::raw::c_char;
 
-use model_manager_core::config::StoreConfig;
 use model_manager_core::source::ai_hub::{list_hub_models, AiHubConfig};
 
 use crate::init::{get_store, runtime_handle};
@@ -47,11 +46,7 @@ pub extern "C" fn geniex_model_list_hub(
         let store = get_store()?;
         let models = runtime_handle()
             .block_on(async {
-                let endpoint = StoreConfig::ai_hub_base_url();
-                let cache_dir = store.config().ai_hub_cache_dir();
-                let version = StoreConfig::ai_hub_version_override()
-                    .unwrap_or_else(StoreConfig::ai_hub_version_fallback);
-                let cfg = AiHubConfig::new(endpoint, version, String::new(), cache_dir, false);
+                let cfg = AiHubConfig::from_store(store, String::new());
                 list_hub_models(&cfg, chipset).await
             })
             .map_err(|e| report(&e))?;

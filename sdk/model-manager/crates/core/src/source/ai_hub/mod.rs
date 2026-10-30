@@ -60,6 +60,19 @@ pub struct AiHubConfig {
 }
 
 impl AiHubConfig {
+    /// Endpoint, version and cache dir from the environment and `store`.
+    pub fn from_store(store: &crate::store::Store, chipset: String) -> Self {
+        let version = StoreConfig::ai_hub_version_override()
+            .unwrap_or_else(StoreConfig::ai_hub_version_fallback);
+        Self::new(
+            StoreConfig::ai_hub_base_url(),
+            version,
+            chipset,
+            store.config().ai_hub_cache_dir(),
+            false,
+        )
+    }
+
     pub fn new(
         endpoint: String,
         version: String,
