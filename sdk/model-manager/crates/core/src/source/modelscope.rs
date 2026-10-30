@@ -333,104 +333,82 @@ fn size_for(map: &HashMap<String, i64>, name: &str) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::source::basename;
+    use crate::manifest::ModelType;
+    use serde_json::json;
     use wiremock::matchers::{method, path, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    /// Register a GET handler for a resolve URL (used for `geniex.json`,
-    /// `config.json`, and existence probes).
-    async fn mount_get(server: &MockServer, rel_path: &str, status: u16, body: &str) {
-        Mock::given(method("GET"))
-            .and(path(rel_path))
-            .respond_with(ResponseTemplate::new(status).set_body_bytes(body.as_bytes()))
-            .mount(server)
-            .await;
-    }
-
-    /// Register the recursive file-listing endpoint, which carries query
-    /// params that `path` alone cannot match.
-    async fn mount_listing(server: &MockServer, repo: &str, body: &str) {
-        let listing_path = format!("/api/v1/models/{repo}/repo/files");
-        Mock::given(method("GET"))
-            .and(path(&listing_path))
-            .and(query_param("Recursive", "true"))
-            .and(query_param("Revision", "master"))
-            .respond_with(ResponseTemplate::new(200).set_body_bytes(body.as_bytes()))
-            .mount(server)
-            .await;
-    }
-
-    fn src(server: &MockServer, repo: &str) -> ModelScopeSource {
+    /// `(path, body)`; `"tree"` as body marks a directory entry.
+    async fn plan_for(repo: &str, files: &[(&str, &str)]) -> Result<Plan> {
+        let server = MockServer::start().await;
+        let listing: Vec<_> = files
+            .iter()
+            .map(|(p, body)| {
+                let name = p.rsplit('/').next().unwrap();
+                let kind = if *body == "tree" { "tree" } else { "blob" };
+                json!({"Name": name, "Path": p, "Size": body.len(), "Type": kind})
+            })
+            .collect();
+        let listing = json!({"Code": 200, "Data": {"Files": listing}, "Message": "success"});
+        mount_listing(&server, repo, listing.to_string()).await;
+        for (p, body) in files {
+            Mock::given(method("GET"))
+                .and(path(format!("/api/v1/models/{repo}/resolve/master/{p}")))
+                .respond_with(ResponseTemplate::new(200).set_body_string(*body))
+                .mount(&server)
+                .await;
+        }
         ModelScopeSource::with_endpoint(
             repo.to_string(),
             &server.uri(),
             None,
             ManifestHint::default(),
-        )
-        .unwrap()
+        )?
+        .plan()
+        .await
     }
 
-    #[tokio::test]
-    async fn plan_synthesises_manifest_when_repo_lacks_one() {
-        let server = MockServer::start().await;
-        let listing = r#"{
-          "Code": 200,
-          "Data": {
-            "Files": [
-              {"Name": "README.md", "Path": "README.md", "Size": 123, "Type": "blob"},
-              {"Name": "model-Q4_K_M.gguf", "Path": "model-Q4_K_M.gguf", "Size": 1024, "Type": "blob"}
-            ]
-          },
-          "Message": "success"
-        }"#;
-        mount_listing(&server, "org/Tiny-GGUF", listing).await;
-        // GET for geniex.json → 404 means "repo does not ship one".
-        mount_get(
-            &server,
-            "/api/v1/models/org/Tiny-GGUF/resolve/master/geniex.json",
-            404,
-            "",
-        )
-        .await;
+    async fn mount_listing(server: &MockServer, repo: &str, body: String) {
+        Mock::given(method("GET"))
+            .and(path(format!("/api/v1/models/{repo}/repo/files")))
+            .and(query_param("Recursive", "true"))
+            .and(query_param("Revision", "master"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(body))
+            .mount(server)
+            .await;
+    }
 
-        let src = src(&server, "org/Tiny-GGUF");
-        let plan = src.plan().await.unwrap();
-        assert_eq!(plan.manifest.name, "org/Tiny-GGUF");
-        assert!(plan.manifest.model_file.contains_key("Q4_K_M"));
-        assert_eq!(plan.files.len(), 1);
-        assert_eq!(plan.files[0].name, "model-Q4_K_M.gguf");
-        match &plan.files[0].bytes {
-            BytesSource::Http { url, .. } => {
-                assert!(url.path().ends_with("model-Q4_K_M.gguf"));
-            }
-            _ => panic!("ModelScope file should be BytesSource::Http"),
+    fn http_path(plan: &Plan, i: usize) -> &str {
+        match &plan.files[i].bytes {
+            BytesSource::Http { url, .. } => url.path(),
+            other => panic!("ModelScope file should be Http, got {other:?}"),
         }
     }
 
     #[tokio::test]
-    async fn plan_uses_ships_manifest_when_present() {
-        let server = MockServer::start().await;
-        let listing = r#"{
-          "Code": 200,
-          "Data": {
-            "Files": [
-              {"Name": "geniex.json", "Path": "geniex.json", "Size": 256, "Type": "blob"},
-              {"Name": "model-Q8_0.gguf", "Path": "model-Q8_0.gguf", "Size": 2048, "Type": "blob"}
-            ]
-          },
-          "Message": "success"
-        }"#;
-        mount_listing(&server, "org/Shipped", listing).await;
-        mount_get(
-            &server,
-            "/api/v1/models/org/Shipped/resolve/master/geniex.json",
-            200,
-            r#"{"Name":"org/Shipped","ModelName":"Shipped","ModelType":"llm","PluginId":"llama_cpp","ModelFile":{"Q8_0":{"Name":"model-Q8_0.gguf","Downloaded":true,"Size":2048}},"MMProjFile":null,"TokenizerFile":null,"ExtraFiles":null}"#,
+    async fn plan_synthesises_manifest_when_repo_lacks_one() {
+        let plan = plan_for(
+            "org/Tiny-GGUF",
+            &[("README.md", "hi"), ("model-Q4_K_M.gguf", "w")],
         )
-        .await;
+        .await
+        .unwrap();
+        assert_eq!(plan.manifest.name, "org/Tiny-GGUF");
+        assert!(plan.manifest.model_file.contains_key("Q4_K_M"));
+        assert_eq!(plan.files.len(), 1);
+        assert_eq!(plan.files[0].name, "model-Q4_K_M.gguf");
+        assert!(http_path(&plan, 0).ends_with("model-Q4_K_M.gguf"));
+    }
 
-        let src = src(&server, "org/Shipped");
-        let plan = src.plan().await.unwrap();
+    #[tokio::test]
+    async fn plan_uses_shipped_manifest_when_present() {
+        let shipped = r#"{"Name":"org/Shipped","ModelName":"Shipped","ModelType":"llm","PluginId":"llama_cpp","ModelFile":{"Q8_0":{"Name":"model-Q8_0.gguf","Downloaded":true,"Size":2048}},"MMProjFile":null,"TokenizerFile":null,"ExtraFiles":null}"#;
+        let plan = plan_for(
+            "org/Shipped",
+            &[("geniex.json", shipped), ("model-Q8_0.gguf", "w")],
+        )
+        .await
+        .unwrap();
         assert_eq!(plan.manifest.name, "org/Shipped");
         assert_eq!(plan.manifest.plugin_id, "llama_cpp");
         assert!(plan.manifest.model_file.contains_key("Q8_0"));
@@ -438,89 +416,44 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn plan_skips_tree_entries_and_nested_paths() {
-        let server = MockServer::start().await;
-        let listing = r#"{
-          "Code": 200,
-          "Data": {
-            "Files": [
-              {"Name": "sub", "Path": "sub", "Size": 0, "Type": "tree"},
-              {"Name": "model-Q4_0.gguf", "Path": "sub/model-Q4_0.gguf", "Size": 512, "Type": "blob"}
-            ]
-          },
-          "Message": "success"
-        }"#;
-        mount_listing(&server, "org/Nested", listing).await;
-        mount_get(
-            &server,
-            "/api/v1/models/org/Nested/resolve/master/geniex.json",
-            404,
-            "",
+    async fn plan_skips_tree_entries_and_flattens_nested_paths() {
+        let plan = plan_for(
+            "org/Nested",
+            &[("sub", "tree"), ("sub/model-Q4_0.gguf", "w")],
         )
-        .await;
-
-        let src = src(&server, "org/Nested");
-        let plan = src.plan().await.unwrap();
+        .await
+        .unwrap();
         assert!(plan.manifest.model_file.contains_key("Q4_0"));
         assert_eq!(plan.files.len(), 1);
-        // Download addresses the real nested path; on-disk name is flat.
         assert_eq!(plan.files[0].name, "model-Q4_0.gguf");
-        match &plan.files[0].bytes {
-            BytesSource::Http { url, .. } => {
-                assert!(url.path().ends_with("sub/model-Q4_0.gguf"));
-            }
-            _ => panic!("ModelScope file should be BytesSource::Http"),
-        }
+        assert!(http_path(&plan, 0).ends_with("sub/model-Q4_0.gguf"));
+    }
+
+    #[tokio::test]
+    async fn plan_classifies_vlm_via_config_json() {
+        let config =
+            r#"{"architectures":["Qwen2_5_VLForConditionalGeneration"],"vision_config":{}}"#;
+        let plan = plan_for(
+            "org/VLM",
+            &[("config.json", config), ("model-Q4_K_M.gguf", "w")],
+        )
+        .await
+        .unwrap();
+        assert_eq!(plan.manifest.model_type, ModelType::Vlm);
     }
 
     #[tokio::test]
     async fn plan_returns_hub_model_not_found_on_404() {
         let server = MockServer::start().await;
         let listing = r#"{"Code": 404, "Data": null, "Message": "model not found"}"#;
-        mount_listing(&server, "org/Missing", listing).await;
-
-        let src = src(&server, "org/Missing");
-        let err = src.plan().await.unwrap_err();
-        assert!(matches!(err, Error::HubModelNotFound(_)));
-    }
-
-    #[tokio::test]
-    async fn plan_classifies_vlm_via_config_json() {
-        let server = MockServer::start().await;
-        let listing = r#"{
-          "Code": 200,
-          "Data": {
-            "Files": [
-              {"Name": "config.json", "Path": "config.json", "Size": 128, "Type": "blob"},
-              {"Name": "model-Q4_K_M.gguf", "Path": "model-Q4_K_M.gguf", "Size": 1024, "Type": "blob"}
-            ]
-          },
-          "Message": "success"
-        }"#;
-        mount_listing(&server, "org/VLM", listing).await;
-        mount_get(
-            &server,
-            "/api/v1/models/org/VLM/resolve/master/config.json",
-            200,
-            r#"{"architectures":["Qwen2_5_VLForConditionalGeneration"],"vision_config":{}}"#,
-        )
-        .await;
-        mount_get(
-            &server,
-            "/api/v1/models/org/VLM/resolve/master/geniex.json",
-            404,
-            "",
-        )
-        .await;
-
-        let src = src(&server, "org/VLM");
-        let plan = src.plan().await.unwrap();
-        assert_eq!(plan.manifest.model_type, crate::manifest::ModelType::Vlm);
-    }
-
-    #[test]
-    fn basename_helper_flattens_nested_paths() {
-        assert_eq!(basename("sub/model.gguf"), "model.gguf");
-        assert_eq!(basename("model.gguf"), "model.gguf");
+        mount_listing(&server, "org/Missing", listing.to_string()).await;
+        let src = ModelScopeSource::with_endpoint(
+            "org/Missing".into(),
+            &server.uri(),
+            None,
+            ManifestHint::default(),
+        );
+        let err = src.unwrap().plan().await.unwrap_err();
+        assert!(matches!(err, Error::HubModelNotFound(_)), "{err:?}");
     }
 }

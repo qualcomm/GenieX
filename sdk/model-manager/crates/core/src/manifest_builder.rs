@@ -489,298 +489,107 @@ fn file_info(name: &str, sizes: &HashMap<String, i64>) -> ModelFileInfo {
 mod tests {
     use super::*;
 
+    fn infer_with(name: &str, files: &[(&str, i64)], hint: ManifestHint) -> Result<ModelManifest> {
+        let names: Vec<String> = files.iter().map(|(n, _)| n.to_string()).collect();
+        let sizes = files.iter().map(|(n, s)| (n.to_string(), *s)).collect();
+        infer_manifest_from_names(name, &names, &sizes, hint)
+    }
+
+    fn infer(files: &[(&str, i64)]) -> ModelManifest {
+        infer_with("Org/Repo-GGUF", files, ManifestHint::default()).unwrap()
+    }
+
+    fn with_quant(quant: &str) -> ManifestHint {
+        ManifestHint {
+            quant: Some(quant.to_string()),
+            ..Default::default()
+        }
+    }
+
+    fn with_config(bytes: &str) -> ManifestHint {
+        ManifestHint {
+            config_json_bytes: Some(bytes.as_bytes().to_vec()),
+            ..Default::default()
+        }
+    }
+
+    fn quants(m: &ModelManifest) -> Vec<&str> {
+        let mut q: Vec<&str> = m.model_file.keys().map(String::as_str).collect();
+        q.sort();
+        q
+    }
+
     #[test]
     fn quant_sort_key_ranks_priority_first_then_alphabetical() {
         let mut tags = vec!["Q8_0", "IQ4_XS", "Q4_K_M", "BF16", "Q4_0"];
-        tags.sort_by(|a, b| quant_sort_key(a).cmp(&quant_sort_key(b)));
-        // An unlisted tag never outranks a listed one by sorting earlier.
-        assert_eq!(tags, vec!["Q4_0", "Q4_K_M", "Q8_0", "BF16", "IQ4_XS"]);
+        tags.sort_by_key(|t| quant_sort_key(t));
+        assert_eq!(tags, ["Q4_0", "Q4_K_M", "Q8_0", "BF16", "IQ4_XS"]);
     }
 
-    fn sizes_of(names: &[(&str, i64)]) -> (Vec<String>, HashMap<String, i64>) {
-        let mut m = HashMap::new();
-        let mut v = Vec::new();
-        for (n, s) in names {
-            m.insert(n.to_string(), *s);
-            v.push(n.to_string());
+    #[test]
+    fn extract_quant_cases() {
+        let cases = [
+            ("model-Q4_K_M.gguf", Some("Q4_K_M")),
+            ("model-Q8_0.gguf", Some("Q8_0")),
+            ("model.gguf", None),
+            // Case folding (qualcomm-ai-hub-community/gemma-4-E2B-it-qat-GGUF).
+            ("gemma-4-E2B-q4_0-override.gguf", Some("Q4_0")),
+            ("model-q4_k_m.gguf", Some("Q4_K_M")),
+            // i-quants and ternary quants are kept as-is.
+            ("model-IQ4_XS.gguf", Some("IQ4_XS")),
+            ("model-iq1_s.gguf", Some("IQ1_S")),
+            ("model-TQ1_0.gguf", Some("TQ1_0")),
+            // Token boundaries: mid-token tags are not quants, path separators are boundaries.
+            ("aQ4_0.gguf", None),
+            ("noQuant.gguf", None),
+            ("dir/Q4_0.gguf", Some("Q4_0")),
+            ("dir\\Q4_0.gguf", Some("Q4_0")),
+            ("model-Q4_K_M_finetune.gguf", Some("Q4_K_M")),
+            // MXFP (ggml-org/gpt-oss-*-GGUF), including shard suffixes.
+            ("model-MXFP4.gguf", Some("MXFP4")),
+            ("model-mxfp4.gguf", Some("MXFP4")),
+            ("gpt-oss-20b-mxfp4-00001-of-00002.gguf", Some("MXFP4")),
+            ("model-MXFP4_MOE.gguf", Some("MXFP4_MOE")),
+            ("aMXFP4.gguf", None),
+            // Float and integer scalars.
+            ("model-F16.gguf", Some("F16")),
+            ("model-F32.gguf", Some("F32")),
+            ("model-F64.gguf", Some("F64")),
+            ("model-f16.gguf", Some("F16")),
+            ("model-BF16.gguf", Some("BF16")),
+            ("model-bf16.gguf", Some("BF16")),
+            ("qwen2-1_5b-instruct-fp16.gguf", Some("FP16")),
+            ("model-FP32.gguf", Some("FP32")),
+            ("model-F32-00001-of-00002.gguf", Some("F32")),
+            ("model-I8.gguf", Some("I8")),
+            ("model-I16.gguf", Some("I16")),
+            ("model-I32.gguf", Some("I32")),
+            ("model-i64.gguf", Some("I64")),
+            ("aF16.gguf", None),
+            ("aBF16.gguf", None),
+            ("aI8.gguf", None),
+            ("modelI8.gguf", None),
+        ];
+        for (name, want) in cases {
+            assert_eq!(extract_quant(name).as_deref(), want, "{name}");
         }
-        (v, m)
     }
 
     #[test]
-    fn extract_quant_finds_common_formats() {
-        assert_eq!(
-            extract_quant("model-Q4_K_M.gguf"),
-            Some("Q4_K_M".to_string())
-        );
-        assert_eq!(extract_quant("model-Q8_0.gguf"), Some("Q8_0".to_string()));
-        assert_eq!(extract_quant("model.gguf"), None);
-    }
-
-    #[test]
-    fn extract_quant_is_case_insensitive() {
-        // qualcomm-ai-hub-community/gemma-4-E2B-it-qat-GGUF ships a lowercase
-        // `q4_0` filename; without folding it landed in the "default" bucket
-        // alongside the projector and got swapped at sort time.
-        assert_eq!(
-            extract_quant("gemma-4-E2B-q4_0-override.gguf"),
-            Some("Q4_0".to_string())
-        );
-        assert_eq!(
-            extract_quant("model-q4_k_m.gguf"),
-            Some("Q4_K_M".to_string())
-        );
-    }
-
-    #[test]
-    fn extract_quant_recognises_i_and_ternary_prefixes() {
-        // i-quants and ternary quants are real upstream tags — they must
-        // be returned as-is, not silently truncated to a Q* tag.
-        assert_eq!(
-            extract_quant("model-IQ4_XS.gguf"),
-            Some("IQ4_XS".to_string())
-        );
-        assert_eq!(extract_quant("model-iq1_s.gguf"), Some("IQ1_S".to_string()));
-        assert_eq!(extract_quant("model-TQ1_0.gguf"), Some("TQ1_0".to_string()));
-    }
-
-    #[test]
-    fn extract_quant_anchors_on_token_boundary() {
-        // Mid-token Q (no separator before it) is not a quant.
-        assert_eq!(extract_quant("aQ4_0.gguf"), None);
-        assert_eq!(extract_quant("noQuant.gguf"), None);
-        // Path separators count as token boundaries.
-        assert_eq!(extract_quant("dir/Q4_0.gguf"), Some("Q4_0".to_string()));
-        assert_eq!(extract_quant("dir\\Q4_0.gguf"), Some("Q4_0".to_string()));
-    }
-
-    #[test]
-    fn extract_quant_does_not_glue_long_alphabetic_segments() {
-        // A trailing `_FINETUNE` is not part of the quant tag — the inner
-        // segment loop must cap segment length so the tag stays Q4_K_M.
-        assert_eq!(
-            extract_quant("model-Q4_K_M_finetune.gguf"),
-            Some("Q4_K_M".to_string())
-        );
-    }
-
-    #[test]
-    fn extract_quant_recognises_mxfp() {
-        // ggml-org/gpt-oss-*-GGUF publishes MXFP4 shards; the tag must be
-        // recognised regardless of case and survive trailing shard suffixes.
-        assert_eq!(extract_quant("model-MXFP4.gguf"), Some("MXFP4".to_string()));
-        assert_eq!(extract_quant("model-mxfp4.gguf"), Some("MXFP4".to_string()));
-        assert_eq!(
-            extract_quant("gpt-oss-20b-mxfp4-00001-of-00002.gguf"),
-            Some("MXFP4".to_string())
-        );
-        assert_eq!(
-            extract_quant("model-MXFP4_MOE.gguf"),
-            Some("MXFP4_MOE".to_string())
-        );
-        // Mid-token MXFP (no separator before it) is not a quant.
-        assert_eq!(extract_quant("aMXFP4.gguf"), None);
-    }
-
-    #[test]
-    fn extract_quant_recognises_float_scalars() {
-        assert_eq!(extract_quant("model-F16.gguf"), Some("F16".to_string()));
-        assert_eq!(extract_quant("model-F32.gguf"), Some("F32".to_string()));
-        assert_eq!(extract_quant("model-F64.gguf"), Some("F64".to_string()));
-        assert_eq!(extract_quant("model-f16.gguf"), Some("F16".to_string()));
-        assert_eq!(extract_quant("model-BF16.gguf"), Some("BF16".to_string()));
-        assert_eq!(extract_quant("model-bf16.gguf"), Some("BF16".to_string()));
-        assert_eq!(
-            extract_quant("qwen2-1_5b-instruct-fp16.gguf"),
-            Some("FP16".to_string())
-        );
-        assert_eq!(extract_quant("model-FP32.gguf"), Some("FP32".to_string()));
-        assert_eq!(
-            extract_quant("model-F32-00001-of-00002.gguf"),
-            Some("F32".to_string())
-        );
-    }
-
-    #[test]
-    fn extract_quant_recognises_integer_scalars() {
-        assert_eq!(extract_quant("model-I8.gguf"), Some("I8".to_string()));
-        assert_eq!(extract_quant("model-I16.gguf"), Some("I16".to_string()));
-        assert_eq!(extract_quant("model-I32.gguf"), Some("I32".to_string()));
-        assert_eq!(extract_quant("model-i64.gguf"), Some("I64".to_string()));
-        // `I` + `Q` must still parse as i-quant, not I<digit>.
-        assert_eq!(
-            extract_quant("model-IQ4_XS.gguf"),
-            Some("IQ4_XS".to_string())
-        );
-        assert_eq!(extract_quant("model-iq1_s.gguf"), Some("IQ1_S".to_string()));
-    }
-
-    #[test]
-    fn extract_quant_anchors_scalars_on_token_boundary() {
-        assert_eq!(extract_quant("aF16.gguf"), None);
-        assert_eq!(extract_quant("aBF16.gguf"), None);
-        assert_eq!(extract_quant("aI8.gguf"), None);
-        assert_eq!(extract_quant("modelI8.gguf"), None);
-    }
-
-    #[test]
-    fn is_mmproj_filename_matches_known_layouts() {
-        // Standard llama.cpp prefix layout.
-        assert!(is_mmproj_filename("mmproj-f16.gguf"));
-        // Bare projector with no variant tag.
-        assert!(is_mmproj_filename("mmproj.gguf"));
-        // Underscore-separated variants seen in some community uploads.
-        assert!(is_mmproj_filename("mmproj_f16.gguf"));
-        assert!(is_mmproj_filename("model_mmproj.gguf"));
-        // Suffix layout shipped by qualcomm-ai-hub-community/gemma-4-*-qat-GGUF.
-        assert!(is_mmproj_filename("gemma-4-e2b-it-mmproj.gguf"));
-        // Infix layout.
-        assert!(is_mmproj_filename("model-mmproj-f16.gguf"));
-        // Negative: a regular weight whose name happens to contain "proj".
-        assert!(!is_mmproj_filename("model-q4_0-override.gguf"));
-        assert!(!is_mmproj_filename("projector-only-no-mm.gguf"));
-    }
-
-    #[test]
-    fn gemma4_qat_layout_picks_correct_entrypoint() {
-        // End-to-end regression for #1013: the projector uses an `-mmproj`
-        // suffix and the weight uses a lowercase `q4_0` tag. The real weight
-        // must become the Q4_0 entrypoint and the projector must populate
-        // mmproj_file.
-        let (names, sizes) = sizes_of(&[
-            ("gemma-4-E2B-it-mmproj.gguf", 500_000),
-            ("gemma-4-E2B-q4_0-override.gguf", 2_000_000),
-        ]);
-        let m = infer_manifest_from_names(
-            "qualcomm-ai-hub-community/gemma-4-E2B-it-qat-GGUF",
-            &names,
-            &sizes,
-            Default::default(),
-        )
-        .unwrap();
-        assert_eq!(m.model_type, ModelType::Vlm);
-        assert_eq!(
-            m.model_file.get("Q4_0").map(|f| f.name.as_str()),
-            Some("gemma-4-E2B-q4_0-override.gguf")
-        );
-        assert_eq!(m.mmproj_file.name, "gemma-4-E2B-it-mmproj.gguf");
-    }
-
-    #[test]
-    fn quant_hint_filters_ggufs() {
-        let (names, sizes) = sizes_of(&[
-            ("model-Q4_0.gguf", 900_000),
-            ("model-Q4_K_M.gguf", 1_000_000),
-            ("model-Q8_0.gguf", 1_800_000),
-        ]);
-        let hint = ManifestHint {
-            quant: Some("Q4_0".to_string()),
-            ..Default::default()
-        };
-        let m = infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, hint).unwrap();
-        assert_eq!(m.model_file.len(), 1);
-        assert_eq!(m.model_file.get("Q4_0").unwrap().name, "model-Q4_0.gguf");
-    }
-
-    #[test]
-    fn sharded_gguf_keeps_every_shard() {
-        // A 3-shard Q4_0 model: entrypoint records its own single-shard size,
-        // the trailing shards land in extra_files so the executor still fetches
-        // them. total_size() must count each shard exactly once.
-        let (names, sizes) = sizes_of(&[
-            ("model-Q4_0-00001-of-00003.gguf", 100),
-            ("model-Q4_0-00002-of-00003.gguf", 200),
-            ("model-Q4_0-00003-of-00003.gguf", 300),
-        ]);
-        let m =
-            infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, Default::default()).unwrap();
-        let entry = m.model_file.get("Q4_0").unwrap();
-        assert_eq!(entry.name, "model-Q4_0-00001-of-00003.gguf");
-        assert_eq!(entry.size, 100, "entrypoint stores its own size only");
-        let extra: Vec<&str> = m.extra_files.iter().map(|f| f.name.as_str()).collect();
-        assert!(extra.contains(&"model-Q4_0-00002-of-00003.gguf"));
-        assert!(extra.contains(&"model-Q4_0-00003-of-00003.gguf"));
-        assert_eq!(m.total_size(), 600, "every shard counted exactly once");
-    }
-
-    #[test]
-    fn gpt_oss_20b_mxfp4_layout() {
-        // ggml-org/gpt-oss-20b-GGUF ships a single 12 GB MXFP4 weight (no
-        // shards). Before MXFP was recognised the file landed in the
-        // `"default"` bucket and `:mxfp4` failed with QuantNotFound.
-        let (names, sizes) = sizes_of(&[("gpt-oss-20b-mxfp4.gguf", 12_109_566_560)]);
-        let hint = ManifestHint {
-            quant: Some("MXFP4".to_string()),
-            ..Default::default()
-        };
-        let m =
-            infer_manifest_from_names("ggml-org/gpt-oss-20b-GGUF", &names, &sizes, hint).unwrap();
-        let entry = m.model_file.get("MXFP4").expect("MXFP4 key present");
-        assert_eq!(entry.name, "gpt-oss-20b-mxfp4.gguf");
-        assert!(
-            m.extra_files.is_empty(),
-            "single-file repo has no extras: {:?}",
-            m.extra_files
-        );
-    }
-
-    #[test]
-    fn fp16_shard_becomes_its_own_bucket() {
-        let (names, sizes) = sizes_of(&[
-            ("qwen2-1_5b-instruct-q4_0.gguf", 1_000_000),
-            ("qwen2-1_5b-instruct-fp16.gguf", 3_100_000),
-        ]);
-        let m = infer_manifest_from_names(
-            "Qwen/Qwen2-1.5B-Instruct-GGUF",
-            &names,
-            &sizes,
-            ManifestHint::default(),
-        )
-        .unwrap();
-        assert_eq!(m.model_file.len(), 2);
-        assert!(m.model_file.contains_key("Q4_0"));
-        assert!(m.model_file.contains_key("FP16"));
-    }
-
-    #[test]
-    fn single_untagged_gguf_pulls_as_default() {
-        let (names, sizes) = sizes_of(&[("Qwen3-35B-A3B-REAP-48-v2.gguf", 8_000_000)]);
-        let m =
-            infer_manifest_from_names("peonist/REAP-48", &names, &sizes, ManifestHint::default())
-                .unwrap();
-        assert_eq!(m.model_file.len(), 1);
-        assert_eq!(
-            m.model_file.get("DEFAULT").map(|f| f.name.as_str()),
-            Some("Qwen3-35B-A3B-REAP-48-v2.gguf")
-        );
-    }
-
-    #[test]
-    fn header_quant_names_the_untagged_bucket() {
-        let (names, sizes) = sizes_of(&[("Qwen3-35B-A3B-REAP-48-v2.gguf", 8_000_000)]);
-        let hint = ManifestHint {
-            header_quants: HashMap::from([(
-                "Qwen3-35B-A3B-REAP-48-v2.gguf".to_string(),
-                "Q4_K_M".to_string(),
-            )]),
-            ..Default::default()
-        };
-        let m = infer_manifest_from_names("peonist/REAP-48", &names, &sizes, hint).unwrap();
-        assert_eq!(
-            m.model_file.get("Q4_K_M").map(|f| f.name.as_str()),
-            Some("Qwen3-35B-A3B-REAP-48-v2.gguf")
-        );
-    }
-
-    #[test]
-    fn filename_quant_wins_over_the_header() {
-        let (names, sizes) = sizes_of(&[("model-Q4_0.gguf", 1_000_000)]);
-        let hint = ManifestHint {
-            header_quants: HashMap::from([("model-Q4_0.gguf".to_string(), "Q8_0".to_string())]),
-            ..Default::default()
-        };
-        let m = infer_manifest_from_names("Org/Repo", &names, &sizes, hint).unwrap();
-        assert_eq!(m.model_file.keys().collect::<Vec<_>>(), vec!["Q4_0"]);
+    fn is_mmproj_filename_cases() {
+        for name in [
+            "mmproj-f16.gguf",
+            "mmproj.gguf",
+            "mmproj_f16.gguf",
+            "model_mmproj.gguf",
+            "gemma-4-e2b-it-mmproj.gguf",
+            "model-mmproj-f16.gguf",
+        ] {
+            assert!(is_mmproj_filename(name), "{name}");
+        }
+        for name in ["model-q4_0-override.gguf", "projector-only-no-mm.gguf"] {
+            assert!(!is_mmproj_filename(name), "{name}");
+        }
     }
 
     #[test]
@@ -792,278 +601,254 @@ mod tests {
             "model-mtp.gguf",
             "README.md",
         ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-        assert_eq!(untagged_gguf_names(&names), vec!["model.gguf"]);
+        .map(String::from)
+        .into();
+        assert_eq!(untagged_gguf_names(&names), ["model.gguf"]);
     }
 
     #[test]
-    fn quant_hint_rejects_unknown_quant() {
-        let (names, sizes) = sizes_of(&[("model-Q4_K_M.gguf", 1_000_000)]);
-        let hint = ManifestHint {
-            quant: Some("Q2_K".to_string()),
-            ..Default::default()
-        };
-        assert!(infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, hint).is_err());
-    }
-
-    #[test]
-    fn infers_vlm_when_mmproj_present() {
-        let (names, sizes) = sizes_of(&[
-            ("model-Q4_K_M.gguf", 1_000_000),
-            ("mmproj-F16.gguf", 200_000),
-        ]);
-        let m =
-            infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, Default::default()).unwrap();
-        assert_eq!(m.model_type, ModelType::Vlm);
-        assert!(m.model_file.contains_key("Q4_K_M"));
-        assert_eq!(m.mmproj_file.name, "mmproj-F16.gguf");
-        assert_eq!(m.model_name, "Repo");
-    }
-
-    #[test]
-    fn mmproj_prefers_fp16_over_larger_bf16_and_f32() {
-        // BF16 has no native HTP kernel support; F16 is the vision encoder's
-        // native intermediate float format, so it should win even though the
-        // repo also ships a larger BF16 or F32 copy (#1650).
-        let (names, sizes) = sizes_of(&[
-            ("model-Q4_K_M.gguf", 1_000_000),
-            ("mmproj-F16.gguf", 990_000_000),
-            ("mmproj-BF16.gguf", 992_000_000),
-            ("mmproj-F32.gguf", 1_910_000_000),
-        ]);
-        let m =
-            infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, Default::default()).unwrap();
-        assert_eq!(m.mmproj_file.name, "mmproj-F16.gguf");
-    }
-
-    #[test]
-    fn mmproj_falls_back_to_largest_without_fp16_candidate() {
-        let (names, sizes) = sizes_of(&[
-            ("model-Q4_K_M.gguf", 1_000_000),
-            ("mmproj-BF16.gguf", 992_000_000),
-            ("mmproj-F32.gguf", 1_910_000_000),
-        ]);
-        let m =
-            infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, Default::default()).unwrap();
-        assert_eq!(m.mmproj_file.name, "mmproj-F32.gguf");
-    }
-
-    #[test]
-    fn skips_mtp_draft_gguf() {
-        // The MTP draft's Q4_0 tag would otherwise win QUANT_PRIORITY over the
-        // base model's Q4_K_XL, but it can't load standalone.
-        let (names, sizes) = sizes_of(&[
-            ("gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf", 2_620_368_960),
-            ("MTP/mtp-gemma-4-E2B-it-Q4_0.gguf", 59_235_648),
-            ("mmproj-F32.gguf", 1_903_027_008),
-        ]);
-        let m = infer_manifest_from_names(
-            "unsloth/gemma-4-E2B-it-qat-GGUF",
-            &names,
-            &sizes,
-            Default::default(),
+    fn gemma4_qat_layout_picks_correct_entrypoint() {
+        // #1013: `-mmproj` suffix projector next to a lowercase `q4_0` weight.
+        let m = infer_with(
+            "qualcomm-ai-hub-community/gemma-4-E2B-it-qat-GGUF",
+            &[
+                ("gemma-4-E2B-it-mmproj.gguf", 500_000),
+                ("gemma-4-E2B-q4_0-override.gguf", 2_000_000),
+            ],
+            ManifestHint::default(),
         )
         .unwrap();
-        assert!(m.model_file.contains_key("Q4_K_XL"));
-        assert!(
-            !m.model_file.contains_key("Q4_0"),
-            "MTP draft must not be a selectable quant: {:?}",
-            m.model_file.keys().collect::<Vec<_>>()
-        );
+        assert_eq!(m.model_type, ModelType::Vlm);
+        assert_eq!(m.model_file["Q4_0"].name, "gemma-4-E2B-q4_0-override.gguf");
+        assert_eq!(m.mmproj_file.name, "gemma-4-E2B-it-mmproj.gguf");
     }
 
     #[test]
-    fn infers_llm_without_mmproj() {
-        let (names, sizes) =
-            sizes_of(&[("model-Q4_K_M.gguf", 1_000_000), ("tokenizer.json", 2_000)]);
-        let m =
-            infer_manifest_from_names("Org/Repo-GGUF", &names, &sizes, Default::default()).unwrap();
-        assert_eq!(m.model_type, ModelType::Llm);
-        assert_eq!(m.tokenizer_file.name, "tokenizer.json");
-    }
-
-    #[test]
-    fn rejects_multiple_tokenizers() {
-        let (names, sizes) = sizes_of(&[
-            ("model-Q4_0.gguf", 1_000_000),
-            ("a/tokenizer.json", 1000),
-            ("b/tokenizer.json", 2000),
-        ]);
-        assert!(infer_manifest_from_names("Org/X", &names, &sizes, Default::default()).is_err());
-    }
-
-    #[test]
-    fn rejects_empty_dir() {
-        let (names, sizes) = sizes_of(&[]);
-        assert!(infer_manifest_from_names("Org/X", &names, &sizes, Default::default()).is_err());
-    }
-
-    #[test]
-    fn safetensors_only_repo_names_the_supported_formats() {
-        // openai/gpt-oss-safeguard-20b layout: safetensors + tokenizer, no GGUF.
-        let (names, sizes) = sizes_of(&[
-            ("config.json", 1000),
-            ("model-00001-of-00002.safetensors", 8_000_000),
-            ("model-00002-of-00002.safetensors", 8_000_000),
-            ("tokenizer.json", 2000),
-        ]);
-        let err = infer_manifest_from_names(
-            "openai/gpt-oss-safeguard-20b",
-            &names,
-            &sizes,
-            Default::default(),
-        )
-        .unwrap_err()
-        .to_string();
-        assert!(err.contains("openai/gpt-oss-safeguard-20b"), "{err}");
-        assert!(err.contains("GGUF"), "{err}");
-        assert!(err.contains("QAIRT"), "{err}");
-    }
-
-    // -- modality classifier ------------------------------------------
-
-    /// Trimmed Qwen2.5-VL config — only the fields the classifier reads.
-    const QWEN25_VL_CONFIG: &str = r#"{
-        "architectures": ["Qwen2_5_VLForConditionalGeneration"],
-        "model_type": "qwen2_5_vl",
-        "vision_config": {"depth": 32, "hidden_size": 1280}
-    }"#;
-
-    const LLAMA31_CONFIG: &str = r#"{
-        "architectures": ["LlamaForCausalLM"],
-        "model_type": "llama"
-    }"#;
-
-    const QWEN3_CONFIG: &str = r#"{
-        "architectures": ["Qwen3ForCausalLM"],
-        "model_type": "qwen3"
-    }"#;
-
-    const GPT_OSS_CONFIG: &str = r#"{
-        "architectures": ["GptOssForCausalLM"],
-        "model_type": "gpt_oss"
-    }"#;
-
-    const GEMMA3_1B_CONFIG: &str = r#"{
-        "architectures": ["Gemma3ForCausalLM"],
-        "model_type": "gemma3_text"
-    }"#;
-
-    const GEMMA3_4B_CONFIG: &str = r#"{
-        "architectures": ["Gemma3ForConditionalGeneration"],
-        "model_type": "gemma3",
-        "vision_config": {"hidden_size": 1152}
-    }"#;
-
-    fn hint_with_config(bytes: &[u8]) -> ManifestHint {
-        ManifestHint {
-            config_json_bytes: Some(bytes.to_vec()),
-            ..Default::default()
+    fn quant_buckets() {
+        type Files<'a> = &'a [(&'a str, i64)];
+        let cases: [(Files, &[&str]); 3] = [
+            (
+                &[
+                    ("qwen2-1_5b-instruct-q4_0.gguf", 1),
+                    ("qwen2-1_5b-instruct-fp16.gguf", 3),
+                ],
+                &["FP16", "Q4_0"],
+            ),
+            (&[("Qwen3-35B-A3B-REAP-48-v2.gguf", 8)], &["DEFAULT"]),
+            // The MTP draft's Q4_0 would outrank Q4_K_XL but can't load standalone.
+            (
+                &[
+                    ("gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf", 2),
+                    ("MTP/mtp-gemma-4-E2B-it-Q4_0.gguf", 1),
+                    ("mmproj-F32.gguf", 1),
+                ],
+                &["Q4_K_XL"],
+            ),
+        ];
+        for (files, want) in cases {
+            assert_eq!(quants(&infer(files)), want, "{files:?}");
         }
     }
 
     #[test]
-    fn config_vlm_with_vision_config() {
-        // #1 — Qwen2.5-VL safetensors, no mmproj anywhere.
-        let names = vec!["model.safetensors".to_string()];
-        let t = infer_model_type(&hint_with_config(QWEN25_VL_CONFIG.as_bytes()), &names);
-        assert_eq!(t, ModelType::Vlm);
-    }
+    fn quant_hint_filters_or_rejects() {
+        let files = [
+            ("model-Q4_0.gguf", 9),
+            ("model-Q4_K_M.gguf", 10),
+            ("model-Q8_0.gguf", 18),
+        ];
+        let m = infer_with("Org/Repo-GGUF", &files, with_quant("Q4_0")).unwrap();
+        assert_eq!(quants(&m), ["Q4_0"]);
+        assert_eq!(m.model_file["Q4_0"].name, "model-Q4_0.gguf");
+        assert!(infer_with("Org/Repo-GGUF", &files, with_quant("Q2_K")).is_err());
 
-    #[test]
-    fn config_llm_llama31() {
-        // #2 — LLaMA-3.1 GGUF.
-        let names = vec!["model-Q4_K_M.gguf".to_string()];
-        let t = infer_model_type(&hint_with_config(LLAMA31_CONFIG.as_bytes()), &names);
-        assert_eq!(t, ModelType::Llm);
-    }
-
-    #[test]
-    fn config_llm_qwen3() {
-        // #3 — Qwen3 text-only.
-        let t = infer_model_type(&hint_with_config(QWEN3_CONFIG.as_bytes()), &[]);
-        assert_eq!(t, ModelType::Llm);
-    }
-
-    #[test]
-    fn config_llm_gpt_oss() {
-        // #4 — gpt-oss.
-        let t = infer_model_type(&hint_with_config(GPT_OSS_CONFIG.as_bytes()), &[]);
-        assert_eq!(t, ModelType::Llm);
-    }
-
-    #[test]
-    fn config_llm_gemma3_1b_text() {
-        // #5 — Gemma-3-1B text-only: model_type="gemma3_text" must short-
-        // circuit before the generic `gemma3` substring promotes VLM.
-        let t = infer_model_type(&hint_with_config(GEMMA3_1B_CONFIG.as_bytes()), &[]);
-        assert_eq!(t, ModelType::Llm);
-    }
-
-    #[test]
-    fn config_vlm_gemma3_4b() {
-        // #6 — Gemma-3-4B-IT multimodal.
-        let t = infer_model_type(&hint_with_config(GEMMA3_4B_CONFIG.as_bytes()), &[]);
-        assert_eq!(t, ModelType::Vlm);
-    }
-
-    #[test]
-    fn mmproj_fallback_preserved_without_config() {
-        // #7 — pure GGUF VLM repo, no config.json.
-        let names = vec!["model-Q4_K_M.gguf".into(), "mmproj-f16.gguf".into()];
-        let t = infer_model_type(&ManifestHint::default(), &names);
-        assert_eq!(t, ModelType::Vlm);
-    }
-
-    #[test]
-    fn pure_gguf_llm_without_config() {
-        // #8 — pure GGUF LLM: no config.json, no mmproj → LLM.
-        let names = vec!["model-Q4_K_M.gguf".into()];
-        let t = infer_model_type(&ManifestHint::default(), &names);
-        assert_eq!(t, ModelType::Llm);
-    }
-
-    #[test]
-    fn config_llm_wins_over_stray_mmproj_file() {
-        // #9 — conflict case: config says LLM, directory has a stray
-        // mmproj file. Config wins (Tier 1 beats Tier 2).
-        let names = vec!["model-Q4_K_M.gguf".into(), "mmproj-x.gguf".into()];
-        let t = infer_model_type(&hint_with_config(LLAMA31_CONFIG.as_bytes()), &names);
-        assert_eq!(t, ModelType::Llm);
-    }
-
-    #[test]
-    fn corrupt_config_defaults_to_llm() {
-        // #10 — unparseable config degrades to Tier 2/3.
-        let t = infer_model_type(&hint_with_config(b"{not json"), &[]);
-        assert_eq!(t, ModelType::Llm);
-    }
-
-    #[test]
-    fn user_override_beats_config() {
-        // #11 — --model-type flag always wins.
-        let mut hint = hint_with_config(LLAMA31_CONFIG.as_bytes());
-        hint.model_type = Some(ModelType::Vlm);
-        let t = infer_model_type(&hint, &[]);
-        assert_eq!(t, ModelType::Vlm);
-    }
-
-    #[test]
-    fn full_pipeline_vlm_config_with_gguf_files() {
-        // End-to-end check that `infer_manifest_from_names` plumbs the
-        // config-derived VLM through to ModelManifest.model_type even
-        // when the directory has no mmproj file.
-        let (names, sizes) =
-            sizes_of(&[("model-Q4_K_M.gguf", 1_000_000), ("tokenizer.json", 2_000)]);
-        let m = infer_manifest_from_names(
-            "Org/Repo",
-            &names,
-            &sizes,
-            hint_with_config(QWEN25_VL_CONFIG.as_bytes()),
+        // ggml-org/gpt-oss-20b-GGUF: a single unsharded MXFP4 weight.
+        let m = infer_with(
+            "Org/R",
+            &[("gpt-oss-20b-mxfp4.gguf", 12_109_566_560)],
+            with_quant("MXFP4"),
         )
         .unwrap();
+        assert_eq!(m.model_file["MXFP4"].name, "gpt-oss-20b-mxfp4.gguf");
+        assert!(m.extra_files.is_empty(), "{:?}", m.extra_files);
+    }
+
+    #[test]
+    fn sharded_gguf_keeps_every_shard() {
+        let m = infer(&[
+            ("model-Q4_0-00001-of-00003.gguf", 100),
+            ("model-Q4_0-00002-of-00003.gguf", 200),
+            ("model-Q4_0-00003-of-00003.gguf", 300),
+        ]);
+        let entry = &m.model_file["Q4_0"];
+        assert_eq!(entry.name, "model-Q4_0-00001-of-00003.gguf");
+        assert_eq!(entry.size, 100, "entrypoint stores its own size only");
+        let mut extra: Vec<&str> = m.extra_files.iter().map(|f| f.name.as_str()).collect();
+        extra.sort();
+        assert_eq!(
+            extra,
+            [
+                "model-Q4_0-00002-of-00003.gguf",
+                "model-Q4_0-00003-of-00003.gguf"
+            ]
+        );
+        assert_eq!(m.total_size(), 600, "every shard counted exactly once");
+    }
+
+    #[test]
+    fn header_quant_names_untagged_files_only() {
+        let header = |file: &str, q: &str| ManifestHint {
+            header_quants: HashMap::from([(file.to_string(), q.to_string())]),
+            ..Default::default()
+        };
+        let untagged = "Qwen3-35B-A3B-REAP-48-v2.gguf";
+        let m = infer_with(
+            "peonist/REAP-48",
+            &[(untagged, 8)],
+            header(untagged, "Q4_K_M"),
+        )
+        .unwrap();
+        assert_eq!(m.model_file["Q4_K_M"].name, untagged);
+        let m = infer_with(
+            "Org/Repo",
+            &[("model-Q4_0.gguf", 1)],
+            header("model-Q4_0.gguf", "Q8_0"),
+        )
+        .unwrap();
+        assert_eq!(quants(&m), ["Q4_0"]);
+    }
+
+    #[test]
+    fn mmproj_and_tokenizer_selection() {
+        let m = infer(&[
+            ("model-Q4_K_M.gguf", 1_000_000),
+            ("mmproj-F16.gguf", 200_000),
+        ]);
+        assert_eq!(
+            (&m.model_type, m.mmproj_file.name.as_str()),
+            (&ModelType::Vlm, "mmproj-F16.gguf")
+        );
+        assert_eq!(m.model_name, "Repo");
+
+        let m = infer(&[("model-Q4_K_M.gguf", 1_000_000), ("tokenizer.json", 2_000)]);
+        assert_eq!(
+            (&m.model_type, m.tokenizer_file.name.as_str()),
+            (&ModelType::Llm, "tokenizer.json")
+        );
+
+        // F16 beats larger BF16/F32 (no native BF16 HTP kernels); else largest wins.
+        let pick = |projectors: &[(&'static str, i64)]| {
+            let mut files = vec![("model-Q4_K_M.gguf", 1_000_000)];
+            files.extend_from_slice(projectors);
+            infer(&files).mmproj_file.name
+        };
+        let bf16_f32 = [
+            ("mmproj-BF16.gguf", 992_000_000),
+            ("mmproj-F32.gguf", 1_910_000_000),
+        ];
+        assert_eq!(
+            pick(&[("mmproj-F16.gguf", 990_000_000), bf16_f32[0], bf16_f32[1]]),
+            "mmproj-F16.gguf"
+        );
+        assert_eq!(pick(&bf16_f32), "mmproj-F32.gguf");
+    }
+
+    #[test]
+    fn rejects_ambiguous_or_unloadable_listings() {
+        let multi_tokenizer = [
+            ("model-Q4_0.gguf", 1),
+            ("a/tokenizer.json", 1),
+            ("b/tokenizer.json", 2),
+        ];
+        assert!(infer_with("Org/X", &multi_tokenizer, ManifestHint::default()).is_err());
+        assert!(infer_with("Org/X", &[], ManifestHint::default()).is_err());
+
+        let repo = "openai/gpt-oss-safeguard-20b";
+        let safetensors = [
+            ("config.json", 1000),
+            ("model-00001-of-00002.safetensors", 8_000_000),
+            ("model-00002-of-00002.safetensors", 8_000_000),
+            ("tokenizer.json", 2000),
+        ];
+        let err = infer_with(repo, &safetensors, ManifestHint::default())
+            .unwrap_err()
+            .to_string();
+        for want in [repo, "GGUF", "QAIRT"] {
+            assert!(err.contains(want), "missing {want:?}: {err}");
+        }
+    }
+
+    const QWEN25_VL: &str = r#"{"architectures":["Qwen2_5_VLForConditionalGeneration"],"model_type":"qwen2_5_vl","vision_config":{"depth":32}}"#;
+    const LLAMA31: &str = r#"{"architectures":["LlamaForCausalLM"],"model_type":"llama"}"#;
+
+    #[test]
+    fn infer_model_type_cases() {
+        use ModelType::{Llm, Vlm};
+        let gguf = "model-Q4_K_M.gguf";
+        let cases: [(&str, Option<&str>, &[&str], ModelType); 10] = [
+            (
+                "vision_config",
+                Some(QWEN25_VL),
+                &["model.safetensors"],
+                Vlm,
+            ),
+            ("llama", Some(LLAMA31), &[gguf], Llm),
+            (
+                "qwen3",
+                Some(r#"{"architectures":["Qwen3ForCausalLM"],"model_type":"qwen3"}"#),
+                &[],
+                Llm,
+            ),
+            (
+                "gpt-oss",
+                Some(r#"{"architectures":["GptOssForCausalLM"],"model_type":"gpt_oss"}"#),
+                &[],
+                Llm,
+            ),
+            // gemma3_text must short-circuit before the `gemma3` substring.
+            (
+                "gemma3 1b",
+                Some(r#"{"architectures":["Gemma3ForCausalLM"],"model_type":"gemma3_text"}"#),
+                &[],
+                Llm,
+            ),
+            (
+                "gemma3 4b",
+                Some(
+                    r#"{"architectures":["Gemma3ForConditionalGeneration"],"model_type":"gemma3","vision_config":{}}"#,
+                ),
+                &[],
+                Vlm,
+            ),
+            ("mmproj fallback", None, &[gguf, "mmproj-f16.gguf"], Vlm),
+            ("pure gguf", None, &[gguf], Llm),
+            (
+                "config beats stray mmproj",
+                Some(LLAMA31),
+                &[gguf, "mmproj-x.gguf"],
+                Llm,
+            ),
+            ("corrupt config", Some("{not json"), &[], Llm),
+        ];
+        for (case, config, names, want) in cases {
+            let hint = config.map(with_config).unwrap_or_default();
+            let names: Vec<String> = names.iter().map(|n| n.to_string()).collect();
+            assert_eq!(infer_model_type(&hint, &names), want, "{case}");
+        }
+
+        let mut hint = with_config(LLAMA31);
+        hint.model_type = Some(Vlm);
+        assert_eq!(
+            infer_model_type(&hint, &[]),
+            Vlm,
+            "user override beats config"
+        );
+    }
+
+    #[test]
+    fn config_vlm_reaches_the_manifest_without_mmproj() {
+        let files = [("model-Q4_K_M.gguf", 1_000_000), ("tokenizer.json", 2_000)];
+        let m = infer_with("Org/Repo", &files, with_config(QWEN25_VL)).unwrap();
         assert_eq!(m.model_type, ModelType::Vlm);
     }
 }

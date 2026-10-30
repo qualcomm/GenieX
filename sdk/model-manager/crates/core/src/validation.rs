@@ -58,39 +58,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn valid_names() {
-        validate_model_name("Qwen/Qwen3-4B-Instruct").unwrap();
-        validate_model_name("a/b").unwrap();
-    }
-
-    #[test]
-    fn rejects_traversal() {
-        assert!(validate_model_name("../etc").is_err());
-        assert!(validate_model_name("a/..").is_err());
-        assert!(validate_model_name("./b").is_err());
-        assert!(validate_model_name("a\\b").is_err());
-    }
-
-    #[test]
-    fn rejects_bad_shape() {
-        assert!(validate_model_name("").is_err());
-        assert!(validate_model_name("onlyone").is_err());
-        assert!(validate_model_name("a/b/c").is_err());
-        assert!(validate_model_name("a//b").is_err());
-    }
-
-    #[test]
-    fn rejects_nul() {
-        assert!(validate_model_name("a/b\0").is_err());
-        assert!(validate_relative_file("foo\0.txt").is_err());
+    fn model_name_rules() {
+        for ok in ["Qwen/Qwen3-4B-Instruct", "a/b"] {
+            assert!(validate_model_name(ok).is_ok(), "{ok:?}");
+        }
+        for bad in [
+            "../etc", "a/..", "./b", "a\\b", "", "onlyone", "a/b/c", "a//b", "a/b\0",
+        ] {
+            assert!(validate_model_name(bad).is_err(), "{bad:?}");
+        }
     }
 
     #[test]
     fn relative_file_rules() {
-        validate_relative_file("model.gguf").unwrap();
-        validate_relative_file("sub/model.gguf").unwrap();
-        assert!(validate_relative_file("/abs").is_err());
-        assert!(validate_relative_file("..").is_err());
-        assert!(validate_relative_file("a/../b").is_err());
+        for ok in ["model.gguf", "sub/model.gguf"] {
+            assert!(validate_relative_file(ok).is_ok(), "{ok:?}");
+        }
+        for bad in ["/abs", "..", "a/../b", "foo\0.txt"] {
+            assert!(validate_relative_file(bad).is_err(), "{bad:?}");
+        }
     }
 }

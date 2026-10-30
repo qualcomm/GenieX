@@ -162,56 +162,40 @@ mod tests {
     use tempfile::tempdir;
 
     #[test]
-    fn tiny_file_is_single_chunk() {
-        let plan = plan_chunks_with_floor(1024, MIN_CHUNK_SIZE);
-        assert_eq!(plan.chunks.len(), 1);
-        assert_eq!(plan.chunks[0].offset, 0);
-        assert_eq!(plan.chunks[0].len, 1024);
-        assert_eq!(plan.chunk_size, MIN_CHUNK_SIZE);
-    }
-
-    #[test]
-    fn exact_min_chunk_is_one_chunk() {
-        let plan = plan_chunks_with_floor(MIN_CHUNK_SIZE, MIN_CHUNK_SIZE);
-        assert_eq!(plan.chunks.len(), 1);
-        assert_eq!(plan.chunks[0].len, MIN_CHUNK_SIZE);
-    }
-
-    #[test]
-    fn thirty_two_mib_splits_into_two() {
-        let plan = plan_chunks_with_floor(2 * MIN_CHUNK_SIZE, MIN_CHUNK_SIZE);
-        assert_eq!(plan.chunks.len(), 2);
-        assert_eq!(plan.chunks[0].len, MIN_CHUNK_SIZE);
-        assert_eq!(plan.chunks[1].len, MIN_CHUNK_SIZE);
-    }
-
-    #[test]
-    fn huge_file_caps_at_max_chunks() {
-        // 4 GiB at the default floor → 128 chunks of 32 MiB each.
-        let size = 4u64 * 1024 * 1024 * 1024;
-        let plan = plan_chunks_with_floor(size, MIN_CHUNK_SIZE);
-        assert_eq!(plan.chunks.len(), MAX_CHUNKS_PER_FILE as usize);
-        assert_eq!(plan.chunk_size, size / MAX_CHUNKS_PER_FILE);
-        assert_eq!(
-            plan.chunks.iter().map(|c| c.len).sum::<u64>(),
-            size,
-            "chunks must tile the whole file"
-        );
-    }
-
-    #[test]
-    fn last_chunk_takes_the_remainder() {
-        let size = MIN_CHUNK_SIZE + 123;
-        let plan = plan_chunks_with_floor(size, MIN_CHUNK_SIZE);
-        assert_eq!(plan.chunks.len(), 2);
-        assert_eq!(plan.chunks[1].len, 123);
-        assert_eq!(plan.chunks[1].offset, MIN_CHUNK_SIZE);
-    }
-
-    #[test]
-    fn zero_size_yields_no_chunks() {
-        let plan = plan_chunks_with_floor(0, MIN_CHUNK_SIZE);
-        assert_eq!(plan.chunks.len(), 0);
+    fn plan_chunks_tiles_the_file() {
+        const MIN: u64 = MIN_CHUNK_SIZE;
+        const GIB4: u64 = 4 << 30;
+        // (size, chunks, chunk_size, last chunk len)
+        let cases = [
+            (1024, 1, MIN, 1024),
+            (MIN, 1, MIN, MIN),
+            (2 * MIN, 2, MIN, MIN),
+            (MIN + 123, 2, MIN, 123),
+            (
+                GIB4,
+                MAX_CHUNKS_PER_FILE as usize,
+                GIB4 / MAX_CHUNKS_PER_FILE,
+                GIB4 / MAX_CHUNKS_PER_FILE,
+            ),
+        ];
+        for (size, n, chunk_size, last_len) in cases {
+            let plan = plan_chunks_with_floor(size, MIN);
+            assert_eq!(plan.chunks.len(), n, "size {size}");
+            assert_eq!(plan.chunk_size, chunk_size, "size {size}");
+            assert_eq!(plan.chunks[0].offset, 0, "size {size}");
+            let last = plan.chunks.last().unwrap();
+            assert_eq!(
+                (last.offset, last.len),
+                ((n as u64 - 1) * chunk_size, last_len),
+                "size {size}"
+            );
+            assert_eq!(
+                plan.chunks.iter().map(|c| c.len).sum::<u64>(),
+                size,
+                "size {size}"
+            );
+        }
+        assert!(plan_chunks_with_floor(0, MIN).chunks.is_empty());
     }
 
     #[test]
@@ -220,13 +204,13 @@ mod tests {
         let marker = dir.path().join("m.progress");
         let plan = plan_chunks_with_floor(3 * MIN_CHUNK_SIZE, MIN_CHUNK_SIZE);
         let bitmap = load_or_init_bitmap(&marker, &plan).unwrap();
-        assert_eq!(bitmap, vec![0, 0, 0]);
+        assert_eq!(bitmap, [0, 0, 0]);
         assert_eq!(pending_chunks(&plan, &bitmap).len(), 3);
         assert_eq!(bytes_already_done(&plan, &bitmap), 0);
 
         mark_chunk_done(&marker, 1).unwrap();
         let bitmap = load_or_init_bitmap(&marker, &plan).unwrap();
-        assert_eq!(bitmap, vec![0, PROGRESS_DONE_BYTE, 0]);
+        assert_eq!(bitmap, [0, PROGRESS_DONE_BYTE, 0]);
         assert_eq!(pending_chunks(&plan, &bitmap).len(), 2);
         assert_eq!(bytes_already_done(&plan, &bitmap), MIN_CHUNK_SIZE);
         assert!(!bitmap_complete(&bitmap));
@@ -235,18 +219,16 @@ mod tests {
         mark_chunk_done(&marker, 2).unwrap();
         let bitmap = load_or_init_bitmap(&marker, &plan).unwrap();
         assert!(bitmap_complete(&bitmap));
-        assert_eq!(pending_chunks(&plan, &bitmap).len(), 0);
+        assert!(pending_chunks(&plan, &bitmap).is_empty());
     }
 
     #[test]
     fn length_mismatch_triggers_reinit() {
         let dir = tempdir().unwrap();
         let marker = dir.path().join("m.progress");
-        // Stale bitmap from a previous pull with different chunk size.
-        fs::write(&marker, vec![PROGRESS_DONE_BYTE; 7]).unwrap();
+        fs::write(&marker, [PROGRESS_DONE_BYTE; 7]).unwrap();
         let plan = plan_chunks_with_floor(3 * MIN_CHUNK_SIZE, MIN_CHUNK_SIZE);
-        let bitmap = load_or_init_bitmap(&marker, &plan).unwrap();
-        assert_eq!(bitmap, vec![0, 0, 0], "mismatched bitmap must reset");
+        assert_eq!(load_or_init_bitmap(&marker, &plan).unwrap(), [0, 0, 0]);
     }
 
     #[test]
@@ -255,8 +237,7 @@ mod tests {
         let path = dir.path().join("f.bin");
         preallocate(&path, 1024).unwrap();
         assert_eq!(fs::metadata(&path).unwrap().len(), 1024);
-
-        fs::write(&path, vec![0xABu8; 2048]).unwrap();
+        fs::write(&path, [0xABu8; 2048]).unwrap();
         preallocate(&path, 512).unwrap();
         assert_eq!(fs::metadata(&path).unwrap().len(), 512);
     }

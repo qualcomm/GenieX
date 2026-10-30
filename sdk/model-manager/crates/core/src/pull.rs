@@ -315,55 +315,33 @@ fn drop_marker(dest_dir: &Path, file_name: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
 
     #[test]
-    fn remove_inflight_dir_removes_empty_sentinel() {
-        let tmp = tempdir().unwrap();
-        let inflight = tmp.path().join(INFLIGHT_DIR);
-        fs::create_dir_all(&inflight).unwrap();
-        remove_inflight_dir(&inflight);
-        assert!(!inflight.exists());
+    fn remove_inflight_dir_handles_empty_nonempty_and_missing() {
+        for (create, leftover) in [(true, false), (true, true), (false, false)] {
+            let tmp = tempfile::tempdir().unwrap();
+            let inflight = tmp.path().join(INFLIGHT_DIR);
+            if create {
+                fs::create_dir_all(&inflight).unwrap();
+            }
+            if leftover {
+                fs::write(inflight.join("leftover.bin"), b"stale").unwrap();
+            }
+            remove_inflight_dir(&inflight);
+            assert!(!inflight.exists(), "create={create} leftover={leftover}");
+        }
     }
 
     #[test]
-    fn remove_inflight_dir_removes_nonempty_sentinel() {
-        let tmp = tempdir().unwrap();
-        let inflight = tmp.path().join(INFLIGHT_DIR);
-        fs::create_dir_all(&inflight).unwrap();
-        fs::write(inflight.join("leftover.bin"), b"stale").unwrap();
-        remove_inflight_dir(&inflight);
-        assert!(!inflight.exists());
-    }
-
-    #[test]
-    fn remove_inflight_dir_noop_when_missing() {
-        let tmp = tempdir().unwrap();
-        let inflight = tmp.path().join(INFLIGHT_DIR);
-        // Do not create it — function must return without warning or panic.
-        remove_inflight_dir(&inflight);
-        assert!(!inflight.exists());
-    }
-
-    #[test]
-    fn check_disk_space_ok_when_enough_room() {
+    fn check_disk_space_allows_up_to_the_boundary() {
         assert!(check_disk_space(100, 200).is_ok());
-    }
-
-    #[test]
-    fn check_disk_space_ok_at_exact_boundary() {
         assert!(check_disk_space(100, 100).is_ok());
-    }
-
-    #[test]
-    fn check_disk_space_errs_when_not_enough_room() {
-        let err = check_disk_space(200, 100).unwrap_err();
         assert!(matches!(
-            err,
-            Error::InsufficientDiskSpace {
+            check_disk_space(200, 100),
+            Err(Error::InsufficientDiskSpace {
                 required: 200,
                 available: 100
-            }
+            })
         ));
     }
 }

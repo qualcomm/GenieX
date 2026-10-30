@@ -243,89 +243,72 @@ mod windows {
         use super::*;
 
         #[test]
-        fn parses_xelite1_reg_output() {
-            let stdout = "\
+        fn parses_reg_sz_values() {
+            let cpu = "\
 HKEY_LOCAL_MACHINE\\HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\r\n    \
 ProcessorNameString    REG_SZ    Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz\r\n\r\n";
-            let brand = parse_reg_query(stdout).expect("parse");
-            assert_eq!(brand, "Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz");
+            assert_eq!(
+                parse_reg_query(cpu).as_deref(),
+                Some("Snapdragon(R) X 12-core X1E80100 @ 3.40 GHz")
+            );
+            assert!(parse_reg_query("").is_none());
+
+            let gpu = "\
+HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-...}\\0000\r\n    \
+DriverDesc    REG_SZ    Qualcomm(R) Adreno(TM) X2-45 GPU\r\n\r\n";
+            assert_eq!(
+                parse_reg_sz(gpu, DRIVER_DESC).as_deref(),
+                Some("Qualcomm(R) Adreno(TM) X2-45 GPU")
+            );
         }
 
         #[test]
-        fn returns_none_on_empty_output() {
-            assert!(parse_reg_query("").is_none());
-        }
-
-        // Real 3-adapter fixture from an X2 Plus dev board (Adreno +
-        // Microsoft Remote Display + a third-party mirror driver): the
-        // virtual entries prove the filter must key on VEN_QCOM, not slot.
-        const MATCHING_FIXTURE: &str = "\r\n\
+        fn finds_qualcomm_display_subkey_by_vendor_not_slot() {
+            // X2 Plus dev board: Adreno plus two virtual display adapters.
+            let three_adapters = "\r\n\
 HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0000\r\n    \
 MatchingDeviceId    REG_SZ    ACPI\\VEN_QCOM&DEV_0FF5&REV_0098\r\n\r\n\
 HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0001\r\n    \
 MatchingDeviceId    REG_SZ    RdpIdd_IndirectDisplay\r\n\r\n\
 HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-e325-11ce-bfc1-08002be10318}\\0002\r\n    \
 MatchingDeviceId    REG_SZ    Root\\ThirdPartyMirror\r\n\r\n";
-
-        #[test]
-        fn finds_qualcomm_display_subkey_by_vendor_not_slot() {
-            let subkey = find_qualcomm_subkey(MATCHING_FIXTURE).expect("subkey");
+            let subkey = find_qualcomm_subkey(three_adapters).expect("subkey");
             assert!(subkey.ends_with("\\0000"), "got {subkey}");
-        }
 
-        #[test]
-        fn find_subkey_none_when_only_virtual_adapters() {
-            let stdout = "\
+            let virtual_only = "\
 HKEY_LOCAL_MACHINE\\...\\0000\r\n    MatchingDeviceId    REG_SZ    RdpIdd_IndirectDisplay\r\n\r\n\
 HKEY_LOCAL_MACHINE\\...\\0001\r\n    MatchingDeviceId    REG_SZ    Root\\ThirdPartyMirror\r\n";
-            assert_eq!(find_qualcomm_subkey(stdout), None);
+            assert_eq!(find_qualcomm_subkey(virtual_only), None);
         }
 
         #[test]
-        fn parses_driver_desc_value() {
-            let stdout = "\
-HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Class\\{4d36e968-...}\\0000\r\n    \
-DriverDesc    REG_SZ    Qualcomm(R) Adreno(TM) X2-45 GPU\r\n\r\n";
-            assert_eq!(
-                parse_reg_sz(stdout, DRIVER_DESC).as_deref(),
-                Some("Qualcomm(R) Adreno(TM) X2-45 GPU")
-            );
-        }
-
-        #[test]
-        fn maps_x2_plus_adreno_to_x2_elite() {
-            assert_eq!(
-                adreno_name_to_chipset("Qualcomm(R) Adreno(TM) X2-45 GPU"),
-                Some("qualcomm-snapdragon-x2-elite")
-            );
-        }
-
-        #[test]
-        fn maps_gen1_adreno_variants_to_x_elite() {
-            for name in [
-                "Qualcomm(R) Adreno(TM) X1-85 GPU",
-                "Qualcomm(R) Adreno(TM) X1-45 GPU",
-            ] {
-                assert_eq!(
-                    adreno_name_to_chipset(name),
+        fn maps_adreno_names() {
+            for (name, want) in [
+                (
+                    "Qualcomm(R) Adreno(TM) X2-45 GPU",
+                    Some("qualcomm-snapdragon-x2-elite"),
+                ),
+                (
+                    "Qualcomm(R) Adreno(TM) X1-85 GPU",
                     Some("qualcomm-snapdragon-x-elite"),
-                    "name {name:?}"
-                );
+                ),
+                (
+                    "Qualcomm(R) Adreno(TM) X1-45 GPU",
+                    Some("qualcomm-snapdragon-x-elite"),
+                ),
+                ("Adreno(TM) X9-99 GPU", None),
+                ("ThirdPartyMirror Device", None),
+            ] {
+                assert_eq!(adreno_name_to_chipset(name), want, "{name:?}");
             }
-        }
-
-        #[test]
-        fn extracts_generation_number() {
-            assert_eq!(extract_adreno_generation("Adreno(TM) X2-45 GPU"), Some(2));
-            assert_eq!(extract_adreno_generation("Adreno(TM) X1-85 GPU"), Some(1));
-        }
-
-        #[test]
-        fn ignores_non_adreno_and_cpu_shaped_tokens() {
-            assert_eq!(extract_adreno_generation("Intel(R) UHD Graphics"), None);
-            assert_eq!(extract_adreno_generation("XG301062"), None);
-            assert_eq!(adreno_name_to_chipset("Adreno(TM) X9-99 GPU"), None);
-            assert_eq!(adreno_name_to_chipset("ThirdPartyMirror Device"), None);
+            for (desc, want) in [
+                ("Adreno(TM) X2-45 GPU", Some(2)),
+                ("Adreno(TM) X1-85 GPU", Some(1)),
+                ("Intel(R) UHD Graphics", None),
+                ("XG301062", None),
+            ] {
+                assert_eq!(extract_adreno_generation(desc), want, "{desc:?}");
+            }
         }
     }
 }
@@ -403,67 +386,43 @@ mod linux {
         use super::*;
 
         #[test]
-        fn maps_qcs9075_evk_real_fixture() {
-            let bytes = b"qcom,qcs9075-addons-iq-9075-evk\0qcom,qcs9075\0qcom,sa8775p\0";
-            assert_eq!(map_compatible(bytes), Some("qualcomm-qcs9075"));
+        fn map_compatible_cases() {
+            let cases: [(&[u8], Option<&str>); 7] = [
+                (
+                    b"qcom,qcs9075-addons-iq-9075-evk\0qcom,qcs9075\0qcom,sa8775p\0",
+                    Some("qualcomm-qcs9075"),
+                ),
+                (
+                    b"qcom,qcs6490-addons-rb3gen2\0qcom,qcm6490\0",
+                    Some("qualcomm-qcs6490"),
+                ),
+                (b"qcom,qcs9075", Some("qualcomm-qcs9075")),
+                (b"qcom,sa8775p\0", None),
+                (b"brcm,bcm2837\0", None),
+                (b"", None),
+                (b"qcom,qcs9075foo\0", None),
+            ];
+            for (bytes, want) in cases {
+                assert_eq!(
+                    map_compatible(bytes),
+                    want,
+                    "{:?}",
+                    String::from_utf8_lossy(bytes)
+                );
+            }
         }
 
         #[test]
-        fn maps_qcs6490_rb3_gen2_real_fixture() {
-            let bytes = b"qcom,qcs6490-addons-rb3gen2\0qcom,qcm6490\0";
-            assert_eq!(map_compatible(bytes), Some("qualcomm-qcs6490"));
-        }
-
-        #[test]
-        fn ignores_family_only_compatible() {
-            assert_eq!(map_compatible(b"qcom,sa8775p\0"), None);
-        }
-
-        #[test]
-        fn ignores_non_qualcomm_vendor() {
-            assert_eq!(map_compatible(b"brcm,bcm2837\0"), None);
-        }
-
-        #[test]
-        fn ignores_empty_input() {
-            assert_eq!(map_compatible(b""), None);
-        }
-
-        #[test]
-        fn does_not_match_prefix_collision() {
-            assert_eq!(map_compatible(b"qcom,qcs9075foo\0"), None);
-        }
-
-        #[test]
-        fn trailing_nul_missing_is_tolerated() {
-            assert_eq!(map_compatible(b"qcom,qcs9075"), Some("qualcomm-qcs9075"));
-        }
-
-        #[test]
-        fn socinfo_maps_iq8275_evk_real_fixture() {
-            assert_eq!(
-                map_socinfo("Snapdragon\n", "QCS8275\n"),
-                Some("qualcomm-qcs8275")
-            );
-        }
-
-        #[test]
-        fn socinfo_rejects_non_snapdragon_family() {
-            assert_eq!(map_socinfo("MSM\n", "QCS8275\n"), None);
-            assert_eq!(map_socinfo("", "QCS8275"), None);
-        }
-
-        #[test]
-        fn socinfo_ignores_unknown_machine() {
-            assert_eq!(map_socinfo("Snapdragon\n", "QCS8300\n"), None);
-        }
-
-        #[test]
-        fn socinfo_family_match_is_case_insensitive() {
-            assert_eq!(
-                map_socinfo("snapdragon\n", "qcs8275\n"),
-                Some("qualcomm-qcs8275")
-            );
+        fn map_socinfo_cases() {
+            for (family, machine, want) in [
+                ("Snapdragon\n", "QCS8275\n", Some("qualcomm-qcs8275")),
+                ("snapdragon\n", "qcs8275\n", Some("qualcomm-qcs8275")),
+                ("MSM\n", "QCS8275\n", None),
+                ("", "QCS8275", None),
+                ("Snapdragon\n", "QCS8300\n", None),
+            ] {
+                assert_eq!(map_socinfo(family, machine), want, "{family:?} {machine:?}");
+            }
         }
     }
 }
@@ -547,43 +506,23 @@ mod android {
         use super::map_soc;
 
         #[test]
-        fn passes_through_qti_soc_model() {
-            assert_eq!(map_soc("QTI", "SM8650"), Some("SM8650"));
-        }
-
-        #[test]
-        fn maps_elite_socs_to_galaxy_aliases() {
-            assert_eq!(map_soc("QTI", "SM8750"), Some("SM8750-AC"));
-            assert_eq!(map_soc("QTI", "sm8850"), Some("SM8850-AD"));
-        }
-
-        #[test]
-        fn accepts_aosp_qualcomm_spelling() {
-            assert_eq!(map_soc("Qualcomm", "SM8650"), Some("SM8650"));
-        }
-
-        #[test]
-        fn manufacturer_match_is_case_insensitive() {
-            assert_eq!(map_soc("qti", "SM8750"), Some("SM8750-AC"));
-            assert_eq!(map_soc("qualcomm", "SM8650"), Some("SM8650"));
-        }
-
-        #[test]
-        fn rejects_non_qualcomm_manufacturer() {
-            assert_eq!(map_soc("Samsung", "S5E9945"), None);
-            assert_eq!(map_soc("MediaTek", "MT6989"), None);
-            assert_eq!(map_soc("Google", "Tensor G4"), None);
-        }
-
-        #[test]
-        fn rejects_empty_model() {
-            assert_eq!(map_soc("QTI", ""), None);
-            assert_eq!(map_soc("QTI", "   "), None);
-        }
-
-        #[test]
-        fn trims_model_whitespace() {
-            assert_eq!(map_soc("QTI", "  SM8650  "), Some("SM8650"));
+        fn map_soc_cases() {
+            for (manuf, model, want) in [
+                ("QTI", "SM8650", Some("SM8650")),
+                ("QTI", "SM8750", Some("SM8750-AC")),
+                ("QTI", "sm8850", Some("SM8850-AD")),
+                ("Qualcomm", "SM8650", Some("SM8650")),
+                ("qti", "SM8750", Some("SM8750-AC")),
+                ("qualcomm", "SM8650", Some("SM8650")),
+                ("QTI", "  SM8650  ", Some("SM8650")),
+                ("Samsung", "S5E9945", None),
+                ("MediaTek", "MT6989", None),
+                ("Google", "Tensor G4", None),
+                ("QTI", "", None),
+                ("QTI", "   ", None),
+            ] {
+                assert_eq!(map_soc(manuf, model), want, "{manuf:?} {model:?}");
+            }
         }
     }
 }
@@ -593,68 +532,42 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_x_elite_brand_string() {
-        let brand = "Snapdragon(R) X Elite - X1E80100 - Qualcomm(R) Oryon(TM) CPU".to_string();
-        assert_eq!(
-            cpu_name_to_chipset_alias(brand).as_deref(),
-            Some("qualcomm-snapdragon-x-elite")
-        );
-    }
-
-    #[test]
-    fn parses_x_plus_brand_string() {
-        let brand = "Snapdragon X Plus - X1P64100 - Qualcomm Oryon CPU".to_string();
-        assert_eq!(
-            cpu_name_to_chipset_alias(brand).as_deref(),
-            Some("qualcomm-snapdragon-x-plus-8-core")
-        );
-    }
-
-    #[test]
-    fn parses_x2_elite_brand_string() {
-        let brand = "Snapdragon X2 Elite - X2E80100 - Qualcomm Oryon CPU".to_string();
-        assert_eq!(
-            cpu_name_to_chipset_alias(brand).as_deref(),
-            Some("qualcomm-snapdragon-x2-elite")
-        );
-    }
-
-    #[test]
-    fn parses_x2_plus_brand_string() {
-        let brand = "Snapdragon X2 Plus - X2P64100 - Qualcomm Oryon CPU".to_string();
-        assert_eq!(
-            cpu_name_to_chipset_alias(brand).as_deref(),
-            Some("qualcomm-snapdragon-x2-elite")
-        );
-    }
-
-    #[test]
-    fn parses_lower_bin_skus() {
-        assert_eq!(
-            cpu_name_to_chipset_alias("X1E78100".to_string()).as_deref(),
-            Some("qualcomm-snapdragon-x-elite")
-        );
-        assert_eq!(
-            cpu_name_to_chipset_alias("X1P42100".to_string()).as_deref(),
-            Some("qualcomm-snapdragon-x-plus-8-core")
-        );
-    }
-
-    #[test]
-    fn ignores_non_oryon_cpus() {
-        assert!(
-            cpu_name_to_chipset_alias("Intel(R) Core(TM) i7-12700H @ 2.30GHz".to_string())
-                .is_none()
-        );
-        assert!(cpu_name_to_chipset_alias("AMD Ryzen 7 7840U".to_string()).is_none());
-        assert!(cpu_name_to_chipset_alias(String::new()).is_none());
+    fn cpu_brand_maps_to_chipset_alias() {
+        let x_elite = Some("qualcomm-snapdragon-x-elite");
+        let x_plus = Some("qualcomm-snapdragon-x-plus-8-core");
+        let x2_elite = Some("qualcomm-snapdragon-x2-elite");
+        for (brand, want) in [
+            (
+                "Snapdragon(R) X Elite - X1E80100 - Qualcomm(R) Oryon(TM) CPU",
+                x_elite,
+            ),
+            ("Snapdragon X Plus - X1P64100 - Qualcomm Oryon CPU", x_plus),
+            (
+                "Snapdragon X2 Elite - X2E80100 - Qualcomm Oryon CPU",
+                x2_elite,
+            ),
+            (
+                "Snapdragon X2 Plus - X2P64100 - Qualcomm Oryon CPU",
+                x2_elite,
+            ),
+            ("X1E78100", x_elite),
+            ("X1P42100", x_plus),
+            ("Intel(R) Core(TM) i7-12700H @ 2.30GHz", None),
+            ("AMD Ryzen 7 7840U", None),
+            ("", None),
+        ] {
+            assert_eq!(
+                cpu_name_to_chipset_alias(brand.to_string()).as_deref(),
+                want,
+                "{brand:?}"
+            );
+        }
     }
 
     #[test]
     fn rejects_almost_sku_shaped_tokens() {
-        assert!(!is_oryon_sku("X1E80100A"));
-        assert!(!is_oryon_sku("XEE80100"));
-        assert!(!is_oryon_sku("X1E10"));
-        assert!(!is_oryon_sku(""));
+        for tok in ["X1E80100A", "XEE80100", "X1E10", ""] {
+            assert!(!is_oryon_sku(tok), "{tok:?}");
+        }
     }
 }

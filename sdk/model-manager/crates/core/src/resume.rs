@@ -59,71 +59,41 @@ mod tests {
     use crate::source::{BytesSource, FileSpec};
     use std::path::PathBuf;
 
-    fn local_spec(name: &str) -> FileSpec {
-        FileSpec {
-            name: name.to_string(),
+    #[test]
+    fn filter_pending_cases() {
+        let spec = FileSpec {
+            name: "a.gguf".to_string(),
             size: 10,
             bytes: BytesSource::Local {
                 path: PathBuf::from("/nowhere"),
             },
+        };
+        let full: &[u8] = b"xxxxxxxxxx";
+        type Bytes<'a> = Option<&'a [u8]>;
+        let cases: [(&str, Bytes, Bytes, bool); 7] = [
+            ("nothing on disk", None, None, true),
+            ("complete bitmap", Some(full), Some(&[1, 1]), false),
+            ("complete bitmap, output missing", None, Some(&[1]), true),
+            (
+                "complete bitmap, size mismatch",
+                Some(b"xxxx"),
+                Some(&[1]),
+                true,
+            ),
+            ("partial bitmap", Some(full), Some(&[1, 0, 1]), true),
+            ("published, no marker", Some(full), None, false),
+            ("truncated, no marker", Some(b"xxxxx"), None, true),
+        ];
+        for (case, output, marker, want_pending) in cases {
+            let tmp = tempfile::tempdir().unwrap();
+            if let Some(b) = output {
+                std::fs::write(tmp.path().join("a.gguf"), b).unwrap();
+            }
+            if let Some(m) = marker {
+                std::fs::write(tmp.path().join("a.gguf.progress"), m).unwrap();
+            }
+            let pending = filter_pending(std::slice::from_ref(&spec), tmp.path());
+            assert_eq!(!pending.is_empty(), want_pending, "{case}");
         }
-    }
-
-    #[test]
-    fn includes_file_when_nothing_exists_yet() {
-        let tmp = tempfile::tempdir().unwrap();
-        let pending = filter_pending(&[local_spec("a.gguf")], tmp.path());
-        assert_eq!(pending.len(), 1);
-    }
-
-    #[test]
-    fn skips_fully_complete_bitmap() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("a.gguf"), b"xxxxxxxxxx").unwrap();
-        std::fs::write(tmp.path().join("a.gguf.progress"), [0x01, 0x01]).unwrap();
-        let pending = filter_pending(&[local_spec("a.gguf")], tmp.path());
-        assert!(pending.is_empty());
-    }
-
-    #[test]
-    fn refetches_complete_bitmap_when_output_is_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("a.gguf.progress"), [0x01]).unwrap();
-        let pending = filter_pending(&[local_spec("a.gguf")], tmp.path());
-        assert_eq!(pending.len(), 1);
-    }
-
-    #[test]
-    fn refetches_complete_bitmap_when_output_size_mismatches() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("a.gguf"), b"xxxx").unwrap();
-        std::fs::write(tmp.path().join("a.gguf.progress"), [0x01]).unwrap();
-        let pending = filter_pending(&[local_spec("a.gguf")], tmp.path());
-        assert_eq!(pending.len(), 1);
-    }
-
-    #[test]
-    fn includes_file_with_partial_bitmap() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("a.gguf"), b"xxxxxxxxxx").unwrap();
-        std::fs::write(tmp.path().join("a.gguf.progress"), [0x01, 0x00, 0x01]).unwrap();
-        let pending = filter_pending(&[local_spec("a.gguf")], tmp.path());
-        assert_eq!(pending.len(), 1);
-    }
-
-    #[test]
-    fn treats_published_without_marker_as_done() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("a.gguf"), b"xxxxxxxxxx").unwrap();
-        let pending = filter_pending(&[local_spec("a.gguf")], tmp.path());
-        assert!(pending.is_empty());
-    }
-
-    #[test]
-    fn refetches_truncated_file_without_marker() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(tmp.path().join("a.gguf"), b"xxxxx").unwrap();
-        let pending = filter_pending(&[local_spec("a.gguf")], tmp.path());
-        assert_eq!(pending.len(), 1);
     }
 }

@@ -135,179 +135,111 @@ mod tests {
     use super::*;
 
     #[test]
-    fn known_alias_resolves() {
+    fn resolves_aliases() {
         assert_eq!(
             resolve_alias("qwen3").as_deref(),
             Some("ggml-org/Qwen3-1.7B-GGUF:Q4_K_M")
         );
-    }
-
-    #[test]
-    fn unknown_alias_returns_none() {
         assert!(resolve_alias("nonexistent_model_xyz").is_none());
     }
 
     #[test]
-    fn aihub_display_name_matches_qualcomm_org() {
-        assert_eq!(
-            aihub_display_name_from_repo("qualcomm/Qwen3-4B"),
-            Some("Qwen3-4B")
-        );
+    fn aihub_display_name_from_repo_cases() {
+        for (repo, want) in [
+            ("qualcomm/Qwen3-4B", Some("Qwen3-4B")),
+            (
+                "ai-hub-models/Llama-v3.2-3B-Chat",
+                Some("Llama-v3.2-3B-Chat"),
+            ),
+            ("Qualcomm/Qwen3-4B", Some("Qwen3-4B")),
+            (
+                "AI-Hub-Models/Llama-v3.2-3B-Chat",
+                Some("Llama-v3.2-3B-Chat"),
+            ),
+            ("qualcomm/Qwen3-4B:Q4_K_M", Some("Qwen3-4B")),
+            ("aihub/llama_v3_2_3b_instruct", None),
+            ("ggml-org/Qwen3-0.6B-GGUF", None),
+            ("bartowski/Foo", None),
+            ("qualcomm", None),
+            ("qualcomm/", None),
+            ("/Qwen3-4B", None),
+            ("ai-hub-models/", None),
+        ] {
+            assert_eq!(aihub_display_name_from_repo(repo), want, "{repo}");
+        }
     }
 
     #[test]
-    fn aihub_display_name_matches_ai_hub_models_org() {
-        assert_eq!(
-            aihub_display_name_from_repo("ai-hub-models/Llama-v3.2-3B-Chat"),
-            Some("Llama-v3.2-3B-Chat")
-        );
+    fn canonicalize_model_name_cases() {
+        for (name, want) in [
+            ("llama_v3_2_3b_instruct", "qualcomm/llama_v3_2_3b_instruct"),
+            ("qualcomm/Qwen3-4B", "qualcomm/Qwen3-4B"),
+            ("ggml-org/Qwen3-1.7B-GGUF", "ggml-org/Qwen3-1.7B-GGUF"),
+            (
+                "https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF",
+                "ggml-org/Qwen3-1.7B-GGUF",
+            ),
+            ("http://huggingface.co/bartowski/Foo", "bartowski/Foo"),
+            (
+                "https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF",
+                "Qwen/Qwen3-0.6B-GGUF",
+            ),
+            (
+                "http://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF",
+                "Qwen/Qwen3-0.6B-GGUF",
+            ),
+            (
+                "ai-hub-models/Llama-v3.2-3B-Chat",
+                "qualcomm/Llama-v3.2-3B-Chat",
+            ),
+            ("AI-Hub-Models/Qwen3-4B", "qualcomm/Qwen3-4B"),
+            ("ai-hub-models/Qwen3-4B:Q4_K_M", "qualcomm/Qwen3-4B:Q4_K_M"),
+        ] {
+            assert_eq!(canonicalize_model_name(name), want, "{name}");
+        }
     }
 
     #[test]
-    fn aihub_display_name_rejects_retired_aihub_prefix() {
-        assert!(aihub_display_name_from_repo("aihub/llama_v3_2_3b_instruct").is_none());
-    }
-
-    #[test]
-    fn aihub_display_name_case_insensitive_on_org() {
-        assert_eq!(
-            aihub_display_name_from_repo("Qualcomm/Qwen3-4B"),
-            Some("Qwen3-4B")
-        );
-        assert_eq!(
-            aihub_display_name_from_repo("AI-Hub-Models/Llama-v3.2-3B-Chat"),
-            Some("Llama-v3.2-3B-Chat")
-        );
-    }
-
-    #[test]
-    fn aihub_display_name_strips_quant_suffix() {
-        assert_eq!(
-            aihub_display_name_from_repo("qualcomm/Qwen3-4B:Q4_K_M"),
-            Some("Qwen3-4B")
-        );
-    }
-
-    #[test]
-    fn aihub_display_name_rejects_hf_orgs() {
-        assert!(aihub_display_name_from_repo("ggml-org/Qwen3-0.6B-GGUF").is_none());
-        assert!(aihub_display_name_from_repo("bartowski/Foo").is_none());
-    }
-
-    #[test]
-    fn aihub_display_name_rejects_non_org_repo() {
-        assert!(aihub_display_name_from_repo("qualcomm").is_none());
-        assert!(aihub_display_name_from_repo("qualcomm/").is_none());
-        assert!(aihub_display_name_from_repo("/Qwen3-4B").is_none());
-        assert!(aihub_display_name_from_repo("ai-hub-models/").is_none());
-    }
-
-    #[test]
-    fn canonicalize_bare_name_routes_to_qualcomm() {
-        assert_eq!(
-            canonicalize_model_name("llama_v3_2_3b_instruct"),
-            "qualcomm/llama_v3_2_3b_instruct"
-        );
-    }
-
-    #[test]
-    fn canonicalize_preserves_org_repo() {
-        assert_eq!(
-            canonicalize_model_name("qualcomm/Qwen3-4B"),
-            "qualcomm/Qwen3-4B"
-        );
-        assert_eq!(
-            canonicalize_model_name("ggml-org/Qwen3-1.7B-GGUF"),
-            "ggml-org/Qwen3-1.7B-GGUF"
-        );
-    }
-
-    #[test]
-    fn canonicalize_strips_huggingface_url_prefix() {
-        assert_eq!(
-            canonicalize_model_name("https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF"),
-            "ggml-org/Qwen3-1.7B-GGUF"
-        );
-        assert_eq!(
-            canonicalize_model_name("http://huggingface.co/bartowski/Foo"),
-            "bartowski/Foo"
-        );
-    }
-
-    #[test]
-    fn canonicalize_strips_modelscope_url_prefix() {
-        assert_eq!(
-            canonicalize_model_name("https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF"),
-            "Qwen/Qwen3-0.6B-GGUF"
-        );
-        assert_eq!(
-            canonicalize_model_name("http://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF"),
-            "Qwen/Qwen3-0.6B-GGUF"
-        );
-    }
-
-    #[test]
-    fn modelscope_reference_needs_a_url_prefix() {
-        assert!(is_modelscope_reference(
-            "https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF"
-        ));
-        assert!(is_modelscope_reference(
-            "http://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF"
-        ));
-        assert!(!is_modelscope_reference("Qwen/Qwen3-0.6B-GGUF"));
-        assert!(!is_modelscope_reference(
-            "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF"
-        ));
-    }
-
-    #[test]
-    fn docker_hub_reference_requires_explicit_prefix() {
-        assert!(is_docker_hub_reference("docker.io/ai/gemma3"));
-        assert!(is_docker_hub_reference("DOCKER.IO/ai/gemma3"));
-        assert!(is_docker_hub_reference("index.docker.io/ai/gemma3"));
-        assert!(is_docker_hub_reference(
-            "https://hub.docker.com/r/ai/gemma3"
-        ));
-        // Bare "org/repo" is never auto-routed to Docker Hub — it's
-        // indistinguishable from a HuggingFace repo of the same shape.
-        assert!(!is_docker_hub_reference("ai/gemma3"));
-        assert!(!is_docker_hub_reference("ggml-org/Qwen3-1.7B-GGUF"));
+    fn hub_reference_detection_needs_an_explicit_prefix() {
+        for (name, modelscope, docker) in [
+            (
+                "https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF",
+                true,
+                false,
+            ),
+            (
+                "http://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF",
+                true,
+                false,
+            ),
+            ("https://huggingface.co/Qwen/Qwen3-0.6B-GGUF", false, false),
+            ("Qwen/Qwen3-0.6B-GGUF", false, false),
+            ("docker.io/ai/gemma3", false, true),
+            ("DOCKER.IO/ai/gemma3", false, true),
+            ("index.docker.io/ai/gemma3", false, true),
+            ("https://hub.docker.com/r/ai/gemma3", false, true),
+            // Bare "org/repo" is indistinguishable from a HuggingFace repo.
+            ("ai/gemma3", false, false),
+            ("ggml-org/Qwen3-1.7B-GGUF", false, false),
+        ] {
+            assert_eq!(
+                is_modelscope_reference(name),
+                modelscope,
+                "modelscope {name}"
+            );
+            assert_eq!(is_docker_hub_reference(name), docker, "docker {name}");
+        }
     }
 
     #[test]
     fn docker_hub_repo_from_name_strips_known_prefixes() {
-        assert_eq!(
-            docker_hub_repo_from_name("docker.io/ai/gemma3"),
-            "ai/gemma3"
-        );
-        assert_eq!(
-            docker_hub_repo_from_name("index.docker.io/ai/gemma3"),
-            "ai/gemma3"
-        );
-        assert_eq!(
-            docker_hub_repo_from_name("https://hub.docker.com/r/ai/gemma3"),
-            "ai/gemma3"
-        );
-        // No recognised prefix: passed through unchanged (explicit
-        // --model-hub docker with a bare "org/repo").
-        assert_eq!(docker_hub_repo_from_name("ai/gemma3"), "ai/gemma3");
-    }
-
-    #[test]
-    fn canonicalize_rewrites_ai_hub_models_to_qualcomm() {
-        assert_eq!(
-            canonicalize_model_name("ai-hub-models/Llama-v3.2-3B-Chat"),
-            "qualcomm/Llama-v3.2-3B-Chat"
-        );
-        // Case-insensitive on the org segment.
-        assert_eq!(
-            canonicalize_model_name("AI-Hub-Models/Qwen3-4B"),
-            "qualcomm/Qwen3-4B"
-        );
-        // The ":quant" suffix rides along on the repo untouched.
-        assert_eq!(
-            canonicalize_model_name("ai-hub-models/Qwen3-4B:Q4_K_M"),
-            "qualcomm/Qwen3-4B:Q4_K_M"
-        );
+        for name in [
+            "docker.io/ai/gemma3",
+            "index.docker.io/ai/gemma3",
+            "https://hub.docker.com/r/ai/gemma3",
+            "ai/gemma3",
+        ] {
+            assert_eq!(docker_hub_repo_from_name(name), "ai/gemma3", "{name}");
+        }
     }
 }

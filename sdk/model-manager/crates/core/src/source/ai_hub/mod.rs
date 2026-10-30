@@ -663,71 +663,25 @@ mod tests {
     use self::dto::ManifestUrls;
     use super::*;
 
-    fn entry(id: &str, domain: &str) -> ManifestModelEntry {
+    const QAIRT: &str = "RUNTIME_GENIEX_QAIRT";
+
+    fn entry(
+        id: &str,
+        domain: &str,
+        runtimes: &[&str],
+        chipsets: &[&str],
+        tags: &[&str],
+    ) -> ManifestModelEntry {
+        let strings = |v: &[&str]| v.iter().map(|s| s.to_string()).collect();
         ManifestModelEntry {
             id: id.to_string(),
             display_name: id.to_string(),
             domain: domain.to_string(),
             manifest_urls: ManifestUrls::default(),
-            supported_runtimes: Vec::new(),
-            supported_chipsets: Vec::new(),
-            tags: Vec::new(),
+            supported_runtimes: strings(runtimes),
+            supported_chipsets: strings(chipsets),
+            tags: strings(tags),
         }
-    }
-
-    fn info(description: &str, headline: &str) -> InfoJson {
-        InfoJson {
-            domain: "MODEL_DOMAIN_GENERATIVE_AI".to_string(),
-            headline: headline.to_string(),
-            description: description.to_string(),
-            tags: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn classify_domain_multimodal_is_vlm() {
-        // #12
-        let e = entry("qwen2_5_vl_7b_instruct", "MODEL_DOMAIN_MULTIMODAL");
-        assert_eq!(classify_ai_hub(None, &e), ModelType::Vlm);
-    }
-
-    #[test]
-    fn classify_qwen25_vl_generative_ai_info_description() {
-        // #13 regression-blocker: live manifest reports GENERATIVE_AI
-        // for Qwen2.5-VL. Description must rescue it.
-        let e = entry("qwen2_5_vl_7b_instruct", "MODEL_DOMAIN_GENERATIVE_AI");
-        let i = info(
-            "Qwen2.5-VL-7B-Instruct is a multimodal vision-language model that processes both images and text",
-            "",
-        );
-        assert_eq!(classify_ai_hub(Some(&i), &e), ModelType::Vlm);
-    }
-
-    #[test]
-    fn classify_llama_generative_ai_stays_llm() {
-        // #14
-        let e = entry("llama_v3_8b_instruct", "MODEL_DOMAIN_GENERATIVE_AI");
-        let i = info(
-            "Llama 3 is a state-of-the-art large language model",
-            "State-of-the-art large language model",
-        );
-        assert_eq!(classify_ai_hub(Some(&i), &e), ModelType::Llm);
-    }
-
-    #[test]
-    fn classify_headline_only_hit() {
-        // #15 — headline alone carries the VLM signal.
-        let e = entry("some_vlm", "MODEL_DOMAIN_GENERATIVE_AI");
-        let i = info("", "Visual question answering on mobile");
-        assert_eq!(classify_ai_hub(Some(&i), &e), ModelType::Vlm);
-    }
-
-    #[test]
-    fn classify_info_missing_defaults_llm() {
-        // #16 — fetch failed; fall back to domain-only (GENERATIVE_AI
-        // isn't a VLM signal) → LLM.
-        let e = entry("mystery_model", "MODEL_DOMAIN_GENERATIVE_AI");
-        assert_eq!(classify_ai_hub(None, &e), ModelType::Llm);
     }
 
     fn hub_entry(
@@ -736,23 +690,64 @@ mod tests {
         chipsets: &[&str],
         tags: &[&str],
     ) -> ManifestModelEntry {
-        ManifestModelEntry {
-            id: id.to_string(),
-            display_name: id.to_string(),
+        entry(id, "MODEL_DOMAIN_GENERATIVE_AI", runtimes, chipsets, tags)
+    }
+
+    fn select(models: Vec<ManifestModelEntry>, device: Option<&str>) -> Vec<(String, ModelType)> {
+        let manifest = ReleaseManifest {
+            platform_url: String::new(),
+            models,
+        };
+        select_hub_models(manifest, device)
+            .into_iter()
+            .map(|m| (m.id, m.model_type))
+            .collect()
+    }
+
+    fn ids(selected: &[(String, ModelType)]) -> Vec<&str> {
+        selected.iter().map(|(id, _)| id.as_str()).collect()
+    }
+
+    #[test]
+    fn classify_ai_hub_cases() {
+        let info = |description: &str, headline: &str| InfoJson {
             domain: "MODEL_DOMAIN_GENERATIVE_AI".to_string(),
-            manifest_urls: ManifestUrls::default(),
-            supported_runtimes: runtimes.iter().map(|s| s.to_string()).collect(),
-            supported_chipsets: chipsets.iter().map(|s| s.to_string()).collect(),
-            tags: tags.iter().map(|s| s.to_string()).collect(),
+            headline: headline.to_string(),
+            description: description.to_string(),
+            tags: Vec::new(),
+        };
+        let cases = [
+            ("MODEL_DOMAIN_MULTIMODAL", None, ModelType::Vlm),
+            // The live manifest reports GENERATIVE_AI for Qwen2.5-VL; the description rescues it.
+            (
+                "MODEL_DOMAIN_GENERATIVE_AI",
+                Some(info("Qwen2.5-VL-7B-Instruct is a multimodal vision-language model that processes both images and text", "")),
+                ModelType::Vlm,
+            ),
+            (
+                "MODEL_DOMAIN_GENERATIVE_AI",
+                Some(info("Llama 3 is a state-of-the-art large language model", "State-of-the-art large language model")),
+                ModelType::Llm,
+            ),
+            ("MODEL_DOMAIN_GENERATIVE_AI", Some(info("", "Visual question answering on mobile")), ModelType::Vlm),
+            ("MODEL_DOMAIN_GENERATIVE_AI", None, ModelType::Llm),
+        ];
+        for (domain, info, want) in cases {
+            let e = entry("m", domain, &[], &[], &[]);
+            assert_eq!(
+                classify_ai_hub(info.as_ref(), &e),
+                want,
+                "{domain} {info:?}"
+            );
         }
     }
 
     #[test]
-    fn select_keeps_only_qairt_models() {
-        let manifest = ReleaseManifest {
-            platform_url: String::new(),
-            models: vec![
-                hub_entry("qairt_model", &["RUNTIME_GENIEX_QAIRT"], &["chipA"], &[]),
+    fn select_keeps_qairt_and_legacy_genie_models() {
+        // Phi-3.5-Mini-Instruct (v0.60.0) declares only the legacy RUNTIME_GENIE.
+        let out = select(
+            vec![
+                hub_entry("qairt_model", &[QAIRT], &["chipA"], &[]),
                 hub_entry(
                     "llamacpp_only",
                     &["RUNTIME_GENIEX_LLAMACPP"],
@@ -765,250 +760,142 @@ mod tests {
                     &["chipA"],
                     &[],
                 ),
-            ],
-        };
-        let out = select_hub_models(manifest, None);
-        let ids: Vec<&str> = out.iter().map(|m| m.id.as_str()).collect();
-        assert_eq!(ids, vec!["qairt_model"]);
-    }
-
-    /// `Phi-3.5-Mini-Instruct` (bucket v0.60.0) declares only the legacy
-    /// `RUNTIME_GENIE` enum, so filtering on `RUNTIME_GENIEX_QAIRT` alone
-    /// silently hid it from `list` even though its assets are installable.
-    #[test]
-    fn select_keeps_legacy_genie_only_models() {
-        let manifest = ReleaseManifest {
-            platform_url: String::new(),
-            models: vec![hub_entry(
-                "phi_3_5_mini_instruct",
-                &["RUNTIME_QNN_CONTEXT_BINARY", "RUNTIME_GENIE"],
-                &["qualcomm-snapdragon-x-elite"],
-                &[],
-            )],
-        };
-        let out = select_hub_models(manifest, None);
-        let ids: Vec<&str> = out.iter().map(|m| m.id.as_str()).collect();
-        assert_eq!(ids, vec!["phi_3_5_mini_instruct"]);
-    }
-
-    #[test]
-    fn select_filters_by_device_chipset() {
-        let manifest = ReleaseManifest {
-            platform_url: String::new(),
-            models: vec![
                 hub_entry(
-                    "on_device",
-                    &["RUNTIME_GENIEX_QAIRT"],
-                    &["chipA", "chipB"],
+                    "phi_3_5_mini_instruct",
+                    &["RUNTIME_QNN_CONTEXT_BINARY", "RUNTIME_GENIE"],
+                    &["x"],
                     &[],
                 ),
-                hub_entry("off_device", &["RUNTIME_GENIEX_QAIRT"], &["chipB"], &[]),
             ],
-        };
-        let out = select_hub_models(manifest, Some("chipA"));
-        let ids: Vec<&str> = out.iter().map(|m| m.id.as_str()).collect();
-        assert_eq!(ids, vec!["on_device"]);
+            None,
+        );
+        assert_eq!(ids(&out), ["phi_3_5_mini_instruct", "qairt_model"]);
     }
 
     #[test]
-    fn select_unfiltered_when_no_device() {
-        let manifest = ReleaseManifest {
-            platform_url: String::new(),
-            models: vec![
-                hub_entry("b_model", &["RUNTIME_GENIEX_QAIRT"], &["chipA"], &[]),
-                hub_entry("a_model", &["RUNTIME_GENIEX_QAIRT"], &["chipB"], &[]),
-            ],
+    fn select_filters_by_device_and_sorts_by_name() {
+        let models = || {
+            vec![
+                hub_entry("b_model", &[QAIRT], &["chipA", "chipB"], &[]),
+                hub_entry("a_model", &[QAIRT], &["chipB"], &[]),
+            ]
         };
-        // None → no device filter; also asserts case-insensitive name sort.
-        let out = select_hub_models(manifest, None);
-        let ids: Vec<&str> = out.iter().map(|m| m.id.as_str()).collect();
-        assert_eq!(ids, vec!["a_model", "b_model"]);
+        assert_eq!(ids(&select(models(), Some("chipA"))), ["b_model"]);
+        assert_eq!(ids(&select(models(), None)), ["a_model", "b_model"]);
     }
 
     #[test]
     fn select_classifies_vlm_from_tag() {
-        let manifest = ReleaseManifest {
-            platform_url: String::new(),
-            models: vec![
-                hub_entry(
-                    "vl_model",
-                    &["RUNTIME_GENIEX_QAIRT"],
-                    &["chipA"],
-                    &["MODEL_TAG_VLM"],
-                ),
-                hub_entry(
-                    "text_model",
-                    &["RUNTIME_GENIEX_QAIRT"],
-                    &["chipA"],
-                    &["MODEL_TAG_LLM"],
-                ),
+        let out = select(
+            vec![
+                hub_entry("vl_model", &[QAIRT], &["chipA"], &["MODEL_TAG_VLM"]),
+                hub_entry("text_model", &[QAIRT], &["chipA"], &["MODEL_TAG_LLM"]),
             ],
-        };
-        let out = select_hub_models(manifest, None);
-        assert_eq!(out[0].id, "text_model"); // sorted: text_ before vl_
-        assert_eq!(out[0].model_type, ModelType::Llm);
-        assert_eq!(out[1].model_type, ModelType::Vlm);
+            None,
+        );
+        assert_eq!(
+            out,
+            [
+                ("text_model".to_string(), ModelType::Llm),
+                ("vl_model".to_string(), ModelType::Vlm)
+            ]
+        );
+    }
+
+    fn zip_entry(name: &str, payload_offset: u64, size: u64) -> ZipEntry {
+        ZipEntry {
+            name: name.to_string(),
+            method: Method::Stored,
+            payload_offset,
+            compressed_size: size,
+            uncompressed_size: size,
+            is_dir: false,
+        }
     }
 
     #[test]
-    fn rejects_basename_collision() {
-        let raw = vec![
-            ZipEntry {
-                name: "a/model.bin".to_string(),
-                method: Method::Stored,
-                payload_offset: 0,
-                compressed_size: 1,
-                uncompressed_size: 1,
-                is_dir: false,
-            },
-            ZipEntry {
-                name: "b/model.bin".to_string(),
-                method: Method::Stored,
-                payload_offset: 100,
-                compressed_size: 1,
-                uncompressed_size: 1,
-                is_dir: false,
-            },
+    fn prepare_flat_entries_rejects_collisions_and_skips_macos_metadata() {
+        let collision = [
+            zip_entry("a/model.bin", 0, 1),
+            zip_entry("b/model.bin", 100, 1),
         ];
-        assert!(prepare_flat_entries(&raw).is_err());
-    }
+        assert!(prepare_flat_entries(&collision).is_err());
 
-    #[test]
-    fn skips_macos_metadata() {
-        let raw = vec![
-            ZipEntry {
-                name: "dir/model.bin".to_string(),
-                method: Method::Stored,
-                payload_offset: 0,
-                compressed_size: 2,
-                uncompressed_size: 2,
-                is_dir: false,
-            },
-            ZipEntry {
-                name: "__MACOSX/dir/._model.bin".to_string(),
-                method: Method::Stored,
-                payload_offset: 100,
-                compressed_size: 4,
-                uncompressed_size: 4,
-                is_dir: false,
-            },
+        let with_macos = [
+            zip_entry("dir/model.bin", 0, 2),
+            zip_entry("__MACOSX/dir/._model.bin", 100, 4),
         ];
-        let out = prepare_flat_entries(&raw).unwrap();
-        assert_eq!(out.len(), 1);
-        assert_eq!(out[0].0, "model.bin");
+        let out = prepare_flat_entries(&with_macos).unwrap();
+        let names: Vec<&str> = out.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["model.bin"]);
     }
 
     #[test]
-    fn cache_miss_on_missing_file() {
+    fn cache_respects_presence_and_ttl() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(read_cache_fresh(&tmp.path().join("nope.json"), INDEX_TTL).is_none());
-    }
-
-    #[test]
-    fn cache_roundtrip_mtime_ttl() {
-        let tmp = tempfile::tempdir().unwrap();
         let p = tmp.path().join("x.json");
         write_cache(&p, br#"{"version":"0.58.0"}"#);
         assert!(read_cache_fresh(&p, INDEX_TTL).is_some());
         assert!(read_cache_fresh(&p, Duration::ZERO).is_none());
     }
 
-    fn chipset(name: &str) -> ChipsetInfo {
-        ChipsetInfo {
-            name: name.to_string(),
-            reference_device: String::new(),
-            aliases: Vec::new(),
-        }
-    }
-
-    fn device(chipset: &str, ostype: &str) -> dto::DeviceInfo {
-        dto::DeviceInfo {
-            chipset: chipset.to_string(),
-            os: dto::DeviceOs {
-                ostype: ostype.to_string(),
-            },
-        }
-    }
-
-    fn sample_platform() -> PlatformInfo {
+    fn platform(chipsets: &[&str], devices: &[(&str, &str)]) -> PlatformInfo {
         PlatformInfo {
-            chipsets: vec![
-                chipset("qualcomm-snapdragon-x-elite"),
-                chipset("qualcomm-qcs9075"),
-                chipset("qualcomm-qcs8275"),
-                chipset("qualcomm-snapdragon-8gen3"),
-            ],
-            devices: vec![
-                device(
-                    "qualcomm-snapdragon-x-elite",
-                    "OPERATING_SYSTEM_TYPE_WINDOWS",
-                ),
-                device("qualcomm-qcs9075", "OPERATING_SYSTEM_TYPE_QC_LINUX"),
-                device("qualcomm-qcs8275", "OPERATING_SYSTEM_TYPE_LINUX"),
-                device("qualcomm-snapdragon-8gen3", "OPERATING_SYSTEM_TYPE_ANDROID"),
-            ],
+            chipsets: chipsets
+                .iter()
+                .map(|name| ChipsetInfo {
+                    name: name.to_string(),
+                    reference_device: String::new(),
+                    aliases: Vec::new(),
+                })
+                .collect(),
+            devices: devices
+                .iter()
+                .map(|(chipset, ostype)| dto::DeviceInfo {
+                    chipset: chipset.to_string(),
+                    os: dto::DeviceOs {
+                        ostype: ostype.to_string(),
+                    },
+                })
+                .collect(),
         }
     }
 
-    fn names(chipsets: &[ChipsetInfo]) -> Vec<&str> {
-        chipsets.iter().map(|c| c.name.as_str()).collect()
-    }
-
     #[test]
-    fn filter_keeps_only_linux_chipsets() {
-        let out = filter_chipsets_for_host(
-            &sample_platform(),
+    fn filter_chipsets_for_host_cases() {
+        const WIN: &str = "OPERATING_SYSTEM_TYPE_WINDOWS";
+        const LINUX: &str = "OPERATING_SYSTEM_TYPE_LINUX";
+        const QC_LINUX: &str = "OPERATING_SYSTEM_TYPE_QC_LINUX";
+        const ANDROID: &str = "OPERATING_SYSTEM_TYPE_ANDROID";
+        let (x_elite, qcs9075, qcs8275, gen3) = (
+            "qualcomm-snapdragon-x-elite",
+            "qualcomm-qcs9075",
+            "qualcomm-qcs8275",
+            "qualcomm-snapdragon-8gen3",
+        );
+        let sample = platform(
+            &[x_elite, qcs9075, qcs8275, gen3],
             &[
-                "OPERATING_SYSTEM_TYPE_LINUX",
-                "OPERATING_SYSTEM_TYPE_QC_LINUX",
+                (x_elite, WIN),
+                (qcs9075, QC_LINUX),
+                (qcs8275, LINUX),
+                (gen3, ANDROID),
             ],
         );
-        assert_eq!(names(&out), vec!["qualcomm-qcs9075", "qualcomm-qcs8275"]);
-    }
-
-    #[test]
-    fn filter_keeps_only_windows_chipset() {
-        let out = filter_chipsets_for_host(&sample_platform(), &["OPERATING_SYSTEM_TYPE_WINDOWS"]);
-        assert_eq!(names(&out), vec!["qualcomm-snapdragon-x-elite"]);
-    }
-
-    #[test]
-    fn filter_keeps_only_android_chipset() {
-        let out = filter_chipsets_for_host(&sample_platform(), &["OPERATING_SYSTEM_TYPE_ANDROID"]);
-        assert_eq!(names(&out), vec!["qualcomm-snapdragon-8gen3"]);
-    }
-
-    #[test]
-    fn filter_keeps_chipset_without_device_entry() {
-        let plat = PlatformInfo {
-            chipsets: vec![
-                chipset("qualcomm-qcs9075"),
-                chipset("qualcomm-snapdragon-8gen3"),
-            ],
-            devices: Vec::new(),
-        };
-        let out = filter_chipsets_for_host(&plat, &["OPERATING_SYSTEM_TYPE_WINDOWS"]);
-        assert_eq!(
-            names(&out),
-            vec!["qualcomm-qcs9075", "qualcomm-snapdragon-8gen3"]
-        );
-    }
-
-    #[test]
-    fn filter_keeps_multi_os_chipset_when_any_matches() {
-        let plat = PlatformInfo {
-            chipsets: vec![chipset("dual")],
-            devices: vec![
-                device("dual", "OPERATING_SYSTEM_TYPE_ANDROID"),
-                device("dual", "OPERATING_SYSTEM_TYPE_LINUX"),
-            ],
-        };
-        assert_eq!(
-            names(&filter_chipsets_for_host(
-                &plat,
-                &["OPERATING_SYSTEM_TYPE_LINUX"]
-            )),
-            vec!["dual"]
-        );
+        let no_devices = platform(&[qcs9075, gen3], &[]);
+        let dual = platform(&["dual"], &[("dual", ANDROID), ("dual", LINUX)]);
+        let cases: [(&PlatformInfo, &[&str], &[&str]); 5] = [
+            (&sample, &[LINUX, QC_LINUX], &[qcs9075, qcs8275]),
+            (&sample, &[WIN], &[x_elite]),
+            (&sample, &[ANDROID], &[gen3]),
+            (&no_devices, &[WIN], &[qcs9075, gen3]),
+            (&dual, &[LINUX], &["dual"]),
+        ];
+        for (plat, host, want) in cases {
+            let out = filter_chipsets_for_host(plat, host);
+            let got: Vec<&str> = out.iter().map(|c| c.name.as_str()).collect();
+            assert_eq!(got, want, "host {host:?}");
+        }
     }
 }

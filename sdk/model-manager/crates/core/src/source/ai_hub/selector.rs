@@ -195,225 +195,173 @@ mod tests {
     use super::*;
     use crate::source::ai_hub::dto::ChipsetInfo;
 
-    fn platform(entries: &[(&str, &[&str])]) -> PlatformInfo {
+    const QAIRT: &str = "RUNTIME_GENIEX_QAIRT";
+    const GENIE: &str = "RUNTIME_GENIE";
+    const X_ELITE: &str = "qualcomm-snapdragon-x-elite";
+    const CRD: &str = "Snapdragon X Elite CRD";
+
+    /// `(name, reference_device, aliases)` per chipset.
+    fn platform(entries: &[(&str, &str, &[&str])]) -> PlatformInfo {
         PlatformInfo {
             chipsets: entries
                 .iter()
-                .map(|(name, aliases)| ChipsetInfo {
-                    name: (*name).to_string(),
-                    reference_device: String::new(),
-                    aliases: aliases.iter().map(|a| (*a).to_string()).collect(),
+                .map(|(name, reference, aliases)| ChipsetInfo {
+                    name: name.to_string(),
+                    reference_device: reference.to_string(),
+                    aliases: aliases.iter().map(|a| a.to_string()).collect(),
                 })
                 .collect(),
             devices: Vec::new(),
         }
     }
 
-    #[test]
-    fn resolves_reference_device() {
-        let plat = PlatformInfo {
-            chipsets: vec![ChipsetInfo {
-                name: "qualcomm-snapdragon-x-elite".to_string(),
-                reference_device: "Snapdragon X Elite CRD".to_string(),
-                aliases: vec![],
-            }],
-            devices: Vec::new(),
-        };
-        assert_eq!(
-            resolve_chipset(&plat, "snapdragon x elite crd").unwrap(),
-            "qualcomm-snapdragon-x-elite"
-        );
-    }
+    /// `(chipset, runtime, precision)`.
+    type Asset<'a> = (&'a str, &'a str, &'a str);
 
-    fn asset(chipset: &str, runtime: &str, precision: &str) -> AssetDetails {
-        AssetDetails {
-            chipset: Some(chipset.to_string()),
-            runtime: runtime.to_string(),
-            precision: precision.to_string(),
-            download_url: format!("https://example.invalid/{chipset}-{precision}.zip"),
-            uncompressed_size: Some(1),
+    fn assets(entries: &[Asset]) -> ModelReleaseAssets {
+        ModelReleaseAssets {
+            model_id: "m".into(),
+            assets: entries
+                .iter()
+                .map(|(chipset, runtime, precision)| AssetDetails {
+                    chipset: Some(chipset.to_string()),
+                    runtime: runtime.to_string(),
+                    precision: precision.to_string(),
+                    download_url: format!("https://example.invalid/{chipset}-{precision}.zip"),
+                    uncompressed_size: Some(1),
+                })
+                .collect(),
         }
     }
 
     #[test]
-    fn display_resolves_to_reference_device() {
-        let plat = PlatformInfo {
-            chipsets: vec![ChipsetInfo {
-                name: "qualcomm-snapdragon-x-elite".to_string(),
-                reference_device: "Snapdragon X Elite CRD".to_string(),
-                aliases: vec!["x1e80100".to_string()],
-            }],
-            devices: Vec::new(),
-        };
-        // canonical id, alias, and reference name all map to the reference name.
-        for input in [
-            "qualcomm-snapdragon-x-elite",
-            "X1E80100",
-            "snapdragon x elite crd",
+    fn resolve_chipset_matches_aliases_and_reference_device() {
+        let plat = platform(&[
+            ("Snapdragon 8 Gen 3", "", &["sm8650", "SD8G3"]),
+            (X_ELITE, CRD, &[]),
+        ]);
+        for (input, want) in [
+            ("sm8650", "Snapdragon 8 Gen 3"),
+            ("SD8G3", "Snapdragon 8 Gen 3"),
+            ("snapdragon x elite crd", X_ELITE),
         ] {
-            assert_eq!(
-                resolve_chipset_display(&plat, input).as_deref(),
-                Some("Snapdragon X Elite CRD"),
-                "input {input:?}"
-            );
+            assert_eq!(resolve_chipset(&plat, input).unwrap(), want, "{input}");
         }
-        assert_eq!(resolve_chipset_display(&plat, "unknown"), None);
-        assert_eq!(resolve_chipset_display(&plat, ""), None);
-    }
-
-    #[test]
-    fn display_falls_back_to_canonical_when_no_reference_device() {
-        let plat = platform(&[("qualcomm-qcs9075", &["sa8775p"])]);
-        assert_eq!(
-            resolve_chipset_display(&plat, "sa8775p").as_deref(),
-            Some("qualcomm-qcs9075")
-        );
-    }
-
-    #[test]
-    fn resolves_alias_case_insensitive() {
-        let plat = platform(&[("Snapdragon 8 Gen 3", &["sm8650", "SD8G3"])]);
-        assert_eq!(
-            resolve_chipset(&plat, "sm8650").unwrap(),
-            "Snapdragon 8 Gen 3"
-        );
-        assert_eq!(
-            resolve_chipset(&plat, "SD8G3").unwrap(),
-            "Snapdragon 8 Gen 3"
-        );
         assert!(resolve_chipset(&plat, "unknown").is_err());
     }
 
     #[test]
-    fn picks_matching_runtime_and_chipset() {
-        let plat = platform(&[("SD8G3", &["sm8650"])]);
-        let ra = ModelReleaseAssets {
-            model_id: "m".into(),
-            assets: vec![
-                asset("SD8G3", "RUNTIME_TFLITE", "PRECISION_FP16"),
-                asset("SD8G3", "RUNTIME_GENIEX_QAIRT", "PRECISION_W4A16"),
-                asset("Other", "RUNTIME_GENIEX_QAIRT", "PRECISION_FP16"),
-            ],
-        };
-        let got = match_asset(&ra, &plat, "sm8650").unwrap();
-        assert_eq!(got.chipset.as_deref(), Some("SD8G3"));
-        assert_eq!(got.runtime, "RUNTIME_GENIEX_QAIRT");
-    }
-
-    /// `Gemma-4-E4B-it` (bucket v0.60.0) publishes only
-    /// `RUNTIME_GENIEX_QAIRT`; matching the legacy name alone made it
-    /// undownloadable on every supported chipset.
-    #[test]
-    fn matches_geniex_qairt_only_model() {
-        let plat = platform(&[("qualcomm-snapdragon-x-elite", &["x1e80100"])]);
-        let ra = ModelReleaseAssets {
-            model_id: "gemma_4_e4b_it".into(),
-            assets: vec![asset(
-                "qualcomm-snapdragon-x-elite",
-                "RUNTIME_GENIEX_QAIRT",
-                "PRECISION_W4A16",
-            )],
-        };
-        let got = match_asset(&ra, &plat, "x1e80100").unwrap();
-        assert_eq!(got.runtime, "RUNTIME_GENIEX_QAIRT");
-    }
-
-    /// `Phi-3.5-Mini-Instruct` (bucket v0.60.0) still ships only the legacy
-    /// `RUNTIME_GENIE` enum, so dropping it would regress that model.
-    #[test]
-    fn matches_legacy_genie_only_model() {
-        let plat = platform(&[("qualcomm-snapdragon-x-elite", &["x1e80100"])]);
-        let ra = ModelReleaseAssets {
-            model_id: "phi_3_5_mini_instruct".into(),
-            assets: vec![asset(
-                "qualcomm-snapdragon-x-elite",
-                "RUNTIME_GENIE",
-                "PRECISION_W4A16",
-            )],
-        };
-        let got = match_asset(&ra, &plat, "x1e80100").unwrap();
-        assert_eq!(got.runtime, "RUNTIME_GENIE");
-    }
-
-    /// When a model dual-publishes the same chipset the newer runtime wins,
-    /// even though `RUNTIME_GENIE` sorts first alphabetically.
-    #[test]
-    fn prefers_geniex_qairt_over_legacy_genie() {
-        let plat = platform(&[("A", &[])]);
-        let ra = ModelReleaseAssets {
-            model_id: "m".into(),
-            assets: vec![
-                asset("A", "RUNTIME_GENIE", "PRECISION_W4A16"),
-                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_W4A16"),
-            ],
-        };
-        let got = match_asset(&ra, &plat, "A").unwrap();
-        assert_eq!(got.runtime, "RUNTIME_GENIEX_QAIRT");
-    }
-
-    /// Non-QAIRT assets must not leak into the "supported chipsets" hint,
-    /// or the error can name a chipset with no installable QAIRT archive.
-    #[test]
-    fn available_excludes_non_qairt_runtimes() {
-        let plat = platform(&[("A", &[]), ("B", &[])]);
-        let ra = ModelReleaseAssets {
-            model_id: "m".into(),
-            assets: vec![
-                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_W4A16"),
-                asset("B", "RUNTIME_TFLITE", "PRECISION_FP16"),
-            ],
-        };
-        let err = match_asset(&ra, &plat, "C").unwrap_err();
-        assert_eq!(err.available, vec!["A".to_string()]);
+    fn resolve_chipset_display_prefers_reference_device() {
+        let plat = platform(&[
+            (X_ELITE, CRD, &["x1e80100"]),
+            ("qualcomm-qcs9075", "", &["sa8775p"]),
+        ]);
+        for (input, want) in [
+            (X_ELITE, Some(CRD)),
+            ("X1E80100", Some(CRD)),
+            ("snapdragon x elite crd", Some(CRD)),
+            ("sa8775p", Some("qualcomm-qcs9075")),
+            ("unknown", None),
+            ("", None),
+        ] {
+            assert_eq!(
+                resolve_chipset_display(&plat, input).as_deref(),
+                want,
+                "{input:?}"
+            );
+        }
     }
 
     #[test]
-    fn reports_available_when_chipset_missing() {
-        let plat = platform(&[("A", &[]), ("B", &[])]);
-        let ra = ModelReleaseAssets {
-            model_id: "m".into(),
-            assets: vec![
-                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_FP16"),
-                asset("B", "RUNTIME_GENIE", "PRECISION_FP16"),
-            ],
-        };
-        let err = match_asset(&ra, &plat, "C").unwrap_err();
-        assert_eq!(err.available, vec!["A".to_string(), "B".to_string()]);
+    fn match_asset_picks() {
+        // Gemma-4-E4B-it publishes only GENIEX_QAIRT, Phi-3.5-Mini-Instruct only legacy GENIE;
+        // a dual-published chipset prefers GENIEX_QAIRT though GENIE sorts first.
+        let cases: [(&[Asset], &str, Asset); 5] = [
+            (
+                &[
+                    ("SD8G3", "RUNTIME_TFLITE", "PRECISION_FP16"),
+                    ("SD8G3", QAIRT, "PRECISION_W4A16"),
+                    ("Other", QAIRT, "PRECISION_FP16"),
+                ],
+                "sm8650",
+                ("SD8G3", QAIRT, "PRECISION_W4A16"),
+            ),
+            (
+                &[(X_ELITE, QAIRT, "PRECISION_W4A16")],
+                "x1e80100",
+                (X_ELITE, QAIRT, "PRECISION_W4A16"),
+            ),
+            (
+                &[(X_ELITE, GENIE, "PRECISION_W4A16")],
+                "x1e80100",
+                (X_ELITE, GENIE, "PRECISION_W4A16"),
+            ),
+            (
+                &[
+                    ("A", GENIE, "PRECISION_W4A16"),
+                    ("A", QAIRT, "PRECISION_W4A16"),
+                ],
+                "A",
+                ("A", QAIRT, "PRECISION_W4A16"),
+            ),
+            (
+                &[
+                    ("A", QAIRT, "PRECISION_W4A16"),
+                    ("A", QAIRT, "PRECISION_FP16"),
+                ],
+                "A",
+                ("A", QAIRT, "PRECISION_FP16"),
+            ),
+        ];
+        let plat = platform(&[
+            ("SD8G3", "", &["sm8650"]),
+            (X_ELITE, "", &["x1e80100"]),
+            ("A", "", &[]),
+        ]);
+        for (published, chipset, (want_chip, want_rt, want_prec)) in cases {
+            let ra = assets(published);
+            let got = match_asset(&ra, &plat, chipset).unwrap();
+            assert_eq!(
+                (
+                    got.chipset.as_deref(),
+                    got.runtime.as_str(),
+                    got.precision.as_str()
+                ),
+                (Some(want_chip), want_rt, want_prec),
+                "{published:?}"
+            );
+        }
     }
 
     #[test]
-    fn available_uses_reference_device_names() {
-        let plat = PlatformInfo {
-            chipsets: vec![ChipsetInfo {
-                name: "qualcomm-snapdragon-x-elite".to_string(),
-                reference_device: "Snapdragon X Elite CRD".to_string(),
-                aliases: vec![],
-            }],
-            devices: Vec::new(),
-        };
-        let ra = ModelReleaseAssets {
-            model_id: "m".into(),
-            assets: vec![asset(
-                "qualcomm-snapdragon-x-elite",
-                "RUNTIME_GENIEX_QAIRT",
-                "PRECISION_FP16",
-            )],
-        };
-        let err = match_asset(&ra, &plat, "unknown").unwrap_err();
-        assert_eq!(err.available, vec!["Snapdragon X Elite CRD".to_string()]);
-    }
-
-    #[test]
-    fn tiebreaks_multiple_precisions_deterministically() {
-        let plat = platform(&[("A", &[])]);
-        let ra = ModelReleaseAssets {
-            model_id: "m".into(),
-            assets: vec![
-                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_W4A16"),
-                asset("A", "RUNTIME_GENIEX_QAIRT", "PRECISION_FP16"),
-            ],
-        };
-        let picked = match_asset(&ra, &plat, "A").unwrap();
-        assert_eq!(picked.precision, "PRECISION_FP16");
+    fn match_asset_reports_installable_chipsets_on_miss() {
+        // Non-QAIRT runtimes must not appear, or the hint names an uninstallable chipset.
+        let cases: [(PlatformInfo, &[Asset], &[&str]); 3] = [
+            (
+                platform(&[("A", "", &[]), ("B", "", &[])]),
+                &[
+                    ("A", QAIRT, "PRECISION_W4A16"),
+                    ("B", "RUNTIME_TFLITE", "PRECISION_FP16"),
+                ],
+                &["A"],
+            ),
+            (
+                platform(&[("A", "", &[]), ("B", "", &[])]),
+                &[
+                    ("A", QAIRT, "PRECISION_FP16"),
+                    ("B", GENIE, "PRECISION_FP16"),
+                ],
+                &["A", "B"],
+            ),
+            (
+                platform(&[(X_ELITE, CRD, &[])]),
+                &[(X_ELITE, QAIRT, "PRECISION_FP16")],
+                &[CRD],
+            ),
+        ];
+        for (plat, published, want) in cases {
+            let err = match_asset(&assets(published), &plat, "unknown").unwrap_err();
+            assert_eq!(err.available, want, "{published:?}");
+        }
     }
 }

@@ -218,75 +218,59 @@ mod tests {
     #[no_mangle]
     extern "C" fn geniex_model_log_emit(_level: std::os::raw::c_int, _msg: *const c_char) {}
 
-    fn http(status: u16) -> Error {
-        Error::HttpStatus {
+    #[test]
+    fn err_to_code_cases() {
+        let http = |status| Error::HttpStatus {
             url: "https://hub.example/x".to_string(),
             status,
+        };
+        let cases = [
+            (http(401), GENIEX_ERROR_COMMON_AUTH),
+            (http(403), GENIEX_ERROR_COMMON_AUTH),
+            (http(404), GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND),
+            (http(429), GENIEX_ERROR_COMMON_RATE_LIMITED),
+            (http(500), GENIEX_ERROR_COMMON_HUB_SERVER),
+            (http(503), GENIEX_ERROR_COMMON_HUB_SERVER),
+            (http(400), GENIEX_ERROR_COMMON_NETWORK),
+            (
+                Error::HttpTimeout("dns".into()),
+                GENIEX_ERROR_COMMON_NETWORK,
+            ),
+            (Error::Http("reset".into()), GENIEX_ERROR_COMMON_NETWORK),
+            (
+                Error::ModelNotFound("m".into()),
+                GENIEX_ERROR_COMMON_FILE_NOT_FOUND,
+            ),
+            (
+                Error::HubModelNotFound("m".into()),
+                GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND,
+            ),
+            (Error::Hub("misc".into()), GENIEX_ERROR_COMMON_UNKNOWN),
+        ];
+        for (err, want) in cases {
+            assert_eq!(err_to_code(&err), want, "{err:?}");
         }
     }
 
     #[test]
-    fn http_status_splits_into_actionable_codes() {
-        assert_eq!(err_to_code(&http(401)), GENIEX_ERROR_COMMON_AUTH);
-        assert_eq!(err_to_code(&http(403)), GENIEX_ERROR_COMMON_AUTH);
-        assert_eq!(
-            err_to_code(&http(404)),
-            GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND
-        );
-        assert_eq!(err_to_code(&http(429)), GENIEX_ERROR_COMMON_RATE_LIMITED);
-        assert_eq!(err_to_code(&http(500)), GENIEX_ERROR_COMMON_HUB_SERVER);
-        assert_eq!(err_to_code(&http(503)), GENIEX_ERROR_COMMON_HUB_SERVER);
-        assert_eq!(err_to_code(&http(400)), GENIEX_ERROR_COMMON_NETWORK);
-    }
-
-    #[test]
-    fn connectivity_failures_stay_network() {
-        assert_eq!(
-            err_to_code(&Error::HttpTimeout("dns".to_string())),
-            GENIEX_ERROR_COMMON_NETWORK
-        );
-        assert_eq!(
-            err_to_code(&Error::Http("reset".to_string())),
-            GENIEX_ERROR_COMMON_NETWORK
-        );
-    }
-
-    #[test]
     fn normalize_quant_suffix_upper_cases_only_after_colon() {
-        assert_eq!(
-            normalize_quant_suffix("ggml-org/Qwen3-0.6B-GGUF:q4_0"),
-            "ggml-org/Qwen3-0.6B-GGUF:Q4_0"
-        );
-        assert_eq!(
-            normalize_quant_suffix("ggml-org/Qwen3-0.6B-GGUF:Q4_0"),
-            "ggml-org/Qwen3-0.6B-GGUF:Q4_0"
-        );
-        assert_eq!(
-            normalize_quant_suffix("ggml-org/gpt-oss-20b-GGUF:mxfp4"),
-            "ggml-org/gpt-oss-20b-GGUF:MXFP4"
-        );
-        // No suffix → unchanged.
-        assert_eq!(
-            normalize_quant_suffix("ggml-org/Qwen3-0.6B-GGUF"),
-            "ggml-org/Qwen3-0.6B-GGUF"
-        );
-        // Trailing colon (no quant) → unchanged.
-        assert_eq!(normalize_quant_suffix("Org/Repo:"), "Org/Repo:");
-    }
-
-    #[test]
-    fn not_found_variants_are_distinct() {
-        assert_eq!(
-            err_to_code(&Error::ModelNotFound("m".to_string())),
-            GENIEX_ERROR_COMMON_FILE_NOT_FOUND
-        );
-        assert_eq!(
-            err_to_code(&Error::HubModelNotFound("m".to_string())),
-            GENIEX_ERROR_COMMON_HUB_MODEL_NOT_FOUND
-        );
-        assert_eq!(
-            err_to_code(&Error::Hub("misc".to_string())),
-            GENIEX_ERROR_COMMON_UNKNOWN
-        );
+        for (name, want) in [
+            (
+                "ggml-org/Qwen3-0.6B-GGUF:q4_0",
+                "ggml-org/Qwen3-0.6B-GGUF:Q4_0",
+            ),
+            (
+                "ggml-org/Qwen3-0.6B-GGUF:Q4_0",
+                "ggml-org/Qwen3-0.6B-GGUF:Q4_0",
+            ),
+            (
+                "ggml-org/gpt-oss-20b-GGUF:mxfp4",
+                "ggml-org/gpt-oss-20b-GGUF:MXFP4",
+            ),
+            ("ggml-org/Qwen3-0.6B-GGUF", "ggml-org/Qwen3-0.6B-GGUF"),
+            ("Org/Repo:", "Org/Repo:"),
+        ] {
+            assert_eq!(normalize_quant_suffix(name), want, "{name}");
+        }
     }
 }
