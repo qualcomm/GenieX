@@ -10,7 +10,7 @@ git tag v1.2.3 && git push origin v1.2.3
 - Bare `vX.Y.Z` tags publish immediately (and push the sdist to production PyPI).
 - Assets: `geniex-sdk-{linux,windows}-arm64-<tag>.zip`, `geniex-cli-linux-arm64-<tag>.tar.gz`, `geniex-cli-setup-windows-arm64-<tag>.exe`, `geniex-android-aar-<tag>.aar`, `geniex-bench-{linux,windows,android}-arm64-<tag>.{tar.gz,zip}`, `geniex-pysdist{,-llama_cpp,-qairt}-<tag>.tar.gz`, and per-file `.sha256` sidecars.
 - The CPU-only variant ([#1217](https://github.com/qualcomm/GenieX/issues/1217)) adds a `-cpu` infix on the Linux and Android assets: `geniex-{sdk,cli}-linux-arm64-cpu-<tag>.*` and `geniex-android-aar-cpu-<tag>.aar`. Docker mirrors it as the `-cpu` tag; Maven Central publishes only the default AAR. No `geniex-bench` archive: on Linux the SDK zip already ships `bin/geniex-bench`, and no device in the benchmark fleet needs a CPU-only build.
-- Re-running the same tag via **Actions → Release → Run workflow** is safe **as long as you set "Use workflow from" to the tag** (Tags tab in the dropdown). Dispatching from `main` is rejected by `resolve-tag` so the workflow never builds a tag against the wrong commit.
+- Re-run a tag via **Actions → Release → Run workflow**: set **Use workflow from** to the tag (Tags tab) and pass the same tag as `release_tag`. `resolve-tag` rejects a dispatch whose commit differs from the tag's, and refuses a **stable** tag whose release already has assets. Prereleases can be re-run freely; a shipped stable tag can't, so cut a higher one.
 - S3 mirror at `s3://qaihub-public-assets/qai-hub-geniex/` — see [§ S3 mirror & manifest](#s3-mirror--manifest) below.
 
 > For the developer/user side of HTP signing (cert import, test-signing), see [run.md § Self-signed fallback](run.md#self-signed-fallback).
@@ -43,7 +43,7 @@ Pre-release channels communicate how ready a build is. Ordering: `alpha < beta <
 Rules:
 
 - **Always pass through at least one `-rc.n` on `main` before stable.**
-- **A stable tag must be on a commit whose HTP bundle is Microsoft-signed**, not self-signed. See [Hexagon HTP signing](#hexagon-htp-signing); if unsure, run `gh run list --workflow release.yml --limit 5` and confirm the SDK artifact name does **not** end in `-selfsigned`. If it does, finish the signing promotion first.
+- **A stable tag must be on a commit whose HTP bundle is Microsoft-signed**, not self-signed. Check the last rc: its release body's "Hexagon HTP" section says which, and a self-signed release carries `ggml-htp-v1.cer` and a `-selfsigned` SDK zip (`gh release view <rc> --json assets`). If it's self-signed, finish [Hexagon HTP signing](#hexagon-htp-signing) first.
 - **Never re-use or move a published tag.** Retract via a new patch.
 - **`alpha.n` tags on feature branches are disposable** — don't rebase the tagged commit afterward.
 
@@ -51,15 +51,16 @@ Rules:
 
 This is the algorithm `/release` follows. Apply in order.
 
-1. **Find the latest stable tag** `v0.A.B` locally — avoids a `gh` round-trip:
+1. **Find the latest stable tag** `v0.A.B` after fetching (stale local tags give wrong proposals):
 
    ```bash
-   git tag --sort=-v:refname --list "v[0-9]*.[0-9]*.[0-9]*" | grep -v -- '-' | head -1
+   git fetch --tags --prune origin
+   git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1
    ```
 
    Don't use `git describe` — it only looks at HEAD's ancestor chain and will miss stable tags cut on side branches. If the command prints nothing, target `v0.1.0` and skip to step 3.
 
-2. **Pick the target `X.Y.Z`** from `git log v0.A.B..HEAD --format="%h %s" --stat` (subject + touched files in one pass; run `git show <sha>` only if that's still ambiguous):
+2. **Pick the target `X.Y.Z`** from `git log v0.A.B..HEAD --no-merges --format="%h %s" --stat` (subject + touched files in one pass; run `git show <sha>` only if that's still ambiguous):
    - any commit with a breaking change → `v0.(A+1).0` (while `X = 0`, breaking bumps MINOR);
    - else any feature commit → `v0.(A+1).0`;
    - else → `v0.A.(B+1)`.
@@ -171,7 +172,7 @@ The CPU-only objects are on S3 but deliberately **absent from the manifest**: th
 
 ## Hexagon HTP signing
 
-The Windows ARM64 SDK ships `libggml-htp.cat` plus `libggml-htp-v{73,75,79,81,85}.so` — Windows refuses to load them unsigned. Release CI runs an `overlay-htp` job **before** `build-cli` that sparse-checks-out `sdk/signed-htp/libggml-htp-<sha>.zip` from the `chore/signed-htp-lfs-store` branch of `qcom-ai-hub/geniex` (LFS-tracked), where `<sha>` is the `third-party/llama.cpp` short SHA. Both the installer and the SDK zip end up with the same HTP files:
+The Windows ARM64 SDK ships `libggml-htp.cat` plus `libggml-htp-v{73,75,79,81,85}.so` — Windows refuses to load them unsigned. Release CI runs an `overlay-htp` job **before** `build-cli` that sparse-checks-out `sdk/signed-htp/libggml-htp-<sha>.zip` from the `chore/signed-htp-lfs-store` branch of `qcom-ai-hub/geniex` (LFS-tracked), where `<sha>` is the first 6 characters of the `third-party/llama.cpp` commit. Both the installer and the SDK zip end up with the same HTP files:
 
 - **Hit** — overlay the Microsoft-signed files into the SDK artifact; `build-cli` packages them into the installer; release normally.
 - **Miss** — keep the self-signed build. The SDK name gets a `-selfsigned` suffix, and the release also carries `ggml-htp-v1.cer` (users import it) and `libggml-htp-to-sign-<sha>.zip` (operators submit it for signing).
@@ -183,13 +184,9 @@ The cross-repo checkout reuses `secrets.GH_PAT` (already scoped for cross-repo a
 ### Promoting self-signed → Microsoft-signed
 
 1. Download `libggml-htp-to-sign-<sha>.zip` from the draft release.
-2. Submit for Microsoft signing.
-   a. Put the `.cat` `.inf` and all `.so` files into a new `<MMDD>\libggml-htp\` folder in samba (nothing else in it; don't reuse a finished folder, Jenkins rewrites it);
-   b. Submit Jenkins pipeline, fill path with `\path\to\<MMDD>`, `QC_PLATFORM` = `8380`, other field use default.
-   c. Get signed files from `<MMDD>\Glymur\01000\ExtractedDrivers\ATT\libggml-htp\`.
-   d. Repack the signed files (without `.inf`) into a zip with the same layout at the root.
-3. Commit the result to `qcom-ai-hub/geniex` at `sdk/signed-htp/libggml-htp-<sha>.zip` on the `chore/signed-htp-lfs-store` branch — `git lfs install` locally, push the zip directly, or open a PR against that branch and squash-merge.
-4. Re-run the Release workflow for the same tag.
+2. Get it Microsoft (attestation) signed through the internal signing service. The steps are in the team's internal runbook, not in this public repo.
+3. Repack the signed `libggml-htp.cat` and `.so` files (no `.inf`) at the zip root, and commit it to `qcom-ai-hub/geniex` at `sdk/signed-htp/libggml-htp-<sha>.zip` on the `chore/signed-htp-lfs-store` branch (LFS).
+4. Re-run the Release workflow for the same prerelease tag (see the re-run rule above).
 
 ## Windows installer signing gate
 
@@ -197,18 +194,9 @@ The Windows installer is published before it is Authenticode-signed, so `geniex 
 
 Release-side: upload `windows-signed.txt` with `true` after the latest stable installer is signed; set it back to a non-`true` value before publishing the next, not-yet-signed installer.
 
-# Check List
+## Release checklist
 
-- make sure `libggml-htp` is signed, if not, see [§ Hexagon HTP signing](#hexagon-htp-signing) above
-  - trigger an alpha version tag with `llama.cpp` bump up.
-  - follow [Promoting self-signed → Microsoft-signed](#promoting-self-signed--microsoft-signed)
-- trigger a rc version tag on `main`, and check below model
-  - `unsloth/Qwen3-0.6B-GGUF` and `unsloth/Qwen3.5-0.8B-GGUF` on `cpu` / `gpu` / `npu`
-  - `qualcomm/Qwen3-4B` and `qualcomm/Qwen3-VL-4B-Instruct`
-  - test `llama_cpp` npu on qualcomm pc
-- create a offical release tag on same commit
-- signed windows installer
-  - send unsigned installer to wido team
-  - replace installer on s3
-  - update sha256
-  - update `windows-signed.txt` to true, see [§ Windows installer signing gate](#windows-installer-signing-gate)
+1. `-rc.n` on `main`, HTP Microsoft-signed (promote first if not).
+2. Smoke-test the rc on CPU / GPU / NPU with one small GGUF and one AI Hub qairt model.
+3. Cut bare `vX.Y.Z` on the same commit.
+4. Manual follow-ups the workflow doesn't do: click **Publish** for the Maven Central deployment, get the Windows installer Authenticode-signed, replace it on S3, then set `windows-signed.txt` to `true`.

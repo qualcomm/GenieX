@@ -13,8 +13,8 @@ report into the GitHub Actions step summary:
 
 ### Artifact compilation & upload
 
-The SDK is cross-compiled for 3 platforms via `_build-sdk.yml`, producing a
-`geniex-bench` binary for each:
+`_build-sdk.yml` cross-compiles the SDK (the bench uses its Linux, Windows, and Android legs),
+producing a `geniex-bench` binary for each:
 
 | Platform       | Target Device                       | Binary             | Test Framework     |
 |----------------|-------------------------------------|--------------------|--------------------|
@@ -54,7 +54,7 @@ QDC interaction lives in `sdk/benchmark/qdc/_qdc.py`:
 |----------------------|-------------------------------------------------------------------------|
 | `make_client`        | Creates an authenticated QDC API client (`QDC_API_KEY`, app=`geniex-ci`)|
 | `resolve_target`     | Maps chipset name (e.g. `SM8850`) to a QDC target ID                    |
-| `submit_and_wait`    | Uploads artifact zip, submits job, polls every 30 s until terminal state. Quota-aware retry with exponential backoff (30 s base, 1 hr budget) |
+| `submit_and_wait`    | Uploads artifact zip, submits job, polls every 30 s until terminal state. Quota-aware retry with exponential backoff (30 s base, 300 s cap, 2 h budget); short retries on transient 5xx |
 
 ## bench.yml — speed
 
@@ -90,7 +90,7 @@ Orchestrated in 4 jobs:
 Example output:
 
 ```
-## QDC Bench -- SM8850
+## QDC Bench — SM8850 — <label>
 
 | Model       | Backend   | Device | Ctx | ngl | Test       | TTFT (ms) | Prefill (tok/s) | Decode (tok/s) |
 |-------------|-----------|--------|----:|----:|------------|----------:|----------------:|---------------:|
@@ -182,43 +182,8 @@ with no hits for a category shows `-`.
 
 ## Downloading geniex-bench
 
-Standalone `geniex-bench` archives (binary + runtime libs) are published to S3
-on each release. Use the **latest** URLs to always get the current stable build,
-or pin to a specific version tag.
-
-### Latest stable (always points to the newest non-prerelease)
-
-| Platform      | URL |
-|---------------|-----|
-| Linux ARM64   | https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-linux-arm64.tar.gz |
-| Android ARM64 | https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-android-arm64.tar.gz |
-| Windows ARM64 | https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-windows-arm64.zip |
-
-### Versioned (pinned to a specific release)
-
-Replace `<tag>` with the release tag (e.g. `v1.2.3`):
-
-| Platform      | URL |
-|---------------|-----|
-| Linux ARM64   | `https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-linux-arm64-<tag>.tar.gz` |
-| Android ARM64 | `https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-android-arm64-<tag>.tar.gz` |
-| Windows ARM64 | `https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-windows-arm64-<tag>.zip` |
-
-### Quick start
-
-```bash
-# Linux / Android (same binary format, different target device)
-curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-linux-arm64.tar.gz | tar xz
-./geniex-bench-linux-arm64-*/bin/geniex-bench --help
-
-# Windows (PowerShell)
-Invoke-WebRequest https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-windows-arm64.zip -OutFile bench.zip
-Expand-Archive bench.zip -DestinationPath .
-.\geniex-bench-windows-arm64-*\bin\geniex-bench.exe --help
-```
-
-Each archive contains `bin/geniex-bench` (or `.exe`) plus `lib/` with all
-required runtime shared libraries (libgeniex, llama_cpp plugin, qairt plugin).
+Download URLs, archive layout, flags, and a quick start for running it by hand are in
+[docs/en/tutorials/benchmarking.mdx](../docs/en/tutorials/benchmarking.mdx).
 
 ### Raw logits mode (`--logits`)
 
