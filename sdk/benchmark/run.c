@@ -697,7 +697,8 @@ void run_vlm(const options_t* o, const device_t* dev, run_result_t* out) {
 
 /* --logits mode: prefill-only raw logits, no timing. Runs one forward pass over
  * `o->n_prompt` random token ids and writes the top-N (token_id, logit) pairs
- * per row to `o->output_json`. Bypasses run_llm's warmup/repeat/aggregate_runs path.
+ * per row to `o->output_json`, or with `o->output_logits` the full-vocabulary rows as
+ * raw float32. Bypasses run_llm's warmup/repeat/aggregate_runs path.
  * The forward-logits API takes input_ids only, so this is random-ids input
  * (bench has no tokenizer). */
 int run_logits(const options_t* o, const device_t* dev) {
@@ -721,7 +722,7 @@ int run_logits(const options_t* o, const device_t* dev) {
     fin.input_ids       = tokens;
     fin.input_ids_count = o->n_prompt;
     fin.all_positions   = !o->logits_last_only;
-    fin.top_n           = o->logits_top_n;
+    fin.top_n           = o->output_logits ? 0 : o->logits_top_n;
 
     int32_t rc = geniex_llm_forward_logits(llm, &fin, &fout);
     if (rc != GENIEX_SUCCESS) {
@@ -744,10 +745,12 @@ int run_logits(const options_t* o, const device_t* dev) {
         fout.row_width < fout.vocab_size ? " (rows truncated to top_n)" : "");
 
     int rc_report = 0;
-    if (o->output_json) {
+    if (o->output_logits) {
+        rc_report = write_logits_raw(o->output_logits, &fout);
+    } else if (o->output_json) {
         rc_report = write_logits_json(o, dev, &fin, &fout);
     } else {
-        fprintf(stderr, "[warn] --logits without --output-json: logits computed but not written\n");
+        fprintf(stderr, "[warn] --logits without --output-json or --output-logits: logits computed but not written\n");
     }
 
     geniex_free(fout.logits);

@@ -259,3 +259,15 @@ pairs sorted by descending logit:
   ]
 }
 ```
+
+`--output-logits PATH` (single-cell, implies `--logits`) writes the full
+vocabulary instead of the top-N JSON: a headerless, packed, row-major `float32`
+array `[n_rows, vocab_size]` (`n_rows` is `-p N`, or 1 with `--logits-last-only`),
+read back with `np.fromfile(PATH, dtype=np.float32).reshape(n_rows, -1)`. A row
+is ~0.6 MB for a 152k vocabulary, so pair it with `--logits-last-only` for
+last-position scoring such as MMLU.
+
+```bash
+geniex-bench --plugin llama_cpp --device npu -m <model> -p 128 \
+  --logits-last-only --output-logits logits.raw
+```
