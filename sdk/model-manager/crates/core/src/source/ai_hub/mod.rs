@@ -7,7 +7,7 @@
 mod catalog;
 pub mod dto;
 mod index;
-pub mod selector;
+pub(crate) mod selector;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use url::Url;
 
-use crate::config::StoreConfig;
+use crate::config;
 use crate::error::{parse_manifest, Error, Result};
 use crate::host;
 use crate::manifest::ModelType;
@@ -47,11 +47,9 @@ pub struct AiHubConfig {
 
 impl AiHubConfig {
     pub fn from_store(store: &crate::store::Store, chipset: String) -> Self {
-        let version = StoreConfig::ai_hub_version_override()
-            .unwrap_or_else(StoreConfig::ai_hub_version_fallback);
         Self::new(
-            StoreConfig::ai_hub_base_url(),
-            version,
+            config::ai_hub_base_url(),
+            config::ai_hub_version(),
             chipset,
             store.config().ai_hub_cache_dir(),
             false,

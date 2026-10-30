@@ -10,7 +10,7 @@ pub mod dockerhub;
 pub mod hf;
 pub mod localfs;
 pub mod modelscope;
-pub mod zip;
+pub(crate) mod zip;
 
 use std::collections::HashMap;
 use std::path::PathBuf;

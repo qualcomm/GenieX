@@ -8,13 +8,13 @@ use std::path::{Path, PathBuf};
 use super::chunk;
 use crate::source::FileSpec;
 
-pub const PROGRESS_SUFFIX: &str = ".progress";
+pub(crate) const PROGRESS_SUFFIX: &str = ".progress";
 
 pub(crate) fn marker_path(dest_dir: &Path, name: &str) -> PathBuf {
     dest_dir.join(format!("{name}{PROGRESS_SUFFIX}"))
 }
 
-pub fn filter_pending(files: &[FileSpec], dest_dir: &Path) -> Vec<FileSpec> {
+pub(crate) fn filter_pending(files: &[FileSpec], dest_dir: &Path) -> Vec<FileSpec> {
     files
         .iter()
         .filter(|f| needs_fetch(f, dest_dir))

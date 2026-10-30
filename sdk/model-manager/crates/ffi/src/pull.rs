@@ -4,7 +4,7 @@
 use std::os::raw::{c_char, c_void};
 use std::path::PathBuf;
 
-use model_manager_core::config::StoreConfig;
+use model_manager_core::config;
 use model_manager_core::executor::{FileProgress, ProgressCallback};
 use model_manager_core::manifest::infer::ManifestHint;
 use model_manager_core::manifest::ModelType;
@@ -88,7 +88,7 @@ pub(crate) unsafe fn extract_name_and_intent(
     }
     let inp = &*input;
     let target = PullTarget {
-        token: opt_str(inp.hf_token).or_else(StoreConfig::hf_token_from_env),
+        token: opt_str(inp.hf_token).or_else(config::hf_token_from_env),
         chipset: opt_str(inp.chipset).unwrap_or_default(),
         display_name: opt_str(inp.display_name),
         local_path: opt_str(inp.local_path).map(PathBuf::from),

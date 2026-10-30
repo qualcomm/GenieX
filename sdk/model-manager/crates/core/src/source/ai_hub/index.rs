@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 
 use url::Url;
 
-use crate::config::StoreConfig;
+use crate::config;
 use crate::error::{parse_manifest, Error, Result};
 use crate::transport::{fetch_capped, HttpTransport};
 
@@ -50,7 +50,7 @@ async fn release_index(
             return Ok(bytes);
         }
     }
-    if StoreConfig::ai_hub_version_override().is_none() {
+    if config::ai_hub_version_override().is_none() {
         let latest_url = format!("{}/releases/{LATEST_DIR}/{filename}", cfg.endpoint);
         match fetch(&latest_url, transport).await {
             Ok(bytes) => {

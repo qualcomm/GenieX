@@ -23,38 +23,6 @@ impl StoreConfig {
         Self { data_dir }
     }
 
-    pub fn hf_token_from_env() -> Option<String> {
-        std::env::var("GENIEX_HFTOKEN").ok()
-    }
-
-    pub fn hf_endpoint() -> String {
-        env_endpoint("HF_ENDPOINT", crate::source::hf::DEFAULT_HF_ENDPOINT)
-    }
-
-    /// Honours the ModelScope SDK's own `MODELSCOPE_ENDPOINT`.
-    pub fn modelscope_endpoint() -> String {
-        env_endpoint(
-            "MODELSCOPE_ENDPOINT",
-            crate::source::modelscope::DEFAULT_MODELSCOPE_ENDPOINT,
-        )
-    }
-
-    pub fn ai_hub_base_url() -> String {
-        std::env::var("GENIEX_AIHUBBASEURL").unwrap_or_else(|_| DEFAULT_AI_HUB_BASE_URL.to_string())
-    }
-
-    pub fn ai_hub_version_override() -> Option<String> {
-        std::env::var("GENIEX_AIHUBVERSION")
-            .ok()
-            .map(|v| v.trim().to_string())
-            .filter(|v| !v.is_empty())
-    }
-
-    /// Used when `releases/latest/` is unavailable.
-    pub fn ai_hub_version_fallback() -> String {
-        DEFAULT_AI_HUB_VERSION.to_string()
-    }
-
     /// Same layout as the Go CLI so both share the cache.
     pub fn ai_hub_cache_dir(&self) -> PathBuf {
         self.data_dir.join("aihub")
@@ -74,6 +42,39 @@ const DEFAULT_AI_HUB_BASE_URL: &str =
     "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models";
 
 const DEFAULT_AI_HUB_VERSION: &str = "v0.60.0";
+
+pub fn hf_token_from_env() -> Option<String> {
+    std::env::var("GENIEX_HFTOKEN").ok()
+}
+
+pub(crate) fn hf_endpoint() -> String {
+    env_endpoint("HF_ENDPOINT", crate::source::hf::DEFAULT_HF_ENDPOINT)
+}
+
+/// Honours the ModelScope SDK's own `MODELSCOPE_ENDPOINT`.
+pub(crate) fn modelscope_endpoint() -> String {
+    env_endpoint(
+        "MODELSCOPE_ENDPOINT",
+        crate::source::modelscope::DEFAULT_MODELSCOPE_ENDPOINT,
+    )
+}
+
+pub(crate) fn ai_hub_base_url() -> String {
+    std::env::var("GENIEX_AIHUBBASEURL").unwrap_or_else(|_| DEFAULT_AI_HUB_BASE_URL.to_string())
+}
+
+/// An explicit `GENIEX_AIHUBVERSION` pin, which also skips `releases/latest/`.
+pub(crate) fn ai_hub_version_override() -> Option<String> {
+    std::env::var("GENIEX_AIHUBVERSION")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+}
+
+/// The pinned version, else the release used when `releases/latest/` is unavailable.
+pub(crate) fn ai_hub_version() -> String {
+    ai_hub_version_override().unwrap_or_else(|| DEFAULT_AI_HUB_VERSION.to_string())
+}
 
 fn env_endpoint(var: &str, default: &str) -> String {
     match std::env::var(var) {
@@ -109,13 +110,13 @@ mod tests {
         let hubs: [(&str, Getter, &str, &str); 2] = [
             (
                 "HF_ENDPOINT",
-                StoreConfig::hf_endpoint,
+                hf_endpoint,
                 DEFAULT_HF_ENDPOINT,
                 "https://hf-mirror.com",
             ),
             (
                 "MODELSCOPE_ENDPOINT",
-                StoreConfig::modelscope_endpoint,
+                modelscope_endpoint,
                 DEFAULT_MODELSCOPE_ENDPOINT,
                 "https://modelscope.example.com",
             ),

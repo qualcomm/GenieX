@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::config::StoreConfig;
+use crate::config;
 use crate::error::{Error, Result};
 use crate::executor::resume;
 use crate::executor::{Executor, ProgressCallback};
@@ -213,7 +213,7 @@ fn build_source(
 ) -> Result<Box<dyn ModelSource>> {
     match &req.intent {
         PullIntent::HuggingFace { repo, token } => {
-            let endpoint = StoreConfig::hf_endpoint();
+            let endpoint = config::hf_endpoint();
             let src = HfSource::with_endpoint_and_transport(
                 repo.clone(),
                 &endpoint,

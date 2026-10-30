@@ -44,7 +44,7 @@ impl ModelScopeSource {
         transport: Arc<dyn HttpTransport>,
         hint: ManifestHint,
     ) -> Result<Self> {
-        let endpoint = crate::config::StoreConfig::modelscope_endpoint();
+        let endpoint = crate::config::modelscope_endpoint();
         Self::with_endpoint(repo, &endpoint, token, transport, hint)
     }
 

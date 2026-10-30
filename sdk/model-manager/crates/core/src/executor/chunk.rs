@@ -11,9 +11,9 @@ use std::path::Path;
 
 use crate::error::Result;
 
-pub const MIN_CHUNK_SIZE: u64 = 16 * 1024 * 1024;
-pub const MAX_CHUNKS_PER_FILE: u64 = 128;
-pub const PROGRESS_DONE_BYTE: u8 = 0x01;
+pub(crate) const MIN_CHUNK_SIZE: u64 = 16 * 1024 * 1024;
+pub(crate) const MAX_CHUNKS_PER_FILE: u64 = 128;
+pub(crate) const PROGRESS_DONE_BYTE: u8 = 0x01;
 
 const ENV_CHUNK_SIZE: &str = "GENIEX_DL_CHUNK_SIZE";
 
@@ -47,7 +47,7 @@ pub(crate) fn single_chunk_plan(file_size: u64) -> ChunkPlan {
     }
 }
 
-pub fn plan_chunks_with_floor(file_size: u64, min_chunk_size: u64) -> ChunkPlan {
+pub(crate) fn plan_chunks_with_floor(file_size: u64, min_chunk_size: u64) -> ChunkPlan {
     let min = min_chunk_size.max(1);
     let chunk_size = if file_size == 0 {
         min
@@ -75,7 +75,7 @@ fn effective_min_chunk_size() -> u64 {
 }
 
 /// A length mismatch means the chunk size changed since the last attempt; start over.
-pub fn load_or_init_bitmap(marker_path: &Path, plan: &ChunkPlan) -> Result<Vec<u8>> {
+pub(crate) fn load_or_init_bitmap(marker_path: &Path, plan: &ChunkPlan) -> Result<Vec<u8>> {
     let expected = plan.chunks.len();
     match fs::read(marker_path) {
         Ok(buf) if buf.len() == expected => Ok(buf),
@@ -90,7 +90,7 @@ pub fn load_or_init_bitmap(marker_path: &Path, plan: &ChunkPlan) -> Result<Vec<u
     }
 }
 
-pub fn pending_chunks(plan: &ChunkPlan, bitmap: &[u8]) -> Vec<ChunkRange> {
+pub(crate) fn pending_chunks(plan: &ChunkPlan, bitmap: &[u8]) -> Vec<ChunkRange> {
     plan.chunks
         .iter()
         .filter(|c| bitmap.get(c.index).copied().unwrap_or(0) != PROGRESS_DONE_BYTE)
@@ -98,7 +98,7 @@ pub fn pending_chunks(plan: &ChunkPlan, bitmap: &[u8]) -> Vec<ChunkRange> {
         .collect()
 }
 
-pub fn bytes_already_done(plan: &ChunkPlan, bitmap: &[u8]) -> u64 {
+pub(crate) fn bytes_already_done(plan: &ChunkPlan, bitmap: &[u8]) -> u64 {
     plan.chunks
         .iter()
         .filter(|c| bitmap.get(c.index).copied().unwrap_or(0) == PROGRESS_DONE_BYTE)
@@ -107,7 +107,7 @@ pub fn bytes_already_done(plan: &ChunkPlan, bitmap: &[u8]) -> u64 {
 }
 
 /// Positional write so concurrent workers don't step on each other.
-pub fn mark_chunk_done(marker_path: &Path, index: usize) -> Result<()> {
+pub(crate) fn mark_chunk_done(marker_path: &Path, index: usize) -> Result<()> {
     let mut f = fs::OpenOptions::new()
         .write(true)
         .read(true)
@@ -118,7 +118,7 @@ pub fn mark_chunk_done(marker_path: &Path, index: usize) -> Result<()> {
     Ok(())
 }
 
-pub fn bitmap_complete(bitmap: &[u8]) -> bool {
+pub(crate) fn bitmap_complete(bitmap: &[u8]) -> bool {
     !bitmap.is_empty() && bitmap.iter().all(|b| *b == PROGRESS_DONE_BYTE)
 }
 
@@ -128,7 +128,7 @@ pub(crate) fn marker_complete(marker: &Path, output: &Path, size: u64) -> bool {
 }
 
 /// Pre-sized so range workers can seek + write without racing on file growth.
-pub fn preallocate(output_path: &Path, file_size: u64) -> Result<()> {
+pub(crate) fn preallocate(output_path: &Path, file_size: u64) -> Result<()> {
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
