@@ -152,6 +152,12 @@ pub fn bitmap_complete(bitmap: &[u8]) -> bool {
     !bitmap.is_empty() && bitmap.iter().all(|b| *b == PROGRESS_DONE_BYTE)
 }
 
+/// A file is done when its marker is complete and its output has `size` bytes.
+pub(crate) fn marker_complete(marker: &Path, output: &Path, size: u64) -> bool {
+    let bitmap = fs::read(marker).unwrap_or_default();
+    bitmap_complete(&bitmap) && fs::metadata(output).map(|m| m.len()).ok() == Some(size)
+}
+
 /// Ensure the destination file exists and has exactly `file_size` bytes,
 /// so range workers can seek + write without races on file growth.
 pub fn preallocate(output_path: &Path, file_size: u64) -> Result<()> {

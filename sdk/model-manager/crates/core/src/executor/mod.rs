@@ -460,9 +460,7 @@ async fn download_raw(
 /// DEFLATE entries resume all-or-nothing: flate2 streams aren't seekable.
 async fn download_deflate(job: &Job, src: RangeSrc, compressed_len: u64, size: u64) -> Result<()> {
     job.state.total_bytes.store(size, Ordering::Relaxed);
-    let marker = std::fs::read(&job.marker).unwrap_or_default();
-    let output_size = std::fs::metadata(&job.output).ok().map(|m| m.len());
-    if marker.first() == Some(&chunk::PROGRESS_DONE_BYTE) && output_size == Some(size) {
+    if chunk::marker_complete(&job.marker, &job.output, size) {
         job.state.downloaded_bytes.store(size, Ordering::Relaxed);
         return Ok(());
     }

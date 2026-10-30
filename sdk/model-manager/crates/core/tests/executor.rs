@@ -266,6 +266,36 @@ async fn http_deflate_decodes_and_marks_done() {
 }
 
 #[tokio::test]
+async fn deflate_entry_with_stale_chunk_marker_is_refetched() {
+    let plain = make_body(16 * 1024, 0x2B);
+    let compressed = deflate_raw(&plain);
+    let server = MockServer::start().await;
+    mount_ranged(&server, "/blob", compressed.clone()).await;
+
+    // A partial chunk bitmap left by a STORED download of the same name,
+    // next to an output that happens to be the right size.
+    let tmp = tempdir().unwrap();
+    std::fs::write(tmp.path().join("entry.bin"), vec![0u8; plain.len()]).unwrap();
+    std::fs::write(tmp.path().join("entry.bin.progress"), [0x01, 0x00]).unwrap();
+
+    let spec = deflate_spec(
+        "entry.bin",
+        url(&server, "/blob"),
+        plain.len(),
+        0,
+        compressed.len(),
+    );
+    Executor::new(fast_transport(), 1)
+        .run(&[spec], tmp.path(), None)
+        .await
+        .expect("deflate");
+    assert!(
+        std::fs::read(tmp.path().join("entry.bin")).unwrap() == plain,
+        "stale entry was kept"
+    );
+}
+
+#[tokio::test]
 async fn local_sources_copy_bytes_and_mark_done() {
     let src = tempdir().unwrap();
     let plain = make_body(40 * 1024, 0x42);

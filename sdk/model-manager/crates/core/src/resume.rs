@@ -14,6 +14,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::executor::chunk;
 use crate::source::FileSpec;
 
 /// Suffix appended to a file name for its `.progress` marker.
@@ -45,16 +46,7 @@ fn needs_fetch(spec: &FileSpec, dest_dir: &Path) -> bool {
         let on_disk = std::fs::metadata(&output).map(|m| m.len()).unwrap_or(0);
         return on_disk != spec.size;
     }
-    if let Ok(data) = std::fs::read(&marker) {
-        // Non-empty, all-0x01 bitmap plus an exact-size payload means
-        // every chunk succeeded; skip. Partial or stale state falls
-        // through so the executor can decide what to refetch.
-        let output_size = std::fs::metadata(&output).map(|m| m.len()).ok();
-        if !data.is_empty() && data.iter().all(|b| *b == 0x01) && output_size == Some(spec.size) {
-            return false;
-        }
-    }
-    true
+    !chunk::marker_complete(&marker, &output, spec.size)
 }
 
 #[cfg(test)]
