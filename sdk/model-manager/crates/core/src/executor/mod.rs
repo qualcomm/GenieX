@@ -319,13 +319,7 @@ async fn run_one(
             len,
         } => {
             let src = RangeSrc::http(&transport, url, auth, offset);
-            download_raw(
-                &job,
-                src,
-                known(if len > 0 { len } else { spec.size }),
-                false,
-            )
-            .await
+            download_raw(&job, src, Some(len), false).await
         }
         BytesSource::LocalRange { path, offset, len } => {
             download_raw(&job, RangeSrc::local(&path, offset)?, Some(len), true).await

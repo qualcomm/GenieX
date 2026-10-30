@@ -266,6 +266,29 @@ async fn http_deflate_decodes_and_marks_done() {
 }
 
 #[tokio::test]
+async fn empty_stored_zip_entry_is_written_without_fetching() {
+    let server = MockServer::start().await;
+    mount_ranged(&server, "/archive.zip", make_body(4096, 0x10)).await;
+    let spec = FileSpec {
+        name: "empty.txt".to_string(),
+        size: 0,
+        bytes: BytesSource::HttpRange {
+            url: url(&server, "/archive.zip"),
+            auth: None,
+            offset: 100,
+            len: 0,
+        },
+    };
+    let tmp = tempdir().unwrap();
+    Executor::new(fast_transport(), 1)
+        .run(&[spec], tmp.path(), None)
+        .await
+        .expect("empty entry");
+    assert_eq!(std::fs::read(tmp.path().join("empty.txt")).unwrap(), b"");
+    assert!(server.received_requests().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn deflate_entry_with_stale_chunk_marker_is_refetched() {
     let plain = make_body(16 * 1024, 0x2B);
     let compressed = deflate_raw(&plain);
