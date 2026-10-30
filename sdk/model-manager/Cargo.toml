@@ -38,7 +38,7 @@ url = "2"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 tempfile = { version = "3", optional = true }
 wiremock = { version = "0.6", optional = true }
-zip = { version = "2", default-features = false, features = ["deflate"], optional = true }
+zip = { version = "9.0.5", default-features = false, features = ["deflate"], optional = true }
 
 [features]
 test-support = ["dep:tempfile", "dep:wiremock", "dep:zip"]
@@ -56,4 +56,4 @@ model-manager = { path = ".", features = ["test-support"] }
 tempfile = "3"
 wiremock = "0.6"
 tokio = { version = "1", features = ["test-util", "net"] }
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
