@@ -4,6 +4,7 @@
 //! Materialises each [`FileSpec`] of a [`crate::source::Plan`] into `dest_dir/<name>`.
 
 pub mod chunk;
+pub(crate) mod resume;
 
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -18,9 +19,9 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use url::Url;
 
+use self::resume::marker_path;
 use crate::config::env_positive;
 use crate::error::{Error, Result};
-use crate::resume::marker_path;
 use crate::source::{BytesSource, FileSpec};
 use crate::transport::{HttpTransport, LocalFileTransport};
 

@@ -3,7 +3,7 @@
 
 use std::os::raw::c_char;
 
-use model_manager_core::mapping::{is_docker_hub_reference, resolve_alias};
+use model_manager_core::model_ref::{is_docker_hub_reference, resolve_alias};
 
 use crate::pull::GenieXHubSource;
 use crate::types::*;

@@ -4,8 +4,7 @@
 use std::os::raw::c_char;
 
 use model_manager_core::source::ai_hub::{
-    detect::detect_host_chipset, detect_host_chipset_reference, list_supported_chipsets,
-    AiHubConfig,
+    detect_host_chipset_reference, list_supported_chipsets, AiHubConfig,
 };
 
 use crate::init::{get_store, runtime_handle};
@@ -72,7 +71,7 @@ pub extern "C" fn geniex_model_detect_chipset(offline: i32, out_chipset: *mut *m
         let out = out_mut(out_chipset)?;
         // offline: local probe only; else translate online to the display name.
         let detected = if offline != 0 {
-            detect_host_chipset()
+            model_manager_core::host::detect_chipset()
         } else {
             let cfg = AiHubConfig::from_store(get_store()?, String::new());
             runtime_handle().block_on(detect_host_chipset_reference(&cfg))

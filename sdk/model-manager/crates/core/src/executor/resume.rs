@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::executor::chunk;
+use super::chunk;
 use crate::source::FileSpec;
 
 pub const PROGRESS_SUFFIX: &str = ".progress";

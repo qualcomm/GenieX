@@ -9,9 +9,9 @@ use fs2::FileExt;
 
 use crate::config::StoreConfig;
 use crate::error::{Error, Result};
+use crate::manifest::infer::quant_sort_key;
 use crate::manifest::{ModelManifest, ModelType};
-use crate::manifest_builder::quant_sort_key;
-use crate::mapping::canonicalize_model_name;
+use crate::model_ref::canonicalize_model_name;
 use crate::validation::validate_model_name;
 
 #[derive(Debug, Clone)]

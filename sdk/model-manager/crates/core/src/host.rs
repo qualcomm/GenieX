@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 //! Best-effort host chipset detection for AI Hub pulls; `None` means the caller must pass one.
-pub fn detect_host_chipset() -> Option<String> {
+pub fn detect_chipset() -> Option<String> {
     #[cfg(target_os = "windows")]
     {
         windows::detect_gpu_chipset()
@@ -396,7 +396,7 @@ mod android {
             fn __system_property_get(name: *const c_char, value: *mut c_char) -> c_int;
         }
 
-        pub(in crate::source::ai_hub::detect) fn detect_soc_chipset() -> Option<String> {
+        pub(in crate::host) fn detect_soc_chipset() -> Option<String> {
             let manuf = read_prop("ro.soc.manufacturer")?;
             let model = read_prop("ro.soc.model")?;
             map_soc(&manuf, &model).map(str::to_string)

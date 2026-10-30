@@ -13,13 +13,13 @@ use async_trait::async_trait;
 use url::Url;
 
 use crate::error::{Error, Result};
-use crate::gguf;
+use crate::manifest::gguf;
+use crate::manifest::infer::ManifestHint;
 use crate::manifest::ModelType;
-use crate::manifest_builder::ManifestHint;
 use crate::transport::{HttpTransport, LocalFileTransport};
 
-use super::ai_hub::remote_zip::{fetch_central_directory, Method, ZipEntry};
-use super::ai_hub::{parse_archive_metadata, prepare_flat_entries, zip_files, Archive};
+use super::ai_hub::parse_archive_metadata;
+use super::zip::{fetch_central_directory, flatten, zip_files, Archive, Method, ZipEntry};
 use super::{
     basename, files_for_manifest, qairt_plan, resolve_manifest, BytesSource, FileSpec, ModelSource,
     Plan, RepoFiles, MANIFEST_FILE,
@@ -190,7 +190,7 @@ impl LocalFsSource {
         let transport: Arc<dyn HttpTransport> =
             Arc::new(LocalFileTransport::open(&self.source_dir)?);
         let url = Url::parse("file:///local-archive").expect("static url");
-        let flat = prepare_flat_entries(&fetch_central_directory(&transport, &url).await?)?;
+        let flat = flatten(&fetch_central_directory(&transport, &url).await?)?;
         let metadata = read_metadata_json(&flat, transport.as_ref(), &url).await;
         let files = zip_files(flat, &Archive::Local(self.source_dir.clone()));
         self.qairt_plan(metadata, files, "archive")

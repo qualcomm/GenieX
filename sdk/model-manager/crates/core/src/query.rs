@@ -4,8 +4,8 @@
 //! Resolve a model's remote candidate quantizations without downloading.
 
 use crate::error::Result;
+use crate::manifest::infer::quant_sort_key;
 use crate::manifest::ModelType;
-use crate::manifest_builder::quant_sort_key;
 use crate::pull::{prepare, PullRequest};
 use crate::source::Plan;
 use crate::store::Store;

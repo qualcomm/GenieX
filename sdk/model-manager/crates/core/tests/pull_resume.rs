@@ -8,7 +8,7 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use model_manager_core::manifest_builder::ManifestHint;
+use model_manager_core::manifest::infer::ManifestHint;
 use model_manager_core::pull::pull_with_source;
 use model_manager_core::source::hf::HfSource;
 use model_manager_core::store::{INFLIGHT_DIR, MANIFEST_FILE};

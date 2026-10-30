@@ -100,7 +100,7 @@ pub fn url(server: &MockServer, at: &str) -> Url {
     Url::parse(&format!("{}{at}", server.uri())).unwrap()
 }
 
-pub use crate::source::ai_hub::remote_zip::Method as ZipMethod;
+pub use crate::source::zip::Method as ZipMethod;
 
 pub fn build_zip(entries: &[(&str, &[u8], ZipMethod)]) -> Vec<u8> {
     let mut zw = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));

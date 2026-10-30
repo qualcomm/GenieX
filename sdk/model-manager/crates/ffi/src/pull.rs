@@ -5,8 +5,8 @@ use std::os::raw::{c_char, c_void};
 use std::path::PathBuf;
 
 use model_manager_core::config::StoreConfig;
-use model_manager_core::manifest_builder::ManifestHint;
-use model_manager_core::mapping::{
+use model_manager_core::manifest::infer::ManifestHint;
+use model_manager_core::model_ref::{
     aihub_display_name_from_repo, canonicalize_model_name, docker_hub_repo_from_name,
     is_docker_hub_reference, is_modelscope_reference,
 };

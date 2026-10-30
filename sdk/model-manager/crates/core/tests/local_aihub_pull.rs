@@ -7,8 +7,8 @@
 
 use std::path::Path;
 
+use model_manager_core::manifest::infer::ManifestHint;
 use model_manager_core::manifest::{ModelManifest, ModelType};
-use model_manager_core::manifest_builder::ManifestHint;
 use model_manager_core::pull::pull_with_source;
 use model_manager_core::source::localfs::LocalFsSource;
 use model_manager_core::test_support::{build_zip, fast_transport, temp_store, ZipMethod};

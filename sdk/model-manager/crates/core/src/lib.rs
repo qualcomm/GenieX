@@ -4,10 +4,10 @@
 pub mod config;
 pub mod error;
 pub mod executor;
+pub mod host;
 pub mod logging;
 pub mod manifest;
-pub mod manifest_builder;
-pub mod mapping;
+pub mod model_ref;
 pub mod pull;
 pub mod query;
 pub mod source;
@@ -18,6 +18,4 @@ pub mod transport;
 #[doc(hidden)]
 pub mod test_support;
 
-mod gguf;
-mod resume;
 mod validation;

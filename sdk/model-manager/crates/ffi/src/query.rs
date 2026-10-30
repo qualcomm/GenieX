@@ -3,7 +3,7 @@
 
 use std::os::raw::c_char;
 
-use model_manager_core::manifest_builder::ManifestHint;
+use model_manager_core::manifest::infer::ManifestHint;
 use model_manager_core::pull::PullRequest;
 use model_manager_core::query::query;
 

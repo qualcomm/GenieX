@@ -4,8 +4,8 @@
 use std::os::raw::c_char;
 use std::path::Path;
 
+use model_manager_core::manifest::infer::quant_sort_key;
 use model_manager_core::manifest::{ModelManifest, ModelType};
-use model_manager_core::manifest_builder::quant_sort_key;
 
 use crate::init::get_store;
 use crate::types::*;

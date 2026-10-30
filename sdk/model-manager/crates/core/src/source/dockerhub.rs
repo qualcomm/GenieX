@@ -15,8 +15,8 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::error::{parse_manifest, Error, Result};
+use crate::manifest::infer::extract_quant;
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
-use crate::manifest_builder::extract_quant;
 use crate::transport::{default_client, fetch_capped, HttpTransport};
 
 use super::{basename, BytesSource, FileSpec, ModelSource, Plan};

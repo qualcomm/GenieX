@@ -5,7 +5,7 @@
 //!
 //!   cargo test --test modelscope_live -- --ignored
 
-use model_manager_core::manifest_builder::ManifestHint;
+use model_manager_core::manifest::infer::ManifestHint;
 use model_manager_core::pull::{pull, PullIntent, PullRequest};
 use model_manager_core::store::Store;
 use model_manager_core::test_support::temp_store;

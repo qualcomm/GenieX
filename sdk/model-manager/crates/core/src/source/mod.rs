@@ -10,6 +10,7 @@ pub mod dockerhub;
 pub mod hf;
 pub mod localfs;
 pub mod modelscope;
+pub mod zip;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -18,8 +19,8 @@ use async_trait::async_trait;
 use url::Url;
 
 use crate::error::{Error, Result};
+use crate::manifest::infer::{infer_manifest_from_names, untagged_gguf_names, ManifestHint};
 use crate::manifest::{ModelFileInfo, ModelManifest, ModelType};
-use crate::manifest_builder::{infer_manifest_from_names, untagged_gguf_names, ManifestHint};
 
 pub(crate) const QAIRT_PLUGIN_ID: &str = "qairt";
 pub(crate) const MANIFEST_FILE: &str = "geniex.json";

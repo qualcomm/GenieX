@@ -10,10 +10,10 @@ use std::sync::Arc;
 
 use crate::config::StoreConfig;
 use crate::error::{Error, Result};
+use crate::executor::resume;
 use crate::executor::{Executor, ProgressCallback};
-use crate::manifest_builder::ManifestHint;
-use crate::mapping::canonicalize_model_name;
-use crate::resume;
+use crate::manifest::infer::ManifestHint;
+use crate::model_ref::canonicalize_model_name;
 use crate::source::ai_hub::{AiHubConfig, AiHubSource};
 use crate::source::dockerhub::DockerHubSource;
 use crate::source::hf::HfSource;

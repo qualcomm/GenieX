@@ -10,8 +10,8 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::error::{Error, Result};
-use crate::gguf;
-use crate::manifest_builder::ManifestHint;
+use crate::manifest::gguf;
+use crate::manifest::infer::ManifestHint;
 use crate::transport::{fetch_capped, HttpTransport};
 
 use super::{files_for_manifest, resolve_manifest, BytesSource, ModelSource, Plan, RepoFiles};

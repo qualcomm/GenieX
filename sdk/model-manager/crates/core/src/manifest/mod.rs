@@ -1,6 +1,9 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
+pub(crate) mod gguf;
+pub mod infer;
+
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 

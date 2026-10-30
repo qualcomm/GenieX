@@ -6,12 +6,16 @@
 //! Fixed sizes: EOCD 22, ZIP64 locator 20 (directly before EOCD), ZIP64 EOCD 56,
 //! CD header 46, local header 30 bytes.
 
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use url::Url;
 
 use crate::error::{Error, Result};
 use crate::transport::HttpTransport;
+
+use super::{basename, BytesSource, FileSpec};
 
 const EOCD_SIG: u32 = 0x0605_4b50;
 const ZIP64_EOCD_LOCATOR_SIG: u32 = 0x0706_4b50;
@@ -327,6 +331,81 @@ fn read_zip64_u64(buf: &[u8], off: usize) -> Option<u64> {
     Some(read_u64(bytes, 0))
 }
 
+pub(crate) enum Archive {
+    Remote(Url),
+    Local(PathBuf),
+}
+
+/// Files by basename, skipping directories and macOS metadata; a basename
+/// collision is an error since entries extract flat.
+pub(crate) fn flatten(raw: &[ZipEntry]) -> Result<Vec<(String, ZipEntry)>> {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut out: Vec<(String, ZipEntry)> = Vec::new();
+    for e in raw {
+        if e.is_dir || is_macos_metadata(&e.name) {
+            continue;
+        }
+        let base = basename(&e.name).to_string();
+        if base.is_empty() || base == "." || base == ".." {
+            continue;
+        }
+        if !seen.insert(base.clone()) {
+            return Err(Error::Hub(format!(
+                "duplicate basename {base:?} in archive (from entry {:?})",
+                e.name
+            )));
+        }
+        out.push((base, e.clone()));
+    }
+    Ok(out)
+}
+
+fn is_macos_metadata(path: &str) -> bool {
+    let normalized = path.replace('\\', "/");
+    if normalized.starts_with("__MACOSX/") || normalized.contains("/__MACOSX/") {
+        return true;
+    }
+    basename(&normalized).starts_with("._")
+}
+
+/// One [`FileSpec`] per flattened entry, read in place from `archive`.
+pub(crate) fn zip_files(flat: Vec<(String, ZipEntry)>, archive: &Archive) -> Vec<FileSpec> {
+    flat.into_iter()
+        .map(|(name, e)| {
+            let (offset, len) = (e.payload_offset, e.compressed_size);
+            let bytes = match (archive, e.method) {
+                (Archive::Remote(url), Method::Stored) => BytesSource::HttpRange {
+                    url: url.clone(),
+                    auth: None,
+                    offset,
+                    len,
+                },
+                (Archive::Remote(url), Method::Deflate) => BytesSource::HttpDeflate {
+                    url: url.clone(),
+                    auth: None,
+                    offset,
+                    compressed_len: len,
+                },
+                (Archive::Local(path), Method::Stored) => BytesSource::LocalRange {
+                    path: path.clone(),
+                    offset,
+                    len,
+                },
+                (Archive::Local(path), Method::Deflate) => BytesSource::LocalDeflate {
+                    path: path.clone(),
+                    offset,
+                    compressed_len: len,
+                },
+            };
+            FileSpec {
+                name,
+                size: e.uncompressed_size,
+                bytes,
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -465,5 +544,30 @@ mod tests {
         let mut body = stored_zip(&[("model.bin", b"HELLO")]);
         add_zip64_eocd(&mut body, u64::MAX, None);
         assert_eq!(parse_local(body).await.unwrap().len(), 1);
+    }
+
+    fn entry(name: &str, payload_offset: u64, size: u64) -> ZipEntry {
+        ZipEntry {
+            name: name.to_string(),
+            method: Method::Stored,
+            payload_offset,
+            compressed_size: size,
+            uncompressed_size: size,
+            is_dir: false,
+        }
+    }
+
+    #[test]
+    fn flatten_rejects_collisions_and_skips_macos_metadata() {
+        let collision = [entry("a/model.bin", 0, 1), entry("b/model.bin", 100, 1)];
+        assert!(flatten(&collision).is_err());
+
+        let with_macos = [
+            entry("dir/model.bin", 0, 2),
+            entry("__MACOSX/dir/._model.bin", 100, 4),
+        ];
+        let out = flatten(&with_macos).unwrap();
+        let names: Vec<&str> = out.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["model.bin"]);
     }
 }
