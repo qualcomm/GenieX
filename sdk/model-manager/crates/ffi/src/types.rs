@@ -201,7 +201,7 @@ pub unsafe fn from_c_array<T>(ptr: *mut T, count: i32) -> Option<Vec<T>> {
 /// the FFI boundary so the invariant is a single point of enforcement.
 pub fn normalize_quant_suffix(name: &str) -> String {
     match name.rsplit_once(':') {
-        Some((base, quant)) if !quant.is_empty() => {
+        Some((base, quant)) if !quant.is_empty() && !quant.starts_with("//") => {
             format!("{base}:{}", quant.to_ascii_uppercase())
         }
         _ => name.to_string(),
@@ -268,6 +268,10 @@ mod tests {
             ),
             ("ggml-org/Qwen3-0.6B-GGUF", "ggml-org/Qwen3-0.6B-GGUF"),
             ("Org/Repo:", "Org/Repo:"),
+            (
+                "https://huggingface.co/ggml-org/Qwen3",
+                "https://huggingface.co/ggml-org/Qwen3",
+            ),
         ] {
             assert_eq!(normalize_quant_suffix(name), want, "{name}");
         }

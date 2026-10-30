@@ -163,7 +163,8 @@ impl Store {
         //                        only when that was the last remaining quant,
         //                        otherwise mmproj/tokenizer/extras stay shared
         //                        with the other quants.
-        let (name, quant) = split_quant(name_with_quant);
+        let (name, quant) = parse_ref(name_with_quant);
+        let name = name.as_str();
         validate_model_name(name)?;
         self.with_model_lock(name, || {
             let dir = self.cfg.model_dir(name);
@@ -221,7 +222,7 @@ impl Store {
     }
 
     pub fn set_model_type(&self, name: &str, model_type: ModelType) -> Result<()> {
-        let name = canonicalize_model_name(name);
+        let (name, _) = parse_ref(name);
         validate_model_name(&name)?;
         self.with_model_lock(&name, || {
             let mut manifest = self.get_manifest(&name)?;
@@ -233,14 +234,8 @@ impl Store {
     /// Read one cached model's manifest, accepting the same loose name forms as
     /// [`Self::get_paths`]: a non-canonical name is canonicalized and any
     /// ":quant" suffix is dropped, since a manifest covers every precision.
-    ///
-    /// Canonicalization runs first so a pasted HuggingFace URL still resolves:
-    /// `split_quant` would otherwise cut at the colon in "https:".
     pub fn resolve_manifest(&self, name_with_quant: &str) -> Result<ModelManifest> {
-        let canonical = canonicalize_model_name(name_with_quant);
-        let (name, _) = split_quant(&canonical);
-        validate_model_name(name)?;
-        self.get_manifest(name)
+        self.get_manifest(&parse_ref(name_with_quant).0)
     }
 
     /// Read one cached model's manifest for reporting, skipping a model whose
@@ -265,9 +260,7 @@ impl Store {
     /// Accepts a bare name (no '/') and canonicalises it to `qualcomm/<name>`
     /// so callers can refer to AI Hub models without the prefix.
     pub fn get_paths(&self, name_with_quant: &str) -> Result<(String, ModelPaths)> {
-        let (name, quant) = split_quant(name_with_quant);
-        let name = canonicalize_model_name(name);
-        validate_model_name(&name)?;
+        let (name, quant) = parse_ref(name_with_quant);
         let manifest = self.get_manifest(&name)?;
         let base_dir = self.cfg.model_dir(&name);
         resolve_model_paths(&manifest, &base_dir, quant.as_deref())
@@ -361,18 +354,16 @@ fn migrate_legacy_qairt_precision(m: &mut ModelManifest) -> bool {
     true
 }
 
-/// Split "org/repo:quant" into ("org/repo", Some("quant")) or ("org/repo", None).
-fn split_quant(s: &str) -> (&str, Option<String>) {
-    if let Some(pos) = s.rfind(':') {
-        let name = &s[..pos];
-        let quant = &s[pos + 1..];
-        if quant.is_empty() {
-            (name, None)
-        } else {
-            (name, Some(quant.to_string()))
+/// Split a loose model reference into its canonical name and optional quant.
+/// Canonicalizing first strips a pasted URL, and a `://` is never a quant cut.
+fn parse_ref(s: &str) -> (String, Option<String>) {
+    let canonical = canonicalize_model_name(s);
+    match canonical.rsplit_once(':') {
+        Some((name, quant)) if !quant.starts_with("//") => {
+            let quant = (!quant.is_empty()).then(|| quant.to_string());
+            (name.to_string(), quant)
         }
-    } else {
-        (s, None)
+        _ => (canonical, None),
     }
 }
 
@@ -440,6 +431,27 @@ mod tests {
         }
         assert!(store.resolve_manifest("Org/Missing").is_err());
         assert_eq!(store.get_model_type("Bare:Q4_K_M").unwrap(), ModelType::Llm);
+    }
+
+    #[test]
+    fn every_operation_accepts_loose_names() {
+        let (store, _tmp) = stored(&["qualcomm/Bare", "ggml-org/Qwen3"]);
+        let url = "https://huggingface.co/ggml-org/Qwen3";
+        for input in [url, &format!("{url}:Q4_K_M")] {
+            let (quant, paths) = store.get_paths(input).unwrap();
+            assert_eq!(
+                (quant.as_str(), paths.model_name.as_str()),
+                ("Q4_K_M", "Qwen3"),
+                "{input}"
+            );
+        }
+        store.set_model_type("Bare:Q4_K_M", ModelType::Vlm).unwrap();
+        assert_eq!(
+            store.get_model_type("qualcomm/Bare").unwrap(),
+            ModelType::Vlm
+        );
+        store.remove("Bare").unwrap();
+        assert!(!store.cfg.model_dir("qualcomm/Bare").exists());
     }
 
     #[test]
