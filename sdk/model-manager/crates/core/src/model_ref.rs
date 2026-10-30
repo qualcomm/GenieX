@@ -13,11 +13,11 @@ pub struct ModelRef {
 }
 
 impl ModelRef {
-    /// Accepts a bare name, `org/repo[:quant]`, or a pasted HF / ModelScope
-    /// URL. A `://` is never a quant cut, and the quant is upper-cased to
+    /// Accepts a bare name, `org/repo[:quant]`, a `docker.io/` reference, or a
+    /// pasted HF / ModelScope URL. A `://` is never a quant cut, and the quant is upper-cased to
     /// match manifest keys.
     pub fn parse(s: &str) -> Result<Self> {
-        let canonical = canonicalize_model_name(s);
+        let canonical = canonicalize_model_name(&docker_hub_repo_from_name(s));
         let (name, quant) = match canonical.rsplit_once(':') {
             Some((name, quant)) if !quant.starts_with("//") => {
                 let quant = (!quant.is_empty()).then(|| quant.to_ascii_uppercase());
@@ -248,6 +248,7 @@ mod tests {
             (url, "ggml-org/Qwen3", None),
             (&format!("{url}:Q8_0"), "ggml-org/Qwen3", Some("Q8_0")),
             ("ai-hub-models/X:w4a16", "qualcomm/X", Some("W4A16")),
+            ("docker.io/ai/smollm2", "ai/smollm2", None),
         ] {
             let r = ModelRef::parse(input).unwrap();
             assert_eq!(
