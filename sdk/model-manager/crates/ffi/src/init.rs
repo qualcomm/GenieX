@@ -78,7 +78,7 @@ pub extern "C" fn geniex_model_init(data_dir: *const c_char) -> i32 {
             cfg.data_dir = PathBuf::from(s);
         }
 
-        let store = Store::new(cfg).map_err(|e| report(&e))?;
+        let store = Store::new(cfg).or_report()?;
         // INIT_LOCK is held ⇒ this set() never races.
         let _ = STORE.set(store);
         logging::debug("geniex model manager initialized");

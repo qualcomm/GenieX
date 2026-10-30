@@ -5,7 +5,7 @@ use std::os::raw::c_char;
 
 use model_manager_core::manifest_builder::ManifestHint;
 use model_manager_core::pull::PullRequest;
-use model_manager_core::query::query_blocking;
+use model_manager_core::query::query;
 
 use crate::init::{get_store, runtime_handle};
 use crate::pull::{extract_name_and_intent, GenieXModelPullInput};
@@ -29,30 +29,17 @@ pub struct GenieXModelQueryOutput {
     pub candidate_count: i32,
 }
 
-impl GenieXModelQueryOutput {
-    fn null() -> Self {
-        Self {
-            model_name: std::ptr::null_mut(),
-            plugin_id: std::ptr::null_mut(),
-            model_type: GenieXModelType::Llm,
-            candidates: std::ptr::null_mut(),
-            candidate_count: 0,
-        }
-    }
-}
-
 #[no_mangle]
 pub extern "C" fn geniex_model_query(
     input: *const GenieXModelPullInput,
     out: *mut GenieXModelQueryOutput,
 ) -> i32 {
     ffi_guard(|| {
-        if input.is_null() || out.is_null() {
+        let out = out_mut(out)?;
+        if input.is_null() {
             return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
         }
-
-        // Query reuses the pull input struct; the quant / callback / model_type
-        // fields are simply ignored here.
+        // Query ignores the pull-only quant / callback / model_type fields.
         let (model_name, intent) = unsafe { extract_name_and_intent(input, "geniex_model_query") }?;
         let req = PullRequest {
             model_name,
@@ -60,8 +47,9 @@ pub extern "C" fn geniex_model_query(
             on_progress: None,
             hint: ManifestHint::default(),
         };
-        let result =
-            query_blocking(&runtime_handle(), get_store()?, req).map_err(|e| report(&e))?;
+        let result = runtime_handle()
+            .block_on(query(get_store()?, req))
+            .or_report()?;
 
         let cands: Vec<GenieXQuantCandidate> = result
             .candidates
@@ -72,30 +60,22 @@ pub extern "C" fn geniex_model_query(
             })
             .collect();
         let (candidates, candidate_count) = into_c_array(cands);
-
-        unsafe {
-            (*out).model_name = str_to_cptr(&result.model_name);
-            (*out).plugin_id = str_to_cptr(&result.plugin_id);
-            (*out).model_type = to_ffi_type(result.model_type);
-            (*out).candidates = candidates;
-            (*out).candidate_count = candidate_count;
-        }
+        *out = GenieXModelQueryOutput {
+            model_name: str_to_cptr(&result.model_name),
+            plugin_id: str_to_cptr(&result.plugin_id),
+            model_type: to_ffi_type(result.model_type),
+            candidates,
+            candidate_count,
+        };
         Ok(GENIEX_SUCCESS)
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn geniex_model_query_free(out: *mut GenieXModelQueryOutput) {
-    if out.is_null() {
-        return;
-    }
-    let o = &mut *out;
+    let Some(o) = out.as_mut() else { return };
     free_cptr(o.model_name);
     free_cptr(o.plugin_id);
-    if let Some(cands) = from_c_array(o.candidates, o.candidate_count) {
-        for c in cands {
-            free_cptr(c.quant);
-        }
-    }
-    *out = GenieXModelQueryOutput::null();
+    free_c_list(o.candidates, o.candidate_count, |c| free_cptr(c.quant));
+    *o = std::mem::zeroed();
 }

@@ -41,16 +41,6 @@ pub async fn query(store: &Store, mut req: PullRequest) -> Result<ModelQuery> {
     Ok(model_query_from_plan(req.model_name, plan))
 }
 
-/// Sync entry point for callers without a runtime; drives [`query`] on a
-/// caller-supplied tokio handle (the FFI crate owns the runtime).
-pub fn query_blocking(
-    handle: &tokio::runtime::Handle,
-    store: &Store,
-    req: PullRequest,
-) -> Result<ModelQuery> {
-    handle.block_on(query(store, req))
-}
-
 fn model_query_from_plan(model_name: String, plan: Plan) -> ModelQuery {
     let mut candidates: Vec<QuantCandidate> = plan
         .manifest

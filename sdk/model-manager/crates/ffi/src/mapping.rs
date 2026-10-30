@@ -24,15 +24,12 @@ pub extern "C" fn geniex_model_resolve_hub(
     out_hub: *mut GenieXHubSource,
 ) -> i32 {
     ffi_guard(|| {
-        if out_hub.is_null() {
-            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
-        }
+        let out = out_mut(out_hub)?;
         let name = unsafe { cstr_to_str(model_name) }?;
-        let resolved = match hub_in {
+        *out = match hub_in {
             GenieXHubSource::Auto if is_docker_hub_reference(name) => GenieXHubSource::Docker,
             other => other,
         };
-        unsafe { *out_hub = resolved };
         Ok(GENIEX_SUCCESS)
     })
 }
@@ -43,12 +40,10 @@ pub extern "C" fn geniex_model_resolve_alias(
     out_full_name: *mut *mut c_char,
 ) -> i32 {
     ffi_guard(|| {
-        if out_full_name.is_null() {
-            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
-        }
+        let out = out_mut(out_full_name)?;
         let alias_str = unsafe { cstr_to_str(alias) }?;
         let full = resolve_alias(alias_str).ok_or(GENIEX_ERROR_COMMON_INVALID_INPUT)?;
-        unsafe { *out_full_name = str_to_cptr(&full) };
+        *out = str_to_cptr(&full);
         Ok(GENIEX_SUCCESS)
     })
 }

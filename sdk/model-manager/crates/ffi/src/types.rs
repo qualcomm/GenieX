@@ -185,6 +185,47 @@ pub fn into_c_array<T>(mut v: Vec<T>) -> (*mut T, i32) {
     (ptr, len)
 }
 
+/// Hand `items` to C as an owned array of C strings.
+pub fn c_str_array<S: AsRef<str>>(items: &[S]) -> (*mut *mut c_char, i32) {
+    into_c_array(items.iter().map(|s| str_to_cptr(s.as_ref())).collect())
+}
+
+/// Free an array from [`c_str_array`], strings included.
+///
+/// # Safety
+/// Same contract as [`from_c_array`].
+pub unsafe fn free_c_str_array(ptr: *mut *mut c_char, count: i32) {
+    for s in from_c_array(ptr, count).unwrap_or_default() {
+        free_cptr(s);
+    }
+}
+
+/// Free an array from [`into_c_array`], releasing each element with `free`.
+///
+/// # Safety
+/// Same contract as [`from_c_array`].
+pub unsafe fn free_c_list<T>(ptr: *mut T, count: i32, mut free: impl FnMut(&mut T)) {
+    for mut item in from_c_array(ptr, count).unwrap_or_default() {
+        free(&mut item);
+    }
+}
+
+/// `out` as a writable reference, or `INVALID_INPUT` when null.
+pub fn out_mut<'a, T>(out: *mut T) -> Result<&'a mut T, i32> {
+    unsafe { out.as_mut() }.ok_or(GENIEX_ERROR_COMMON_INVALID_INPUT)
+}
+
+pub trait OrReport<T> {
+    /// Record the error as the last error and turn it into its FFI code.
+    fn or_report(self) -> Result<T, i32>;
+}
+
+impl<T> OrReport<T> for model_manager_core::error::Result<T> {
+    fn or_report(self) -> Result<T, i32> {
+        self.map_err(|e| report(&e))
+    }
+}
+
 /// Reclaim a Vec previously handed to C by [`into_c_array`].
 ///
 /// # Safety
@@ -215,11 +256,6 @@ pub fn normalize_quant_suffix(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // The SDK C side provides geniex_model_log_emit at link time; stub it so
-    // the standalone test binary resolves the symbol.
-    #[no_mangle]
-    extern "C" fn geniex_model_log_emit(_level: std::os::raw::c_int, _msg: *const c_char) {}
 
     #[test]
     fn err_to_code_cases() {

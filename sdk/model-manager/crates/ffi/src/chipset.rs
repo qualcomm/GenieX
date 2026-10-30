@@ -30,64 +30,43 @@ pub struct GenieXChipsetList {
 #[no_mangle]
 pub extern "C" fn geniex_model_list_chipsets(out: *mut GenieXChipsetList) -> i32 {
     ffi_guard(|| {
-        if out.is_null() {
-            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
-        }
-        let store = get_store()?;
+        let out = out_mut(out)?;
+        let cfg = AiHubConfig::from_store(get_store()?, String::new());
         let chipsets = runtime_handle()
-            .block_on(async {
-                let cfg = AiHubConfig::from_store(store, String::new());
-                list_supported_chipsets(&cfg).await
-            })
-            .map_err(|e| report(&e))?;
+            .block_on(list_supported_chipsets(&cfg))
+            .or_report()?;
 
         let infos: Vec<GenieXChipsetInfo> = chipsets
             .iter()
             .map(|c| {
                 // The canonical id is demoted into the alias list.
-                let display = c.display_name();
-                let mut alias_strs: Vec<&str> = Vec::with_capacity(c.aliases.len() + 1);
-                if !c.aliases.iter().any(|a| a == &c.name) {
-                    alias_strs.push(c.name.as_str());
+                let mut aliases: Vec<&str> = Vec::with_capacity(c.aliases.len() + 1);
+                if !c.aliases.contains(&c.name) {
+                    aliases.push(&c.name);
                 }
-                alias_strs.extend(c.aliases.iter().map(String::as_str));
-                let aliases_vec: Vec<*mut c_char> =
-                    alias_strs.iter().map(|a| str_to_cptr(a)).collect();
-                let (aliases, alias_count) = into_c_array(aliases_vec);
+                aliases.extend(c.aliases.iter().map(String::as_str));
+                let (aliases, alias_count) = c_str_array(&aliases);
                 GenieXChipsetInfo {
-                    name: str_to_cptr(display),
+                    name: str_to_cptr(c.display_name()),
                     aliases,
                     alias_count,
                 }
             })
             .collect();
-        let (chipsets_ptr, count) = into_c_array(infos);
-        unsafe {
-            (*out).chipsets = chipsets_ptr;
-            (*out).count = count;
-        }
+        let (chipsets, count) = into_c_array(infos);
+        *out = GenieXChipsetList { chipsets, count };
         Ok(GENIEX_SUCCESS)
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn geniex_model_list_chipsets_free(out: *mut GenieXChipsetList) {
-    if out.is_null() {
-        return;
-    }
-    let o = &mut *out;
-    if let Some(mut infos) = from_c_array(o.chipsets, o.count) {
-        for info in infos.iter_mut() {
-            free_cptr(info.name);
-            if let Some(aliases) = from_c_array(info.aliases, info.alias_count) {
-                for a in aliases {
-                    free_cptr(a);
-                }
-            }
-        }
-    }
-    o.chipsets = std::ptr::null_mut();
-    o.count = 0;
+    let Some(o) = out.as_mut() else { return };
+    free_c_list(o.chipsets, o.count, |info| {
+        free_cptr(info.name);
+        free_c_str_array(info.aliases, info.alias_count);
+    });
+    *o = std::mem::zeroed();
 }
 
 /* ---- geniex_model_detect_chipset ---- */
@@ -95,23 +74,15 @@ pub unsafe extern "C" fn geniex_model_list_chipsets_free(out: *mut GenieXChipset
 #[no_mangle]
 pub extern "C" fn geniex_model_detect_chipset(offline: i32, out_chipset: *mut *mut c_char) -> i32 {
     ffi_guard(|| {
-        if out_chipset.is_null() {
-            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
-        }
+        let out = out_mut(out_chipset)?;
         // offline: local probe only; else translate online to the display name.
         let detected = if offline != 0 {
             detect_host_chipset()
         } else {
-            let store = get_store()?;
-            runtime_handle().block_on(async {
-                let cfg = AiHubConfig::from_store(store, String::new());
-                detect_host_chipset_reference(&cfg).await
-            })
+            let cfg = AiHubConfig::from_store(get_store()?, String::new());
+            runtime_handle().block_on(detect_host_chipset_reference(&cfg))
         };
-        let ptr = detected
-            .map(|s| str_to_cptr(&s))
-            .unwrap_or(std::ptr::null_mut());
-        unsafe { *out_chipset = ptr };
+        *out = detected.map_or(std::ptr::null_mut(), |s| str_to_cptr(&s));
         Ok(GENIEX_SUCCESS)
     })
 }

@@ -35,31 +35,22 @@ pub extern "C" fn geniex_model_list_hub(
     out: *mut GenieXHubModelList,
 ) -> i32 {
     ffi_guard(|| {
-        if out.is_null() {
-            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
-        }
+        let out = out_mut(out)?;
+        // Invalid UTF-8 is an error here, unlike an absent filter.
         let chipset = if chipset.is_null() {
             None
         } else {
             Some(unsafe { cstr_to_str(chipset)? })
         };
-        let store = get_store()?;
+        let cfg = AiHubConfig::from_store(get_store()?, String::new());
         let models = runtime_handle()
-            .block_on(async {
-                let cfg = AiHubConfig::from_store(store, String::new());
-                list_hub_models(&cfg, chipset).await
-            })
-            .map_err(|e| report(&e))?;
+            .block_on(list_hub_models(&cfg, chipset))
+            .or_report()?;
 
         let infos: Vec<GenieXHubModelInfo> = models
             .into_iter()
             .map(|m| {
-                let chipsets_vec: Vec<*mut c_char> = m
-                    .supported_chipsets
-                    .iter()
-                    .map(|c| str_to_cptr(c))
-                    .collect();
-                let (chipsets, chipset_count) = into_c_array(chipsets_vec);
+                let (chipsets, chipset_count) = c_str_array(&m.supported_chipsets);
                 GenieXHubModelInfo {
                     name: str_to_cptr(&format!("qualcomm/{}", m.display_name)),
                     model_type: to_ffi_type(m.model_type),
@@ -68,31 +59,18 @@ pub extern "C" fn geniex_model_list_hub(
                 }
             })
             .collect();
-        let (models_ptr, count) = into_c_array(infos);
-        unsafe {
-            (*out).models = models_ptr;
-            (*out).count = count;
-        }
+        let (models, count) = into_c_array(infos);
+        *out = GenieXHubModelList { models, count };
         Ok(GENIEX_SUCCESS)
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn geniex_model_list_hub_free(out: *mut GenieXHubModelList) {
-    if out.is_null() {
-        return;
-    }
-    let o = &mut *out;
-    if let Some(mut infos) = from_c_array(o.models, o.count) {
-        for info in infos.iter_mut() {
-            free_cptr(info.name);
-            if let Some(chipsets) = from_c_array(info.chipsets, info.chipset_count) {
-                for c in chipsets {
-                    free_cptr(c);
-                }
-            }
-        }
-    }
-    o.models = std::ptr::null_mut();
-    o.count = 0;
+    let Some(o) = out.as_mut() else { return };
+    free_c_list(o.models, o.count, |info| {
+        free_cptr(info.name);
+        free_c_str_array(info.chipsets, info.chipset_count);
+    });
+    *o = std::mem::zeroed();
 }

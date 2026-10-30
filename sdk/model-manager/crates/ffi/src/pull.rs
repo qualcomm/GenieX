@@ -10,7 +10,7 @@ use model_manager_core::mapping::{
     aihub_display_name_from_repo, canonicalize_model_name, docker_hub_repo_from_name,
     is_docker_hub_reference, is_modelscope_reference,
 };
-use model_manager_core::pull::{pull_blocking, PullIntent, PullRequest};
+use model_manager_core::pull::{pull, PullIntent, PullRequest};
 
 use crate::init::{get_store, runtime_handle};
 use crate::types::*;
@@ -293,7 +293,9 @@ pub extern "C" fn geniex_model_pull(input: *const GenieXModelPullInput) -> i32 {
                 ..ManifestHint::default()
             },
         };
-        pull_blocking(&runtime_handle(), get_store()?, req).map_err(|e| report(&e))?;
+        runtime_handle()
+            .block_on(pull(get_store()?, req))
+            .or_report()?;
         Ok(GENIEX_SUCCESS)
     })
 }

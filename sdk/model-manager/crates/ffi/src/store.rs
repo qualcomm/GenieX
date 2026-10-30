@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use std::os::raw::c_char;
+use std::path::Path;
 
 use model_manager_core::manifest::{ModelManifest, ModelType};
 use model_manager_core::manifest_builder::quant_sort_key;
@@ -36,18 +37,8 @@ pub struct GenieXModelPaths {
     pub model_type: GenieXModelType,
 }
 
-impl GenieXModelPaths {
-    fn null() -> Self {
-        Self {
-            model_path: std::ptr::null_mut(),
-            mmproj_path: std::ptr::null_mut(),
-            tokenizer_path: std::ptr::null_mut(),
-            model_dir: std::ptr::null_mut(),
-            model_name: std::ptr::null_mut(),
-            plugin_id: std::ptr::null_mut(),
-            model_type: GenieXModelType::Llm,
-        }
-    }
+fn path_to_cptr(p: &Path) -> *mut c_char {
+    str_to_cptr(&p.to_string_lossy())
 }
 
 #[no_mangle]
@@ -56,42 +47,38 @@ pub extern "C" fn geniex_model_get_paths(
     out_paths: *mut GenieXModelPaths,
 ) -> i32 {
     ffi_guard(|| {
-        if out_paths.is_null() {
-            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
-        }
+        let out = out_mut(out_paths)?;
         let name = normalize_quant_suffix(unsafe { cstr_to_str(model_name) }?);
-        let store = get_store()?;
-        let (_, paths) = store.get_paths(&name).map_err(|e| report(&e))?;
-        let opt_path = |p: Option<&std::path::PathBuf>| {
-            p.map(|p| str_to_cptr(&p.to_string_lossy()))
-                .unwrap_or(std::ptr::null_mut())
+        let (_, paths) = get_store()?.get_paths(&name).or_report()?;
+        let opt_path =
+            |p: Option<&std::path::PathBuf>| p.map_or(std::ptr::null_mut(), |p| path_to_cptr(p));
+        *out = GenieXModelPaths {
+            model_path: path_to_cptr(&paths.model_path),
+            mmproj_path: opt_path(paths.mmproj_path.as_ref()),
+            tokenizer_path: opt_path(paths.tokenizer_path.as_ref()),
+            model_dir: path_to_cptr(&paths.model_dir),
+            model_name: str_to_cptr(&paths.model_name),
+            plugin_id: str_to_cptr(&paths.plugin_id),
+            model_type: to_ffi_type(paths.model_type),
         };
-        unsafe {
-            (*out_paths).model_path = str_to_cptr(&paths.model_path.to_string_lossy());
-            (*out_paths).model_dir = str_to_cptr(&paths.model_dir.to_string_lossy());
-            (*out_paths).model_name = str_to_cptr(&paths.model_name);
-            (*out_paths).plugin_id = str_to_cptr(&paths.plugin_id);
-            (*out_paths).mmproj_path = opt_path(paths.mmproj_path.as_ref());
-            (*out_paths).tokenizer_path = opt_path(paths.tokenizer_path.as_ref());
-            (*out_paths).model_type = to_ffi_type(paths.model_type);
-        }
         Ok(GENIEX_SUCCESS)
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn geniex_model_paths_free(paths: *mut GenieXModelPaths) {
-    if paths.is_null() {
-        return;
+    let Some(p) = paths.as_mut() else { return };
+    for s in [
+        p.model_path,
+        p.mmproj_path,
+        p.tokenizer_path,
+        p.model_dir,
+        p.model_name,
+        p.plugin_id,
+    ] {
+        free_cptr(s);
     }
-    let p = &mut *paths;
-    free_cptr(p.model_path);
-    free_cptr(p.mmproj_path);
-    free_cptr(p.tokenizer_path);
-    free_cptr(p.model_dir);
-    free_cptr(p.model_name);
-    free_cptr(p.plugin_id);
-    *paths = GenieXModelPaths::null();
+    *p = std::mem::zeroed();
 }
 
 /// Build the C view of one manifest: every heap member is owned by the caller
@@ -104,9 +91,8 @@ fn detail_from_manifest(m: &ModelManifest) -> GenieXModelDetail {
         .filter(|(_, fi)| fi.downloaded)
         .map(|(q, _)| q.as_str())
         .collect();
-    downloaded.sort_by(|a, b| quant_sort_key(a).cmp(&quant_sort_key(b)));
-    let (precisions, precision_count) =
-        into_c_array(downloaded.into_iter().map(str_to_cptr).collect());
+    downloaded.sort_by_key(|q| quant_sort_key(q));
+    let (precisions, precision_count) = c_str_array(&downloaded);
     GenieXModelDetail {
         name: str_to_cptr(&m.name),
         model_name: str_to_cptr(&m.model_name),
@@ -124,12 +110,8 @@ unsafe fn free_detail(d: &mut GenieXModelDetail) {
     free_cptr(d.name);
     free_cptr(d.model_name);
     free_cptr(d.plugin_id);
-    if let Some(precs) = from_c_array(d.precisions, d.precision_count) {
-        for p in precs {
-            free_cptr(p);
-        }
-    }
-    *d = GenieXModelDetail::null();
+    free_c_str_array(d.precisions, d.precision_count);
+    *d = std::mem::zeroed();
 }
 
 /* ---- geniex_model_get_detailed ---- */
@@ -140,24 +122,19 @@ pub extern "C" fn geniex_model_get_detailed(
     out: *mut GenieXModelDetail,
 ) -> i32 {
     ffi_guard(|| {
-        if out.is_null() {
-            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
-        }
+        let out = out_mut(out)?;
         let name = unsafe { cstr_to_str(model_name) }?;
-        let manifest = get_store()?
-            .resolve_detail_manifest(name)
-            .map_err(|e| report(&e))?;
-        unsafe { *out = detail_from_manifest(&manifest) };
+        let manifest = get_store()?.resolve_detail_manifest(name).or_report()?;
+        *out = detail_from_manifest(&manifest);
         Ok(GENIEX_SUCCESS)
     })
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn geniex_model_detail_free(detail: *mut GenieXModelDetail) {
-    if detail.is_null() {
-        return;
+    if let Some(d) = detail.as_mut() {
+        free_detail(d);
     }
-    free_detail(&mut *detail);
 }
 
 /* ---- geniex_model_remove / clean ---- */
@@ -166,7 +143,7 @@ pub unsafe extern "C" fn geniex_model_detail_free(detail: *mut GenieXModelDetail
 pub extern "C" fn geniex_model_remove(model_name: *const c_char) -> i32 {
     ffi_guard(|| {
         let name = normalize_quant_suffix(unsafe { cstr_to_str(model_name) }?);
-        get_store()?.remove(&name).map_err(|e| report(&e))?;
+        get_store()?.remove(&name).or_report()?;
         Ok(GENIEX_SUCCESS)
     })
 }
@@ -174,9 +151,9 @@ pub extern "C" fn geniex_model_remove(model_name: *const c_char) -> i32 {
 #[no_mangle]
 pub extern "C" fn geniex_model_clean(removed_count: *mut i32) -> i32 {
     ffi_guard(|| {
-        let n = get_store()?.clean().map_err(|e| report(&e))?;
-        if !removed_count.is_null() {
-            unsafe { *removed_count = n };
+        let n = get_store()?.clean().or_report()?;
+        if let Ok(out) = out_mut(removed_count) {
+            *out = n;
         }
         Ok(GENIEX_SUCCESS)
     })
@@ -190,12 +167,9 @@ pub extern "C" fn geniex_model_get_type(
     out_type: *mut GenieXModelType,
 ) -> i32 {
     ffi_guard(|| {
-        if out_type.is_null() {
-            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
-        }
+        let out = out_mut(out_type)?;
         let name = unsafe { cstr_to_str(model_name) }?;
-        let t = get_store()?.get_model_type(name).map_err(|e| report(&e))?;
-        unsafe { *out_type = to_ffi_type(t) };
+        *out = to_ffi_type(get_store()?.get_model_type(name).or_report()?);
         Ok(GENIEX_SUCCESS)
     })
 }
@@ -213,9 +187,7 @@ pub extern "C" fn geniex_model_set_type(
             GenieXModelType::Llm => ModelType::Llm,
             GenieXModelType::Vlm => ModelType::Vlm,
         };
-        get_store()?
-            .set_model_type(name, t)
-            .map_err(|e| report(&e))?;
+        get_store()?.set_model_type(name, t).or_report()?;
         Ok(GENIEX_SUCCESS)
     })
 }
@@ -234,20 +206,6 @@ pub struct GenieXModelDetail {
     pub precision_count: i32,
 }
 
-impl GenieXModelDetail {
-    fn null() -> Self {
-        Self {
-            name: std::ptr::null_mut(),
-            model_name: std::ptr::null_mut(),
-            plugin_id: std::ptr::null_mut(),
-            model_type: GenieXModelType::Llm,
-            total_size: 0,
-            precisions: std::ptr::null_mut(),
-            precision_count: 0,
-        }
-    }
-}
-
 #[repr(C)]
 pub struct GenieXModelListDetailedOutput {
     pub models: *mut GenieXModelDetail,
@@ -257,16 +215,10 @@ pub struct GenieXModelListDetailedOutput {
 #[no_mangle]
 pub extern "C" fn geniex_model_list_detailed(output: *mut GenieXModelListDetailedOutput) -> i32 {
     ffi_guard(|| {
-        if output.is_null() {
-            return Err(GENIEX_ERROR_COMMON_INVALID_INPUT);
-        }
-        let manifests = get_store()?.list().map_err(|e| report(&e))?;
-        let details: Vec<GenieXModelDetail> = manifests.iter().map(detail_from_manifest).collect();
-        let (models, count) = into_c_array(details);
-        unsafe {
-            (*output).models = models;
-            (*output).count = count;
-        }
+        let out = out_mut(output)?;
+        let manifests = get_store()?.list().or_report()?;
+        let (models, count) = into_c_array(manifests.iter().map(detail_from_manifest).collect());
+        *out = GenieXModelListDetailedOutput { models, count };
         Ok(GENIEX_SUCCESS)
     })
 }
@@ -275,17 +227,9 @@ pub extern "C" fn geniex_model_list_detailed(output: *mut GenieXModelListDetaile
 pub unsafe extern "C" fn geniex_model_list_detailed_free(
     output: *mut GenieXModelListDetailedOutput,
 ) {
-    if output.is_null() {
-        return;
-    }
-    let o = &mut *output;
-    if let Some(mut details) = from_c_array(o.models, o.count) {
-        for d in details.iter_mut() {
-            free_detail(d);
-        }
-    }
-    o.models = std::ptr::null_mut();
-    o.count = 0;
+    let Some(o) = output.as_mut() else { return };
+    free_c_list(o.models, o.count, |d| free_detail(d));
+    *o = std::mem::zeroed();
 }
 
 #[cfg(test)]

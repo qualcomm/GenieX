@@ -97,9 +97,6 @@ pub enum PullIntent {
 
 /// Download a model, writing its manifest only after every file is
 /// present.
-///
-/// Async-native; sync callers should use [`pull_blocking`] (which
-/// drives this on the FFI runtime).
 pub async fn pull(store: &Store, mut req: PullRequest) -> Result<()> {
     let (source, transport) = prepare(store, &mut req)?;
     pull_with_source(
@@ -164,22 +161,6 @@ pub async fn pull_with_source(
             Ok(())
         })
         .await
-}
-
-/// Sync entry point for callers without a runtime. Drives [`pull`] to
-/// completion on a caller-supplied tokio handle — the FFI crate owns
-/// one process-global runtime and calls this from sync
-/// `geniex_model_pull`.
-///
-/// **Do not call from inside a tokio context** — it panics
-/// (`Handle::block_on from within a runtime`). Async callers must
-/// use [`pull`].
-pub fn pull_blocking(
-    handle: &tokio::runtime::Handle,
-    store: &Store,
-    req: PullRequest,
-) -> Result<()> {
-    handle.block_on(pull(store, req))
 }
 
 /// Canonicalize `req.model_name` (bare names land under `qualcomm/`) and
