@@ -104,7 +104,7 @@ geniex infer unsloth/Qwen3-VL-2B-Instruct-GGUF:Q4_0 -p "Describe this image: /da
 Image paths must be absolute paths inside the container, so put images in `./data` on the host.
 
 <Note>
-  Tested on an Apple M1 Max with Docker Desktop and GenieX CLI v0.10.0. Set `GENIEX_CHIPSET` to start with a different chipset. An existing chipset in `/data` is left unchanged.
+  Tested on an Apple M1 Max with Docker Desktop and GenieX CLI v0.10.0. The `--compute cpu` default comes from the `qualcomm-qcs6490` chipset this image sets. If you set `GENIEX_CHIPSET` to another chipset, or `/data` already has one configured (it's left unchanged), pass `--compute cpu` to `geniex infer`.
 </Note>
 
 <br />

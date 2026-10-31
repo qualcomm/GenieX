@@ -104,7 +104,7 @@ geniex infer unsloth/Qwen3-VL-2B-Instruct-GGUF:Q4_0 -p "Describe this image: /da
 图片路径必须是容器内的绝对路径，因此请将图片放在宿主机的 `./data` 目录中。
 
 <Note>
-  已在 Apple M1 Max、Docker Desktop 和 GenieX CLI v0.10.0 上测试。设置 `GENIEX_CHIPSET` 可在启动时使用其他芯片。`/data` 中已有的芯片配置不会被更改。
+  已在 Apple M1 Max、Docker Desktop 和 GenieX CLI v0.10.0 上测试。`--compute cpu` 默认值来自该镜像设置的 `qualcomm-qcs6490` 芯片。如果将 `GENIEX_CHIPSET` 设为其他芯片，或 `/data` 中已配置其他芯片（已有配置不会被更改），请为 `geniex infer` 传入 `--compute cpu`。
 </Note>
 
 <br />
