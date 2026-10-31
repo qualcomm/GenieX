@@ -72,6 +72,41 @@ For the full Python install guide on native Linux ARM64, see [Python Install —
 
 The Python SDK can be installed inside the Docker container or directly on the Linux ARM64 host. See the [Linux ARM64 tab](/en/run/python/install) for native install instructions.
 
+## **Non-Snapdragon arm64 hosts**
+
+To try the GenieX CLI on an arm64 machine without a Snapdragon chipset, such as an Apple Silicon Mac running Docker Desktop, build the CPU-only image from [`.github/docker/cpu-host.Dockerfile`](https://github.com/qualcomm/GenieX/blob/main/.github/docker/cpu-host.Dockerfile). It wraps `docker.io/qualcomm/geniex:latest-cpu`, needs neither `--privileged` nor the `/usr/lib` mount, sets a chipset on first start so `geniex pull` doesn't prompt for one, and makes `geniex infer` default to `--compute cpu`.
+
+<Warning>
+  This path is for development and testing. It runs on CPU only, so its speed doesn't reflect Snapdragon performance. Use GGUF models on the `llama_cpp` runtime: Qualcomm AI Hub bundles need the NPU.
+</Warning>
+
+The image isn't published to Docker Hub, so build it from a clone of this repository:
+
+```bash bash
+git clone --depth 1 https://github.com/qualcomm/GenieX.git
+cd GenieX
+docker build -f .github/docker/cpu-host.Dockerfile -t geniex-cpu-host .
+```
+
+Start a container, keeping models in `./data`:
+
+```bash bash
+docker run -it --rm -v "$PWD/data:/data" geniex-cpu-host
+```
+
+Then pull a model and run it from the container shell:
+
+```bash bash
+geniex pull unsloth/Qwen3-VL-2B-Instruct-GGUF:Q4_0 --model-type vlm
+geniex infer unsloth/Qwen3-VL-2B-Instruct-GGUF:Q4_0 -p "Describe this image: /data/image.jpg"
+```
+
+Image paths must be absolute paths inside the container, so put images in `./data` on the host.
+
+<Note>
+  Tested on an Apple M1 Max with Docker Desktop and GenieX CLI v0.10.0. Set `GENIEX_CHIPSET` to start with a different chipset. An existing chipset in `/data` is left unchanged.
+</Note>
+
 <br />
 
 <Feedback/>
