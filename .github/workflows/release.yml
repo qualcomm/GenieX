@@ -303,6 +303,9 @@ jobs:
             (cd to-sign && zip -r "../libggml-htp-to-sign-${LLAMA_SHA}.zip" .)
           fi
           zip -r "geniex-sdk-windows-arm64-${RELEASE_TAG}${sdk_suffix}.zip" sdk-windows-arm64
+          # Standalone llama_cpp plugin dir (HTP files already overlaid) for downstream
+          # apps that drop it next to their own libgeniex build.
+          (cd sdk-windows-arm64/lib/llama_cpp && zip -r "$OLDPWD/geniex-llama_cpp-plugin-windows-arm64-${RELEASE_TAG}${sdk_suffix}.zip" .)
           zip -r "geniex-sdk-linux-arm64-${RELEASE_TAG}.zip" sdk-linux-arm64
           zip -r "geniex-sdk-linux-arm64-cpu-${RELEASE_TAG}.zip" sdk-linux-arm64-cpu
 
