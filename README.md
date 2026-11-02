@@ -239,6 +239,26 @@ Thanks to everyone building GenieX 💙
 
 ---
 
+## 📑 Citation
+
+If you use GenieX in your research or product work, please cite it:
+
+```bibtex
+@software{qualcomm_geniex,
+    title = {GenieX},
+    url = {https://github.com/qualcomm/GenieX},
+    publisher = {Qualcomm AI Hub},
+    author = {Chen, Wei and Li, Zhiyuan and Zhu, Lingyue and Chen, Hongzhi and
+              Wu, Mengsheng and Qian, Yichen and Zhu, Zhenxuan and
+              Cheng, Zhiyuan and Zhang, Dengchuan and Li, Yin and
+              Dong, Likuan and Cao, Wenwen},
+    year = {2026},
+}
+```
+
+\* Wei Chen and Zhiyuan Li contributed equally to this work.
+
+
 ## 📄 License
 
 BSD 3-Clause — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
