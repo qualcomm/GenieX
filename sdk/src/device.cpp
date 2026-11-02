@@ -32,6 +32,9 @@ constexpr const char* kAliasAuto   = "auto";
 constexpr const char* kDeviceHTP0      = "HTP0";
 constexpr const char* kDeviceGPUOpenCL = "GPUOpenCL";
 constexpr const char* kDeviceQairtNPU  = "NPU";
+#if defined(GENIEX_CUDA)
+constexpr const char* kDeviceCUDA0 = "CUDA0";
+#endif
 
 std::string to_lower(const char* s) {
     if (!s) return {};
@@ -53,9 +56,14 @@ bool is_known_alias(const std::string& s) {
     return s == kAliasCPU || s == kAliasGPU || s == kAliasNPU || s == kAliasHybrid;
 }
 
-// A concrete llama.cpp device name: "HTP0".."HTPn" or "GPUOpenCL".
+// Concrete llama.cpp device names; CUDA IDs are accepted only in CUDA builds.
 bool is_device_token(const std::string& t) {
     if (t == kDeviceGPUOpenCL) return true;
+#if defined(GENIEX_CUDA)
+    if (t.rfind("CUDA", 0) == 0 && t.size() > 4) {
+        return std::all_of(t.begin() + 4, t.end(), [](unsigned char c) { return std::isdigit(c); });
+    }
+#endif
     if (t.rfind("HTP", 0) == 0 && t.size() > 3) {
         for (size_t i = 3; i < t.size(); ++i)
             if (!std::isdigit(static_cast<unsigned char>(t[i]))) return false;
@@ -115,10 +123,14 @@ int32_t geniex_resolve_device(const geniex_ResolveDeviceInput* input, geniex_Res
         return GENIEX_ERROR_COMMON_INVALID_DEVICE;
     }
 
-    // Empty / "auto" → plugin default. Both qairt and llama_cpp default to
-    // the pinned-NPU path.
+    // Empty / "auto" uses the plugin default. CUDA builds use the first CUDA
+    // device for llama_cpp; Snapdragon builds retain the pinned-NPU path.
     if (alias.empty() || alias == kAliasAuto) {
+#if defined(GENIEX_CUDA)
+        alias = plugin == kPluginQairt ? kAliasNPU : kAliasGPU;
+#else
         alias = kAliasNPU;
+#endif
     }
 
     // QAIRT is NPU-only and rejects any non-zero n_gpu_layers, so force
@@ -148,7 +160,11 @@ int32_t geniex_resolve_device(const geniex_ResolveDeviceInput* input, geniex_Res
     if (alias == kAliasCPU) {
         output->ngl = 0;
     } else if (alias == kAliasGPU) {
+#if defined(GENIEX_CUDA)
+        output->device_id = portable_strdup(kDeviceCUDA0);
+#else
         output->device_id = portable_strdup(kDeviceGPUOpenCL);
+#endif
     } else if (alias == kAliasNPU) {
         output->device_id = portable_strdup(kDeviceHTP0);
     }
