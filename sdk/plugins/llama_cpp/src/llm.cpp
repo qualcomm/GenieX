@@ -14,6 +14,7 @@
 #include "chat.h"
 #include "common.h"
 #include "htp_session.h"
+#include "liquid-decision.h"
 #include "logging.h"
 #include "params.h"
 #include "profiler.h"
@@ -91,6 +92,9 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
             GENIEX_LOG_INFO("gpt-oss on GPU: flash attention enabled");
         }
     }
+    // Keep accelerator microbatch safety limits; only CPU defaults expand to
+    // hold an entire non-causal question. Explicit SDK limits remain honored.
+    configure_decision_context(this->model, cpar, config.n_batch <= 0, config.n_ubatch <= 0 && device == Device::CPU);
     this->ctx = llama_init_from_model(this->model, cpar);
     if (!this->ctx) {
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
@@ -244,6 +248,9 @@ int32_t LlamaLlm::apply_chat_template(
 int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGenerateOutput* output) {
     // Validate input
     if (!input) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    if (!this->ctx) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
+    // Autoregressive sampling requires persistent sequence state.
+    if (!llama_get_memory(this->ctx)) return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
 
     bool has_input_embd  = input->input_embd != nullptr && input->input_embd_count > 0;
     bool has_input_ids   = input->input_ids != nullptr && input->input_ids_count > 0;
@@ -586,6 +593,8 @@ int32_t LlamaLlm::forward_logits(const geniex_LlmForwardLogitsInput* input, geni
     if (!this->ctx || !this->model) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
     if (!input->input_ids || input->input_ids_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    const bool cacheless = !llama_get_memory(this->ctx);
+    if (cacheless && input->all_positions) return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
 
     const llama_vocab* vocab   = llama_model_get_vocab(this->model);
     const int          n_vocab = llama_vocab_n_tokens(vocab);
@@ -602,6 +611,11 @@ int32_t LlamaLlm::forward_logits(const geniex_LlmForwardLogitsInput* input, geni
     if (n_tok > n_ctx) {
         GENIEX_LOG_WARN("forward_logits: input ({}) exceeds context length ({})", n_tok, n_ctx);
         return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+    }
+
+    if (cacheless && (n_tok > n_batch || n_tok > static_cast<int>(llama_n_ubatch(this->ctx)))) {
+        GENIEX_LOG_WARN("forward_logits: cache-less input must fit one physical batch; try --compute cpu");
+        return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
     }
 
     // Fresh KV in, clean KV out: result depends only on input_ids and
@@ -670,6 +684,14 @@ int32_t LlamaLlm::decide(const geniex_DecideInput* input, geniex_DecideOutput* o
     DecisionPrepared prepared;
     int32_t          rc = prepare_decision(this->model, input, &prepared);
     if (rc != GENIEX_SUCCESS) return rc;
+    if (is_liquid_decision(prepared.type)) {
+        this->reset();
+        struct ResetGuard {
+            LlamaLlm* self;
+            ~ResetGuard() { self->reset(); }
+        } reset_guard{this};
+        return evaluate_liquid_decision(this->ctx, prepared, output);
+    }
     const llama_vocab* vocab = llama_model_get_vocab(this->model);
 
     // Decision codes must map to distinct single tokens in the model vocabulary.

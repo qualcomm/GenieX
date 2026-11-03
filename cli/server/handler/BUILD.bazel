@@ -45,10 +45,14 @@ go_cgo_test(
         "chat_token_test.go",
         "completion_test.go",
         "decisions_test.go",
+        "decisions_liquid_test.go",
         "health_test.go",
         "metrics_test.go",
         "status_test.go",
     ],
     embed = [":handler"],
-    deps = ["@com_github_spf13_viper//:viper"],
+    deps = [
+        "//cli/server/middleware",
+        "@com_github_spf13_viper//:viper",
+    ],
 )
