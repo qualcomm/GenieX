@@ -1,5 +1,5 @@
 diff --git a/common/arg.cpp b/common/arg.cpp
-index f733c24..9706b3a 100644
+index f733c2470..9706b3ac5 100644
 --- a/common/arg.cpp
 +++ b/common/arg.cpp
 @@ -924,7 +924,7 @@ static bool common_params_parse_ex(int argc, char ** argv, common_params_context
@@ -26,7 +26,7 @@ index f733c24..9706b3a 100644
          {"--models-autoload"},
          {"--no-models-autoload"},
 diff --git a/common/common.cpp b/common/common.cpp
-index ca85f66..a4b4fea 100644
+index ca85f66d2..a4b4feaee 100644
 --- a/common/common.cpp
 +++ b/common/common.cpp
 @@ -1187,7 +1187,6 @@ static const std::map<common_decision_type, std::string> COMMON_DECISION_TYPE_NA
@@ -142,7 +142,7 @@ index ca85f66..a4b4fea 100644
          cparams.n_outputs_max_per_seq = 1;
  
 diff --git a/common/common.h b/common/common.h
-index a0d960c..8e3fe2c 100644
+index a0d960c5e..8e3fe2c89 100644
 --- a/common/common.h
 +++ b/common/common.h
 @@ -701,7 +701,6 @@ struct common_params {
@@ -172,7 +172,7 @@ index a0d960c..8e3fe2c 100644
  void common_set_adapter_lora(struct llama_context * ctx, std::vector<common_adapter_lora_info> & lora);
  
 diff --git a/common/fit.cpp b/common/fit.cpp
-index 55b457e..7a03008 100644
+index 55b457e10..7a0300829 100644
 --- a/common/fit.cpp
 +++ b/common/fit.cpp
 @@ -1,8 +1,6 @@
@@ -578,7 +578,7 @@ index 55b457e..7a03008 100644
  }
  
 diff --git a/common/fit.h b/common/fit.h
-index 47478bb..824d386 100644
+index 47478bba1..824d386b0 100644
 --- a/common/fit.h
 +++ b/common/fit.h
 @@ -3,7 +3,6 @@
@@ -638,7 +638,7 @@ index 47478bb..824d386 100644
      int64_t total;
      int64_t free;
 diff --git a/ggml/include/ggml.h b/ggml/include/ggml.h
-index d62a631..7263f1b 100644
+index d62a63104..7263f1b2d 100644
 --- a/ggml/include/ggml.h
 +++ b/ggml/include/ggml.h
 @@ -666,6 +666,7 @@ extern "C" {
@@ -650,7 +650,7 @@ index d62a631..7263f1b 100644
  
      enum ggml_tri_type {
 diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
-index 22e5fd9..c7d7c62 100644
+index 22e5fd9c7..c7d7c621f 100644
 --- a/ggml/src/ggml-backend.cpp
 +++ b/ggml/src/ggml-backend.cpp
 @@ -1866,6 +1866,15 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
@@ -670,7 +670,7 @@ index 22e5fd9..c7d7c62 100644
  
      for (int split_id = 0; split_id < sched->n_splits; split_id++) {
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
-index 53d39d2..2edfdf4 100644
+index 53d39d249..2edfdf40c 100644
 --- a/ggml/src/ggml-cpu/ggml-cpu.c
 +++ b/ggml/src/ggml-cpu/ggml-cpu.c
 @@ -2376,10 +2376,15 @@ static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads) {
@@ -706,7 +706,7 @@ index 53d39d2..2edfdf4 100644
          // Try fused ops, fall back to normal compute
          const int n_fused = ggml_cpu_try_fuse_ops(cgraph, node_n, &params, cplan);
 diff --git a/ggml/src/ggml-cpu/ggml-cpu.cpp b/ggml/src/ggml-cpu/ggml-cpu.cpp
-index 81ff5d7..82f933e 100644
+index 81ff5d79f..82f933e1c 100644
 --- a/ggml/src/ggml-cpu/ggml-cpu.cpp
 +++ b/ggml/src/ggml-cpu/ggml-cpu.cpp
 @@ -8,6 +8,7 @@
@@ -767,7 +767,7 @@ index 81ff5d7..82f933e 100644
          return (void *)ggml_backend_cpu_set_threadpool;
      }
 diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
-index 85e1701..afeda2a 100644
+index 85e17018c..afeda2aff 100644
 --- a/ggml/src/ggml-cpu/ops.cpp
 +++ b/ggml/src/ggml-cpu/ops.cpp
 @@ -4846,8 +4846,8 @@ static void ggml_compute_forward_scale_f32(
@@ -865,7 +865,7 @@ index 85e1701..afeda2a 100644
              y[k] = GGML_FP32_TO_BF16(s*GGML_BF16_TO_FP32(x[k]) + b);
          }
 diff --git a/ggml/src/ggml-hexagon/CMakeLists.txt b/ggml/src/ggml-hexagon/CMakeLists.txt
-index 9444f73..20c7202 100644
+index 9444f7321..fda55f3ae 100644
 --- a/ggml/src/ggml-hexagon/CMakeLists.txt
 +++ b/ggml/src/ggml-hexagon/CMakeLists.txt
 @@ -21,7 +21,6 @@ message(STATUS "hexagon: using ${HEXAGON_SDK_ROOT} and ${HEXAGON_TOOLS_ROOT} for
@@ -892,26 +892,43 @@ index 9444f73..20c7202 100644
      htp-drv.cpp
      htp-drv.h
      libdl.h
-@@ -82,8 +72,7 @@ function(build_htp_skel V)
+@@ -71,7 +61,7 @@ target_include_directories(${TARGET_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ht
+ # Build HTP skels
+ set(HTP_SKELS)
+ set(HTP_PROJECTS)
+-function(build_htp_skel V)
++function(build_htp_skel V TOOLV)
+     ExternalProject_Add(htp-${V}
+         SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/htp BUILD_ALWAYS ON
+         CMAKE_ARGS
+@@ -82,19 +72,18 @@ function(build_htp_skel V)
              -DHEXAGON_TOOLS_ROOT=${HEXAGON_TOOLS_ROOT}
              -DHEXAGON_HTP_DEBUG=${GGML_HEXAGON_HTP_DEBUG}
              -DDSP_VERSION=${V}
 -            -DPython3_EXECUTABLE=${Python3_EXECUTABLE}
 -            -DPREBUILT_LIB_DIR="toolv21_${V}")
-+            -DPREBUILT_LIB_DIR="toolv19_${V}")
++            -DPREBUILT_LIB_DIR="${TOOLV}_${V}")
      list(APPEND HTP_SKELS ${CMAKE_CURRENT_BINARY_DIR}/libggml-htp-${V}.so)
      list(APPEND HTP_PROJECTS htp-${V})
      set(HTP_SKELS ${HTP_SKELS} PARENT_SCOPE)
-@@ -94,7 +83,6 @@ build_htp_skel(v73)
- build_htp_skel(v75)
- build_htp_skel(v79)
- build_htp_skel(v81)
+     set(HTP_PROJECTS ${HTP_PROJECTS} PARENT_SCOPE)
+ endfunction()
+ 
+-build_htp_skel(v73)
+-build_htp_skel(v75)
+-build_htp_skel(v79)
+-build_htp_skel(v81)
 -build_htp_skel(v85)
++build_htp_skel(v73 toolv19)
++build_htp_skel(v75 toolv19)
++build_htp_skel(v79 toolv19)
++build_htp_skel(v81 toolv19)
++build_htp_skel(v85 toolv21)
  
  # Install Hexagon skels required at runtime
  install(FILES ${HTP_SKELS} TYPE LIB)
 diff --git a/ggml/src/ggml-hexagon/ggml-hexagon.cpp b/ggml/src/ggml-hexagon/ggml-hexagon.cpp
-index cf2e37a..0275c02 100644
+index cf2e37aa6..8a5391143 100644
 --- a/ggml/src/ggml-hexagon/ggml-hexagon.cpp
 +++ b/ggml/src/ggml-hexagon/ggml-hexagon.cpp
 @@ -1,6 +1,7 @@
@@ -12657,19 +12674,6 @@ index cf2e37a..0275c02 100644
  
      // Init Arch first since it affects other defaults
      if (!str_arch) {
-@@ -3425,9 +11398,9 @@ static void ggml_hexagon_init(ggml_backend_reg * reg) {
-             if (opt_arch < 73) {
-                 GGML_LOG_WARN("ggml-hex: Hexagon arch v%d is under supported range, capping at v73\n", opt_arch);
-                 opt_arch = 73;
--            } else if (opt_arch > 85) {
--                GGML_LOG_WARN("ggml-hex: Hexagon arch v%d is over supported range, capping at v85\n", opt_arch);
--                opt_arch = 85;
-+            } else if (opt_arch > 81) {
-+                GGML_LOG_WARN("ggml-hex: Hexagon arch v%d is over supported range, capping at v81\n", opt_arch);
-+                opt_arch = 81;
-             }
-         }
-     } else {
 @@ -3449,26 +11422,39 @@ static void ggml_hexagon_init(ggml_backend_reg * reg) {
      opt_verbose   = str_verbose  ? atoi(str_verbose)                      : 0;
      opt_opbatch   = str_opbatch  ? strtoul(str_opbatch, NULL, 0)          : opt_opbatch;
@@ -12733,7 +12737,7 @@ index cf2e37a..0275c02 100644
      const char * str_devices  = getenv("GGML_HEXAGON_DEVICES");
 diff --git a/ggml/src/ggml-hexagon/hex-int8-pack.h b/ggml/src/ggml-hexagon/hex-int8-pack.h
 new file mode 100644
-index 0000000..1c6a385
+index 000000000..1c6a385a0
 --- /dev/null
 +++ b/ggml/src/ggml-hexagon/hex-int8-pack.h
 @@ -0,0 +1,263 @@
@@ -13001,7 +13005,7 @@ index 0000000..1c6a385
 +    });
 +}
 diff --git a/ggml/src/ggml-hexagon/htp-kparams.cpp b/ggml/src/ggml-hexagon/htp-kparams.cpp
-index b8d1aee..3e5cb12 100644
+index b8d1aee3d..3e5cb129e 100644
 --- a/ggml/src/ggml-hexagon/htp-kparams.cpp
 +++ b/ggml/src/ggml-hexagon/htp-kparams.cpp
 @@ -1,7 +1,6 @@
@@ -13467,7 +13471,7 @@ index b8d1aee..3e5cb12 100644
          case HTP_OP_MUL_MAT:
          case HTP_OP_MUL_MAT_ID:
 diff --git a/ggml/src/ggml-hexagon/htp-opnode.h b/ggml/src/ggml-hexagon/htp-opnode.h
-index a30c5b6..24f41dc 100644
+index a30c5b600..24f41dc9a 100644
 --- a/ggml/src/ggml-hexagon/htp-opnode.h
 +++ b/ggml/src/ggml-hexagon/htp-opnode.h
 @@ -1,74 +1,40 @@
@@ -13993,7 +13997,7 @@ index a30c5b6..24f41dc 100644
  
  #endif // HTP_OPNODE_H
 diff --git a/ggml/src/ggml-hexagon/htp/CMakeLists.txt b/ggml/src/ggml-hexagon/htp/CMakeLists.txt
-index 2edd653..903845d 100644
+index 2edd653ce..903845d7f 100644
 --- a/ggml/src/ggml-hexagon/htp/CMakeLists.txt
 +++ b/ggml/src/ggml-hexagon/htp/CMakeLists.txt
 @@ -20,7 +20,7 @@ add_library(${HTP_LIB} SHARED
@@ -14042,7 +14046,7 @@ index 2edd653..903845d 100644
  install(TARGETS ${HTP_LIB})
 diff --git a/ggml/src/ggml-hexagon/htp/act-ops.c b/ggml/src/ggml-hexagon/htp/act-ops.c
 new file mode 100644
-index 0000000..10a1ad5
+index 000000000..10a1ad5f4
 --- /dev/null
 +++ b/ggml/src/ggml-hexagon/htp/act-ops.c
 @@ -0,0 +1,1035 @@
@@ -15082,7 +15086,7 @@ index 0000000..10a1ad5
 +    }
 +}
 diff --git a/ggml/src/ggml-hexagon/htp/allreduce-ops.h b/ggml/src/ggml-hexagon/htp/allreduce-ops.h
-index 1264c1c..54ef603 100644
+index 1264c1cbb..54ef60378 100644
 --- a/ggml/src/ggml-hexagon/htp/allreduce-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/allreduce-ops.h
 @@ -32,7 +32,6 @@ static inline size_t htp_allreduce_vtcm_buffer_count(
@@ -15115,7 +15119,7 @@ index 1264c1c..54ef603 100644
  }
  #endif
 diff --git a/ggml/src/ggml-hexagon/htp/argsort-ops.c b/ggml/src/ggml-hexagon/htp/argsort-ops.c
-index 7aa7ca8..6f24d95 100644
+index 7aa7ca8e4..6f24d95f9 100644
 --- a/ggml/src/ggml-hexagon/htp/argsort-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/argsort-ops.c
 @@ -453,10 +453,7 @@ static void merge_runs(
@@ -15520,7 +15524,7 @@ index 7aa7ca8..6f24d95 100644
      return HTP_STATUS_OK;
  }
 diff --git a/ggml/src/ggml-hexagon/htp/argsort-ops.h b/ggml/src/ggml-hexagon/htp/argsort-ops.h
-index f74189f..05320a2 100644
+index f74189fba..05320a2e9 100644
 --- a/ggml/src/ggml-hexagon/htp/argsort-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/argsort-ops.h
 @@ -7,27 +7,33 @@
@@ -15708,7 +15712,7 @@ index f74189f..05320a2 100644
  }
  
 diff --git a/ggml/src/ggml-hexagon/htp/binary-ops.c b/ggml/src/ggml-hexagon/htp/binary-ops.c
-index 48f461e..1286176 100644
+index 48f461e46..1286176af 100644
 --- a/ggml/src/ggml-hexagon/htp/binary-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/binary-ops.c
 @@ -42,7 +42,6 @@ struct htp_binary_context {
@@ -16458,7 +16462,7 @@ index 48f461e..1286176 100644
      if ((src0_type == HTP_TYPE_F32) || (src0_type == HTP_TYPE_F16)) {
          return execute_op_binary(octx);
 diff --git a/ggml/src/ggml-hexagon/htp/binary-ops.h b/ggml/src/ggml-hexagon/htp/binary-ops.h
-index 8c5e683..aa8ff49 100644
+index 8c5e683e8..aa8ff4959 100644
 --- a/ggml/src/ggml-hexagon/htp/binary-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/binary-ops.h
 @@ -6,13 +6,13 @@
@@ -16679,7 +16683,7 @@ index 8c5e683..aa8ff49 100644
 -
  #endif
 diff --git a/ggml/src/ggml-hexagon/htp/concat-ops.c b/ggml/src/ggml-hexagon/htp/concat-ops.c
-index 2036988..f11319e 100644
+index 20369884b..f11319e12 100644
 --- a/ggml/src/ggml-hexagon/htp/concat-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/concat-ops.c
 @@ -13,7 +13,6 @@
@@ -16756,7 +16760,7 @@ index 2036988..f11319e 100644
      return octx->status;
  }
 diff --git a/ggml/src/ggml-hexagon/htp/concat-ops.h b/ggml/src/ggml-hexagon/htp/concat-ops.h
-index a5d9328..1d72184 100644
+index a5d93284f..1d7218441 100644
 --- a/ggml/src/ggml-hexagon/htp/concat-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/concat-ops.h
 @@ -2,20 +2,12 @@
@@ -16827,7 +16831,7 @@ index a5d9328..1d72184 100644
  
  #endif // HTP_CONCAT_OPS_H
 diff --git a/ggml/src/ggml-hexagon/htp/cpy-ops.c b/ggml/src/ggml-hexagon/htp/cpy-ops.c
-index fce45c2..d366acb 100644
+index fce45c2d4..d366acb75 100644
 --- a/ggml/src/ggml-hexagon/htp/cpy-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/cpy-ops.c
 @@ -18,7 +18,6 @@
@@ -17075,7 +17079,7 @@ index fce45c2..d366acb 100644
              const struct htp_tensor * sync = octx->src[1];
              const uint32_t seq = (uint32_t) octx->op_params[0];
 diff --git a/ggml/src/ggml-hexagon/htp/cpy-ops.h b/ggml/src/ggml-hexagon/htp/cpy-ops.h
-index c3b97c0..4cf7dc1 100644
+index c3b97c0ca..4cf7dc13b 100644
 --- a/ggml/src/ggml-hexagon/htp/cpy-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/cpy-ops.h
 @@ -3,8 +3,6 @@
@@ -17186,7 +17190,7 @@ index c3b97c0..4cf7dc1 100644
  
  #if defined(__cplusplus)
 diff --git a/ggml/src/ggml-hexagon/htp/cumsum-ops.c b/ggml/src/ggml-hexagon/htp/cumsum-ops.c
-index 36fc812..eaab7d7 100644
+index 36fc81276..eaab7d7e5 100644
 --- a/ggml/src/ggml-hexagon/htp/cumsum-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/cumsum-ops.c
 @@ -12,11 +12,9 @@
@@ -17305,7 +17309,7 @@ index 36fc812..eaab7d7 100644
  
      return HTP_STATUS_OK;
 diff --git a/ggml/src/ggml-hexagon/htp/diag-ops.c b/ggml/src/ggml-hexagon/htp/diag-ops.c
-index 7f03e85..162214d 100644
+index 7f03e8550..162214d3e 100644
 --- a/ggml/src/ggml-hexagon/htp/diag-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/diag-ops.c
 @@ -10,12 +10,10 @@
@@ -17460,7 +17464,7 @@ index 7f03e85..162214d 100644
  
      return HTP_STATUS_OK;
 diff --git a/ggml/src/ggml-hexagon/htp/dma-queue.h b/ggml/src/ggml-hexagon/htp/dma-queue.h
-index 05f3730..9b774bd 100644
+index 05f37305d..9b774bdd9 100644
 --- a/ggml/src/ggml-hexagon/htp/dma-queue.h
 +++ b/ggml/src/ggml-hexagon/htp/dma-queue.h
 @@ -436,10 +436,10 @@ static inline void dma_sync_write(dma_queue * dma_q, dma_addr_t dst, const void
@@ -17486,7 +17490,7 @@ index 05f3730..9b774bd 100644
      uint32_t line_size;
      uint32_t capacity;
 diff --git a/ggml/src/ggml-hexagon/htp/fill-ops.c b/ggml/src/ggml-hexagon/htp/fill-ops.c
-index 2cab31b..212104a 100644
+index 2cab31b5f..212104a23 100644
 --- a/ggml/src/ggml-hexagon/htp/fill-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/fill-ops.c
 @@ -16,7 +16,6 @@
@@ -17661,7 +17665,7 @@ index 2cab31b..212104a 100644
      return HTP_STATUS_OK;
  }
 diff --git a/ggml/src/ggml-hexagon/htp/flash-attn-ops.c b/ggml/src/ggml-hexagon/htp/flash-attn-ops.c
-index ee25817..48142c6 100644
+index ee258172b..48142c6c5 100644
 --- a/ggml/src/ggml-hexagon/htp/flash-attn-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/flash-attn-ops.c
 @@ -11,6 +11,7 @@
@@ -19802,7 +19806,7 @@ index ee25817..48142c6 100644
      if (has_sinks) {
          const struct htp_tensor * sinks = octx->src[4];
 diff --git a/ggml/src/ggml-hexagon/htp/flash-attn-ops.h b/ggml/src/ggml-hexagon/htp/flash-attn-ops.h
-index f2654f0..200eab1 100644
+index f2654f0a8..200eab1b3 100644
 --- a/ggml/src/ggml-hexagon/htp/flash-attn-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/flash-attn-ops.h
 @@ -45,7 +45,7 @@ static inline void htp_fa_mdev_teams(uint32_t n_kv_heads, uint32_t mdev_count, b
@@ -19903,7 +19907,7 @@ index f2654f0..200eab1 100644
  
                  if (cost < best_cost || (cost == best_cost && mn > best_mn)) {
 diff --git a/ggml/src/ggml-hexagon/htp/gated-delta-net-ops.c b/ggml/src/ggml-hexagon/htp/gated-delta-net-ops.c
-index 5252ac3..1dd828d 100644
+index 5252ac352..1dd828db7 100644
 --- a/ggml/src/ggml-hexagon/htp/gated-delta-net-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/gated-delta-net-ops.c
 @@ -2270,9 +2270,46 @@ static int gated_delta_net_f32_hmx_chunked(
@@ -20063,7 +20067,7 @@ index 5252ac3..1dd828d 100644
           gctx.layout.total_bytes, n_threads);
  
 diff --git a/ggml/src/ggml-hexagon/htp/gated-delta-net-ops.h b/ggml/src/ggml-hexagon/htp/gated-delta-net-ops.h
-index 0625c4d..32fb7d2 100644
+index 0625c4d44..32fb7d24b 100644
 --- a/ggml/src/ggml-hexagon/htp/gated-delta-net-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/gated-delta-net-ops.h
 @@ -37,7 +37,13 @@ struct htp_gdn_kernel_params {
@@ -20115,7 +20119,7 @@ index 0625c4d..32fb7d2 100644
  
  struct htp_gdn_hmx_vtcm_layout {
 diff --git a/ggml/src/ggml-hexagon/htp/get-rows-ops.c b/ggml/src/ggml-hexagon/htp/get-rows-ops.c
-index 39acdfd..d91f946 100644
+index 39acdfda6..d91f946ad 100644
 --- a/ggml/src/ggml-hexagon/htp/get-rows-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/get-rows-ops.c
 @@ -17,32 +17,21 @@
@@ -20784,7 +20788,7 @@ index 39acdfd..d91f946 100644
           octx->src[0]->ne[0], octx->src[0]->ne[1], octx->src[0]->ne[2], octx->src[0]->ne[3],
           octx->src[1]->ne[0], octx->src[1]->ne[1], octx->src[1]->ne[2], octx->src[1]->ne[3],
 diff --git a/ggml/src/ggml-hexagon/htp/get-rows-ops.h b/ggml/src/ggml-hexagon/htp/get-rows-ops.h
-index 4634be2..69fa544 100644
+index 4634be2e2..69fa54464 100644
 --- a/ggml/src/ggml-hexagon/htp/get-rows-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/get-rows-ops.h
 @@ -5,8 +5,7 @@
@@ -20918,7 +20922,7 @@ index 4634be2..69fa544 100644
  
  #if defined(__cplusplus)
 diff --git a/ggml/src/ggml-hexagon/htp/hex-common.h b/ggml/src/ggml-hexagon/htp/hex-common.h
-index b943453..e6a5254 100644
+index b943453a3..e6a52540d 100644
 --- a/ggml/src/ggml-hexagon/htp/hex-common.h
 +++ b/ggml/src/ggml-hexagon/htp/hex-common.h
 @@ -17,10 +17,6 @@
@@ -20933,7 +20937,7 @@ index b943453..e6a5254 100644
      if (x <= 1) { return 1; }
      int p = 2;
 diff --git a/ggml/src/ggml-hexagon/htp/hex-profile.h b/ggml/src/ggml-hexagon/htp/hex-profile.h
-index 5c7a1a4..a26961f 100644
+index 5c7a1a488..a26961fc9 100644
 --- a/ggml/src/ggml-hexagon/htp/hex-profile.h
 +++ b/ggml/src/ggml-hexagon/htp/hex-profile.h
 @@ -44,14 +44,12 @@ struct htp_thread_trace {
@@ -20955,7 +20959,7 @@ index 5c7a1a4..a26961f 100644
  }
  
 diff --git a/ggml/src/ggml-hexagon/htp/hex-utils.h b/ggml/src/ggml-hexagon/htp/hex-utils.h
-index abb44da..2a5557c 100644
+index abb44da25..2a5557c1a 100644
 --- a/ggml/src/ggml-hexagon/htp/hex-utils.h
 +++ b/ggml/src/ggml-hexagon/htp/hex-utils.h
 @@ -51,6 +51,16 @@ static inline void hex_l2flush(void * addr, size_t size) {
@@ -20977,7 +20981,7 @@ index abb44da..2a5557c 100644
  }
 diff --git a/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-int8.h b/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-int8.h
 new file mode 100644
-index 0000000..8863275
+index 000000000..8863275f6
 --- /dev/null
 +++ b/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-int8.h
 @@ -0,0 +1,633 @@
@@ -21615,7 +21619,7 @@ index 0000000..8863275
 +
 +#endif // HMX_MM_KERNELS_INT8_H
 diff --git a/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h b/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h
-index 65f90c1..1e82512 100644
+index 65f90c17a..1e82512f0 100644
 --- a/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h
 +++ b/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h
 @@ -14,19 +14,14 @@ static const __fp16 iq4_nl_to_fp16_lut[64] __attribute__((aligned(VLEN))) = {
@@ -21900,7 +21904,7 @@ index 65f90c1..1e82512 100644
  
  // dot-chunk functions require external HMX lock
 diff --git a/ggml/src/ggml-hexagon/htp/htp-ctx.h b/ggml/src/ggml-hexagon/htp/htp-ctx.h
-index 5d14a85..29c47a8 100644
+index 5d14a8504..29c47a879 100644
 --- a/ggml/src/ggml-hexagon/htp/htp-ctx.h
 +++ b/ggml/src/ggml-hexagon/htp/htp-ctx.h
 @@ -3,7 +3,6 @@
@@ -22043,7 +22047,7 @@ index 5d14a85..29c47a8 100644
  int op_pool_1d(struct htp_ops_context * octx);
  int op_allreduce(struct htp_ops_context * octx);
 diff --git a/ggml/src/ggml-hexagon/htp/htp-ops.h b/ggml/src/ggml-hexagon/htp/htp-ops.h
-index f3b2d6b..f5efa76 100644
+index f3b2d6b73..f5efa76c5 100644
 --- a/ggml/src/ggml-hexagon/htp/htp-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/htp-ops.h
 @@ -30,14 +30,25 @@ enum htp_data_type {
@@ -22180,7 +22184,7 @@ index f3b2d6b..f5efa76 100644
      HTP_TRACE_EVT_L2FLUSH             = 1,
 diff --git a/ggml/src/ggml-hexagon/htp/htp-tensor.c b/ggml/src/ggml-hexagon/htp/htp-tensor.c
 new file mode 100644
-index 0000000..bfbb68a
+index 000000000..bfbb68af8
 --- /dev/null
 +++ b/ggml/src/ggml-hexagon/htp/htp-tensor.c
 @@ -0,0 +1,408 @@
@@ -22593,7 +22597,7 @@ index 0000000..bfbb68a
 +    }
 +}
 diff --git a/ggml/src/ggml-hexagon/htp/htp-tensor.h b/ggml/src/ggml-hexagon/htp/htp-tensor.h
-index a5ea0d5..28a7e3d 100644
+index a5ea0d533..28a7e3d8a 100644
 --- a/ggml/src/ggml-hexagon/htp/htp-tensor.h
 +++ b/ggml/src/ggml-hexagon/htp/htp-tensor.h
 @@ -8,40 +8,27 @@
@@ -22723,7 +22727,7 @@ index a5ea0d5..28a7e3d 100644
 +
  #endif // HTP_TENSOR_H
 diff --git a/ggml/src/ggml-hexagon/htp/htp_iface.idl b/ggml/src/ggml-hexagon/htp/htp_iface.idl
-index 6e3390b..b46e252 100644
+index 6e3390ba1..b46e25296 100644
 --- a/ggml/src/ggml-hexagon/htp/htp_iface.idl
 +++ b/ggml/src/ggml-hexagon/htp/htp_iface.idl
 @@ -11,7 +11,7 @@ struct htp_iface_pmu_conf {
@@ -22736,7 +22740,7 @@ index 6e3390b..b46e252 100644
      AEEResult mmap(in uint32 fd, in uint64 size);
      AEEResult munmap(in uint32 fd);
 diff --git a/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-float.h b/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-float.h
-index d748897..605892a 100644
+index d7488976b..605892aa7 100644
 --- a/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-float.h
 +++ b/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-float.h
 @@ -76,7 +76,7 @@ static inline void quantize_f16_f16_kernel(
@@ -22990,7 +22994,7 @@ index d748897..605892a 100644
                                  const void * restrict vy0, const void * restrict vy1) {
      const HVX_Vector * restrict x0 = (const HVX_Vector *) vx0;
 diff --git a/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h b/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h
-index 01c6716..2550746 100644
+index 01c671679..255074674 100644
 --- a/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h
 +++ b/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h
 @@ -1,55 +1,45 @@
@@ -24218,7 +24222,7 @@ index 01c6716..2550746 100644
          c++;
          if (c == nb) {
 diff --git a/ggml/src/ggml-hexagon/htp/hvx-norm.h b/ggml/src/ggml-hexagon/htp/hvx-norm.h
-index 145c308..a0b6aa5 100644
+index 145c3086e..a0b6aa506 100644
 --- a/ggml/src/ggml-hexagon/htp/hvx-norm.h
 +++ b/ggml/src/ggml-hexagon/htp/hvx-norm.h
 @@ -11,8 +11,7 @@
@@ -24508,7 +24512,7 @@ index 145c308..a0b6aa5 100644
                                       uint8_t * restrict dst,
                                       const int num_elems,
 diff --git a/ggml/src/ggml-hexagon/htp/hvx-quant.h b/ggml/src/ggml-hexagon/htp/hvx-quant.h
-index b0ca6ec..bbf7309 100644
+index b0ca6ecf6..bbf7309ac 100644
 --- a/ggml/src/ggml-hexagon/htp/hvx-quant.h
 +++ b/ggml/src/ggml-hexagon/htp/hvx-quant.h
 @@ -5,7 +5,6 @@
@@ -25140,7 +25144,7 @@ index b0ca6ec..bbf7309 100644
  
  #endif // HVX_QUANT_H
 diff --git a/ggml/src/ggml-hexagon/htp/hvx-sigmoid.h b/ggml/src/ggml-hexagon/htp/hvx-sigmoid.h
-index d4d67ff..c898d4b 100644
+index d4d67ff2f..c898d4bca 100644
 --- a/ggml/src/ggml-hexagon/htp/hvx-sigmoid.h
 +++ b/ggml/src/ggml-hexagon/htp/hvx-sigmoid.h
 @@ -68,12 +68,50 @@ static inline HVX_Vector hvx_vec_tanh_f32(HVX_Vector x) {
@@ -25271,7 +25275,7 @@ index d4d67ff..c898d4b 100644
 +
  #endif /* HVX_SIGMOID_H */
 diff --git a/ggml/src/ggml-hexagon/htp/im2col-ops.c b/ggml/src/ggml-hexagon/htp/im2col-ops.c
-index fc49c40..322d916 100644
+index fc49c403b..322d9161f 100644
 --- a/ggml/src/ggml-hexagon/htp/im2col-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/im2col-ops.c
 @@ -18,15 +18,17 @@
@@ -26683,7 +26687,7 @@ index fc49c40..322d916 100644
 +    return HTP_STATUS_OK;
  }
 diff --git a/ggml/src/ggml-hexagon/htp/main.c b/ggml/src/ggml-hexagon/htp/main.c
-index 414c6f6..130720d 100644
+index 414c6f661..130720d8c 100644
 --- a/ggml/src/ggml-hexagon/htp/main.c
 +++ b/ggml/src/ggml-hexagon/htp/main.c
 @@ -28,8 +28,8 @@
@@ -27131,7 +27135,7 @@ index 414c6f6..130720d 100644
          uint32_t r_size = sizeof(req);
  
 diff --git a/ggml/src/ggml-hexagon/htp/matmul-ops.c b/ggml/src/ggml-hexagon/htp/matmul-ops.c
-index b4b9430..6289a8a 100644
+index b4b943058..6289a8a42 100644
 --- a/ggml/src/ggml-hexagon/htp/matmul-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/matmul-ops.c
 @@ -16,7 +16,7 @@
@@ -32552,7 +32556,7 @@ index b4b9430..6289a8a 100644
      return op_matmul_nx_impl(octx);
  }
 diff --git a/ggml/src/ggml-hexagon/htp/matmul-ops.h b/ggml/src/ggml-hexagon/htp/matmul-ops.h
-index 4971ed9..3305878 100644
+index 4971ed958..330587862 100644
 --- a/ggml/src/ggml-hexagon/htp/matmul-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/matmul-ops.h
 @@ -4,7 +4,6 @@
@@ -33105,7 +33109,7 @@ index 4971ed9..3305878 100644
  }
  #endif
 diff --git a/ggml/src/ggml-hexagon/htp/pad-ops.c b/ggml/src/ggml-hexagon/htp/pad-ops.c
-index cda6df3..85f25a8 100644
+index cda6df318..85f25a8eb 100644
 --- a/ggml/src/ggml-hexagon/htp/pad-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/pad-ops.c
 @@ -17,28 +17,18 @@
@@ -33392,7 +33396,7 @@ index cda6df3..85f25a8 100644
      return HTP_STATUS_OK;
  }
 diff --git a/ggml/src/ggml-hexagon/htp/pool-ops.c b/ggml/src/ggml-hexagon/htp/pool-ops.c
-index b41c7be..ea1f1a5 100644
+index b41c7bed2..ea1f1a597 100644
 --- a/ggml/src/ggml-hexagon/htp/pool-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/pool-ops.c
 @@ -247,7 +247,6 @@ typedef void (*pool_plane_fn_t)(const float * src, float * dst, const struct htp
@@ -33534,7 +33538,7 @@ index b41c7be..ea1f1a5 100644
      return HTP_STATUS_OK;
  }
 diff --git a/ggml/src/ggml-hexagon/htp/pool-ops.h b/ggml/src/ggml-hexagon/htp/pool-ops.h
-index 178e5d0..66b405a 100644
+index 178e5d00f..66b405a8b 100644
 --- a/ggml/src/ggml-hexagon/htp/pool-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/pool-ops.h
 @@ -7,18 +7,8 @@
@@ -33641,7 +33645,7 @@ index 178e5d0..66b405a 100644
  
  #endif // HTP_POOL_OPS_H
 diff --git a/ggml/src/ggml-hexagon/htp/repeat-ops.c b/ggml/src/ggml-hexagon/htp/repeat-ops.c
-index 827ef24..2551be2 100644
+index 827ef24c5..2551be225 100644
 --- a/ggml/src/ggml-hexagon/htp/repeat-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/repeat-ops.c
 @@ -16,11 +16,14 @@
@@ -33763,7 +33767,7 @@ index 827ef24..2551be2 100644
      work_queue_run(octx->ctx->work_queue, repeat_job_per_thread, &rctx, n_threads);
  
 diff --git a/ggml/src/ggml-hexagon/htp/roll-ops.c b/ggml/src/ggml-hexagon/htp/roll-ops.c
-index 77ded0f..9c373f5 100644
+index 77ded0fe9..9c373f56d 100644
 --- a/ggml/src/ggml-hexagon/htp/roll-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/roll-ops.c
 @@ -17,15 +17,16 @@
@@ -33961,7 +33965,7 @@ index 77ded0f..9c373f5 100644
  
      work_queue_run(octx->ctx->work_queue, roll_thread_f32, &rctx, n_threads);
 diff --git a/ggml/src/ggml-hexagon/htp/rope-ops.c b/ggml/src/ggml-hexagon/htp/rope-ops.c
-index 8c55ac3..efa7484 100644
+index 8c55ac3af..efa748456 100644
 --- a/ggml/src/ggml-hexagon/htp/rope-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/rope-ops.c
 @@ -19,6 +19,7 @@
@@ -34325,7 +34329,7 @@ index 8c55ac3..efa7484 100644
      return err;
  }
 diff --git a/ggml/src/ggml-hexagon/htp/rope-ops.h b/ggml/src/ggml-hexagon/htp/rope-ops.h
-index 0c28ef8..91a1558 100644
+index 0c28ef826..91a1558b0 100644
 --- a/ggml/src/ggml-hexagon/htp/rope-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/rope-ops.h
 @@ -3,15 +3,24 @@
@@ -34403,7 +34407,7 @@ index 0c28ef8..91a1558 100644
  
  static inline uint8_t * rope_spad_slot(uint8_t * base, uint32_t slot, size_t row_size_aligned) {
 diff --git a/ggml/src/ggml-hexagon/htp/set-rows-ops.c b/ggml/src/ggml-hexagon/htp/set-rows-ops.c
-index 191cf0c..7b4f498 100644
+index 191cf0c6a..7b4f49873 100644
 --- a/ggml/src/ggml-hexagon/htp/set-rows-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/set-rows-ops.c
 @@ -79,10 +79,8 @@ static void set_rows_thread_dma_##TYPE_NAME##_##IDX_TYPE(unsigned int nth, unsig
@@ -34548,7 +34552,7 @@ index 191cf0c..7b4f498 100644
           octx->src[0]->ne[0], octx->src[0]->ne[1], octx->src[0]->ne[2], octx->src[0]->ne[3],
           octx->src[1]->ne[0], octx->src[1]->ne[1], octx->src[1]->ne[2], octx->src[1]->ne[3],
 diff --git a/ggml/src/ggml-hexagon/htp/set-rows-ops.h b/ggml/src/ggml-hexagon/htp/set-rows-ops.h
-index b9cb6cc..5e98d2c 100644
+index b9cb6cc90..5e98d2cb5 100644
 --- a/ggml/src/ggml-hexagon/htp/set-rows-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/set-rows-ops.h
 @@ -2,13 +2,18 @@
@@ -34628,7 +34632,7 @@ index b9cb6cc..5e98d2c 100644
  
  #if defined(__cplusplus)
 diff --git a/ggml/src/ggml-hexagon/htp/softmax-ops.c b/ggml/src/ggml-hexagon/htp/softmax-ops.c
-index d65c3fa..48be5d7 100644
+index d65c3fae3..48be5d725 100644
 --- a/ggml/src/ggml-hexagon/htp/softmax-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/softmax-ops.c
 @@ -496,7 +496,7 @@ static int execute_op_softmax_f32(struct htp_ops_context * octx) {
@@ -34696,7 +34700,7 @@ index d65c3fa..48be5d7 100644
          .use_f16               = kparams->use_f16 != 0,
  
 diff --git a/ggml/src/ggml-hexagon/htp/softmax-ops.h b/ggml/src/ggml-hexagon/htp/softmax-ops.h
-index ef65673..8d976ad 100644
+index ef6567306..8d976adb8 100644
 --- a/ggml/src/ggml-hexagon/htp/softmax-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/softmax-ops.h
 @@ -7,9 +7,8 @@
@@ -34782,7 +34786,7 @@ index ef65673..8d976ad 100644
  
  #endif // HTP_SOFTMAX_OPS_H
 diff --git a/ggml/src/ggml-hexagon/htp/solve-tri-ops.c b/ggml/src/ggml-hexagon/htp/solve-tri-ops.c
-index 628ca65..182982f 100644
+index 628ca65e8..182982fcd 100644
 --- a/ggml/src/ggml-hexagon/htp/solve-tri-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/solve-tri-ops.c
 @@ -13,16 +13,14 @@
@@ -34953,7 +34957,7 @@ index 628ca65..182982f 100644
              .total_jobs      = njobs,
              .job_start       = job_start,
 diff --git a/ggml/src/ggml-hexagon/htp/ssm-conv.c b/ggml/src/ggml-hexagon/htp/ssm-conv.c
-index dae339e..0d28c89 100644
+index dae339e4d..0d28c8990 100644
 --- a/ggml/src/ggml-hexagon/htp/ssm-conv.c
 +++ b/ggml/src/ggml-hexagon/htp/ssm-conv.c
 @@ -135,13 +135,6 @@ static inline void hvx_ssm_conv_unpack_to_T(const float * raw, float * T, uint32
@@ -35123,7 +35127,7 @@ index dae339e..0d28c89 100644
          .octx             = octx,
          .kparams          = kparams,
 diff --git a/ggml/src/ggml-hexagon/htp/ssm-conv.h b/ggml/src/ggml-hexagon/htp/ssm-conv.h
-index 43b2575..a071d74 100644
+index 43b2575a2..a071d74b0 100644
 --- a/ggml/src/ggml-hexagon/htp/ssm-conv.h
 +++ b/ggml/src/ggml-hexagon/htp/ssm-conv.h
 @@ -3,10 +3,8 @@
@@ -35208,7 +35212,7 @@ index 43b2575..a071d74 100644
  static_assert(sizeof(struct htp_ssm_conv_kernel_params) <= 128, "htp_ssm_conv_kernel_params is too large for kernel_params blob");
  #else
 diff --git a/ggml/src/ggml-hexagon/htp/sum-rows-ops.c b/ggml/src/ggml-hexagon/htp/sum-rows-ops.c
-index 3d931ed..177c74b 100644
+index 3d931ed19..177c74b33 100644
 --- a/ggml/src/ggml-hexagon/htp/sum-rows-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/sum-rows-ops.c
 @@ -18,7 +18,6 @@
@@ -35350,7 +35354,7 @@ index 3d931ed..177c74b 100644
      struct argmax_context actx = {
          .octx             = octx,
 diff --git a/ggml/src/ggml-hexagon/htp/unary-ops.c b/ggml/src/ggml-hexagon/htp/unary-ops.c
-index 3b63ac6..d4a33a1 100644
+index 3b63ac674..d4a33a1b6 100644
 --- a/ggml/src/ggml-hexagon/htp/unary-ops.c
 +++ b/ggml/src/ggml-hexagon/htp/unary-ops.c
 @@ -22,6 +22,8 @@
@@ -36631,7 +36635,7 @@ index 3b63ac6..d4a33a1 100644
              return HTP_STATUS_NO_SUPPORT;
      }
 diff --git a/ggml/src/ggml-hexagon/htp/unary-ops.h b/ggml/src/ggml-hexagon/htp/unary-ops.h
-index 713e40d..c3580ff 100644
+index 713e40d50..c3580ffa7 100644
 --- a/ggml/src/ggml-hexagon/htp/unary-ops.h
 +++ b/ggml/src/ggml-hexagon/htp/unary-ops.h
 @@ -2,34 +2,52 @@
@@ -36916,7 +36920,7 @@ index 713e40d..c3580ff 100644
  #endif /* HTP_UNARY_OPS_H */
 diff --git a/ggml/src/ggml-hexagon/htp/upscale-ops.c b/ggml/src/ggml-hexagon/htp/upscale-ops.c
 new file mode 100644
-index 0000000..2357dc1
+index 000000000..2357dc18a
 --- /dev/null
 +++ b/ggml/src/ggml-hexagon/htp/upscale-ops.c
 @@ -0,0 +1,191 @@
@@ -37111,28 +37115,8 @@ index 0000000..2357dc1
 +
 +    return HTP_STATUS_OK;
 +}
-diff --git a/ggml/src/ggml-hexagon/libggml-htp.inf b/ggml/src/ggml-hexagon/libggml-htp.inf
-index ff6ac27..874dde1 100644
---- a/ggml/src/ggml-hexagon/libggml-htp.inf
-+++ b/ggml/src/ggml-hexagon/libggml-htp.inf
-@@ -18,7 +18,6 @@ libggml-htp-v73.so = 1
- libggml-htp-v75.so = 1
- libggml-htp-v79.so = 1
- libggml-htp-v81.so = 1
--libggml-htp-v85.so = 1
- 
- [ControlFlags]
- ExcludeFromSelect = *
-@@ -31,7 +30,6 @@ libggml-htp-v73.so,,,0x10 ;COPYFLG_NO_OVERWRITE
- libggml-htp-v75.so,,,0x10 ;COPYFLG_NO_OVERWRITE
- libggml-htp-v79.so,,,0x10 ;COPYFLG_NO_OVERWRITE
- libggml-htp-v81.so,,,0x10 ;COPYFLG_NO_OVERWRITE
--libggml-htp-v85.so,,,0x10 ;COPYFLG_NO_OVERWRITE
- 
- [Strings]
- GGML   = 'GGML'
 diff --git a/ggml/src/ggml.c b/ggml/src/ggml.c
-index 5d8449a..ed8554b 100644
+index 5d8449a88..ed8554b14 100644
 --- a/ggml/src/ggml.c
 +++ b/ggml/src/ggml.c
 @@ -3503,7 +3503,7 @@ static struct ggml_tensor * ggml_scale_impl(
@@ -37146,7 +37130,7 @@ index 5d8449a..ed8554b 100644
  
 diff --git a/scripts/snapdragon/act_dump.cpp b/scripts/snapdragon/act_dump.cpp
 new file mode 100644
-index 0000000..59d8169
+index 000000000..59d8169eb
 --- /dev/null
 +++ b/scripts/snapdragon/act_dump.cpp
 @@ -0,0 +1,143 @@
@@ -37294,8 +37278,8 @@ index 0000000..59d8169
 +    return rc;
 +}
 diff --git a/scripts/snapdragon/smooth_calib.py b/scripts/snapdragon/smooth_calib.py
-new file mode 100755
-index 0000000..8665c5f
+new file mode 100644
+index 000000000..8665c5fba
 --- /dev/null
 +++ b/scripts/snapdragon/smooth_calib.py
 @@ -0,0 +1,244 @@
@@ -37544,7 +37528,7 @@ index 0000000..8665c5f
 +if __name__ == "__main__":
 +    sys.exit(main())
 diff --git a/src/llama-arch.cpp b/src/llama-arch.cpp
-index 497e426..3e48acf 100644
+index 497e42692..3e48acf14 100644
 --- a/src/llama-arch.cpp
 +++ b/src/llama-arch.cpp
 @@ -135,7 +135,6 @@ static const std::map<llm_arch, const char *> LLM_ARCH_NAMES = {
@@ -37595,7 +37579,7 @@ index 497e426..3e48acf 100644
          case LLM_ARCH_BAILINGMOE3:
          case LLM_ARCH_KIMI_K3:
 diff --git a/src/llama-arch.h b/src/llama-arch.h
-index eca6d18..399a1c6 100644
+index eca6d18af..399a1c657 100644
 --- a/src/llama-arch.h
 +++ b/src/llama-arch.h
 @@ -139,7 +139,6 @@ enum llm_arch {
@@ -37615,7 +37599,7 @@ index eca6d18..399a1c6 100644
      LLM_KV_BLOCK_COUNT,
      LLM_KV_LEADING_DENSE_BLOCK_COUNT,
 diff --git a/src/llama-context.cpp b/src/llama-context.cpp
-index 455f519..4fc04c7 100644
+index 455f5198e..4fc04c733 100644
 --- a/src/llama-context.cpp
 +++ b/src/llama-context.cpp
 @@ -455,6 +455,18 @@ llama_context::llama_context(
@@ -37707,7 +37691,7 @@ index 455f519..4fc04c7 100644
      {
          //const auto t_start_us = ggml_time_us();
 diff --git a/src/llama-graph.cpp b/src/llama-graph.cpp
-index a2d1c7d..a22dfba 100644
+index a2d1c7def..a22dfba96 100644
 --- a/src/llama-graph.cpp
 +++ b/src/llama-graph.cpp
 @@ -634,10 +634,7 @@ bool llm_graph_input_attn_kv_msa::can_reuse(const llm_graph_params & params) {
@@ -37786,7 +37770,7 @@ index a2d1c7d..a22dfba 100644
          // prepare new kq mask - starts filled with -INFINITY
          ggml_tensor * kq_mask_all = ggml_fill(ctx0, kq_mask, -INFINITY);
 diff --git a/src/llama-graph.h b/src/llama-graph.h
-index c1a7d36..f56a305 100644
+index c1a7d36ee..f56a305e9 100644
 --- a/src/llama-graph.h
 +++ b/src/llama-graph.h
 @@ -1336,10 +1336,15 @@ struct llm_graph_context {
@@ -37807,7 +37791,7 @@ index c1a7d36..f56a305 100644
  
      llm_graph_input_attn_kv_iswa * build_attn_inp_kv_iswa() const;
 diff --git a/src/llama-hparams.h b/src/llama-hparams.h
-index 7abb372..bd0be84 100644
+index 7abb372ce..bd0be8434 100644
 --- a/src/llama-hparams.h
 +++ b/src/llama-hparams.h
 @@ -388,6 +388,8 @@ struct llama_hparams {
@@ -37820,7 +37804,7 @@ index 7abb372..bd0be84 100644
      // needed by encoder-decoder models (e.g. T5, FLAN-T5)
      // ref: https://github.com/ggml-org/llama.cpp/pull/8141
 diff --git a/src/llama-kv-cache-dsa-iswa.cpp b/src/llama-kv-cache-dsa-iswa.cpp
-index 3d91228..02d14a3 100644
+index 3d91228f3..02d14a344 100644
 --- a/src/llama-kv-cache-dsa-iswa.cpp
 +++ b/src/llama-kv-cache-dsa-iswa.cpp
 @@ -23,6 +23,7 @@ llama_kv_cache_dsa_iswa::llama_kv_cache_dsa_iswa(
@@ -37849,7 +37833,7 @@ index 3d91228..02d14a3 100644
  }
  
 diff --git a/src/llama-kv-cache-dsa-iswa.h b/src/llama-kv-cache-dsa-iswa.h
-index 73fbaa7..1aae269 100644
+index 73fbaa7df..1aae269da 100644
 --- a/src/llama-kv-cache-dsa-iswa.h
 +++ b/src/llama-kv-cache-dsa-iswa.h
 @@ -24,6 +24,7 @@ public:
@@ -37861,7 +37845,7 @@ index 73fbaa7..1aae269 100644
          const layer_filter_cb & filter_lid,
          const  layer_reuse_cb & reuse);
 diff --git a/src/llama-kv-cache-dsa.cpp b/src/llama-kv-cache-dsa.cpp
-index 2602ae3..307ff31 100644
+index 2602ae3c3..307ff31dd 100644
 --- a/src/llama-kv-cache-dsa.cpp
 +++ b/src/llama-kv-cache-dsa.cpp
 @@ -21,6 +21,7 @@ llama_kv_cache_dsa::llama_kv_cache_dsa(
@@ -37891,7 +37875,7 @@ index 2602ae3..307ff31 100644
  }
  
 diff --git a/src/llama-kv-cache-dsa.h b/src/llama-kv-cache-dsa.h
-index 13a5904..584ab40 100644
+index 13a59047c..584ab40b9 100644
 --- a/src/llama-kv-cache-dsa.h
 +++ b/src/llama-kv-cache-dsa.h
 @@ -24,6 +24,7 @@ public:
@@ -37903,7 +37887,7 @@ index 13a5904..584ab40 100644
                 llama_swa_type   swa_type,
          const layer_filter_cb & filter_mla,
 diff --git a/src/llama-kv-cache-dsv4.cpp b/src/llama-kv-cache-dsv4.cpp
-index f0ab9f3..70bfee8 100644
+index f0ab9f35d..70bfee8f9 100644
 --- a/src/llama-kv-cache-dsv4.cpp
 +++ b/src/llama-kv-cache-dsv4.cpp
 @@ -1252,6 +1252,7 @@ llama_kv_cache_dsv4::llama_kv_cache_dsv4(
@@ -37951,7 +37935,7 @@ index f0ab9f3..70bfee8 100644
  
      LLAMA_LOG_INFO("%s: creating DSV4 CSA compressor state\n", __func__);
 diff --git a/src/llama-kv-cache-dsv4.h b/src/llama-kv-cache-dsv4.h
-index 44bf959..3e97c46 100644
+index 44bf95955..3e97c46e2 100644
 --- a/src/llama-kv-cache-dsv4.h
 +++ b/src/llama-kv-cache-dsv4.h
 @@ -101,6 +101,7 @@ public:
@@ -37963,7 +37947,7 @@ index 44bf959..3e97c46 100644
          const layer_filter_cb & filter,
          const  layer_reuse_cb & reuse);
 diff --git a/src/llama-kv-cache-iswa.cpp b/src/llama-kv-cache-iswa.cpp
-index 8ce8e01..4606bcf 100644
+index 8ce8e0165..4606bcf98 100644
 --- a/src/llama-kv-cache-iswa.cpp
 +++ b/src/llama-kv-cache-iswa.cpp
 @@ -23,12 +23,13 @@ llama_kv_cache_iswa::llama_kv_cache_iswa(
@@ -38007,7 +37991,7 @@ index 8ce8e01..4606bcf 100644
  }
  
 diff --git a/src/llama-kv-cache-iswa.h b/src/llama-kv-cache-iswa.h
-index 65aba2a..8352669 100644
+index 65aba2af7..8352669dd 100644
 --- a/src/llama-kv-cache-iswa.h
 +++ b/src/llama-kv-cache-iswa.h
 @@ -25,6 +25,7 @@ public:
@@ -38027,7 +38011,7 @@ index 65aba2a..8352669 100644
          const layer_filter_cb & filter,
          const  layer_reuse_cb & reuse,
 diff --git a/src/llama-kv-cache-msa.cpp b/src/llama-kv-cache-msa.cpp
-index 2d6bac0..a57937f 100644
+index 2d6bac0cb..a57937ff4 100644
 --- a/src/llama-kv-cache-msa.cpp
 +++ b/src/llama-kv-cache-msa.cpp
 @@ -20,20 +20,21 @@ llama_kv_cache_msa::llama_kv_cache_msa(
@@ -38082,7 +38066,7 @@ index 2d6bac0..a57937f 100644
  
  void llama_kv_cache_msa_context::set_input_cell_pos(ggml_tensor * dst, const llama_ubatch * ubatch, int32_t div) const {
 diff --git a/src/llama-kv-cache-msa.h b/src/llama-kv-cache-msa.h
-index 81c6827..3b1477c 100644
+index 81c6827f3..3b1477c83 100644
 --- a/src/llama-kv-cache-msa.h
 +++ b/src/llama-kv-cache-msa.h
 @@ -23,6 +23,7 @@ public:
@@ -38110,7 +38094,7 @@ index 81c6827..3b1477c 100644
      const uint32_t       n_swa    = 0;
      const llama_swa_type swa_type = LLAMA_SWA_TYPE_NONE;
 diff --git a/src/llama-kv-cache.cpp b/src/llama-kv-cache.cpp
-index e108f04..451349b 100644
+index e108f0423..451349b2f 100644
 --- a/src/llama-kv-cache.cpp
 +++ b/src/llama-kv-cache.cpp
 @@ -73,6 +73,7 @@ llama_kv_cache::llama_kv_cache(
@@ -38264,7 +38248,7 @@ index e108f04..451349b 100644
                  uint32_t j = jj;
  
 diff --git a/src/llama-kv-cache.h b/src/llama-kv-cache.h
-index 60d2e18..b31cc22 100644
+index 60d2e183c..b31cc226d 100644
 --- a/src/llama-kv-cache.h
 +++ b/src/llama-kv-cache.h
 @@ -107,6 +107,7 @@ public:
@@ -38286,7 +38270,7 @@ index 60d2e18..b31cc22 100644
      const uint32_t n_swa = 0;
  
 diff --git a/src/llama-memory-hybrid-idx.cpp b/src/llama-memory-hybrid-idx.cpp
-index da17476..03f0c34 100644
+index da1747649..03f0c342d 100644
 --- a/src/llama-memory-hybrid-idx.cpp
 +++ b/src/llama-memory-hybrid-idx.cpp
 @@ -24,6 +24,7 @@ llama_memory_hybrid_idx::llama_memory_hybrid_idx(
@@ -38316,7 +38300,7 @@ index da17476..03f0c34 100644
      }()) {}
  
 diff --git a/src/llama-memory-hybrid-idx.h b/src/llama-memory-hybrid-idx.h
-index 59940db..faa1724 100644
+index 59940dbb8..faa1724b0 100644
 --- a/src/llama-memory-hybrid-idx.h
 +++ b/src/llama-memory-hybrid-idx.h
 @@ -24,6 +24,7 @@ public:
@@ -38328,7 +38312,7 @@ index 59940db..faa1724 100644
             llama_swa_type   swa_type,
                              /* recurrent */
 diff --git a/src/llama-memory-hybrid-iswa.cpp b/src/llama-memory-hybrid-iswa.cpp
-index 6d843c7..4c0f14c 100644
+index 6d843c76e..4c0f14c22 100644
 --- a/src/llama-memory-hybrid-iswa.cpp
 +++ b/src/llama-memory-hybrid-iswa.cpp
 @@ -18,6 +18,7 @@ llama_memory_hybrid_iswa::llama_memory_hybrid_iswa(
@@ -38348,7 +38332,7 @@ index 6d843c7..4c0f14c 100644
          filter_attn == nullptr ?
              [&](int32_t il) { return !hparams.is_recr(il); }
 diff --git a/src/llama-memory-hybrid-iswa.h b/src/llama-memory-hybrid-iswa.h
-index 52c885a..6e68f3f 100644
+index 52c885ac9..6e68f3f44 100644
 --- a/src/llama-memory-hybrid-iswa.h
 +++ b/src/llama-memory-hybrid-iswa.h
 @@ -28,6 +28,7 @@ public:
@@ -38360,7 +38344,7 @@ index 52c885a..6e68f3f 100644
                  ggml_type   type_r,
                  ggml_type   type_s,
 diff --git a/src/llama-memory-hybrid.cpp b/src/llama-memory-hybrid.cpp
-index 7d3b279..0361b23 100644
+index 7d3b27908..0361b23ca 100644
 --- a/src/llama-memory-hybrid.cpp
 +++ b/src/llama-memory-hybrid.cpp
 @@ -16,6 +16,7 @@ llama_memory_hybrid::llama_memory_hybrid(
@@ -38380,7 +38364,7 @@ index 7d3b279..0361b23 100644
          swa_type,
          nullptr,
 diff --git a/src/llama-memory-hybrid.h b/src/llama-memory-hybrid.h
-index 2b4d126..74fa89e 100644
+index 2b4d1269c..74fa89ea6 100644
 --- a/src/llama-memory-hybrid.h
 +++ b/src/llama-memory-hybrid.h
 @@ -26,6 +26,7 @@ public:
@@ -38392,7 +38376,7 @@ index 2b4d126..74fa89e 100644
             llama_swa_type   swa_type,
                              /* recurrent */
 diff --git a/src/llama-model.cpp b/src/llama-model.cpp
-index c7b2fcc..78a387e 100644
+index c7b2fcc93..78a387e5d 100644
 --- a/src/llama-model.cpp
 +++ b/src/llama-model.cpp
 @@ -314,8 +314,6 @@ static llama_model * llama_model_mapping(llm_arch arch, const llama_model_params
@@ -38549,7 +38533,7 @@ index c7b2fcc..78a387e 100644
          case LLM_ARCH_SEED_OSS:
          case LLM_ARCH_GROVEMOE:
 diff --git a/src/llama-quant.cpp b/src/llama-quant.cpp
-index 5ebd578..bdc4f65 100644
+index 5ebd57807..bdc4f653f 100644
 --- a/src/llama-quant.cpp
 +++ b/src/llama-quant.cpp
 @@ -342,9 +342,6 @@ static bool tensor_allows_quantization(const llama_model_quantize_params * param
@@ -38563,7 +38547,7 @@ index 5ebd578..bdc4f65 100644
      quantize &= name.find("indexer.k_proj.weight") == std::string::npos;
      quantize &= name.find("indexer.q_proj.weight") == std::string::npos;
 diff --git a/src/models/deepseek4.cpp b/src/models/deepseek4.cpp
-index da51549..4d58b2f 100644
+index da51549e4..4d58b2fd2 100644
 --- a/src/models/deepseek4.cpp
 +++ b/src/models/deepseek4.cpp
 @@ -686,7 +686,7 @@ ggml_tensor * llama_model_deepseek4::graph::build_top_k_mask(
@@ -38576,7 +38560,7 @@ index da51549..4d58b2f 100644
  
          return kq_mask_top_k;
 diff --git a/src/models/gemma4.cpp b/src/models/gemma4.cpp
-index f4f80d3..bb18d77 100644
+index f4f80d396..bb18d778e 100644
 --- a/src/models/gemma4.cpp
 +++ b/src/models/gemma4.cpp
 @@ -16,6 +16,7 @@ void llama_model_gemma4::load_arch_hparams(llama_model_loader & ml) {
@@ -38745,7 +38729,7 @@ index f4f80d3..bb18d77 100644
 +    return ggml_permute(ctx0, inp_per_layer, 0, 2, 1, 3);
  }
 diff --git a/src/models/glm5-next.cpp b/src/models/glm5-next.cpp
-index d0917ed..d1e9b50 100644
+index d0917ed8a..d1e9b503d 100644
 --- a/src/models/glm5-next.cpp
 +++ b/src/models/glm5-next.cpp
 @@ -887,7 +887,7 @@ ggml_tensor * llama_model_glm5_next::graph::build_kda_layer(
@@ -38851,7 +38835,7 @@ index d0917ed..d1e9b50 100644
  
 diff --git a/src/models/lfm3.cpp b/src/models/lfm3.cpp
 deleted file mode 100644
-index 77eabc4..0000000
+index 77eabc467..000000000
 --- a/src/models/lfm3.cpp
 +++ /dev/null
 @@ -1,197 +0,0 @@
@@ -39053,7 +39037,7 @@ index 77eabc4..0000000
 -    res->t_logits = cur;
 -}
 diff --git a/src/models/models.h b/src/models/models.h
-index 5cd69b5..5d9b607 100644
+index 5cd69b59f..5d9b6077a 100644
 --- a/src/models/models.h
 +++ b/src/models/models.h
 @@ -2433,19 +2433,6 @@ struct llama_model_lfm2moe : public llama_model_base {
@@ -39101,7 +39085,7 @@ index 5cd69b5..5d9b607 100644
  
          // attention output (cur) and the selection to carry to the next shared layer (sel)
 diff --git a/src/models/qwen4exp.cpp b/src/models/qwen4exp.cpp
-index c3e2b01..f5a81f8 100644
+index c3e2b010d..f5a81f8f6 100644
 --- a/src/models/qwen4exp.cpp
 +++ b/src/models/qwen4exp.cpp
 @@ -818,6 +818,7 @@ ggml_tensor * llama_model_qwen4exp::graph::build_qsa_sel(
@@ -39192,7 +39176,7 @@ index c3e2b01..f5a81f8 100644
      // Qwen3Next uses a single Q projection that outputs query + gate
      ggml_tensor * Qcur_full = build_lora_mm(model.layers[il].wq, cur, model.layers[il].wq_s); // [ (n_embd_head * 2) * n_head, n_tokens ]
 diff --git a/tools/mtmd/CMakeLists.txt b/tools/mtmd/CMakeLists.txt
-index 7c054c0..8ca4ae3 100644
+index 7c054c0c6..8ca4ae3a4 100644
 --- a/tools/mtmd/CMakeLists.txt
 +++ b/tools/mtmd/CMakeLists.txt
 @@ -58,7 +58,6 @@ add_library(mtmd
@@ -39204,7 +39188,7 @@ index 7c054c0..8ca4ae3 100644
              models/mimovl.cpp
              models/qwen3a.cpp
 diff --git a/tools/mtmd/clip-impl.h b/tools/mtmd/clip-impl.h
-index 141954f..661f0c6 100644
+index 141954f10..661f0c646 100644
 --- a/tools/mtmd/clip-impl.h
 +++ b/tools/mtmd/clip-impl.h
 @@ -173,12 +173,6 @@
@@ -39237,7 +39221,7 @@ index 141954f..661f0c6 100644
      { PROJECTOR_TYPE_KIMIVL,            "kimivl"},
      { PROJECTOR_TYPE_PADDLEOCR,         "paddleocr"},
 diff --git a/tools/mtmd/clip-model.h b/tools/mtmd/clip-model.h
-index 2c5cf1f..1f31984 100644
+index 2c5cf1fed..1f319843b 100644
 --- a/tools/mtmd/clip-model.h
 +++ b/tools/mtmd/clip-model.h
 @@ -325,11 +325,6 @@ struct clip_layer {
@@ -39263,7 +39247,7 @@ index 2c5cf1f..1f31984 100644
      ggml_tensor * token_embd_img_break = nullptr;
  
 diff --git a/tools/mtmd/clip.cpp b/tools/mtmd/clip.cpp
-index 0ec65e4..204b16f 100644
+index 0ec65e4c1..204b16f3e 100644
 --- a/tools/mtmd/clip.cpp
 +++ b/tools/mtmd/clip.cpp
 @@ -1031,10 +1031,6 @@ static std::unique_ptr<clip_graph> clip_get_graph_builder(clip_ctx * ctx, const
@@ -39437,7 +39421,7 @@ index 0ec65e4..204b16f 100644
          case PROJECTOR_TYPE_YOUTUVL:
 diff --git a/tools/mtmd/models/lfm3vl.cpp b/tools/mtmd/models/lfm3vl.cpp
 deleted file mode 100644
-index e8e455b..0000000
+index e8e455b11..000000000
 --- a/tools/mtmd/models/lfm3vl.cpp
 +++ /dev/null
 @@ -1,182 +0,0 @@
@@ -39624,7 +39608,7 @@ index e8e455b..0000000
 -    return gf;
 -}
 diff --git a/tools/mtmd/models/models.h b/tools/mtmd/models/models.h
-index ba5769c..3b34548 100644
+index ba5769c76..3b34548c4 100644
 --- a/tools/mtmd/models/models.h
 +++ b/tools/mtmd/models/models.h
 @@ -54,11 +54,6 @@ struct clip_graph_sensenova_u1 : clip_graph {
@@ -39640,7 +39624,7 @@ index ba5769c..3b34548 100644
      clip_graph_ling3vl(clip_ctx * ctx, const clip_image_f32 & img) : clip_graph_qwen3vl(ctx, img) {}
      ggml_cgraph * build() override;
 diff --git a/tools/mtmd/mtmd-cli.cpp b/tools/mtmd/mtmd-cli.cpp
-index 72e8ae6..faabd48 100644
+index 72e8ae657..faabd4840 100644
 --- a/tools/mtmd/mtmd-cli.cpp
 +++ b/tools/mtmd/mtmd-cli.cpp
 @@ -91,6 +91,8 @@ struct mtmd_cli_context {
@@ -39710,7 +39694,7 @@ index 72e8ae6..faabd48 100644
  
              GGML_ASSERT(embd != nullptr);
 diff --git a/tools/mtmd/mtmd-image.cpp b/tools/mtmd/mtmd-image.cpp
-index ffa483b..551ea0c 100644
+index ffa483b25..551ea0c60 100644
 --- a/tools/mtmd/mtmd-image.cpp
 +++ b/tools/mtmd/mtmd-image.cpp
 @@ -809,7 +809,8 @@ clip_image_size mtmd_image_preprocessor_dyn_size::get_target_size(const clip_hpa
@@ -39759,7 +39743,7 @@ index ffa483b..551ea0c 100644
  // mtmd_image_preprocessor_glm5v
  //
 diff --git a/tools/mtmd/mtmd-image.h b/tools/mtmd/mtmd-image.h
-index 0e97a37..40d5b59 100644
+index 0e97a370a..40d5b59cc 100644
 --- a/tools/mtmd/mtmd-image.h
 +++ b/tools/mtmd/mtmd-image.h
 @@ -135,15 +135,6 @@ struct mtmd_image_preprocessor_dyn_size : mtmd_image_preprocessor {
@@ -39779,7 +39763,7 @@ index 0e97a37..40d5b59 100644
  
  // GLM 5.3 flash, similar to dyn_size, but each edge is aligned up to patch_size*n_merge, and max budget is met by a search over the height with the width scaled proportionally
 diff --git a/tools/mtmd/mtmd.cpp b/tools/mtmd/mtmd.cpp
-index 37d5eb2..df32b8f 100644
+index 37d5eb21d..df32b8f36 100644
 --- a/tools/mtmd/mtmd.cpp
 +++ b/tools/mtmd/mtmd.cpp
 @@ -772,13 +772,6 @@ struct mtmd_context {
