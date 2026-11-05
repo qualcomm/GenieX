@@ -157,7 +157,11 @@ enable_testing()
 #   one-off alpha build on this branch only (never merged to main): brings in
 #   qcom-llama/llama.cpp@weihuan/gemma4-opfusion-opt's Hexagon HTP op-fusion
 #   work for Gemma4 (tiled HMX matmul, int8 activation packing, flash-attention
-#   KV-cache fusion) that hasn't landed upstream yet. Delete this entry and the
+#   KV-cache fusion) that hasn't landed upstream yet. It drops the upstream
+#   HTP_POWER_MODE_* table, so llama-hexagon-power-mode-setter.patch is left
+#   out of this branch's patch list below (no runtime power-mode switching in
+#   this alpha). The fork also drops v85; the patch restores upstream's v85
+#   skel (toolv21), .inf entry and arch cap. Delete this entry and the
 #   patch file once the alpha is no longer needed.
 # * llama-opencl-adreno-cpy-constreg.patch works around an Adreno OpenCL
 #   compiler crash: kernel_cpy_f32_f32_pack's min(ne00, get_local_size(0))
@@ -186,7 +190,6 @@ if(GENIEX_PLUGIN_LLAMA_CPP)
     if(GGML_HEXAGON)
         list(APPEND _LLAMA_PATCHES
             "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-release-sessions.patch"
-            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode-setter.patch"
             "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-gemma4-opfusion-opt.patch")
     endif()
     if(GGML_OPENCL)
