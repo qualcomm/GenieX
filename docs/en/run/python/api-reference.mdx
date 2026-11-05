@@ -161,6 +161,77 @@ Same as [`GenieXLLM`](#geniexllm).
 
 ---
 
+## JEV structured decisions
+
+`JevDecider` runs typed, non-executing structured decisions over an existing [`GenieXLLM`](#geniexllm) or [`GenieXVLM`](#geniexvlm). Import JEV types from `geniex.jev`:
+
+```python
+from geniex.jev import ClassificationSpec, JevDecider
+
+decider = JevDecider(model)
+result = decider.classify(ClassificationSpec(
+    labels=["safe", "review"],
+    instructions="Choose the appropriate review route.",
+    context="Caller-supplied content to classify",
+))
+print(result.label)
+```
+
+### `JevDecider(model)`
+
+| Parameter | Type | Description |
+|---|---|---|
+| `model` | `GenieXLLM \| GenieXVLM` | An already-loaded model. |
+
+JEV calls `model.decide()` directly. The SDK returns one value per option as calibrated probabilities or raw logits; raw logits are converted with a temperature-scaled softmax. Backends that do not implement native decisions return a not-supported error.
+
+### Decision methods
+
+| Method | Input | Output | Description |
+|---|---|---|---|
+| `classify(spec)` | `ClassificationSpec` | `ClassificationResult` | Select exactly one ID from `labels`. |
+| `choose(spec)` | `MultipleChoiceSpec` | `MultipleChoiceResult` | Select a validated number of stable option IDs. |
+| `triage(spec)` | `TriageSpec` | `TriageResult` | Produce the built-in customer-support triage record. |
+
+`ClassificationSpec` accepts `labels`, `instructions`, optional `context`, `images`, and `request_confidence`.
+
+`MultipleChoiceSpec` accepts `options: list[Option]`, `instructions`, optional `context`, `images`, `min_selections`, `max_selections`, and `request_confidence`. Native multiple choice uses a fixed top-k: set equal nonzero bounds, or leave both at zero to select exactly one option.
+
+`TriageSpec` accepts `message` and optional `images`. It returns `intent`, `is_urgent`, `frustration`, `refund_requested`, and `churn_risk` after five native decision calls.
+
+### Result and helper types
+
+| Type | Attributes |
+|---|---|
+| `Option` | `id: str`, `text: str` |
+| `ClassificationResult` | `label: str`, `confidence: Confidence \| None` |
+| `MultipleChoiceResult` | `selected_ids: list[str]`, `confidence: Confidence \| None` |
+| `Confidence` | `value: float` from 0 through 1, `provenance: str` (`"sdk_calibrated"` or `"logits_softmax"`) |
+| `TriageResult` | `intent`, `is_urgent`, `frustration`, `refund_requested`, `churn_risk` |
+
+Labels and option IDs must be nonempty and unique. Text-only models reject images. Classification uses argmax; fixed-count multiple choice uses the top-k option scores.
+
+### Low-level `decide()`
+
+`GenieXLLM.decide(input)` and `GenieXVLM.decide(input)` expose the same native path. Import `DecideInput`, `DecideQuestion`, `DecideOption`, and `DecideOutput` from `geniex`. Set `question_index` to the question to evaluate. A VLM input may also include `image_paths` and `audio_paths`; an LLM rejects media.
+
+```python
+from geniex import DecideInput, DecideOption, DecideQuestion
+
+output = model.decide(DecideInput(
+    state="A customer was charged twice.",
+    questions=[DecideQuestion(
+        id="route",
+        question_type="choice",
+        instructions="Choose the support queue.",
+        options=[DecideOption("billing"), DecideOption("technical")],
+    )],
+))
+print(output.logits or output.probabilities)
+```
+
+---
+
 ## ModelTokenizer
 
 Accessed via `model.tokenizer`. Provides a `transformers`-compatible chat template interface.

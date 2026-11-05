@@ -1,6 +1,8 @@
 package com.geniex.sdk.jni
 
 import com.geniex.sdk.bean.ChatMessage
+import com.geniex.sdk.bean.DecideInput
+import com.geniex.sdk.bean.DecideOutput
 import com.geniex.sdk.bean.GenerationConfig
 import com.geniex.sdk.bean.LLMTokenCallback
 import com.geniex.sdk.bean.LlmApplyChatTemplateOutput
@@ -12,6 +14,7 @@ internal class Llm {
     external fun create(llmCreateInputObj: LlmCreateInput): Long
     external fun reset(handle: Long): Int
     external fun destroy(handle: Long): Int
+    external fun decide(handle: Long, input: DecideInput): DecideOutput
     external fun stopStream(handle: Long)
     external fun applyChatTemplate(
         handle: Long,

@@ -31,6 +31,121 @@ const char* hold_c_str(const std::string& s) {
 
 void clear_jni_cstr_pool() { jni_cstr_pool.clear(); }
 
+geniex_DecideInput* DecideInputStorage::get() {
+    for (size_t i = 0; i < questions.size(); ++i) {
+        questions[i].options      = options[i].empty() ? nullptr : options[i].data();
+        questions[i].option_count = static_cast<int32_t>(options[i].size());
+    }
+    value.questions      = questions.empty() ? nullptr : questions.data();
+    value.question_count = static_cast<int32_t>(questions.size());
+    value.image_paths    = image_paths.empty() ? nullptr : image_paths.data();
+    value.image_count    = static_cast<int32_t>(image_paths.size());
+    value.audio_paths    = audio_paths.empty() ? nullptr : audio_paths.data();
+    value.audio_count    = static_cast<int32_t>(audio_paths.size());
+    return &value;
+}
+
+DecideInputStorage extract_decide_input(JNIEnv* env, jobject inputObj) {
+    DecideInputStorage storage;
+    if (!inputObj) return storage;
+
+    auto hold_string = [&](jobject object, jclass cls, const char* field, bool nullable = false) -> const char* {
+        jfieldID id = env->GetFieldID(cls, field, "Ljava/lang/String;");
+        if (!id) return nullptr;
+        jstring value = static_cast<jstring>(env->GetObjectField(object, id));
+        if (!value) return nullable ? nullptr : "";
+        storage.strings.push_back(jstring2str(env, value));
+        env->DeleteLocalRef(value);
+        return storage.strings.back().c_str();
+    };
+    auto hold_paths = [&](jobject object, jclass cls, const char* field, std::vector<const char*>& output) {
+        jfieldID     id     = env->GetFieldID(cls, field, "[Ljava/lang/String;");
+        jobjectArray values = id ? static_cast<jobjectArray>(env->GetObjectField(object, id)) : nullptr;
+        if (!values) return;
+        const jsize count = env->GetArrayLength(values);
+        output.reserve(count);
+        for (jsize i = 0; i < count; ++i) {
+            jstring value = static_cast<jstring>(env->GetObjectArrayElement(values, i));
+            storage.strings.push_back(jstring2str(env, value));
+            output.push_back(storage.strings.back().c_str());
+            env->DeleteLocalRef(value);
+        }
+        env->DeleteLocalRef(values);
+    };
+
+    jclass input_cls             = env->GetObjectClass(inputObj);
+    storage.value.state          = hold_string(inputObj, input_cls, "state");
+    jfieldID index_id            = env->GetFieldID(input_cls, "questionIndex", "I");
+    storage.value.question_index = index_id ? env->GetIntField(inputObj, index_id) : 0;
+
+    jfieldID     questions_id = env->GetFieldID(input_cls, "questions", "[Lcom/geniex/sdk/bean/DecideQuestion;");
+    jobjectArray questions =
+        questions_id ? static_cast<jobjectArray>(env->GetObjectField(inputObj, questions_id)) : nullptr;
+    const jsize question_count = questions ? env->GetArrayLength(questions) : 0;
+    storage.questions.resize(question_count);
+    storage.options.resize(question_count);
+    for (jsize i = 0; i < question_count; ++i) {
+        jobject question     = env->GetObjectArrayElement(questions, i);
+        jclass  question_cls = env->GetObjectClass(question);
+        auto&   target       = storage.questions[i];
+        target.id            = hold_string(question, question_cls, "id", true);
+        target.question_type = hold_string(question, question_cls, "questionType");
+        target.instructions  = hold_string(question, question_cls, "instructions");
+
+        jfieldID     options_id = env->GetFieldID(question_cls, "options", "[Lcom/geniex/sdk/bean/DecideOption;");
+        jobjectArray options =
+            options_id ? static_cast<jobjectArray>(env->GetObjectField(question, options_id)) : nullptr;
+        const jsize option_count = options ? env->GetArrayLength(options) : 0;
+        storage.options[i].resize(option_count);
+        for (jsize j = 0; j < option_count; ++j) {
+            jobject option            = env->GetObjectArrayElement(options, j);
+            jclass  option_cls        = env->GetObjectClass(option);
+            auto&   option_target     = storage.options[i][j];
+            option_target.key         = hold_string(option, option_cls, "key");
+            jfieldID bool_id          = env->GetFieldID(option_cls, "keyIsBool", "Z");
+            option_target.key_is_bool = bool_id && env->GetBooleanField(option, bool_id) == JNI_TRUE;
+            option_target.description = hold_string(option, option_cls, "description", true);
+            env->DeleteLocalRef(option_cls);
+            env->DeleteLocalRef(option);
+        }
+        if (options) env->DeleteLocalRef(options);
+        env->DeleteLocalRef(question_cls);
+        env->DeleteLocalRef(question);
+    }
+    if (questions) env->DeleteLocalRef(questions);
+    hold_paths(inputObj, input_cls, "imagePaths", storage.image_paths);
+    hold_paths(inputObj, input_cls, "audioPaths", storage.audio_paths);
+    env->DeleteLocalRef(input_cls);
+    return storage;
+}
+
+jobject decide_output_to_java(JNIEnv* env, const geniex_DecideOutput& output) {
+    auto to_float_array = [&](const float* values) -> jfloatArray {
+        if (!values || output.option_count <= 0) return nullptr;
+        jfloatArray result = env->NewFloatArray(output.option_count);
+        if (result) env->SetFloatArrayRegion(result, 0, output.option_count, values);
+        return result;
+    };
+    jfloatArray logits        = to_float_array(output.logits);
+    jfloatArray probabilities = to_float_array(output.probabilities);
+    jstring     decision_type = env->NewStringUTF(output.decision_type ? output.decision_type : "");
+    jclass      cls           = env->FindClass("com/geniex/sdk/bean/DecideOutput");
+    jmethodID   ctor          = cls ? env->GetMethodID(cls, "<init>", "([F[FIFLjava/lang/String;)V") : nullptr;
+    jobject     result        = ctor ? env->NewObject(cls,
+                                ctor,
+                                logits,
+                                probabilities,
+                                static_cast<jint>(output.input_tokens),
+                                static_cast<jfloat>(output.temperature),
+                                decision_type)
+                                     : nullptr;
+    if (logits) env->DeleteLocalRef(logits);
+    if (probabilities) env->DeleteLocalRef(probabilities);
+    if (decision_type) env->DeleteLocalRef(decision_type);
+    if (cls) env->DeleteLocalRef(cls);
+    return result;
+}
+
 void free_chat_template_grammar(geniex_ChatTemplateGrammar& grammar) {
     geniex_free(grammar.grammar);
     geniex_free(grammar.generation_prompt);

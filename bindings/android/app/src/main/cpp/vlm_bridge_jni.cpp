@@ -311,3 +311,28 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_extractMediaPat
         return nullptr;
     }
 }
+
+extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Vlm_decide(
+    JNIEnv* env, jobject, jlong handle, jobject input_obj) {
+    if (!handle || !input_obj) {
+        throw_runtime_exception(env, "VLM decide failed: invalid input");
+        return nullptr;
+    }
+    auto                input_storage = extract_decide_input(env, input_obj);
+    geniex_DecideOutput output{};
+    const int32_t       result = geniex_vlm_decide(reinterpret_cast<geniex_VLM*>(handle), input_storage.get(), &output);
+    if (result != GENIEX_SUCCESS) {
+        geniex_free(output.logits);
+        geniex_free(output.probabilities);
+        geniex_free(output.decision_type);
+        throw_runtime_exception(
+            env, "VLM decide failed: %s", geniex_get_error_message(static_cast<geniex_ErrorCode>(result)));
+        return nullptr;
+    }
+    jobject value = decide_output_to_java(env, output);
+    geniex_free(output.logits);
+    geniex_free(output.probabilities);
+    geniex_free(output.decision_type);
+    if (!value && !env->ExceptionCheck()) throw_runtime_exception(env, "VLM decide failed to convert output");
+    return value;
+}
