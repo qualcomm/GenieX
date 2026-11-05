@@ -128,6 +128,88 @@ func TestWriteBlockingResponse(t *testing.T) {
 	}
 }
 
+// An unset OpenAI field must be absent, not a zero value: clients such as Home
+// Assistant treat a present function_call as a real call to a function "".
+func TestWriteBlockingResponseOmitsUnsetFields(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	call := openai.ChatCompletionMessageFunctionToolCallFunction{Name: "get_weather", Arguments: `{"city":"Beijing"}`}
+	cases := []struct {
+		name      string
+		content   string
+		reasoning string
+		calls     []openai.ChatCompletionMessageFunctionToolCallFunction
+	}{
+		{name: "text only", content: "hello"},
+		{name: "tool call", calls: []openai.ChatCompletionMessageFunctionToolCallFunction{call}},
+		{name: "reasoning", content: "hello", reasoning: "let me check"},
+		{name: "reasoning with tool call", reasoning: "let me check", calls: []openai.ChatCompletionMessageFunctionToolCallFunction{call}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			var content, reasoning strings.Builder
+			content.WriteString(tc.content)
+			reasoning.WriteString(tc.reasoning)
+			finish := func() []openai.ChatCompletionMessageFunctionToolCallFunction { return tc.calls }
+			writeBlockingResponse(c, &content, &reasoning, geniex_sdk.ProfileData{StopReason: "eos", GeneratedTokens: 3}, finish, "test-model")
+
+			var got map[string]any
+			if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			for _, key := range []string{"id", "object", "created", "model", "choices", "usage", "timings"} {
+				if _, ok := got[key]; !ok {
+					t.Errorf("top level lost %q: %s", key, w.Body)
+				}
+			}
+			for _, key := range []string{"moderation", "service_tier", "system_fingerprint"} {
+				if _, ok := got[key]; ok {
+					t.Errorf("top level has unset %q: %s", key, w.Body)
+				}
+			}
+			if got["object"] != "chat.completion" {
+				t.Errorf("object=%v", got["object"])
+			}
+			choice := got["choices"].([]any)[0].(map[string]any)
+			for _, key := range []string{"index", "message", "finish_reason", "logprobs"} {
+				if _, ok := choice[key]; !ok {
+					t.Errorf("choice lost %q: %s", key, w.Body)
+				}
+			}
+			msg := choice["message"].(map[string]any)
+			for _, key := range []string{"role", "content"} {
+				if _, ok := msg[key]; !ok {
+					t.Errorf("message lost %q: %s", key, w.Body)
+				}
+			}
+			for _, key := range []string{"function_call", "audio", "refusal", "annotations"} {
+				if _, ok := msg[key]; ok {
+					t.Errorf("message has unset %q: %s", key, w.Body)
+				}
+			}
+			if _, ok := msg["tool_calls"]; ok != (len(tc.calls) > 0) {
+				t.Errorf("tool_calls present=%v, want %v: %s", ok, len(tc.calls) > 0, w.Body)
+			}
+			if _, ok := msg["reasoning_content"]; ok != (tc.reasoning != "") {
+				t.Errorf("reasoning_content present=%v: %s", ok, w.Body)
+			}
+			calls, _ := msg["tool_calls"].([]any)
+			for _, raw := range calls {
+				tcall := raw.(map[string]any)
+				if _, ok := tcall["custom"]; ok {
+					t.Errorf("tool call has unset custom: %s", w.Body)
+				}
+				for _, key := range []string{"id", "type", "function"} {
+					if _, ok := tcall[key]; !ok {
+						t.Errorf("tool call lost %q: %s", key, w.Body)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestChatResponsesFinalizeParserAtEOF(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, reasoning := range []string{"", "reason"} {

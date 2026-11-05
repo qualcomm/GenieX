@@ -14,7 +14,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/shared/constant"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 	"github.com/qualcomm/GenieX/cli/server/types"
@@ -55,19 +54,30 @@ func writePromptTooLong(c *gin.Context, profile geniex_sdk.ProfileData) {
 	})
 }
 
-// Adds reasoning_content, which openai-go's ChatCompletionMessage lacks; used
-// only when thinking is separated so the inline default stays byte-identical.
+// The response types below are server-side on purpose. openai-go's
+// ChatCompletion structs are meant for decoding replies, so none of their
+// fields are omitempty and an unset function_call, audio or refusal would be
+// written out as a zero value. Clients read that as "present", so only the
+// fields geniex fills in are listed here.
+
+type blockingToolCall struct {
+	ID       string                                               `json:"id"`
+	Type     string                                               `json:"type"`
+	Function openai.ChatCompletionMessageFunctionToolCallFunction `json:"function"`
+}
+
 type blockingMessage struct {
-	Role             string                                      `json:"role"`
-	Content          string                                      `json:"content"`
-	ReasoningContent string                                      `json:"reasoning_content,omitempty"`
-	ToolCalls        []openai.ChatCompletionMessageToolCallUnion `json:"tool_calls,omitempty"`
+	Role             string             `json:"role"`
+	Content          string             `json:"content"`
+	ReasoningContent string             `json:"reasoning_content,omitempty"`
+	ToolCalls        []blockingToolCall `json:"tool_calls,omitempty"`
 }
 
 type blockingChoice struct {
-	Index        int64           `json:"index"`
-	Message      blockingMessage `json:"message"`
-	FinishReason string          `json:"finish_reason"`
+	Index        int64                               `json:"index"`
+	Message      blockingMessage                     `json:"message"`
+	FinishReason string                              `json:"finish_reason"`
+	Logprobs     openai.ChatCompletionChoiceLogprobs `json:"logprobs"`
 }
 
 type blockingResponse struct {
@@ -78,21 +88,14 @@ type blockingResponse struct {
 	Timings timings                `json:"timings"`
 }
 
-// chatCompletionWithTimings adds timings to the openai-go response type via
-// embedding, keeping the reasoning=="" branch's fields byte-identical.
-type chatCompletionWithTimings struct {
-	openai.ChatCompletion
-	Timings timings `json:"timings"`
-}
-
 func writeBlockingResponse(c *gin.Context, contentBuilder, reasoningBuilder *strings.Builder, profile geniex_sdk.ProfileData, finish func() []openai.ChatCompletionMessageFunctionToolCallFunction, model string) {
 	meta := types.NewResponseMetadata("chatcmpl", model)
 	calls := finish()
 	content, reasoning := contentBuilder.String(), reasoningBuilder.String()
 	finishReason := mapFinishReason(profile.StopReason)
-	var toolCalls []openai.ChatCompletionMessageToolCallUnion
+	var toolCalls []blockingToolCall
 	for _, call := range calls {
-		toolCalls = append(toolCalls, openai.ChatCompletionMessageToolCallUnion{
+		toolCalls = append(toolCalls, blockingToolCall{
 			ID:       fmt.Sprintf("call_%d", rand.Uint32()),
 			Type:     "function",
 			Function: call,
@@ -100,28 +103,6 @@ func writeBlockingResponse(c *gin.Context, contentBuilder, reasoningBuilder *str
 	}
 	if len(toolCalls) > 0 {
 		finishReason = "tool_calls"
-	}
-
-	if reasoning == "" {
-		choice := openai.ChatCompletionChoice{
-			FinishReason: finishReason,
-			Message: openai.ChatCompletionMessage{
-				Role:      constant.Assistant(openai.MessageRoleAssistant),
-				Content:   content,
-				ToolCalls: toolCalls,
-			},
-		}
-		c.JSON(http.StatusOK, chatCompletionWithTimings{
-			ChatCompletion: openai.ChatCompletion{
-				ID:      meta.ID,
-				Created: meta.Created,
-				Model:   meta.Model,
-				Choices: []openai.ChatCompletionChoice{choice},
-				Usage:   profile2Usage(profile),
-			},
-			Timings: profile2Timings(profile),
-		})
-		return
 	}
 
 	c.JSON(http.StatusOK, blockingResponse{
