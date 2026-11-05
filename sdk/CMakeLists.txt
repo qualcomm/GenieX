@@ -153,6 +153,12 @@ enable_testing()
 #   per-model (upstream only reads it once, from GGML_HEXAGON_POWER_MODE, at
 #   backend-registry construction). See
 #   sdk/plugins/llama_cpp/src/htp_session.cpp for the caller.
+# * llama-gemma4-opfusion-opt.patch is a temporary, disposable addition for a
+#   one-off alpha build on this branch only (never merged to main): brings in
+#   qcom-llama/llama.cpp@weihuan/gemma4-opfusion-opt's Hexagon HTP op-fusion
+#   work for Gemma4 (tiled HMX matmul, int8 activation packing, flash-attention
+#   KV-cache fusion) that hasn't landed upstream yet. Delete this entry and the
+#   patch file once the alpha is no longer needed.
 # * llama-opencl-adreno-cpy-constreg.patch works around an Adreno OpenCL
 #   compiler crash: kernel_cpy_f32_f32_pack's min(ne00, get_local_size(0))
 #   emits an IMINrr with two constant-class operands, which the driver's
@@ -180,7 +186,8 @@ if(GENIEX_PLUGIN_LLAMA_CPP)
     if(GGML_HEXAGON)
         list(APPEND _LLAMA_PATCHES
             "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-release-sessions.patch"
-            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode-setter.patch")
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode-setter.patch"
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-gemma4-opfusion-opt.patch")
     endif()
     if(GGML_OPENCL)
         list(APPEND _LLAMA_PATCHES
