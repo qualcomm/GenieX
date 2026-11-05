@@ -119,7 +119,7 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-          key: cargo-sdk-${{ matrix.platform }}-${{ hashFiles('sdk/model-manager/Cargo.lock', 'sdk/model-manager/**/Cargo.toml', 'sdk/model-manager/crates/**/*.rs') }}
+          key: cargo-sdk-${{ matrix.platform }}-${{ hashFiles('sdk/model-manager/Cargo.lock', 'sdk/model-manager/**/Cargo.toml', 'sdk/model-manager/src/**/*.rs') }}
 
       # Toolchain identifier baked into the cmake-build cache key so a
       # runner-image / container-image bump (MSVC patch, clang/apt layer)
