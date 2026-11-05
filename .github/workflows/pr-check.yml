@@ -56,6 +56,45 @@ jobs:
     with:
       upload_artifact: true
 
+  test-decision-protocols:
+    name: test-decision-protocols
+    needs: [lint]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: false
+      - name: Resolve changed files
+        id: files
+        uses: ./.github/actions/changed-files
+        with:
+          include: '^(sdk|third-party|tests|\.github)/'
+      - name: Install build tools
+        if: steps.files.outputs.any == 'true'
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build ccache
+      - name: Cache compiler outputs
+        if: steps.files.outputs.any == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ccache
+          key: decision-ccache-${{ runner.os }}-${{ hashFiles('tests/decision/**', 'sdk/plugins/llama_cpp/**') }}
+          restore-keys: |
+            decision-ccache-${{ runner.os }}-
+      - name: Run model-free decision tests
+        if: steps.files.outputs.any == 'true'
+        run: |
+          git submodule update --init --depth 1 third-party/llama.cpp
+          cmake -S tests/decision -B build-decision-tests -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DGENIEX_DECISION_REFERENCE_TESTS=OFF -DGGML_NATIVE=OFF \
+            -DGGML_OPENCL=OFF -DGGML_HEXAGON=OFF -DGGML_CUDA=OFF \
+            -DGGML_VULKAN=OFF -DGGML_METAL=OFF -DGGML_BLAS=OFF -DGGML_OPENMP=OFF
+          cmake --build build-decision-tests --target decision-tests --parallel "$(nproc)"
+          ctest --test-dir build-decision-tests --output-on-failure
+
   test-rust:
     name: test-rust
     needs: [lint]

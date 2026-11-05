@@ -118,7 +118,9 @@ In an interactive session with an audio-capable model, `/mic` records a clip ins
 
 ### **`geniex decide`**
 
-Make a local structured decision with a `llama_cpp` LLM or VLM. Select `predicate`, `choice`, or `score` with `--kind`. Models with a `systemone` template use the matching OpenJEV, LEV, or Nimble decision path and model-specific temperature; if `decision.type` is missing, they are treated as OpenJEV. Models without `systemone` fall back to a generic choice prompt using their regular chat template and temperature `1.0`. LEV choices average both option orders and LEV predicates use a nine-rating readout; all paths use logits and return probabilities and confidence. Add `--image` or `--audio` (repeatable) to send local media to a compatible VLM.
+Make a local structured decision with a `llama_cpp` LLM or VLM. Select `predicate`, `choice`, or `score` with `--kind`. Supported native `decision.type` identifiers are `openjev`, `lev`, `nimble`, `lfm2-d1`, `lfm2-d1-omni`, and `lfm3-d1`. Native adapters use the model's named `systemone` template and calibration metadata. If the type is missing but `systemone` exists, OpenJEV is assumed. Ordinary compatible models without a native type or `systemone` use a generic labeled-option prompt with their regular chat template and temperature `1.0`. Unknown nonempty native types are rejected before that fallback; Liquid models missing `systemone` are also rejected.
+
+LEV choices average both option orders and LEV predicates use a nine-rating readout. Liquid d1 groups answer-token variants; d1-omni-600M reads its decision head at option-mask positions rather than next-token logits. The public result schema is unchanged. Add `--image` or `--audio` (repeatable) only for supported non-Liquid VLM decision paths; Liquid decision support is currently **text-only**.
 
 ```bash
 geniex decide <model-name>[:<precision>] --kind predicate \
@@ -135,7 +137,38 @@ geniex decide <vlm-name> --kind choice --image photo.png \
   --choice battery --choice screen
 ```
 
-Repeat `--choice VALUE` for each candidate. In `--choice 'retry=Try again'`, `retry` is the value returned in JSON and `Try again` is optional context for the model; it is not a key-value map. Quote the argument if the description has spaces. `--level` similarly accepts `LABEL=DESCRIPTION`. `--image` and `--audio` accept existing local regular files and may each be repeated up to 8 times. `--compute`, `--ngl`, `--nctx`, and `--power-mode` control local model loading, as with `geniex infer`. Both LLM and VLM decisions use logits, with model-specific temperature and candidate encoding. `--vit-compute` selects the VLM vision encoder's compute unit. `geniex decide --help` groups these flags under Model Loading, LLM/VLM Decision, and VLM Specific.
+Repeat `--choice VALUE` for each candidate. In `--choice 'retry=Try again'`, `retry` is the value returned in JSON and `Try again` is optional context for the model; it is not a key-value map. Quote the argument if the description has spaces. `--level` similarly accepts `LABEL=DESCRIPTION`. `--image` and `--audio` accept existing local regular files and may each be repeated up to 8 times. `--compute`, `--ngl`, `--nctx`, and `--power-mode` control local model loading, as with `geniex infer`. LLM and VLM decisions use the protocol's native readout, with model-specific calibration and candidate encoding. `--vit-compute` selects the VLM vision encoder's compute unit. `geniex decide --help` groups these flags under Model Loading, LLM/VLM Decision, and VLM Specific.
+
+### Liquid AI d1 text decisions
+
+| Model repository | Architecture | Native protocol | CPU/OpenCL-tested GGUF |
+|---|---|---|---|
+| [LiquidAI/d1-3B-GGUF](https://huggingface.co/LiquidAI/d1-3B-GGUF) | `lfm2` | `lfm2-d1` | `d1-3B-Q4_K_M.gguf` |
+| [LiquidAI/d1-omni-600M-GGUF](https://huggingface.co/LiquidAI/d1-omni-600M-GGUF) | `lfm2` | `lfm2-d1-omni` | `d1-omni-600M-Q8_0.gguf` |
+| [LiquidAI/d1-2B-GGUF](https://huggingface.co/LiquidAI/d1-2B-GGUF) | `lfm3` | `lfm3-d1` | `d1-2B-Q4_K_M.gguf` |
+
+For text-only use, download just the language/decision GGUF and import that directory as an LLM. For example, using the [Hugging Face CLI](https://huggingface.co/docs/huggingface_hub/guides/cli):
+
+```sh
+hf download LiquidAI/d1-2B-GGUF d1-2B-Q4_K_M.gguf --local-dir ./models/d1-2b
+geniex pull local/d1-2b:Q4_K_M --model-hub localfs --local-path ./models/d1-2b --model-type llm
+geniex decide local/d1-2b:Q4_K_M --compute cpu --nctx 4096 --json \
+  --kind choice --input 'I was charged twice, please refund one charge.' \
+  --question 'Which team should handle this?' \
+  --choice 'billing=Charges, refunds, invoices' \
+  --choice 'technical=App or site faults' --choice 'fraud=Suspected unauthorised use'
+```
+
+To use d1-3B or d1-omni-600M, substitute the corresponding repository, GGUF filename, local directory/name, and precision from the table. `predicate` maps to Liquid's `noul`; `choice` descriptions map to criteria; `score` levels are zero-based and ordered as supplied, with 2–10 levels. Choices support 2–255 options. d1-3B/d1-2B need distinct single-token answer codes; Omni reads option masks instead.
+
+**Limitations:**
+- Text only in GenieX decisions, even when loaded as a VLM with a projector. Liquid image/audio requests are explicitly rejected, never dropped or routed through generic prompts. d1-3B is image-capable, d1-omni-600M supports images or one audio clip (not both), and d1-2B supports pictures/video upstream; those media paths are not implemented here. A projector is not needed for text decisions.
+- d1-2B and d1-omni-600M evaluate each question as one isolated physical batch. CPU default batch sizes follow the configured context size. GPU defaults normally allow 512 tokens per question; the CLI caps QCS6490 / RB3 Gen 2 GPU batches at 256. NPU defaults allow 128 on Linux and 1024 on Windows/Android, including template/question/option tokens. Longer questions fail rather than being split or silently moved to CPU. The CLI normally defaults to NPU (chipset overrides may select CPU): use `--compute cpu` (HTTP: `"compute":"cpu"`) for longer questions. Raising `--nctx` alone does not raise accelerator physical-batch limits. Explicit SDK batch limits are honored.
+- Omni budgets and right-truncates text to at most 16384 tokens after reserving question/options space, independently of `nctx`. The prepared question must also fit the configured context and physical batch. With the default 4096-token LLM context, long inputs can therefore be rejected even after truncation. Use `--nctx 16384 --compute cpu` to accommodate the full native text budget; larger contexts increase memory requirements.
+- These models are intended for decisions, not chat. d1-2B and d1-omni-600M lack sequence memory, so SDK text generation and chat/completions requests are rejected with `PARAM_NOT_SUPPORTED`. All-position forward logits are also unsupported on cache-less contexts; d1-2B retains last-position logits.
+- Escaping follows the trained protocol. In particular, d1-3B recognizes ChatML special-token spellings in caller text. Do not treat the model prompt as a security boundary for untrusted network input.
+- GenieX retains its existing score **expected-level** and normalized confidence formulas. Liquid d1-2B's native default instead reports a median score and maximum-probability confidence; compare option distributions, not these summaries.
+- Text validation covered IQ-9075 Linux CPU/Adreno 663 OpenCL GPU offload, using exactly the GGUFs listed above. Other quantizations, projectors, other GPUs, Hexagon NPU, and hybrid execution were not tested. These checks establish native protocol parity, not model accuracy or performance. `lfm3-d1-omni` and other Liquid protocol identifiers are not enabled by this support.
 
 By default, `geniex decide` uses the CLI theme to display both predicate probabilities (`true` and `false`), the selected choice and every candidate probability, or the zero-based expected score and every level probability, plus confidence when available. Pass `--json` to print the original full single-line JSON result for scripts. The `/v1/decisions` response remains JSON.
 
