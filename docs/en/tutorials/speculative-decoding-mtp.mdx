@@ -27,6 +27,20 @@ geniex pull RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0
 
 Both models are resident at once, so plan for roughly 20 GB of free disk and enough RAM to hold the pair.
 
+A lighter pair is the dense **E4B** model. Google ships its QAT drafter only as unquantized safetensors, so `cascade-tech` repackages it as GGUF:
+
+| Role | Model |
+|---|---|
+| **Target** | `google/gemma-4-E4B-it-qat-q4_0-gguf:Q4_0` |
+| **Draft** | `cascade-tech/gemma-4-E4B-it-qat-q4_0-unquantized-assistant-gguf:Q4_0` |
+
+```bash
+geniex pull google/gemma-4-E4B-it-qat-q4_0-gguf:Q4_0
+geniex pull cascade-tech/gemma-4-E4B-it-qat-q4_0-unquantized-assistant-gguf:Q4_0
+```
+
+This pair is under 6 GB combined.
+
 ## **Step 2: Run it with `geniex infer`**
 
 Three new flags turn it on — the type, the draft model, and how far ahead to draft:
@@ -49,6 +63,18 @@ When speculation is active, the profiling block gains a `draft accept` line — 
 decode speed:   56.4 tok/s
 stop reason:    eos
 draft accept:   14/75 (18.7%)
+```
+
+The same flags work on the E4B pair from [Step 1](#step-1-pull-the-model-pair):
+
+```bash
+geniex infer google/gemma-4-E4B-it-qat-q4_0-gguf:Q4_0 --spec-type draft-mtp --draft-model cascade-tech/gemma-4-E4B-it-qat-q4_0-unquantized-assistant-gguf:Q4_0 --draft-tokens 3
+```
+
+```text
+decode speed:   13.4 tok/s
+stop reason:    eos
+draft accept:   153/225 (68.0%)
 ```
 
 Setup failure is non-fatal: if the draft context can't be built, GenieX logs `speculative decoding setup failed; falling back to plain decoding` and continues at normal speed.
