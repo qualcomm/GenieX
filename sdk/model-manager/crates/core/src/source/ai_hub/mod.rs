@@ -45,6 +45,8 @@ const MAX_INDEX_BYTES: u64 = 8 * 1024 * 1024;
 
 /// TTL for `latest/` index JSONs — short so new releases propagate.
 const INDEX_TTL: Duration = Duration::from_secs(60 * 60);
+/// Host detection only uses the catalogue to get a friendly display name.
+const HOST_CHIPSET_LOOKUP_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// TTL for per-model info.json (immutable per release).
 const INFO_TTL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -232,9 +234,22 @@ pub async fn detect_host_chipset_reference(cfg: &AiHubConfig) -> Option<String> 
         Ok(t) => Arc::new(t),
         Err(_) => return Some(raw),
     };
-    match fetch_platform_info(cfg, &transport).await {
-        Ok(plat) => Some(selector::resolve_chipset_display(&plat, &raw).unwrap_or(raw)),
-        Err(_) => Some(raw),
+    Some(resolve_host_chipset_reference(raw, cfg, &transport).await)
+}
+
+async fn resolve_host_chipset_reference(
+    raw: String,
+    cfg: &AiHubConfig,
+    transport: &Arc<dyn HttpTransport>,
+) -> String {
+    match tokio::time::timeout(
+        HOST_CHIPSET_LOOKUP_TIMEOUT,
+        fetch_platform_info(cfg, transport),
+    )
+    .await
+    {
+        Ok(Ok(plat)) => selector::resolve_chipset_display(&plat, &raw).unwrap_or(raw),
+        _ => raw,
     }
 }
 
@@ -911,6 +926,68 @@ mod tests {
         write_cache(&p, br#"{"version":"0.58.0"}"#);
         assert!(read_cache_fresh(&p, INDEX_TTL).is_some());
         assert!(read_cache_fresh(&p, Duration::ZERO).is_none());
+    }
+
+    struct StalledTransport;
+
+    #[async_trait]
+    impl HttpTransport for StalledTransport {
+        async fn head(&self, _: &Url, _: Option<&str>) -> Result<crate::transport::HeadInfo> {
+            std::future::pending().await
+        }
+
+        async fn get_range(
+            &self,
+            _: &Url,
+            _: Option<&str>,
+            _: u64,
+            _: u64,
+            _: &mut (dyn tokio::io::AsyncWrite + Unpin + Send),
+        ) -> Result<()> {
+            unreachable!("a stalled HEAD cannot be followed by a GET")
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn host_chipset_lookup_falls_back_when_catalogue_stalls() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = AiHubConfig::new(
+            "https://example.invalid".into(),
+            "0.64.0".into(),
+            String::new(),
+            tmp.path().to_path_buf(),
+            false,
+        );
+        let transport: Arc<dyn HttpTransport> = Arc::new(StalledTransport);
+        let start = tokio::time::Instant::now();
+
+        let chipset =
+            resolve_host_chipset_reference("qualcomm-qcs9075".into(), &cfg, &transport).await;
+
+        assert_eq!(chipset, "qualcomm-qcs9075");
+        assert_eq!(start.elapsed(), HOST_CHIPSET_LOOKUP_TIMEOUT);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn host_chipset_lookup_uses_cached_display_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_cache(
+            &tmp.path().join(PLATFORM_FILENAME),
+            br#"{"chipsets":[{"name":"qualcomm-qcs9075","reference_device":"Dragonwing IQ-9075 EVK"}]}"#,
+        );
+        let cfg = AiHubConfig::new(
+            "https://example.invalid".into(),
+            "0.64.0".into(),
+            String::new(),
+            tmp.path().to_path_buf(),
+            false,
+        );
+        let transport: Arc<dyn HttpTransport> = Arc::new(StalledTransport);
+
+        let chipset =
+            resolve_host_chipset_reference("qualcomm-qcs9075".into(), &cfg, &transport).await;
+
+        assert_eq!(chipset, "Dragonwing IQ-9075 EVK");
     }
 
     fn chipset(name: &str) -> ChipsetInfo {
