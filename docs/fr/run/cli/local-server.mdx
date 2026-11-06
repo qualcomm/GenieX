@@ -1,0 +1,410 @@
+---
+title: "Serveur local"
+description: "Exécutez une API HTTP compatible OpenAI sur localhost avec accélération NPU/GPU/CPU Snapdragon."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+GenieX intègre un serveur d'inférence intégré qui expose une **API compatible avec OpenAI**. Exécutez des modèles sur l'appareil et connectez-les à toute application ou framework prenant en charge le protocole OpenAI — des frameworks d'agents comme **LangChain**, des applications d'IA natives comme **OpenClaw**, ou votre propre code. Sans aucune dépendance au cloud.
+
+## **Prérequis**
+
+- La CLI installée — voir [Installation](/fr/run/cli/install).
+- Shell interactif depuis un conteneur (Docker uniquement) — voir [Exécuter en mode interactif](/fr/run/linux/install#executer-en-mode-interactif).
+- Un modèle préalablement téléchargé. `geniex serve` ne télécharge **pas** automatiquement les modèles.
+
+## **Démarrer le serveur**
+
+Téléchargez un modèle :
+
+```bash bash
+geniex pull ai-hub-models/Qwen3-4B-Instruct-2507
+```
+
+Démarrez le serveur :
+
+```bash bash
+geniex serve
+```
+
+Le serveur s'exécute par défaut sur `http://127.0.0.1:18181`. Laissez ce terminal ouvert et envoyez des requêtes depuis un autre terminal. Lancez `geniex serve -h` pour afficher toutes les options configurables.
+
+## **POST /v1/chat/completions**
+
+Génère une réponse du modèle pour une conversation. Prend en charge les LLM (texte uniquement) et les VLM (texte + image ou audio).
+
+### **Requête LLM**
+
+```json Exemple de valeur
+{
+  "model": "ai-hub-models/Qwen3-4B-Instruct-2507",
+  "messages": [
+    {"role": "user", "content": "Bonjour ! Présentez-vous brièvement."}
+  ],
+  "max_tokens": 256,
+  "temperature": 0.7,
+  "stream": false
+}
+```
+
+<a id="separating-reasoning-reasoning_content"></a>
+### **Séparation du raisonnement (reasoning_content)**
+
+Par défaut, les modèles avec réflexion placent leur chaîne de pensée dans `message.reasoning_content` et conservent un champ `content` propre. Définissez `reasoning_format` sur `none` dans le corps de la requête `/v1/chat/completions` pour conserver le raisonnement brut intégré dans `message.content` :
+
+```bash
+curl http://127.0.0.1:18181/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ai-hub-models/Qwen3-4B-Instruct-2507",
+    "messages": [{"role": "user", "content": "Bonjour !"}],
+    "reasoning_format": "none"
+  }'
+```
+
+`deepseek` est la valeur par défaut ; `deepseek`, `deepseek-legacy` et `auto` séparent le raisonnement, tandis que `none` le conserve en ligne. Ce paramètre ne désactive pas le raisonnement (contrairement à `enable_think: false`) et s'applique également aux requêtes en streaming et d'appels d'outils. Consultez l'[exemple de client Python](#separating-reasoning-reasoning_content) pour savoir comment lire ces champs séparés avec le SDK OpenAI.
+
+### **Essayer depuis l'interface Swagger UI**
+
+Ouvrez `http://127.0.0.1:18181` dans votre navigateur pour accéder à l'interface intégrée Swagger UI.
+
+**Étape 1.** Dépliez le point de terminaison `POST /v1/chat/completions` pour afficher l'exemple de corps de requête et le schéma.
+
+![Swagger UI montrant le point de terminaison chat completions avec un corps de requête d'exemple](/Images/server/curl-1.png)
+
+**Étape 2.** Cliquez sur **Try it out**, modifiez le corps de la requête selon vos besoins, puis cliquez sur **Execute**.
+
+![Modification du corps de la requête en mode Try-it-out avant exécution](/Images/server/curl-2.png)
+
+**Étape 3.** Consultez la réponse — un statut `200` avec la réponse générée par le modèle.
+
+![Corps de la réponse montrant un code 200 réussi avec la réponse du modèle](/Images/server/curl-3.png)
+
+<a id="vlm-request"></a>
+### **Requête VLM**
+
+Un VLM accepte des parties de contenu multimodal en plus du texte. Utilisez `image_url` pour les images et `input_audio` pour l'audio sur un modèle dont le mmproj comprend un encodeur conformer (par exemple `google/gemma-4-E2B-it-qat-q4_0-gguf`). `image_url.url` et `input_audio.data` acceptent tous deux les trois mêmes formats :
+
+| Format | Exemple image | Exemple audio |
+|---|---|---|
+| Chemin de fichier local (le préfixe `file://` est facultatif) | `C:/Users/Username/Pictures/photo.jpg` | `/data/jfk.wav`, `file:///tmp/jfk.wav` |
+| URL HTTP / HTTPS — récupérée par le serveur | `https://example.com/image.jpg` | `https://example.com/clip.mp3` |
+| Data URL en Base64 — octets intégrés | `data:image/png;base64,iVBORw0KGgo...` | `data:audio/wav;base64,UklGR...` |
+
+<Note>
+**Vous utilisez Docker ?** Les chemins locaux sont résolus **à l'intérieur du conteneur**, et non sur votre système hôte. La commande d'installation monte déjà `$PWD/data` sur `/data` — déposez-y vos fichiers image et audio et passez `/data/cat.jpg` / `/data/jfk.wav`. Vous pouvez également utiliser une URL HTTP ou une Data URL en base64 pour contourner totalement le système de fichiers.
+</Note>
+
+<Warning>L'entrée audio fonctionne uniquement sur le backend **llama.cpp**. Les modèles QAIRT signalent `audio: false` et un modèle QAIRT recevant de l'audio échoue avec `GenieXError(-201201): Multimodal generation failed`.</Warning>
+
+Un message unique peut mélanger des parties `image_url` et `input_audio`. Téléchargez un modèle compatible audio et récupérez un extrait d'exemple :
+
+```bash
+geniex pull google/gemma-4-E2B-it-qat-q4_0-gguf
+curl -L -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/master/samples/jfk.wav
+curl -L -o landmark.jpg "https://images.pexels.com/photos/402028/pexels-photo-402028.jpeg?w=1024"
+```
+
+```bash
+curl http://127.0.0.1:18181/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "google/gemma-4-E2B-it-qat-q4_0-gguf",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {"type": "text", "text": "Décrivez l'image, puis transcrivez l'audio."},
+          {"type": "image_url", "image_url": {"url": "/chemin/complet/vers/landmark.jpg"}},
+          {"type": "input_audio", "input_audio": {"data": "/chemin/complet/vers/jfk.wav"}}
+        ]
+      }
+    ],
+    "max_tokens": 256
+  }'
+```
+
+La même requête avec le client Python `openai` :
+
+```python
+resp = client.chat.completions.create(
+    model="google/gemma-4-E2B-it-qat-q4_0-gguf",
+    messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Décrivez l'image, puis transcrivez l'audio."},
+                {"type": "image_url", "image_url": {"url": "/chemin/complet/vers/landmark.jpg"}},
+                {"type": "input_audio", "input_audio": {"data": "/chemin/complet/vers/jfk.wav"}},
+            ],
+        }
+    ],
+    max_tokens=256,
+)
+print(resp.choices[0].message.content)
+```
+
+Sortie (vérifiée avec `--compute npu`, Snapdragon X Elite) :
+
+```text
+Il s'agit d'une photographie représentant un temple japonais traditionnel ... À l'arrière-plan, on aperçoit des montagnes aux douces teintes bleutées et un paysage urbain lointain.
+
+**Transcription :**
+And so my fellow Americans ask not what your country can do for you, ask what you can do for your country.
+```
+
+Dans l'interface Swagger UI, remplacez le corps de la requête par une charge utile VLM comme ci-dessus, pointez les chemins vers des fichiers locaux, puis cliquez sur **Execute**.
+
+![Modification du corps de requête VLM en mode Try-it-out avant exécution](/Images/server/curl-4.png)
+
+![Corps de la réponse affichant un code 200 avec la description d'image du VLM](/Images/server/curl-5.png)
+
+## **POST /v1/completions**
+
+Génère une continuation brute de `prompt` sans appliquer de modèle de discussion — le prompt parvient au modèle tel quel. Utilisez ce point de terminaison pour les clients qui construisent eux-mêmes l'intégralité du prompt, comme les outils d'autocomplétion de code en cours de ligne (Fill-In-the-Middle ou FIM) dans un éditeur : placez les tokens FIM du modèle directement dans `prompt`. Uniquement pour les modèles LLM.
+
+```json Exemple de valeur
+{
+  "model": "unsloth/Qwen2.5-Coder-3B-GGUF:Q4_0",
+  "prompt": "<|fim_prefix|>def fibonacci(n):\n    <|fim_suffix|>\n    return a<|fim_middle|>",
+  "max_tokens": 64,
+  "temperature": 0.2,
+  "stop": ["<|endoftext|>"],
+  "stream": false
+}
+```
+
+La réponse `choices[0].text` est la complétion brute, prête à être insérée à la position du curseur. `stream`, `stop`, `echo` et les paramètres d'échantillonnage (`temperature`, `top_p`, `top_k`, `min_p`, `repetition_penalty`, `seed`) fonctionnent comme sur `/v1/chat/completions` ; `suffix` n'est pas pris en charge — encodez plutôt le suffixe avec les tokens FIM du modèle directement dans `prompt`.
+
+## **POST /v1/decisions**
+
+Évalue des questions ordonnées de type `predicate`, `choice` et `score` à l'aide d'un LLM ou VLM `llama_cpp` **déjà importé dans le cache GenieX**. Ce point de terminaison respecte le format de requête et de réponse OpenAI Decisions. Les modèles dotés de `systemone` utilisent la voie de décision OpenJEV, LEV ou Nimble et une température propre au modèle ; si `decision.type` est absent, OpenJEV est utilisé par défaut. Les modèles sans `systemone` utilisent un prompt générique avec leur modèle de discussion habituel et une température de `1.0`. Les choix LEV font la moyenne des deux ordres d'options, et les prédicats LEV utilisent une échelle de notation à neuf niveaux ; les LLM comme les VLM utilisent les logits natifs (LEV lui-même est uniquement textuel). Les VLM peuvent évaluer des images et de l'audio intégrés.
+
+```sh
+curl http://127.0.0.1:18181/v1/decisions -H 'Content-Type: application/json' -d '{
+  "model": "local/decision-model:Q4_K_M",
+  "compute": "cpu",
+  "nctx": 8192,
+  "input": "Our checkout has returned 500 errors since 9am.",
+  "questions": [
+    {
+      "name": "label",
+      "type": "choice",
+      "instructions": "Which label fits this ticket?",
+      "choices": [
+        {"value": "billing", "description": "Payments and refunds"},
+        {"value": "bug", "description": "Software errors"},
+        {"value": "account", "description": "Login and account access"}
+      ]
+    },
+    {"name": "urgent", "type": "predicate", "instructions": "Is a critical business operation currently blocked?"},
+    {
+      "name": "severity",
+      "type": "score",
+      "instructions": "How severe is the issue?",
+      "levels": [{"label": "low"}, {"label": "moderate"}, {"label": "critical"}]
+    }
+  ]
+}'
+```
+
+`input` peut être une chaîne de texte non vide ou des messages utilisateur contenant des parties `input_text`, `input_image` et `input_audio` spécifiques à GenieX. Les images (`image_url`) et l'audio (`input_audio.data`) utilisent la méthode `SaveURIToTempFile` du point de terminaison de chat, qui accepte les chemins locaux, `file://`, HTTP(S) et les data URLs. L'audio accepte également du base64 brut avec `input_audio.format` (par exemple `wav`), comme en discussion. Un maximum de 8 éléments de chaque type est accepté, et le VLM doit prendre en charge la modalité correspondante. Chaque question peut comporter un nom unique facultatif (`name` ; les noms omis renvoient `null`) ; choisissez de 2 à 255 valeurs de choix (selon le vocabulaire de tokens du modèle) et de 2 à 10 niveaux de score, avec un maximum de 64 questions. Le tableau ordonné `answers` renvoie une probabilité réelle pour les prédicats, la valeur sélectionnée pour les choix et un index base zéro pour les scores. Les réponses LLM et VLM incluent des probabilités et un indice de confiance, sans générer de tokens de sortie. Remplacez le `model` de l'exemple par un nom de modèle mis en cache par GenieX issu de `geniex list`, et non un chemin GGUF.
+
+## **Client Python (SDK OpenAI)**
+
+Puisque le serveur implémente le protocole OpenAI, vous pouvez pointer le client Python officiel `openai` vers le serveur local et réutiliser tout votre code OpenAI existant. Installez-le avec `pip install openai`, puis instanciez un client :
+
+```python python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://127.0.0.1:18181/v1",
+    api_key="geniex",  # toute chaîne non vide ; le serveur ne la vérifie pas
+)
+```
+
+Les exemples ci-dessous réutilisent cet objet `client`. Remplacez la valeur de `model` par un modèle que vous avez déjà téléchargé. Le suffixe facultatif `:<precision>` (par exemple `Q4_0`, `Q4_K_M`, `Q8_0`) sélectionne une variante de quantification — `Q4_0` est recommandé pour llama.cpp sur NPU Hexagon. Voir [Précisions (Quantifications) prises en charge](/fr/models/supported#precisions-quantisations-prises-en-charge).
+
+### **Streaming**
+
+Affichez chaque fragment (delta) au fur et à mesure de son arrivée :
+
+```python python
+stream = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=[
+        {"role": "user", "content": "Bonjour ! Présentez-vous brièvement."},
+    ],
+    max_tokens=256,
+    temperature=0.7,
+    stream=True,
+)
+
+for chunk in stream:
+    delta = chunk.choices[0].delta.content
+    if delta:
+        print(delta, end="", flush=True)
+print()
+```
+
+### **Complétion de discussion (non-streaming)**
+
+Une seule requête, une seule réponse, sans flux — le format classique `chat.completions.create` d'OpenAI. Le paramètre supplémentaire `enable_think=False` désactive le préfixe de raisonnement par défaut `<think>…</think>` de Qwen3 pour préserver un contenu de réponse propre.
+
+```python python
+resp = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=[
+        {"role": "user", "content": "Bonjour ! Présentez-vous brièvement."},
+    ],
+    max_tokens=128,
+    temperature=0.7,
+    extra_body={"enable_think": False},
+)
+
+print(resp.choices[0].message.content)
+print("finish_reason:", resp.choices[0].finish_reason)
+print("usage:", resp.usage)
+```
+
+Exemple de sortie :
+
+```text
+Bonjour ! Je suis Qwen, un grand modèle linguistique développé par Alibaba Cloud...
+finish_reason: stop
+usage: CompletionUsage(completion_tokens=58, prompt_tokens=19, total_tokens=77, ...)
+```
+
+`usage.prompt_tokens` représente la longueur totale du prompt, y compris les tokens réutilisés depuis le cache KV. `usage.prompt_tokens_details.cached_tokens` représente la partie réutilisée (0 en cas de cache miss), et `timings.prompt_n` correspond à ce qui a été réellement évalué. Les modèles QAIRT ne rapportent pas encore la réutilisation, de sorte que leur champ `prompt_tokens` ne compte que les tokens évalués.
+
+### **Séparation du raisonnement (reasoning_content)**
+
+Par défaut, un modèle avec réflexion place sa chaîne de pensée dans le champ standard OpenAI `message.reasoning_content`, laissant le champ `content` propre. Ne passez `reasoning_format="none"` dans le corps de requête que si vous avez impérativement besoin du raisonnement brut en ligne dans `message.content`.
+
+<Note>
+`reasoning_format` n'est pas équivalent à `enable_think` : `enable_think=False` empêche totalement le modèle **de produire** une chaîne de pensée, tandis que le comportement par défaut `reasoning_format="deepseek"` lui permet de réfléchir normalement tout en **déplaçant** la réflexion hors de `content`. Les valeurs acceptées sont `deepseek` (défaut), `deepseek-legacy` et `auto` (tous trois séparent la réflexion), ou `none` (maintenue en ligne). Cela s'applique également aux requêtes d'appels d'outils, y compris en streaming : le bloc de réflexion est isolé avant que la réponse ne soit analysée pour identifier un appel d'outil.
+</Note>
+
+```python python
+resp = client.chat.completions.create(
+    model="unsloth/Qwen3-4B-GGUF:Q4_0",
+    messages=[
+        {"role": "user", "content": "Combien font 2+2 ? Répondez brièvement."},
+    ],
+    max_tokens=128,
+)
+
+msg = resp.choices[0].message
+print("reasoning:", msg.model_extra.get("reasoning_content"))
+print("content:", msg.content)
+```
+
+Le streaming fonctionne de la même manière — la chaîne de pensée arrive sous la forme de fragments `delta.reasoning_content` et la réponse finale sous `delta.content`.
+
+### **Appel d'outils (Tool calling)**
+
+Les appels de fonctions/outils utilisent le schéma `tools` standard d'OpenAI. Le serveur extrait l'appel d'outil depuis le texte généré par le modèle (balises `<tool_call>…</tool_call>` ou bloc de code ` ```json `) et l'émet sous forme de `tool_calls` OpenAI. Ce flux fonctionne **également avec les VLM** — le modèle peut examiner une image, décider de la recherche à mener et appeler un outil.
+
+L'exemple ci-dessous détaille une boucle d'agent en deux étapes avec `qualcomm/Qwen3-VL-4B-Instruct` : (1) le VLM identifie un monument à partir d'une photo et appelle `web_search`, (2) vous exécutez la recherche localement et réinjectez les résultats afin que le VLM rédige une réponse documentée.
+
+<Note>
+Une réponse peut contenir plusieurs appels d'outils ; répondez avec un message `role: "tool"` par `tool_call_id`. Définissez `parallel_tool_calls: false` pour limiter les modèles llama_cpp à un seul appel par réponse (certains modèles de discussion peuvent l'ignorer). QAIRT ignore cette option. L'exemple ci-dessous ne traite que le premier appel.
+</Note>
+
+<Note>
+Deux particularités de Qwen3-VL pour des appels d'outils fiables :
+1. Préparez le modèle avec un message système décrivant explicitement le format `<tool_call>…</tool_call>` (le template de chat de Qwen3-VL ne l'impose pas aussi rigoureusement que celui de Qwen3 textuel).
+2. Au tour suivant, supprimez `tools=` et retirez le contenu de l'image de `messages` — cela évite que le VLM ne réinvoque l'outil et empêche de réexécuter inutilement l'encodeur de vision sur la même image.
+</Note>
+
+Installez la bibliothèque de recherche utilisée par l'outil (`pip install ddgs` — DuckDuckGo, aucune clé API requise), puis :
+
+```python python
+import json
+
+from ddgs import DDGS
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Rechercher sur le web des informations de voyage sur un lieu.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Requête de recherche, ex. 'que faire à Kyoto'"},
+                },
+                "required": ["query"],
+            },
+        },
+    }
+]
+
+def web_search(query: str) -> list[dict]:
+    return [
+        {"title": r["title"], "snippet": r["body"], "url": r["href"]}
+        for r in DDGS().text(query, max_results=3)
+    ]
+
+IMAGE_URL = "https://images.pexels.com/photos/402028/pexels-photo-402028.jpeg?w=1024"
+
+system_prompt = (
+    "Vous êtes un assistant de voyage. Appelez l'outil web_search pour rechercher tout lieu "
+    "au sujet duquel l'utilisateur pose une question avant de répondre. Une fois les résultats reçus, "
+    "n'appelez plus l'outil - utilisez-les pour rédiger une réponse courte et conviviale. "
+    "Émettez les appels d'outils au format exact : "
+    '<tool_call>{"name": "web_search", "arguments": {"query": "<votre requête>"}}</tool_call>'
+)
+
+messages = [
+    {"role": "system", "content": system_prompt},
+    {
+        "role": "user",
+        "content": [
+            {"type": "image_url", "image_url": {"url": IMAGE_URL}},
+            {"type": "text", "text": "Identifiez le monument, puis appelez web_search pour obtenir des conseils de visite."},
+        ],
+    },
+]
+
+# Étape 1 - Le VLM identifie le monument et déclenche un appel web_search.
+first = client.chat.completions.create(
+    model="qualcomm/Qwen3-VL-4B-Instruct",
+    messages=messages,
+    tools=tools,
+    tool_choice="auto",
+    max_tokens=512,
+    extra_body={"enable_think": False},
+)
+call = first.choices[0].message.tool_calls[0]
+print("finish_reason:", first.choices[0].finish_reason)  # -> "tool_calls"
+print("call:", call.function.name, call.function.arguments)
+
+# Étape 2 - Exécuter l'outil, réinjecter le résultat dans une nouvelle conversation texte.
+result = web_search(**json.loads(call.function.arguments))
+
+followup = [
+    {"role": "system", "content": system_prompt},
+    {"role": "user", "content": "Résumez les conseils de visite à partir des résultats ci-dessous."},
+    first.choices[0].message,
+    {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result)},
+]
+
+final = client.chat.completions.create(
+    model="qualcomm/Qwen3-VL-4B-Instruct",
+    messages=followup,
+    max_tokens=256,
+    extra_body={"enable_think": False},
+)
+print(final.choices[0].message.content)
+```
+
+## **Autres points de terminaison**
+
+- `GET /v1/models` — liste les modèles disponibles.
+- `GET /v1/models/{model}` — affiche les informations relatives à un modèle donné.
+
+<br />
+
+<Feedback/>

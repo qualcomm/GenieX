@@ -1,0 +1,179 @@
+---
+title: "Démarrage rapide"
+description: "Exécutez votre premier modèle depuis le SDK Android GenieX en Kotlin."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+Cette page vous guide pour exécuter votre premier modèle depuis une application Kotlin, puis pour basculer vers un autre modèle. Pour une application de référence complète avec interface de chat, sélecteur de modèles et support VLM, consultez l'[application d'exemple](https://github.com/qualcomm/ai-hub-apps/blob/release/geniex_chat_android/README.md).
+
+## **Prérequis**
+
+- Le SDK ajouté à votre projet Gradle — voir [Installation](/fr/run/android/install).
+- Un téléphone fonctionnant avec un **Snapdragon 8 Elite** ou un **Snapdragon 8 Elite Gen 5**.
+- L'autorisation `INTERNET` dans votre `AndroidManifest.xml` (le SDK télécharge les poids depuis Hugging Face / Qualcomm AI Hub à la première utilisation).
+
+## **Exécuter votre premier modèle**
+
+Le flux reste identique quel que soit le modèle : **initialiser le SDK → télécharger les poids → charger → générer**. Voici un exemple minimal de bout en bout avec `unsloth/Qwen3-0.6B-GGUF` — un modèle de discussion compact Qwen3 0.6B qui s'exécute sur tout chipset pris en charge.
+
+<Steps>
+  <Step title="Initialiser le SDK">
+    Appelez cette méthode au démarrage de l'application (idempotente — sûre à placer dans `Activity.onCreate`) :
+
+    ```kotlin
+    GenieXSdk.getInstance().init(context)
+    ```
+  </Step>
+
+  <Step title="Télécharger le modèle">
+    `pullFlow` émet les événements de progression sous forme de flux. Exécutez-le dans une coroutine sur `Dispatchers.IO` :
+
+    ```kotlin
+    ModelManagerWrapper.pullFlow(
+        ModelPullInput(
+            model_name = "unsloth/Qwen3-0.6B-GGUF",
+            precision  = "Q4_0",
+            hub        = HubSource.HUGGINGFACE,
+        )
+    ).collect { event ->
+        when (event) {
+            is ModelManagerWrapper.PullEvent.Progress  -> /* mettre à jour l'interface */
+            ModelManagerWrapper.PullEvent.Completed    -> /* terminé */
+            is ModelManagerWrapper.PullEvent.Error     -> /* afficher l'erreur */
+        }
+    }
+    ```
+
+    Les téléchargements peuvent être repris — fermer l'application en cours de téléchargement puis la relancer reprend là où elle s'était arrêtée.
+  </Step>
+
+  <Step title="Charger le modèle">
+    Résolvez les chemins sur le disque et instanciez un `LlmWrapper` :
+
+    ```kotlin
+    val paths = ModelManagerWrapper.getPaths("unsloth/Qwen3-0.6B-GGUF")
+        ?: error("Modèle non téléchargé")
+
+    val llm = LlmWrapper.builder()
+        .llmCreateInput(
+            LlmCreateInput(
+                model_path = paths.model_path,
+                config     = ModelConfig(nCtx = 4096),
+                runtime_id  = "llama_cpp",
+                compute_unit  = null,   // null → NPU sur Snapdragon (recommandé)
+            )
+        )
+        .build()
+        .getOrThrow()
+    ```
+  </Step>
+
+  <Step title="Générer">
+    Appliquez le modèle de discussion, puis collectez les tokens depuis le flux de streaming :
+
+    ```kotlin
+    val chat = arrayListOf(ChatMessage("user", "Qu'est-ce que l'IA ?"))
+    val templated = llm.applyChatTemplate(chat.toTypedArray(), null, false).getOrThrow()
+
+    llm.generateStreamFlow(
+        templated.formattedText,
+        GenerationConfig(maxTokens = 2048),
+    ).collect { result ->
+        when (result) {
+            is LlmStreamResult.Token     -> print(result.text)
+            is LlmStreamResult.Completed -> println("\nTerminé")
+            is LlmStreamResult.Error     -> println("Erreur : ${result.throwable}")
+        }
+    }
+    ```
+
+    <Warning>
+    Passez toujours `templated.formattedText` (le prompt formaté par le modèle de discussion) dans `generateStreamFlow`, et **non** le texte brut de l'utilisateur. Le pipeline natif attend une invite déjà mise en forme.
+    </Warning>
+  </Step>
+</Steps>
+
+## **Changer de modèle**
+
+Changer de modèle consiste principalement à modifier `model_name` et `runtime_id`. Il existe deux runtimes :
+
+- **`llama_cpp`** — exécute tout modèle GGUF. Prend en charge les unités de calcul NPU / GPU / CPU via `compute_unit`.
+- **`qairt`** (Qualcomm AI Engine Direct) — exécute les modèles Qualcomm AI Hub. NPU uniquement, requiert un paramètre explicite `chipset` sur Android.
+
+### Un autre modèle GGUF (llama.cpp)
+
+Modifiez simplement `model_name` (et `precision` si vous souhaitez en changer) — le reste du code est rigoureusement identique :
+
+```kotlin
+ModelPullInput(
+    model_name = "unsloth/Qwen3-VL-2B-Instruct-GGUF",
+    precision  = "Q4_0",
+    hub        = HubSource.HUGGINGFACE,
+)
+```
+
+Pour les VLM, passez également `paths.mmproj_path` dans `VlmCreateInput` — voir [Référence API → VLM](/fr/run/android/api-reference#vlm).
+
+### Un modèle Qualcomm AI Hub (NPU via Qualcomm AI Engine Direct)
+
+Les modèles Qualcomm AI Hub sont précompilés par chipset et ne s'exécutent que sur le NPU. Vous **devez** spécifier `chipset` sous Android :
+
+```kotlin
+ModelManagerWrapper.pullFlow(
+    ModelPullInput(
+        model_name = "ai-hub-models/Qwen3-4B-Instruct-2507",
+        hub        = HubSource.AUTO,   // dirige ai-hub-models/* vers Qualcomm AI Hub
+        chipset    = "SM8750",         // SM8750 = 8 Elite, SM8850 = 8 Elite Gen 5
+    )
+).collect { /* … */ }
+```
+
+Définissez ensuite `runtime_id = "qairt"` dans `LlmCreateInput`. Consultez les dépôts Qualcomm AI Hub pris en charge dans la [référence de l'API](/fr/run/android/api-reference#supported-models).
+
+### Changer d'unité de calcul (NPU / GPU / CPU)
+
+Pour `llama_cpp` uniquement — définissez `compute_unit` dans `LlmCreateInput` :
+
+| `compute_unit`        | Unité de calcul                            |
+|--------------------|--------------------------------------------|
+| `null` ou `"npu"`  | NPU Hexagon (recommandé sur Snapdragon).   |
+| `"gpu"`            | GPU Adreno via OpenCL.                     |
+| `"cpu"`            | Purement CPU. Fonctionne sur tout chipset ARM64. |
+
+Qualcomm AI Engine Direct ignore ce paramètre — `cpu`/`gpu` sont redirigés vers le NPU avec un avertissement.
+
+## **Utiliser un modèle local**
+
+Si les poids se trouvent déjà sur l'appareil — transférés via `adb push`, intégrés dans le dossier des fichiers de votre application ou produits par un autre outil — pointez le gestionnaire de modèles vers ce répertoire : définissez `hub = HubSource.LOCALFS` et `local_path` sur l'emplacement du disque. `pullFlow` l'importe dans le cache du SDK (sans réseau), après quoi `getPaths` / `LlmWrapper` fonctionnent exactement comme pour un modèle téléchargé.
+
+Les snippets Android complets pour importer un modèle local GGUF et un bundle local Qualcomm AI Engine Direct sont présentés sur la page Modèles :
+
+- [Exécuter un bundle local Qualcomm AI Engine Direct → Android](/fr/models/supported#run-a-local-qualcomm-ai-engine-direct-bundle)
+- [Exécuter un modèle local GGUF → Android](/fr/models/supported#run-a-local-gguf-model)
+
+## **Utiliser l'application d'exemple**
+
+L'[application d'exemple](https://github.com/qualcomm/ai-hub-apps/blob/release/geniex_chat_android/README.md) est un client de discussion entièrement fonctionnel construit sur les snippets ci-dessus. Quelques modèles de conception méritent d'être repris :
+
+- **Interface de sélection de modèle** — la liste déroulante est pilotée par `app/src/main/assets/model_list.json`. Chaque entrée fixe un `model_name`, un `hub`, et (pour Qualcomm AI Engine Direct) un `chipset`. Modifiez ce fichier pour ajouter de nouveaux modèles sans toucher au code.
+- **Téléchargements avec reprise et progression** — les événements `Progress` de `pullFlow` fournissent le décompte d'octets par fichier ; l'exemple les relie directement à un `LinearProgressIndicator`.
+- **Sélecteur d'unité de calcul adapté au runtime** — lorsque le modèle sélectionné utilise Qualcomm AI Engine Direct, le sélecteur masque les options GPU/CPU. Voir `LoadDialog.kt`.
+- **Sélecteur d'image VLM** — pour les VLM, l'exemple transmet le chemin absolu du fichier dans `VlmContent("image", path)`. Ne passez pas d'URI de contenu — la couche native lit directement le fichier.
+
+Clonez [`qualcomm/ai-hub-apps`](https://github.com/qualcomm/ai-hub-apps/blob/release/geniex_chat_android/README.md), ouvrez le projet dans Android Studio et cliquez sur **Run ▶**.
+
+## **Étapes suivantes**
+
+<CardGroup cols={2}>
+  <Card title="Référence de l'API" href="/fr/run/android/api-reference" icon="book">
+    Classes wrappers, sélection du runtime / de l'unité de calcul et structures de données.
+  </Card>
+  <Card title="Plateformes et runtimes" href="/fr/get-started/platforms" icon="route">
+    Plateformes Snapdragon et quand choisir llama.cpp vs Qualcomm AI Engine Direct.
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback />

@@ -181,6 +181,79 @@
             ]
           }
         ]
+      },
+      {
+        "language": "fr",
+        "groups": [
+          {
+            "group": "Démarrage",
+            "icon": "rocket",
+            "pages": [
+              "fr/get-started/what-is-geniex",
+              "fr/get-started/quickstart",
+              "fr/get-started/platforms",
+              "fr/models/supported"
+            ]
+          },
+          {
+            "group": "Exécution",
+            "icon": "play",
+            "pages": [
+              {
+                "group": "Ligne de commande",
+                "icon": "terminal",
+                "pages": [
+                  "fr/run/cli/install",
+                  "fr/run/cli/quickstart",
+                  "fr/run/cli/local-server",
+                  "fr/run/cli/reference"
+                ]
+              },
+              {
+                "group": "Python",
+                "icon": "python",
+                "pages": [
+                  "fr/run/python/install",
+                  "fr/run/python/quickstart",
+                  "fr/run/python/api-reference"
+                ]
+              },
+              {
+                "group": "Linux (Docker)",
+                "icon": "docker",
+                "pages": [
+                  "fr/run/linux/install"
+                ]
+              },
+              {
+                "group": "Android (Kotlin)",
+                "icon": "android",
+                "pages": [
+                  "fr/run/android/install",
+                  "fr/run/android/quickstart",
+                  "fr/run/android/api-reference"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Tutoriels",
+            "icon": "graduation-cap",
+            "pages": [
+              "fr/tutorials/benchmarking",
+              "fr/tutorials/speculative-decoding-mtp",
+              "fr/tutorials/audio-input"
+            ]
+          },
+          {
+            "group": "Ressources",
+            "icon": "circle-question",
+            "pages": [
+              "fr/resources/faq",
+              "fr/resources/troubleshooting"
+            ]
+          }
+        ]
       }
     ]
   }

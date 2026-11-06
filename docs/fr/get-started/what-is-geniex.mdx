@@ -1,0 +1,85 @@
+---
+title: "Qu'est-ce que GenieX"
+description: "Environnement d'exécution d'inférence IA sur l'appareil pour Qualcomm Snapdragon — exécutez des LLM et VLM de pointe via CLI, Python, Android et Docker."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+GenieX est un environnement d'exécution d'inférence d'IA générative sur l'appareil conçu pour les plateformes Qualcomm. C'est le moyen le plus simple d'exécuter localement des modèles de langage et de vision-langage de pointe sur le NPU Hexagon, le GPU Adreno ou le CPU en quelques lignes de code. Il s'agit de la version communautaire de Qualcomm GENIE.
+
+<Info>**GenieX est en version préliminaire pour développeurs (developer preview).** Vos retours sont les bienvenus — [ouvrez une issue](https://github.com/qualcomm/GenieX/issues) ou [rejoignez Slack](https://aihub.qualcomm.com/community/slack).</Info>
+
+## **Architecture**
+
+<img
+  src="/Mintlify-image/geniex_arch_v2.png"
+  alt="Pile architecturale de GenieX : les interfaces CLI, API Python, API Java, Docker et Serve reposent sur le SDK GenieX, qui répartit l'exécution vers le runtime llama.cpp (GGML sur noyaux CPU/GPU/HTP) ou le runtime Qualcomm AI Engine Direct sur NPU. Cible Windows, Android et Linux."
+  style={{ borderRadius: '0.5rem' }}
+/>
+
+GenieX propose **cinq points d'entrée**, tous reposant sur un SDK unique :
+
+- **CLI** — exécutez et servez des modèles directement depuis le terminal.
+- **Python** — intégrez l'inférence dans vos applications avec le SDK Python.
+- **Java/Kotlin** — le SDK Android pour les applications mobiles sur l'appareil.
+- **Docker** — une image conteneurisée pour des déploiements reproductibles.
+- **Serveur compatible OpenAI** — un serveur local clé en main pour les clients OpenAI existants.
+
+Sous le capot, ce SDK répartit l'exécution soit vers le **runtime llama.cpp** (noyaux GGML pour CPU / GPU / HTP Hexagon), soit vers le **runtime [Qualcomm® AI Engine Direct](https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk)** (NPU uniquement). Le même SDK fonctionne sur Windows ARM64, Android et Linux ARM64.
+
+<Note>**Qualcomm AI Engine Direct** est le nom officiel de ce qui est également désigné sous les noms *Qualcomm AI Engine Direct SDK*, *Qualcomm AI Runtime* et *QAIRT*. Tout au long de cette documentation, nous utilisons le nom officiel.</Note>
+
+## **Pourquoi deux runtimes ?**
+
+Pour bénéficier à la fois d'une **large compatibilité de modèles** et de **performances optimales** au sein d'une même pile :
+
+- **La plupart des modèles fonctionnent directement** — pointez GenieX vers presque n'importe quel modèle GGUF sur Hugging Face et il s'exécute sur CPU / GPU / NPU via llama.cpp.
+- **Les modèles Qualcomm® AI Hub fonctionnent de manière optimale** — les modèles publiés sur [Qualcomm AI Hub](https://aihub.qualcomm.com/) sont précompilés par chipset et s'exécutent via Qualcomm AI Engine Direct sur le NPU Hexagon pour des performances maximales sur l'appareil.
+
+Consultez [Plateformes et environnements d'exécution](/fr/get-started/platforms#environnements-d-execution-geniex) pour savoir lequel choisir selon vos besoins.
+
+## **Ce que vous pouvez faire avec GenieX**
+
+- **Exécuter des modèles localement** sur Snapdragon X (Windows ARM64), Snapdragon 8 Elite (Android) et les chipsets IoT Dragonwing.
+- **Choisir un runtime** — `llama.cpp` pour n'importe quel modèle GGUF communautaire, Qualcomm AI Engine Direct (`qairt`) pour les bundles NPU précompilés de Qualcomm AI Hub.
+- **Créer des applications** via la CLI, un serveur local compatible OpenAI, le SDK Python, le SDK Android ou une image Docker.
+
+## **Par où commencer**
+
+<CardGroup cols={2}>
+  <Card title="Démarrage rapide" href="/fr/get-started/quickstart" icon="rocket">
+    Choisissez votre interface et réalisez votre première inférence en quelques minutes.
+  </Card>
+  <Card title="Plateformes et runtimes" href="/fr/get-started/platforms" icon="microchip">
+    Plateformes Snapdragon prises en charge par GenieX, et quand choisir llama.cpp vs Qualcomm AI Engine Direct.
+  </Card>
+  <Card title="Modèles" href="/fr/models/supported" icon="cube">
+    LLM et VLM testés sur les runtimes llama.cpp et Qualcomm AI Engine Direct.
+  </Card>
+</CardGroup>
+
+## **Communauté**
+
+<CardGroup cols={2}>
+  <Card title="Signaler un problème" href="https://github.com/qualcomm/GenieX/issues" icon="github">
+    Signalez un bug, demandez une fonctionnalité ou parcourez les tickets ouverts sur GitHub.
+  </Card>
+  <Card title="Rejoindre Slack" href="https://aihub.qualcomm.com/community/slack" icon="slack">
+    Collaborez avec l'équipe GenieX et d'autres développeurs.
+  </Card>
+</CardGroup>
+
+## **Mentions légales**
+
+<CardGroup cols={2}>
+  <Card title="Licence" href="https://github.com/qualcomm/GenieX/blob/main/LICENSE" icon="scale-balanced">
+    GenieX est publié sous licence BSD 3-Clause.
+  </Card>
+  <Card title="Conditions d'utilisation" href="https://www.qualcomm.com/site/terms-of-use" icon="file-contract">
+    Conditions d'utilisation du site Qualcomm.
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>

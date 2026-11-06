@@ -1,0 +1,73 @@
+---
+title: "Démarrage rapide"
+description: "Exécutez votre premier modèle depuis la CLI GenieX."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **Prérequis**
+
+- La CLI installée — voir [Installation](/fr/run/cli/install).
+- Shell interactif depuis un conteneur (Docker uniquement) — voir [Exécuter en mode interactif](/fr/run/linux/install#executer-en-mode-interactif).
+- Connaissance du [choix du runtime](/fr/get-started/platforms#geniex-runtimes) — `qairt` (Qualcomm AI Engine Direct) pour les modèles Qualcomm AI Hub, `llama_cpp` pour tout modèle GGUF.
+
+## **Exécuter votre premier modèle**
+
+### **Runtime Qualcomm AI Engine Direct (Qualcomm AI Hub)**
+
+**Modèle de langage (LLM) :**
+
+```powershell windows
+geniex infer ai-hub-models/Qwen3-4B
+```
+
+**Modèle multimodal (VLM) :**
+
+```powershell windows
+geniex infer ai-hub-models/Qwen2.5-VL-7B-Instruct
+```
+
+### **Runtime llama.cpp (GGUF)**
+
+Choisissez `Q4_0` lorsque vous y êtes invité — il offre la meilleure prise en charge sur NPU Hexagon.
+
+**Modèle de langage (LLM) :**
+
+```powershell windows
+geniex infer unsloth/Qwen3.5-0.8B-GGUF
+```
+
+**Modèle multimodal (VLM) :**
+
+```powershell windows
+geniex infer Qwen/Qwen3-VL-2B-Instruct-GGUF
+```
+
+Lorsque demandé :
+- **Précision (Quantification)** — `Q4_0` pour des performances optimales sur NPU Hexagon.
+
+<Tip>Pour essayer d'autres modèles GGUF, copiez le chemin de n'importe quel GGUF compatible depuis Hugging Face et remplacez-le dans la commande ci-dessus. Voir [Exécuter un modèle GGUF depuis Hugging Face](/fr/models/supported#run-a-gguf-model-from-hugging-face).</Tip>
+
+<a id="run-a-local-model"></a>
+<a id="executer-un-modele-local"></a>
+## **Exécuter un modèle local**
+
+Vous avez déjà un modèle sur disque ou souhaitez convertir vous-même un bundle depuis Hugging Face ? Utilisez `geniex pull` avec `--local-path` pour l'enregistrer, puis exécutez-le comme n'importe quel autre modèle. Consultez :
+
+- [Exécuter un bundle local Qualcomm AI Engine Direct](/fr/models/supported#run-a-local-qualcomm-ai-engine-direct-bundle) — converti par vos soins depuis Hugging Face, un dossier de bundle extrait ou un fichier `.zip` d'AI Hub.
+- [Exécuter un modèle local GGUF](/fr/models/supported#run-a-local-gguf-model) — un répertoire contenant votre fichier `.gguf`.
+
+## **Étapes suivantes**
+
+<CardGroup cols={2}>
+  <Card title="Serveur local" href="/fr/run/cli/local-server" icon="server">
+    Exposez une API HTTP compatible OpenAI sur `localhost:18181`.
+  </Card>
+  <Card title="Référence de la CLI" href="/fr/run/cli/reference" icon="book">
+    Toutes les commandes, toutes les options.
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>

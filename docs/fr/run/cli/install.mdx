@@ -1,0 +1,168 @@
+---
+title: "Installation de la CLI"
+description: "Installer la CLI GenieX sur Windows ARM64 ou l'exécuter via Docker sur Linux ARM64."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+La CLI est fournie sous forme d'exécutable natif Windows ARM64 et sous forme d'image Docker Linux ARM64 pour les processeurs IoT Dragonwing QCS9075 et similaires.
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ### **Prérequis**
+
+    - Processeur Snapdragon série X (X Elite ou X2 Elite). Voir [Plateformes prises en charge](/fr/get-started/platforms).
+    - PowerShell ou tout autre terminal disponible sur Windows ARM64.
+
+    ### **Mettre à jour les pilotes NPU et GPU**
+
+    Installez les derniers pilotes Qualcomm avant d'exécuter GenieX :
+
+    1. **GPU Adreno** — Téléchargez le dernier [pilote graphique Windows](https://softwarecenter.qualcomm.com/catalog/item/Windows_Graphics_Driver), lancez l'installateur et redémarrez Windows. Dans le **Gestionnaire de périphériques**, vérifiez que le GPU apparaît bien sous **Cartes graphiques**.
+    2. **NPU Hexagon** — Téléchargez le dernier [pilote Qualcomm NPU](https://softwarecenter.qualcomm.com/catalog/item/Qualcomm_HND), lancez l'installateur et redémarrez Windows. Dans le **Gestionnaire de périphériques**, vérifiez que le NPU Hexagon apparaît bien sous **Processeurs neuronaux**.
+
+    ### **Téléchargement**
+
+    <Card title="Programme d'installation GenieX CLI" icon="download" href="https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-cli.exe">
+      Dernière version de la CLI GenieX pour Windows ARM64. Cliquez sur le fichier `.exe` téléchargé et suivez les instructions.
+    </Card>
+
+    Le programme d'installation n'étant pas encore signé numériquement, Windows SmartScreen affichera un avertissement. Cliquez sur **Informations complémentaires → Exécuter quand même**.
+
+    ### **Ajouter au PATH**
+
+    Rendez `geniex` accessible dans votre terminal :
+
+    ```powershell windows
+    Set-Alias geniex (where.exe geniex)
+    ```
+
+    ### **Vérification**
+
+    ```powershell windows
+    geniex --help
+    ```
+
+    Passez maintenant au [Démarrage rapide](/fr/run/cli/quickstart).
+  </Tab>
+
+  <Tab title="Linux ARM64 (Natif)">
+    Installez `geniex` directement sur un système hôte Linux ARM64 Dragonwing (carte EVK ou tout appareil avec un BSP Qualcomm). Si vous préférez l'exécuter dans un conteneur, consultez plutôt [Installation Linux (Docker)](/fr/run/linux/install).
+
+    ### **Prérequis**
+
+    - Hôte Linux ARM64.
+    - Chipset IoT Dragonwing — voir [Plateformes prises en charge](/fr/get-started/platforms).
+
+    <a id="install-host-dependencies"></a>
+    ### **Installer les dépendances hôtes**
+
+    `geniex` accède au NPU via les bibliothèques de pilotes Qualcomm de l'hôte. Installez-les avant d'exécuter `geniex`, en deux étapes.
+
+    **1. Paquets APT standards**
+
+    Fournit `libatomic1`, `libglib2.0-0` et un chargeur générique ICD OpenCL :
+
+    ```bash bash
+    sudo apt update
+    sudo apt install -y \
+      libatomic1 \
+      libglib2.0-0 \
+      ocl-icd-libopencl1
+    ```
+
+    <Note>`ocl-icd-libopencl1` est remplacé par `qcom-adreno1` à l'étape suivante.</Note>
+
+    **2. Paquets de pilotes Qualcomm (via le PPA `ubuntu-qcom-iot`)**
+
+    Fournit les bibliothèques propriétaires Qualcomm nécessaires au NPU :
+
+    | Bibliothèque | Fournie par |
+    | --- | --- |
+    | `libOpenCL_adreno.so.1`, `libCB.so.1`, `libadreno_utils.so.1`, `libgsl.so.1`, `libllvm-*.so.1` | `qcom-adreno1` |
+    | `libdmabufheap.so.0.0.0` | `qcom-libdmabufheap` *(dépendance auto de `qcom-adreno1`)* |
+    | `libpropertyvault.so.0.0.0` | `qcom-property-vault` *(dépendance auto de `qcom-adreno1`)* |
+    | `libcdsprpc.so.1.0.0` | `qcom-fastrpc1` |
+
+    ```bash bash
+    sudo apt-get install -y qcom-adreno1 qcom-fastrpc1 libqnn1
+    ```
+
+    Le PPA (`ppa:ubuntu-qcom-iot/qcom-ppa`) est préconfiguré sur l'image Ubuntu pour kit EVK IQ9075. `qcom-adreno1` installe automatiquement `qcom-libdmabufheap` et `qcom-property-vault`.
+
+    ### **Installation**
+
+    Si `HOME` n'est pas défini (courant dans les conteneurs minimaux ou les sessions `sudo -s`), exportez-le d'abord afin que l'installateur sache où placer les exécutables :
+
+    ```bash bash
+    export HOME=/root
+    ```
+
+    Lancez ensuite le script d'installation :
+
+    ```bash bash
+    curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
+    ```
+
+    Le script télécharge la dernière version stable, vérifie son empreinte SHA256 et procède à l'installation sans `sudo`. Si le répertoire des exécutables n'est pas déjà dans votre `PATH`, il affiche la ligne d'exportation exacte à ajouter — par exemple :
+
+    ```bash bash
+    echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc   # ou ~/.zshrc / ~/.profile
+    ```
+
+    Ouvrez un nouveau shell ou appliquez avec `source` sur ce fichier pour activer le changement.
+
+    <Note>
+      Si le script signale des bibliothèques partagées manquantes (`libCB.so.1`, `libOpenCL_adreno.so.1`, `libcdsprpc.so.1.0.0`, etc.), installez d'abord les paquets de pilotes Qualcomm — voir [Installer les dépendances hôtes](#install-host-dependencies) ci-dessus.
+    </Note>
+
+    ### **Vérification**
+
+    ```bash bash
+    geniex --help
+    ```
+
+    Si `geniex` n'est pas trouvé, ouvrez un nouveau terminal ou ajoutez au `PATH` le chemin indiqué par l'installateur à la fin de son exécution.
+
+    ### **Avancé**
+
+    <AccordionGroup>
+      <Accordion title="Emplacements d'installation">
+        Le script s'exécute sans `sudo` et choisit un emplacement selon vos privilèges :
+
+        - **Root** (EVK / conteneur) → binaire dans `/usr/local/lib/geniex/`, lanceur dans `/usr/local/bin/geniex`.
+        - **Non-root** → binaire dans `${XDG_DATA_HOME:-~/.local/share}/geniex/`, lanceur dans `~/.local/bin/geniex`.
+
+        Il télécharge la dernière version stable, vérifie son empreinte SHA256 et effectue une installation atomique.
+      </Accordion>
+
+      <Accordion title="Verrouiller une version ou utiliser un préfixe personnalisé">
+        Passez les drapeaux après `sh -s --` :
+
+        ```bash bash
+        # Verrouiller une version spécifique
+        curl -fsSL .../install.sh | sh -s -- --version v0.1.8
+
+        # Préfixe d'installation personnalisé
+        curl -fsSL .../install.sh | sh -s -- --prefix /opt/geniex
+        ```
+      </Accordion>
+
+      <Accordion title="Ajouter au PATH manuellement">
+        Si le répertoire du lanceur n'est pas présent dans votre `PATH`, ajoutez la ligne affichée par l'installateur — généralement :
+
+        ```bash bash
+        echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc   # ou ~/.zshrc / ~/.profile
+        ```
+
+        Ouvrez un nouveau shell ou rechargez ce fichier avec `source`.
+      </Accordion>
+    </AccordionGroup>
+
+  </Tab>
+
+</Tabs>
+
+<br />
+
+<Feedback/>

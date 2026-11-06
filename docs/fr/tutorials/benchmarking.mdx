@@ -1,0 +1,260 @@
+---
+title: "Benchmarking avec geniex-bench"
+description: "Mesurer le débit de préremplissage et de décodage sous Windows ARM64 et Linux ARM64 avec geniex-bench."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+`geniex-bench` mesure le débit d'inférence brut — TTFT, vitesse de préremplissage (prefill) et vitesse de décodage — sur le matériel réel Snapdragon. Il s'agit d'un binaire autonome sans dépendance envers la CLI : téléchargez l'archive, extrayez-la et lancez-la.
+
+## **Prérequis**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    - Appareil équipé d'un Snapdragon X Elite ou X2 Elite sous Windows ARM64. Voir [Plateformes prises en charge](/fr/get-started/platforms).
+    - PowerShell (toute version).
+    - Un modèle téléchargé. Exécutez `geniex pull` au préalable, ou laissez `geniex-bench` le télécharger à la première exécution via `--mm-data-dir`.
+  </Tab>
+  <Tab title="Linux ARM64">
+    - Appareil Qualcomm Dragonwing IQ-9075 ou IQ-8275 sous Ubuntu ARM64.
+    - Les mêmes bibliothèques de pilotes Qualcomm requises par la CLI GenieX. Si `geniex` est déjà installé, elles sont présentes. Sinon, installez-les :
+
+      ```bash bash
+      sudo apt-get install -y qcom-adreno1 qcom-fastrpc1 libqnn1
+      ```
+
+    - Un modèle téléchargé, ou un identifiant de modèle Hugging Face / AI Hub que `geniex-bench` peut télécharger automatiquement.
+  </Tab>
+</Tabs>
+
+## **Étape 1 : Télécharger et extraire**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    Ouvrez PowerShell et lancez :
+
+    ```powershell windows
+    Invoke-WebRequest `
+      https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-windows-arm64.zip `
+      -OutFile bench.zip
+    Expand-Archive bench.zip -DestinationPath bench
+    ```
+
+    Vérifiez que le binaire s'exécute :
+
+    ```powershell windows
+    .\bench\bin\geniex-bench.exe --help
+    ```
+  </Tab>
+  <Tab title="Linux ARM64">
+    ```bash bash
+    curl -fsSL \
+      https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-linux-arm64.tar.gz \
+      | tar xz
+    ```
+
+    Vérifiez :
+
+    ```bash bash
+    ./geniex-bench-linux-arm64-*/bin/geniex-bench --help
+    ```
+
+    Configurez le chemin des bibliothèques pour la session (le binaire requiert les fichiers `.so` inclus) :
+
+    ```bash bash
+    BENCH_DIR=$(ls -d geniex-bench-linux-arm64-*)
+    export LD_LIBRARY_PATH="$BENCH_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export GENIEX_PLUGIN_PATH="$BENCH_DIR/lib"
+    BENCH="$BENCH_DIR/bin/geniex-bench"
+    ```
+  </Tab>
+</Tabs>
+
+<Note>Pour figer une version spécifique, remplacez l'URL par une versionnée — voir [Verrouiller une version](#pinning-a-version).</Note>
+
+## **Étape 2 : Exécuter votre premier benchmark**
+
+Les options minimales obligatoires sont `--plugin`, `--device` et `-m`. L'argument du modèle accepte soit un chemin local, soit un identifiant du gestionnaire de modèles (téléchargé automatiquement à la première utilisation) :
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ```powershell windows
+    .\bench\bin\geniex-bench.exe `
+      --plugin llama_cpp --device npu `
+      -m bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+    ```
+
+    Sortie :
+
+    ```text
+    [ok  ] cell  plugin=llama_cpp  device=npu  ngl=-1  ttft=349.2ms  prefill=60.2tps  decode=21.8tps  gen=128 tok
+    ```
+  </Tab>
+  <Tab title="Linux ARM64">
+    ```bash bash
+    "$BENCH" \
+      --plugin llama_cpp --device npu \
+      -m bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+    ```
+
+    Sortie :
+
+    ```text
+    [ok  ] cell  plugin=llama_cpp  device=npu  ngl=-1  ttft=358.4ms  prefill=58.7tps  decode=20.1tps  gen=128 tok
+    ```
+  </Tab>
+</Tabs>
+
+Par défaut, `geniex-bench` exécute **1 passage d'échauffement (warmup) + 5 répétitions mesurées** avec 512 tokens d'entrée aléatoires et génère 128 tokens à une température de 0.0 (déterministe). Les chiffres sont agrégés en médiane ± écart-type sur les 5 passages. Tout comme `llama-bench`, les mesures de temps ne s'interrompent jamais prématurément sur un token de fin de séquence (EOS) ; chaque passage génère donc exactement `-n` tokens (plugin `llama_cpp` ; les exécutions avec `--accuracy` s'arrêtent sur EOS).
+
+## **Étape 3 : Comparer les backends de calcul**
+
+Exécutez le même modèle avec `--device cpu`, `--device npu` et `--device hybrid` pour déterminer la configuration la plus rapide pour votre charge de travail.
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    ```powershell windows
+    $BENCH = ".\bench\bin\geniex-bench.exe"
+    $MODEL = "bartowski/Qwen_Qwen3-1.7B-GGUF:Q4_0"
+
+    & $BENCH --plugin llama_cpp --device cpu    -m $MODEL
+    & $BENCH --plugin llama_cpp --device npu    -m $MODEL
+    & $BENCH --plugin llama_cpp --device hybrid -m $MODEL
+    ```
+
+    Exemple de sortie (Snapdragon X Elite, Q4_0) :
+
+    ```text
+    [ok  ] cell  plugin=llama_cpp  device=cpu     ngl=0    ttft=476.2ms  prefill=25.3tps  decode=18.5tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=npu     ngl=-1  ttft=340.1ms  prefill=62.8tps  decode=23.1tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=hybrid  ngl=-1  ttft=198.4ms  prefill=91.5tps  decode=27.4tps  gen=128 tok
+    ```
+  </Tab>
+  <Tab title="Linux ARM64">
+    ```bash bash
+    MODEL="bartowski/Qwen_Qwen3-1.7B-GGUF:Q4_0"
+
+    "$BENCH" --plugin llama_cpp --device cpu    -m "$MODEL"
+    "$BENCH" --plugin llama_cpp --device npu    -m "$MODEL"
+    "$BENCH" --plugin llama_cpp --device hybrid -m "$MODEL"
+    ```
+
+    Exemple de sortie (Dragonwing IQ-9075, Q4_0) :
+
+    ```text
+    [ok  ] cell  plugin=llama_cpp  device=cpu     ngl=0    ttft=512.3ms  prefill=21.4tps  decode=15.2tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=npu     ngl=-1  ttft=395.1ms  prefill=53.2tps  decode=18.8tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=hybrid  ngl=-1  ttft=241.7ms  prefill=78.3tps  decode=22.6tps  gen=128 tok
+    ```
+  </Tab>
+</Tabs>
+
+**Quel backend choisir :**
+
+| Périphérique | Idéal pour |
+|---|---|
+| `hybrid` | Le plus rapide sur les modèles llama_cpp — le planificateur par tenseur assigne chaque opération au HTP ou au CPU selon ce que chaque backend gère le mieux. Recommandation par défaut. |
+| `npu` | Fixe l'exécution sur une session HTP unique, utile lorsque vous avez besoin d'une disposition déterministe. Préremplissage plus lent que `hybrid` sur la plupart des modèles. |
+| `cpu` | Référence ; utile pour comparaison et sur les modèles qui ne tirent pas profit de la décharge sur NPU. |
+| `gpu` | Chemin OpenCL ; à utiliser pour comparer GPU vs NPU sur les modèles llama_cpp. |
+
+<Note>Les modèles Qualcomm AI Hub (`--plugin qairt`) s'exécutent exclusivement sur NPU — `--device cpu`, `gpu` ou `hybrid` sont silencieusement redirigés vers `npu`.</Note>
+
+## **Interpréter les chiffres**
+
+Chaque ligne `[ok  ]` rapporte trois métriques :
+
+| Métrique | Ce qu'elle mesure |
+|---|---|
+| `ttft` | Temps jusqu'au premier token (Time To First Token) — du début de l'appel d'inférence jusqu'au premier token échantillonné. Sur un VLM, cela inclut l'encodeur de média, ce n'est donc **pas** directement comparable à un TTFT purement textuel. |
+| `prefill` (tok/s) | Vitesse à laquelle le modèle a traité les tokens d'entrée (prompt). Plus la valeur est élevée, mieux c'est. |
+| `decode` (tok/s) | Vitesse de génération des tokens — chaque token produit ajoute une étape ici. C'est le chiffre que les utilisateurs perçoivent comme la "vitesse de frappe" dans une interface de chat. |
+
+`ttft` et `prefill` sont dominés par le parallélisme (calculs par lots sur NPU/GPU) ; `decode` est dominé par la bande passante mémoire (un token à la fois, chaque poids étant lu à chaque pas). Sur Snapdragon, `hybrid` comble l'écart entre ces deux phases en orientant chaque opération vers son meilleur backend.
+
+Pour `--plugin qairt`, `prompt_tokens` et `prefill_tps` sont rapportés sur la longueur complétée (padding) (`ceil(n / 128) × 128`) car le moteur QAIRT complète les identifiants d'entrée par blocs de 128 tokens. Ce comportement est normal — le décompte complété reflète le travail réellement effectué par le moteur.
+
+## **Comparer les modèles équitablement**
+
+Maintenez ces variables constantes lors de la comparaison de deux modèles ou configurations :
+
+| Variable à fixer | Option | Valeur par défaut |
+|---|---|---|
+| Longueur du prompt | `-p` / `--n-prompt` | 512 tokens aléatoires |
+| Taille du contexte | `-c` / `--ctx-size` | 0 (issu du modèle) |
+| Tokens générés | `-n` / `--n-gen` | 128 |
+| Température d'échantillonnage | `--temperature` | 0.0 |
+| Graine aléatoire | `--seed` | 42 |
+| Répétitions | `-r` | 5 |
+| Passes de préchauffage | `--warmup` | 1 |
+
+Les valeurs par défaut sont configurées pour garantir des comparaisons reproductibles (température 0.0, graine 42, 5 répétitions mesurées). Modifiez-les avec précaution — une valeur `-n` plus élevée mesure mieux la courbe de décodage, tandis qu'une valeur `-c` plus grande teste le modèle sous un contexte étendu.
+
+**Erreurs fréquentes :**
+
+- Comparer un passage en `Q4_0` avec un passage en `Q8_0`. Le fichier plus volumineux doit charger plus de données de poids par étape de décodage, il sera donc plus lent quel que soit le backend de calcul.
+- Comparer `--device cpu` (qui utilise `ngl=0`) avec `--device npu` (qui utilise `ngl=-1`, toutes les couches déportées). Si vous souhaitez une référence CPU pure, utilisez toujours `--device cpu`.
+- Oublier de relancer la mesure après le premier téléchargement d'un modèle. La première exécution inclut le temps de téléchargement dans le temps total écoulé, mais pas dans les métriques `ttft` / `prefill` / `decode` (qui sont mesurées à l'intérieur du moteur) ; les chiffres restent valides, mais la session globale est plus lente.
+
+## **Enregistrer les résultats en JSON**
+
+Ajoutez `--output-json` pour générer un rapport exploitable par machine :
+
+```bash bash
+"$BENCH" --plugin llama_cpp --device hybrid \
+  -m bartowski/Qwen_Qwen3-1.7B-GGUF:Q4_0 \
+  --output-json results/qwen3-1.7b-hybrid.json \
+  --cell-id Qwen3-1.7B-llama_cpp-hybrid
+```
+
+Le fichier JSON inclut les temps par passage ainsi que les statistiques agrégées (médiane / min / max / moyenne / écart-type) :
+
+```json
+{
+  "schema_version": "7",
+  "cell_id": "Qwen3-1.7B-llama_cpp-hybrid",
+  "plugin": "llama_cpp",
+  "device": "hybrid",
+  "agg": {
+    "ttft_ms":     {"median": 198.4, "min": 191.2, "max": 204.1, "mean": 197.9, "stdev": 5.1},
+    "prefill_tps": {"median": 91.5,  "min": 89.3,  "max": 94.2,  "mean": 91.1,  "stdev": 2.0},
+    "decode_tps":  {"median": 27.4,  "min": 26.8,  "max": 28.1,  "mean": 27.3,  "stdev": 0.5}
+  }
+}
+```
+
+## **Exécuter une matrice de modèles**
+
+Pour balayer plusieurs combinaisons `(modèle, périphérique)` au cours d'une même session — en amortissant le coût d'initialisation du plugin — utilisez `--matrix-file` :
+
+```bash bash
+cat > matrix.tsv <<'EOF'
+Qwen3-0.6B-cpu	llama_cpp	cpu	bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+Qwen3-0.6B-npu	llama_cpp	npu	bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+Qwen3-0.6B-hybrid	llama_cpp	hybrid	bartowski/Qwen_Qwen3-0.6B-GGUF:Q4_0
+Qwen3-4B-qairt	qairt	npu	qualcomm/qwen3_4b
+EOF
+
+"$BENCH" --matrix-file matrix.tsv --output-json-dir results/
+```
+
+Ordre des colonnes : `cell_id`, `plugin`, `device`, `model_path_or_id`. Chaque ligne produit un fichier JSON dans `--output-json-dir`.
+
+<a id="pinning-a-version"></a>
+## **Verrouiller une version**
+
+Les URL mentionnées ci-dessus renvoient systématiquement vers la dernière version stable. Pour cibler une version précise, remplacez le nom de fichier par une version spécifique (par exemple `v0.3.19`) :
+
+| Plateforme | URL versionnée |
+|---|---|
+| Windows ARM64 | `https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-windows-arm64-v0.3.19.zip` |
+| Linux ARM64 | `https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/geniex-bench-linux-arm64-v0.3.19.tar.gz` |
+
+## **Étapes suivantes**
+
+- [Référence de la CLI](/fr/run/cli/reference) — options de `geniex infer` et alias de `--compute`.
+- [Plateformes et runtimes](/fr/get-started/platforms) — chipsets et runtimes pris en charge.
+
+<br />
+
+<Feedback />

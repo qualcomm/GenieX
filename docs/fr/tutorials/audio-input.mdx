@@ -1,0 +1,166 @@
+---
+title: "Entrée audio"
+description: "Transcrivez et raisonnez sur de l'audio sur l'appareil avec un VLM compatible audio, dans la CLI GenieX, le serveur local et le SDK Python."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+Un modèle vision-langage dont le projecteur multimodal intègre un **encodeur audio conformer** peut accepter de l'audio aux côtés du texte et des images. GenieX achemine l'extrait via le chemin mtmd (multimodal) de llama.cpp — le même mécanisme qui traite les images — permettant ainsi à un seul échange de combiner texte, image et audio.
+
+<Note>L'audio fonctionne **exclusivement via `llama_cpp`**. Les bundles QAIRT indiquent `audio: false` et un modèle QAIRT recevant de l'audio échoue avec `GenieXError(-201201): Multimodal generation failed`. L'audio s'exécute sur `--compute npu` / `gpu` / `cpu` ; le NPU constitue le chemin par défaut et le plus rapide sur Snapdragon.</Note>
+
+## **Étape 1 : Télécharger un modèle compatible audio**
+
+La prise en charge de l'audio n'est pas un simple drapeau de métadonnées — elle signifie que le GGUF mmproj intègre véritablement un encodeur audio. `google/gemma-4-E2B-it-qat-q4_0-gguf` en dispose : les poids `Q4_0` (≈3,1 Go) et le mmproj conformer (≈0,9 Go) sont téléchargés ensemble, pour un total d'environ 4,0 Go.
+
+```bash
+geniex pull google/gemma-4-E2B-it-qat-q4_0-gguf
+```
+
+Récupérez un extrait audio et une photo de test à utiliser dans les exemples ci-dessous :
+
+```bash
+curl -L -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/master/samples/jfk.wav
+curl -L -o landmark.jpg "https://images.pexels.com/photos/402028/pexels-photo-402028.jpeg?w=1024"
+```
+
+## **Étape 2 : Exécuter avec `geniex infer`**
+
+Indiquez un chemin **absolu** vers un fichier `.wav` ou `.mp3` dans le prompt (ou glissez-déposez le fichier dans votre terminal). Les chemins d'images et d'audio sont auto-détectés, et une même invite peut combiner les deux :
+
+```bash
+geniex infer google/gemma-4-E2B-it-qat-q4_0-gguf \
+  -p "Describe the image and transcribe the audio. Image: /chemin/absolu/vers/landmark.jpg Audio: /chemin/absolu/vers/jfk.wav"
+```
+
+Sortie (vérifiée avec `--compute npu`, Snapdragon X Elite) :
+
+```text
+**Image Description:**
+This is a scenic, panoramic photograph that features a traditional Japanese temple ... The overall mood of the image is serene and beautiful.
+
+**Audio Transcription:**
+"And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+```
+
+### Enregistrer depuis le micro avec `/mic`
+
+Dans une session interactive (lancez `geniex infer <model>` sans `-p`), la commande `/mic` enregistre un extrait et le transmet directement — très pratique lorsque vous n'avez pas de fichier audio sur disque. Cette commande n'apparaît que lorsque le modèle chargé prend en charge l'audio.
+
+```text
+> /mic
+Recording is going on, press Ctrl-C to stop
+```
+
+`Ctrl-C` interrompt l'enregistrement ; GenieX l'enregistre dans un fichier `.wav` temporaire et le transcrit.
+
+<Warning>
+`/mic` requiert la présence de **SoX** dans votre `PATH`. Sans cela, GenieX affiche `SoX is not installed, some features may not work` au démarrage. Pour l'installer :
+
+```bash
+sudo apt install sox       # Debian/Ubuntu
+sudo yum install sox       # RHEL/CentOS/Fedora
+sudo pacman -S sox         # Arch Linux
+```
+
+```powershell
+winget install --id=ChrisBagwell.SoX -e
+# redémarrez ensuite votre terminal pour que sox soit dans le PATH
+```
+</Warning>
+
+## **Étape 3 : Utiliser sur le serveur local**
+
+Démarrez le serveur et envoyez une partie de contenu `input_audio` compatible OpenAI. `input_audio.data` accepte les trois mêmes formats qu'une URL d'image — un chemin local, une URL HTTP/HTTPS ou une Data URL base64. Un message unique peut mélanger `image_url` et `input_audio` :
+
+```bash
+geniex serve
+```
+
+```bash
+curl http://127.0.0.1:18181/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "google/gemma-4-E2B-it-qat-q4_0-gguf",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {"type": "text", "text": "Décrivez l'image, puis transcrivez l'audio."},
+          {"type": "image_url", "image_url": {"url": "/chemin/absolu/vers/landmark.jpg"}},
+          {"type": "input_audio", "input_audio": {"data": "/chemin/absolu/vers/jfk.wav"}}
+        ]
+      }
+    ],
+    "max_tokens": 256
+  }'
+```
+
+<Warning>**Vous utilisez Docker ?** Les chemins locaux sont résolus **dans le conteneur**. La commande d'installation monte `$PWD/data` sur `/data` — placez vos fichiers à cet endroit et transmettez `/data/jfk.wav`, ou utilisez une URL HTTP / Data URL base64 pour contourner le système de fichiers.</Warning>
+
+Consultez [Serveur local](/fr/run/cli/local-server#vlm-request) pour le format de requête complet et l'équivalent client Python `openai`.
+
+## **Étape 4 : Utiliser depuis le SDK Python**
+
+Chargez le modèle avec `AutoModelForVision2Seq` et passez les chemins à `generate(images=[...], audios=[...])` — un appel unique peut accepter les deux. `capabilities()` confirme que le mmproj gère l'audio avant tout envoi :
+
+```python
+import os
+from geniex import AutoModelForVision2Seq
+
+image_path = os.path.abspath("landmark.jpg")
+audio_path = os.path.abspath("jfk.wav")
+
+model = AutoModelForVision2Seq.from_pretrained(
+    "google/gemma-4-E2B-it-qat-q4_0-gguf",
+    device_map="npu",                       # l'audio s'exécute sur npu / gpu / cpu, pas qairt
+)
+print(model.capabilities())  # -> {'vision': True, 'audio': True}
+
+messages = [{
+    "role": "user",
+    "content": [
+        {"type": "image", "image": image_path},
+        {"type": "audio", "audio": audio_path},
+        {"type": "text", "text": "Décrivez l'image, puis transcrivez l'audio."},
+    ],
+}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
+
+output = model.generate(prompt, images=[image_path], audios=[audio_path], max_new_tokens=256)
+print(output.text)
+
+model.close()
+```
+
+## **Formats pris en charge et prétraitement**
+
+| | Détails |
+|---|---|
+| **Auto-détection CLI / prompt** | Extensions `.wav` et `.mp3` uniquement. Tout autre chemin dans le prompt est considéré comme une image. |
+| **Serveur** | Aucune liste blanche d'extensions — les octets de `input_audio.data` sont décodés selon leur contenu, donc tout ce que llama.cpp peut décoder fonctionne. |
+| **Décodeur (llama.cpp)** | Reconnaît WAV, MP3 et FLAC par les octets magiques (magic bytes). Attention à la différence : un chemin `.flac` dans un prompt CLI est redirigé vers les images même si le décodeur interne sait traiter le FLAC — passez le FLAC via le serveur ou convertissez en `.wav`/`.mp3` en CLI. |
+| **Canaux / Fréquence d'échantillonnage** | L'audio est systématiquement converti en **mono** et rééchantillonné vers la fréquence cible de l'encodeur (généralement **16 kHz** ; certaines architectures utilisent 24 kHz). Pris en charge automatiquement sans conversion préalable requise. |
+| **Durée** | Aucun maximum. Les extraits plus courts que la longueur de bloc de l'encodeur sont complétés par des zéros ; les extraits plus longs sont découpés en blocs automatiquement. |
+
+<Note>La gestion des canaux/fréquences/durées est prise en charge dans la couche audio mtmd de llama.cpp (tierce partie), et non dans GenieX — le comportement peut évoluer avec la version de llama.cpp.</Note>
+
+## **Cas d'erreurs fréquents**
+
+| Situation | Ce qui se produit |
+|---|---|
+| **Audio transmis à un modèle QAIRT** | `capabilities()` signale `audio: false` ; la génération échoue avec `GenieXError(-201201): Multimodal generation failed`. QAIRT ne dispose d'aucune chaîne de décodage audio. |
+| **Audio transmis à un VLM purement vision** (mmproj sans encodeur audio) | L'audio est **silencieusement ignoré** avec un avertissement `model does not support audio input; skipping N audio file(s)`, et la génération continue en mode texte seul. Vérifiez d'abord `capabilities()['audio']`. |
+| **Fichier audio illisible ou non pris en charge** | Le fichier est écarté avec un message de journalisation de débogage. Si cela laisse moins de médias que ce que le modèle de discussion attend, la génération échoue ensuite avec l'erreur `-201201`. |
+
+## **Étapes suivantes**
+
+- [Référence de la CLI](/fr/run/cli/reference#geniex-infer-vlm) — toutes les options de `geniex infer`.
+- [Serveur local](/fr/run/cli/local-server#vlm-request) — l'API complète compatible OpenAI.
+- [Démarrage rapide Python](/fr/run/python/quickstart) — inférence VLM et audio en Python.
+
+<br />
+
+<Feedback />

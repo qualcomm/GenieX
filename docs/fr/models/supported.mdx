@@ -1,0 +1,347 @@
+---
+title: "Modèles"
+description: "Où trouver des modèles, comment les exécuter, et quelles précisions s'exécutent sur le NPU Snapdragon."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+Il existe deux sources principales pour obtenir des modèles, correspondant aux deux [runtimes](/fr/get-started/platforms#geniex-runtimes) de GenieX :
+
+- **[Qualcomm AI Hub](https://aihub.qualcomm.com/models/)** — bundles précompilés pour Qualcomm AI Engine Direct, ainsi que des modèles GGUF sélectionnés pour llama.cpp.
+- **[Hugging Face](https://huggingface.co/models?library=gguf)** — n'importe quel modèle GGUF pour llama.cpp. Voir [Exécuter un modèle GGUF depuis Hugging Face](#run-a-gguf-model-from-hugging-face).
+
+## **Modalités d'entrée**
+
+| Modalité | Prise en charge par | Remarques |
+|---|---|---|
+| Texte | LLM, VLM | Tous les modèles. |
+| Image | VLM | N'importe quel VLM (bundle QAIRT ou GGUF avec un mmproj image). |
+| Audio | VLM (llama.cpp uniquement) | Un VLM GGUF dont le mmproj comprend un encodeur conformer — par exemple `google/gemma-4-E2B-it-qat-q4_0-gguf`. Les bundles QAIRT ne prennent pas en charge l'audio. Voir le [tutoriel d'entrée audio](/fr/tutorials/audio-input). |
+
+Un seul échange avec un VLM peut combiner texte, image et audio. Consultez le [tutoriel d'entrée audio](/fr/tutorials/audio-input) pour des exemples vérifiés en CLI, serveur et Python.
+
+## **Exécuter un modèle Qualcomm AI Hub**
+
+Pour un modèle situé dans l'espace de noms `ai-hub-models/*`, lancez simplement `geniex infer` :
+
+```powershell windows
+geniex infer ai-hub-models/Qwen3-4B
+```
+
+<Note>Qualcomm AI Engine Direct fonctionne uniquement sur NPU. Spécifiez `--compute npu` ou omettez l'option.</Note>
+
+<a id="run-a-gguf-model-from-hugging-face"></a>
+## **Exécuter un modèle GGUF depuis Hugging Face**
+
+Tout dépôt GGUF compatible sur Hugging Face fonctionne. Copiez le chemin du dépôt et transmettez-le à `geniex infer` :
+
+```powershell windows
+geniex infer <org>/<repo>-GGUF
+```
+
+Par exemple :
+
+```powershell windows
+geniex infer unsloth/Phi-4-mini-instruct-GGUF
+```
+
+Lorsque vous y êtes invité :
+- **Précision (Quantification)** — `Q4_0` pour la meilleure prise en charge sur NPU Hexagon. Voir [Précisions (Quantifications) prises en charge](#precisions-quantizations-supported).
+
+<a id="set-up-a-hugging-face-token"></a>
+### Configurer un jeton Hugging Face
+
+Certains modèles sur Hugging Face sont **restreints (gated)** — vous devez accepter la licence du modèle sur le site Hugging Face et fournir un jeton d'accès avant que GenieX puisse les télécharger.
+
+<Steps>
+  <Step title="Créer un jeton">
+    Rendez-vous sur [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) et créez un nouveau jeton avec l'accès en **Lecture (Read)**.
+  </Step>
+  <Step title="Accepter la licence du modèle">
+    Visitez la page du modèle sur Hugging Face (par exemple `https://huggingface.co/<org>/<model>`) et acceptez l'accord de licence si demandé.
+  </Step>
+  <Step title="Fournir le jeton à GenieX">
+    GenieX vérifie les sources suivantes dans l'ordre (la première valeur non vide est retenue) :
+
+    1. Variable d'environnement `GENIEX_HFTOKEN`
+    2. Variable d'environnement `HF_TOKEN`
+    3. Fichier `~/.cache/huggingface/token`
+
+    **Option A — variable d'environnement (recommandée) :**
+
+    <CodeGroup>
+    ```powershell windows
+    # Variable standard HF (fonctionne aussi avec les autres outils HF)
+    $env:HF_TOKEN = "hf_..."
+
+    # Ou spécifique à GenieX (prioritaire sur HF_TOKEN)
+    $env:GENIEX_HFTOKEN = "hf_..."
+    ```
+
+    ```bash linux
+    # Variable standard HF (fonctionne aussi avec les autres outils HF)
+    export HF_TOKEN="hf_..."
+
+    # Ou spécifique à GenieX (prioritaire sur HF_TOKEN)
+    export GENIEX_HFTOKEN="hf_..."
+    ```
+    </CodeGroup>
+
+    **Option B — connexion via CLI Hugging Face (persistée sur disque) :**
+
+    ```bash
+    pip install huggingface_hub
+    huggingface-cli login
+    ```
+
+    Cette commande écrit le jeton dans `~/.cache/huggingface/token`, que GenieX lit automatiquement.
+  </Step>
+</Steps>
+
+<Tip>`GENIEX_HFTOKEN` a la priorité la plus haute, suivi de `HF_TOKEN`, puis du fichier de jeton mis en cache. Utilisez `GENIEX_HFTOKEN` si vous souhaitez un jeton distinct pour GenieX sans impacter vos autres outils Hugging Face.</Tip>
+
+<a id="run-a-local-qualcomm-ai-engine-direct-bundle"></a>
+## **Exécuter un bundle local Qualcomm AI Engine Direct**
+
+Les bundles en dehors de l'espace de noms `ai-hub-models/*` — qu'ils aient été convertis par vos soins depuis Hugging Face ou qu'ils soient déjà présents sur le disque — sont importés une seule fois, puis exécutés comme n'importe quel autre modèle.
+
+<Tabs>
+  <Tab title="CLI">
+    Enregistrez le bundle avec `geniex pull --local-path`, puis lancez `geniex infer`.
+
+    **Converti par vos soins depuis Hugging Face**
+
+    Assurez-vous que la [CLI Hugging Face](https://huggingface.co/docs/huggingface_hub/en/guides/cli) est installée, puis téléchargez un bundle et importez-le :
+
+    <CodeGroup>
+    ```powershell windows
+    # Définir le nom du modèle (doit correspondre exactement au sous-dossier HF)
+    $model = "llama_v3_2_3b_instruct"
+
+    # Télécharger le modèle depuis Hugging Face
+    hf download yichqian/geniex-qairt-models `
+      --local-dir $model `
+      --include "$model/**"
+
+    # Importer en utilisant le dossier téléchargé (chemin absolu)
+    geniex pull local/$model --local-path (Resolve-Path "$model\$model").Path
+
+    # Lancer l'inférence
+    geniex infer local/$model
+    ```
+
+    ```bash linux
+    # Définir le nom du modèle (doit correspondre exactement au sous-dossier HF)
+    model="llama_v3_2_3b_instruct"
+
+    # Télécharger le modèle depuis Hugging Face
+    hf download yichqian/geniex-qairt-models \
+      --local-dir "$model" \
+      --include "$model/**"
+
+    # Importer en utilisant le dossier téléchargé (chemin absolu)
+    geniex pull "local/$model" --local-path "$(realpath "$model/$model")"
+
+    # Lancer l'inférence
+    geniex infer "local/$model"
+    ```
+    </CodeGroup>
+
+    **Déjà sur le disque**
+
+    Pointez `--local-path` vers le répertoire du bundle extrait (contenant les fragments `.bin` et `metadata.json`) :
+
+    <CodeGroup>
+    ```powershell windows
+    geniex pull local/my-bundle --local-path C:\models\my-bundle
+    geniex infer local/my-bundle
+    ```
+
+    ```bash linux
+    geniex pull local/my-bundle --local-path /home/user/models/my-bundle
+    geniex infer local/my-bundle
+    ```
+    </CodeGroup>
+
+    Vous pouvez également importer directement depuis une archive `.zip` d'AI Hub sans extraction préalable :
+
+    <CodeGroup>
+    ```powershell windows
+    geniex pull local/my-bundle --local-path C:\downloads\model.zip
+    ```
+
+    ```bash linux
+    geniex pull local/my-bundle --local-path /home/user/downloads/model.zip
+    ```
+    </CodeGroup>
+
+    <Note>`geniex pull` copie les fichiers du modèle dans son cache local. Après une importation réussie, vous pouvez supprimer le téléchargement d'origine en toute sécurité pour récupérer de l'espace disque. Utilisez `geniex list` pour vérifier la présence du modèle en cache.</Note>
+  </Tab>
+
+  <Tab title="Python">
+    Pointez `from_pretrained` vers le dossier du bundle et forcez le runtime Qualcomm AI Engine Direct avec `device_map="qairt"` :
+
+    ```python
+    from geniex import AutoModelForCausalLM
+
+    model = AutoModelForCausalLM.from_pretrained(
+        r"C:\<votre_chemin>\Qwen3-4B-Instruct-2507", # tout fichier .bin ou le dossier du bundle
+        model_name="qwen3_4b_instruct_2507",        # correspond à l'identifiant Qualcomm AI Hub
+        device_map="qairt",                         # requis pour Qualcomm AI Engine Direct
+    )
+    ```
+
+    Consultez la [référence API Python](/fr/run/python/api-reference) pour l'ensemble des paramètres.
+  </Tab>
+
+  <Tab title="Android">
+    Définissez `hub = HubSource.LOCALFS` et pointez `local_path` vers un répertoire AI Hub extrait (`metadata.json` plus un ou plusieurs fragments `.bin`) ou vers le fichier `.zip` d'AI Hub. `pullFlow` l'importe dans le cache du SDK (sans connexion réseau) ; aucun `chipset` n'est requis car le bundle est déjà compilé pour un chipset précis. La modalité (LLM vs VLM) est lue depuis `metadata.json`.
+
+    ```kotlin
+    ModelManagerWrapper.pullFlow(
+        ModelPullInput(
+            model_name = "local/qwen3-4b-2507",
+            hub        = HubSource.LOCALFS,
+            local_path = "/data/local/tmp/Qwen3-4B-Instruct-2507",  // dossier extrait ou .zip
+        )
+    ).collect { /* Progress / Completed / Error */ }
+    ```
+
+    Chargez ensuite avec `runtime_id = "qairt"` — à l'identique d'un modèle téléchargé :
+
+    ```kotlin
+    val paths = ModelManagerWrapper.getPaths("local/qwen3-4b-2507")
+        ?: error("Modèle non importé")
+
+    val llm = LlmWrapper.builder()
+        .llmCreateInput(
+            LlmCreateInput(
+                model_path = paths.model_path,
+                config     = ModelConfig(),
+                runtime_id  = "qairt",
+                compute_unit  = null,   // qairt fonctionne uniquement sur NPU
+            )
+        )
+        .build()
+        .getOrThrow()
+    ```
+
+    <Note>
+    Le champ `model_name` sert simplement de clé de cache — toute chaîne de type `org/repo` convient ; le préfixe `local/...` est une convention courante. Vous n'avez pas besoin d'écrire un `geniex.json` pour une importation locale : le gestionnaire de modèles en génère un lors de l'import. Un dossier QAIRT est reconnu grâce à la présence de `metadata.json` et de fragments `.bin` (ou d'un fichier `.zip`) ; un dossier contenant des fichiers `.bin` isolés sans `metadata.json` ne sera pas détecté. Lors de l'importation de modèles de types mixtes, privilégiez `paths.runtime_id` (faisant foi) plutôt que de coder en dur `runtime_id`.
+    </Note>
+  </Tab>
+</Tabs>
+
+<a id="run-a-local-gguf-model"></a>
+## **Exécuter un modèle local GGUF**
+
+Un modèle GGUF local est un répertoire (ou un fichier) contenant vos poids `.gguf` — transféré par vos soins, généré par un autre outil ou déjà sur disque. Importez-le une fois, puis exécutez-le comme tout autre modèle.
+
+<Tabs>
+  <Tab title="CLI">
+    Pointez `--local-path` vers le répertoire contenant votre fichier `.gguf` :
+
+    <CodeGroup>
+    ```powershell windows
+    geniex pull local/my-model --local-path C:\models\my-model
+    geniex infer local/my-model
+    ```
+
+    ```bash linux
+    geniex pull local/my-model --local-path /home/user/models/my-model
+    geniex infer local/my-model
+    ```
+    </CodeGroup>
+  </Tab>
+
+  <Tab title="Python">
+    Transmettez directement le chemin d'un fichier `.gguf` local à `from_pretrained` :
+
+    ```python
+    from geniex import AutoModelForCausalLM
+
+    model = AutoModelForCausalLM.from_pretrained(
+        r"C:\models\my-model\model.gguf",   # chemin vers un fichier .gguf local
+        device_map="auto",                  # auto -> npu pour llama_cpp
+    )
+    ```
+
+    Consultez la [référence API Python](/fr/run/python/api-reference) pour l'ensemble des paramètres.
+  </Tab>
+
+  <Tab title="Android">
+    Définissez `hub = HubSource.LOCALFS` et pointez `local_path` vers un répertoire contenant le ou les fichiers `.gguf`. Un manifeste `geniex.json` est utilisé s'il est présent ; sinon, la structure est déduite des noms de fichiers. Pour un VLM, placez le fichier `mmproj-*.gguf` dans le même répertoire.
+
+    ```kotlin
+    ModelManagerWrapper.pullFlow(
+        ModelPullInput(
+            model_name = "local/qwen3-0.6b",
+            hub        = HubSource.LOCALFS,
+            local_path = "/data/local/tmp/qwen3-0.6b",   // répertoire contenant les *.gguf
+        )
+    ).collect { /* Progress / Completed / Error */ }
+    ```
+
+    Chargez ensuite avec `runtime_id = "llama_cpp"` — à l'identique d'un modèle téléchargé :
+
+    ```kotlin
+    val paths = ModelManagerWrapper.getPaths("local/qwen3-0.6b")
+        ?: error("Modèle non importé")
+
+    val llm = LlmWrapper.builder()
+        .llmCreateInput(
+            LlmCreateInput(
+                model_path = paths.model_path,
+                config     = ModelConfig(nCtx = 4096),
+                runtime_id  = "llama_cpp",
+                compute_unit  = null,   // null → NPU sur Snapdragon (recommandé)
+            )
+        )
+        .build()
+        .getOrThrow()
+    ```
+  </Tab>
+</Tabs>
+
+<a id="precisions-quantizations-supported"></a>
+<a id="precisions-quantisations-prises-en-charge"></a>
+## **Précisions (Quantifications) prises en charge**
+
+La précision que vous choisissez détermine sur quel composant matériel le modèle s'exécute.
+
+### llama.cpp
+
+llama.cpp accepte toute la gamme de formats de quantification GGML. La CLI vous invite à en sélectionner une lorsque vous téléchargez un modèle GGUF via `geniex pull` :
+
+```powershell
+Choose a precision version to download
+> Q4_0       [1.2 GiB] (default)
+  Q8_0       [2.0 GiB]
+  F16        [3.8 GiB]
+```
+
+| Précision (Quantification) | S'exécute sur | Remarques |
+|---|---|---|
+| **`Q4_0`** *(défaut)* | **NPU Hexagon** | Meilleure prise en charge NPU dans llama.cpp. Recommandé pour la plupart des modèles. |
+| `Q8_0` | GPU / CPU | Meilleure qualité pour ~2× l'espace disque et la mémoire. |
+| `F16` | GPU / CPU | Précision de référence. Principalement pour évaluation — lourd et lent. |
+| `Q4_K_M`, `Q5_K_M`, etc. | GPU / CPU | K-quants à précision mixte. Non optimisés pour le NPU Hexagon. |
+
+<Tip>Privilégiez `Q4_0` pour que le modèle soit exécuté sur le NPU Hexagon. Les autres précisions fonctionneront mais s'exécuteront généralement sur GPU ou CPU.</Tip>
+
+### Qualcomm AI Engine Direct
+
+Les bundles Qualcomm AI Engine Direct sont **statiquement pré-quantifiés** — il n'y a pas de choix de précision à l'exécution. Pour utiliser une précision différente, téléchargez un autre bundle depuis [Qualcomm AI Hub](https://aihub.qualcomm.com/models/).
+
+| Précision (Quantification) | S'exécute sur | Remarques |
+|---|---|---|
+| **`w4a16`** *(le plus courant)* | **NPU Hexagon** | Poids en int4, activations en int16. Meilleur équilibre entre taille et fidélité pour les LLM sur l'appareil. |
+| `w4` | **NPU Hexagon** | Poids en int4, activations en flottant. Fidélité légèrement supérieure à w4a16 au prix de calculs supplémentaires. |
+
+<Tip>La plupart des bundles précompilés sur Qualcomm AI Hub utilisent `w4a16`. Le niveau de quantification est figé dans le bundle lors de la compilation — choisissez le bundle correspondant à vos objectifs de qualité et de performances.</Tip>
+
+Pour les autres contraintes du bundle (longueur de contexte, cache KV, `nCtx` sous Android), consultez les [contraintes d'exécution de Qualcomm AI Engine Direct](/fr/get-started/platforms#runtime-constraints).
+
+<br />
+
+<Feedback/>
