@@ -1,6 +1,6 @@
 ---
 title: "Référence de l'API"
-description: "SDK Android GenieX — sélection du runtime / de l'unité de calcul, gestion des modèles et API d'inférence pour LLM et VLM."
+description: "SDK Android GenieX - sélection du runtime / de l'unité de calcul, gestion des modèles et API d'inférence pour LLM et VLM."
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
@@ -19,7 +19,7 @@ val runtime_id: String?   // "llama_cpp" | "qairt" | null
 |---------------|----------------------------------|--------------------------|--------------------------------|
 | `"llama_cpp"` | llama.cpp + backend GGML Hexagon | GGUF                     | CPU / GPU Adreno / NPU Hexagon |
 | `"qairt"`     | Qualcomm® AI Engine Direct       | Fichiers binaires précompilés Qualcomm AI Hub | NPU Hexagon uniquement   |
-| `null`        | Le SDK choisit selon les chemins du modèle | —                        | —                              |
+| `null`        | Le SDK choisit selon les chemins du modèle | -                        | -                              |
 
 Les constantes sont exposées via [`RuntimeIdValue`](https://github.com/qualcomm/GenieX/blob/main/bindings/android/app/src/main/java/com/geniex/sdk/bean/InputPluginBase.kt) (`LLAMA_CPP`, `QAIRT`).
 
@@ -33,25 +33,25 @@ val compute_unit: String?   // "cpu" | "gpu" | "npu" | null
 
 | Alias   | Effet                                                               |
 |---------|---------------------------------------------------------------------|
-| `null`  | Valeur par défaut du runtime — `npu` pour `llama_cpp`, `npu` pour `qairt`. |
+| `null`  | Valeur par défaut du runtime - `npu` pour `llama_cpp`, `npu` pour `qairt`. |
 | `"npu"` | Accélération par NPU Hexagon. Recommandé sur Snapdragon.            |
 | `"gpu"` | GPU Adreno via OpenCL (`llama_cpp` uniquement).                     |
 | `"cpu"` | Purement CPU. Force `nGpuLayers = 0`.                               |
 
 <Note>
-Qualcomm AI Engine Direct ne prend en charge que le NPU. Passer `"cpu"` ou `"gpu"` avec un modèle Qualcomm AI Hub enregistre un avertissement et se replie sur le NPU — sans provoquer d'erreur.
+Qualcomm AI Engine Direct ne prend en charge que le NPU. Passer `"cpu"` ou `"gpu"` avec un modèle Qualcomm AI Hub enregistre un avertissement et se replie sur le NPU - sans provoquer d'erreur.
 </Note>
 
 ---
 
 ## **Gestionnaire de modèles**
 
-Les modèles sont téléchargés sur l'appareil via le gestionnaire de modèles Rust intégré. Ne copiez **pas** manuellement les poids avec `adb push` — utilisez `ModelManagerWrapper`.
+Les modèles sont téléchargés sur l'appareil via le gestionnaire de modèles Rust intégré. Ne copiez **pas** manuellement les poids avec `adb push` - utilisez `ModelManagerWrapper`.
 
 ### `ModelManagerWrapper`
 
 ```kotlin
-// Initialisation (idempotente — sûre à appeler dans chaque Activity.onCreate).
+// Initialisation (à appeler dans chaque Activity.onCreate).
 GenieXSdk.getInstance().init(context)
 
 // Téléchargement avec flux de progression.
@@ -115,7 +115,7 @@ data class ModelPaths(
     val model_path:     String,
     val model_dir:      String,
     val model_name:     String,
-    val runtime_id:      String,            // fait autorité — à préférer à la sélection de l'UI
+    val runtime_id:      String,            // fait autorité. A préférer à la sélection de l'UI
     val mmproj_path:    String? = null,    // poids de projection VLM
     val tokenizer_path: String? = null,
     val compute_unit:      String? = null,
@@ -409,7 +409,7 @@ llmWrapper.applyChatTemplate(chat.toTypedArray(), null, false).onSuccess { t ->
 ```
 
 <Note>
-Qualcomm AI Engine Direct rejette `nGpuLayers != 0` et `nCtx != 0` avec `PARAM_NOT_SUPPORTED` — le cache KV et la longueur de contexte sont figés à la compilation par le bundle Qualcomm AI Hub. Laissez les deux à leurs valeurs par défaut et modifiez uniquement `max_tokens` / `enable_thinking`.
+Qualcomm AI Engine Direct rejette `nGpuLayers != 0` et `nCtx != 0` avec `PARAM_NOT_SUPPORTED`. Le cache KV et la longueur de contexte sont figés à la compilation par le bundle Qualcomm AI Hub. Laissez les deux à leurs valeurs par défaut et modifiez uniquement `max_tokens` / `enable_thinking`.
 </Note>
 
 ### VLM

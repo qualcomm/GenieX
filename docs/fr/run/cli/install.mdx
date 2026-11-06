@@ -18,8 +18,8 @@ La CLI est fournie sous forme d'exécutable natif Windows ARM64 et sous forme d'
 
     Installez les derniers pilotes Qualcomm avant d'exécuter GenieX :
 
-    1. **GPU Adreno** — Téléchargez le dernier [pilote graphique Windows](https://softwarecenter.qualcomm.com/catalog/item/Windows_Graphics_Driver), lancez l'installateur et redémarrez Windows. Dans le **Gestionnaire de périphériques**, vérifiez que le GPU apparaît bien sous **Cartes graphiques**.
-    2. **NPU Hexagon** — Téléchargez le dernier [pilote Qualcomm NPU](https://softwarecenter.qualcomm.com/catalog/item/Qualcomm_HND), lancez l'installateur et redémarrez Windows. Dans le **Gestionnaire de périphériques**, vérifiez que le NPU Hexagon apparaît bien sous **Processeurs neuronaux**.
+    1. **GPU Adreno** - Téléchargez le dernier [pilote graphique Windows](https://softwarecenter.qualcomm.com/catalog/item/Windows_Graphics_Driver), lancez l'installateur et redémarrez Windows. Dans le **Gestionnaire de périphériques**, vérifiez que le GPU apparaît bien sous **Cartes graphiques**.
+    2. **NPU Hexagon** - Téléchargez le dernier [pilote Qualcomm NPU](https://softwarecenter.qualcomm.com/catalog/item/Qualcomm_HND), lancez l'installateur et redémarrez Windows. Dans le **Gestionnaire de périphériques**, vérifiez que le NPU Hexagon apparaît bien sous **Processeurs neuronaux**.
 
     ### **Téléchargement**
 
@@ -52,7 +52,7 @@ La CLI est fournie sous forme d'exécutable natif Windows ARM64 et sous forme d'
     ### **Prérequis**
 
     - Hôte Linux ARM64.
-    - Chipset IoT Dragonwing — voir [Plateformes prises en charge](/fr/get-started/platforms).
+    - Chipset IoT Dragonwing - voir [Plateformes prises en charge](/fr/get-started/platforms).
 
     <a id="install-host-dependencies"></a>
     ### **Installer les dépendances hôtes**
@@ -104,7 +104,7 @@ La CLI est fournie sous forme d'exécutable natif Windows ARM64 et sous forme d'
     curl -fsSL https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/install.sh | sh
     ```
 
-    Le script télécharge la dernière version stable, vérifie son empreinte SHA256 et procède à l'installation sans `sudo`. Si le répertoire des exécutables n'est pas déjà dans votre `PATH`, il affiche la ligne d'exportation exacte à ajouter — par exemple :
+    Le script télécharge la dernière version stable, vérifie son empreinte SHA256 et procède à l'installation sans `sudo`. Si le répertoire des exécutables n'est pas déjà dans votre `PATH`, il affiche la ligne d'exportation exacte à ajouter. Par exemple :
 
     ```bash bash
     echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc   # ou ~/.zshrc / ~/.profile
@@ -113,7 +113,7 @@ La CLI est fournie sous forme d'exécutable natif Windows ARM64 et sous forme d'
     Ouvrez un nouveau shell ou appliquez avec `source` sur ce fichier pour activer le changement.
 
     <Note>
-      Si le script signale des bibliothèques partagées manquantes (`libCB.so.1`, `libOpenCL_adreno.so.1`, `libcdsprpc.so.1.0.0`, etc.), installez d'abord les paquets de pilotes Qualcomm — voir [Installer les dépendances hôtes](#install-host-dependencies) ci-dessus.
+      Si le script signale des bibliothèques partagées manquantes (`libCB.so.1`, `libOpenCL_adreno.so.1`, `libcdsprpc.so.1.0.0`, etc.), installez d'abord les paquets de pilotes Qualcomm. Voir [Installer les dépendances hôtes](#install-host-dependencies) ci-dessus.
     </Note>
 
     ### **Vérification**
@@ -149,7 +149,7 @@ La CLI est fournie sous forme d'exécutable natif Windows ARM64 et sous forme d'
       </Accordion>
 
       <Accordion title="Ajouter au PATH manuellement">
-        Si le répertoire du lanceur n'est pas présent dans votre `PATH`, ajoutez la ligne affichée par l'installateur — généralement :
+        Si le répertoire du lanceur n'est pas présent dans votre `PATH`, ajoutez la ligne affichée par l'installateur - généralement :
 
         ```bash bash
         echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc   # ou ~/.zshrc / ~/.profile

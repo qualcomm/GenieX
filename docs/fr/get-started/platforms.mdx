@@ -5,11 +5,11 @@ description: "Plateformes Snapdragon prises en charge par GenieX et quel runtime
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-GenieX fonctionne exclusivement sur Qualcomm Snapdragon — aucune version x86 ou ARM non-Snapdragon n'est disponible. Pour démarrer, choisissez la **plateforme Snapdragon** sur laquelle vous allez exécuter, puis choisissez un **runtime** adapté au modèle que vous souhaitez utiliser.
+GenieX fonctionne exclusivement sur Qualcomm Snapdragon. Aucune version x86 ou ARM non-Snapdragon n'est disponible. Pour démarrer, choisissez la **plateforme Snapdragon** sur laquelle vous allez exécuter, puis choisissez un **runtime** adapté au modèle que vous souhaitez utiliser.
 
 ## **Plateformes Snapdragon**
 
-GenieX est pris en charge sur trois familles Snapdragon — calcul (compute), mobile et IoT — couvrant Windows ARM64, Android et Linux ARM64.
+GenieX est pris en charge sur trois familles Snapdragon : calcul (compute), mobile et IoT. Celles-ci couvrent Windows ARM64, Android et Linux ARM64.
 
 ### Chipsets pris en charge
 
@@ -21,13 +21,13 @@ Voici les chipsets sur lesquels GenieX est validé. Chaque ligne indique l'**ide
 | | **Snapdragon® X2 Elite** | `X2E*` | `qualcomm-snapdragon-x2-elite` |
 | **Mobile** *(Android)* | **Snapdragon® 8 Elite** | `SM8750` | `qualcomm-snapdragon-8-elite` |
 | | **Snapdragon® 8 Elite Gen 5** | `SM8850` | résolu à partir de `SM8850` *(voir note)* |
-| **IoT** *(Linux ARM64 — caméras, robotique, industrie)* | **Qualcomm® Dragonwing™ IQ-9075** | `QCS9075` | `qualcomm-qcs9075` |
+| **IoT** *(Linux ARM64 - caméras, robotique, industrie)* | **Qualcomm® Dragonwing™ IQ-9075** | `QCS9075` | `qualcomm-qcs9075` |
 | | **Qualcomm® Dragonwing™ IQ-8275** | `QCS8275` | `qualcomm-qcs8275` |
 
 <Note>
-**Chipset vs. ID SoC.** Les composants de la série Snapdragon X sont identifiés par leur SKU CPU Oryon (`X1E80100`, `X2E80100`, …) ; chaque composant d'une même génération partage la même architecture NPU, donc **tous les SKU X Elite correspondent au même artefact AI Hub** — y compris les composants X Plus et X2 Plus. Android signale son SoC via `ro.soc.model`, et les cartes Dragonwing via le device tree.
+**Chipset vs. ID SoC.** Les composants de la série Snapdragon X sont identifiés par leur SKU CPU Oryon (`X1E80100`, `X2E80100`, …) ; chaque composant d'une même génération partage la même architecture NPU, donc **tous les SKU X Elite correspondent au même artefact AI Hub**, y compris les composants X Plus et X2 Plus. Android signale son SoC via `ro.soc.model`, et les cartes Dragonwing via le device tree.
 
-Sur Android, GenieX transmet l'ID SoC (par exemple `SM8850`) directement à Qualcomm AI Hub, qui le résout à travers sa propre table d'alias — GenieX évite délibérément de maintenir un second mappage. Transmettez l'**ID SoC**, et non un nom de chipset AI Hub, et le bon artefact sera sélectionné. Les suffixes de variante ne sont pas exposés par `ro.soc.model` : un Galaxy S25 signale `SM8750`, et non `SM8750-AC` (l'alias pour `qualcomm-snapdragon-8-elite-for-galaxy`). Transmettez donc le chipset explicitement si vous avez besoin de l'artefact de variante.
+Sur Android, GenieX transmet l'ID SoC (par exemple `SM8850`) directement à Qualcomm AI Hub, qui le résout à travers sa propre table d'alias. GenieX évite délibérément de maintenir un second mappage. Transmettez l'**ID SoC**, et non un nom de chipset AI Hub, et le bon artefact sera sélectionné. Les suffixes de variante ne sont pas exposés par `ro.soc.model` : un Galaxy S25 signale `SM8750`, et non `SM8750-AC` (l'alias pour `qualcomm-snapdragon-8-elite-for-galaxy`). Transmettez donc le chipset explicitement si vous avez besoin de l'artefact de variante.
 </Note>
 
 GenieX **détecte automatiquement le chipset** sous Windows sur Snapdragon, Linux Dragonwing et Android. Vérifiez ce qu'il a détecté ou définissez-le explicitement :
@@ -37,7 +37,7 @@ geniex config get chipset          # affiche le chipset détecté (ou configuré
 geniex config set chipset          # lance un sélecteur interactif
 ```
 
-<Warning>**Android requiert un chipset explicite** pour les téléchargements Qualcomm AI Hub — l'auto-détection via `ro.soc.model` couvre la voie CLI/SDK, mais le SDK Android requiert `ModelPullInput.chipset` défini sur `"SM8750"` ou `"SM8850"`. Voir la [référence API Android](/fr/run/android/api-reference#modelpullinput).</Warning>
+<Warning>**Android requiert un chipset explicite** pour les téléchargements Qualcomm AI Hub. L'auto-détection via `ro.soc.model` couvre la voie CLI/SDK, mais le SDK Android requiert `ModelPullInput.chipset` défini sur `"SM8750"` ou `"SM8850"`. Voir la [référence API Android](/fr/run/android/api-reference#modelpullinput).</Warning>
 
 ### Interfaces par système d'exploitation
 
@@ -47,7 +47,7 @@ geniex config set chipset          # lance un sélecteur interactif
 | **Android** *(Mobile)* | <ul><li>[SDK Android](/fr/run/android/quickstart) (Kotlin, Maven Central)</li></ul> |
 | **Linux ARM64** *(IoT Dragonwing)* | <ul><li>[Installation native](/fr/run/cli/install)</li><li>[Docker](/fr/run/linux/install)</li></ul> |
 
-Les chipsets ci-dessus constituent l'ensemble validé. GenieX peut fonctionner sur d'autres composants Snapdragon au sein des mêmes familles — pour la liste complète de ce que Qualcomm AI Hub peut compiler, consultez la [liste des appareils Qualcomm AI Hub](https://workbench.aihub.qualcomm.com/docs/hub/devices.html).
+Les chipsets ci-dessus constituent l'ensemble validé. GenieX peut fonctionner sur d'autres composants Snapdragon au sein des mêmes familles - pour la liste complète de ce que Qualcomm AI Hub peut compiler, consultez la [liste des appareils Qualcomm AI Hub](https://workbench.aihub.qualcomm.com/docs/hub/devices.html).
 
 <Tip>**Pas d'appareil sous la main ?** Connectez-vous à [Qualcomm Developer Cloud (QDC)](https://qdc.qualcomm.com/) pour ouvrir des sessions distantes sur Snapdragon X Elite / X2 Elite, Snapdragon 8 Elite / 8 Elite Gen 5 et Dragonwing IQ-9075. Consultez le [guide pas à pas de QDC dans la FAQ](/fr/resources/faq#qdc-qualcomm-device-cloud).</Tip>
 
@@ -56,8 +56,8 @@ Les chipsets ci-dessus constituent l'ensemble validé. GenieX peut fonctionner s
 
 GenieX intègre deux environnements d'exécution afin de vous offrir à la fois une **large compatibilité de modèles** et des **performances maximales sur Snapdragon** au sein d'une seule pile :
 
-- **`llama_cpp`** — n'importe quel modèle GGUF de Hugging Face, s'exécutant sur le NPU Hexagon, le GPU Adreno ou le CPU via le backend GGML Hexagon de Qualcomm. Le plus large choix de modèles.
-- **`qairt`** ([Qualcomm® AI Engine Direct](https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk)) — bundles précompilés issus de [Qualcomm AI Hub](https://aihub.qualcomm.com/models/), compilés et quantifiés par chipset et assignés au NPU Hexagon. La voie la plus rapide lorsque votre modèle est présent sur Qualcomm AI Hub.
+- **`llama_cpp`** - n'importe quel modèle GGUF de Hugging Face, s'exécutant sur le NPU Hexagon, le GPU Adreno ou le CPU via le backend GGML Hexagon de Qualcomm. Le plus large choix de modèles.
+- **`qairt`** ([Qualcomm® AI Engine Direct](https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk)) - bundles précompilés issus de [Qualcomm AI Hub](https://aihub.qualcomm.com/models/), compilés et quantifiés par chipset et assignés au NPU Hexagon. La voie la plus rapide lorsque votre modèle est présent sur Qualcomm AI Hub.
 
 <Note>**Qualcomm AI Engine Direct** (également appelé *Qualcomm AI Engine Direct SDK*, *Qualcomm AI Runtime* et historiquement *QAIRT*) est le nom officiel. Tout au long de cette documentation, nous utilisons le nom officiel.</Note>
 
@@ -97,16 +97,16 @@ L'option `--compute` correspond au matériel sous-jacent de la manière suivante
 | `npu` *(défaut)* | Assigné au NPU Hexagon (`HTP0`). Meilleure voie NPU exclusif. |
 | `gpu` | GPU Adreno via OpenCL. |
 | `cpu` | Purement CPU. Force `nGpuLayers = 0`. |
-| `hybrid` | `device_id` vide + `n_gpu_layers=-1` (toutes les couches) — planificateur par tenseur HTP+CPU de llama.cpp. **La voie rapide sur Snapdragon.** |
+| `hybrid` | `device_id` vide + `n_gpu_layers=-1` (toutes les couches) - planificateur par tenseur HTP+CPU de llama.cpp. **La voie rapide sur Snapdragon.** |
 
-La précision choisie lors de `geniex pull` détermine également sur quel matériel le modèle sera chargé — voir [Précisions (Quantifications) prises en charge](/fr/models/supported#precisions-quantisations-prises-en-charge).
+La précision choisie lors de `geniex pull` détermine également sur quel matériel le modèle sera chargé - voir [Précisions (Quantifications) prises en charge](/fr/models/supported#precisions-quantisations-prises-en-charge).
 
 ---
 
 <a id="qualcomm-ai-engine-direct"></a>
 ## **Qualcomm AI Engine Direct**
 
-Le runtime `qairt` exécute les bundles précompilés issus de **Qualcomm AI Hub** via [Qualcomm® AI Engine Direct](https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk). Uniquement sur NPU, avec un bundle compilé et quantifié pour un chipset Snapdragon donné — généralement la voie NPU la plus rapide lorsque votre modèle est disponible sur Qualcomm AI Hub.
+Le runtime `qairt` exécute les bundles précompilés issus de **Qualcomm AI Hub** via [Qualcomm® AI Engine Direct](https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk). Uniquement sur NPU, avec un bundle compilé et quantifié pour un chipset Snapdragon donné - généralement la voie NPU la plus rapide lorsque votre modèle est disponible sur Qualcomm AI Hub.
 
 ### Unités de calcul
 
@@ -114,13 +114,13 @@ Qualcomm AI Engine Direct fonctionne **uniquement sur NPU**.
 
 | Alias | Effet |
 |---|---|
-| `npu` *(défaut)* | Assigné à `HTP0` — la seule voie prise en charge. |
+| `npu` *(défaut)* | Assigné à `HTP0` - la seule voie prise en charge. |
 | `cpu` / `gpu` | Coercé vers `npu` avec un avertissement. Ne provoque jamais d'erreur. |
 
 <a id="runtime-constraints"></a>
 ### Contraintes d'exécution
 
-Le bundle intègre **sa précision, sa longueur de contexte et la taille de son cache KV de façon figée** — aucune de ces valeurs ne peut être modifiée à l'exécution. Sur Android, `nGpuLayers != 0` et `nCtx != 0` sont rejetés avec `PARAM_NOT_SUPPORTED` ; laissez les deux à leurs valeurs par défaut et ajustez uniquement `max_tokens` / `enable_thinking`. Pour modifier la précision ou la longueur de contexte, téléchargez un bundle différent depuis [Qualcomm AI Hub](https://aihub.qualcomm.com/models/).
+Le bundle intègre **sa précision, sa longueur de contexte et la taille de son cache KV de façon figée** - aucune de ces valeurs ne peut être modifiée à l'exécution. Sur Android, `nGpuLayers != 0` et `nCtx != 0` sont rejetés avec `PARAM_NOT_SUPPORTED` ; laissez les deux à leurs valeurs par défaut et ajustez uniquement `max_tokens` / `enable_thinking`. Pour modifier la précision ou la longueur de contexte, téléchargez un bundle différent depuis [Qualcomm AI Hub](https://aihub.qualcomm.com/models/).
 
 <br />
 

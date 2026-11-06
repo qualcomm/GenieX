@@ -5,13 +5,13 @@ description: "Transcrivez et raisonnez sur de l'audio sur l'appareil avec un VLM
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-Un modèle vision-langage dont le projecteur multimodal intègre un **encodeur audio conformer** peut accepter de l'audio aux côtés du texte et des images. GenieX achemine l'extrait via le chemin mtmd (multimodal) de llama.cpp — le même mécanisme qui traite les images — permettant ainsi à un seul échange de combiner texte, image et audio.
+Un modèle vision-langage dont le projecteur multimodal intègre un **encodeur audio conformer** peut accepter de l'audio aux côtés du texte et des images. GenieX achemine l'extrait via le chemin mtmd (multimodal) de llama.cpp - le même mécanisme qui traite les images - permettant ainsi à un seul échange de combiner texte, image et audio.
 
 <Note>L'audio fonctionne **exclusivement via `llama_cpp`**. Les bundles QAIRT indiquent `audio: false` et un modèle QAIRT recevant de l'audio échoue avec `GenieXError(-201201): Multimodal generation failed`. L'audio s'exécute sur `--compute npu` / `gpu` / `cpu` ; le NPU constitue le chemin par défaut et le plus rapide sur Snapdragon.</Note>
 
 ## **Étape 1 : Télécharger un modèle compatible audio**
 
-La prise en charge de l'audio n'est pas un simple drapeau de métadonnées — elle signifie que le GGUF mmproj intègre véritablement un encodeur audio. `google/gemma-4-E2B-it-qat-q4_0-gguf` en dispose : les poids `Q4_0` (≈3,1 Go) et le mmproj conformer (≈0,9 Go) sont téléchargés ensemble, pour un total d'environ 4,0 Go.
+La prise en charge de l'audio n'est pas un simple drapeau de métadonnées. Elle signifie que le GGUF mmproj intègre véritablement un encodeur audio. `google/gemma-4-E2B-it-qat-q4_0-gguf` en dispose : les poids `Q4_0` (≈3,1 Go) et le mmproj conformer (≈0,9 Go) sont téléchargés ensemble, pour un total d'environ 4,0 Go.
 
 ```bash
 geniex pull google/gemma-4-E2B-it-qat-q4_0-gguf
@@ -45,7 +45,7 @@ This is a scenic, panoramic photograph that features a traditional Japanese temp
 
 ### Enregistrer depuis le micro avec `/mic`
 
-Dans une session interactive (lancez `geniex infer <model>` sans `-p`), la commande `/mic` enregistre un extrait et le transmet directement — très pratique lorsque vous n'avez pas de fichier audio sur disque. Cette commande n'apparaît que lorsque le modèle chargé prend en charge l'audio.
+Dans une session interactive (lancez `geniex infer <model>` sans `-p`), la commande `/mic` enregistre un extrait et le transmet directement - très pratique lorsque vous n'avez pas de fichier audio sur disque. Cette commande n'apparaît que lorsque le modèle chargé prend en charge l'audio.
 
 ```text
 > /mic
@@ -71,7 +71,7 @@ winget install --id=ChrisBagwell.SoX -e
 
 ## **Étape 3 : Utiliser sur le serveur local**
 
-Démarrez le serveur et envoyez une partie de contenu `input_audio` compatible OpenAI. `input_audio.data` accepte les trois mêmes formats qu'une URL d'image — un chemin local, une URL HTTP/HTTPS ou une Data URL base64. Un message unique peut mélanger `image_url` et `input_audio` :
+Démarrez le serveur et envoyez une partie de contenu `input_audio` compatible OpenAI. `input_audio.data` accepte les trois mêmes formats qu'une URL d'image - un chemin local, une URL HTTP/HTTPS ou une Data URL base64. Un message unique peut mélanger `image_url` et `input_audio` :
 
 ```bash
 geniex serve
@@ -96,13 +96,13 @@ curl http://127.0.0.1:18181/v1/chat/completions \
   }'
 ```
 
-<Warning>**Vous utilisez Docker ?** Les chemins locaux sont résolus **dans le conteneur**. La commande d'installation monte `$PWD/data` sur `/data` — placez vos fichiers à cet endroit et transmettez `/data/jfk.wav`, ou utilisez une URL HTTP / Data URL base64 pour contourner le système de fichiers.</Warning>
+<Warning>**Vous utilisez Docker ?** Les chemins locaux sont résolus **dans le conteneur**. La commande d'installation monte `$PWD/data` sur `/data` - placez vos fichiers à cet endroit et transmettez `/data/jfk.wav`, ou utilisez une URL HTTP / Data URL base64 pour contourner le système de fichiers.</Warning>
 
 Consultez [Serveur local](/fr/run/cli/local-server#vlm-request) pour le format de requête complet et l'équivalent client Python `openai`.
 
 ## **Étape 4 : Utiliser depuis le SDK Python**
 
-Chargez le modèle avec `AutoModelForVision2Seq` et passez les chemins à `generate(images=[...], audios=[...])` — un appel unique peut accepter les deux. `capabilities()` confirme que le mmproj gère l'audio avant tout envoi :
+Chargez le modèle avec `AutoModelForVision2Seq` et passez les chemins à `generate(images=[...], audios=[...])`, un appel unique peut accepter les deux. `capabilities()` confirme que le mmproj gère l'audio avant tout envoi :
 
 ```python
 import os
@@ -140,12 +140,12 @@ model.close()
 | | Détails |
 |---|---|
 | **Auto-détection CLI / prompt** | Extensions `.wav` et `.mp3` uniquement. Tout autre chemin dans le prompt est considéré comme une image. |
-| **Serveur** | Aucune liste blanche d'extensions — les octets de `input_audio.data` sont décodés selon leur contenu, donc tout ce que llama.cpp peut décoder fonctionne. |
-| **Décodeur (llama.cpp)** | Reconnaît WAV, MP3 et FLAC par les octets magiques (magic bytes). Attention à la différence : un chemin `.flac` dans un prompt CLI est redirigé vers les images même si le décodeur interne sait traiter le FLAC — passez le FLAC via le serveur ou convertissez en `.wav`/`.mp3` en CLI. |
+| **Serveur** | Aucune liste blanche d'extensions - les octets de `input_audio.data` sont décodés selon leur contenu, donc tout ce que llama.cpp peut décoder fonctionne. |
+| **Décodeur (llama.cpp)** | Reconnaît WAV, MP3 et FLAC par les octets magiques (magic bytes). Attention à la différence : un chemin `.flac` dans un prompt CLI est redirigé vers les images même si le décodeur interne sait traiter le FLAC - passez le FLAC via le serveur ou convertissez en `.wav`/`.mp3` en CLI. |
 | **Canaux / Fréquence d'échantillonnage** | L'audio est systématiquement converti en **mono** et rééchantillonné vers la fréquence cible de l'encodeur (généralement **16 kHz** ; certaines architectures utilisent 24 kHz). Pris en charge automatiquement sans conversion préalable requise. |
 | **Durée** | Aucun maximum. Les extraits plus courts que la longueur de bloc de l'encodeur sont complétés par des zéros ; les extraits plus longs sont découpés en blocs automatiquement. |
 
-<Note>La gestion des canaux/fréquences/durées est prise en charge dans la couche audio mtmd de llama.cpp (tierce partie), et non dans GenieX — le comportement peut évoluer avec la version de llama.cpp.</Note>
+<Note>La gestion des canaux/fréquences/durées est prise en charge dans la couche audio mtmd de llama.cpp (tierce partie), et non dans GenieX - le comportement peut évoluer avec la version de llama.cpp.</Note>
 
 ## **Cas d'erreurs fréquents**
 
@@ -157,9 +157,9 @@ model.close()
 
 ## **Étapes suivantes**
 
-- [Référence de la CLI](/fr/run/cli/reference#geniex-infer-vlm) — toutes les options de `geniex infer`.
-- [Serveur local](/fr/run/cli/local-server#vlm-request) — l'API complète compatible OpenAI.
-- [Démarrage rapide Python](/fr/run/python/quickstart) — inférence VLM et audio en Python.
+- [Référence de la CLI](/fr/run/cli/reference#geniex-infer-vlm) - toutes les options de `geniex infer`.
+- [Serveur local](/fr/run/cli/local-server#vlm-request) - l'API complète compatible OpenAI.
+- [Démarrage rapide Python](/fr/run/python/quickstart) - inférence VLM et audio en Python.
 
 <br />
 

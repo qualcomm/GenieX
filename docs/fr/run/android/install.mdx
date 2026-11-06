@@ -5,14 +5,14 @@ description: "Ajouter le SDK Android GenieX à votre projet Gradle depuis Maven 
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-Ajoutez le SDK GenieX à un projet Android Studio pour que votre application puisse télécharger les poids depuis Hugging Face / Qualcomm AI Hub et les exécuter sur le NPU Hexagon, le GPU Adreno ou le CPU — le tout en Kotlin.
+Ajoutez le SDK GenieX à un projet Android Studio pour que votre application puisse télécharger les poids depuis Hugging Face / Qualcomm AI Hub et les exécuter sur le NPU Hexagon, le GPU Adreno ou le CPU - le tout en Kotlin.
 
 ## **Essayer l'application d'exemple d'abord**
 
-Observez GenieX fonctionner sur Android avant d'écrire la moindre ligne de code. L'application de chat de référence — avec sélecteur de modèles, reprises de téléchargement et prise en charge VLM — se trouve dans `qualcomm/ai-hub-apps`. Clonez-la, ouvrez-la dans Android Studio et cliquez sur **Run ▶**.
+Observez GenieX fonctionner sur Android avant d'écrire la moindre ligne de code. L'application de chat de référence avec sélecteur de modèles, reprises de téléchargement et prise en charge VLM - se trouve dans `qualcomm/ai-hub-apps`. Clonez-la, ouvrez-la dans Android Studio et cliquez sur **Run ▶**.
 
 <Card title="Obtenir l'application d'exemple GenieX Chat" icon="github" href="https://github.com/qualcomm/ai-hub-apps/blob/release/geniex_chat_android/README.md">
-  Compilez l'application de discussion de référence à partir des sources — suivez le README pour la cloner, la compiler et la lancer.
+  Compilez l'application de discussion de référence à partir des sources. Suivez le README pour la cloner, la compiler et la lancer.
 </Card>
 
 Sélectionnez un modèle dans le menu déroulant et choisissez NPU, GPU ou CPU au chargement. Appuyez sur le bouton d'image pour les VLM. Restez connecté en Wi-Fi pour le premier téléchargement.
@@ -23,7 +23,7 @@ Pas de téléphone disponible ? Voir [Tester sans appareil physique](/fr/resourc
 
 - **Android Studio** [Hedgehog (2023.1.1)](https://developer.android.com/studio/releases/past-releases/as-hedgehog-release-notes) ou plus récent.
 - **`minSdk = 27`** (Android 8.1) dans votre module d'application.
-- Un smartphone équipé d'un processeur **Snapdragon 8 Elite** (`SM8750`) ou **Snapdragon 8 Elite Gen 5** (`SM8850`) — voir [Plateformes prises en charge](/fr/get-started/platforms).
+- Un smartphone équipé d'un processeur **Snapdragon 8 Elite** (`SM8750`) ou **Snapdragon 8 Elite Gen 5** (`SM8850`) - voir [Plateformes prises en charge](/fr/get-started/platforms).
 
 ## **Ajouter le SDK à votre application**
 
@@ -50,7 +50,7 @@ Pas de téléphone disponible ? Voir [Tester sans appareil physique](/fr/resourc
     }
     ```
 
-    L'artefact intègre les bibliothèques natives `arm64-v8a` — aucun NDK ni CMake requis de votre côté.
+    L'artefact intègre les bibliothèques natives `arm64-v8a` - aucun NDK ni CMake requis de votre côté.
   </Step>
 
   <Step title="Déclarer les autorisations">

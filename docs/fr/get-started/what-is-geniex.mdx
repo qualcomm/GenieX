@@ -1,13 +1,13 @@
 ---
 title: "Qu'est-ce que GenieX"
-description: "Environnement d'exécution d'inférence IA sur l'appareil pour Qualcomm Snapdragon — exécutez des LLM et VLM de pointe via CLI, Python, Android et Docker."
+description: "Environnement d'exécution d'inférence IA sur l'appareil pour Qualcomm Snapdragon - exécutez des LLM et VLM de pointe via CLI, Python, Android et Docker."
 ---
 
 import Feedback from "/snippets/page-feedback.mdx";
 
 GenieX est un environnement d'exécution d'inférence d'IA générative sur l'appareil conçu pour les plateformes Qualcomm. C'est le moyen le plus simple d'exécuter localement des modèles de langage et de vision-langage de pointe sur le NPU Hexagon, le GPU Adreno ou le CPU en quelques lignes de code. Il s'agit de la version communautaire de Qualcomm GENIE.
 
-<Info>**GenieX est en version préliminaire pour développeurs (developer preview).** Vos retours sont les bienvenus — [ouvrez une issue](https://github.com/qualcomm/GenieX/issues) ou [rejoignez Slack](https://aihub.qualcomm.com/community/slack).</Info>
+<Info>**GenieX est en version préliminaire pour développeurs (developer preview).** Vos retours sont les bienvenus. [ouvrez une issue](https://github.com/qualcomm/GenieX/issues) ou [rejoignez Slack](https://aihub.qualcomm.com/community/slack).</Info>
 
 ## **Architecture**
 
@@ -19,11 +19,11 @@ GenieX est un environnement d'exécution d'inférence d'IA générative sur l'ap
 
 GenieX propose **cinq points d'entrée**, tous reposant sur un SDK unique :
 
-- **CLI** — exécutez et servez des modèles directement depuis le terminal.
-- **Python** — intégrez l'inférence dans vos applications avec le SDK Python.
-- **Java/Kotlin** — le SDK Android pour les applications mobiles sur l'appareil.
-- **Docker** — une image conteneurisée pour des déploiements reproductibles.
-- **Serveur compatible OpenAI** — un serveur local clé en main pour les clients OpenAI existants.
+- **CLI** - exécutez et servez des modèles directement depuis le terminal.
+- **Python** - intégrez l'inférence dans vos applications avec le SDK Python.
+- **Java/Kotlin** - le SDK Android pour les applications mobiles sur l'appareil.
+- **Docker** - une image conteneurisée pour des déploiements reproductibles.
+- **Serveur compatible OpenAI** - un serveur local clé en main pour les clients OpenAI existants.
 
 Sous le capot, ce SDK répartit l'exécution soit vers le **runtime llama.cpp** (noyaux GGML pour CPU / GPU / HTP Hexagon), soit vers le **runtime [Qualcomm® AI Engine Direct](https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk)** (NPU uniquement). Le même SDK fonctionne sur Windows ARM64, Android et Linux ARM64.
 
@@ -33,15 +33,15 @@ Sous le capot, ce SDK répartit l'exécution soit vers le **runtime llama.cpp** 
 
 Pour bénéficier à la fois d'une **large compatibilité de modèles** et de **performances optimales** au sein d'une même pile :
 
-- **La plupart des modèles fonctionnent directement** — pointez GenieX vers presque n'importe quel modèle GGUF sur Hugging Face et il s'exécute sur CPU / GPU / NPU via llama.cpp.
-- **Les modèles Qualcomm® AI Hub fonctionnent de manière optimale** — les modèles publiés sur [Qualcomm AI Hub](https://aihub.qualcomm.com/) sont précompilés par chipset et s'exécutent via Qualcomm AI Engine Direct sur le NPU Hexagon pour des performances maximales sur l'appareil.
+- **La plupart des modèles fonctionnent directement** - pointez GenieX vers presque n'importe quel modèle GGUF sur Hugging Face et il s'exécute sur CPU / GPU / NPU via llama.cpp.
+- **Les modèles Qualcomm® AI Hub fonctionnent de manière optimale** - les modèles publiés sur [Qualcomm AI Hub](https://aihub.qualcomm.com/) sont précompilés par chipset et s'exécutent via Qualcomm AI Engine Direct sur le NPU Hexagon pour des performances maximales sur l'appareil.
 
 Consultez [Plateformes et environnements d'exécution](/fr/get-started/platforms#environnements-d-execution-geniex) pour savoir lequel choisir selon vos besoins.
 
 ## **Ce que vous pouvez faire avec GenieX**
 
 - **Exécuter des modèles localement** sur Snapdragon X (Windows ARM64), Snapdragon 8 Elite (Android) et les chipsets IoT Dragonwing.
-- **Choisir un runtime** — `llama.cpp` pour n'importe quel modèle GGUF communautaire, Qualcomm AI Engine Direct (`qairt`) pour les bundles NPU précompilés de Qualcomm AI Hub.
+- **Choisir un runtime** - `llama.cpp` pour n'importe quel modèle GGUF communautaire, Qualcomm AI Engine Direct (`qairt`) pour les bundles NPU précompilés de Qualcomm AI Hub.
 - **Créer des applications** via la CLI, un serveur local compatible OpenAI, le SDK Python, le SDK Android ou une image Docker.
 
 ## **Par où commencer**

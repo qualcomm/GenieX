@@ -9,17 +9,17 @@ Cette page vous guide pour exécuter votre premier modèle depuis une applicatio
 
 ## **Prérequis**
 
-- Le SDK ajouté à votre projet Gradle — voir [Installation](/fr/run/android/install).
+- Le SDK ajouté à votre projet Gradle - voir [Installation](/fr/run/android/install).
 - Un téléphone fonctionnant avec un **Snapdragon 8 Elite** ou un **Snapdragon 8 Elite Gen 5**.
 - L'autorisation `INTERNET` dans votre `AndroidManifest.xml` (le SDK télécharge les poids depuis Hugging Face / Qualcomm AI Hub à la première utilisation).
 
 ## **Exécuter votre premier modèle**
 
-Le flux reste identique quel que soit le modèle : **initialiser le SDK → télécharger les poids → charger → générer**. Voici un exemple minimal de bout en bout avec `unsloth/Qwen3-0.6B-GGUF` — un modèle de discussion compact Qwen3 0.6B qui s'exécute sur tout chipset pris en charge.
+Le flux reste identique quel que soit le modèle : **initialiser le SDK → télécharger les poids → charger → générer**. Voici un exemple minimal de bout en bout avec `unsloth/Qwen3-0.6B-GGUF` - un modèle de discussion compact Qwen3 0.6B qui s'exécute sur tout chipset pris en charge.
 
 <Steps>
   <Step title="Initialiser le SDK">
-    Appelez cette méthode au démarrage de l'application (idempotente — sûre à placer dans `Activity.onCreate`) :
+    Appelez cette méthode au démarrage de l'application (A placer dans `Activity.onCreate`) :
 
     ```kotlin
     GenieXSdk.getInstance().init(context)
@@ -45,7 +45,7 @@ Le flux reste identique quel que soit le modèle : **initialiser le SDK → tél
     }
     ```
 
-    Les téléchargements peuvent être repris — fermer l'application en cours de téléchargement puis la relancer reprend là où elle s'était arrêtée.
+    Les téléchargements peuvent être repris - fermer l'application en cours de téléchargement puis la relancer reprend là où elle s'était arrêtée.
   </Step>
 
   <Step title="Charger le modèle">
@@ -98,12 +98,12 @@ Le flux reste identique quel que soit le modèle : **initialiser le SDK → tél
 
 Changer de modèle consiste principalement à modifier `model_name` et `runtime_id`. Il existe deux runtimes :
 
-- **`llama_cpp`** — exécute tout modèle GGUF. Prend en charge les unités de calcul NPU / GPU / CPU via `compute_unit`.
-- **`qairt`** (Qualcomm AI Engine Direct) — exécute les modèles Qualcomm AI Hub. NPU uniquement, requiert un paramètre explicite `chipset` sur Android.
+- **`llama_cpp`** - exécute tout modèle GGUF. Prend en charge les unités de calcul NPU / GPU / CPU via `compute_unit`.
+- **`qairt`** (Qualcomm AI Engine Direct) - exécute les modèles Qualcomm AI Hub. NPU uniquement, requiert un paramètre explicite `chipset` sur Android.
 
 ### Un autre modèle GGUF (llama.cpp)
 
-Modifiez simplement `model_name` (et `precision` si vous souhaitez en changer) — le reste du code est rigoureusement identique :
+Modifiez simplement `model_name` (et `precision` si vous souhaitez en changer). Le reste du code est rigoureusement identique :
 
 ```kotlin
 ModelPullInput(
@@ -113,7 +113,7 @@ ModelPullInput(
 )
 ```
 
-Pour les VLM, passez également `paths.mmproj_path` dans `VlmCreateInput` — voir [Référence API → VLM](/fr/run/android/api-reference#vlm).
+Pour les VLM, passez également `paths.mmproj_path` dans `VlmCreateInput`. Voir [Référence API → VLM](/fr/run/android/api-reference#vlm).
 
 ### Un modèle Qualcomm AI Hub (NPU via Qualcomm AI Engine Direct)
 
@@ -133,7 +133,7 @@ Définissez ensuite `runtime_id = "qairt"` dans `LlmCreateInput`. Consultez les 
 
 ### Changer d'unité de calcul (NPU / GPU / CPU)
 
-Pour `llama_cpp` uniquement — définissez `compute_unit` dans `LlmCreateInput` :
+Pour `llama_cpp` uniquement - définissez `compute_unit` dans `LlmCreateInput` :
 
 | `compute_unit`        | Unité de calcul                            |
 |--------------------|--------------------------------------------|
@@ -141,11 +141,11 @@ Pour `llama_cpp` uniquement — définissez `compute_unit` dans `LlmCreateInput`
 | `"gpu"`            | GPU Adreno via OpenCL.                     |
 | `"cpu"`            | Purement CPU. Fonctionne sur tout chipset ARM64. |
 
-Qualcomm AI Engine Direct ignore ce paramètre — `cpu`/`gpu` sont redirigés vers le NPU avec un avertissement.
+Qualcomm AI Engine Direct ignore ce paramètre - `cpu`/`gpu` sont redirigés vers le NPU avec un avertissement.
 
 ## **Utiliser un modèle local**
 
-Si les poids se trouvent déjà sur l'appareil — transférés via `adb push`, intégrés dans le dossier des fichiers de votre application ou produits par un autre outil — pointez le gestionnaire de modèles vers ce répertoire : définissez `hub = HubSource.LOCALFS` et `local_path` sur l'emplacement du disque. `pullFlow` l'importe dans le cache du SDK (sans réseau), après quoi `getPaths` / `LlmWrapper` fonctionnent exactement comme pour un modèle téléchargé.
+Si les poids transférés via `adb push`, se trouvent déjà sur l'appareil, intégrés alors dans le dossier des fichiers de votre application ou produits par avec autre outil, pointez ensuite le gestionnaire de modèles vers ce répertoire : définissez `hub = HubSource.LOCALFS` et `local_path` sur l'emplacement du disque. `pullFlow` l'importe dans le cache du SDK (sans réseau), après quoi `getPaths` / `LlmWrapper` fonctionnent exactement comme pour un modèle téléchargé.
 
 Les snippets Android complets pour importer un modèle local GGUF et un bundle local Qualcomm AI Engine Direct sont présentés sur la page Modèles :
 
@@ -156,10 +156,10 @@ Les snippets Android complets pour importer un modèle local GGUF et un bundle l
 
 L'[application d'exemple](https://github.com/qualcomm/ai-hub-apps/blob/release/geniex_chat_android/README.md) est un client de discussion entièrement fonctionnel construit sur les snippets ci-dessus. Quelques modèles de conception méritent d'être repris :
 
-- **Interface de sélection de modèle** — la liste déroulante est pilotée par `app/src/main/assets/model_list.json`. Chaque entrée fixe un `model_name`, un `hub`, et (pour Qualcomm AI Engine Direct) un `chipset`. Modifiez ce fichier pour ajouter de nouveaux modèles sans toucher au code.
-- **Téléchargements avec reprise et progression** — les événements `Progress` de `pullFlow` fournissent le décompte d'octets par fichier ; l'exemple les relie directement à un `LinearProgressIndicator`.
-- **Sélecteur d'unité de calcul adapté au runtime** — lorsque le modèle sélectionné utilise Qualcomm AI Engine Direct, le sélecteur masque les options GPU/CPU. Voir `LoadDialog.kt`.
-- **Sélecteur d'image VLM** — pour les VLM, l'exemple transmet le chemin absolu du fichier dans `VlmContent("image", path)`. Ne passez pas d'URI de contenu — la couche native lit directement le fichier.
+- **Interface de sélection de modèle** - la liste déroulante est pilotée par `app/src/main/assets/model_list.json`. Chaque entrée fixe un `model_name`, un `hub`, et (pour Qualcomm AI Engine Direct) un `chipset`. Modifiez ce fichier pour ajouter de nouveaux modèles sans toucher au code.
+- **Téléchargements avec reprise et progression** - les événements `Progress` de `pullFlow` fournissent le décompte d'octets par fichier ; l'exemple les relie directement à un `LinearProgressIndicator`.
+- **Sélecteur d'unité de calcul adapté au runtime** - lorsque le modèle sélectionné utilise Qualcomm AI Engine Direct, le sélecteur masque les options GPU/CPU. Voir `LoadDialog.kt`.
+- **Sélecteur d'image VLM** - pour les VLM, l'exemple transmet le chemin absolu du fichier dans `VlmContent("image", path)`. Ne passez pas d'URI de contenu - la couche native lit directement le fichier.
 
 Clonez [`qualcomm/ai-hub-apps`](https://github.com/qualcomm/ai-hub-apps/blob/release/geniex_chat_android/README.md), ouvrez le projet dans Android Studio et cliquez sur **Run ▶**.
 

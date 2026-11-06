@@ -9,20 +9,20 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="Qu'est-ce que GenieX ?">
-    Un SDK multi-plateforme d'inférence d'IA conçu pour Qualcomm Snapdragon. GenieX exécute des LLM et VLM de pointe sur l'appareil — sur le NPU Hexagon, le GPU Adreno ou les unités de calcul CPU — sur Windows ARM64, Android et Linux ARM64. Voir [Qu'est-ce que GenieX](/fr/get-started/what-is-geniex).
+    Un SDK multi-plateforme d'inférence d'IA conçu pour Qualcomm Snapdragon. GenieX exécute des LLM et VLM de pointe sur l'appareil via le NPU Hexagon, le GPU Adreno ou les unités de calcul CPU, sur Windows ARM64, Android et Linux ARM64. Voir [Qu'est-ce que GenieX](/fr/get-started/what-is-geniex).
   </Accordion>
 
   <Accordion title="Quelle interface dois-je utiliser ?">
-    - **Pour tester et scripter** — [CLI](/fr/run/cli/install) sous Windows ARM64 ou Linux ARM64.
-    - **Pour créer une application** — [Serveur local](/fr/run/cli/local-server) (HTTP compatible OpenAI) ou [SDK Python](/fr/run/python/install).
-    - **Pour le mobile** — [SDK Android](/fr/run/android/install) (Kotlin, Maven Central).
-    - **Pour un déploiement IoT reproductible** — [Image Docker](/fr/run/cli/install) sur les kits d'évaluation (EVK) Linux ARM64, fixée à un tag de version.
+    - **Pour tester et scripter** - [CLI](/fr/run/cli/install) sous Windows ARM64 ou Linux ARM64.
+    - **Pour créer une application** - [Serveur local](/fr/run/cli/local-server) (HTTP compatible OpenAI) ou [SDK Python](/fr/run/python/install).
+    - **Pour le mobile** - [SDK Android](/fr/run/android/install) (Kotlin, Maven Central).
+    - **Pour un déploiement IoT reproductible** - [Image Docker](/fr/run/cli/install) sur les kits d'évaluation (EVK) Linux ARM64, fixée à un tag de version.
 
     Le [Démarrage rapide](/fr/get-started/quickstart) sert de point d'aiguillage vers ces quatre options.
   </Accordion>
 
   <Accordion title="Où puis-je voir le matériel pris en charge par GenieX ?">
-    [Plateformes prises en charge](/fr/get-started/platforms) — Snapdragon X sous Windows ARM64, Snapdragon 8 Elite sous Android, Dragonwing QCS9075 sous Linux ARM64.
+    [Plateformes prises en charge](/fr/get-started/platforms) - Snapdragon X sous Windows ARM64, Snapdragon 8 Elite sous Android, Dragonwing QCS9075 sous Linux ARM64.
   </Accordion>
 </AccordionGroup>
 
@@ -30,8 +30,8 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="Quelle est la différence entre llama.cpp et Qualcomm AI Engine Direct ?">
-    - **llama.cpp** — exécute n'importe quel modèle GGUF, prend en charge les unités de calcul NPU/GPU/CPU. Idéal pour tester des modèles communautaires.
-    - **[Qualcomm® AI Engine Direct](https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk)** (`qairt`) — exécute les modèles précompilés de Qualcomm AI Hub, NPU uniquement. Généralement la voie la plus rapide lorsque votre modèle est présent sur Qualcomm AI Hub.
+    - **llama.cpp** - exécute n'importe quel modèle GGUF, prend en charge les unités de calcul NPU/GPU/CPU. Idéal pour tester des modèles communautaires.
+    - **[Qualcomm® AI Engine Direct](https://www.qualcomm.com/developer/software/qualcomm-ai-engine-direct-sdk)** (`qairt`) - exécute les modèles précompilés de Qualcomm AI Hub, NPU uniquement. Généralement la voie la plus rapide lorsque votre modèle est présent sur Qualcomm AI Hub.
 
     Voir [Plateformes et runtimes](/fr/get-started/platforms#geniex-runtimes).
   </Accordion>
@@ -41,7 +41,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="Quelle précision (quantification) dois-je choisir ?">
-    Pour llama.cpp sur le NPU Snapdragon : **`Q4_0`**. Il offre la meilleure prise en charge sur NPU Hexagon. Les modèles Qualcomm AI Hub sont déjà pré-quantifiés — aucun choix requis. Voir [Précisions (Quantifications) prises en charge](/fr/models/supported#precisions-quantisations-prises-en-charge).
+    Pour llama.cpp sur le NPU Snapdragon : **`Q4_0`**. Il offre la meilleure prise en charge sur NPU Hexagon. Les modèles Qualcomm AI Hub sont déjà pré-quantifiés - aucun choix requis. Voir [Précisions (Quantifications) prises en charge](/fr/models/supported#precisions-quantisations-prises-en-charge).
   </Accordion>
 </AccordionGroup>
 
@@ -51,7 +51,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   <Accordion title="Puis-je exécuter n'importe quel modèle issu de Hugging Face ?">
     Tout modèle **GGUF** sur le runtime llama.cpp. Voir [Exécuter un modèle GGUF depuis Hugging Face](/fr/models/supported#run-a-gguf-model-from-hugging-face).
 
-    Qualcomm AI Engine Direct requiert un modèle Qualcomm AI Hub précompilé — en ajouter un nouveau nécessite son enregistrement préalable côté C++.
+    Qualcomm AI Engine Direct requiert un modèle Qualcomm AI Hub précompilé, en ajouter un nouveau nécessite son enregistrement préalable côté C++.
   </Accordion>
 
   <Accordion title="Comment configurer un jeton Hugging Face pour les modèles restreints ?">
@@ -66,7 +66,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="Où se trouve la liste des modèles pris en charge ?">
-    [Modèles](/fr/models/supported) — répartis par runtime (Qualcomm AI Engine Direct, llama.cpp).
+    [Modèles](/fr/models/supported) - répartis par runtime (Qualcomm AI Engine Direct, llama.cpp).
   </Accordion>
 </AccordionGroup>
 
@@ -74,10 +74,10 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="Ai-je besoin d'un appareil Snapdragon ?">
-    Oui. GenieX cible les chipsets Qualcomm Snapdragon — NPU Hexagon, GPU Adreno et CPU Snapdragon ARM. Il n'existe pas de version x86 ou ARM non-Snapdragon. Si vous n'avez pas d'appareil sous la main, utilisez le [Qualcomm Developer Cloud / Device Cloud](/fr/get-started/platforms).
+    Oui. GenieX cible les chipsets Qualcomm Snapdragon - NPU Hexagon, GPU Adreno et CPU Snapdragon ARM. Il n'existe pas de version x86 ou ARM non-Snapdragon. Si vous n'avez pas d'appareil sous la main, utilisez le [Qualcomm Developer Cloud / Device Cloud](/fr/get-started/platforms).
   </Accordion>
 
-  <Accordion title="Mon modèle Qualcomm AI Hub indique que le NPU est requis — puis-je l'exécuter sur CPU ?">
+  <Accordion title="Mon modèle Qualcomm AI Hub indique que le NPU est requis. Puis-je l'exécuter sur CPU ?">
     Non. Qualcomm AI Engine Direct est exclusivement réservé au NPU par conception. Les alias `cpu` et `gpu` sont automatiquement redirigés vers le NPU avec un avertissement. Utilisez le runtime llama.cpp (avec un GGUF) si vous avez besoin d'un repli sur CPU/GPU.
   </Accordion>
 </AccordionGroup>
@@ -87,7 +87,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="Dois-je posséder mon propre appareil QDC ?">
-    Non. Connectez-vous à [Qualcomm Developer Cloud](https://qdc.qualcomm.com/), choisissez un appareil Snapdragon et démarrez une session interactive — c'est tout. Consultez [Plateformes prises en charge](/fr/get-started/platforms) pour connaître les chipsets disponibles.
+    Non. Connectez-vous à [Qualcomm Developer Cloud](https://qdc.qualcomm.com/), choisissez un appareil Snapdragon et démarrez une session interactive - c'est tout. Consultez [Plateformes prises en charge](/fr/get-started/platforms) pour connaître les chipsets disponibles.
   </Accordion>
 
   <Accordion title="Comment me connecter à un appareil QDC via SSH ?">
@@ -110,7 +110,7 @@ import Feedback from "/snippets/page-feedback.mdx";
         />
 
         <Tip>
-        **`WARNING: UNPROTECTED PRIVATE KEY FILE!`** — les permissions de votre fichier `.pem` sont trop ouvertes. SSH exige que les clés privées ne soient lisibles que par leur propriétaire :
+        **`WARNING: UNPROTECTED PRIVATE KEY FILE!`** - les permissions de votre fichier `.pem` sont trop ouvertes. SSH exige que les clés privées ne soient lisibles que par leur propriétaire :
 
         ```bash
         chmod 600 /path/to/your-key.pem
@@ -147,7 +147,7 @@ import Feedback from "/snippets/page-feedback.mdx";
         Activez le **Wi-Fi** (afin que la démo puisse télécharger des modèles) et **Keep screen on** (pour que l'écran ne se verrouille pas pendant le téléchargement). SSH n'est **pas** requis.
       </Step>
       <Step title="Téléverser l'APK">
-        Utilisez **Upload file** sur la page de configuration de la session pour envoyer votre `.apk` compilé sur l'appareil — le fichier doit être téléversé **avant** le début de la session.
+        Utilisez **Upload file** sur la page de configuration de la session pour envoyer votre `.apk` compilé sur l'appareil - le fichier doit être téléversé **avant** le début de la session.
       </Step>
       <Step title="Démarrer et tester">
         Démarrez la session. Sur l'écran partagé, appuyez sur l'APK téléversé pour l'installer, puis lancez **GenieX Demo** depuis le tiroir d'applications.
@@ -170,9 +170,9 @@ import Feedback from "/snippets/page-feedback.mdx";
   <Accordion title="Comment installer Python sur un appareil Linux ARM64 ?" id="how-do-i-install-python-on-a-linux-arm64-device">
     GenieX requiert Python **ARM64**. Les versions x86_64 / AMD64 ne sont pas prises en charge, même sous émulation.
 
-    Les appareils QDC (Qualcomm embedded Linux / Yocto) intègrent Python ARM64 préinstallé — vérifiez avec `python3 --version`. Si votre appareil ne dispose pas de Python, utilisez l'une des méthodes ci-dessous.
+    Les appareils QDC (Qualcomm embedded Linux / Yocto) intègrent Python ARM64 préinstallé. Vérifiez avec `python3 --version`. Si votre appareil ne dispose pas de Python, utilisez l'une des méthodes ci-dessous.
 
-    **Option 1 — [Miniconda](https://docs.anaconda.com/miniconda/) (recommandé ; fonctionne sur Yocto et Ubuntu ARM64)**
+    **Option 1 - [Miniconda](https://docs.anaconda.com/miniconda/) (recommandé ; fonctionne sur Yocto et Ubuntu ARM64)**
 
     ```bash
     wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh
@@ -190,18 +190,18 @@ import Feedback from "/snippets/page-feedback.mdx";
     python --version
     ```
 
-    **Option 2 — apt (Ubuntu ARM64 uniquement)**
+    **Option 2 - apt (Ubuntu ARM64 uniquement)**
 
     ```bash
     sudo apt update && sudo apt install -y python3 python3-pip python3-venv
     python3 --version
     ```
 
-    Les images Yocto de QDC n'incluent pas `apt` — utilisez Miniconda ci-dessus.
+    Les images Yocto de QDC n'incluent pas `apt` - utilisez Miniconda ci-dessus.
   </Accordion>
 
   <Accordion title="Miniconda est-il pris en charge sur Windows ARM64 ?">
-    Non. Il n'existe pas actuellement d'installateur natif Miniconda pour Windows ARM64. Sous Windows ARM64, téléchargez l'installateur officiel [Python 3.13.3 ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe) depuis python.org — voir [Installation de Python](/fr/run/python/install). N'installez pas la version x86 / AMD64 : les wheels GenieX ciblent uniquement ARM64.
+    Non. Il n'existe pas actuellement d'installateur natif Miniconda pour Windows ARM64. Sous Windows ARM64, téléchargez l'installateur officiel [Python 3.13.3 ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe) depuis python.org. Voir [Installation de Python](/fr/run/python/install). N'installez pas la version x86 / AMD64 : les wheels GenieX ciblent uniquement ARM64.
   </Accordion>
 </AccordionGroup>
 
@@ -209,7 +209,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="Le serveur local est-il compatible avec l'API OpenAI ?">
-    Oui — consultez [Serveur local](/fr/run/cli/local-server). Vous pouvez pointer le client Python officiel `openai` vers `http://127.0.0.1:18181/v1` et réutiliser votre code OpenAI sans modification.
+    Oui - consultez [Serveur local](/fr/run/cli/local-server). Vous pouvez pointer le client Python officiel `openai` vers `http://127.0.0.1:18181/v1` et réutiliser votre code OpenAI sans modification.
   </Accordion>
 
   <Accordion title="geniex serve télécharge-t-il automatiquement les modèles ?">

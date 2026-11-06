@@ -5,7 +5,7 @@ description: "Mesurer le débit de préremplissage et de décodage sous Windows 
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-`geniex-bench` mesure le débit d'inférence brut — TTFT, vitesse de préremplissage (prefill) et vitesse de décodage — sur le matériel réel Snapdragon. Il s'agit d'un binaire autonome sans dépendance envers la CLI : téléchargez l'archive, extrayez-la et lancez-la.
+`geniex-bench` mesure le débit d'inférence brut TTFT, vitesse de préremplissage (prefill) et vitesse de décodage sur le matériel Snapdragon. Il s'agit d'un binaire autonome sans dépendance envers la CLI : téléchargez l'archive, extrayez-la et lancez-la.
 
 ## **Prérequis**
 
@@ -70,7 +70,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Tab>
 </Tabs>
 
-<Note>Pour figer une version spécifique, remplacez l'URL par une versionnée — voir [Verrouiller une version](#pinning-a-version).</Note>
+<Note>Pour figer une version spécifique, remplacez l'URL par une versionnée. Voir [Verrouiller une version](#pinning-a-version).</Note>
 
 ## **Étape 2 : Exécuter votre premier benchmark**
 
@@ -153,12 +153,12 @@ Exécutez le même modèle avec `--device cpu`, `--device npu` et `--device hybr
 
 | Périphérique | Idéal pour |
 |---|---|
-| `hybrid` | Le plus rapide sur les modèles llama_cpp — le planificateur par tenseur assigne chaque opération au HTP ou au CPU selon ce que chaque backend gère le mieux. Recommandation par défaut. |
+| `hybrid` | Le plus rapide sur les modèles llama_cpp. Le planificateur par tenseur assigne chaque opération au HTP ou au CPU selon ce que chaque backend gère le mieux. Recommandation par défaut. |
 | `npu` | Fixe l'exécution sur une session HTP unique, utile lorsque vous avez besoin d'une disposition déterministe. Préremplissage plus lent que `hybrid` sur la plupart des modèles. |
 | `cpu` | Référence ; utile pour comparaison et sur les modèles qui ne tirent pas profit de la décharge sur NPU. |
 | `gpu` | Chemin OpenCL ; à utiliser pour comparer GPU vs NPU sur les modèles llama_cpp. |
 
-<Note>Les modèles Qualcomm AI Hub (`--plugin qairt`) s'exécutent exclusivement sur NPU — `--device cpu`, `gpu` ou `hybrid` sont silencieusement redirigés vers `npu`.</Note>
+<Note>Les modèles Qualcomm AI Hub (`--plugin qairt`) s'exécutent exclusivement sur NPU. Les paramètres `--device cpu`, `gpu` ou `hybrid` sont silencieusement redirigés vers `npu`.</Note>
 
 ## **Interpréter les chiffres**
 
@@ -166,13 +166,13 @@ Chaque ligne `[ok  ]` rapporte trois métriques :
 
 | Métrique | Ce qu'elle mesure |
 |---|---|
-| `ttft` | Temps jusqu'au premier token (Time To First Token) — du début de l'appel d'inférence jusqu'au premier token échantillonné. Sur un VLM, cela inclut l'encodeur de média, ce n'est donc **pas** directement comparable à un TTFT purement textuel. |
+| `ttft` | Temps jusqu'au premier token (Time To First Token), du début de l'appel d'inférence jusqu'au premier token échantillonné. Sur un VLM, cela inclut l'encodeur de média, ce n'est donc **pas** directement comparable à un TTFT purement textuel. |
 | `prefill` (tok/s) | Vitesse à laquelle le modèle a traité les tokens d'entrée (prompt). Plus la valeur est élevée, mieux c'est. |
-| `decode` (tok/s) | Vitesse de génération des tokens — chaque token produit ajoute une étape ici. C'est le chiffre que les utilisateurs perçoivent comme la "vitesse de frappe" dans une interface de chat. |
+| `decode` (tok/s) | Vitesse de génération des tokens, chaque token produit ajoute une étape ici. C'est le chiffre que les utilisateurs perçoivent comme la "vitesse de frappe" dans une interface de chat. |
 
 `ttft` et `prefill` sont dominés par le parallélisme (calculs par lots sur NPU/GPU) ; `decode` est dominé par la bande passante mémoire (un token à la fois, chaque poids étant lu à chaque pas). Sur Snapdragon, `hybrid` comble l'écart entre ces deux phases en orientant chaque opération vers son meilleur backend.
 
-Pour `--plugin qairt`, `prompt_tokens` et `prefill_tps` sont rapportés sur la longueur complétée (padding) (`ceil(n / 128) × 128`) car le moteur QAIRT complète les identifiants d'entrée par blocs de 128 tokens. Ce comportement est normal — le décompte complété reflète le travail réellement effectué par le moteur.
+Pour `--plugin qairt`, `prompt_tokens` et `prefill_tps` sont rapportés sur la longueur complétée (padding) (`ceil(n / 128) × 128`) car le moteur QAIRT complète les identifiants d'entrée par blocs de 128 tokens. Ce comportement est normal, le décompte complété reflète le travail réellement effectué par le moteur.
 
 ## **Comparer les modèles équitablement**
 
@@ -188,7 +188,7 @@ Maintenez ces variables constantes lors de la comparaison de deux modèles ou co
 | Répétitions | `-r` | 5 |
 | Passes de préchauffage | `--warmup` | 1 |
 
-Les valeurs par défaut sont configurées pour garantir des comparaisons reproductibles (température 0.0, graine 42, 5 répétitions mesurées). Modifiez-les avec précaution — une valeur `-n` plus élevée mesure mieux la courbe de décodage, tandis qu'une valeur `-c` plus grande teste le modèle sous un contexte étendu.
+Les valeurs par défaut sont configurées pour garantir des comparaisons reproductibles (température 0.0, graine 42, 5 répétitions mesurées). Modifiez-les avec précaution - une valeur `-n` plus élevée mesure mieux la courbe de décodage, tandis qu'une valeur `-c` plus grande teste le modèle sous un contexte étendu.
 
 **Erreurs fréquentes :**
 
@@ -225,7 +225,7 @@ Le fichier JSON inclut les temps par passage ainsi que les statistiques agrégé
 
 ## **Exécuter une matrice de modèles**
 
-Pour balayer plusieurs combinaisons `(modèle, périphérique)` au cours d'une même session — en amortissant le coût d'initialisation du plugin — utilisez `--matrix-file` :
+Pour balayer plusieurs combinaisons `(modèle, périphérique)` au cours d'une même session, en amortissant le coût d'initialisation du plugin, utilisez `--matrix-file` :
 
 ```bash bash
 cat > matrix.tsv <<'EOF'
@@ -252,8 +252,8 @@ Les URL mentionnées ci-dessus renvoient systématiquement vers la dernière ver
 
 ## **Étapes suivantes**
 
-- [Référence de la CLI](/fr/run/cli/reference) — options de `geniex infer` et alias de `--compute`.
-- [Plateformes et runtimes](/fr/get-started/platforms) — chipsets et runtimes pris en charge.
+- [Référence de la CLI](/fr/run/cli/reference) - options de `geniex infer` et alias de `--compute`.
+- [Plateformes et runtimes](/fr/get-started/platforms) - chipsets et runtimes pris en charge.
 
 <br />
 

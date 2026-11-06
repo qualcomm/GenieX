@@ -5,12 +5,12 @@ description: "Exécutez une API HTTP compatible OpenAI sur localhost avec accél
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-GenieX intègre un serveur d'inférence intégré qui expose une **API compatible avec OpenAI**. Exécutez des modèles sur l'appareil et connectez-les à toute application ou framework prenant en charge le protocole OpenAI — des frameworks d'agents comme **LangChain**, des applications d'IA natives comme **OpenClaw**, ou votre propre code. Sans aucune dépendance au cloud.
+GenieX intègre un serveur d'inférence intégré qui expose une **API compatible avec OpenAI**. Exécutez des modèles sur l'appareil et connectez-les à toute application ou framework prenant en charge le protocole OpenAI - des frameworks d'agents comme **LangChain**, des applications d'IA natives comme **OpenClaw**, ou votre propre code. Sans aucune dépendance au cloud.
 
 ## **Prérequis**
 
-- La CLI installée — voir [Installation](/fr/run/cli/install).
-- Shell interactif depuis un conteneur (Docker uniquement) — voir [Exécuter en mode interactif](/fr/run/linux/install#executer-en-mode-interactif).
+- La CLI installée - voir [Installation](/fr/run/cli/install).
+- Shell interactif depuis un conteneur (Docker uniquement) - voir [Exécuter en mode interactif](/fr/run/linux/install#executer-en-mode-interactif).
 - Un modèle préalablement téléchargé. `geniex serve` ne télécharge **pas** automatiquement les modèles.
 
 ## **Démarrer le serveur**
@@ -76,7 +76,7 @@ Ouvrez `http://127.0.0.1:18181` dans votre navigateur pour accéder à l'interfa
 
 ![Modification du corps de la requête en mode Try-it-out avant exécution](/Images/server/curl-2.png)
 
-**Étape 3.** Consultez la réponse — un statut `200` avec la réponse générée par le modèle.
+**Étape 3.** Consultez la réponse : un statut `200` avec la réponse générée par le modèle.
 
 ![Corps de la réponse montrant un code 200 réussi avec la réponse du modèle](/Images/server/curl-3.png)
 
@@ -88,11 +88,11 @@ Un VLM accepte des parties de contenu multimodal en plus du texte. Utilisez `ima
 | Format | Exemple image | Exemple audio |
 |---|---|---|
 | Chemin de fichier local (le préfixe `file://` est facultatif) | `C:/Users/Username/Pictures/photo.jpg` | `/data/jfk.wav`, `file:///tmp/jfk.wav` |
-| URL HTTP / HTTPS — récupérée par le serveur | `https://example.com/image.jpg` | `https://example.com/clip.mp3` |
-| Data URL en Base64 — octets intégrés | `data:image/png;base64,iVBORw0KGgo...` | `data:audio/wav;base64,UklGR...` |
+| URL HTTP / HTTPS - récupérée par le serveur | `https://example.com/image.jpg` | `https://example.com/clip.mp3` |
+| Data URL en Base64 - octets intégrés | `data:image/png;base64,iVBORw0KGgo...` | `data:audio/wav;base64,UklGR...` |
 
 <Note>
-**Vous utilisez Docker ?** Les chemins locaux sont résolus **à l'intérieur du conteneur**, et non sur votre système hôte. La commande d'installation monte déjà `$PWD/data` sur `/data` — déposez-y vos fichiers image et audio et passez `/data/cat.jpg` / `/data/jfk.wav`. Vous pouvez également utiliser une URL HTTP ou une Data URL en base64 pour contourner totalement le système de fichiers.
+**Vous utilisez Docker ?** Les chemins locaux sont résolus **à l'intérieur du conteneur**, et non sur votre système hôte. La commande d'installation monte déjà `$PWD/data` sur `/data`. Déposez-y vos fichiers image et audio et passez `/data/cat.jpg` / `/data/jfk.wav`. Vous pouvez également utiliser une URL HTTP ou une Data URL en base64 pour contourner totalement le système de fichiers.
 </Note>
 
 <Warning>L'entrée audio fonctionne uniquement sur le backend **llama.cpp**. Les modèles QAIRT signalent `audio: false` et un modèle QAIRT recevant de l'audio échoue avec `GenieXError(-201201): Multimodal generation failed`.</Warning>
@@ -161,7 +161,7 @@ Dans l'interface Swagger UI, remplacez le corps de la requête par une charge ut
 
 ## **POST /v1/completions**
 
-Génère une continuation brute de `prompt` sans appliquer de modèle de discussion — le prompt parvient au modèle tel quel. Utilisez ce point de terminaison pour les clients qui construisent eux-mêmes l'intégralité du prompt, comme les outils d'autocomplétion de code en cours de ligne (Fill-In-the-Middle ou FIM) dans un éditeur : placez les tokens FIM du modèle directement dans `prompt`. Uniquement pour les modèles LLM.
+Génère une continuation brute de `prompt` sans appliquer de modèle de discussion, le prompt parvient au modèle tel quel. Utilisez ce point de terminaison pour les clients qui construisent eux-mêmes l'intégralité du prompt, comme les outils d'autocomplétion de code en cours de ligne (Fill-In-the-Middle ou FIM) dans un éditeur : placez les tokens FIM du modèle directement dans `prompt`. Uniquement pour les modèles LLM.
 
 ```json Exemple de valeur
 {
@@ -174,7 +174,7 @@ Génère une continuation brute de `prompt` sans appliquer de modèle de discuss
 }
 ```
 
-La réponse `choices[0].text` est la complétion brute, prête à être insérée à la position du curseur. `stream`, `stop`, `echo` et les paramètres d'échantillonnage (`temperature`, `top_p`, `top_k`, `min_p`, `repetition_penalty`, `seed`) fonctionnent comme sur `/v1/chat/completions` ; `suffix` n'est pas pris en charge — encodez plutôt le suffixe avec les tokens FIM du modèle directement dans `prompt`.
+La réponse `choices[0].text` est la complétion brute, prête à être insérée à la position du curseur. `stream`, `stop`, `echo` et les paramètres d'échantillonnage (`temperature`, `top_p`, `top_k`, `min_p`, `repetition_penalty`, `seed`) fonctionnent comme sur `/v1/chat/completions` ; `suffix` n'est pas pris en charge - encodez plutôt le suffixe avec les tokens FIM du modèle directement dans `prompt`.
 
 ## **POST /v1/decisions**
 
@@ -223,7 +223,7 @@ client = OpenAI(
 )
 ```
 
-Les exemples ci-dessous réutilisent cet objet `client`. Remplacez la valeur de `model` par un modèle que vous avez déjà téléchargé. Le suffixe facultatif `:<precision>` (par exemple `Q4_0`, `Q4_K_M`, `Q8_0`) sélectionne une variante de quantification — `Q4_0` est recommandé pour llama.cpp sur NPU Hexagon. Voir [Précisions (Quantifications) prises en charge](/fr/models/supported#precisions-quantisations-prises-en-charge).
+Les exemples ci-dessous réutilisent cet objet `client`. Remplacez la valeur de `model` par un modèle que vous avez déjà téléchargé. Le suffixe facultatif `:<precision>` (par exemple `Q4_0`, `Q4_K_M`, `Q8_0`) sélectionne une variante de quantification : `Q4_0` est recommandé pour llama.cpp sur NPU Hexagon. Voir [Précisions (Quantifications) prises en charge](/fr/models/supported#precisions-quantisations-prises-en-charge).
 
 ### **Streaming**
 
@@ -249,7 +249,7 @@ print()
 
 ### **Complétion de discussion (non-streaming)**
 
-Une seule requête, une seule réponse, sans flux — le format classique `chat.completions.create` d'OpenAI. Le paramètre supplémentaire `enable_think=False` désactive le préfixe de raisonnement par défaut `<think>…</think>` de Qwen3 pour préserver un contenu de réponse propre.
+Une seule requête, une seule réponse, sans flux avec le format classique `chat.completions.create` d'OpenAI. Le paramètre supplémentaire `enable_think=False` désactive le préfixe de raisonnement par défaut `<think>…</think>` de Qwen3 pour préserver un contenu de réponse propre.
 
 ```python python
 resp = client.chat.completions.create(
@@ -299,11 +299,11 @@ print("reasoning:", msg.model_extra.get("reasoning_content"))
 print("content:", msg.content)
 ```
 
-Le streaming fonctionne de la même manière — la chaîne de pensée arrive sous la forme de fragments `delta.reasoning_content` et la réponse finale sous `delta.content`.
+Le streaming fonctionne de la même manière. La chaîne de pensée arrive sous la forme de fragments `delta.reasoning_content` et la réponse finale sous `delta.content`.
 
 ### **Appel d'outils (Tool calling)**
 
-Les appels de fonctions/outils utilisent le schéma `tools` standard d'OpenAI. Le serveur extrait l'appel d'outil depuis le texte généré par le modèle (balises `<tool_call>…</tool_call>` ou bloc de code ` ```json `) et l'émet sous forme de `tool_calls` OpenAI. Ce flux fonctionne **également avec les VLM** — le modèle peut examiner une image, décider de la recherche à mener et appeler un outil.
+Les appels de fonctions/outils utilisent le schéma `tools` standard d'OpenAI. Le serveur extrait l'appel d'outil depuis le texte généré par le modèle (balises `<tool_call>…</tool_call>` ou bloc de code ` ```json `) et l'émet sous forme de `tool_calls` OpenAI. Ce flux fonctionne **également avec les VLM** - le modèle peut examiner une image, décider de la recherche à mener et appeler un outil.
 
 L'exemple ci-dessous détaille une boucle d'agent en deux étapes avec `qualcomm/Qwen3-VL-4B-Instruct` : (1) le VLM identifie un monument à partir d'une photo et appelle `web_search`, (2) vous exécutez la recherche localement et réinjectez les résultats afin que le VLM rédige une réponse documentée.
 
@@ -314,10 +314,10 @@ Une réponse peut contenir plusieurs appels d'outils ; répondez avec un message
 <Note>
 Deux particularités de Qwen3-VL pour des appels d'outils fiables :
 1. Préparez le modèle avec un message système décrivant explicitement le format `<tool_call>…</tool_call>` (le template de chat de Qwen3-VL ne l'impose pas aussi rigoureusement que celui de Qwen3 textuel).
-2. Au tour suivant, supprimez `tools=` et retirez le contenu de l'image de `messages` — cela évite que le VLM ne réinvoque l'outil et empêche de réexécuter inutilement l'encodeur de vision sur la même image.
+2. Au tour suivant, supprimez `tools=` et retirez le contenu de l'image de `messages`, cela évite que le VLM ne réinvoque l'outil et empêche de réexécuter inutilement l'encodeur de vision sur la même image.
 </Note>
 
-Installez la bibliothèque de recherche utilisée par l'outil (`pip install ddgs` — DuckDuckGo, aucune clé API requise), puis :
+Installez la bibliothèque de recherche utilisée par l'outil (`pip install ddgs` - DuckDuckGo, aucune clé API requise), puis :
 
 ```python python
 import json
@@ -402,8 +402,8 @@ print(final.choices[0].message.content)
 
 ## **Autres points de terminaison**
 
-- `GET /v1/models` — liste les modèles disponibles.
-- `GET /v1/models/{model}` — affiche les informations relatives à un modèle donné.
+- `GET /v1/models` - liste les modèles disponibles.
+- `GET /v1/models/{model}` - affiche les informations relatives à un modèle donné.
 
 <br />
 

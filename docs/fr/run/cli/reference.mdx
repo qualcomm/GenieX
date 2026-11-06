@@ -42,9 +42,9 @@ Choose a precision version to download
 
 <Tip>`Q4_0` offre la meilleure prise en charge sur NPU Hexagon. Voir [Précisions (Quantifications) prises en charge](/fr/models/supported#precisions-quantisations-prises-en-charge).</Tip>
 
-Les modèles Qualcomm AI Hub sont déjà pré-quantifiés — aucun choix n'est nécessaire.
+Les modèles Qualcomm AI Hub sont déjà pré-quantifiés - aucun choix n'est nécessaire.
 
-### **`geniex infer` — LLM**
+### **`geniex infer` - LLM**
 
 Lance une session de discussion interactive avec un modèle de langage.
 
@@ -52,14 +52,14 @@ Lance une session de discussion interactive avec un modèle de langage.
 geniex infer ai-hub-models/Qwen3-4B
 ```
 
-**Mode réflexion (Thinking mode)** — contrôler si le modèle affiche son raisonnement avant de répondre :
+**Mode réflexion (Thinking mode)** - contrôler si le modèle affiche son raisonnement avant de répondre :
 
 ```powershell
 geniex infer ai-hub-models/Qwen3-4B --think         # affiche les étapes de raisonnement
 geniex infer ai-hub-models/Qwen3-4B --think=false   # répond directement
 ```
 
-**Sélection de l'unité de calcul** (via `--compute`) — choisir quelle unité matérielle exécute le modèle (`npu` par défaut) :
+**Sélection de l'unité de calcul** (via `--compute`) - choisir quelle unité matérielle exécute le modèle (`npu` par défaut) :
 
 ```powershell
 # Les modèles llama.cpp prennent en charge toutes les unités de calcul
@@ -72,7 +72,7 @@ geniex infer ai-hub-models/Qwen3-4B --compute npu
 ```
 
 ```bash
-# Liste explicite d'appareils — répartir sur plusieurs cœurs HTP (llama.cpp + appareils multi-DSP uniquement)
+# Liste explicite d'appareils - répartir sur plusieurs cœurs HTP (llama.cpp + appareils multi-DSP uniquement)
 GGML_HEXAGON_DEVICES=4 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 --compute HTP0,HTP1,HTP2,HTP3
 ```
 
@@ -83,7 +83,7 @@ GGML_HEXAGON_DEVICES=4 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0
 <Warning>Les modèles Qualcomm AI Hub fonctionnent uniquement sur NPU. `--compute cpu` ou `--compute gpu` est ignoré avec un avertissement et le modèle s'exécute sur le NPU.</Warning>
 
 <a id="geniex-infer-vlm"></a>
-### **`geniex infer` — VLM**
+### **`geniex infer` - VLM**
 
 Exécutez l'inférence vision-langage avec une entrée texte seule, image ou audio :
 
@@ -91,7 +91,7 @@ Exécutez l'inférence vision-langage avec une entrée texte seule, image ou aud
 geniex infer google/gemma-4-E2B-it-qat-q4_0-gguf
 ```
 
-Pour du texte seul, lancez simplement la commande et discutez. Pour une entrée image ou audio, fournissez le **chemin absolu** ou glissez-déposez le fichier dans votre terminal — les chemins d'images (`.jpg`, `.jpeg`, `.png`, `.webp`) et audio (`.wav`, `.mp3`) sont auto-détectés, et une même invite peut combiner les deux. `google/gemma-4-E2B-it-qat-q4_0-gguf` intègre un mmproj compatible audio (~4,0 Go au total : poids `Q4_0` + mmproj conformer téléchargés ensemble) :
+Pour du texte seul, lancez simplement la commande et discutez. Pour une entrée image ou audio, fournissez le **chemin absolu** ou glissez-déposez le fichier dans votre terminal - les chemins d'images (`.jpg`, `.jpeg`, `.png`, `.webp`) et audio (`.wav`, `.mp3`) sont auto-détectés, et une même invite peut combiner les deux. `google/gemma-4-E2B-it-qat-q4_0-gguf` intègre un mmproj compatible audio (~4,0 Go au total : poids `Q4_0` + mmproj conformer téléchargés ensemble) :
 
 ```bash
 geniex pull google/gemma-4-E2B-it-qat-q4_0-gguf
@@ -115,7 +115,7 @@ This is a scenic, panoramic photograph that features a traditional Japanese temp
 
 <Warning>L'entrée audio fonctionne uniquement sur le backend **llama.cpp** et requiert un modèle compatible audio (mmproj avec encodeur conformer). L'audio fonctionne également avec `--compute cpu` / `gpu`, mais les modèles QAIRT signalent `audio: false` et échouent avec `GenieXError(-201201): Multimodal generation failed`.</Warning>
 
-Dans une session interactive avec un modèle compatible audio, `/mic` enregistre un extrait au microphone au lieu d'en charger un depuis le disque — `Ctrl-C` arrête l'enregistrement et le transcrit. Cela nécessite la présence de **SoX** dans votre `PATH` (`sudo apt install sox`, ou `winget install --id=ChrisBagwell.SoX -e` sous Windows) ; sinon GenieX signale au démarrage que `SoX is not installed`. Consultez le [tutoriel d'entrée audio](/fr/tutorials/audio-input) pour le guide complet.
+Dans une session interactive avec un modèle compatible audio, `/mic` enregistre un extrait au microphone au lieu d'en charger un depuis le disque - `Ctrl-C` arrête l'enregistrement et le transcrit. Cela nécessite la présence de **SoX** dans votre `PATH` (`sudo apt install sox`, ou `winget install --id=ChrisBagwell.SoX -e` sous Windows) ; sinon GenieX signale au démarrage que `SoX is not installed`. Consultez le [tutoriel d'entrée audio](/fr/tutorials/audio-input) pour le guide complet.
 
 ### **`geniex decide`**
 
@@ -178,7 +178,7 @@ Démarrer le serveur local compatible OpenAI. Consultez [Serveur local](/fr/run/
 geniex serve
 ```
 
-Les modèles avec raisonnement placent leur chaîne de pensée dans `message.reasoning_content` par défaut. Définissez le champ `reasoning_format` sur `none` par requête pour la conserver en ligne dans `message.content` — voir [Séparation du raisonnement](/fr/run/cli/local-server#separating-reasoning-reasoning_content).
+Les modèles avec raisonnement placent leur chaîne de pensée dans `message.reasoning_content` par défaut. Définissez le champ `reasoning_format` sur `none` par requête pour la conserver en ligne dans `message.content` - voir [Séparation du raisonnement](/fr/run/cli/local-server#separating-reasoning-reasoning_content).
 
 Les requêtes de chat réfléchissent par défaut. Lancez le serveur avec `--think=false` (ou `GENIEX_THINK=false`) pour désactiver la réflexion sur les requêtes qui omettent `enable_think` ; le champ de requête reste prioritaire.
 
@@ -209,16 +209,16 @@ Contrôlent la sélection des tokens lors de la génération.
 
 | Option | Type | Défaut | Description |
 |---|---|---|---|
-| `--temperature` | float | — | Température d'échantillonnage. Des valeurs plus élevées augmentent l'aléa. |
-| `--top-p` | float | — | Seuil d'échantillonnage top-p (nucleus). |
-| `--top-k` | int | — | Échantillonnage top-k. Ne retient que les k tokens les plus probables. |
-| `--min-p` | float | — | Seuil d'échantillonnage min-p. |
+| `--temperature` | float | - | Température d'échantillonnage. Des valeurs plus élevées augmentent l'aléa. |
+| `--top-p` | float | - | Seuil d'échantillonnage top-p (nucleus). |
+| `--top-k` | int | - | Échantillonnage top-k. Ne retient que les k tokens les plus probables. |
+| `--min-p` | float | - | Seuil d'échantillonnage min-p. |
 | `--repetition-penalty` | float | `1` | Pénalité de répétition. Les valeurs > 1 réduisent la répétition. |
-| `--presence-penalty` | float | — | Pénalise les tokens déjà apparus dans le texte. |
-| `--frequency-penalty` | float | — | Pénalise les tokens proportionnellement à leur fréquence. |
-| `--seed` | int | — | Graine aléatoire pour des sorties reproductibles. |
-| `--grammar-path` | string | — | Chemin vers un fichier de grammaire GBNF pour génération contrainte. |
-| `--grammar-string` | string | — | Grammaire en ligne au format chaîne GBNF. |
+| `--presence-penalty` | float | - | Pénalise les tokens déjà apparus dans le texte. |
+| `--frequency-penalty` | float | - | Pénalise les tokens proportionnellement à leur fréquence. |
+| `--seed` | int | - | Graine aléatoire pour des sorties reproductibles. |
+| `--grammar-path` | string | - | Chemin vers un fichier de grammaire GBNF pour génération contrainte. |
+| `--grammar-string` | string | - | Grammaire en ligne au format chaîne GBNF. |
 
 ### Options du modèle
 
@@ -229,11 +229,11 @@ Contrôlent le chargement du modèle, le contexte et les limites de génération
 | `-n`, `--ngl` | int | `-1` | Nombre de couches déportées sur GPU/NPU, `-1` = toutes (llama_cpp uniquement). |
 | `--nctx` | int | `4096` | Taille de la fenêtre de contexte (tokens d'entrée + sortie max). |
 | `--max-tokens` | int | `2048` | Nombre maximal de tokens à générer par réponse. |
-| `--stop` | string[] | — | Séquences d'arrêt (peut être spécifié plusieurs fois). |
-| `--stop-file` | string | — | Fichier contenant les séquences d'arrêt (une par ligne). |
+| `--stop` | string[] | - | Séquences d'arrêt (peut être spécifié plusieurs fois). |
+| `--stop-file` | string | - | Fichier contenant les séquences d'arrêt (une par ligne). |
 | `--think` / `--think=false` | bool | `true` | Active ou désactive le mode réflexion pour les modèles de raisonnement. |
-| `-s`, `--system-prompt` | string | — | Prompt système pour définir le comportement du modèle. |
-| `--sliding-window` | — | `false` | (`qairt` uniquement) Évince le contexte le plus ancien au-delà d'un court préfixe ancré au lieu d'émettre une erreur lors du dépassement de contexte. |
+| `-s`, `--system-prompt` | string | - | Prompt système pour définir le comportement du modèle. |
+| `--sliding-window` | - | `false` | (`qairt` uniquement) Évince le contexte le plus ancien au-delà d'un court préfixe ancré au lieu d'émettre une erreur lors du dépassement de contexte. |
 | `--power-mode` | string | `burst` | Mode de gestion d'énergie/horloge HTP, partagé par `qairt` et `llama_cpp` : `low_power_saver`, `power_saver`, `high_power_saver`, `low_balanced`, `balanced`, `high_performance`, `sustained_high_performance`, `burst`. |
 
 <a id="increasing-the-context-length"></a>
@@ -248,21 +248,21 @@ La fenêtre de contexte (`--nctx`) représente la quantité d'informations que l
   geniex infer unsloth/Qwen3-8B-GGUF --nctx 8192
   ```
 
-- **Qualcomm AI Engine Direct (NPU) :** la longueur de contexte est **figée dans le bundle compilé** et ne peut pas être étendue à l'exécution — `--nctx` est sans effet. À la place :
+- **Qualcomm AI Engine Direct (NPU) :** la longueur de contexte est **figée dans le bundle compilé** et ne peut pas être étendue à l'exécution, `--nctx` est sans effet. À la place :
   - Ajoutez `--sliding-window` pour continuer la conversation : le contexte le plus ancien au-delà du préfixe est évincé.
   - Pour une fenêtre réellement plus large, téléchargez un bundle compilé pour un contexte plus grand depuis [Qualcomm AI Hub](https://aihub.qualcomm.com/models/). Voir les [contraintes d'exécution de Qualcomm AI Engine Direct](/fr/get-started/platforms#runtime-constraints).
 
 ## **`geniex-bench`**
 
-`geniex-bench` est un binaire de benchmark autonome — indépendant de la CLI `geniex` — qui mesure le TTFT, la vitesse de préremplissage (prefill) et de décodage directement via l'API C de GenieX. Il est fourni sous forme d'archive précompilée pour Windows ARM64 et Linux ARM64.
+`geniex-bench` est un binaire de benchmark autonome, indépendant de la CLI `geniex`, qui mesure le TTFT, la vitesse de préremplissage (prefill) et de décodage directement via l'API C de GenieX. Il est fourni sous forme d'archive précompilée pour Windows ARM64 et Linux ARM64.
 
 Consultez le [tutoriel de Benchmarking](/fr/tutorials/benchmarking) pour les instructions de téléchargement et le guide complet. Référence rapide :
 
 | Option | Défaut | Description |
 |---|---|---|
-| `--plugin` | — | `llama_cpp` \| `qairt`. Requis pour un chemin de fichier ; optionnel pour un ID du gestionnaire de modèles. |
+| `--plugin` | - | `llama_cpp` \| `qairt`. Requis pour un chemin de fichier ; optionnel pour un ID du gestionnaire de modèles. |
 | `--device` | `auto` | `cpu` \| `gpu` \| `npu` \| `hybrid`. |
-| `-m` / `--model` | — | Chemin local (`.gguf` ou dossier de bundle) ou identifiant du gestionnaire (`org/repo[:quant]`). Requis. |
+| `-m` / `--model` | - | Chemin local (`.gguf` ou dossier de bundle) ou identifiant du gestionnaire (`org/repo[:quant]`). Requis. |
 | `-p` | `512` | Longueur de préremplissage en tokens aléatoires. |
 | `-n` / `--n-gen` | `128` | Nombre de tokens à générer par exécution. |
 | `-r` | `5` | Répétitions mesurées. |
@@ -270,10 +270,10 @@ Consultez le [tutoriel de Benchmarking](/fr/tutorials/benchmarking) pour les ins
 | `--temperature` | `0.0` | Température d'échantillonnage. `0.0` = déterministe (glouton). |
 | `--seed` | `42` | Graine aléatoire pour la génération des tokens de préremplissage. |
 | `--power-mode` | `burst` | Mode énergétique HTP partagé par `qairt` et `llama_cpp`. |
-| `--output-json` | — | Écrit un fichier JSON contenant les statistiques agrégées. |
-| `--matrix-file` | — | Fichier TSV (`cell_id`, `plugin`, `device`, `model`) pour tester plusieurs combinaisons en une session. |
-| `--output-json-dir` | — | Dossier de sortie pour les fichiers JSON du mode matrice. |
-| `--accuracy` | — | Affiche le texte généré au lieu des métriques de temps (1 passage, sans warmup). À combiner avec `--prompt-file`. |
+| `--output-json` | - | Écrit un fichier JSON contenant les statistiques agrégées. |
+| `--matrix-file` | - | Fichier TSV (`cell_id`, `plugin`, `device`, `model`) pour tester plusieurs combinaisons en une session. |
+| `--output-json-dir` | - | Dossier de sortie pour les fichiers JSON du mode matrice. |
+| `--accuracy` | - | Affiche le texte généré au lieu des métriques de temps (1 passage, sans warmup). À combiner avec `--prompt-file`. |
 
 ## **Commandes utilitaires**
 

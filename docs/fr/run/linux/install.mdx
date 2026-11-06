@@ -13,14 +13,14 @@ Le parcours Linux Docker s'appuie sur une image conteneur conçue pour Linux ARM
 
 ### **Prérequis**
 
-- Hôte Linux ARM64 avec Docker installé — si vous n'avez pas encore Docker, suivez le [guide d'installation Docker pour Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
-- Chipset IoT Dragonwing — voir [Plateformes prises en charge](/fr/get-started/platforms).
+- Hôte Linux ARM64 avec Docker installé. Si vous n'avez pas encore Docker, suivez le [guide d'installation Docker pour Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
+- Chipset IoT Dragonwing. Voir [Plateformes prises en charge](/fr/get-started/platforms).
 
 <a id="install-host-dependencies"></a>
 <a id="installer-les-dependances-hotes"></a>
 ### **Installer les dépendances hôtes**
 
-Le conteneur accède au NPU via les bibliothèques de pilotes Qualcomm de l'hôte, montées via `-v /usr/lib:/opt/qcom-lib:ro`. Installez-les **sur l'hôte** avant `docker run` — suivez [Installation de la CLI → Installer les dépendances hôtes](/fr/run/cli/install#install-host-dependencies).
+Le conteneur accède au NPU via les bibliothèques de pilotes Qualcomm de l'hôte, montées via `-v /usr/lib:/opt/qcom-lib:ro`. Installez-les **sur l'hôte** avant `docker run` - suivez [Installation de la CLI → Installer les dépendances hôtes](/fr/run/cli/install#install-host-dependencies).
 
 ### **Télécharger l'image (pull)**
 
@@ -37,7 +37,7 @@ docker pull "$IMAGE"
 </Note>
 
 <Note>
-  **Cartes de référence ARMv8.0** — certains SoC Dragonwing IoT sans NPU ne peuvent pas exécuter l'image par défaut en ARMv8.2 ; ajoutez `-cpu` au tag pour ces systèmes : `docker.io/qualcomm/geniex:latest-cpu`. Cette image est purement CPU et ne nécessite ni `--privileged` ni le montage de `/usr/lib` ci-dessous.
+  **Cartes de référence ARMv8.0**. Certains SoC Dragonwing IoT sans NPU ne peuvent pas exécuter l'image par défaut en ARMv8.2 ; ajoutez `-cpu` au tag pour ces systèmes : `docker.io/qualcomm/geniex:latest-cpu`. Cette image est purement CPU et ne nécessite ni `--privileged` ni le montage de `/usr/lib` ci-dessous.
 </Note>
 
 <a id="run-interactively"></a>
@@ -67,11 +67,11 @@ Pour le mode serveur, consultez [Serveur local](/fr/run/cli/local-server).
 
 ## **CLI**
 
-Pour le guide complet d'installation de la CLI avec Docker, voir [Installation de la CLI — Linux ARM64 (Docker)](/fr/run/cli/install).
+Pour le guide complet d'installation de la CLI avec Docker, voir [Installation de la CLI - Linux ARM64 (Docker)](/fr/run/cli/install).
 
 ## **Python**
 
-Pour le guide complet d'installation de Python sur Linux ARM64 natif, voir [Installation de Python — Linux ARM64](/fr/run/python/install).
+Pour le guide complet d'installation de Python sur Linux ARM64 natif, voir [Installation de Python - Linux ARM64](/fr/run/python/install).
 
 Le SDK Python peut être installé à l'intérieur du conteneur Docker ou directement sur l'hôte Linux ARM64. Consultez l'[onglet Linux ARM64](/fr/run/python/install) pour les instructions d'installation native.
 

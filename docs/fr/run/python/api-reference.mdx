@@ -5,13 +5,13 @@ description: "Documentation complète de l'API pour le SDK Python GenieX."
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-Le SDK Python GenieX suit les mêmes conventions de conception que `transformers` de Hugging Face — utilisez `AutoModel*.from_pretrained()` pour charger un modèle, puis appelez `.generate()` pour l'inférence.
+Le SDK Python GenieX suit les mêmes conventions de conception que `transformers` de Hugging Face. Utilisez `AutoModel*.from_pretrained()` pour charger un modèle, puis appelez `.generate()` pour l'inférence.
 
 ---
 
 ## AutoModelForCausalLM
 
-Fabrique (factory) pour charger des modèles de langage causaux — à la fois purement textuels et multimodaux. Renvoie un [`GenieXLLM`](#geniexllm) pour les modèles textuels, ou un [`GenieXVLM`](#geniexvlm) lorsqu'un modèle multimodal est détecté (par ex. `phi4_multimodal`, `qwen3.5-vl`, `gemma4`).
+Fabrique (factory) pour charger des modèles de langage causaux, à la fois purement textuels et multimodaux. Renvoie un [`GenieXLLM`](#geniexllm) pour les modèles textuels, ou un [`GenieXVLM`](#geniexvlm) lorsqu'un modèle multimodal est détecté (par ex. `phi4_multimodal`, `qwen3.5-vl`, `gemma4`).
 
 ```python
 from geniex import AutoModelForCausalLM
@@ -183,13 +183,13 @@ prompt = model.tokenizer.apply_chat_template(
 | Paramètre | Type | Défaut | Description |
 |---|---|---|---|
 | `messages` | `list[dict]` | *requis* | Liste de dictionnaires de messages avec les clés `"role"` et `"content"`. |
-| `tokenize` | `bool` | `False` | Doit être `False` — la tokenisation isolée n'est pas prise en charge. |
+| `tokenize` | `bool` | `False` | Doit être `False` car la tokenisation isolée n'est pas prise en charge. |
 | `add_generation_prompt` | `bool` | `True` | Indique s'il faut ajouter le suffixe de prompt de génération. |
-| `enable_thinking` | `bool \| None` | `None` | Active le mode réflexion. `None` (défaut) et `True` permettent tous deux à un modèle compatible de réfléchir (et sont sans effet sur les autres modèles). `False` demande au modèle compatible d'ignorer sa phase de réflexion — forcé à `True` avec un avertissement sur les modèles non compatibles. La compatibilité est auto-détectée et exposée via `model.supports_thinking`. |
+| `enable_thinking` | `bool \| None` | `None` | Active le mode réflexion. `None` (défaut) et `True` permettent tous deux à un modèle compatible de réfléchir (et sont sans effet sur les autres modèles). `False` demande au modèle compatible d'ignorer sa phase de réflexion. Forcé à `True` avec un avertissement sur les modèles non compatibles. La compatibilité est auto-détectée et exposée via `model.supports_thinking`. |
 | `tools` | `list[dict] \| str \| None` | `None` | Définitions d'outils sous forme de liste de dictionnaires ou de chaîne JSON pré-sérialisée. |
 | `include_grammar` | `bool` | `False` | Renvoie un `ChatTemplateOutput` avec le prompt formaté et les métadonnées de grammaire pour usage explicite dans `generate()`. |
 
-Par défaut, renvoie une chaîne `str` — le prompt formaté prêt pour `model.generate()`. Avec `include_grammar=True`, passez les deux valeurs explicitement :
+Par défaut, renvoie une chaîne `str`, il s'agit du prompt formaté prêt pour `model.generate()`. Avec `include_grammar=True`, passez les deux valeurs explicitement :
 
 ```python
 template = model.tokenizer.apply_chat_template(messages, tools=tools, include_grammar=True)
@@ -260,7 +260,7 @@ final = streamer.output  # GenerateOutput disponible à la fin de l'itération
 | Méthode / Propriété | Description |
 |---|---|
 | `__iter__()` | Fournit les morceaux de texte (`str`) générés. |
-| `output` | `GenerateOutput \| None` — disponible une fois l'itération terminée. |
+| `output` | `GenerateOutput \| None`, disponible une fois l'itération terminée. |
 | `cancel()` | Arrête la génération à la frontière du prochain token. |
 
 ---

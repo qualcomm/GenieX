@@ -7,8 +7,8 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 Il existe deux sources principales pour obtenir des modèles, correspondant aux deux [runtimes](/fr/get-started/platforms#geniex-runtimes) de GenieX :
 
-- **[Qualcomm AI Hub](https://aihub.qualcomm.com/models/)** — bundles précompilés pour Qualcomm AI Engine Direct, ainsi que des modèles GGUF sélectionnés pour llama.cpp.
-- **[Hugging Face](https://huggingface.co/models?library=gguf)** — n'importe quel modèle GGUF pour llama.cpp. Voir [Exécuter un modèle GGUF depuis Hugging Face](#run-a-gguf-model-from-hugging-face).
+- **[Qualcomm AI Hub](https://aihub.qualcomm.com/models/)** - bundles précompilés pour Qualcomm AI Engine Direct, ainsi que des modèles GGUF sélectionnés pour llama.cpp.
+- **[Hugging Face](https://huggingface.co/models?library=gguf)** - n'importe quel modèle GGUF pour llama.cpp. Voir [Exécuter un modèle GGUF depuis Hugging Face](#run-a-gguf-model-from-hugging-face).
 
 ## **Modalités d'entrée**
 
@@ -16,7 +16,7 @@ Il existe deux sources principales pour obtenir des modèles, correspondant aux 
 |---|---|---|
 | Texte | LLM, VLM | Tous les modèles. |
 | Image | VLM | N'importe quel VLM (bundle QAIRT ou GGUF avec un mmproj image). |
-| Audio | VLM (llama.cpp uniquement) | Un VLM GGUF dont le mmproj comprend un encodeur conformer — par exemple `google/gemma-4-E2B-it-qat-q4_0-gguf`. Les bundles QAIRT ne prennent pas en charge l'audio. Voir le [tutoriel d'entrée audio](/fr/tutorials/audio-input). |
+| Audio | VLM (llama.cpp uniquement) | Un VLM GGUF dont le mmproj comprend un encodeur conformer, par exemple `google/gemma-4-E2B-it-qat-q4_0-gguf`. Les bundles QAIRT ne prennent pas en charge l'audio. Voir le [tutoriel d'entrée audio](/fr/tutorials/audio-input). |
 
 Un seul échange avec un VLM peut combiner texte, image et audio. Consultez le [tutoriel d'entrée audio](/fr/tutorials/audio-input) pour des exemples vérifiés en CLI, serveur et Python.
 
@@ -46,12 +46,12 @@ geniex infer unsloth/Phi-4-mini-instruct-GGUF
 ```
 
 Lorsque vous y êtes invité :
-- **Précision (Quantification)** — `Q4_0` pour la meilleure prise en charge sur NPU Hexagon. Voir [Précisions (Quantifications) prises en charge](#precisions-quantizations-supported).
+- **Précision (Quantification)** - `Q4_0` pour la meilleure prise en charge sur NPU Hexagon. Voir [Précisions (Quantifications) prises en charge](#precisions-quantizations-supported).
 
 <a id="set-up-a-hugging-face-token"></a>
 ### Configurer un jeton Hugging Face
 
-Certains modèles sur Hugging Face sont **restreints (gated)** — vous devez accepter la licence du modèle sur le site Hugging Face et fournir un jeton d'accès avant que GenieX puisse les télécharger.
+Certains modèles sur Hugging Face sont **restreints (gated)** donc vous devez accepter la licence du modèle sur le site Hugging Face et fournir un jeton d'accès avant que GenieX puisse les télécharger.
 
 <Steps>
   <Step title="Créer un jeton">
@@ -67,7 +67,7 @@ Certains modèles sur Hugging Face sont **restreints (gated)** — vous devez ac
     2. Variable d'environnement `HF_TOKEN`
     3. Fichier `~/.cache/huggingface/token`
 
-    **Option A — variable d'environnement (recommandée) :**
+    **Option A - variable d'environnement (recommandée) :**
 
     <CodeGroup>
     ```powershell windows
@@ -87,7 +87,7 @@ Certains modèles sur Hugging Face sont **restreints (gated)** — vous devez ac
     ```
     </CodeGroup>
 
-    **Option B — connexion via CLI Hugging Face (persistée sur disque) :**
+    **Option B - connexion via CLI Hugging Face (persistée sur disque) :**
 
     ```bash
     pip install huggingface_hub
@@ -103,7 +103,7 @@ Certains modèles sur Hugging Face sont **restreints (gated)** — vous devez ac
 <a id="run-a-local-qualcomm-ai-engine-direct-bundle"></a>
 ## **Exécuter un bundle local Qualcomm AI Engine Direct**
 
-Les bundles en dehors de l'espace de noms `ai-hub-models/*` — qu'ils aient été convertis par vos soins depuis Hugging Face ou qu'ils soient déjà présents sur le disque — sont importés une seule fois, puis exécutés comme n'importe quel autre modèle.
+Les bundles en dehors de l'espace de noms `ai-hub-models/*`, qu'ils aient été convertis par vos soins depuis Hugging Face ou qu'ils soient déjà présents sur le disque - sont importés une seule fois, puis exécutés comme n'importe quel autre modèle.
 
 <Tabs>
   <Tab title="CLI">
@@ -207,7 +207,7 @@ Les bundles en dehors de l'espace de noms `ai-hub-models/*` — qu'ils aient ét
     ).collect { /* Progress / Completed / Error */ }
     ```
 
-    Chargez ensuite avec `runtime_id = "qairt"` — à l'identique d'un modèle téléchargé :
+    Chargez ensuite avec `runtime_id = "qairt"` - à l'identique d'un modèle téléchargé :
 
     ```kotlin
     val paths = ModelManagerWrapper.getPaths("local/qwen3-4b-2507")
@@ -227,7 +227,7 @@ Les bundles en dehors de l'espace de noms `ai-hub-models/*` — qu'ils aient ét
     ```
 
     <Note>
-    Le champ `model_name` sert simplement de clé de cache — toute chaîne de type `org/repo` convient ; le préfixe `local/...` est une convention courante. Vous n'avez pas besoin d'écrire un `geniex.json` pour une importation locale : le gestionnaire de modèles en génère un lors de l'import. Un dossier QAIRT est reconnu grâce à la présence de `metadata.json` et de fragments `.bin` (ou d'un fichier `.zip`) ; un dossier contenant des fichiers `.bin` isolés sans `metadata.json` ne sera pas détecté. Lors de l'importation de modèles de types mixtes, privilégiez `paths.runtime_id` (faisant foi) plutôt que de coder en dur `runtime_id`.
+    Le champ `model_name` sert simplement de clé de cache. Toute chaîne de type `org/repo` convient ; le préfixe `local/...` est une convention courante. Vous n'avez pas besoin d'écrire un `geniex.json` pour une importation locale : le gestionnaire de modèles en génère un lors de l'import. Un dossier QAIRT est reconnu grâce à la présence de `metadata.json` et de fragments `.bin` (ou d'un fichier `.zip`) ; un dossier contenant des fichiers `.bin` isolés sans `metadata.json` ne sera pas détecté. Lors de l'importation de modèles de types mixtes, privilégiez `paths.runtime_id` (faisant foi) plutôt que de coder en dur `runtime_id`.
     </Note>
   </Tab>
 </Tabs>
@@ -235,7 +235,7 @@ Les bundles en dehors de l'espace de noms `ai-hub-models/*` — qu'ils aient ét
 <a id="run-a-local-gguf-model"></a>
 ## **Exécuter un modèle local GGUF**
 
-Un modèle GGUF local est un répertoire (ou un fichier) contenant vos poids `.gguf` — transféré par vos soins, généré par un autre outil ou déjà sur disque. Importez-le une fois, puis exécutez-le comme tout autre modèle.
+Un modèle GGUF local est un répertoire (ou un fichier) contenant vos poids `.gguf`, transféré par vos soins, généré par un autre outil ou déjà sur disque. Importez-le une fois, puis exécutez-le comme tout autre modèle.
 
 <Tabs>
   <Tab title="CLI">
@@ -282,7 +282,7 @@ Un modèle GGUF local est un répertoire (ou un fichier) contenant vos poids `.g
     ).collect { /* Progress / Completed / Error */ }
     ```
 
-    Chargez ensuite avec `runtime_id = "llama_cpp"` — à l'identique d'un modèle téléchargé :
+    Chargez ensuite avec `runtime_id = "llama_cpp"`, à l'identique d'un modèle téléchargé :
 
     ```kotlin
     val paths = ModelManagerWrapper.getPaths("local/qwen3-0.6b")
@@ -324,21 +324,21 @@ Choose a precision version to download
 |---|---|---|
 | **`Q4_0`** *(défaut)* | **NPU Hexagon** | Meilleure prise en charge NPU dans llama.cpp. Recommandé pour la plupart des modèles. |
 | `Q8_0` | GPU / CPU | Meilleure qualité pour ~2× l'espace disque et la mémoire. |
-| `F16` | GPU / CPU | Précision de référence. Principalement pour évaluation — lourd et lent. |
+| `F16` | GPU / CPU | Précision de référence. Principalement pour évaluation - lourd et lent. |
 | `Q4_K_M`, `Q5_K_M`, etc. | GPU / CPU | K-quants à précision mixte. Non optimisés pour le NPU Hexagon. |
 
 <Tip>Privilégiez `Q4_0` pour que le modèle soit exécuté sur le NPU Hexagon. Les autres précisions fonctionneront mais s'exécuteront généralement sur GPU ou CPU.</Tip>
 
 ### Qualcomm AI Engine Direct
 
-Les bundles Qualcomm AI Engine Direct sont **statiquement pré-quantifiés** — il n'y a pas de choix de précision à l'exécution. Pour utiliser une précision différente, téléchargez un autre bundle depuis [Qualcomm AI Hub](https://aihub.qualcomm.com/models/).
+Les bundles Qualcomm AI Engine Direct sont **statiquement pré-quantifiés**, il n'y a pas de choix de précision à l'exécution. Pour utiliser une précision différente, téléchargez un autre bundle depuis [Qualcomm AI Hub](https://aihub.qualcomm.com/models/).
 
 | Précision (Quantification) | S'exécute sur | Remarques |
 |---|---|---|
 | **`w4a16`** *(le plus courant)* | **NPU Hexagon** | Poids en int4, activations en int16. Meilleur équilibre entre taille et fidélité pour les LLM sur l'appareil. |
 | `w4` | **NPU Hexagon** | Poids en int4, activations en flottant. Fidélité légèrement supérieure à w4a16 au prix de calculs supplémentaires. |
 
-<Tip>La plupart des bundles précompilés sur Qualcomm AI Hub utilisent `w4a16`. Le niveau de quantification est figé dans le bundle lors de la compilation — choisissez le bundle correspondant à vos objectifs de qualité et de performances.</Tip>
+<Tip>La plupart des bundles précompilés sur Qualcomm AI Hub utilisent `w4a16`. Le niveau de quantification est figé dans le bundle lors de la compilation - choisissez le bundle correspondant à vos objectifs de qualité et de performances.</Tip>
 
 Pour les autres contraintes du bundle (longueur de contexte, cache KV, `nCtx` sous Android), consultez les [contraintes d'exécution de Qualcomm AI Engine Direct](/fr/get-started/platforms#runtime-constraints).
 

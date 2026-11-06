@@ -5,7 +5,7 @@ description: "Accélérez le décodage avec un modèle draft de prédiction mult
 
 import Feedback from "/snippets/page-feedback.mdx";
 
-Le décodage spéculatif accélère l'inférence d'un grand modèle sans altérer la qualité de ce qu'il produit. Un modèle **draft** (brouillon) léger propose plusieurs tokens à l'avance, le grand modèle **cible** (target) les vérifie tous en une seule passe avant (forward pass), et le préfixe validé est validé en bloc. La vérification ne coûtant qu'une seule passe quel que soit le nombre de tokens vérifiés, les tokens acceptés au-delà du premier sont quasiment gratuits — et la sortie reste rigoureusement identique à ce que la cible aurait produit seule.
+Le décodage spéculatif accélère l'inférence d'un grand modèle sans altérer la qualité de ce qu'il produit. Un modèle **draft** (brouillon) léger propose plusieurs tokens à l'avance, le grand modèle **cible** (target) les vérifie tous en une seule passe avant (forward pass), et le préfixe validé est validé en bloc. La vérification ne coûtant qu'une seule passe quel que soit le nombre de tokens vérifiés, les tokens acceptés au-delà du premier sont quasiment gratuits - et la sortie reste rigoureusement identique à ce que la cible aurait produit seule.
 
 **MTP (Multi-Token Prediction)** est la variante la plus efficace. Au lieu d'un petit modèle entraîné séparément dont les prédictions peuvent dériver de la cible, MTP utilise des têtes de prédiction entraînées *conjointement* avec la cible qui lisent ses propres états cachés, de sorte que les propositions proviennent de la même distribution que les échantillons du modèle cible.
 
@@ -14,7 +14,7 @@ Le décodage spéculatif accélère l'inférence d'un grand modèle sans altére
 <a id="step-1-pull-the-model-pair"></a>
 ## **Étape 1 : Télécharger la paire de modèles**
 
-MTP requiert un modèle draft entraîné pour **la cible exacte** que vous exécutez — un petit GGUF arbitraire ne peut pas être substitué, et une paire non concordante échoue au chargement.
+MTP requiert un modèle draft entraîné pour **la cible exacte** que vous exécutez. Un petit GGUF arbitraire ne peut pas être substitué, et une paire non concordante échoue au chargement.
 
 | Rôle | Modèle |
 |---|---|
@@ -44,7 +44,7 @@ Cette paire occupe moins de 6 Go combinés.
 
 ## **Étape 2 : Exécuter avec `geniex infer`**
 
-Trois nouvelles options l'activent — le type, le modèle draft, et le nombre de tokens à anticiper :
+Trois nouvelles options l'activent - le type, le modèle draft, et le nombre de tokens à anticiper :
 
 ```bash
 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 --spec-type draft-mtp --draft-model RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0 --draft-tokens 3
@@ -53,12 +53,12 @@ geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 --spec-type draft-mtp 
 | Option | Défaut | Effet |
 |---|---|---|
 | `--spec-type` | *(désactivé)* | Définissez sur `draft-mtp` pour activer MTP. |
-| `--draft-model` | — | Nom au catalogue `org/repo[:precision]` ou chemin GGUF local. Requis par `draft-mtp`. |
+| `--draft-model` | - | Nom au catalogue `org/repo[:precision]` ou chemin GGUF local. Requis par `draft-mtp`. |
 | `--draft-tokens` | `3` | Nombre maximal de tokens anticipés par étape de vérification. |
 | `--draft-min` | `0` | Nombre minimal de tokens anticipés par étape. `0` = défaut llama.cpp. |
 | `--draft-p-min` | `0` | Le draft cesse de proposer en deçà de ce seuil de confiance. `0` = défaut llama.cpp. |
 
-Lorsque la spéculation est active, le bloc de profilage intègre une ligne `draft accept` — tokens acceptés sur le total proposé. Cette ligne confirme son bon fonctionnement :
+Lorsque la spéculation est active, le bloc de profilage intègre une ligne `draft accept` avec les tokens acceptés sur le total proposé. Cette ligne confirme son bon fonctionnement :
 
 ```text
 decode speed:   56.4 tok/s
@@ -82,7 +82,7 @@ Un échec de configuration n'est pas bloquant : si le contexte du draft ne peut 
 
 ## **Étape 3 : Utiliser sur le serveur local**
 
-Démarrez le serveur, puis envoyez les champs MTP dans le corps de la requête — la spéculation étant configurée **par requête**, `geniex serve` ne dispose pas d'option `--spec-type`.
+Démarrez le serveur, puis envoyez les champs MTP dans le corps de la requête La spéculation étant configurée **par requête**, `geniex serve` ne dispose pas d'option `--spec-type`.
 
 ```bash
 geniex serve
@@ -112,9 +112,9 @@ geniex serve
 
 Les trois champs mis en surbrillance sont les seuls ajouts. `spec_type` active MTP ; `spec_draft_model` désigne le draft téléchargé à l'Étape 1 ; `spec_n_max` correspond à `--draft-tokens`. `spec_n_min` et `spec_p_min` sont également acceptés, correspondant à `--draft-min` et `--draft-p-min`.
 
-Collez ce corps directement dans l'interface intégrée Swagger UI sur `http://127.0.0.1:18181` pour tester — voir [Serveur local](/fr/run/cli/local-server) pour l'API complète.
+Collez ce corps directement dans l'interface intégrée Swagger UI sur `http://127.0.0.1:18181` pour tester - voir [Serveur local](/fr/run/cli/local-server) pour l'API complète.
 
-<Warning>**Le serveur ne télécharge jamais automatiquement un modèle draft.** Contrairement à `geniex infer`, il n'utilise que ce qui est déjà en cache, de sorte qu'un draft manquant provoque une erreur — réalisez d'abord l'[Étape 1](#step-1-pull-the-model-pair).</Warning>
+<Warning>**Le serveur ne télécharge jamais automatiquement un modèle draft.** Contrairement à `geniex infer`, il n'utilise que ce qui est déjà en cache, de sorte qu'un draft manquant provoque une erreur - réalisez d'abord l'[Étape 1](#step-1-pull-the-model-pair).</Warning>
 
 <Note>Les champs `spec_*` font partie de la clé de cache du modèle, de sorte que toute modification de l'un d'eux reconstruit le modèle lors de la requête suivante. Gardez-les stables au long d'une session.</Note>
 
@@ -131,12 +131,12 @@ GGML_HEXAGON_NDEV=4 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 \
   --draft-model RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0
 ```
 
-<Note>La liste d'appareils outrepasse les alias `npu` / `hybrid` — `npu` cible `HTP0` seul, tandis qu'une liste séparée par des virgules répartit le traitement sur tous les cœurs mentionnés. Les modèles `qairt` forcent une liste d'appareils vers le NPU avec un avertissement.</Note>
+<Note>La liste d'appareils outrepasse les alias `npu` / `hybrid` - `npu` cible `HTP0` seul, tandis qu'une liste séparée par des virgules répartit le traitement sur tous les cœurs mentionnés. Les modèles `qairt` forcent une liste d'appareils vers le NPU avec un avertissement.</Note>
 
 ## **Étapes suivantes**
 
-- [Référence de la CLI](/fr/run/cli/reference) — toutes les options de `geniex infer`.
-- [Serveur local](/fr/run/cli/local-server) — l'API complète compatible OpenAI.
+- [Référence de la CLI](/fr/run/cli/reference) - toutes les options de `geniex infer`.
+- [Serveur local](/fr/run/cli/local-server) - l'API complète compatible OpenAI.
 
 <br />
 

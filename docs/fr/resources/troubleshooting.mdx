@@ -9,7 +9,7 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="Erreurs SSL ou de certificat lors de pip install (proxy d'entreprise / QDC)">
-    Courant sur les réseaux avec inspection TLS — y compris **Qualcomm Developer Cloud (QDC)**. Pré-téléchargez le SDK et pointez pip vers le fichier local. Consultez le snippet PowerShell complet dans [Installation de Python](/fr/run/python/install#installation-via-pip).
+    Courant sur les réseaux avec inspection TLS, y compris **Qualcomm Developer Cloud (QDC)**. Pré-téléchargez le SDK et pointez pip vers le fichier local. Consultez le snippet PowerShell complet dans [Installation de Python](/fr/run/python/install#installation-via-pip).
   </Accordion>
 
   <Accordion title="Windows SmartScreen bloque le programme d'installation CLI">
@@ -29,7 +29,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="Erreurs avec `--compute cpu` ou `--compute gpu` sur un modèle Qualcomm AI Hub">
-    Qualcomm AI Engine Direct fonctionne exclusivement sur NPU. Utilisez `--compute npu` (ou omettez le paramètre — `npu` est la valeur par défaut pour `qairt`). Pour exécuter sur CPU/GPU, passez à un modèle GGUF sur le [runtime llama.cpp](/fr/get-started/platforms#llamacpp).
+    Qualcomm AI Engine Direct fonctionne exclusivement sur NPU. Utilisez `--compute npu` (ou omettez le paramètre - `npu` est la valeur par défaut pour `qairt`). Pour exécuter sur CPU/GPU, passez à un modèle GGUF sur le [runtime llama.cpp](/fr/get-started/platforms#llamacpp).
   </Accordion>
 
   <Accordion title="`Context length exceeded` lors d'une longue conversation">
@@ -80,7 +80,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="Le conteneur charge le modèle mais l'inférence échoue avec `Failed to create device: 14001`">
-    Le conteneur ne peut pas accéder au NPU. Vérifiez que votre commande `docker run` inclut `--privileged` et le montage `/usr/lib`, et que les paquets de pilotes Qualcomm de l'hôte (`qcom-adreno1`, `qcom-fastrpc1`) sont bien installés — voir [Installation Linux → Installer les dépendances hôtes](/fr/run/linux/install#installer-les-dependances-hotes).
+    Le conteneur ne peut pas accéder au NPU. Vérifiez que votre commande `docker run` inclut `--privileged` et le montage `/usr/lib`, et que les paquets de pilotes Qualcomm de l'hôte (`qcom-adreno1`, `qcom-fastrpc1`) sont bien installés. Voir [Installation Linux → Installer les dépendances hôtes](/fr/run/linux/install#installer-les-dependances-hotes).
   </Accordion>
 
   <Accordion title="Un VLM avec `--compute npu` s'interrompt avec `HTP0 buffer mapping failed` (SIGABRT)">
@@ -104,11 +104,11 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="`--compute hybrid` fonctionne mais à la vitesse du CPU (repli silencieux)">
-    Si le pilote Hexagon ne peut pas être chargé (voir l'entrée précédente), `hybrid` produit toujours une sortie correcte — il s'exécute simplement entièrement sur le CPU, l'échec étant donc silencieux. Confirmez que le NPU est réellement sollicité en exécutant avec `GGML_HEX_VERBOSE=1` ; vous devriez voir `Hexagon Arch version vNN` et une session `libggml-htp-vNN.so`. L'absence de ces lignes indique un repli sur CPU.
+    Si le pilote Hexagon ne peut pas être chargé (voir l'entrée précédente), `hybrid` produit toujours une sortie correcte - il s'exécute simplement entièrement sur le CPU, l'échec étant donc silencieux. Confirmez que le NPU est réellement sollicité en exécutant avec `GGML_HEX_VERBOSE=1` ; vous devriez voir `Hexagon Arch version vNN` et une session `libggml-htp-vNN.so`. L'absence de ces lignes indique un repli sur CPU.
   </Accordion>
 
   <Accordion title="`geniex` s'arrête avec 'device is missing CPU features geniex requires'">
-    La version Linux aarch64 est compilée pour **armv8.2-a** avec les extensions `fp16`, `dotprod`, `lse` (instructions atomiques) et `rdm`. Les cartes de référence armv8.0 — certains SoC Dragonwing IoT sans NPU — n'implémentent pas ces instructions, de sorte que `geniex` s'arrête au démarrage avec une erreur claire plutôt que de planter avec un signal `SIGILL: illegal instruction` en cours d'exécution.
+    La version Linux aarch64 est compilée pour **armv8.2-a** avec les extensions `fp16`, `dotprod`, `lse` (instructions atomiques) et `rdm`. Les cartes de référence armv8.0 - certains SoC Dragonwing IoT sans NPU - n'implémentent pas ces instructions, de sorte que `geniex` s'arrête au démarrage avec une erreur claire plutôt que de planter avec un signal `SIGILL: illegal instruction` en cours d'exécution.
 
     Cette vérification est globale : chaque backend a besoin de ces instructions, donc changer `--compute` pour `cpu`, `gpu` ou `npu` ne résoudra pas le problème sur un tel appareil. Vérifiez les fonctionnalités signalées par votre processeur :
 
@@ -117,7 +117,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     cat /proc/cpuinfo | grep Features          # mêmes fonctionnalités sous les dénominations du noyau
     ```
 
-    Si ces fonctionnalités sont absentes, installez la version **CPU-only**. Elle est compilée pour `armv8.0-a` générique sans extensions ISA, ne propose que l'inférence CPU (pas de QAIRT/NPU, pas d'OpenCL/GPU, pas d'Hexagon) et est proportionnellement plus lente — ggml se replie sur ses noyaux de quantification fp32 sans `dotprod`/`fp16`. Chaque canal l'exige explicitement ; rien n'est auto-détecté :
+    Si ces fonctionnalités sont absentes, installez la version **CPU-only**. Elle est compilée pour `armv8.0-a` générique sans extensions ISA, ne propose que l'inférence CPU (pas de QAIRT/NPU, pas d'OpenCL/GPU, pas d'Hexagon) et est proportionnellement plus lente. GGML se replie sur ses noyaux de quantification fp32 sans `dotprod`/`fp16`. Chaque canal l'exige explicitement ; rien n'est auto-détecté :
 
     ```bash bash
     curl -fsSL https://raw.githubusercontent.com/qualcomm/GenieX/main/cli/release/linux/install.sh | sh -s -- --cpu-only
@@ -127,7 +127,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     | --- | --- |
     | `install.sh` | `--cpu-only` |
     | `pip install geniex` | `GENIEX_SDK_VARIANT=cpu` |
-    | Docker | le tag `-cpu` — `docker.io/qualcomm/geniex:latest-cpu` |
+    | Docker | le tag `-cpu` - `docker.io/qualcomm/geniex:latest-cpu` |
 
     `geniex-qairt` ne propose aucune version CPU-only : QAIRT nécessite un NPU, et ces cartes n'en ont aucun. Utilisez `geniex-llama-cpp` (ou le méta-paquet `geniex`, qui désactive automatiquement le backend QAIRT sur une telle carte).
 
@@ -135,13 +135,13 @@ import Feedback from "/snippets/page-feedback.mdx";
   </Accordion>
 
   <Accordion title="Gemma 4 E2B est tué par l'OOM-killer sur RB3 Gen 2 (QCS6490)">
-    En tant que VLM, le modèle nécessite ~4,94 Go — 3,04 Go pour les poids `Q4_0` plus 1,9 Go pour le projecteur F32 mmproj — face aux ~4,7 Go disponibles sur cette carte, le noyau tue donc le processus pendant le chargement du projecteur :
+    En tant que VLM, le modèle nécessite ~4,94 Go - 3,04 Go pour les poids `Q4_0` plus 1,9 Go pour le projecteur F32 mmproj, face aux ~4,7 Go disponibles sur cette carte, le noyau tue donc le processus pendant le chargement du projecteur :
 
     ```text
     Out of memory: Killed process 19714 (geniex) total-vm:7849464kB, anon-rss:0kB, file-rss:771016kB
     ```
 
-    Déclarez le modèle comme `llm` pour exécuter **uniquement son parcours textuel** — cela ignore le projecteur et permet l'exécution en mémoire. L'entrée image et audio ne sera pas disponible dans ce mode.
+    Déclarez le modèle comme `llm` pour exécuter **uniquement son parcours textuel**, cela ignore le projecteur et permet l'exécution en mémoire. L'entrée image et audio ne sera pas disponible dans ce mode.
 
     ```bash bash
     geniex pull google/gemma-4-E2B-it-qat-q4_0-gguf
@@ -157,15 +157,15 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 <AccordionGroup>
   <Accordion title="Le modèle se charge mais la génération se répète en boucle ou ne produit rien">
-    L'application de démo (ou votre code) passe le **texte brut de l'utilisateur** dans `generateStreamFlow` au lieu de l'invite mise en forme par le modèle de discussion (chat template). Les pipelines Qualcomm AI Engine Direct considèrent que leur entrée est déjà formatée — transmettez `applyChatTemplate().formattedText`, et non le message brut.
+    L'application de démo (ou votre code) passe le **texte brut de l'utilisateur** dans `generateStreamFlow` au lieu de l'invite mise en forme par le modèle de discussion (chat template). Les pipelines Qualcomm AI Engine Direct considèrent que leur entrée est déjà formatée, transmettez `applyChatTemplate().formattedText`, et non le message brut.
   </Accordion>
 
   <Accordion title="Le téléchargement Qualcomm AI Hub échoue avec `INVALID_INPUT`">
-    Android requiert un `chipset` explicite pour les téléchargements Qualcomm AI Hub — l'auto-détection ne fonctionne que sous Windows sur Snapdragon. Définissez `ModelPullInput.chipset` sur `"SM8750"` (Snapdragon 8 Elite) ou `"SM8850"` (Snapdragon 8 Elite Gen 5). Voir [Référence API Android → ModelPullInput](/fr/run/android/api-reference#modelpullinput).
+    Android requiert un `chipset` explicite pour les téléchargements Qualcomm AI Hub. L'auto-détection ne fonctionne que sous Windows sur Snapdragon. Définissez `ModelPullInput.chipset` sur `"SM8750"` (Snapdragon 8 Elite) ou `"SM8850"` (Snapdragon 8 Elite Gen 5). Voir [Référence API Android → ModelPullInput](/fr/run/android/api-reference#modelpullinput).
   </Accordion>
 
   <Accordion title="Le chargement Qualcomm AI Engine Direct échoue avec 'unknown model name'">
-    L'identifiant du modèle renvoyé par Qualcomm AI Hub doit correspondre à une entrée dans le registre du runtime Qualcomm AI Engine Direct (`qwen3_4b_instruct_2507`, `qwen2_5_vl_7b_instruct`, etc.). Pour ajouter un nouveau modèle Qualcomm AI Hub, vous devez d'abord l'enregistrer côté C++ — voir `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`.
+    L'identifiant du modèle renvoyé par Qualcomm AI Hub doit correspondre à une entrée dans le registre du runtime Qualcomm AI Engine Direct (`qwen3_4b_instruct_2507`, `qwen2_5_vl_7b_instruct`, etc.). Pour ajouter un nouveau modèle Qualcomm AI Hub, vous devez d'abord l'enregistrer côté C++. Voir `third-party/geniex-qairt/models/{llm,vlm}_model_registry.h`.
   </Accordion>
 
   <Accordion title="`nGpuLayers` ou `nCtx` rejetés sur Qualcomm AI Engine Direct">
@@ -175,7 +175,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   <Accordion title="L'initialisation échoue avec 'this device's CPU lacks features required by geniex'">
     La même protection au démarrage que sous Linux. L'AAR par défaut est compilé pour **armv8.7-a** avec les extensions `fp16`, `dotprod` et `i8mm`, mais `minSdk` 27 admet encore des téléphones antérieurs à celles-ci ; `geniex_init` renvoie donc `NOT_SUPPORTED` au lieu de planter avec un `SIGILL` en pleine exécution.
 
-    Déployez l'AAR **CPU-only** sur ces appareils — `geniex-android-aar-cpu-<tag>.aar` depuis les [assets de release](https://github.com/qualcomm/GenieX/releases). Il est compilé pour `armv8.0-a` générique sans extensions ISA, ne prend en charge que l'inférence CPU (pas de Qualcomm AI Engine Direct, pas d'OpenCL, pas d'Hexagon) et s'exécute plus lentement. Pour le reste, il s'agit d'un remplacement direct : même espace de noms `com.geniex.sdk` et même API. Seul l'AAR par défaut est publié sur Maven Central.
+    Déployez l'AAR **CPU-only** sur ces appareils : `geniex-android-aar-cpu-<tag>.aar` depuis les [assets de release](https://github.com/qualcomm/GenieX/releases). Il est compilé pour `armv8.0-a` générique sans extensions ISA, ne prend en charge que l'inférence CPU (pas de Qualcomm AI Engine Direct, pas d'OpenCL, pas d'Hexagon) et s'exécute plus lentement. Pour le reste, il s'agit d'un remplacement direct : même espace de noms `com.geniex.sdk` et même API. Seul l'AAR par défaut est publié sur Maven Central.
   </Accordion>
 </AccordionGroup>
 

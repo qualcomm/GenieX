@@ -7,10 +7,10 @@ import Feedback from "/snippets/page-feedback.mdx";
 
 ## **Prérequis**
 
-- Le SDK Python installé — voir [Installation](/fr/run/python/install).
-- Connaissance du [choix du runtime](/fr/get-started/platforms#geniex-runtimes) — `qairt` pour les modèles Qualcomm AI Hub, `llama_cpp` pour tout modèle GGUF.
+- Le SDK Python installé - voir [Installation](/fr/run/python/install).
+- Connaissance du [choix du runtime](/fr/get-started/platforms#geniex-runtimes). `qairt` pour les modèles Qualcomm AI Hub, `llama_cpp` pour tout modèle GGUF.
 
-Le SDK suit les mêmes principes de conception que `transformers` de Hugging Face — chargez le modèle avec `AutoModelForCausalLM.from_pretrained()`, puis appelez `.generate()`.
+Le SDK suit les mêmes principes de conception que `transformers` de Hugging Face. Chargez le modèle avec `AutoModelForCausalLM.from_pretrained()`, puis appelez `.generate()`.
 
 ## **Inférence LLM (GGUF)**
 
@@ -116,7 +116,7 @@ model.close()
 
 ## **Inférence audio (GGUF)**
 
-L'entrée audio fonctionne sur le backend **llama.cpp** avec un modèle compatible audio — son mmproj doit intégrer un encodeur conformer. `google/gemma-4-E2B-it-qat-q4_0-gguf` est l'un de ces modèles. Chargez-le avec `AutoModelForVision2Seq`, puis transmettez les chemins de fichiers à `generate(images=[...], audios=[...])` — un seul appel peut inclure les deux.
+L'entrée audio fonctionne sur le backend **llama.cpp** avec un modèle compatible audio. Son mmproj doit intégrer un encodeur conformer. `google/gemma-4-E2B-it-qat-q4_0-gguf` est l'un de ces modèles. Chargez-le avec `AutoModelForVision2Seq`, puis transmettez les chemins de fichiers à `generate(images=[...], audios=[...])` - un seul appel peut inclure les deux.
 
 <Warning>L'entrée audio fonctionne uniquement sur le backend **llama.cpp**. Les bundles QAIRT signalent `capabilities()['audio'] == False` et lèvent une exception `GenieXError(-201201): Multimodal generation failed` si de l'audio leur est fourni.</Warning>
 
@@ -172,7 +172,7 @@ Une photographie dévoile un paysage grandiose mettant en valeur un temple japon
 
 ## **Exemple pas à pas en Jupyter Notebook**
 
-Pour les utilisateurs sur PC portable, suivez le notebook Jupyter disponible dans [examples/python/windows.ipynb](https://github.com/qualcomm/GenieX/blob/main/examples/python/windows.ipynb) — il détaille la configuration de l'environnement et l'inférence de bout en bout.
+Pour les utilisateurs sur PC portable, suivez le notebook Jupyter disponible dans [examples/python/windows.ipynb](https://github.com/qualcomm/GenieX/blob/main/examples/python/windows.ipynb) - il détaille la configuration de l'environnement et l'inférence de bout en bout.
 
 ## **Étapes suivantes**
 
