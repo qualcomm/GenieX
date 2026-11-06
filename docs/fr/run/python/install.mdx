@@ -1,0 +1,72 @@
+---
+title: "Installation de Python"
+description: "Installer le SDK Python GenieX sur Windows ARM64 ou Linux ARM64."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+Le SDK Python GenieX est distribué sous forme de wheel ARM64 pour Windows ARM64 et Linux ARM64.
+
+## **Prérequis**
+
+- Processeur Snapdragon série X (X Elite ou X2 Elite). Voir [Plateformes prises en charge](/fr/get-started/platforms).
+- **Python 3.10+ en version ARM64**. Les versions x86_64 / AMD64 ne sont pas prises en charge.
+
+<a id="install-via-pip"></a>
+<a id="installation-via-pip"></a>
+## **Installation via pip**
+
+<Tabs>
+  <Tab title="Windows ARM64">
+    Si Python n'est pas installé, téléchargez [Python 3.13.3 pour ARM64](https://www.python.org/ftp/python/3.13.3/python-3.13.3-arm64.exe).
+
+    Confirmez que Python est bien compilé pour ARM64. Le résultat **doit afficher `ARM64`** (et non `AMD64`) :
+
+    ```powershell
+    python -c "import platform; print(platform.machine())"
+    ```
+
+    Créez un environnement virtuel et installez :
+
+    ```powershell
+    python -m venv geniex-env
+    .\geniex-env\Scripts\Activate.ps1
+    pip install -U geniex
+    ```
+
+    Cette commande télécharge le paquet depuis [PyPI](https://pypi.org/project/geniex/).
+  </Tab>
+
+  <Tab title="Linux ARM64">
+    Qualcomm embedded Linux (Yocto) intègre Python préinstallé. Vérifiez avec :
+
+    ```bash
+    python3 --version
+    ```
+
+    Installez directement avec pip :
+
+    ```bash
+    python3 -m pip install -U geniex
+    ```
+
+    Cette commande télécharge le paquet depuis [PyPI](https://pypi.org/project/geniex/) et récupère automatiquement les bibliothèques du SDK Linux ARM64.
+
+    <Note>
+    Si Python n'est pas préinstallé, consultez [Comment installer Python sur un appareil Linux ARM64 ?](/fr/resources/faq#how-do-i-install-python-on-a-linux-arm64-device) pour une méthode vérifiée avec Miniconda (fonctionne sur Qualcomm Yocto et Ubuntu ARM64).
+    </Note>
+  </Tab>
+</Tabs>
+
+## **Vérification**
+
+```python
+import geniex
+print(geniex.version())
+```
+
+Rendez-vous maintenant sur le [Démarrage rapide](/fr/run/python/quickstart).
+
+<br />
+
+<Feedback/>

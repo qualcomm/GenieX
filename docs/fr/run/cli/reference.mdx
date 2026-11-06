@@ -1,0 +1,290 @@
+---
+title: "Référence de la CLI"
+description: "Toutes les commandes et options de la CLI GenieX, avec exemples d'utilisation."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **Inférence de modèle**
+
+### **`geniex pull`**
+
+Télécharge un modèle et le stocke localement.
+
+```powershell
+geniex pull <model-name>[:<precision>]
+```
+
+| Option | Description |
+|---|---|
+| `--model-hub` | Source du modèle : `aihub` \| `hf` \| `modelscope` \| `docker` \| `localfs`. Auto-détectée si omise. |
+| `--local-path` | Chemin vers un répertoire local ou un fichier `.zip` AI Hub. Implique `--model-hub localfs`. |
+| `--model-type` | Type de modèle : `llm` \| `vlm`. Auto-détecté si omis. |
+
+**Téléchargement depuis un chemin local :**
+
+```powershell
+geniex pull local/my-model --local-path /chemin/vers/dossier-modele
+```
+
+<Note>`pull` copie les fichiers dans le cache de GenieX. Après une importation réussie, vous pouvez supprimer la source pour éviter les doublons.</Note>
+
+**Précision (Quantification) (llama.cpp uniquement)**
+
+Pour les modèles GGUF, la CLI vous invite à choisir une précision :
+
+```powershell
+Choose a precision version to download
+> Q4_0       [1.2 GiB]
+  Q8_0       [2.0 GiB]
+  F16        [3.8 GiB]
+```
+
+<Tip>`Q4_0` offre la meilleure prise en charge sur NPU Hexagon. Voir [Précisions (Quantifications) prises en charge](/fr/models/supported#precisions-quantisations-prises-en-charge).</Tip>
+
+Les modèles Qualcomm AI Hub sont déjà pré-quantifiés - aucun choix n'est nécessaire.
+
+### **`geniex infer` - LLM**
+
+Lance une session de discussion interactive avec un modèle de langage.
+
+```powershell
+geniex infer ai-hub-models/Qwen3-4B
+```
+
+**Mode réflexion (Thinking mode)** - contrôler si le modèle affiche son raisonnement avant de répondre :
+
+```powershell
+geniex infer ai-hub-models/Qwen3-4B --think         # affiche les étapes de raisonnement
+geniex infer ai-hub-models/Qwen3-4B --think=false   # répond directement
+```
+
+**Sélection de l'unité de calcul** (via `--compute`) - choisir quelle unité matérielle exécute le modèle (`npu` par défaut) :
+
+```powershell
+# Les modèles llama.cpp prennent en charge toutes les unités de calcul
+geniex infer unsloth/Qwen3.5-0.8B-GGUF --compute npu
+geniex infer unsloth/Qwen3.5-0.8B-GGUF --compute gpu
+geniex infer unsloth/Qwen3.5-0.8B-GGUF --compute cpu
+
+# Les modèles Qualcomm AI Hub ne prennent en charge que le NPU
+geniex infer ai-hub-models/Qwen3-4B --compute npu
+```
+
+```bash
+# Liste explicite d'appareils - répartir sur plusieurs cœurs HTP (llama.cpp + appareils multi-DSP uniquement)
+GGML_HEXAGON_DEVICES=4 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 --compute HTP0,HTP1,HTP2,HTP3
+```
+
+<Note>Définissez `GGML_HEXAGON_DEVICES` en correspondance avec le nombre d'identifiants d'appareils dans `--compute`. Les modèles `qairt` redirigent une liste de périphériques vers le NPU avec un avertissement. Consultez [Répartition sur plusieurs cœurs HTP](/fr/tutorials/speculative-decoding-mtp#repartition-sur-plusieurs-coeurs-htp) pour les mesures de performances MTP.</Note>
+
+<Note>Pour les VLM avec `--compute npu`, l'encodeur de vision partage par défaut la session HTP du modèle de langage, ce qui peut provoquer une interruption sur certains appareils. Exécutez-le sur une seconde session avec `GGML_HEXAGON_DEVICES=2 geniex infer <vlm> --compute HTP0 --vit-compute HTP1`. Voir [Dépannage](/fr/resources/troubleshooting).</Note>
+
+<Warning>Les modèles Qualcomm AI Hub fonctionnent uniquement sur NPU. `--compute cpu` ou `--compute gpu` est ignoré avec un avertissement et le modèle s'exécute sur le NPU.</Warning>
+
+<a id="geniex-infer-vlm"></a>
+### **`geniex infer` - VLM**
+
+Exécutez l'inférence vision-langage avec une entrée texte seule, image ou audio :
+
+```bash
+geniex infer google/gemma-4-E2B-it-qat-q4_0-gguf
+```
+
+Pour du texte seul, lancez simplement la commande et discutez. Pour une entrée image ou audio, fournissez le **chemin absolu** ou glissez-déposez le fichier dans votre terminal - les chemins d'images (`.jpg`, `.jpeg`, `.png`, `.webp`) et audio (`.wav`, `.mp3`) sont auto-détectés, et une même invite peut combiner les deux. `google/gemma-4-E2B-it-qat-q4_0-gguf` intègre un mmproj compatible audio (~4,0 Go au total : poids `Q4_0` + mmproj conformer téléchargés ensemble) :
+
+```bash
+geniex pull google/gemma-4-E2B-it-qat-q4_0-gguf
+
+curl -L -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/master/samples/jfk.wav
+curl -L -o landmark.jpg "https://images.pexels.com/photos/402028/pexels-photo-402028.jpeg?w=1024"
+
+geniex infer google/gemma-4-E2B-it-qat-q4_0-gguf \
+  -p "Describe the image and transcribe the audio. Image: /chemin/absolu/vers/landmark.jpg Audio: /chemin/absolu/vers/jfk.wav"
+```
+
+Sortie (vérifiée sur `--compute npu`, Snapdragon X Elite) :
+
+```text
+**Image Description:**
+This is a scenic, panoramic photograph that features a traditional Japanese temple ... The overall mood of the image is serene and beautiful.
+
+**Audio Transcription:**
+"And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+```
+
+<Warning>L'entrée audio fonctionne uniquement sur le backend **llama.cpp** et requiert un modèle compatible audio (mmproj avec encodeur conformer). L'audio fonctionne également avec `--compute cpu` / `gpu`, mais les modèles QAIRT signalent `audio: false` et échouent avec `GenieXError(-201201): Multimodal generation failed`.</Warning>
+
+Dans une session interactive avec un modèle compatible audio, `/mic` enregistre un extrait au microphone au lieu d'en charger un depuis le disque - `Ctrl-C` arrête l'enregistrement et le transcrit. Cela nécessite la présence de **SoX** dans votre `PATH` (`sudo apt install sox`, ou `winget install --id=ChrisBagwell.SoX -e` sous Windows) ; sinon GenieX signale au démarrage que `SoX is not installed`. Consultez le [tutoriel d'entrée audio](/fr/tutorials/audio-input) pour le guide complet.
+
+### **`geniex decide`**
+
+Prendre une décision structurée locale avec un LLM ou VLM `llama_cpp`. Sélectionnez `predicate`, `choice` ou `score` avec `--kind`. Les modèles avec template `systemone` utilisent la voie OpenJEV, LEV ou Nimble correspondante et une température spécifique au modèle ; si `decision.type` est absent, ils sont traités comme OpenJEV. Les modèles sans `systemone` se replient sur un prompt de choix générique utilisant leur template de chat standard et une température de `1.0`. Les choix LEV moyennent les deux ordres d'options et les prédicats LEV utilisent une évaluation sur neuf niveaux ; toutes les voies exploitent les logits et renvoient probabilités et confiance. Ajoutez `--image` ou `--audio` (répétable) pour envoyer des médias locaux à un VLM compatible.
+
+```bash
+geniex decide <model-name>[:<precision>] --kind predicate \
+  --input "La batterie ne charge pas" --question "Est-ce un problème matériel ?"
+geniex decide <model-name>[:<precision>] --kind choice \
+  --input "La batterie ne charge pas" --question "Choisissez l'action suivante" \
+  --choice 'retry=Réessayer' --choice 'replace=Remplacer la batterie'
+geniex decide <model-name>[:<precision>] --kind score \
+  --input "La température de la batterie est de 85°C" --question "Évaluez la gravité" \
+  --level low --level medium --level "high=Arrêt immédiat requis"
+# Choix visuel (le modèle doit être classifié comme VLM)
+geniex decide <vlm-name> --kind choice --image photo.png \
+  --input "Une photo du support" --question "Identifiez le problème" \
+  --choice battery --choice screen
+```
+
+Répétez `--choice VALEUR` pour chaque option candidate. Dans `--choice 'retry=Réessayer'`, `retry` est la valeur renvoyée en JSON et `Réessayer` est un contexte optionnel pour le modèle. Entourez de guillemets si la description contient des espaces. De même, `--level` accepte `LABEL=DESCRIPTION`. `--image` et `--audio` acceptent des fichiers réguliers locaux existants et peuvent être répétés jusqu'à 8 fois chacun. Les options `--compute`, `--ngl`, `--nctx` et `--power-mode` contrôlent le chargement du modèle, comme avec `geniex infer`. `--vit-compute` sélectionne l'unité de calcul de l'encodeur de vision VLM. `geniex decide --help` regroupe ces options par catégorie.
+
+Par défaut, `geniex decide` utilise le thème CLI pour afficher les probabilités des prédicats (`true` et `false`), le choix sélectionné et la probabilité de chaque candidat, ou le score attendu et la probabilité de chaque niveau, avec l'indice de confiance. Ajoutez `--json` pour afficher le résultat JSON brut sur une seule ligne pour vos scripts.
+
+## **`geniex model`**
+
+Inspecter et reconfigurer les modèles en cache.
+
+<a id="geniex-model-set-type"></a>
+### **`geniex model set-type`**
+
+Remplacer le type de modèle enregistré dans le manifeste d'un modèle en cache. Omettez le type pour le choisir de manière interactive.
+
+```bash
+geniex model set-type <model-name> [llm|vlm]
+```
+
+Le type détermine la voie empruntée par `geniex infer` : `vlm` charge le projecteur mmproj aux côtés des poids et accepte les entrées image / audio, tandis que `llm` charge uniquement les poids de langue. Forcer un GGUF multimodal en `llm` permet d'exécuter son parcours textuel sur une carte où les poids + le projecteur ne tiendraient pas en mémoire.
+
+```bash
+geniex model set-type google/gemma-4-E2B-it-qat-q4_0-gguf llm
+```
+
+<Note>`geniex pull --model-type llm <model>` renseigne ce même champ dès le téléchargement, évitant ainsi d'avoir à exécuter `set-type` par la suite.</Note>
+
+### **`geniex model list`**
+
+Lister les modèles Qualcomm AI Hub disposant d'une compilation `qairt` (NPU). Seuls les modèles compatibles avec le chipset détecté sont listés, sauf si vous spécifiez `--all`.
+
+```bash
+geniex model list
+geniex model list --all
+```
+
+## **`geniex serve`**
+
+Démarrer le serveur local compatible OpenAI. Consultez [Serveur local](/fr/run/cli/local-server) pour les spécifications de l'API.
+
+```bash
+geniex serve
+```
+
+Les modèles avec raisonnement placent leur chaîne de pensée dans `message.reasoning_content` par défaut. Définissez le champ `reasoning_format` sur `none` par requête pour la conserver en ligne dans `message.content` - voir [Séparation du raisonnement](/fr/run/cli/local-server#separating-reasoning-reasoning_content).
+
+Les requêtes de chat réfléchissent par défaut. Lancez le serveur avec `--think=false` (ou `GENIEX_THINK=false`) pour désactiver la réflexion sur les requêtes qui omettent `enable_think` ; le champ de requête reste prioritaire.
+
+## **Journalisation (Logging)**
+
+`--log` est une option globale contrôlant le niveau de journalisation de la CLI. Elle équivaut à la variable d'environnement `GENIEX_LOG` et prévaut sur celle-ci lorsqu'elles sont toutes deux définies.
+
+```bash
+geniex --log debug list
+```
+
+| Valeur | Sortie |
+|---|---|
+| `none` | rien (**défaut CLI**) |
+| `error` | erreurs uniquement |
+| `warn` | avertissements + erreurs |
+| `info` | infos + avertissements + erreurs |
+| `debug` | debug + infos + avertissements + erreurs |
+| `trace` | tout |
+
+## **Options de configuration**
+
+Ces options peuvent être transmises à `geniex infer` pour configurer le chargement et la génération.
+
+### Options d'échantillonnage (Sampler)
+
+Contrôlent la sélection des tokens lors de la génération.
+
+| Option | Type | Défaut | Description |
+|---|---|---|---|
+| `--temperature` | float | - | Température d'échantillonnage. Des valeurs plus élevées augmentent l'aléa. |
+| `--top-p` | float | - | Seuil d'échantillonnage top-p (nucleus). |
+| `--top-k` | int | - | Échantillonnage top-k. Ne retient que les k tokens les plus probables. |
+| `--min-p` | float | - | Seuil d'échantillonnage min-p. |
+| `--repetition-penalty` | float | `1` | Pénalité de répétition. Les valeurs > 1 réduisent la répétition. |
+| `--presence-penalty` | float | - | Pénalise les tokens déjà apparus dans le texte. |
+| `--frequency-penalty` | float | - | Pénalise les tokens proportionnellement à leur fréquence. |
+| `--seed` | int | - | Graine aléatoire pour des sorties reproductibles. |
+| `--grammar-path` | string | - | Chemin vers un fichier de grammaire GBNF pour génération contrainte. |
+| `--grammar-string` | string | - | Grammaire en ligne au format chaîne GBNF. |
+
+### Options du modèle
+
+Contrôlent le chargement du modèle, le contexte et les limites de génération.
+
+| Option | Type | Défaut | Description |
+|---|---|---|---|
+| `-n`, `--ngl` | int | `-1` | Nombre de couches déportées sur GPU/NPU, `-1` = toutes (llama_cpp uniquement). |
+| `--nctx` | int | `4096` | Taille de la fenêtre de contexte (tokens d'entrée + sortie max). |
+| `--max-tokens` | int | `2048` | Nombre maximal de tokens à générer par réponse. |
+| `--stop` | string[] | - | Séquences d'arrêt (peut être spécifié plusieurs fois). |
+| `--stop-file` | string | - | Fichier contenant les séquences d'arrêt (une par ligne). |
+| `--think` / `--think=false` | bool | `true` | Active ou désactive le mode réflexion pour les modèles de raisonnement. |
+| `-s`, `--system-prompt` | string | - | Prompt système pour définir le comportement du modèle. |
+| `--sliding-window` | - | `false` | (`qairt` uniquement) Évince le contexte le plus ancien au-delà d'un court préfixe ancré au lieu d'émettre une erreur lors du dépassement de contexte. |
+| `--power-mode` | string | `burst` | Mode de gestion d'énergie/horloge HTP, partagé par `qairt` et `llama_cpp` : `low_power_saver`, `power_saver`, `high_power_saver`, `low_balanced`, `balanced`, `high_performance`, `sustained_high_performance`, `burst`. |
+
+<a id="increasing-the-context-length"></a>
+<a id="augmenter-la-longueur-de-contexte"></a>
+### Augmenter la longueur de contexte
+
+La fenêtre de contexte (`--nctx`) représente la quantité d'informations que le modèle peut traiter en une fois. Lorsque la conversation dépasse cette limite, une erreur *context length exceeded* survient. La méthode pour l'augmenter dépend du runtime :
+
+- **llama.cpp (GGUF) :** `--nctx <N>` étend la fenêtre à l'exécution, jusqu'au maximum appris par le modèle. Une fenêtre plus grande consomme plus de mémoire pour le cache KV.
+
+  ```bash
+  geniex infer unsloth/Qwen3-8B-GGUF --nctx 8192
+  ```
+
+- **Qualcomm AI Engine Direct (NPU) :** la longueur de contexte est **figée dans le bundle compilé** et ne peut pas être étendue à l'exécution, `--nctx` est sans effet. À la place :
+  - Ajoutez `--sliding-window` pour continuer la conversation : le contexte le plus ancien au-delà du préfixe est évincé.
+  - Pour une fenêtre réellement plus large, téléchargez un bundle compilé pour un contexte plus grand depuis [Qualcomm AI Hub](https://aihub.qualcomm.com/models/). Voir les [contraintes d'exécution de Qualcomm AI Engine Direct](/fr/get-started/platforms#runtime-constraints).
+
+## **`geniex-bench`**
+
+`geniex-bench` est un binaire de benchmark autonome, indépendant de la CLI `geniex`, qui mesure le TTFT, la vitesse de préremplissage (prefill) et de décodage directement via l'API C de GenieX. Il est fourni sous forme d'archive précompilée pour Windows ARM64 et Linux ARM64.
+
+Consultez le [tutoriel de Benchmarking](/fr/tutorials/benchmarking) pour les instructions de téléchargement et le guide complet. Référence rapide :
+
+| Option | Défaut | Description |
+|---|---|---|
+| `--plugin` | - | `llama_cpp` \| `qairt`. Requis pour un chemin de fichier ; optionnel pour un ID du gestionnaire de modèles. |
+| `--device` | `auto` | `cpu` \| `gpu` \| `npu` \| `hybrid`. |
+| `-m` / `--model` | - | Chemin local (`.gguf` ou dossier de bundle) ou identifiant du gestionnaire (`org/repo[:quant]`). Requis. |
+| `-p` | `512` | Longueur de préremplissage en tokens aléatoires. |
+| `-n` / `--n-gen` | `128` | Nombre de tokens à générer par exécution. |
+| `-r` | `5` | Répétitions mesurées. |
+| `--warmup` | `1` | Exécutions d'échauffement (non comptées dans les statistiques). |
+| `--temperature` | `0.0` | Température d'échantillonnage. `0.0` = déterministe (glouton). |
+| `--seed` | `42` | Graine aléatoire pour la génération des tokens de préremplissage. |
+| `--power-mode` | `burst` | Mode énergétique HTP partagé par `qairt` et `llama_cpp`. |
+| `--output-json` | - | Écrit un fichier JSON contenant les statistiques agrégées. |
+| `--matrix-file` | - | Fichier TSV (`cell_id`, `plugin`, `device`, `model`) pour tester plusieurs combinaisons en une session. |
+| `--output-json-dir` | - | Dossier de sortie pour les fichiers JSON du mode matrice. |
+| `--accuracy` | - | Affiche le texte généré au lieu des métriques de temps (1 passage, sans warmup). À combiner avec `--prompt-file`. |
+
+## **Commandes utilitaires**
+
+| Commande | Description | Exemple |
+|---|---|---|
+| `geniex list` | Affiche tous les modèles téléchargés avec leurs noms et tailles. | `geniex list` |
+| `geniex remove <model>` | Supprime un modèle local spécifique par son nom. | `geniex remove unsloth/Qwen3-0.6B-GGUF` |
+| `geniex clean` | Supprime tous les modèles mis en cache localement. | `geniex clean` |
+| `geniex infer -h` | Affiche l'aide pour `geniex infer`. | `geniex infer -h` |
+| `geniex serve -h` | Affiche l'aide pour `geniex serve`. | `geniex serve -h` |
+
+<br />
+
+<Feedback />

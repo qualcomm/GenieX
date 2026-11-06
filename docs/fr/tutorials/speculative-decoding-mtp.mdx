@@ -1,0 +1,143 @@
+---
+title: "Décodage spéculatif avec MTP"
+description: "Accélérez le décodage avec un modèle draft de prédiction multi-tokens (MTP), dans la CLI GenieX et le serveur local."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+Le décodage spéculatif accélère l'inférence d'un grand modèle sans altérer la qualité de ce qu'il produit. Un modèle **draft** (brouillon) léger propose plusieurs tokens à l'avance, le grand modèle **cible** (target) les vérifie tous en une seule passe avant (forward pass), et le préfixe validé est validé en bloc. La vérification ne coûtant qu'une seule passe quel que soit le nombre de tokens vérifiés, les tokens acceptés au-delà du premier sont quasiment gratuits - et la sortie reste rigoureusement identique à ce que la cible aurait produit seule.
+
+**MTP (Multi-Token Prediction)** est la variante la plus efficace. Au lieu d'un petit modèle entraîné séparément dont les prédictions peuvent dériver de la cible, MTP utilise des têtes de prédiction entraînées *conjointement* avec la cible qui lisent ses propres états cachés, de sorte que les propositions proviennent de la même distribution que les échantillons du modèle cible.
+
+<Note>Le décodage spéculatif fonctionne **exclusivement avec `llama_cpp`** et en **mode texte uniquement**. Sur le runtime `qairt`, ces réglages sont ignorés avec un avertissement. Si vous l'activez sur un modèle multimodal, GenieX exécute la voie LLM et abandonne le contenu image / audio avec un avertissement.</Note>
+
+<a id="step-1-pull-the-model-pair"></a>
+## **Étape 1 : Télécharger la paire de modèles**
+
+MTP requiert un modèle draft entraîné pour **la cible exacte** que vous exécutez. Un petit GGUF arbitraire ne peut pas être substitué, et une paire non concordante échoue au chargement.
+
+| Rôle | Modèle |
+|---|---|
+| **Cible (Target)** | `google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0` |
+| **Draft** | `RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0` |
+
+```bash
+geniex pull google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0
+geniex pull RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0
+```
+
+Les deux modèles résidant simultanément en mémoire, prévoyez environ 20 Go d'espace disque disponible et suffisamment de mémoire vive pour héberger la paire.
+
+Une alternative plus légère est le modèle dense **E4B**. Google ne fournit son draft QAT que sous forme de safetensors non quantifiés, que `cascade-tech` a reconditionné au format GGUF :
+
+| Rôle | Modèle |
+|---|---|
+| **Cible (Target)** | `google/gemma-4-E4B-it-qat-q4_0-gguf:Q4_0` |
+| **Draft** | `cascade-tech/gemma-4-E4B-it-qat-q4_0-unquantized-assistant-gguf:Q4_0` |
+
+```bash
+geniex pull google/gemma-4-E4B-it-qat-q4_0-gguf:Q4_0
+geniex pull cascade-tech/gemma-4-E4B-it-qat-q4_0-unquantized-assistant-gguf:Q4_0
+```
+
+Cette paire occupe moins de 6 Go combinés.
+
+## **Étape 2 : Exécuter avec `geniex infer`**
+
+Trois nouvelles options l'activent - le type, le modèle draft, et le nombre de tokens à anticiper :
+
+```bash
+geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 --spec-type draft-mtp --draft-model RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0 --draft-tokens 3
+```
+
+| Option | Défaut | Effet |
+|---|---|---|
+| `--spec-type` | *(désactivé)* | Définissez sur `draft-mtp` pour activer MTP. |
+| `--draft-model` | - | Nom au catalogue `org/repo[:precision]` ou chemin GGUF local. Requis par `draft-mtp`. |
+| `--draft-tokens` | `3` | Nombre maximal de tokens anticipés par étape de vérification. |
+| `--draft-min` | `0` | Nombre minimal de tokens anticipés par étape. `0` = défaut llama.cpp. |
+| `--draft-p-min` | `0` | Le draft cesse de proposer en deçà de ce seuil de confiance. `0` = défaut llama.cpp. |
+
+Lorsque la spéculation est active, le bloc de profilage intègre une ligne `draft accept` avec les tokens acceptés sur le total proposé. Cette ligne confirme son bon fonctionnement :
+
+```text
+decode speed:   56.4 tok/s
+stop reason:    eos
+draft accept:   14/75 (18.7%)
+```
+
+Les mêmes options s'appliquent à la paire E4B de l'[Étape 1](#step-1-pull-the-model-pair) :
+
+```bash
+geniex infer google/gemma-4-E4B-it-qat-q4_0-gguf:Q4_0 --spec-type draft-mtp --draft-model cascade-tech/gemma-4-E4B-it-qat-q4_0-unquantized-assistant-gguf:Q4_0 --draft-tokens 3
+```
+
+```text
+decode speed:   13.4 tok/s
+stop reason:    eos
+draft accept:   153/225 (68.0%)
+```
+
+Un échec de configuration n'est pas bloquant : si le contexte du draft ne peut être construit, GenieX consigne `speculative decoding setup failed; falling back to plain decoding` et poursuit son exécution à vitesse normale.
+
+## **Étape 3 : Utiliser sur le serveur local**
+
+Démarrez le serveur, puis envoyez les champs MTP dans le corps de la requête La spéculation étant configurée **par requête**, `geniex serve` ne dispose pas d'option `--spec-type`.
+
+```bash
+geniex serve
+```
+
+`POST /v1/chat/completions` reçoit les trois mêmes réglages sous forme de champs `spec_*`. Le reste correspond au corps de requête standard compatible OpenAI :
+
+```json Corps de requête {8-10}
+{
+  "model": "google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Bonjour ! Présentez-vous brièvement."
+    }
+  ],
+  "spec_type": "draft-mtp",
+  "spec_draft_model": "RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0",
+  "spec_n_max": 3,
+  "nctx": 8192,
+  "max_completion_tokens": 2048,
+  "temperature": 0.8,
+  "top_p": 0.95,
+  "stream": false
+}
+```
+
+Les trois champs mis en surbrillance sont les seuls ajouts. `spec_type` active MTP ; `spec_draft_model` désigne le draft téléchargé à l'Étape 1 ; `spec_n_max` correspond à `--draft-tokens`. `spec_n_min` et `spec_p_min` sont également acceptés, correspondant à `--draft-min` et `--draft-p-min`.
+
+Collez ce corps directement dans l'interface intégrée Swagger UI sur `http://127.0.0.1:18181` pour tester - voir [Serveur local](/fr/run/cli/local-server) pour l'API complète.
+
+<Warning>**Le serveur ne télécharge jamais automatiquement un modèle draft.** Contrairement à `geniex infer`, il n'utilise que ce qui est déjà en cache, de sorte qu'un draft manquant provoque une erreur - réalisez d'abord l'[Étape 1](#step-1-pull-the-model-pair).</Warning>
+
+<Note>Les champs `spec_*` font partie de la clé de cache du modèle, de sorte que toute modification de l'un d'eux reconstruit le modèle lors de la requête suivante. Gardez-les stables au long d'une session.</Note>
+
+<a id="spreading-across-multiple-htp-cores"></a>
+<a id="repartition-sur-plusieurs-coeurs-htp"></a>
+## **Répartition sur plusieurs cœurs HTP**
+
+Sur les appareils dotés de plusieurs sous-systèmes DSP (par ex. Snapdragon X2 Elite avec quatre cœurs HTP), vous pouvez répartir la charge de travail en passant une liste d'appareils séparés par des virgules à `--compute`. Définissez `GGML_HEXAGON_NDEV` sur le nombre d'identifiants d'appareils pour que le backend Hexagon les ouvre tous :
+
+```bash
+GGML_HEXAGON_NDEV=4 geniex infer google/gemma-4-26B-A4B-it-qat-q4_0-gguf:Q4_0 \
+  --compute HTP0,HTP1,HTP2,HTP3 \
+  --spec-type draft-mtp \
+  --draft-model RachidAR/gemma-4-26B-A4B-it-qat-assistant-q4_0-gguf:Q4_0
+```
+
+<Note>La liste d'appareils outrepasse les alias `npu` / `hybrid` - `npu` cible `HTP0` seul, tandis qu'une liste séparée par des virgules répartit le traitement sur tous les cœurs mentionnés. Les modèles `qairt` forcent une liste d'appareils vers le NPU avec un avertissement.</Note>
+
+## **Étapes suivantes**
+
+- [Référence de la CLI](/fr/run/cli/reference) - toutes les options de `geniex infer`.
+- [Serveur local](/fr/run/cli/local-server) - l'API complète compatible OpenAI.
+
+<br />
+
+<Feedback />
