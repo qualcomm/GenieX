@@ -260,8 +260,9 @@ HKEY_LOCAL_MACHINE\\...\\0001\r\n    MatchingDeviceId    REG_SZ    Root\\ThirdPa
 
 #[cfg(target_os = "linux")]
 mod linux {
-    //! Devicetree `compatible` first; socinfo is the fallback for boards like
-    //! IQ-8275 whose compat list names only `qcs8300`, not the real `QCS8275`.
+    //! Devicetree `compatible` first; socinfo is the fallback for boards whose
+    //! compat list doesn't name the real SKU: IQ-8275 (`qcs8300`) and IQ-9075 on
+    //! upstream DTs (`lemans-evk`: `qcs9100`).
 
     use std::fs;
 
@@ -275,7 +276,10 @@ mod linux {
         ("qcs9075", "qualcomm-qcs9075"),
     ];
 
-    const MACHINE_TO_CHIPSET: &[(&str, &str)] = &[("QCS8275", "qualcomm-qcs8275")];
+    const MACHINE_TO_CHIPSET: &[(&str, &str)] = &[
+        ("QCS8275", "qualcomm-qcs8275"),
+        ("QCS9075", "qualcomm-qcs9075"),
+    ];
 
     pub(super) fn detect_dt_chipset() -> Option<String> {
         let bytes = fs::read(DT_COMPATIBLE).ok()?;
@@ -320,7 +324,7 @@ mod linux {
 
         #[test]
         fn map_compatible_cases() {
-            let cases: [(&[u8], Option<&str>); 7] = [
+            let cases: [(&[u8], Option<&str>); 8] = [
                 (
                     b"qcom,qcs9075-addons-iq-9075-evk\0qcom,qcs9075\0qcom,sa8775p\0",
                     Some("qualcomm-qcs9075"),
@@ -331,6 +335,7 @@ mod linux {
                 ),
                 (b"qcom,qcs9075", Some("qualcomm-qcs9075")),
                 (b"qcom,sa8775p\0", None),
+                (b"qcom,lemans-evk\0qcom,qcs9100\0qcom,sa8775p\0", None),
                 (b"brcm,bcm2837\0", None),
                 (b"", None),
                 (b"qcom,qcs9075foo\0", None),
@@ -353,6 +358,7 @@ mod linux {
                 ("MSM\n", "QCS8275\n", None),
                 ("", "QCS8275", None),
                 ("Snapdragon\n", "QCS8300\n", None),
+                ("Snapdragon\n", "QCS9075\n", Some("qualcomm-qcs9075")),
             ] {
                 assert_eq!(map_socinfo(family, machine), want, "{family:?} {machine:?}");
             }
