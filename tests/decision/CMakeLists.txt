@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 project(geniex_decision_tests C CXX)
 set(CMAKE_CXX_STANDARD 17)
+# Match sdk/CMakeLists.txt: the bundled fmt requires UTF-8 source on MSVC.
+add_compile_options("$<$<C_COMPILER_ID:MSVC>:/utf-8>" "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+# Keep the test next to llama.cpp's DLLs; Windows has no rpath.
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_TOOLS ON CACHE BOOL "" FORCE)

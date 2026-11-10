@@ -28,7 +28,7 @@ Enable the optional llama.cpp reference comparison, then pass an actual GGUF:
 cmake -S tests/decision -B build-decision-tests \
   -DGENIEX_DECISION_REFERENCE_TESTS=ON -DGGML_METAL=OFF -DGGML_BLAS=OFF -DGGML_NATIVE=OFF
 cmake --build build-decision-tests --target decision-tests llama-server -j
-./build-decision-tests/decision-tests /path/to/d1-2B-Q4_K_M.gguf
+./build-decision-tests/bin/decision-tests /path/to/d1-2B-Q4_K_M.gguf
 ```
 
 This runs predicate, choice, and score inference on CPU (`n_gpu_layers=0`). It
