@@ -9,7 +9,8 @@ permissions:
 jobs:
   cpp-format:
     name: cpp-format
-    runs-on: ubuntu-latest
+    # clang-format-18 ships only up to the ubuntu-24.04 image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
