@@ -202,7 +202,7 @@ pub unsafe fn from_c_array<T>(ptr: *mut T, count: i32) -> Option<Vec<T>> {
 /// the FFI boundary so the invariant is a single point of enforcement.
 pub fn normalize_quant_suffix(name: &str) -> String {
     match name.rsplit_once(':') {
-        Some((base, quant)) if !quant.is_empty() => {
+        Some((base, quant)) if !quant.is_empty() && !quant.starts_with("//") => {
             format!("{base}:{}", quant.to_ascii_uppercase())
         }
         _ => name.to_string(),
@@ -272,6 +272,11 @@ mod tests {
         );
         // Trailing colon (no quant) → unchanged.
         assert_eq!(normalize_quant_suffix("Org/Repo:"), "Org/Repo:");
+        // A pasted URL's scheme colon is not a quant separator.
+        assert_eq!(
+            normalize_quant_suffix("https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF"),
+            "https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF"
+        );
     }
 
     #[test]
