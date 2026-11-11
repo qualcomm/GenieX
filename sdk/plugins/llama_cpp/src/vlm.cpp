@@ -12,6 +12,7 @@
 #include "common.h"
 #include "geniex.h"
 #include "htp_session.h"
+#include "liquid-decision.h"
 #include "llama.h"
 #include "logging.h"
 #include "mtmd-helper.h"
@@ -102,6 +103,8 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
     const int32_t        n_ctx_default = device == Device::NPU ? 4096 : 16384;
     llama_context_params cpar =
         build_context_params(config, n_ctx_default, device, nullptr, OutputReservation::LastPerSequence);
+    // Preserve accelerator microbatch safety limits as in the LLM path.
+    configure_decision_context(this->model, cpar, config.n_batch <= 0, config.n_ubatch <= 0 && device == Device::CPU);
     this->ctx = llama_init_from_model(this->model, cpar);
     if (!this->ctx) {
         llama_model_free(this->model);
@@ -179,6 +182,14 @@ int32_t LlamaVlm::decide(const geniex_DecideInput* input, geniex_DecideOutput* o
     DecisionPrepared prepared;
     int32_t          rc = prepare_decision(this->model, input, &prepared);
     if (rc != GENIEX_SUCCESS) return rc;
+    if (is_liquid_decision(prepared.type)) {
+        this->reset();
+        struct ResetGuard {
+            LlamaVlm* self;
+            ~ResetGuard() { self->reset(); }
+        } reset_guard{this};
+        return evaluate_liquid_decision(this->ctx, prepared, output);
+    }
     if (prepared.type == "lev") return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
     const std::string&              prompt     = prepared.prompt;
     const std::vector<std::string>& candidates = prepared.candidates;
@@ -448,6 +459,9 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     if (!this->ctx || !input || !output || !input->prompt_utf8) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
+
+    // Autoregressive sampling requires persistent sequence state.
+    if (!llama_get_memory(this->ctx)) return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
 
     common::Profiler profiler;
 

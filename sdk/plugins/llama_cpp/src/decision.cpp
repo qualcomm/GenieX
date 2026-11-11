@@ -12,10 +12,17 @@
 #include "chat.h"
 #include "common.h"
 #include "jinja/runtime.h"
+#include "liquid-decision.h"
 #include "logging.h"
 #include "mtmd.h"
 
 namespace geniex {
+
+std::string decision_metadata_string(const llama_model* model, const std::string& key) {
+    char value[256] = {};
+    return llama_model_meta_val_str(model, key.c_str(), value, sizeof(value)) < 0 ? "" : value;
+}
+
 namespace {
 
 using json = common_json;
@@ -33,14 +40,9 @@ struct Question {
     std::vector<Option> options;
 };
 
-// Read the small GGUF fields used to select the decision template.
-std::string meta_string(const llama_model* model, const std::string& key) {
-    char value[256] = {};
-    return llama_model_meta_val_str(model, key.c_str(), value, sizeof(value)) < 0 ? "" : value;
-}
-
 // Reserve mtmd's marker for media placeholders inserted by the SDK.
 std::string clean_marker(std::string text, const std::string& marker) {
+    if (marker.empty()) return text;
     for (size_t pos = 0; (pos = text.find(marker, pos)) != std::string::npos;) {
         text.replace(pos, marker.size(), " ");
         ++pos;
@@ -117,18 +119,53 @@ int32_t prepare_decision(const llama_model* model, const geniex_DecideInput* inp
     }
 
     try {
-        const std::string architecture  = meta_string(model, "general.architecture");
-        const std::string metadata_type = meta_string(model, architecture + ".decision.type");
+        const std::string architecture  = decision_metadata_string(model, "general.architecture");
+        const std::string metadata_type = decision_metadata_string(model, architecture + ".decision.type");
         if (!metadata_type.empty() && metadata_type != "openjev" && metadata_type != "lev" &&
-            metadata_type != "nimble") {
+            metadata_type != "nimble" && !is_liquid_decision(metadata_type)) {
             return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
         }
         // Use the model's native template when present; otherwise render a generic chat prompt.
-        const char*       source    = llama_model_chat_template(model, "systemone");
-        const std::string type      = !source ? "generic" : metadata_type.empty() ? "openjev" : metadata_type;
-        const std::string marker    = mtmd_default_marker();
+        const char* source = llama_model_chat_template(model, "systemone");
+        // A declared Liquid protocol cannot be answered by generic chat prompts.
+        if (is_liquid_decision(metadata_type) && !source) return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
+        const std::string type = !source ? "generic" : metadata_type.empty() ? "openjev" : metadata_type;
+        // Liquid text never goes through mtmd. Its own escaping rules must see
+        // the original caller text, including a literal SDK media marker.
+        const std::string marker    = is_liquid_decision(type) ? "" : mtmd_default_marker();
         const std::string state     = clean_marker(input->state, marker);
         const auto        questions = parse_questions(input, marker);
+
+        if (is_liquid_decision(type)) {
+            // Media needs a different batch assembly path, particularly for Omni.
+            // Reject it before rendering instead of dropping it from the state.
+            if (input->image_count || input->audio_count) return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
+            const auto&      question = questions[input->question_index];
+            DecisionPrepared prepared;
+            prepared.type          = type;
+            prepared.question_type = question.type;
+            json options           = json::array();
+            for (size_t i = 0; i < question.options.size(); ++i) prepared.original_index.push_back(i);
+            const bool true_first = type != "lfm2-d1-omni";
+            if (question.type == "noul" && question.options[0].key != (true_first ? "true" : "false")) {
+                std::reverse(prepared.original_index.begin(), prepared.original_index.end());
+            }
+            for (const size_t i : prepared.original_index) {
+                const auto& option = question.options[i];
+                // Score levels are positional, regardless of the caller's display keys.
+                options.push_back(json{{"key", question.type == "score" ? std::to_string(i) : option.key},
+                    {"description", option.description ? json(*option.description) : json()}});
+            }
+            prepare_liquid_decision(model,
+                json{{"id", question.id},
+                    {"type", question.type},
+                    {"state", state},
+                    {"instructions", question.instructions},
+                    {"options", options}},
+                prepared);
+            *output = std::move(prepared);
+            return GENIEX_SUCCESS;
+        }
 
         // Only single-token answer codes can be read directly from next-token logits.
         std::vector<std::string> labels;

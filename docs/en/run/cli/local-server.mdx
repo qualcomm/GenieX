@@ -176,7 +176,9 @@ The response `choices[0].text` is the raw completion, ready to insert at the cur
 
 ## **POST /v1/decisions**
 
-Evaluate ordered `predicate`, `choice`, and `score` questions using a `llama_cpp` LLM or VLM **already imported into the GenieX cache**. This endpoint follows the OpenAI Decisions request and response shape. Models with `systemone` use the OpenJEV, LEV, or Nimble decision path and model-specific temperature; if `decision.type` is absent, OpenJEV is assumed. Models without `systemone` use a generic prompt with their usual chat template and temperature `1.0`. LEV choices average both option orders, and LEV predicates use a nine-rating readout; both LLMs and VLMs use native logits (LEV itself is text-only). VLMs can evaluate inline images and audio.
+Evaluate ordered `predicate`, `choice`, and `score` questions using a `llama_cpp` LLM or VLM **already imported into the GenieX cache**. This endpoint follows the OpenAI Decisions request and response shape. Supported native `decision.type` identifiers are `openjev`, `lev`, `nimble`, `lfm2-d1`, `lfm2-d1-omni`, and `lfm3-d1`. Native adapters use the named `systemone` template, protocol-specific readout, and GGUF calibration. If `decision.type` is absent but `systemone` exists, OpenJEV is assumed. Ordinary models without `systemone` use a generic labeled-option prompt with their usual chat template and temperature `1.0`. Unknown nonempty native types, and Liquid types missing `systemone`, are rejected rather than falling back.
+
+LEV choices average both option orders, and LEV predicates use a nine-rating readout (LEV is text-only). Liquid d1-3B/d1-2B max-pool answer-token variants; d1-omni-600M reads three-column decision-head outputs at the option-mask positions. Liquid decisions are currently **text-only**, through either LLM or VLM handles. Compatible non-Liquid VLM paths can evaluate inline images and audio.
 
 ```sh
 curl http://127.0.0.1:18181/v1/decisions -H 'Content-Type: application/json' -d '{
@@ -206,7 +208,35 @@ curl http://127.0.0.1:18181/v1/decisions -H 'Content-Type: application/json' -d 
 }'
 ```
 
-`input` can be a nonempty text string or user messages containing `input_text`, `input_image`, and GenieX-specific `input_audio` parts. Images (`image_url`) and audio (`input_audio.data`) use the chat endpoint's `SaveURIToTempFile` path, which accepts local paths, `file://`, HTTP(S), and data URLs. Audio also accepts raw base64 with `input_audio.format` (for example, `wav`), as in chat. At most 8 of each are accepted, and the VLM must support the corresponding modality. Each question may have an optional unique `name` (omitted names return `null`); choose 2–255 choice values (subject to the model's token vocabulary) and 2–10 score levels, with at most 64 questions. The ordered `answers` array returns a true probability for predicates, the selected value for choices, and a zero-based index for scores. Both LLM and VLM answers include probabilities and confidence, with zero output tokens. Replace the example `model` with a cached GenieX model name from `geniex list`, not a GGUF path.
+`input` can be a nonempty text string or user messages containing `input_text`, `input_image`, and GenieX-specific `input_audio` parts. Images (`image_url`) and audio (`input_audio.data`) use the chat endpoint's `SaveURIToTempFile` path, which accepts local paths, `file://`, HTTP(S), and data URLs. Audio also accepts raw base64 with `input_audio.format` (for example, `wav`), as in chat. At most 8 of each are accepted, and the VLM must support the corresponding modality. Each question may have an optional unique `name` (omitted names return `null`); choose 2–255 choice values (subject to the model's token vocabulary) and 2–10 score levels, with at most 64 questions. The ordered `answers` array returns a true probability for predicates, the selected value for choices, and an expected zero-based level for scores. Both LLM and VLM answers include probabilities and confidence, with zero output tokens. Replace the example `model` with a cached GenieX model name from `geniex list`, not a GGUF path.
+
+### Liquid AI example
+
+Import a Liquid GGUF using the [CLI instructions](/en/run/cli/reference#liquid-ai-d1-text-decisions), then use the same public question schema:
+
+```sh
+curl http://127.0.0.1:18181/v1/decisions -H 'Content-Type: application/json' -d '{
+  "model": "local/d1-2b:Q4_K_M",
+  "compute": "cpu",
+  "nctx": 4096,
+  "input": "I was charged twice this month, please refund one of them.",
+  "questions": [
+    {"name": "refund", "type": "predicate", "instructions": "Is the customer asking for a refund?"},
+    {"name": "team", "type": "choice", "instructions": "Which team should handle this?",
+     "choices": [{"value": "billing", "description": "Charges, refunds, invoices"},
+                 {"value": "technical", "description": "App or site faults"},
+                 {"value": "fraud", "description": "Suspected unauthorised use"}]},
+    {"name": "urgency", "type": "score", "instructions": "How urgent is this?",
+     "levels": [{"label": "low", "description": "Can wait"},
+                {"label": "medium", "description": "Today"},
+                {"label": "high", "description": "Blocking the customer now"}]}
+  ]
+}'
+```
+
+The verified models are `LiquidAI/d1-3B-GGUF` (`lfm2-d1`, Q4_K_M), `LiquidAI/d1-omni-600M-GGUF` (`lfm2-d1-omni`, Q8_0), and `LiquidAI/d1-2B-GGUF` (`lfm3-d1`, Q4_K_M), tested with text on IQ-9075 Linux CPU/Adreno 663 OpenCL GPU offload. These observations do not cover Hexagon NPU, hybrid, other GPUs, or other quantizations. Substitute the name/precision of your cached import to use another of these models.
+
+Liquid `input_image`/`input_audio` requests are not supported, including mixed media. d1-2B and d1-omni-600M need each complete question in one physical batch. The SDK/server GPU default allows 512 tokens; the CLI additionally caps QCS6490 / RB3 Gen 2 GPU batches at 256. Linux NPU defaults allow 128 (Windows/Android NPU: 1024), including template/question/option tokens. Use `"compute":"cpu"` for longer questions; increasing `nctx` alone does not raise accelerator batch limits. CPU default batches follow `nctx`. Omni truncates to its native 16384-token budget, but the prepared result must still fit `nctx` and the physical batch: with `nctx=4096`, long inputs can be rejected. Use `"nctx":16384,"compute":"cpu"` for the full budget. These are decision models; cache-less d1-2B and d1-omni-600M reject chat/completions generation rather than sampling unavailable or meaningless logits. Each question is evaluated independently; there is no shared-prefix optimization. Returned calibrated probabilities are not temperature-scaled a second time. GenieX retains expected scores and normalized confidence, unlike d1-2B's native median-score/maximum-probability summaries. See the [Liquid limitations](/en/run/cli/reference#liquid-ai-d1-text-decisions) for modality, memory, and untested-backend details.
 
 ## **Python client (OpenAI SDK)**
 
