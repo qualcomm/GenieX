@@ -47,7 +47,11 @@ Device classify_device(const char* device_id, int n_gpu_layers) {
     return Device::CPU;  // UNKOWN treat as CPU
 }
 
-int resolve_n_threads(int requested) { return requested > 0 ? requested : common_cpu_get_num_math(); }
+int resolve_n_threads(int requested, int cap = 0) {
+    if (requested > 0) return requested;
+    int n = common_cpu_get_num_math();
+    return cap > 0 ? std::min(n, cap) : n;
+}
 
 llama_model_params build_model_params(const geniex_ModelConfig& config, Device device) {
     static const bool mmap_matrix[3][3] = {
@@ -104,8 +108,17 @@ llama_context_params build_context_params(const geniex_ModelConfig& config, int3
         {true, false, true}   // Android
     };
 
-    uint32_t ubatch = ubatch_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
-    bool     fa     = fa_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+    // Decode thread cap (0 = none). On Windows NPU the HTP does the decode work and every extra CPU
+    // thread spin-polls each token for no throughput gain. Prefill (n_threads_batch) stays uncapped.
+    static const int decode_threads_matrix[3][3] = {
+        {0, 0, 0},  // Linux
+        {0, 0, 4},  // Windows
+        {0, 0, 0}   // Android
+    };
+
+    uint32_t ubatch         = ubatch_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+    bool     fa             = fa_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+    int      decode_threads = decode_threads_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
 
     llama_context_params cpar = llama_context_default_params();
     cpar.swa_full             = false;
@@ -113,7 +126,7 @@ llama_context_params build_context_params(const geniex_ModelConfig& config, int3
     cpar.n_batch              = config.n_batch > 0 ? config.n_batch : 2048;
     cpar.n_ubatch             = config.n_ubatch > 0 ? config.n_ubatch : ubatch;
     cpar.n_seq_max            = config.n_seq_max > 0 ? config.n_seq_max : 1;
-    cpar.n_threads            = resolve_n_threads(config.n_threads);
+    cpar.n_threads            = resolve_n_threads(config.n_threads, decode_threads);
     cpar.n_threads_batch      = resolve_n_threads(config.n_threads_batch);
     cpar.flash_attn_type      = static_cast<llama_flash_attn_type>(fa);
     cpar.no_perf              = false;
