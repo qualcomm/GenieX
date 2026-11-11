@@ -223,6 +223,8 @@ const AI_HUB_VLM_KEYWORDS: &[&str] = &[
 ];
 
 /// `genie.supports_vision` and `precision` from an archive's `metadata.json`.
+///
+/// Accepts both `"w4a16"` and the proto enum name `"PRECISION_W4A16"`.
 pub(crate) fn parse_archive_metadata(bytes: &[u8]) -> (Option<ModelType>, String) {
     let Ok(v) = serde_json::from_slice::<serde_json::Value>(bytes) else {
         return (None, String::new());
@@ -234,7 +236,8 @@ pub(crate) fn parse_archive_metadata(bytes: &[u8]) -> (Option<ModelType>, String
             ModelType::Llm
         }
     });
-    let precision = v["precision"].as_str().unwrap_or_default().to_string();
+    let raw = v["precision"].as_str().unwrap_or_default();
+    let precision = raw.strip_prefix("PRECISION_").unwrap_or(raw).to_string();
     (model_type, precision)
 }
 
@@ -256,6 +259,27 @@ fn classify_ai_hub(info: Option<&InfoJson>, entry: &ManifestModelEntry) -> Model
 mod tests {
     use self::dto::ManifestUrls;
     use super::*;
+
+    #[test]
+    fn parse_archive_metadata_legacy_and_proto_layouts() {
+        let legacy = br#"{"precision":"w4a16","genie":{"supports_vision":true}}"#;
+        let proto =
+            br#"{"precision":"PRECISION_W4A16","model_files":[{"filename":"part1_of_1.bin"}],
+            "genie":{"supports_vision":true}}"#;
+        assert_eq!(
+            parse_archive_metadata(legacy),
+            (Some(ModelType::Vlm), "w4a16".to_string())
+        );
+        assert_eq!(
+            parse_archive_metadata(proto),
+            (Some(ModelType::Vlm), "W4A16".to_string())
+        );
+        assert_eq!(
+            parse_archive_metadata(br#"{"genie":{"supports_streaming":true}}"#),
+            (None, String::new())
+        );
+        assert_eq!(parse_archive_metadata(b"not json"), (None, String::new()));
+    }
 
     #[test]
     fn classify_ai_hub_cases() {
