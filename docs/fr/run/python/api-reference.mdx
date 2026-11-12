@@ -1,0 +1,337 @@
+---
+title: "Référence de l'API"
+description: "Documentation complète de l'API pour le SDK Python GenieX."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+Le SDK Python GenieX suit les mêmes conventions de conception que `transformers` de Hugging Face. Utilisez `AutoModel*.from_pretrained()` pour charger un modèle, puis appelez `.generate()` pour l'inférence.
+
+---
+
+## AutoModelForCausalLM
+
+Fabrique (factory) pour charger des modèles de langage causaux, à la fois purement textuels et multimodaux. Renvoie un [`GenieXLLM`](#geniexllm) pour les modèles textuels, ou un [`GenieXVLM`](#geniexvlm) lorsqu'un modèle multimodal est détecté (par ex. `phi4_multimodal`, `qwen3.5-vl`, `gemma4`).
+
+```python
+from geniex import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "ai-hub-models/Qwen3-4B-Instruct",
+    device_map="auto",
+)
+```
+
+<a id="from_pretrained"></a>
+### `from_pretrained()`
+
+| Paramètre | Type | Défaut | Description |
+|---|---|---|---|
+| `model_name_or_path` | `str` | *requis* | Identifiant de dépôt HuggingFace, alias court (ex. `"qwen3"`), ou chemin local. |
+| `device_map` | `str` | `"auto"` | `"auto"` sélectionne le premier runtime + unité de calcul disponibles. Accepte également `"<runtime>"` ou `"<runtime>:<compute_unit>"`. |
+| `precision` | `str \| None` | `None` | Variante de précision (quantification) (ex. `"Q4_K_M"`). Filtre les fichiers lors du téléchargement depuis le Hub. |
+| `mmproj_path` | `str \| None` | `None` | Chemin vers le fichier du projecteur multimodal. Auto-résolu depuis le Hub ; transmettez explicitement pour forcer le mode VLM. |
+
+<Expandable title="Paramètres supplémentaires">
+
+| Paramètre | Type | Défaut | Description |
+|---|---|---|---|
+| `model_name` | `str \| None` | `None` | Remplace le nom du modèle dans le registre (ex. `"granite4"` pour Qualcomm AI Engine Direct). |
+| `hf_token` | `str \| None` | `None` | Jeton d'authentification HuggingFace pour les modèles restreints. |
+| `max_tokens` | `int` | — | Nombre maximal de tokens pour la génération. |
+
+</Expandable>
+
+**Valeur de retour :** [`GenieXLLM`](#geniexllm) ou [`GenieXVLM`](#geniexvlm) (détecté automatiquement selon le modèle)
+
+---
+
+## AutoModelForVision2Seq
+
+Fabrique pour charger des modèles de vision-langage / multimodaux. Renvoie une instance de [`GenieXVLM`](#geniexvlm).
+
+```python
+from geniex import AutoModelForVision2Seq
+
+model = AutoModelForVision2Seq.from_pretrained("ai-hub-models/Qwen2.5-7B-Instruct", device_map="qairt")
+```
+
+### `from_pretrained()`
+
+Accepte tous les mêmes paramètres que [`AutoModelForCausalLM.from_pretrained()`](#from_pretrained) ainsi que :
+
+| Paramètre | Type | Défaut | Description |
+|---|---|---|---|
+| `mmproj_path` | `str \| None` | `None` | Chemin vers le fichier du projecteur multimodal. Auto-résolu lors du téléchargement depuis le Hub. |
+
+**Valeur de retour :** [`GenieXVLM`](#geniexvlm)
+
+---
+
+<a id="geniexllm"></a>
+## GenieXLLM
+
+Instance de modèle de langage textuel renvoyée par `AutoModelForCausalLM.from_pretrained()`.
+
+<a id="generate"></a>
+### `generate()`
+
+Exécute la génération de texte à partir d'une chaîne de prompt formatée.
+
+```python
+output = model.generate(prompt, max_new_tokens=256)
+print(output.text)
+```
+
+Pour appliquer une grammaire d'outils produite par le modèle de discussion, demandez les métadonnées et transmettez-les à la génération :
+
+```python
+template = model.tokenizer.apply_chat_template(messages, tools=tools, include_grammar=True)
+output = model.generate(
+    template.formatted_text,
+    chat_template_grammar=template.chat_template_grammar,
+)
+```
+
+| Paramètre | Type | Défaut | Description |
+|---|---|---|---|
+| `prompt` | `str` | *requis* | Chaîne de prompt formatée (utilisez `model.tokenizer.apply_chat_template()` pour la construire). |
+| `max_new_tokens` | `int` | `512` | Nombre maximal de tokens à générer. |
+| `temperature` | `float` | `0.7` | Température d'échantillonnage. |
+| `top_p` | `float` | `0.9` | Seuil d'échantillonnage nucleus. |
+| `top_k` | `int` | `40` | Échantillonnage top-k. |
+| `min_p` | `float` | `0.0` | Seuil de probabilité minimale. |
+| `stream` | `bool` | `False` | Si `True`, renvoie un [`TextIteratorStreamer`](#textiteratorstreamer). |
+
+<Expandable title="Pénalités et paramètres avancés">
+
+| Paramètre | Type | Défaut | Description |
+|---|---|---|---|
+| `repetition_penalty` | `float` | `1.1` | Pénalité de répétition. |
+| `presence_penalty` | `float` | `0.0` | Pénalité de présence. |
+| `frequency_penalty` | `float` | `0.0` | Pénalité de fréquence. |
+| `seed` | `int` | `-1` | Graine aléatoire (`-1` = aléatoire). |
+| `stop` | `list[str] \| None` | `None` | Séquences d'arrêt. |
+| `grammar` | `str \| None` | `None` | Chaîne de grammaire GBNF pour génération contrainte. |
+| `chat_template_grammar` | `ChatTemplateGrammar \| None` | `None` | Métadonnées de grammaire renvoyées par `apply_chat_template(include_grammar=True)`. |
+
+</Expandable>
+
+**Valeur de retour :** [`GenerateOutput`](#generateoutput) (ou [`TextIteratorStreamer`](#textiteratorstreamer) si `stream=True`)
+
+### `reset()`
+
+Réinitialise l'état de la conversation et vide le cache KV.
+
+### `save_kv_cache(path)` / `load_kv_cache(path)`
+
+Sauvegarde ou charge le cache clé-valeur vers/depuis un chemin de fichier (`str`).
+
+### `close()`
+
+Libère le descripteur du modèle et libère les ressources. Prend également en charge l'utilisation en gestionnaire de contexte (context manager) :
+
+```python
+with AutoModelForCausalLM.from_pretrained("qwen3") as model:
+    output = model.generate(prompt)
+```
+
+---
+
+<a id="geniexvlm"></a>
+## GenieXVLM
+
+Instance de modèle vision-langage renvoyée par `AutoModelForVision2Seq.from_pretrained()`.
+
+### `generate()`
+
+Mêmes paramètres que [`GenieXLLM.generate()`](#generate) avec en plus :
+
+| Paramètre | Type | Défaut | Description |
+|---|---|---|---|
+| `images` | `list[str] \| None` | `None` | Liste des chemins de fichiers image à traiter par le modèle. |
+| `audios` | `list[str] \| None` | `None` | Liste des chemins de fichiers audio à traiter par le modèle. |
+
+```python
+output = model.generate(prompt, images=["/chemin/vers/image.jpg"], max_new_tokens=256)
+print(output.text)
+```
+
+**Valeur de retour :** [`GenerateOutput`](#generateoutput) (ou [`TextIteratorStreamer`](#textiteratorstreamer) si `stream=True`)
+
+### `reset()` / `close()`
+
+Identique à [`GenieXLLM`](#geniexllm).
+
+---
+
+## ModelTokenizer
+
+Accessible via `model.tokenizer`. Fournit une interface de modèle de discussion (chat template) compatible avec `transformers`.
+
+### `apply_chat_template()`
+
+Formate une liste de messages de discussion en utilisant le modèle de discussion intégré au modèle.
+
+```python
+messages = [{"role": "user", "content": "Combien font 2+2 ?"}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
+```
+
+| Paramètre | Type | Défaut | Description |
+|---|---|---|---|
+| `messages` | `list[dict]` | *requis* | Liste de dictionnaires de messages avec les clés `"role"` et `"content"`. |
+| `tokenize` | `bool` | `False` | Doit être `False` car la tokenisation isolée n'est pas prise en charge. |
+| `add_generation_prompt` | `bool` | `True` | Indique s'il faut ajouter le suffixe de prompt de génération. |
+| `enable_thinking` | `bool \| None` | `None` | Active le mode réflexion. `None` (défaut) et `True` permettent tous deux à un modèle compatible de réfléchir (et sont sans effet sur les autres modèles). `False` demande au modèle compatible d'ignorer sa phase de réflexion. Forcé à `True` avec un avertissement sur les modèles non compatibles. La compatibilité est auto-détectée et exposée via `model.supports_thinking`. |
+| `tools` | `list[dict] \| str \| None` | `None` | Définitions d'outils sous forme de liste de dictionnaires ou de chaîne JSON pré-sérialisée. |
+| `include_grammar` | `bool` | `False` | Renvoie un `ChatTemplateOutput` avec le prompt formaté et les métadonnées de grammaire pour usage explicite dans `generate()`. |
+
+Par défaut, renvoie une chaîne `str`, il s'agit du prompt formaté prêt pour `model.generate()`. Avec `include_grammar=True`, passez les deux valeurs explicitement :
+
+```python
+template = model.tokenizer.apply_chat_template(messages, tools=tools, include_grammar=True)
+output = model.generate(
+    template.formatted_text,
+    chat_template_grammar=template.chat_template_grammar,
+)
+```
+
+---
+
+## Classes de sortie
+
+### ChatTemplateOutput
+
+Renvoyé par `apply_chat_template(..., include_grammar=True)`. Le champ `formatted_text` contient le prompt, et `chat_template_grammar` contient une valeur propre `ChatTemplateGrammar` pouvant être transmise à `generate()`.
+
+### ChatTemplateGrammar
+
+Contient le type de grammaire, le texte de grammaire, le drapeau lazy, le prompt de génération, la liste des déclencheurs et les identifiants de tokens préservés. Possède ses propres chaînes et tuples Python et reste valide après le retour de l'appel de modèle.
+
+<a id="generateoutput"></a>
+### GenerateOutput
+
+Renvoyé par `model.generate()`.
+
+| Attribut | Type | Description |
+|---|---|---|
+| `text` | `str` | Texte généré (balises de réflexion retirées si présentes). |
+| `thinking` | `str \| None` | Contenu du raisonnement du modèle, ou `None`. |
+| `profile` | [`ProfileData`](#profiledata) | Métriques de performance. |
+
+<a id="profiledata"></a>
+### ProfileData
+
+| Attribut | Type | Description |
+|---|---|---|
+| `ttft` | `int` | Délai avant le premier token (Time To First Token en ms). |
+| `prompt_tokens` | `int` | Nombre de tokens du prompt évalués lors du préremplissage. |
+| `total_prompt_tokens` | `int` | Total des tokens du prompt, y compris ceux réutilisés depuis le cache KV. |
+| `generated_tokens` | `int` | Nombre de tokens générés. |
+| `prefill_speed` | `float` | Vitesse de préremplissage (tokens/s). |
+| `decode_speed` | `float` | Vitesse de décodage (tokens/s). |
+| `stop_reason` | `str \| None` | Raison de l'arrêt de la génération (ex. `"eos"`, `"limit"`). |
+
+<Expandable title="Tous les champs chronométriques">
+
+| Attribut | Type | Description |
+|---|---|---|
+| `prompt_time` | `int` | Temps de traitement du prompt (ms). |
+| `decode_time` | `int` | Temps de décodage (ms). |
+
+</Expandable>
+
+<a id="textiteratorstreamer"></a>
+### TextIteratorStreamer
+
+Renvoyé par `model.generate(..., stream=True)`. Fournit les fragments de texte décodés au fur et à mesure de leur génération.
+
+```python
+streamer = model.generate(prompt, max_new_tokens=256, stream=True)
+for chunk in streamer:
+    print(chunk, end="", flush=True)
+
+final = streamer.output  # GenerateOutput disponible à la fin de l'itération
+```
+
+| Méthode / Propriété | Description |
+|---|---|
+| `__iter__()` | Fournit les morceaux de texte (`str`) générés. |
+| `output` | `GenerateOutput \| None`, disponible une fois l'itération terminée. |
+| `cancel()` | Arrête la génération à la frontière du prochain token. |
+
+---
+
+## Gestionnaire de modèles (Model Manager)
+
+Le même gestionnaire de modèles que celui de la CLI est accessible par programmation via `geniex.model_manager`.
+
+```python
+from geniex import model_manager as mm
+
+MODEL = "Qwen/Qwen3-0.6B-GGUF"
+mm.pull(MODEL)
+print(f"téléchargement terminé : {MODEL}")
+paths = mm.get_paths(MODEL)
+print(f"chemin du modèle :      {paths}")
+local_models = mm.list_models()
+print(f"modèles locaux :        {local_models}")
+mm.remove(MODEL)
+print(f"modèle supprimé :       {MODEL}")
+```
+
+| Fonction | Description |
+|---|---|
+| `pull(model_name, ...)` | Télécharge un modèle par son alias ou `org/repo[:precision]`. |
+| `list_models()` | Renvoie une `list[str]` des noms de modèles en cache. |
+| `get_paths(model_name)` | Renvoie `ModelPaths` avec les chemins de fichiers locaux résolus. |
+| `get_type(model_name)` | Renvoie `"llm"` ou `"vlm"`. |
+| `resolve_alias(alias)` | Résout un alias court vers sa forme canonique `org/repo`. |
+| `remove(model_name)` | Supprime un modèle en cache du disque. |
+| `clean()` | Supprime tous les modèles en cache. Renvoie le nombre d'éléments supprimés. |
+
+<Expandable title="Paramètres de pull()">
+
+| Paramètre | Type | Défaut | Description |
+|---|---|---|---|
+| `model_name` | `str` | *requis* | `org/repo` ou alias court. |
+| `precision` | `str \| None` | `None` | Indication de précision (quantification) (ex. `"Q4_K_M"`). |
+| `hub` | `str` | `"auto"` | `"auto"` \| `"hf"` \| `"localfs"`. |
+| `local_path` | `str \| None` | `None` | Répertoire source (requis quand `hub="localfs"`). |
+| `hf_token` | `str \| None` | `None` | Jeton d'accès HuggingFace. |
+| `on_progress` | `Callable \| None` | `None` | Rappel `(files: list[FileProgress]) -> bool` ; renvoyez `False` pour annuler. |
+
+</Expandable>
+
+<Expandable title="Attributs de ModelPaths">
+
+| Attribut | Type | Description |
+|---|---|---|
+| `model_path` | `str` | Chemin vers le fichier principal du modèle. |
+| `model_dir` | `str` | Répertoire contenant le modèle. |
+| `model_name` | `str` | Nom canonique du modèle. |
+| `runtime` | `str` | Identifiant du runtime. |
+| `mmproj_path` | `str \| None` | Chemin du projecteur multimodal (VLM uniquement). |
+| `tokenizer_path` | `str \| None` | Chemin du fichier du tokenizer. |
+| `compute_unit` | `str \| None` | Identifiant de l'unité de calcul. |
+
+</Expandable>
+
+---
+
+## Fonctions du SDK
+
+| Fonction | Description |
+|---|---|
+| `geniex.init()` | Initialise le SDK. Appelé automatiquement lors du premier chargement de modèle. |
+| `geniex.deinit()` | Arrête le SDK et libère les ressources associées. |
+| `geniex.version()` | Renvoie la chaîne de version du SDK. |
+| `geniex.get_runtime_list()` | Renvoie une `list[str]` des identifiants de runtime disponibles. |
+| `geniex.get_compute_unit_list(runtime)` | Renvoie une `list[tuple[str, str]]` de paires `(compute_unit, compute_unit_name)` pour le runtime spécifié. |
+
+<br />
+
+<Feedback/>
