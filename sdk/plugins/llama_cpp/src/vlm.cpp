@@ -68,7 +68,9 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
     if (!selection) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
-    select_iq9_npu_devices(*selection, input->model_path);
+    // Same lifetime as selection: mpar.tensor_split points into it.
+    const Iq9NpuLayout iq9 = select_iq9_npu_devices(*selection, input->model_path);
+    if (!iq9.tensor_split.empty()) mpar.tensor_split = iq9.tensor_split.data();
 
     // Pick the mmproj device from the caller's explicit selection, before apply_device_selection fills in defaults.
     const bool explicit_selection = !selection->empty();
@@ -103,6 +105,7 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
     const int32_t        n_ctx_default = device == Device::NPU ? 4096 : 16384;
     llama_context_params cpar =
         build_context_params(config, n_ctx_default, device, nullptr, OutputReservation::LastPerSequence);
+    apply_iq9_npu_ubatch(iq9, config, this->model, cpar);
     // Preserve accelerator microbatch safety limits as in the LLM path.
     configure_decision_context(this->model, cpar, config.n_batch <= 0, config.n_ubatch <= 0 && device == Device::CPU);
     this->ctx = llama_init_from_model(this->model, cpar);

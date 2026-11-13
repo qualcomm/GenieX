@@ -438,23 +438,63 @@ const char* linux_hexagon_devices() {
     return iq9 ? kIq9HexagonDevices : "HTP0[0-1:0],HTP1[0-1:1]";
 }
 
-void select_iq9_npu_devices(std::vector<ggml_backend_dev_t>& selection, const char* model_path) {
+bool iq9_hexagon_layout() {
     const char* env = std::getenv("GGML_HEXAGON_DEVICES");
-    if (!env || std::strcmp(env, kIq9HexagonDevices) != 0 || !model_path) return;
+    return env && std::strcmp(env, kIq9HexagonDevices) == 0;
+}
+
+Iq9NpuLayout select_iq9_npu_devices(std::vector<ggml_backend_dev_t>& selection, const char* model_path) {
+    Iq9NpuLayout layout;
+    if (!iq9_hexagon_layout() || !model_path) return layout;
     // resolve_devices() output is null-terminated: plain `npu` is {HTP0, nullptr}.
-    if (selection.size() != 2 || !selection[0] || std::strcmp(ggml_backend_dev_name(selection[0]), "HTP0") != 0) return;
+    if (selection.size() != 2 || !selection[0] || std::strcmp(ggml_backend_dev_name(selection[0]), "HTP0") != 0) {
+        return layout;
+    }
 
     std::error_code ec;
     const uintmax_t size = std::filesystem::file_size(model_path, ec);
-    if (ec || size < (2ull << 30)) return;
+    if (ec || size < (2ull << 30)) return layout;
     // Keep the per-NSP grouping: alternating cdsp/cdsp1 between consecutive layers aborts with dsp-rsp
     // INTERNAL-ERROR. Up to ~8 GiB (4B-13B Q4) two sessions per NSP fit and leave HTP0 to the mmproj; larger
     // models (e.g. Qwen3-30B-A3B) need all seven.
-    const char* devices = size >= (8ull << 30) ? "HTP0,HTP1,HTP2,HTP3,HTP4,HTP5,HTP6" : "HTP1,HTP2,HTP4,HTP5";
+    const bool  all     = size >= (8ull << 30);
+    const char* devices = all ? "HTP0,HTP1,HTP2,HTP3,HTP4,HTP5,HTP6" : "HTP1,HTP2,HTP4,HTP5";
     auto        split   = resolve_devices(devices);
-    if (!split || split->empty()) return;
+    if (!split || split->empty()) return layout;
     GENIEX_LOG_INFO("IQ9 NPU: {} MiB model, layer-splitting across {}", size >> 20, devices);
     selection = std::move(*split);
+
+    // The Linux NPU default ubatch of 128 leaves most of the prefill on the table once the model is split
+    // (Qwen3-30B-A3B 4K prompt: 102 -> ~193 tok/s at 768; 4B/8B/9B: +10-15% at 512, larger is no faster).
+    // On the seven-way split the last session also holds the output layer, whose ubatch x vocab logits buffer
+    // (~450 MiB at 768 for Qwen3) no longer maps next to a full share of layers under GGML_HEXAGON_MBUF 64,64:
+    // give it 0.3 of a share. See qcom-ai-hub/geniex#1863.
+    layout.n_ubatch = all ? 768 : 512;
+    if (all) {
+        const size_t n_split = selection.size() - 1;  // drop the null terminator
+        layout.tensor_split.assign(llama_max_devices(), 0.0f);
+        std::fill_n(layout.tensor_split.begin(), n_split, 1.0f);
+        layout.tensor_split[n_split - 1] = 0.3f;
+    }
+    return layout;
+}
+
+void apply_iq9_npu_ubatch(const Iq9NpuLayout& layout, const geniex_ModelConfig& config, const llama_model* model,
+    llama_context_params& cpar) {
+    if (layout.n_ubatch == 0 || config.n_ubatch > 0 || !model) return;
+    // The last session maps its compute buffer, logits rows included, as one block; past ~640 MiB that fails
+    // (Qwen3.5-9B's 248k vocab at 1024 needs ~970 MiB). Halve the ubatch until the logits rows fit.
+    constexpr uint64_t kMaxLogitsBytes = 640ull << 20;
+    const uint64_t     n_vocab         = static_cast<uint64_t>(llama_vocab_n_tokens(llama_model_get_vocab(model)));
+    uint32_t           ubatch          = std::min(layout.n_ubatch, cpar.n_batch);
+    auto               logits_bytes    = [&](uint32_t ub) {
+        const uint32_t rows = cpar.n_outputs_max > 0 ? std::min(ub, cpar.n_outputs_max) : ub;
+        return rows * n_vocab * sizeof(float);
+    };
+    while (ubatch > 128 && logits_bytes(ubatch) > kMaxLogitsBytes) ubatch /= 2;
+    if (ubatch <= cpar.n_ubatch) return;
+    GENIEX_LOG_INFO("IQ9 NPU: n_ubatch {} -> {} for the layer split", cpar.n_ubatch, ubatch);
+    cpar.n_ubatch = ubatch;
 }
 
 void apply_device_selection(llama_model_params& mpar, std::vector<ggml_backend_dev_t>& selection, Device device) {

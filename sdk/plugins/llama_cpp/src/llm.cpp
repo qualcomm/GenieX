@@ -64,7 +64,9 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
     if (!selection) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
-    select_iq9_npu_devices(*selection, input->model_path);
+    // Same lifetime as selection: mpar.tensor_split points into it.
+    const Iq9NpuLayout iq9 = select_iq9_npu_devices(*selection, input->model_path);
+    if (!iq9.tensor_split.empty()) mpar.tensor_split = iq9.tensor_split.data();
     apply_device_selection(mpar, *selection, device);
 
     // FIX: HTP backend patch
@@ -84,6 +86,7 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
     std::optional<common_params_speculative> spar = build_speculative_params(config);
 
     llama_context_params cpar = build_context_params(config, /*n_ctx_default=*/4096, device, spar ? &*spar : nullptr);
+    apply_iq9_npu_ubatch(iq9, config, this->model, cpar);
     if (device == Device::GPU) {
         char arch[32] = {};
         llama_model_meta_val_str(this->model, "general.architecture", arch, sizeof(arch));

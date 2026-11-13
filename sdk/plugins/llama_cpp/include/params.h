@@ -28,10 +28,26 @@ std::optional<std::vector<ggml_backend_dev_t>> resolve_devices(const char* devic
 // across both NPUs; IQ9 (QCS9075) additionally exposes single sessions for select_iq9_npu_devices.
 const char* linux_hexagon_devices();
 
+// True when GGML_HEXAGON_DEVICES is the IQ9 default layout from linux_hexagon_devices().
+bool iq9_hexagon_layout();
+
+// Defaults that go with an IQ9 layer split. tensor_split is empty (even split) or llama_max_devices() long, and must
+// outlive the load since mpar.tensor_split points into it. n_ubatch is 0 when no split was picked.
+struct Iq9NpuLayout {
+    uint32_t           n_ubatch = 0;
+    std::vector<float> tensor_split;
+};
+
 // IQ9: an HTP session maps only ~1 GiB, so a >= 2 GiB model on the default HTP0 fails to load. When the caller asked
 // for plain `npu` (selection is just HTP0) and the IQ9 default layout is in effect, replace the selection with a
-// layer split over the single sessions sized to the model file. Leaves explicit device lists alone.
-void select_iq9_npu_devices(std::vector<ggml_backend_dev_t>& selection, const char* model_path);
+// layer split over the single sessions sized to the model file, and return the ubatch / tensor split that go with
+// it. Leaves explicit device lists alone.
+Iq9NpuLayout select_iq9_npu_devices(std::vector<ggml_backend_dev_t>& selection, const char* model_path);
+
+// Raise cpar.n_ubatch to the layout's, unless the caller set n_ubatch, capped so the last session's logits rows still
+// map. Call after the model is loaded (needs its vocab size).
+void apply_iq9_npu_ubatch(
+    const Iq9NpuLayout& layout, const geniex_ModelConfig& config, const llama_model* model, llama_context_params& cpar);
 
 // Set mpar.devices from a resolve_devices() result. selection may be filled in place and must outlive the load,
 // since mpar.devices points into it.
