@@ -577,6 +577,57 @@ def test_chat_template(llama_cpp_llm_paths, device_map):
 
 @pytest.mark.llm
 @pytest.mark.parametrize('device_map', ['cpu'])
+def test_qwen35_reasoning_content(geniex_session, cached, device_map):
+    model_path = os.environ.get('GENIEX_TEST_MTP_MODEL') or cached(_MTP_QWEN35).model_path
+    reasoning = 'The user wants the weather in Paris. I should call get_weather.'
+    assistant = {
+        'role': 'assistant',
+        'content': '',
+        'reasoning_content': reasoning,
+        'tool_calls': [
+            {
+                'id': 'call_1',
+                'type': 'function',
+                'function': {'name': 'get_weather', 'arguments': '{"city":"Paris"}'},
+            }
+        ],
+    }
+    messages = [
+        {'role': 'user', 'content': 'What is the weather in Paris?'},
+        assistant,
+        {'role': 'tool', 'tool_call_id': 'call_1', 'content': 'Sunny, 18 C.'},
+    ]
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        model_path, model_name=_MTP_QWEN35.id, device_map=f'llama_cpp:{device_map}'
+    ) as llm:
+
+        def render(history):
+            return llm.tokenizer.apply_chat_template(
+                history, tokenize=False, add_generation_prompt=True, enable_thinking=True, tools=[_WEATHER_TOOL]
+            )
+
+        separate = render(messages)
+        without_reasoning = {k: v for k, v in assistant.items() if k != 'reasoning_content'}
+        omitted = render([messages[0], without_reasoning, messages[2]])
+        inline = render(
+            [
+                messages[0],
+                {**without_reasoning, 'content': f'<think>\n{reasoning}\n</think>\n\n'},
+                messages[2],
+            ]
+        )
+        next_user = render([*messages, {'role': 'user', 'content': 'Thanks.'}])
+
+    assert reasoning in separate, 'assistant reasoning was dropped before reaching the template'
+    assert separate == inline, 'separate reasoning must reconstruct the same prompt as inline thinking'
+    assert separate != omitted
+    assert 'Sunny, 18 C.' in separate
+    # The template intentionally discards thinking from turns before the latest user message.
+    assert reasoning not in next_user
+
+
+@pytest.mark.llm
+@pytest.mark.parametrize('device_map', ['cpu'])
 def test_chat_template_content_load_override(llama_cpp_llm_paths, device_map):
     jinja = (
         '{% for m in messages %}[{{ m.role }}] {{ m.content }}\n{% endfor %}'

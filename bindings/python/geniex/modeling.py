@@ -294,6 +294,7 @@ class GenieXLLM:
                 geniex_LlmChatMessage(
                     role=msg['role'].encode(),
                     content=(msg['content'] if isinstance(msg.get('content'), str) else '').encode(),
+                    reasoning_content=_enc(msg.get('reasoning_content')),
                     **_tool_fields(msg, keepalive),
                 )
                 for msg in messages
@@ -559,6 +560,7 @@ def _build_vlm_messages(messages: list[dict]):
         role = msg['role'].encode()
         content = msg.get('content', '')
         tools = _tool_fields(msg, _content_refs)
+        tools['reasoning_content'] = _enc(msg.get('reasoning_content'))
 
         if isinstance(content, str):
             ContentArray = geniex_VlmContent * 1

@@ -83,15 +83,17 @@ func buildToolCalls(c *gin.Context, msg openai.ChatCompletionMessageParamUnion) 
 func buildLLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []geniex_sdk.LlmChatMessage, ok bool) {
 	messages = make([]geniex_sdk.LlmChatMessage, 0, len(param.Messages))
 	for _, msg := range param.Messages {
-		if len(msg.GetToolCalls()) > 0 {
+		reasoning := utils.AssistantReasoningContent(msg)
+		if len(msg.GetToolCalls()) > 0 || reasoning != "" {
 			calls, valid := buildToolCalls(c, msg)
 			if !valid {
 				return nil, false
 			}
 			messages = append(messages, geniex_sdk.LlmChatMessage{
-				Role:      geniex_sdk.LlmRole(*msg.GetRole()),
-				Content:   contentText(msg),
-				ToolCalls: calls,
+				Role:             geniex_sdk.LlmRole(*msg.GetRole()),
+				Content:          contentText(msg),
+				ToolCalls:        calls,
+				ReasoningContent: reasoning,
 			})
 			continue
 		}
@@ -170,15 +172,17 @@ func buildVLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []g
 	}()
 	messages = make([]geniex_sdk.VlmChatMessage, 0, len(param.Messages))
 	for _, msg := range param.Messages {
-		if len(msg.GetToolCalls()) > 0 {
+		reasoning := utils.AssistantReasoningContent(msg)
+		if len(msg.GetToolCalls()) > 0 || reasoning != "" {
 			calls, valid := buildToolCalls(c, msg)
 			if !valid {
 				return nil, tempFiles, false
 			}
 			messages = append(messages, geniex_sdk.VlmChatMessage{
-				Role:      geniex_sdk.VlmRole(*msg.GetRole()),
-				Contents:  textContents(msg),
-				ToolCalls: calls,
+				Role:             geniex_sdk.VlmRole(*msg.GetRole()),
+				Contents:         textContents(msg),
+				ToolCalls:        calls,
+				ReasoningContent: reasoning,
 			})
 			continue
 		}

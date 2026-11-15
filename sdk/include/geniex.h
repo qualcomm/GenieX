@@ -658,6 +658,8 @@ typedef struct {
     int32_t          tool_call_count; /* Number of elements in `tool_calls` */
     const char*      tool_call_id;    /* "tool": id of the call this responds to (may be NULL) */
     const char*      tool_name;       /* "tool": name of the function that ran (may be NULL) */
+
+    const char* reasoning_content; /* Optional assistant thinking, separate from content (llama_cpp). */
 } geniex_LlmChatMessage;
 
 /** Input structure for applying chat template */
@@ -895,6 +897,8 @@ typedef struct {
     int32_t          tool_call_count;  // number of elements in `tool_calls`
     const char*      tool_call_id;     // "tool": id of the call this responds to (may be NULL)
     const char*      tool_name;        // "tool": name of the function that ran (may be NULL)
+
+    const char* reasoning_content;  // Optional assistant thinking, separate from contents (llama_cpp).
 } geniex_VlmChatMessage;
 
 typedef struct geniex_VLM geniex_VLM; /* Opaque VLM handle */

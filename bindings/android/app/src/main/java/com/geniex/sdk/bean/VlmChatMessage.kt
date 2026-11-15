@@ -7,5 +7,6 @@ data class VlmChatMessage(
     // toolCallId and toolName. All unset for a plain chat turn.
     val toolCalls: List<ToolCall> = emptyList(),
     val toolCallId: String? = null,
-    val toolName: String? = null
+    val toolName: String? = null,
+    val reasoningContent: String? = null
 )

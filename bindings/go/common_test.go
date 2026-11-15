@@ -55,6 +55,32 @@ func TestParallelToolCallsFFI(t *testing.T) {
 	}
 }
 
+func TestChatMessageReasoningContentFFI(t *testing.T) {
+	reasoning := "考える\nthen call get_weather"
+	llm := (LlmApplyChatTemplateInput{Messages: []LlmChatMessage{
+		{Role: LlmRoleUser, Content: "weather?"},
+		{Role: LlmRoleAssistant, ReasoningContent: reasoning},
+		{Role: LlmRoleTool, Content: "sunny", ToolCallID: "call_1"},
+	}}).toCPtr()
+	defer freeLlmApplyChatTemplateInput(llm)
+	llmMessages := unsafe.Slice(llm.messages, int(llm.message_count))
+	if llmMessages[0].reasoning_content != nil || cGoString(llmMessages[1].reasoning_content) != reasoning ||
+		cGoString(llmMessages[2].content) != "sunny" || cGoString(llmMessages[2].tool_call_id) != "call_1" {
+		t.Fatal("LLM chat message fields did not survive C conversion")
+	}
+	vlm := (VlmApplyChatTemplateInput{Messages: []VlmChatMessage{
+		{Role: VlmRoleUser},
+		{Role: VlmRoleAssistant, ReasoningContent: reasoning},
+		{Role: VlmRoleTool, ToolCallID: "call_1"},
+	}}).toCPtr()
+	defer freeVlmApplyChatTemplateInput(vlm)
+	vlmMessages := unsafe.Slice(vlm.messages, int(vlm.message_count))
+	if vlmMessages[0].reasoning_content != nil || cGoString(vlmMessages[1].reasoning_content) != reasoning ||
+		cGoString(vlmMessages[2].tool_call_id) != "call_1" {
+		t.Fatal("VLM chat message fields did not survive C conversion")
+	}
+}
+
 // NULL user_data must keep generation alive; an installed callback's return
 // value must propagate so the user can stop.
 func TestOnTokenCallbackDispatch(t *testing.T) {

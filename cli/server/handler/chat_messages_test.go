@@ -10,12 +10,14 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
+	"github.com/qualcomm/GenieX/cli/server/utils"
 )
 
 // One round of an agentic loop: the assistant issues a tool call, the harness
@@ -43,6 +45,83 @@ func bindRequest(t *testing.T, body string) (*gin.Context, ChatCompletionRequest
 		t.Fatalf("bind: %v", err)
 	}
 	return c, param
+}
+
+func TestChatRequestPreservesReasoningContent(t *testing.T) {
+	_, request := bindRequest(t, `{"messages":[{"role":"assistant","content":null,
+		"reasoning_content":"Check the weather in Paris.",
+		"tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{}"}}]}]}`)
+	assistant := request.Messages[0].OfAssistant
+	if assistant == nil {
+		t.Fatal("assistant message was lost")
+	}
+	if got := assistant.ExtraFields()["reasoning_content"]; got != "Check the weather in Paris." {
+		t.Fatalf("reasoning_content = %v, want the original assistant reasoning", got)
+	}
+}
+
+func TestBuildMessagesReasoningContent(t *testing.T) {
+	for _, tc := range []struct {
+		name, message, reasoning, content string
+	}{
+		{"text", `"content":"answer","reasoning_content":"think first"`, "think first", "answer"},
+		{"parts", `"content":[{"type":"text","text":"answer"}],"reasoning_content":"think first"`, "think first", "answer"},
+		{"null content", `"content":null,"reasoning_content":"考える\nthen act"`, "考える\nthen act", ""},
+		{"missing content", `"reasoning_content":"think first"`, "think first", ""},
+		{"no reasoning", `"content":"answer"`, "", "answer"},
+		{"null reasoning", `"content":"answer","reasoning_content":null`, "", "answer"},
+		{"empty reasoning", `"content":"answer","reasoning_content":""`, "", "answer"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, request := bindRequest(t, `{"messages":[{"role":"assistant",`+tc.message+`}]}`)
+			llm, ok := buildLLMMessages(c, request)
+			if !ok || len(llm) != 1 {
+				t.Fatalf("LLM message conversion failed: %+v", llm)
+			}
+			if llm[0].ReasoningContent != tc.reasoning || llm[0].Content != tc.content {
+				t.Errorf("LLM message = %+v", llm[0])
+			}
+			vlm, files, ok := buildVLMMessages(c, request)
+			if !ok || len(vlm) != 1 || len(files) != 0 {
+				t.Fatalf("VLM message conversion failed: %+v, files=%v", vlm, files)
+			}
+			var content string
+			for _, part := range vlm[0].Contents {
+				content += part.Text
+			}
+			if vlm[0].ReasoningContent != tc.reasoning || content != tc.content {
+				t.Errorf("VLM message = %+v", vlm[0])
+			}
+		})
+	}
+}
+
+func TestReasoningToolRoundTripAndSessionKey(t *testing.T) {
+	body := strings.Replace(toolLoopBody, `"content": null`, `"content": null, "reasoning_content": "List the folder."`, 1)
+	c, request := bindRequest(t, body)
+	llm, ok := buildLLMMessages(c, request)
+	if !ok || len(llm) != 3 {
+		t.Fatalf("LLM conversion failed: %+v", llm)
+	}
+	vlm, _, ok := buildVLMMessages(c, request)
+	if !ok || len(vlm) != 3 {
+		t.Fatalf("VLM conversion failed: %+v", vlm)
+	}
+	wantCall := geniex_sdk.ToolCall{ID: "call_1", Name: "bash", Arguments: `{"cmd":"ls"}`}
+	if llm[1].ReasoningContent != "List the folder." || vlm[1].ReasoningContent != "List the folder." ||
+		!reflect.DeepEqual(llm[1].ToolCalls, []geniex_sdk.ToolCall{wantCall}) ||
+		!reflect.DeepEqual(vlm[1].ToolCalls, llm[1].ToolCalls) ||
+		llm[2].ToolCallID != "call_1" || vlm[2].ToolCallID != "call_1" {
+		t.Fatalf("reasoning or tool round trip lost: LLM=%+v VLM=%+v", llm, vlm)
+	}
+	llmKey := utils.SessionKeyOf(llm)
+	vlmKey := utils.SessionKeyOfVLMRequest(request.Messages)
+	llm[1].ReasoningContent = "Changed reasoning."
+	request.Messages[1].OfAssistant.SetExtraFields(map[string]any{"reasoning_content": "Changed reasoning."})
+	if reflect.DeepEqual(llmKey, utils.SessionKeyOf(llm)) ||
+		reflect.DeepEqual(vlmKey, utils.SessionKeyOfVLMRequest(request.Messages)) {
+		t.Fatal("changed reasoning must change the session key")
+	}
 }
 
 func TestParallelToolCallsRequest(t *testing.T) {

@@ -54,6 +54,30 @@ type ChatCompletionRequest struct {
 	SpecPMin       float32 `json:"spec_p_min"`
 }
 
+func (p *ChatCompletionRequest) UnmarshalJSON(data []byte) error {
+	// Decode onto the existing request so omitted fields retain server defaults.
+	type request ChatCompletionRequest
+	if err := sonic.Unmarshal(data, (*request)(p)); err != nil {
+		return err
+	}
+	// openai-go's request types discard unknown fields. Retain this extension
+	// on assistant messages so it reaches the template without altering content.
+	var extra struct {
+		Messages []struct {
+			ReasoningContent string `json:"reasoning_content"`
+		} `json:"messages"`
+	}
+	if err := sonic.Unmarshal(data, &extra); err != nil {
+		return err
+	}
+	for i, msg := range extra.Messages {
+		if assistant := p.Messages[i].OfAssistant; assistant != nil && msg.ReasoningContent != "" {
+			assistant.SetExtraFields(map[string]any{"reasoning_content": msg.ReasoningContent})
+		}
+	}
+	return nil
+}
+
 func defaultChatCompletionRequest() ChatCompletionRequest {
 	// Prefill model-load and think knobs with server defaults. ShouldBindJSON overwrites
 	// fields present in the body, including explicit empty strings and zeros.

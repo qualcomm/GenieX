@@ -110,8 +110,9 @@ const (
 )
 
 type VlmChatMessage struct {
-	Role     VlmRole
-	Contents []VlmContent
+	Role             VlmRole
+	Contents         []VlmContent
+	ReasoningContent string
 
 	// Assistant turns carry ToolCalls; the matching tool response carries
 	// ToolCallID and ToolName. All empty for a plain chat turn.
@@ -133,13 +134,14 @@ func (vcms vlmChatMessages) toCPtr() (*C.geniex_VlmChatMessage, C.int32_t) {
 		contents, contentCount := vlmContents(vcm.Contents).toCPtr()
 		calls, callCount := toolCalls(vcm.ToolCalls).toCPtr()
 		cMessages[i] = C.geniex_VlmChatMessage{
-			role:            cStringIfSet(string(vcm.Role)),
-			contents:        contents,
-			content_count:   contentCount,
-			tool_calls:      calls,
-			tool_call_count: callCount,
-			tool_call_id:    cStringIfSet(vcm.ToolCallID),
-			tool_name:       cStringIfSet(vcm.ToolName),
+			role:              cStringIfSet(string(vcm.Role)),
+			contents:          contents,
+			content_count:     contentCount,
+			tool_calls:        calls,
+			tool_call_count:   callCount,
+			tool_call_id:      cStringIfSet(vcm.ToolCallID),
+			tool_name:         cStringIfSet(vcm.ToolName),
+			reasoning_content: cStringIfSet(vcm.ReasoningContent),
 		}
 	}
 	return (*C.geniex_VlmChatMessage)(raw), C.int32_t(count)
@@ -152,6 +154,7 @@ func freeVlmChatMessages(cPtr *C.geniex_VlmChatMessage, count C.int32_t) {
 	cMessages := unsafe.Slice(cPtr, int(count))
 	for i := range cMessages {
 		cFreeIfSet(unsafe.Pointer(cMessages[i].role))
+		cFreeIfSet(unsafe.Pointer(cMessages[i].reasoning_content))
 		cFreeIfSet(unsafe.Pointer(cMessages[i].tool_call_id))
 		cFreeIfSet(unsafe.Pointer(cMessages[i].tool_name))
 		freeToolCalls(cMessages[i].tool_calls, cMessages[i].tool_call_count)
