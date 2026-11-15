@@ -284,18 +284,25 @@ func (s *Splitter) Feed(token string) Event {
 	return t.Event
 }
 
-// RestoreOpener wraps onToken so that a <think> already opened by the prompt
-// (LFM3, MiniCPM5, ...) is replayed, with the whitespace the template left
-// after it, before the first generated token. The model cannot emit it, and
-// the Splitter needs it to enter thinking.
+// RestoreOpener wraps onToken so that a thinking opener already in the prompt
+// is replayed before the first generated token: a <think> (LFM3, MiniCPM5, ...),
+// with the whitespace the template left after it, or the <|channel>thought\n
+// that Gemma 4's template adds after a tool response, as the three tokens the
+// Splitter matches. The model cannot emit it, and the Splitter needs it to
+// enter thinking.
 func RestoreOpener(prompt string, onToken func(string) bool) func(string) bool {
+	var replay []string
 	trimmed := strings.TrimRight(prompt, " \t\r\n")
-	if !strings.HasSuffix(trimmed, "<think>") {
+	switch {
+	case strings.HasSuffix(prompt, "<|channel>thought\n"):
+		replay = []string{"<|channel>", "thought", "\n"}
+	case strings.HasSuffix(trimmed, "<think>"):
+		replay = []string{"<think>"}
+		if tail := prompt[len(trimmed):]; tail != "" {
+			replay = append(replay, tail)
+		}
+	default:
 		return onToken
-	}
-	replay := []string{"<think>"}
-	if tail := prompt[len(trimmed):]; tail != "" {
-		replay = append(replay, tail)
 	}
 	return func(token string) bool {
 		for _, piece := range replay {
