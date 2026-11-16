@@ -540,6 +540,7 @@ def test_chat_template(llama_cpp_llm_paths, device_map):
         {'role': 'assistant', 'content': None, 'tool_calls': [call]},
         {'role': 'tool', 'tool_call_id': 'call_1', 'name': 'get_weather', 'content': 'MAGIC_SUNNY_42'},
     ]
+    reasoned = [*asked, {**answered[1], 'reasoning_content': 'MAGIC_THOUGHT_42'}, answered[2]]
     with geniex.AutoModelForCausalLM.from_pretrained(
         _LLM.id,
         precision=_LLM.precision,
@@ -557,6 +558,7 @@ def test_chat_template(llama_cpp_llm_paths, device_map):
         from_list = render(asked, tokenize=False, tools=[_WEATHER_TOOL])
         from_str = render(asked, tokenize=False, tools=json.dumps([_WEATHER_TOOL]))
         after = render(answered, tokenize=False, tools=[_WEATHER_TOOL])
+        with_reasoning = render(reasoned, tokenize=False, tools=[_WEATHER_TOOL])
 
     assert '<|im_start|>system' in roles
     assert '<|im_start|>user' in roles
@@ -573,6 +575,9 @@ def test_chat_template(llama_cpp_llm_paths, device_map):
     # (Gemma 4, Mistral, Cohere) dropped the tool result from the prompt entirely.
     assert 'MAGIC_SUNNY_42' in after, f'tool response missing from the prompt: {after!r}'
     assert len(after) > len(from_list), 'adding a tool round trip did not grow the prompt'
+    # Regression: reasoning_content never crossed the chat-message FFI, so a template that
+    # keeps the thinking of the current turn rendered the history without it (#1665).
+    assert 'MAGIC_THOUGHT_42' in with_reasoning, f'reasoning_content missing from the prompt: {with_reasoning!r}'
 
 
 @pytest.mark.llm

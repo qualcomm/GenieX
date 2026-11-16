@@ -185,6 +185,10 @@ type LlmChatMessage struct {
 	ToolCalls  []ToolCall
 	ToolCallID string
 	ToolName   string
+
+	// The thinking an assistant turn generated before Content. Templates that
+	// keep thinking in the history render it from here.
+	ReasoningContent string
 }
 
 type llmChatMessages []LlmChatMessage
@@ -199,12 +203,13 @@ func (lcm llmChatMessages) toCPtr() (*C.geniex_LlmChatMessage, C.int32_t) {
 	for i, msg := range lcm {
 		calls, callCount := toolCalls(msg.ToolCalls).toCPtr()
 		cMessages[i] = C.geniex_LlmChatMessage{
-			role:            cStringIfSet(string(msg.Role)),
-			content:         cStringIfSet(msg.Content),
-			tool_calls:      calls,
-			tool_call_count: callCount,
-			tool_call_id:    cStringIfSet(msg.ToolCallID),
-			tool_name:       cStringIfSet(msg.ToolName),
+			role:              cStringIfSet(string(msg.Role)),
+			content:           cStringIfSet(msg.Content),
+			tool_calls:        calls,
+			tool_call_count:   callCount,
+			tool_call_id:      cStringIfSet(msg.ToolCallID),
+			tool_name:         cStringIfSet(msg.ToolName),
+			reasoning_content: cStringIfSet(msg.ReasoningContent),
 		}
 	}
 	return (*C.geniex_LlmChatMessage)(raw), C.int32_t(count)
@@ -220,6 +225,7 @@ func freeLlmChatMessages(cPtr *C.geniex_LlmChatMessage, count C.int32_t) {
 		cFreeIfSet(unsafe.Pointer(cMessages[i].content))
 		cFreeIfSet(unsafe.Pointer(cMessages[i].tool_call_id))
 		cFreeIfSet(unsafe.Pointer(cMessages[i].tool_name))
+		cFreeIfSet(unsafe.Pointer(cMessages[i].reasoning_content))
 		freeToolCalls(cMessages[i].tool_calls, cMessages[i].tool_call_count)
 	}
 	C.free(unsafe.Pointer(cPtr))

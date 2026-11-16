@@ -883,7 +883,7 @@ components:
           description: The contents of the message
         reasoning_content:
           type: string
-          description: The model's chain-of-thought, present on assistant responses when the effective `reasoning_format` is a separating value (e.g. the default `deepseek`).
+          description: The model's chain-of-thought, present on assistant responses when the effective `reasoning_format` is a separating value (e.g. the default `deepseek`). Send it back on the assistant message in later requests; the server passes it to the chat template.
         name:
           type: string
           description: The name of the author of this message

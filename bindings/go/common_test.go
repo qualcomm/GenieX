@@ -55,6 +55,32 @@ func TestParallelToolCallsFFI(t *testing.T) {
 	}
 }
 
+func TestReasoningContentFFI(t *testing.T) {
+	const thinking = "check the forecast"
+
+	llm := (LlmApplyChatTemplateInput{Messages: []LlmChatMessage{
+		{Role: LlmRoleUser, Content: "weather?"},
+		{Role: LlmRoleAssistant, Content: "sunny", ReasoningContent: thinking},
+	}}).toCPtr()
+	llmMessages := unsafe.Slice(llm.messages, int(llm.message_count))
+	if llmMessages[0].reasoning_content != nil {
+		t.Errorf("LLM user reasoning_content = %q, want NULL", cGoString(llmMessages[0].reasoning_content))
+	}
+	if got := cGoString(llmMessages[1].reasoning_content); got != thinking {
+		t.Errorf("LLM assistant reasoning_content = %q, want %q", got, thinking)
+	}
+	freeLlmApplyChatTemplateInput(llm)
+
+	vlm := (VlmApplyChatTemplateInput{Messages: []VlmChatMessage{
+		{Role: VlmRoleAssistant, ReasoningContent: thinking},
+	}}).toCPtr()
+	vlmMessages := unsafe.Slice(vlm.messages, int(vlm.message_count))
+	if got := cGoString(vlmMessages[0].reasoning_content); got != thinking {
+		t.Errorf("VLM assistant reasoning_content = %q, want %q", got, thinking)
+	}
+	freeVlmApplyChatTemplateInput(vlm)
+}
+
 // NULL user_data must keep generation alive; an installed callback's return
 // value must propagate so the user can stop.
 func TestOnTokenCallbackDispatch(t *testing.T) {

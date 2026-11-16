@@ -177,8 +177,7 @@ int32_t QairtLlm::apply_chat_template(
     }
 
     // Copy the FFI message array into the typed shape the new stateless
-    // applyChatTemplate() expects. reasoning_content has no FFI field yet and
-    // stays default-empty.
+    // applyChatTemplate() expects.
     std::vector<ChatMessage> messages;
     messages.reserve(static_cast<std::size_t>(input->message_count - start_idx) + 1);
     bool has_system = false;
@@ -203,6 +202,7 @@ int32_t QairtLlm::apply_chat_template(
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
         if (m.content) out.content = m.content;
+        if (m.reasoning_content) out.reasoning_content = m.reasoning_content;
         qairt::apply_tool_fields(out, m.tool_calls, m.tool_call_count, m.tool_call_id, m.tool_name);
         messages.push_back(std::move(out));
     }

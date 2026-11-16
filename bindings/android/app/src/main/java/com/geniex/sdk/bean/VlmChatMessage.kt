@@ -7,5 +7,8 @@ data class VlmChatMessage(
     // toolCallId and toolName. All unset for a plain chat turn.
     val toolCalls: List<ToolCall> = emptyList(),
     val toolCallId: String? = null,
-    val toolName: String? = null
+    val toolName: String? = null,
+    // The thinking an assistant turn generated before contents. Templates that
+    // keep thinking in the history render it from here.
+    val reasoningContent: String? = null
 )

@@ -118,6 +118,10 @@ type VlmChatMessage struct {
 	ToolCalls  []ToolCall
 	ToolCallID string
 	ToolName   string
+
+	// The thinking an assistant turn generated before Contents. Templates that
+	// keep thinking in the history render it from here.
+	ReasoningContent string
 }
 
 type vlmChatMessages []VlmChatMessage
@@ -133,13 +137,14 @@ func (vcms vlmChatMessages) toCPtr() (*C.geniex_VlmChatMessage, C.int32_t) {
 		contents, contentCount := vlmContents(vcm.Contents).toCPtr()
 		calls, callCount := toolCalls(vcm.ToolCalls).toCPtr()
 		cMessages[i] = C.geniex_VlmChatMessage{
-			role:            cStringIfSet(string(vcm.Role)),
-			contents:        contents,
-			content_count:   contentCount,
-			tool_calls:      calls,
-			tool_call_count: callCount,
-			tool_call_id:    cStringIfSet(vcm.ToolCallID),
-			tool_name:       cStringIfSet(vcm.ToolName),
+			role:              cStringIfSet(string(vcm.Role)),
+			contents:          contents,
+			content_count:     contentCount,
+			tool_calls:        calls,
+			tool_call_count:   callCount,
+			tool_call_id:      cStringIfSet(vcm.ToolCallID),
+			tool_name:         cStringIfSet(vcm.ToolName),
+			reasoning_content: cStringIfSet(vcm.ReasoningContent),
 		}
 	}
 	return (*C.geniex_VlmChatMessage)(raw), C.int32_t(count)
@@ -154,6 +159,7 @@ func freeVlmChatMessages(cPtr *C.geniex_VlmChatMessage, count C.int32_t) {
 		cFreeIfSet(unsafe.Pointer(cMessages[i].role))
 		cFreeIfSet(unsafe.Pointer(cMessages[i].tool_call_id))
 		cFreeIfSet(unsafe.Pointer(cMessages[i].tool_name))
+		cFreeIfSet(unsafe.Pointer(cMessages[i].reasoning_content))
 		freeToolCalls(cMessages[i].tool_calls, cMessages[i].tool_call_count)
 		freeVlmContents(cMessages[i].contents, cMessages[i].content_count)
 	}

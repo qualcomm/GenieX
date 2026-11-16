@@ -7,5 +7,8 @@ data class ChatMessage(
     // toolCallId and toolName. All unset for a plain chat turn.
     var toolCalls: List<ToolCall> = emptyList(),
     var toolCallId: String? = null,
-    var toolName: String? = null
+    var toolName: String? = null,
+    // The thinking an assistant turn generated before content. Templates that
+    // keep thinking in the history render it from here.
+    var reasoningContent: String? = null
 )

@@ -4,6 +4,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -52,6 +53,41 @@ type ChatCompletionRequest struct {
 	SpecNMax       int32   `json:"spec_n_max"`
 	SpecNMin       int32   `json:"spec_n_min"`
 	SpecPMin       float32 `json:"spec_p_min"`
+
+	// Each message's reasoning_content, by index. Clients send a reply's
+	// thinking back on its assistant message, and openai-go's message types
+	// drop the field, so UnmarshalJSON reads it separately.
+	ReasoningContents []string `json:"-"`
+}
+
+// UnmarshalJSON decodes the request as usual, then each message's
+// reasoning_content.
+func (r *ChatCompletionRequest) UnmarshalJSON(data []byte) error {
+	type plain ChatCompletionRequest // drops this method, so no recursion
+	if err := json.Unmarshal(data, (*plain)(r)); err != nil {
+		return err
+	}
+	var reasoning struct {
+		Messages []struct {
+			ReasoningContent string `json:"reasoning_content"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(data, &reasoning); err != nil {
+		return err
+	}
+	r.ReasoningContents = make([]string, len(reasoning.Messages))
+	for i, msg := range reasoning.Messages {
+		r.ReasoningContents[i] = msg.ReasoningContent
+	}
+	return nil
+}
+
+// reasoningOf returns the reasoning_content the client sent on message i.
+func (r *ChatCompletionRequest) reasoningOf(i int) string {
+	if i < len(r.ReasoningContents) {
+		return r.ReasoningContents[i]
+	}
+	return ""
 }
 
 func defaultChatCompletionRequest() ChatCompletionRequest {

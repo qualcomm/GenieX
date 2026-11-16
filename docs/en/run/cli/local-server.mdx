@@ -329,6 +329,8 @@ print("content:", msg.content)
 
 Streaming works the same way — the chain-of-thought arrives as `delta.reasoning_content` deltas and the final reply as `delta.content`.
 
+In later requests, send the thinking back as `reasoning_content` on its assistant message. The server passes it to the chat template, so a template that keeps earlier thinking, such as Qwen3.5's during a tool-calling turn, renders the history as the model wrote it, and the cached prompt can be reused instead of read again.
+
 ### **Tool calling**
 
 Function/tool calling uses the standard OpenAI `tools` schema. The server extracts the tool call from the model's generated text (`<tool_call>…</tool_call>` tags or a fenced ` ```json ` block) and re-emits it as OpenAI `tool_calls`. The flow works with **VLMs too** — the model can look at an image, decide what to search for, and call a tool.

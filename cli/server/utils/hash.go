@@ -89,6 +89,9 @@ func HashMessages[M any](msgs []M, fields func(M) []string) SessionKey {
 
 // SessionKeyOf hashes the model-ready LLM messages GenieX is about to feed
 // the plugin, keyed stably regardless of the request's raw JSON formatting.
+// ReasoningContent stays out of the key: a model that only appends keeps the
+// thinking it generated, and a client may drop older turns' thinking, as many
+// chat templates do, without starting a new conversation.
 func SessionKeyOf(messages []geniex_sdk.LlmChatMessage) SessionKey {
 	return HashMessages(messages, func(m geniex_sdk.LlmChatMessage) []string {
 		return append([]string{string(m.Role), m.Content, m.ToolCallID, m.ToolName}, ToolCallFields(m.ToolCalls)...)

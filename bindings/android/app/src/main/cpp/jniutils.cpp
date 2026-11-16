@@ -792,11 +792,12 @@ std::vector<geniex_LlmChatMessage> extract_llm_chat_messages(JNIEnv* env, jobjec
         jclass  msgCls = env->GetObjectClass(jmsg);
 
         geniex_LlmChatMessage m{};
-        m.role         = opt_string_field(env, jmsg, msgCls, "role");
-        m.content      = opt_string_field(env, jmsg, msgCls, "content");
-        m.tool_call_id = opt_string_field(env, jmsg, msgCls, "toolCallId");
-        m.tool_name    = opt_string_field(env, jmsg, msgCls, "toolName");
-        m.tool_calls   = extract_tool_calls(env, jmsg, msgCls, "toolCalls", &m.tool_call_count);
+        m.role              = opt_string_field(env, jmsg, msgCls, "role");
+        m.content           = opt_string_field(env, jmsg, msgCls, "content");
+        m.tool_call_id      = opt_string_field(env, jmsg, msgCls, "toolCallId");
+        m.tool_name         = opt_string_field(env, jmsg, msgCls, "toolName");
+        m.tool_calls        = extract_tool_calls(env, jmsg, msgCls, "toolCalls", &m.tool_call_count);
+        m.reasoning_content = opt_string_field(env, jmsg, msgCls, "reasoningContent");
         msgs.push_back(m);
 
         env->DeleteLocalRef(jmsg);
@@ -953,12 +954,13 @@ std::vector<geniex_VlmChatMessage> extract_vlm_chat_messages(JNIEnv* env, jobjec
         }
 
         geniex_VlmChatMessage m{};
-        m.role          = role_cstr;
-        m.content_count = count;
-        m.contents      = contents_arr;
-        m.tool_call_id  = opt_string_field(env, jmsg, msgCls, "toolCallId");
-        m.tool_name     = opt_string_field(env, jmsg, msgCls, "toolName");
-        m.tool_calls    = extract_tool_calls(env, jmsg, msgCls, "toolCalls", &m.tool_call_count);
+        m.role              = role_cstr;
+        m.content_count     = count;
+        m.contents          = contents_arr;
+        m.tool_call_id      = opt_string_field(env, jmsg, msgCls, "toolCallId");
+        m.tool_name         = opt_string_field(env, jmsg, msgCls, "toolName");
+        m.tool_calls        = extract_tool_calls(env, jmsg, msgCls, "toolCalls", &m.tool_call_count);
+        m.reasoning_content = opt_string_field(env, jmsg, msgCls, "reasoningContent");
 
         msgs.push_back(m);
 

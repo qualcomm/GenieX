@@ -82,16 +82,18 @@ func buildToolCalls(c *gin.Context, msg openai.ChatCompletionMessageParamUnion) 
 // On failure, writes a response and returns ok=false; the caller must return.
 func buildLLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []geniex_sdk.LlmChatMessage, ok bool) {
 	messages = make([]geniex_sdk.LlmChatMessage, 0, len(param.Messages))
-	for _, msg := range param.Messages {
+	for i, msg := range param.Messages {
+		reasoning := param.reasoningOf(i)
 		if len(msg.GetToolCalls()) > 0 {
 			calls, valid := buildToolCalls(c, msg)
 			if !valid {
 				return nil, false
 			}
 			messages = append(messages, geniex_sdk.LlmChatMessage{
-				Role:      geniex_sdk.LlmRole(*msg.GetRole()),
-				Content:   contentText(msg),
-				ToolCalls: calls,
+				Role:             geniex_sdk.LlmRole(*msg.GetRole()),
+				Content:          contentText(msg),
+				ToolCalls:        calls,
+				ReasoningContent: reasoning,
 			})
 			continue
 		}
@@ -105,6 +107,7 @@ func buildLLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []g
 			continue
 		}
 
+		first := len(messages)
 		switch content := msg.GetContent().AsAny().(type) {
 		case *string:
 			messages = append(messages, geniex_sdk.LlmChatMessage{
@@ -153,6 +156,10 @@ func buildLLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []g
 			c.JSON(http.StatusBadRequest, map[string]any{"error": "unknown content type"})
 			return nil, false
 		}
+		// A message split into text parts keeps its thinking on the first.
+		if len(messages) > first {
+			messages[first].ReasoningContent = reasoning
+		}
 	}
 	return messages, true
 }
@@ -169,16 +176,18 @@ func buildVLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []g
 		}
 	}()
 	messages = make([]geniex_sdk.VlmChatMessage, 0, len(param.Messages))
-	for _, msg := range param.Messages {
+	for i, msg := range param.Messages {
+		reasoning := param.reasoningOf(i)
 		if len(msg.GetToolCalls()) > 0 {
 			calls, valid := buildToolCalls(c, msg)
 			if !valid {
 				return nil, tempFiles, false
 			}
 			messages = append(messages, geniex_sdk.VlmChatMessage{
-				Role:      geniex_sdk.VlmRole(*msg.GetRole()),
-				Contents:  textContents(msg),
-				ToolCalls: calls,
+				Role:             geniex_sdk.VlmRole(*msg.GetRole()),
+				Contents:         textContents(msg),
+				ToolCalls:        calls,
+				ReasoningContent: reasoning,
 			})
 			continue
 		}
@@ -192,6 +201,7 @@ func buildVLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []g
 			continue
 		}
 
+		first := len(messages)
 		switch content := msg.GetContent().AsAny().(type) {
 		case *string:
 			messages = append(messages, geniex_sdk.VlmChatMessage{
@@ -288,6 +298,9 @@ func buildVLMMessages(c *gin.Context, param ChatCompletionRequest) (messages []g
 			slog.Error("Unknown content type in message")
 			c.JSON(http.StatusBadRequest, map[string]any{"error": "unknown content type"})
 			return nil, tempFiles, false
+		}
+		if len(messages) > first {
+			messages[first].ReasoningContent = reasoning
 		}
 	}
 	return messages, tempFiles, true

@@ -256,6 +256,8 @@ print("content:", msg.content)
 
 流式响应同理——思维链以 `delta.reasoning_content` 增量返回，最终回复以 `delta.content` 返回。
 
+在后续请求中，可将思维链放回对应 assistant 消息的 `reasoning_content` 字段。服务器会把它传给聊天模板，使保留历史思维链的模板（例如 Qwen3.5 在工具调用轮次中）按模型生成时的原样渲染历史，从而复用已缓存的提示，无需重新读取。
+
 ### **工具调用（Tool calling）**
 
 函数/工具调用使用标准的 OpenAI `tools` schema。服务器会从模型生成的文本中解析工具调用（`<tool_call>…</tool_call>` 标签或 ` ```json ` 代码块），并以 OpenAI `tool_calls` 形式返回。VLM **也走同一条路径**——模型可以先看图，再决定搜什么、调用工具。

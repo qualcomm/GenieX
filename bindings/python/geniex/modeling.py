@@ -294,6 +294,7 @@ class GenieXLLM:
                 geniex_LlmChatMessage(
                     role=msg['role'].encode(),
                     content=(msg['content'] if isinstance(msg.get('content'), str) else '').encode(),
+                    reasoning_content=_enc(msg.get('reasoning_content')),
                     **_tool_fields(msg, keepalive),
                 )
                 for msg in messages
@@ -558,13 +559,13 @@ def _build_vlm_messages(messages: list[dict]):
     for msg in messages:
         role = msg['role'].encode()
         content = msg.get('content', '')
-        tools = _tool_fields(msg, _content_refs)
+        fields = {**_tool_fields(msg, _content_refs), 'reasoning_content': _enc(msg.get('reasoning_content'))}
 
         if isinstance(content, str):
             ContentArray = geniex_VlmContent * 1
             contents = ContentArray(geniex_VlmContent(type=b'text', text=content.encode()))
             _content_refs.append(contents)
-            c_msgs_list.append(geniex_VlmChatMessage(role=role, contents=contents, content_count=1, **tools))
+            c_msgs_list.append(geniex_VlmChatMessage(role=role, contents=contents, content_count=1, **fields))
         elif isinstance(content, list):
             n = len(content)
             ContentArray = geniex_VlmContent * n
@@ -575,9 +576,9 @@ def _build_vlm_messages(messages: list[dict]):
                 items.append(geniex_VlmContent(type=ctype, text=text_val))
             contents = ContentArray(*items)
             _content_refs.append(contents)
-            c_msgs_list.append(geniex_VlmChatMessage(role=role, contents=contents, content_count=n, **tools))
+            c_msgs_list.append(geniex_VlmChatMessage(role=role, contents=contents, content_count=n, **fields))
         else:
-            c_msgs_list.append(geniex_VlmChatMessage(role=role, content_count=0, **tools))
+            c_msgs_list.append(geniex_VlmChatMessage(role=role, content_count=0, **fields))
 
     arr = MsgArray(*c_msgs_list)
     return arr, count, _content_refs

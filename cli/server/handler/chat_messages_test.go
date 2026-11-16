@@ -255,3 +255,54 @@ func TestBuildLLMMessagesToolContentParts(t *testing.T) {
 		t.Fatalf("messages = %+v, want one message with content \"ab\"", messages)
 	}
 }
+
+// Clients send a reply's thinking back as reasoning_content, which openai-go's
+// message types drop; templates that keep thinking render it from there.
+const reasoningBody = `{
+  "model": "m",
+  "messages": [
+    {"role": "user", "content": "weather in Paris?"},
+    {"role": "assistant", "content": null, "reasoning_content": "call get_weather",
+     "tool_calls": [{"id": "call_1", "type": "function",
+                     "function": {"name": "get_weather", "arguments": "{\"city\":\"Paris\"}"}}]},
+    {"role": "tool", "tool_call_id": "call_1", "content": "18 C, clear"},
+    {"role": "assistant", "content": "It is 18 C and clear.", "reasoning_content": "answer from the tool"},
+    {"role": "assistant", "reasoning_content": "split thinking",
+     "content": [{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]}
+  ]
+}`
+
+func TestBuildLLMMessagesKeepsReasoningContent(t *testing.T) {
+	c, param := bindRequest(t, reasoningBody)
+	messages, ok := buildLLMMessages(c, param)
+	if !ok {
+		t.Fatalf("buildLLMMessages failed, status %d", c.Writer.Status())
+	}
+	// The last message's two text parts become two messages; its thinking goes on the first.
+	want := []string{"", "call get_weather", "", "answer from the tool", "split thinking", ""}
+	if len(messages) != len(want) {
+		t.Fatalf("len(messages) = %d, want %d: %+v", len(messages), len(want), messages)
+	}
+	for i, w := range want {
+		if got := messages[i].ReasoningContent; got != w {
+			t.Errorf("messages[%d].ReasoningContent = %q, want %q", i, got, w)
+		}
+	}
+}
+
+func TestBuildVLMMessagesKeepsReasoningContent(t *testing.T) {
+	c, param := bindRequest(t, reasoningBody)
+	messages, _, ok := buildVLMMessages(c, param)
+	if !ok {
+		t.Fatalf("buildVLMMessages failed, status %d", c.Writer.Status())
+	}
+	want := []string{"", "call get_weather", "", "answer from the tool", "split thinking"}
+	if len(messages) != len(want) {
+		t.Fatalf("len(messages) = %d, want %d: %+v", len(messages), len(want), messages)
+	}
+	for i, w := range want {
+		if got := messages[i].ReasoningContent; got != w {
+			t.Errorf("messages[%d].ReasoningContent = %q, want %q", i, got, w)
+		}
+	}
+}

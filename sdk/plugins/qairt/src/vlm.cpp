@@ -201,6 +201,7 @@ int32_t QairtVlm::apply_chat_template(
             msg.role = Role::User;
         }
 
+        if (src.reasoning_content) msg.reasoning_content = src.reasoning_content;
         qairt::apply_tool_fields(msg, src.tool_calls, src.tool_call_count, src.tool_call_id, src.tool_name);
 
         // Map content items
