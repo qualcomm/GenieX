@@ -31,6 +31,15 @@ pub(super) async fn platform(
     parse_manifest("platform.json", &bytes)
 }
 
+/// Last cached platform.json regardless of age.
+pub(super) fn cached_platform(cfg: &AiHubConfig) -> Option<PlatformInfo> {
+    if cfg.skip_cache {
+        return None;
+    }
+    let bytes = std::fs::read(cfg.cache_dir.join("platform.json")).ok()?;
+    parse_manifest("platform.json", &bytes).ok()
+}
+
 pub(super) async fn release_manifest(
     cfg: &AiHubConfig,
     transport: &Arc<dyn HttpTransport>,

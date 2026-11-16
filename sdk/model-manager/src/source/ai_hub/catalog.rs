@@ -16,7 +16,7 @@ use super::selector::{self, is_qairt_runtime};
 use super::{index, AiHubConfig};
 
 /// Host detection only uses the catalogue to get a friendly display name.
-const HOST_CHIPSET_LOOKUP_TIMEOUT: Duration = Duration::from_secs(3);
+const HOST_CHIPSET_LOOKUP_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// `None` means "don't filter".
 fn host_ostypes() -> Option<&'static [&'static str]> {
@@ -142,10 +142,15 @@ async fn resolve_host_chipset_reference(
     cfg: &AiHubConfig,
     transport: &Arc<dyn HttpTransport>,
 ) -> String {
-    match tokio::time::timeout(HOST_CHIPSET_LOOKUP_TIMEOUT, index::platform(cfg, transport)).await {
-        Ok(Ok(plat)) => selector::resolve_chipset_display(&plat, &raw).unwrap_or(raw),
-        _ => raw,
-    }
+    let plat = match index::cached_platform(cfg) {
+        Some(plat) => Some(plat),
+        None => tokio::time::timeout(HOST_CHIPSET_LOOKUP_TIMEOUT, index::platform(cfg, transport))
+            .await
+            .ok()
+            .and_then(Result::ok),
+    };
+    plat.and_then(|p| selector::resolve_chipset_display(&p, &raw))
+        .unwrap_or(raw)
 }
 
 #[cfg(test)]
@@ -323,50 +328,52 @@ mod tests {
             _: u64,
             _: &mut (dyn tokio::io::AsyncWrite + Unpin + Send),
         ) -> Result<()> {
-            unreachable!("a stalled HEAD cannot be followed by a GET")
+            unreachable!()
         }
+    }
+
+    async fn lookup(cache_dir: &std::path::Path) -> (String, Duration) {
+        let cfg = AiHubConfig::new(
+            "https://example.invalid".into(),
+            "0.64.0".into(),
+            String::new(),
+            cache_dir.to_path_buf(),
+            false,
+        );
+        let transport: Arc<dyn HttpTransport> = Arc::new(StalledTransport);
+        let start = tokio::time::Instant::now();
+        let chipset =
+            resolve_host_chipset_reference("qualcomm-qcs9075".into(), &cfg, &transport).await;
+        (chipset, start.elapsed())
     }
 
     #[tokio::test(start_paused = true)]
     async fn host_chipset_lookup_falls_back_when_catalogue_stalls() {
         let tmp = tempfile::tempdir().unwrap();
-        let cfg = AiHubConfig::new(
-            "https://example.invalid".into(),
-            "0.64.0".into(),
-            String::new(),
-            tmp.path().to_path_buf(),
-            false,
+        assert_eq!(
+            lookup(tmp.path()).await,
+            ("qualcomm-qcs9075".into(), HOST_CHIPSET_LOOKUP_TIMEOUT)
         );
-        let transport: Arc<dyn HttpTransport> = Arc::new(StalledTransport);
-        let start = tokio::time::Instant::now();
-
-        let chipset =
-            resolve_host_chipset_reference("qualcomm-qcs9075".into(), &cfg, &transport).await;
-
-        assert_eq!(chipset, "qualcomm-qcs9075");
-        assert_eq!(start.elapsed(), HOST_CHIPSET_LOOKUP_TIMEOUT);
     }
 
     #[tokio::test(start_paused = true)]
-    async fn host_chipset_lookup_uses_cached_display_name() {
+    async fn host_chipset_lookup_uses_stale_cache_without_network() {
         let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("platform.json");
         std::fs::write(
-            tmp.path().join("platform.json"),
+            &path,
             br#"{"chipsets":[{"name":"qualcomm-qcs9075","reference_device":"Dragonwing IQ-9075 EVK"}]}"#,
         )
         .unwrap();
-        let cfg = AiHubConfig::new(
-            "https://example.invalid".into(),
-            "0.64.0".into(),
-            String::new(),
-            tmp.path().to_path_buf(),
-            false,
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(std::time::SystemTime::now() - Duration::from_secs(48 * 60 * 60))
+            .unwrap();
+        assert_eq!(
+            lookup(tmp.path()).await,
+            ("Dragonwing IQ-9075 EVK".into(), Duration::ZERO)
         );
-        let transport: Arc<dyn HttpTransport> = Arc::new(StalledTransport);
-
-        let chipset =
-            resolve_host_chipset_reference("qualcomm-qcs9075".into(), &cfg, &transport).await;
-
-        assert_eq!(chipset, "Dragonwing IQ-9075 EVK");
     }
 }
