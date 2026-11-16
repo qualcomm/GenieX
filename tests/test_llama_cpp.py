@@ -161,6 +161,36 @@ def test_llm_prefix_cache_fallback(geniex_session, device_map):
             assert reused.profile.prompt_tokens == fresh.profile.prompt_tokens > 1
 
 
+# Gemma's SWA cache keeps only its newest n_swa + n_ubatch positions, 768 here, so a rollback far
+# behind them can't keep the sliding window: the fallback must read the prompt again rather than
+# decode on top of an emptied SWA cache (#1675).
+@pytest.mark.llm
+@pytest.mark.parametrize('device_map', ['cpu'])
+def test_llm_prefix_cache_swa_fallback(geniex_session, device_map):
+    notes = '\n'.join(f'Note {i}: the lighthouse logbook records calm seas and a steady beam.' for i in range(1, 81))
+    edited = notes.replace(
+        'Note 5: the lighthouse logbook records calm seas', 'Note 5: the lighthouse logbook records a storm'
+    )
+    ask = '\nWhich note records a storm? Answer with its number only.'
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        'unsloth/gemma-3-1b-it-GGUF',
+        precision='Q4_0',
+        device_map=device_map,
+        n_ubatch=256,
+    ) as llm:
+        first, second = (_chat_prompt(llm, text + ask) for text in (notes, edited))
+
+        def generate(prompt):
+            return llm.generate(prompt, max_new_tokens=8, temperature=GREEDY_TEMPERATURE, seed=LLM_QUALITY_SEED)
+
+        generate(first)
+        reused = generate(second)
+        llm.reset()
+        fresh = generate(second)
+    assert reused.text == fresh.text
+    assert reused.profile.prompt_tokens == fresh.profile.prompt_tokens > 1
+
+
 def _quality_misses(llm, budget: int) -> list[str]:
     misses = []
     for prompt, expected in LLM_QUALITY_PROMPTS:
