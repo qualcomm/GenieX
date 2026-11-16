@@ -59,6 +59,7 @@ async fn release_index(
                 }
                 return Ok(bytes);
             }
+            Err(e @ Error::HttpTimeout(_)) => return Err(e),
             Err(e) => {
                 crate::logging::warn(&format!(
                     "aihub {filename} at {latest_url} unavailable ({e}); \
@@ -133,5 +134,49 @@ mod tests {
         write_cache(&p, br#"{"version":"0.58.0"}"#);
         assert!(read_cache_fresh(&p, INDEX_TTL).is_some());
         assert!(read_cache_fresh(&p, Duration::ZERO).is_none());
+    }
+
+    struct LatestUnreachable;
+
+    #[async_trait::async_trait]
+    impl HttpTransport for LatestUnreachable {
+        async fn head(&self, url: &Url, _: Option<&str>) -> Result<crate::transport::HeadInfo> {
+            if url.path().contains("/latest/") {
+                Err(Error::HttpTimeout("unreachable".into()))
+            } else {
+                Ok(crate::transport::HeadInfo { size: 2 })
+            }
+        }
+
+        async fn get_range(
+            &self,
+            _: &Url,
+            _: Option<&str>,
+            _: u64,
+            _: u64,
+            sink: &mut (dyn tokio::io::AsyncWrite + Unpin + Send),
+        ) -> Result<()> {
+            tokio::io::AsyncWriteExt::write_all(sink, b"{}")
+                .await
+                .unwrap();
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn network_failure_skips_pinned_fallback() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cfg = AiHubConfig::new(
+            "http://offline.invalid".into(),
+            "v0.60.0".into(),
+            String::new(),
+            tmp.path().to_path_buf(),
+            true,
+        );
+        let transport: Arc<dyn HttpTransport> = Arc::new(LatestUnreachable);
+        let err = release_index("platform.json", &cfg, &transport)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, Error::HttpTimeout(_)));
     }
 }

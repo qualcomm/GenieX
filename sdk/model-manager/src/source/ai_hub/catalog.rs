@@ -4,11 +4,12 @@
 //! What AI Hub offers: supported chipsets and runnable models.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::error::Result;
 use crate::host;
 use crate::manifest::ModelType;
-use crate::transport::{HttpTransport, ReqwestTransport};
+use crate::transport::{HttpTransport, ReqwestTransport, TransportConfig};
 
 use super::dto::{ChipsetInfo, PlatformInfo, ReleaseManifest};
 use super::selector::{self, is_qairt_runtime};
@@ -126,7 +127,11 @@ fn select_hub_models(manifest: ReleaseManifest, device_chipset: Option<&str>) ->
 /// Reference device name (e.g. `"Snapdragon X Elite CRD"`), else the raw detected id.
 pub async fn detect_host_chipset_reference(cfg: &AiHubConfig) -> Option<String> {
     let raw = host::detect_chipset()?;
-    let transport: Arc<dyn HttpTransport> = match ReqwestTransport::new() {
+    let transport: Arc<dyn HttpTransport> = match ReqwestTransport::with_config(TransportConfig {
+        connect_timeout: Some(Duration::from_secs(3)),
+        retries: Some(0),
+        ..Default::default()
+    }) {
         Ok(t) => Arc::new(t),
         Err(_) => return Some(raw),
     };
