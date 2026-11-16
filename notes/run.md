@@ -3,7 +3,7 @@
 Terminology used throughout this doc:
 
 - **Runtime** — `llama_cpp` or `qairt` (the `plugin_id`).
-- **Compute unit** — NPU, GPU, CPU, or `hybrid` (mapped from `--device` / `device_id`).
+- **Compute unit** — NPU, GPU, CPU, or `hybrid` (mapped from `-c/--compute` / `device_id`).
 - **Chipset** — the SoC, e.g. Snapdragon X Elite (`SM8750`, `SM8850`, …).
 
 Two runtimes ship with geniex and both can drive the Snapdragon NPU, but through **separate user-space stacks** that consume **different model formats**:
@@ -42,7 +42,7 @@ FFI-sync rule).
 gpu / npu / hybrid offload everything unless `--ngl` is set. The value
 passes through the SDK unchanged. qairt ignores `--ngl` (forced to 0).
 
-Defaults when the user passes nothing (`--device ""` / `device_map="auto"`):
+Defaults when the user passes nothing (`--compute ""` / `device_map="auto"`):
 `npu` for both `llama_cpp` and `qairt`. QAIRT exposes only one device,
 so `cpu` / `gpu` / `hybrid` against a qairt model get coerced to `NPU`
 with a warning on stderr — the CLI does **not** exit early.
@@ -55,15 +55,12 @@ is NPU-only, so a device list gets coerced to `NPU` with a warning.
 
 ## Power mode
 
-Unlike compute-unit aliases, the power-mode alias table is **not** behind a
-public SDK API: [`sdk/include/power_mode_alias.h`](../sdk/include/power_mode_alias.h)
-is a header-only table that the qairt and llama_cpp plugins each `#include`
-directly and resolve on their own (they're separate shared libraries and
-don't call into each other or into `libgeniex` for this). It's a single
-unified knob for both runtimes' HTP DCVS/HMX power/clock-management, set via
-`geniex_ModelConfig.power_mode` (`--power-mode` on `geniex infer` / `run` /
-`serve` and `geniex-bench`; a JSON `power_mode` field on `geniex serve`
-requests).
+A single knob for both runtimes' HTP DCVS/HMX power and clock management, set via
+`geniex_ModelConfig.power_mode` (`--power-mode` on `geniex infer` / `run` / `serve` and
+`geniex-bench`; a JSON `power_mode` field on `geniex serve` requests). Go and Python
+resolve the alias strings themselves; C/C++ callers that build a `geniex_ModelConfig`
+directly (benchmark, examples, JNI) use the header-only table in
+[`sdk/include/power_mode_alias.h`](../sdk/include/power_mode_alias.h).
 
 | Alias                          | Relative power (lowest → highest) |
 |---------------------------------|-----|
@@ -97,59 +94,45 @@ only on the NPU compute unit — it's a no-op (logged, not an error) on
 
 ## Compute-unit selection (llama_cpp)
 
-`llama_cpp` supports OpenCL and Hexagon on Windows ARM64. The compute unit is driven by two inputs on `geniex_LlmCreateInput`:
+The compute unit is driven by two inputs on `geniex_LlmCreateInput`:
 
-- `device_id` — string, runtime-specific (`HTP0`, `GPUOpenCL`, `CPU`, …).
-- `config.n_gpu_layers` — int; how many layers to offload. `-1` = all.
+- `device_id` — `HTP0`, `HTP0,HTP1,…`, `GPUOpenCL`, or empty.
+- `config.n_gpu_layers` — layers to offload; `-1` = all, `0` = CPU.
 
-### NPU compute-unit selection (llama_cpp)
+[`sdk/plugins/llama_cpp/src/params.cpp`](../sdk/plugins/llama_cpp/src/params.cpp) (`classify_device`,
+`resolve_devices`) turns those into one of CPU / GPU / NPU and picks per-platform defaults for
+`n_ubatch`, flash-attention, and CPU threading from small tables in the same file. Empty
+`device_id` with layers offloaded (`hybrid`) is classified as NPU. Edit those tables rather than
+special-casing call sites.
 
-`sdk/plugins/llama_cpp/src/llm.cpp:73-114` branches on whether `device_id` is non-null, producing **two runtime paths** with very different performance:
-
-1. **`device_id` null + `n_gpu_layers=-1`** (the `hybrid` alias) → llama.cpp's **per-tensor scheduler**. It inspects each tensor and assigns it to whichever registered backend supports the op (HTP for computable ops, CPU for fallbacks), using CPU-resident buffers for the fallback tensors. **Fast path.** On X1E80100 + Qwen3-1.7B-Q8_0: ~90 tok/s prefill, ~27 tok/s decode, ~200 ms TTFT. Task Manager shows NPU pegged.
-
-2. **`device_id="HTP0"` + `n_gpu_layers=-1`** (the `npu` alias) → runtime calls `ggml_backend_dev_by_name("HTP0")` and sets `mpar.devices = {HTP0}`. This **pins the model to a single compute-unit layout** and disables per-tensor hybrid assignment. Any op HTP doesn't support gets handled less efficiently. On the same model: ~60 tok/s prefill, ~22 tok/s decode, ~350 ms TTFT. Task Manager shows CPU pegged (the host thread driving HTP busy-waits, *plus* all fallbacks run there). Useful when you want deterministic layout / all weights on a known compute unit. Note: a non-zero `n_gpu_layers` is required even with the compute unit pinned — `device_id="HTP0"` with `ngl=0` opens an HTP session and then runs every layer on CPU, so the default `ngl=-1` (all layers) applies for this alias (`sdk/src/device.cpp`).
-
-Bonus: when the `device_id` string starts with `"HTP0"`, the runtime also flips KV cache to Q8_0 and enables flash-attn (`llm.cpp:136-140`). Orthogonal to perf — path (2) is slower than (1) even with those enabled.
-
-**Rule of thumb:** use `--device hybrid` (or leave `--device` empty) for fastest throughput; use `--device npu` when you need determinism or when debugging placement.
-
-History: the `fb98467` commit ("add device parameter") originally made `--device npu` synthesize `device_id="HTP0"`, collapsing the fast path. That was reverted (hybrid became the implicit default), then the two semantics were split into explicit `npu` / `hybrid` aliases to let callers pick.
-
-### Running from the CLI
-
-Use `--device` (`-d`):
-
-```powershell
-geniex infer Qwen/Qwen3-1.7B-GGUF                 # hybrid (default) for llama.cpp
-geniex infer Qwen/Qwen3-1.7B-GGUF --device npu    # pinned HTP0
-geniex infer Qwen/Qwen3-1.7B-GGUF --device hybrid # explicit hybrid
-geniex infer Qwen/Qwen3-1.7B-GGUF --device gpu
-geniex infer Qwen/Qwen3-1.7B-GGUF --device cpu
+```bash
+geniex infer unsloth/Qwen3-1.7B-GGUF:Q4_0                # npu (default)
+geniex infer unsloth/Qwen3-1.7B-GGUF:Q4_0 -c gpu
+geniex infer unsloth/Qwen3-1.7B-GGUF:Q4_0 -c cpu
+geniex infer unsloth/Qwen3-1.7B-GGUF:Q4_0 -c HTP0,HTP1   # explicit multi-session list
 ```
 
-### Sanity-checking which path actually ran
+### Checking which path actually ran
 
-The SDK's default log handler is a no-op in release builds (`sdk/src/ml.cpp:36-60`), so `stdout`/`stderr` stays silent and "did it actually use HTP?" is easy to guess wrong. Ways to check:
+The SDK's default log handler writes to stderr, but the CLI defaults to `--log none`. Run with
+`--log info` (or `GENIEX_LOG=info`) and look for the device lines (`Found device: HTP0`,
+`Using N device(s)`) and `[Optimise] threadpool attached: …`.
 
-- **Python:** set `GENIEX_LOG=INFO`. The Python binding installs a `geniex_set_log` callback that routes SDK messages (`Found device: HTP0`, `Using N device(s)`, etc.) to stderr. If you see `Found device: …` lines you're on the **pinned-`HTP0` path** (the `npu` alias); absence = hybrid path.
-- **Windows:** Task Manager's NPU graph. Hybrid lights it up; pinned-`HTP0` pegs the CPU (host thread busy-waits HTP the whole inference).
-- **Signature:** on Snapdragon X1E80100 + a 1.7B Q8_0 model, hybrid gives prefill ≳ 80 tok/s and TTFT ≲ 250 ms; pinned-`HTP0` gives prefill ≲ 65 tok/s and TTFT ≳ 340 ms. Prefill and TTFT separate the two paths more cleanly than decode.
-- **Threadpool:** any offloaded path (all aliases except `cpu`) logs `threadpool tuned for offload: 6 threads pinned to cores [2, 8), strict, poll=1000` — the SDK mirrors upstream's fixed `-t 6 --cpu-mask 0xfc` (`sdk/plugins/llama_cpp/src/threadpool.cpp`); pass `n_threads` in `geniex_ModelConfig` to override. Absent on `--device cpu`.
+If you see `Device '…' not found, skipping`, the runtime loaded but the GGML backend DLL did not.
+Check that test-signing is on (for HTP) or that `ggml-opencl.dll` is present in
+`sdk/pkg-geniex/lib/llama_cpp/`.
 
-If you see `Device '…' not found, skipping`, the runtime loaded but the GGML backend DLL did not — verify test-signing is still on (for HTP) or that `ggml-opencl.dll` is present in `sdk/pkg-geniex/lib/llama_cpp/`.
-
-> Q4_K_M is a suboptimal quant for HTP — it prefers Q4_0 / Q8_0, so some tensors fall back to CPU. Use Q4_0 for a clean NPU run.
+> Q4_K_M is a suboptimal quant for HTP; some tensors fall back to CPU. Use Q4_0 / Q8_0 for a clean NPU run.
 
 ## Running QAIRT models
 
-QAIRT exposes only its Hexagon NPU compute unit (`plugin_id="qairt"`, `device_id="NPU"`). The SDK's `geniex_resolve_device` coerces `--device cpu` / `gpu` / `hybrid` to `npu` with a stderr warning so existing shell pipelines don't break — expect a line like:
+QAIRT exposes only its Hexagon NPU compute unit (`plugin_id="qairt"`, `device_id="NPU"`). The SDK's `geniex_resolve_device` coerces `-c cpu` / `gpu` / `hybrid` to `npu` with a stderr warning, so existing shell pipelines don't break. Expect a line like:
 
 ```
 Warning: qairt plugin only supports NPU inference; ignoring device='cpu' and running on NPU
 ```
 
-QAIRT models need a `geniex.json` to work. See the [granite4_micro example](https://huggingface.co/yichqian/geniex-qairt-models/blob/main/granite4_micro/geniex.json).
+Each QAIRT model directory carries a `geniex.json`. The model manager writes one on import when the bundle doesn't ship it.
 
 ### Using a custom QNN library
 
@@ -158,10 +141,10 @@ without reinstalling, point the plugin at it:
 
 ```bash
 # via the CLI flag (qairt models only)
-geniex infer local/granite4_micro --qairt-lib /path/to/qairt/2.XX.0
+geniex infer <qairt-model> --qairt-lib /path/to/qairt/2.XX.0
 
 # or via the environment variable (picked up by any front-end: CLI, pybind, Android)
-GENIEX_QAIRT_LIB=/path/to/qairt/2.XX.0 geniex infer local/granite4_micro
+GENIEX_QAIRT_LIB=/path/to/qairt/2.XX.0 geniex infer <qairt-model>
 ```
 
 SDK embedders call it **before `geniex_init`** instead of touching their own environment —
@@ -204,34 +187,21 @@ The path accepts either layout:
 > not the root you passed. `<source>` is `geniex_set_qairt_runtime_path` or
 > `GENIEX_QAIRT_LIB`, so the line also tells you which knob won.
 
-<details><summary>Which runtimes are accepted, and why this is a supported override</summary>
+<details><summary>Which runtimes are accepted</summary>
 
-The plugin reaches QNN through the versioned C interface. Its explicit load-time floor is
-`kMinApiMinor = 27` (QNN C API 2.27), independent of the headers used to compile it; the
-current plugin is compiled against QAIRT 2.50.40.260831 headers (QNN C API 2.39). Provider queries
-were checked with QAIRT 2.47.1 (QNN 2.36), 2.48.40 (2.37), 2.50.40 (2.39), and the installed
-bundle. These provider queries are not model-load or inference validation. A previous build
-using 2.36 headers was measured on Snapdragon X Elite across 2.45 / 2.48 / 2.49 at identical
-throughput; that historical result was not repeated with the 2.50 headers.
+The plugin reaches QNN through the versioned C interface with a load-time floor of
+`kMinApiMinor = 27` (QNN C API 2.27), independent of the headers it was compiled against, so
+older and newer QAIRT runtimes load without ABI breaks. `QnnHtpNetRunExtensions` is not
+needed: the plugin applies `htp_backend_ext_config.json` itself.
 
-This replaces an earlier C++ `IBackend` path whose vtable layout changed every release, where
-a mismatch could segfault (ai-hub-models-internal#3964). That hazard is gone with the C API,
-which is why this is a supported override rather than a testing-only aid.
-
-`QnnHtpNetRunExtensions` is no longer loaded at all — the plugin applies
-`htp_backend_ext_config.json` itself through the public C API — so a runtime folder does not
-need to carry it.
-
-An unusable path fails model load immediately, naming the source it came from, e.g.
+An unusable path fails model load immediately and names its source, e.g.
 `geniex_set_qairt_runtime_path does not contain QnnHtp.dll (looked in the folder itself and
 lib/aarch64-windows-msvc): <path>`.
 
-**One runtime per process.** `QnnHtp` is loaded once and stays resident for the life of the
-process — the plugin never unloads it, and `ADSP_LIBRARY_PATH` / `SetDllDirectory` are
-process-wide. So the path is locked at `geniex_init`, and setting it afterwards returns
-`GENIEX_ERROR_COMMON_ALREADY_INITIALIZED` rather than appearing to work. `geniex_deinit` does
-not unlock it: the QNN libraries outlive the cycle. Comparing versions means one process per
-version.
+**One runtime per process.** `QnnHtp` stays loaded for the life of the process, and
+`ADSP_LIBRARY_PATH` / `SetDllDirectory` are process-wide. The path is locked at `geniex_init`;
+setting it later returns `GENIEX_ERROR_COMMON_ALREADY_INITIALIZED`, and `geniex_deinit` doesn't
+unlock it. Comparing runtimes means one process per runtime.
 
 </details>
 
@@ -260,57 +230,24 @@ multicore unavailable (QNN verbose trace: `Error code 1000 ... key = 304` /
 SoCs expose a single NSP core; multi-NSP parts (e.g. certain automotive SoCs)
 report `numCores > 1` in QNN platform info.
 
-### Build and run locally
+### Run a QAIRT bundle
 
-```bash
-hf download yichqian/geniex-qairt-models --local-dir=geniex-qairt-models
-bazelisk run //cli -- pull local/granite4_micro \
-  --model-hub localfs \
-  --local-path /absolute/path/to/geniex-qairt-models/granite4_micro
-bazelisk run //cli -- infer local/granite4_micro
-```
-
-### Hand off a build to another machine
-
-Builder:
-
-```bash
-bazelisk build //cli:artifact
-# Export bazel-bin/cli/artifact.zip and ggml-htp-v1.cer
-```
-
-Recipient:
-
-```bash
-# unzip artifact.zip
-hf download yichqian/geniex-qairt-models --local-dir=geniex-qairt-models
-./geniex.exe pull local/granite4_micro --model-hub localfs \
-  --local-path /absolute/path/to/geniex-qairt-models/granite4_micro
-./geniex.exe infer local/granite4_micro
-```
+AI Hub bundles pull natively: `geniex pull ai-hub-models/<model>:<precision>` (the chipset is detected,
+or set it with `geniex config set chipset`). A bundle you already have on disk imports with
+`geniex pull <name> --local-path <dir-or-zip>`. A local build runs the same way through
+`bazelisk run //cli -- <args>`; to hand a build to another machine, ship `bazel-bin/cli/artifact.zip`
+(plus `ggml-htp-v1.cer` for a self-signed build).
 
 ## Running a prebuilt CI release (Windows on Snapdragon)
 
-Every `v*` tag publishes the Windows ARM64 installer on [the Releases page](https://github.com/qualcomm/GenieX/releases). Download both:
-
-- `geniex-cli-setup.exe` — the installer
-- `geniex-sdk-windows-arm64-<tag>.zip` — the SDK
-
-The SDK filename encodes the HTP signing flavor:
+Every `v*` tag publishes `geniex-cli-setup-windows-arm64-<tag>.exe` on [the Releases page](https://github.com/qualcomm/GenieX/releases). The installer bundles the SDK. The SDK zip name tells you how the HTP catalog is signed:
 
 | Filename                                        | HTP signing        | Extra setup                                 |
 |-------------------------------------------------|--------------------|---------------------------------------------|
-| `geniex-sdk-windows-arm64-<tag>.zip`            | Microsoft-signed   | None — skip to "Run" below.                 |
+| `geniex-sdk-windows-arm64-<tag>.zip`            | Microsoft-signed   | None.                                       |
 | `geniex-sdk-windows-arm64-<tag>-selfsigned.zip` | Self-signed (test) | See [Self-signed fallback](#self-signed-fallback). |
 
-If the release also attaches `ggml-htp-v1.cer`, you're on the self-signed flavor.
-
-Run:
-
-1. Install with `geniex-cli-setup.exe`.
-2. `hf download yichqian/geniex-qairt-models --local-dir=geniex-qairt-models`
-3. `geniex.exe pull local/granite4_micro --model-hub localfs --local-path <abs-path>\geniex-qairt-models\granite4_micro`
-4. `geniex.exe infer local/granite4_micro`
+A release that also attaches `ggml-htp-v1.cer` is self-signed.
 
 ## Self-signed fallback
 

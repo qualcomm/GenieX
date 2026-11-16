@@ -144,8 +144,11 @@ func writeBlockingResponse(c *gin.Context, contentBuilder, reasoningBuilder *str
 func profile2Usage(p geniex_sdk.ProfileData) openai.CompletionUsage {
 	return openai.CompletionUsage{
 		CompletionTokens: p.GeneratedTokens,
-		PromptTokens:     p.PromptTokens,
-		TotalTokens:      p.TotalTokens(),
+		PromptTokens:     p.TotalPromptTokens,
+		TotalTokens:      p.TotalPromptTokens + p.GeneratedTokens,
+		PromptTokensDetails: openai.CompletionUsagePromptTokensDetails{
+			CachedTokens: p.CachedPromptTokens(),
+		},
 		CompletionTokensDetails: openai.CompletionUsageCompletionTokensDetails{
 			AcceptedPredictionTokens: p.DraftNAccepted,
 			RejectedPredictionTokens: p.DraftNTotal - p.DraftNAccepted,
@@ -187,6 +190,7 @@ func logProfile(profile geniex_sdk.ProfileData) {
 	recordProfile(profile)
 	slog.Info("Generation complete",
 		"prompt_tokens", profile.PromptTokens,
+		"cached_prompt_tokens", profile.CachedPromptTokens(),
 		"prompt_tok_s", profile.PrefillSpeed,
 		"decode_tokens", profile.GeneratedTokens,
 		"decode_tok_s", profile.DecodingSpeed,

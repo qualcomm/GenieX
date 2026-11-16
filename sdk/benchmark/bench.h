@@ -134,6 +134,7 @@ typedef struct {
     const char* qairt_lib;
 
     const char* output_json;
+    const char* output_logits;
     const char* output_md;
     const char* cell_id;
 
@@ -239,7 +240,8 @@ void mm_shutdown(void);
  * `o->repeat * o->prompt_count` measured results into `out`. */
 void run_llm(const options_t* o, const device_t* dev, run_result_t* out);
 void run_vlm(const options_t* o, const device_t* dev, run_result_t* out);
-/* --logits: one prefill-only forward pass, writes its own JSON report.
+/* --logits: one prefill-only forward pass, writes its own JSON report (or the
+ * raw float32 file with --output-logits).
  * 0 on success, 1 when that report could not be written. */
 int run_logits(const options_t* o, const device_t* dev);
 
@@ -258,5 +260,6 @@ int write_cell_json(const options_t* o, const device_t* dev, int64_t model_size_
 int write_md_row(const options_t* o, const device_t* dev, int64_t model_size_bytes, const agg_t* a);
 int write_logits_json(const options_t* o, const device_t* dev, const geniex_LlmForwardLogitsInput* fin,
     const geniex_LlmForwardLogitsOutput* fout);
+int write_logits_raw(const char* path, const geniex_LlmForwardLogitsOutput* fout);
 
 #endif /* GENIEX_BENCH_H */

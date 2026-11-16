@@ -222,7 +222,8 @@ Returned by `model.generate()`.
 | Attribute | Type | Description |
 |---|---|---|
 | `ttft` | `int` | Time to first token (ms). |
-| `prompt_tokens` | `int` | Number of prompt tokens. |
+| `prompt_tokens` | `int` | Number of prompt tokens evaluated in prefill. |
+| `total_prompt_tokens` | `int` | Full prompt tokens, including those reused from the KV cache. |
 | `generated_tokens` | `int` | Number of generated tokens. |
 | `prefill_speed` | `float` | Prefill speed (tokens/s). |
 | `decode_speed` | `float` | Decode speed (tokens/s). |

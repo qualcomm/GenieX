@@ -180,10 +180,9 @@ func (keepAlive *keepAliveService) destroy() {
 	keepAlive.setStatus(nil)
 }
 
-// keepAliveGet reuses the cached model when name/params match, resetting it
-// when session isn't a continuation of the one last served, so a new
-// conversation never inherits another's KV cache. Returns whether the model
-// is fresh after a reset or load. Runs under the request GIL.
+// keepAliveGet reuses the cached model when name/params match. llama_cpp LLMs
+// handle prefix reuse in the SDK; other models reset on a new session.
+// Returns whether the model is fresh after a reset or load. Runs under the request GIL.
 func keepAliveGet[T any](name string, param types.ModelParam, session utils.SessionKey) (any, bool, error) {
 	// The SDK resolves bare names / aliases and picks the default precision
 	// when none is given; pass the request string through verbatim.
@@ -197,6 +196,9 @@ func keepAliveGet[T any](name string, param types.ModelParam, session utils.Sess
 
 	if keepAlive.name == name && reflect.DeepEqual(keepAlive.param, param) {
 		fresh := !utils.IsContinuation(keepAlive.lastSession, session)
+		if paths.RuntimeID == geniex_sdk.RuntimeLlamaCpp && reflect.TypeFor[T]() == reflect.TypeFor[geniex_sdk.LLM]() {
+			fresh = false
+		}
 		if fresh {
 			if r, ok := keepAlive.model.(resettable); ok {
 				if err := r.Reset(); err != nil {

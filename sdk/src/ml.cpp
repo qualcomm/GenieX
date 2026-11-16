@@ -221,7 +221,7 @@ int32_t geniex_get_plugin_list(geniex_GetPluginListOutput* output) {
             return GENIEX_SUCCESS;
         }
 
-        output->plugin_ids = static_cast<geniex_PluginId*>(malloc(plugin_list.size() * sizeof(geniex_PluginId)));
+        output->plugin_ids = static_cast<geniex_PluginId*>(calloc(plugin_list.size(), sizeof(geniex_PluginId)));
         if (!output->plugin_ids) {
             GENIEX_LOG_ERROR("failed to allocate memory for plugin IDs");
             return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;

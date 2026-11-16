@@ -1084,6 +1084,12 @@ components:
         prompt_tokens:
           type: integer
           description: Number of tokens in the prompt
+        prompt_tokens_details:
+          type: object
+          properties:
+            cached_tokens:
+              type: integer
+              description: Number of prompt tokens reused from the KV cache
         completion_tokens:
           type: integer
           description: Number of tokens in the generated completion

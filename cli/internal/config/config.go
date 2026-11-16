@@ -33,6 +33,7 @@ type Config struct {
 	DraftTokens int32   // Default max draft tokens (0 = plugin default of 3)
 	DraftMin    int32   // Default min draft tokens (0 = llama.cpp default)
 	DraftPMin   float32 // Default min greedy draft probability (0 = llama.cpp default)
+	Think       bool    // Default chat thinking mode (default: true)
 	// HTTPS / TLS settings
 	HTTPS    bool   // Whether to serve over HTTPS (default: false)
 	CertFile string // TLS certificate file path
@@ -48,6 +49,8 @@ func init() {
 	// ENV only param need to set default here
 	viper.SetDefault("hftoken", "") // Default empty token
 	viper.SetDefault("log", "none") // Default log level
+
+	viper.SetDefault("think", true) // Default chat thinking mode, overridden by serve --think
 
 	viper.SetEnvPrefix("geniex")
 	viper.AutomaticEnv()

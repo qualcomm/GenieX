@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 /* Output side: the stdout summary line, the per-cell JSON report, the
- * llama-bench-style Markdown row, and the --logits JSON report. */
+ * llama-bench-style Markdown row, and the --logits JSON report / raw dump. */
 
 #include <stdlib.h>
 #include <string.h>
@@ -106,8 +106,12 @@ int write_cell_json(const options_t* o, const device_t* dev, int64_t model_size_
     json_field_str(f, "model_id", o->model_id, false);
     json_field_i64(f, "model_size_bytes", model_size_bytes, false);
     json_field_str(f, "geniex_version", geniex_version(), false);
-    json_field_str(f, "qairt_version", geniex_get_plugin_version("qairt"), false);
-    json_field_str(f, "llama_cpp_version", geniex_get_plugin_version("llama_cpp"), false);
+    /* Query only this cell's plugin: geniex_get_plugin_version instantiates the
+     * plugin, and creating llama_cpp just for its version string opens a
+     * second HTP session that nothing in a qairt cell uses. */
+    const bool is_qairt = strcmp(o->plugin, "qairt") == 0;
+    json_field_str(f, "qairt_version", is_qairt ? geniex_get_plugin_version("qairt") : NULL, false);
+    json_field_str(f, "llama_cpp_version", is_qairt ? NULL : geniex_get_plugin_version("llama_cpp"), false);
     fprintf(f, "    \"params\": {\n");
     fprintf(f,
         "      \"warmup\": %d, \"repetitions\": %d, \"n_prompt\": %d, \"n_gen\": %d,\n"
@@ -228,6 +232,23 @@ int write_logits_json(const options_t* o, const device_t* dev, const geniex_LlmF
     fprintf(f, "    ]\n");
     fprintf(f, "}\n");
     fclose(f);
+    return 0;
+}
+
+/* Write the --output-logits result as a headerless row-major float32 array
+ * [n_rows, vocab_size], e.g. np.fromfile(path, np.float32).reshape(n_rows, -1). */
+int write_logits_raw(const char* path, const geniex_LlmForwardLogitsOutput* fout) {
+    FILE* f = fopen(path, "wb");
+    if (!f) {
+        fprintf(stderr, "ERROR: cannot open %s for write\n", path);
+        return 1;
+    }
+    const size_t n       = (size_t)fout->n_rows * (size_t)fout->row_width;
+    const size_t written = fwrite(fout->logits, sizeof(float), n, f);
+    if (fclose(f) != 0 || written != n) {
+        fprintf(stderr, "ERROR: cannot write %s\n", path);
+        return 1;
+    }
     return 0;
 }
 

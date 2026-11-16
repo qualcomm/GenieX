@@ -44,7 +44,6 @@ go_cgo_test(
         "toolcall_scanner_test.go",
         "toolcall_spark2_5_test.go",
         "toolcall_test.go",
-        "toolcall_tokens_test.go",
     ],
     embed = [":utils"],
 )

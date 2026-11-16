@@ -14,17 +14,22 @@ import (
 )
 
 type ProfileData struct {
-	TTFT            int64
-	MediaTime       int64
-	PromptTime      int64
-	DecodeTime      int64
-	PromptTokens    int64
-	GeneratedTokens int64
-	PrefillSpeed    float64
-	DecodingSpeed   float64
-	DraftNTotal     int64
-	DraftNAccepted  int64
-	StopReason      string
+	TTFT              int64
+	MediaTime         int64
+	PromptTime        int64
+	DecodeTime        int64
+	PromptTokens      int64 // Evaluated in prefill.
+	TotalPromptTokens int64 // Full requested input, including tokens reused from the KV cache.
+	GeneratedTokens   int64
+	PrefillSpeed      float64
+	DecodingSpeed     float64
+	DraftNTotal       int64
+	DraftNAccepted    int64
+	StopReason        string
+}
+
+func (p ProfileData) CachedPromptTokens() int64 {
+	return max(p.TotalPromptTokens-p.PromptTokens, 0)
 }
 
 func (p ProfileData) TotalTokens() int64 {
@@ -38,17 +43,18 @@ func (p ProfileData) TotalTimeUs() int64 {
 // LCOV_EXCL_START
 func newProfileDataFromCPtr(c C.geniex_ProfileData) ProfileData {
 	return ProfileData{
-		TTFT:            int64(c.ttft),
-		MediaTime:       int64(c.media_time),
-		PromptTime:      int64(c.prompt_time),
-		DecodeTime:      int64(c.decode_time),
-		PromptTokens:    int64(c.prompt_tokens),
-		GeneratedTokens: int64(c.generated_tokens),
-		PrefillSpeed:    float64(c.prefill_speed),
-		DecodingSpeed:   float64(c.decoding_speed),
-		DraftNTotal:     int64(c.draft_n_total),
-		DraftNAccepted:  int64(c.draft_n_accepted),
-		StopReason:      C.GoString(c.stop_reason),
+		TTFT:              int64(c.ttft),
+		MediaTime:         int64(c.media_time),
+		PromptTime:        int64(c.prompt_time),
+		DecodeTime:        int64(c.decode_time),
+		PromptTokens:      int64(c.prompt_tokens),
+		TotalPromptTokens: int64(c.total_prompt_tokens),
+		GeneratedTokens:   int64(c.generated_tokens),
+		PrefillSpeed:      float64(c.prefill_speed),
+		DecodingSpeed:     float64(c.decoding_speed),
+		DraftNTotal:       int64(c.draft_n_total),
+		DraftNAccepted:    int64(c.draft_n_accepted),
+		StopReason:        C.GoString(c.stop_reason),
 	}
 }
 

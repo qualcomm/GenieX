@@ -5,6 +5,8 @@ package common
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"testing"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
@@ -19,6 +21,16 @@ func hintFor(err error) string {
 		}
 	}
 	return ""
+}
+
+func TestUnsupportedOperationHint(t *testing.T) {
+	err := fmt.Errorf("runtime llama_cpp: %w", geniex_sdk.ErrCommonParamNotSupported)
+	got := hintFor(err)
+	if !strings.Contains(got, "requested operation or parameter") ||
+		!strings.Contains(got, "decision-only models") || !strings.Contains(got, "geniex decide") ||
+		!strings.Contains(got, "/v1/decisions") || !strings.Contains(got, "--compute cpu") {
+		t.Fatalf("unsupported generation needs an actionable hint:\n%s", got)
+	}
 }
 
 // The SDK returns the same NOT_SUPPORTED code for an unsupported model type and

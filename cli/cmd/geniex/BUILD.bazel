@@ -26,6 +26,7 @@ go_library(
         "//cli/internal/record",
         "//cli/internal/render",
         "//cli/internal/store",
+        "//cli/internal/thinkfsm",
         "//cli/server",
         "//cli/server/handler",
         "@com_github_bytedance_sonic//:sonic",

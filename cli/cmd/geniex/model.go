@@ -24,6 +24,7 @@ import (
 	"golang.org/x/term"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
+	"github.com/qualcomm/GenieX/cli/internal/config"
 	"github.com/qualcomm/GenieX/cli/internal/render"
 	"github.com/qualcomm/GenieX/cli/internal/store"
 )
@@ -446,6 +447,7 @@ func pullModel(ctx context.Context, name, quant string) error {
 		Precision:   quant,
 		Hub:         hub,
 		LocalPath:   localPath,
+		HfToken:     config.Get().HFToken,
 		DisplayName: "",
 	}
 

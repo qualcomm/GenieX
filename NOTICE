@@ -95,6 +95,14 @@ This document provides information about third-party libraries used in the Genie
 
 ## C/C++ Dependencies
 
+### llama.cpp
+
+- **License**: MIT License
+- **Copyright**: Copyright (c) 2023-2026 The ggml authors
+- **URL**: https://github.com/ggml-org/llama.cpp
+- **Description**: Inference runtime; native Liquid decision layout and verbalizer logic adapted in `sdk/plugins/llama_cpp/src/liquid-decision.cpp`
+- **License File**: [third-party/llama.cpp/LICENSE](third-party/llama.cpp/LICENSE)
+
 ### ggml
 
 - **License**: MIT License

@@ -33,9 +33,10 @@ class LlamaVlm : public IVlm {
 
     // Append-only KV reuse: skip the common prefix + last generation, feed only
     // the rest. Recurrent models can't roll back, so we never re-feed old tokens.
-    int32_t     n_past = 0;
-    std::string past_prompt;  // last turn's full prompt
-    std::string past_gen;     // last turn's generated text
+    int32_t     n_past      = 0;
+    uint32_t    past_tokens = 0;  // token count (not KV positions) behind past_prompt + past_gen
+    std::string past_prompt;      // last turn's full prompt
+    std::string past_gen;         // last turn's generated text
 
     // Tracks whether this instance pinned an HTP session; releases on last handoff.
     htp::SessionGuard htp_guard_;

@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
+	"github.com/qualcomm/GenieX/cli/internal/thinkfsm"
 )
 
 func TestProcessContextLengthExceeded(t *testing.T) {
@@ -188,6 +189,121 @@ func TestParseFiles(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFSMEventThinkFormatting(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		tokens []string
+		want   string
+	}{
+		{"missing newlines", []string{"<think>", "reason", "</think>", "answer"}, "<think>\nreason\n</think>\n\nanswer"},
+		{"existing newlines", []string{"<think>", "\n", "reason", "\n", "</think>", "\n\n", "answer"}, "<think>\nreason\n</think>\n\nanswer"},
+		{"attached newlines", []string{"<think>", "\nreason\n", "</think>", "\n\nanswer"}, "<think>\nreason\n</think>\n\nanswer"},
+
+		{"standalone CR after opener", []string{"<think>", "\r", "reason", "</think>", "answer"}, "<think>\n\rreason\n</think>\n\nanswer"},
+		{"standalone CR after closer", []string{"<think>", "reason\n", "</think>", "\r", "answer"}, "<think>\nreason\n</think>\n\n\ranswer"},
+		{"standalone CR before boundary", []string{"<think>", "\r", "</think>", "answer"}, "<think>\n\r\n</think>\n\nanswer"},
+		{"split answer newlines", []string{"<think>", "reason", "</think>", "\n", "", "\nanswer"}, "<think>\nreason\n</think>\n\nanswer"},
+		{"one answer newline", []string{"<think>", "reason", "</think>", "\nanswer"}, "<think>\nreason\n</think>\n\nanswer"},
+		{"extra boundary newlines", []string{"<think>", "\n", "\nreason\n\n", "</think>", "\n", "\n", "\nanswer"}, "<think>\n\nreason\n\n</think>\n\n\nanswer"},
+		{"internal newlines and indentation", []string{"<think>", "  first\n\n", "  second", "</think>", "  answer\n\nmore"}, "<think>\n  first\n\n  second\n</think>\n\n  answer\n\nmore"},
+		{"empty thinking", []string{"<think>", "", "</think>", "answer"}, "<think>\n</think>\n\nanswer"},
+		{"unterminated thinking", []string{"<think>", "reason"}, "<think>\nreason"},
+		{"plain text", []string{"\nanswer", "\n\nmore"}, "\nanswer\n\nmore"},
+		{"unmatched closing tag", []string{"</think>", "answer"}, "</think>answer"},
+		{"Ministral", []string{"[THINK]", "\nreason\n", "[/THINK]", "\n\nanswer"}, "<think>\nreason\n</think>\n\nanswer"},
+		{"Gemma", []string{"<|channel>", "thought", "\n", "reason\n", "<channel|>", "\n\nanswer"}, "<think>\nreason\n</think>\n\nanswer"},
+		{"Gemma leading body newline", []string{"<|channel>", "thought", "\n", "\nreason\n", "<channel|>", "answer"}, "<think>\n\nreason\n</think>\n\nanswer"},
+		{"Gemma split leading body newlines", []string{"<|channel>", "thought", "\n", "\n", "", "\nreason\n", "<channel|>", "answer"}, "<think>\n\n\nreason\n</think>\n\nanswer"},
+		{"GPT-OSS", []string{"<|channel|>", "analysis", "<|message|>", "reason\n", "<|end|>", "<|start|>", "assistant", "<|channel|>", "final", "<|message|>", "\n\nanswer"}, "<think>\nreason\n</think>\n\nanswer"},
+		{"multiple thinking messages", []string{"<|channel|>", "analysis", "<|message|>", "first", "<|end|>", "<|start|>", "assistant", "<|channel|>", "analysis", "<|message|>", "\nsecond", "<|end|>"}, "<think>\nfirst\n</think>\n\n<think>\nsecond\n</think>\n\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &Processor{splitter: thinkfsm.New()}
+			got := captureProcessorOutput(t, func() {
+				for _, token := range tc.tokens {
+					p.fsmEvent(token)
+				}
+			})
+			if got != tc.want {
+				t.Errorf("output = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFSMEventRestoredThinkOpener(t *testing.T) {
+	for _, prompt := range []string{"assistant\n<think>", "assistant\n<think>\n", "assistant\n<think>\n\n"} {
+		t.Run(prompt, func(t *testing.T) {
+			p := &Processor{splitter: thinkfsm.New()}
+			got := captureProcessorOutput(t, func() {
+				onToken := thinkfsm.RestoreOpener(prompt, func(token string) bool {
+					p.fsmEvent(token)
+					return true
+				})
+				for _, token := range []string{"reason", "</think>", "answer"} {
+					onToken(token)
+				}
+			})
+			want := "<think>\nreason\n</think>\n\nanswer"
+			if strings.HasSuffix(prompt, "\n\n") {
+				want = "<think>\n\nreason\n</think>\n\nanswer"
+			}
+			if got != want {
+				t.Errorf("output = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestProcessResetsThinkFormatting(t *testing.T) {
+	p := &Processor{endsWithNewline: true, newlinesToSkip: 2}
+	prompts := 0
+	p.GetPrompt = func() (string, error) {
+		prompts++
+		if prompts > 2 {
+			return "", io.EOF
+		}
+		return "hi", nil
+	}
+	p.Run = func(_ string, _, _ []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error) {
+		if p.endsWithNewline || p.newlinesToSkip != 0 {
+			t.Fatalf("formatting state not reset: endsWithNewline = %v, newlinesToSkip = %d", p.endsWithNewline, p.newlinesToSkip)
+		}
+		for _, token := range []string{"<think>", "reason", "</think>"} {
+			onToken(token)
+		}
+		return "", geniex_sdk.ProfileData{}, nil
+	}
+	captureProcessorOutput(t, func() {
+		if err := p.Process(); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func captureProcessorOutput(t *testing.T, run func()) string {
+	t.Helper()
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+	stdout := os.Stdout
+	defer func() { os.Stdout = stdout }()
+	os.Stdout = writer
+	run()
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = stdout
+	output, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(output)
 }
 
 func mustWriteFile(t *testing.T, path string) {

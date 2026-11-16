@@ -14,8 +14,8 @@ import (
 )
 
 // SessionKey identifies a conversation as one hash per turn (chat: one per
-// message; completions/logits: a single turn). A cached model is reset when
-// the new request's key isn't a continuation of the last one served.
+// message; completions/logits: a single turn). Models requiring append-only
+// reuse reset when the new key isn't a continuation of the last request.
 type SessionKey []uint64
 
 // IsContinuation reports whether next carries on from last: the same

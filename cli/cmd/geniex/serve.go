@@ -54,6 +54,7 @@ func serve() *cobra.Command {
 	defaultFlags.Int32("draft-tokens", 0, "Max draft tokens per step, 0 = plugin default of 3 (env: GENIEX_DRAFT_TOKENS)")
 	defaultFlags.Int32("draft-min", 0, "Min draft tokens per step, 0 = llama.cpp default (env: GENIEX_DRAFT_MIN)")
 	defaultFlags.Float32("draft-p-min", 0, "Min greedy draft probability, 0 = llama.cpp default (env: GENIEX_DRAFT_P_MIN)")
+	defaultFlags.Bool("think", true, "Enable thinking mode when request omits enable_think, use --think=false to disable (env: GENIEX_THINK)")
 
 	groups := []*pflag.FlagSet{serverFlags, defaultFlags}
 	for _, flags := range groups {
@@ -87,6 +88,7 @@ func serve() *cobra.Command {
 	viper.BindEnv("draftmin", "GENIEX_DRAFT_MIN")
 	viper.BindPFlag("draftpmin", serveCmd.Flags().Lookup("draft-p-min"))
 	viper.BindEnv("draftpmin", "GENIEX_DRAFT_P_MIN")
+	viper.BindPFlag("think", serveCmd.Flags().Lookup("think"))
 	viper.BindPFlag("https", serveCmd.Flags().Lookup("https"))
 	viper.BindPFlag("certfile", serveCmd.Flags().Lookup("certfile"))
 	viper.BindPFlag("keyfile", serveCmd.Flags().Lookup("keyfile"))

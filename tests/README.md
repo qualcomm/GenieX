@@ -30,6 +30,7 @@ model-manager-pull check that runs first:
 | `test_vlm_generate`                | Golden-retriever caption keyword, then a two-turn image conversation — one load.                 |
 | `test_chat_template`               | ChatML sentinels, `enable_thinking`, tools list vs JSON string (llama_cpp: tool response).       |
 | `test_mtp_multi_turn`              | (llama_cpp only) same "Alice" convo with `spec_type='draft-mtp'`.                                |
+| `test_mtp_qwen35_cache_lifecycle`  | Qwen3.5 MTP stays active and matches clean greedy decoding after reset or prompt revision.      |
 
 Behavioural cases are parametrised over `(model, device_map)` pairs from
 `models.json`, so which backends run is a property of the model entry.
@@ -73,7 +74,7 @@ from HF), so the device shards need network access but no manual pre-pull.
 # Anywhere — model-free API checks only
 pytest tests -m api
 
-# Anywhere — adds the llama_cpp CPU cells (downloads ~400 MB on first run)
+# Anywhere — adds the llama_cpp CPU cells (downloads configured CPU test models on first run)
 pytest tests -m "api or (llama_cpp and device_cpu)"
 
 # Snapdragon Windows ARM64 or Qualcomm Linux — full matrix
@@ -93,6 +94,7 @@ behavioural suite is a manifest edit. Loader: `tests/_models.py`.
 | `llama_cpp_llm`        | `unsloth/gpt-oss-20b-GGUF` Q4_0 | hybrid | nightly |
 | `llama_cpp_vlm`        | `unsloth/gemma-4-E2B-it-GGUF` Q4_0 + mmproj-F16 | cpu, gpu, npu | pr |
 | `llama_cpp_mtp_target` | `google/gemma-4-26B-A4B-it-qat-q4_0-gguf` | npu | nightly |
+| `llama_cpp_mtp_qwen35` | `bartowski/Qwen_Qwen3.5-0.8B-GGUF` Q8_0, including its MTP head | cpu, npu | pr |
 | `llama_cpp_mtp_draft`  | `RachidAR/gemma-4-...-assistant-q4_0-gguf` | — (paired with the target) | nightly |
 | `qairt_llm`            | `qualcomm/Qwen3-4B` | npu | pr |
 | `qairt_vlm`            | `qualcomm/Qwen2.5-VL-7B-Instruct` | npu | pr |
@@ -101,6 +103,24 @@ Entry fields: `id`, `precision`, `hub` (default `auto`), `devices`,
 `quality_max_new_tokens` (per-model budget for the keyword cells),
 `env_override` (an env var that replaces `id`), `nightly` (marks every cell of
 the entry `nightly`; use it for models whose download dominates a PR run).
+
+### Qwen3.5 MTP cache regression
+
+The Qwen3.5 cases use the same GGUF as target and drafter. Unlike Gemma's
+shared-cache MTP path, this exercises `nextn.*` head loading and the separate
+drafter KV cache. Four cases compare MTP output with a clean plain greedy
+decode: explicit reset, identical prompt, edited question, and replacement
+question. Each case requires nonzero draft-token statistics, so a silent
+fallback to plain decoding fails the test. The unsupported QCS9075M HTP
+cell skips, as in the existing Gemma MTP test; its CPU cell still runs.
+
+The default matrix downloads the Q8_0 model on first use. To reuse a local
+Qwen3.5-0.8B GGUF containing its MTP head:
+
+```bash
+GENIEX_TEST_MTP_MODEL=/path/to/Qwen3.5-0.8B-Q8_0.gguf \
+  pytest tests/test_llama_cpp.py -k 'mtp_qwen35_cache_lifecycle and cpu'
+```
 
 llama_cpp and QAIRT share the same LLM/VLM models so a keyword-quality
 divergence traces to backend / quantization rather than model identity.

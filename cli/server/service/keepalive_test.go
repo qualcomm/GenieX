@@ -4,6 +4,9 @@
 package service
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
@@ -98,9 +101,60 @@ func TestResolveModelParam_InvalidPowerMode(t *testing.T) {
 // Regression test for #1322: model destruction shares the request GIL, so
 // the cleanup goroutine can never destroy a model a handler is still using.
 
-type fakeModel struct{ destroyed int }
+type fakeModel struct{ destroyed, resets int }
 
 func (f *fakeModel) Destroy() error { f.destroyed++; return nil }
+func (f *fakeModel) Reset() error   { f.resets++; return nil }
+
+func TestKeepAliveSessionReset(t *testing.T) {
+	root := t.TempDir()
+	if err := geniex_sdk.ModelInit(root); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { geniex_sdk.ModelDeinit() })
+
+	for _, tc := range []struct {
+		name, runtime, kind string
+		reset               bool
+	}{
+		{"llama-llm", geniex_sdk.RuntimeLlamaCpp, "llm", false},
+		{"qairt-llm", geniex_sdk.RuntimeQairt, "llm", true},
+		{"llama-vlm", geniex_sdk.RuntimeLlamaCpp, "vlm", true},
+		{"qairt-vlm", geniex_sdk.RuntimeQairt, "vlm", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			name := "tests/" + tc.name
+			dir := filepath.Join(root, "models", "tests", tc.name)
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			manifest := fmt.Sprintf(`{"Name":%q,"ModelName":"test","ModelType":%q,"PluginId":%q,"ModelFile":{"Q4_0":{"Name":"model.gguf","Downloaded":true,"Size":0}}}`, name, tc.kind, tc.runtime)
+			if err := os.WriteFile(filepath.Join(dir, "geniex.json"), []byte(manifest), 0600); err != nil {
+				t.Fatal(err)
+			}
+
+			f := &fakeModel{}
+			keepAlive.name = name
+			keepAlive.model = f
+			keepAlive.param = types.ModelParam{}
+			keepAlive.lastSession = []uint64{1}
+			t.Cleanup(keepAlive.destroy)
+			get := func(session []uint64) (any, bool, error) {
+				if tc.kind == "vlm" {
+					return keepAliveGet[geniex_sdk.VLM](name, types.ModelParam{}, session)
+				}
+				return keepAliveGet[geniex_sdk.LLM](name, types.ModelParam{}, session)
+			}
+			for i, session := range [][]uint64{{1, 2}, {3}} {
+				model, fresh, err := get(session)
+				wantReset := tc.reset && i == 1
+				if err != nil || model != f || fresh != wantReset || (f.resets > 0) != wantReset {
+					t.Fatalf("session %v: model=%v fresh=%v resets=%d err=%v; want reset=%v", session, model, fresh, f.resets, err, wantReset)
+				}
+			}
+		})
+	}
+}
 
 func TestSweepNeverDestroysMidRequest(t *testing.T) {
 	viper.Set("keepalive", -1) // any idle time counts as expired

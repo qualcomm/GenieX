@@ -187,6 +187,8 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_Llm_generate(JNIEnv
 }
 
 // JNI: stopStream - Stop ongoing generation
+// JNIEXPORT/JNICALL make the rule misread this void function as non-void.
+// nosemgrep: reusable-workflows.semgrep_rules.cxx.funcret.gen.non-void-function-no-return
 extern "C" JNIEXPORT void JNICALL Java_com_geniex_sdk_jni_Llm_stopStream(JNIEnv*, jobject, jlong handle) {
     void*                       h = (void*)handle;
     std::lock_guard<std::mutex> lock(g_stopFlagsMutex);

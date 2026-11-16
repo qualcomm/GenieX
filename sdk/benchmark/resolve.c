@@ -274,7 +274,7 @@ char* resolve_local_anchor(const char* path) {
     /* Prefer tokenizer.json. */
     {
         const char* leaf = "/tokenizer.json";
-        char*       buf  = (char*)malloc(plen + strlen(leaf) + 1);
+        char*       buf  = (char*)calloc(plen + strlen(leaf) + 1, 1);
         if (!buf) return NULL;
         snprintf(buf, plen + strlen(leaf) + 1, "%s%s", path, leaf);
         if (stat(buf, &st) == 0 && S_ISREG(st.st_mode)) {

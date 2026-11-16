@@ -4,6 +4,7 @@
 package thinkfsm
 
 import (
+	"slices"
 	"strconv"
 	"testing"
 )
@@ -1097,5 +1098,41 @@ func TestGPTOSSAwaitingEqualsEndsAbandonedRecipient(t *testing.T) {
 					[]EventKind{Consume, Consume, ToolCall, ToolCall, ToolCall, ToolCall, Consume, Consume, ToolCallStart, ToolCall, ToolCallEnd})
 			})
 		}
+	}
+}
+
+func TestRestoreOpener(t *testing.T) {
+	tokens := []string{"reason", "</think>", "answer"}
+	for _, tc := range []struct {
+		name, prompt string
+		pieces       []string
+		kinds        []EventKind
+	}{
+		{"open", "assistant\n<think>", []string{"<think>", "reason", "</think>", "answer"},
+			[]EventKind{EnterThinking, Thinking, LeaveThinking, Content}},
+		{"open with newline", "assistant\n<think>\n", []string{"<think>", "\n", "reason", "</think>", "answer"},
+			[]EventKind{EnterThinking, Thinking, Thinking, LeaveThinking, Content}},
+		{"closed", "assistant\n<think>\n\n</think>\n\n", tokens, []EventKind{Content, Content, Content}},
+		{"no thinking", "assistant\n", tokens, []EventKind{Content, Content, Content}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := New()
+			var pieces []string
+			var kinds []EventKind
+			onToken := RestoreOpener(tc.prompt, func(piece string) bool {
+				pieces = append(pieces, piece)
+				kinds = append(kinds, s.Feed(piece).Kind)
+				return true
+			})
+			for _, token := range tokens {
+				onToken(token)
+			}
+			if !slices.Equal(pieces, tc.pieces) {
+				t.Errorf("pieces = %q, want %q", pieces, tc.pieces)
+			}
+			if !slices.Equal(kinds, tc.kinds) {
+				t.Errorf("kinds = %v, want %v", kinds, tc.kinds)
+			}
+		})
 	}
 }

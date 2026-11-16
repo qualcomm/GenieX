@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -15,6 +16,7 @@
 #include <vector>
 
 #include "common.h"
+#include "geniex_model.h"
 #include "ggml-backend.h"
 #include "logging.h"
 #include "speculative.h"
@@ -45,7 +47,11 @@ Device classify_device(const char* device_id, int n_gpu_layers) {
     return Device::CPU;  // UNKOWN treat as CPU
 }
 
-int resolve_n_threads(int requested) { return requested > 0 ? requested : common_cpu_get_num_math(); }
+int resolve_n_threads(int requested, int cap = 0) {
+    if (requested > 0) return requested;
+    int n = common_cpu_get_num_math();
+    return cap > 0 ? std::min(n, cap) : n;
+}
 
 llama_model_params build_model_params(const geniex_ModelConfig& config, Device device) {
     static const bool mmap_matrix[3][3] = {
@@ -102,8 +108,17 @@ llama_context_params build_context_params(const geniex_ModelConfig& config, int3
         {true, false, true}   // Android
     };
 
-    uint32_t ubatch = ubatch_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
-    bool     fa     = fa_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+    // Decode thread cap (0 = none). On Windows NPU the HTP does the decode work and every extra CPU
+    // thread spin-polls each token for no throughput gain. Prefill (n_threads_batch) stays uncapped.
+    static const int decode_threads_matrix[3][3] = {
+        {0, 0, 0},  // Linux
+        {0, 0, 4},  // Windows
+        {0, 0, 0}   // Android
+    };
+
+    uint32_t ubatch         = ubatch_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+    bool     fa             = fa_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
+    int      decode_threads = decode_threads_matrix[static_cast<int>(kHostPlatform)][static_cast<int>(device)];
 
     llama_context_params cpar = llama_context_default_params();
     cpar.swa_full             = false;
@@ -111,7 +126,7 @@ llama_context_params build_context_params(const geniex_ModelConfig& config, int3
     cpar.n_batch              = config.n_batch > 0 ? config.n_batch : 2048;
     cpar.n_ubatch             = config.n_ubatch > 0 ? config.n_ubatch : ubatch;
     cpar.n_seq_max            = config.n_seq_max > 0 ? config.n_seq_max : 1;
-    cpar.n_threads            = resolve_n_threads(config.n_threads);
+    cpar.n_threads            = resolve_n_threads(config.n_threads, decode_threads);
     cpar.n_threads_batch      = resolve_n_threads(config.n_threads_batch);
     cpar.flash_attn_type      = static_cast<llama_flash_attn_type>(fa);
     cpar.no_perf              = false;
@@ -157,7 +172,9 @@ void warmup_context(const llama_model* model, llama_context* ctx) {
     if (llama_vocab_eos(vocab) != LLAMA_TOKEN_NULL) tokens.push_back(llama_vocab_eos(vocab));
     if (tokens.empty()) tokens.push_back(0);
 
-    if (llama_decode(ctx, llama_batch_get_one(tokens.data(), static_cast<int32_t>(tokens.size()))) != 0) {
+    // llama_decode asserts n_tokens <= n_batch, so clamp like common_init_from_params does.
+    const auto n_tokens = std::min<size_t>(tokens.size(), llama_n_batch(ctx));
+    if (llama_decode(ctx, llama_batch_get_one(tokens.data(), static_cast<int32_t>(n_tokens))) != 0) {
         GENIEX_LOG_WARN("model warmup decode failed");
     }
     llama_synchronize(ctx);
@@ -406,6 +423,38 @@ std::optional<std::vector<ggml_backend_dev_t>> resolve_devices(const char* devic
         devices.push_back(nullptr);  // NULL terminator for llama_model_params::devices
     }
     return devices;
+}
+
+// IQ9: HTP0 row-splits across both NSPs (small models, mmproj), HTP1-HTP3 are single sessions on NSP0 and HTP4-HTP6
+// on NSP1, for layer-splitting models too large for one session.
+constexpr const char* kIq9HexagonDevices = "HTP0[0-1:0],HTP1[0:1],HTP2[0:2],HTP3[0:3],HTP4[1:1],HTP5[1:2],HTP6[1:3]";
+
+const char* linux_hexagon_devices() {
+    if (!std::filesystem::exists("/dev/fastrpc-cdsp1")) return "2";
+    char* chipset = nullptr;
+    geniex_model_detect_chipset(/*offline=*/1, &chipset);
+    const bool iq9 = chipset && std::string_view(chipset) == "qualcomm-qcs9075";
+    if (chipset) geniex_free(chipset);
+    return iq9 ? kIq9HexagonDevices : "HTP0[0-1:0],HTP1[0-1:1]";
+}
+
+void select_iq9_npu_devices(std::vector<ggml_backend_dev_t>& selection, const char* model_path) {
+    const char* env = std::getenv("GGML_HEXAGON_DEVICES");
+    if (!env || std::strcmp(env, kIq9HexagonDevices) != 0 || !model_path) return;
+    // resolve_devices() output is null-terminated: plain `npu` is {HTP0, nullptr}.
+    if (selection.size() != 2 || !selection[0] || std::strcmp(ggml_backend_dev_name(selection[0]), "HTP0") != 0) return;
+
+    std::error_code ec;
+    const uintmax_t size = std::filesystem::file_size(model_path, ec);
+    if (ec || size < (2ull << 30)) return;
+    // Keep the per-NSP grouping: alternating cdsp/cdsp1 between consecutive layers aborts with dsp-rsp
+    // INTERNAL-ERROR. Up to ~8 GiB (4B-13B Q4) two sessions per NSP fit and leave HTP0 to the mmproj; larger
+    // models (e.g. Qwen3-30B-A3B) need all seven.
+    const char* devices = size >= (8ull << 30) ? "HTP0,HTP1,HTP2,HTP3,HTP4,HTP5,HTP6" : "HTP1,HTP2,HTP4,HTP5";
+    auto        split   = resolve_devices(devices);
+    if (!split || split->empty()) return;
+    GENIEX_LOG_INFO("IQ9 NPU: {} MiB model, layer-splitting across {}", size >> 20, devices);
+    selection = std::move(*split);
 }
 
 void apply_device_selection(llama_model_params& mpar, std::vector<ggml_backend_dev_t>& selection, Device device) {

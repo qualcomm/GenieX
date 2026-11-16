@@ -66,14 +66,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   <Accordion title="`docker pull` 报权限错误 / 未授权">
     需要同时满足两点：
 
-    1. **镜像仓库登录。** Docker Hub（`docker.io/qualcomm/geniex`）是公开的，无需登录。Qualcomm Container Registry 则需先登录：
-
-       ```bash bash
-       # Qualcomm Container Registry:
-       docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
-       ```
-
-       出现 `Login Succeeded` 即成功。
+    1. **镜像仓库。** 从 Docker Hub（`docker.io/qualcomm/geniex`）拉取，公开、无需登录。若报 `unauthorized`，对照 [CLI 安装（Docker）](/cn/run/cli/install) 检查镜像名和 tag。
 
     2. **加入 docker 用户组。** 若 `docker pull` 返回 `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`，说明当前用户不在 `docker` 组：
 
@@ -93,7 +86,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     默认情况下，视觉编码器（mmproj）与语言模型共用同一个 HTP session，在部分设备（如 QCS9075）上两者无法同时放下。为视觉编码器单独分配一个 HTP session：
 
     ```bash bash
-    GGML_HEXAGON_NDEV=2 geniex infer unsloth/Qwen3-VL-2B-Instruct-GGUF:Q4_0 --compute HTP0 --vit-compute HTP1
+    GGML_HEXAGON_DEVICES=2 geniex infer unsloth/Qwen3-VL-2B-Instruct-GGUF:Q4_0 --compute HTP0 --vit-compute HTP1
     ```
 
     如果不想让视觉编码器占用 NPU，可改用 `--vit-compute CPU`。`GGML_HEXAGON_DEVICES=2` 是该变量的新写法；必须在启动 `geniex`（或 `geniex serve`）的 shell 中设置。

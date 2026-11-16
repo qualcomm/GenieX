@@ -36,7 +36,9 @@ type Processor struct {
 	Run       func(prompt string, images, audios []string, onToken func(string) bool) (string, geniex_sdk.ProfileData, error)
 	Reset     func() error
 
-	splitter *thinkfsm.Splitter
+	splitter        *thinkfsm.Splitter
+	endsWithNewline bool
+	newlinesToSkip  int
 }
 
 func (p *Processor) Process() error {
@@ -81,6 +83,8 @@ func (p *Processor) Process() error {
 		spin.Start()
 
 		p.splitter = thinkfsm.New()
+		p.endsWithNewline = false
+		p.newlinesToSkip = 0
 		stopGen = false
 		output, profileData, err := p.Run(prompt, images, audios, func(token string) bool {
 			if firstToken {
@@ -207,19 +211,28 @@ func (p *Processor) fsmEvent(token string) {
 	switch ev.Kind {
 	case thinkfsm.EnterThinking:
 		render.GetTheme().Set(render.GetTheme().ThinkOutput)
-		if token == "<think>" {
-			fmt.Print("<think>")
-		} else {
-			fmt.Print("<think>\n")
+		fmt.Print("<think>\n")
+		p.endsWithNewline = true
+		p.newlinesToSkip = 1
+		if token == "\n" {
+			p.newlinesToSkip = 0
 		}
 	case thinkfsm.LeaveThinking:
-		if token == "</think>" {
-			fmt.Print("</think>")
-		} else {
-			fmt.Print("\n</think>\n\n")
+		if !p.endsWithNewline {
+			fmt.Print("\n")
 		}
+		fmt.Print("</think>\n\n")
+		p.newlinesToSkip = 2
 		render.GetTheme().Set(render.GetTheme().ModelOutput)
 	case thinkfsm.Thinking, thinkfsm.Content:
+		for p.newlinesToSkip > 0 && strings.HasPrefix(ev.Text, "\n") {
+			ev.Text = ev.Text[1:]
+			p.newlinesToSkip--
+		}
+		if ev.Text != "" {
+			p.newlinesToSkip = 0
+			p.endsWithNewline = strings.HasSuffix(ev.Text, "\n")
+		}
 		fmt.Print(ev.Text)
 	}
 }

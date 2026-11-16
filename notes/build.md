@@ -19,7 +19,7 @@ Run every command below from **PowerShell**, not `cmd.exe`, Git Bash, or WSL. Th
 Also needed by the SDK's CMake configure: a vendored submodule (sentencepiece, under `third-party/geniex-qairt`) creates a symlink and fails with "A required privilege is not held by the client" without it.
 
 1. Enable **Developer Mode**: Settings → Privacy & Security → For developers.
-2. Grant **Create symbolic links** rights via `gpedit.msc` → Computer Configuration → Windows Settings → Security Settings → Local Policies → User Rights Assignment, or set `HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\LocalAccountTokenFilterPolicy = 1` (DWORD).
+2. Grant **Create symbolic links** rights via `gpedit.msc` → Computer Configuration → Windows Settings → Security Settings → Local Policies → User Rights Assignment.
 3. Enable **Long paths**: Settings → Privacy & Security → For developers.
 4. **Sign out and back in (or reboot)** after enabling Developer Mode; open sessions keep the old token. Verify in a new terminal with `whoami /priv | findstr SymbolicLink` (no output means it hasn't taken effect).
 5. If symlink errors persist, comment out `startup --windows_enable_symlinks` in `.bazelrc` — but be aware this can break other SDK paths.
@@ -30,7 +30,7 @@ Also needed by the SDK's CMake configure: a vendored submodule (sentencepiece, u
 
 The SDK's Rust model manager (`sdk/model-manager`) is built by `cargo` from CMake, and its build scripts compile C code, so a native Windows ARM64 build also needs:
 
-- **clang** (verified with `22.1.2`) — used by `cc-rs` and the Snapdragon presets. Install the ARM64 MSYS2 build (the plain LLVM installer has no `aarch64`-hosted `clang.exe`):
+- **clang** — used by `cc-rs` and the Snapdragon presets. Install the ARM64 MSYS2 build (the plain LLVM installer has no `aarch64`-hosted `clang.exe`):
 
   ```powershell
   winget install --id MSYS2.MSYS2
@@ -39,14 +39,14 @@ The SDK's Rust model manager (`sdk/model-manager`) is built by `cargo` from CMak
 
   Then add `C:\msys64\clangarm64\bin` to `PATH` (ahead of any other `clang.exe`, e.g. one bundled with Visual Studio).
 
-- **cargo** (verified with `1.95.0`) and the Windows ARM64 target:
+- **cargo** and the Windows ARM64 target:
 
   ```powershell
   winget install --id Rustlang.Rustup
   rustup target add aarch64-pc-windows-msvc
   ```
 
-- **Visual Studio** (verified with VS 2026 18.5 Community) — for the MSVC libs/linker only. Install the **"Desktop development with C++"** workload with the **ARM64 build tools** component.
+- **Visual Studio** — for the MSVC libs/linker only. Install the **"Desktop development with C++"** workload with the **ARM64 build tools** component.
 
 `clang` targets the MSVC ABI, so it needs MSVC's `INCLUDE`/`LIB` and `lld-link` on `PATH`. Without them, CMake's compiler check fails with `lld-link: error: could not open 'oldnames.lib'`. Configure and build from a Visual Studio **Developer** environment for ARM64 (see [Build the SDK](#windows-arm64-snapdragon)).
 
@@ -188,11 +188,12 @@ Deploy and smoke-test on device:
 
 ```bash
 adb push pkg-geniex /data/local/tmp/geniex
-adb push Qwen3-0.6B-Q4_0.gguf /data/local/tmp/geniex/modelfiles/llama_cpp/
+adb push Qwen3-0.6B-Q4_0.gguf /data/local/tmp/geniex/
 adb shell "cd /data/local/tmp/geniex && \
-  LD_LIBRARY_PATH=./lib \
+  LD_LIBRARY_PATH=./lib:./lib/llama_cpp \
+  ADSP_LIBRARY_PATH=./lib/llama_cpp \
   GENIEX_PLUGIN_PATH=./lib \
-  ./bin/geniex_test_llm"
+  ./bin/geniex-bench --plugin llama_cpp --device npu -m Qwen3-0.6B-Q4_0.gguf"
 ```
 
 The Android demo app is no longer hosted in this repo — it lives in [`qualcomm/ai-hub-apps`](https://github.com/qualcomm/ai-hub-apps/tree/main/apps/geniex_chat_android). Build the AAR here, then point the demo app at it.
@@ -223,7 +224,7 @@ Flags for `bazelisk build` and `bazelisk run`:
 
 | Flag                                    | Meaning                                                                                                     |
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `--//sdk:sdk_type={local,s3,bazel}`     | SDK source. `local` (default) links against `sdk/pkg-geniex`; `s3` and `bazel` are WIP.                     |
+| `--//sdk:sdk_type={local,s3,bazel}`     | SDK source. Only `local` (default, links against `sdk/pkg-geniex`) works; `s3` and `bazel` are not wired up yet.                     |
 | `--config={linux_arm64,windows_arm64}`  | Cross-compile to the target platform (Go toolchain + CGO + `oci_image` base). `sdk/pkg-geniex/` must match. |
 
 ### Development and release targets
@@ -250,7 +251,7 @@ Use `bazelisk coverage` instead of `bazelisk test`:
 bazelisk coverage //... --combined_report=lcov
 ```
 
-Bazel's default `--instrumentation_filter` only covers packages that own a test target, so every Go package ships at least a placeholder `package_test.go` to keep itself in the denominator. Combined lcov lands at `bazel-out/_coverage/_coverage_report.dat`. Render it with `genhtml bazel-out/_coverage/_coverage_report.dat -o coverage-html` (gitignored), or summarize on the CLI with `lcov --list <report>`.
+Bazel's default `--instrumentation_filter` only covers packages that own a test target, so every Go package ships at least a placeholder `package_test.go` to keep itself in the denominator. Combined lcov lands at `bazel-out/_coverage/_coverage_report.dat`. Render it with `genhtml bazel-out/_coverage/_coverage_report.dat -o coverage-html` (gitignored), or summarize on the CLI with `lcov --list <report>`. lcov 2.x honours `LCOV_EXCL_*` markers with `--filter region --rc c_file_extensions=c,h,cc,cpp,go`; lcov 1.x (msys2, older distros) ignores them, so render on Linux with 2.x for a clean report.
 
 ## Python bindings
 

@@ -14,6 +14,7 @@
 #include "chat.h"
 #include "common.h"
 #include "htp_session.h"
+#include "liquid-decision.h"
 #include "logging.h"
 #include "params.h"
 #include "profiler.h"
@@ -63,6 +64,7 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
     if (!selection) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
+    select_iq9_npu_devices(*selection, input->model_path);
     apply_device_selection(mpar, *selection, device);
 
     // FIX: HTP backend patch
@@ -90,6 +92,9 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
             GENIEX_LOG_INFO("gpt-oss on GPU: flash attention enabled");
         }
     }
+    // Keep accelerator microbatch safety limits; only CPU defaults expand to
+    // hold an entire non-causal question. Explicit SDK limits remain honored.
+    configure_decision_context(this->model, cpar, config.n_batch <= 0, config.n_ubatch <= 0 && device == Device::CPU);
     this->ctx = llama_init_from_model(this->model, cpar);
     if (!this->ctx) {
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
@@ -143,6 +148,9 @@ int32_t LlamaLlm::reset() {
     this->past_prompt_tokens.clear();
 
     llama_memory_clear(llama_get_memory(this->ctx), /*clear data=*/true);
+    if (this->draft_ctx) {
+        llama_memory_clear(llama_get_memory(this->draft_ctx), /*clear data=*/true);
+    }
 
     return GENIEX_SUCCESS;
 }
@@ -240,6 +248,9 @@ int32_t LlamaLlm::apply_chat_template(
 int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGenerateOutput* output) {
     // Validate input
     if (!input) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    if (!this->ctx) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
+    // Autoregressive sampling requires persistent sequence state.
+    if (!llama_get_memory(this->ctx)) return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
 
     bool has_input_embd  = input->input_embd != nullptr && input->input_embd_count > 0;
     bool has_input_ids   = input->input_ids != nullptr && input->input_ids_count > 0;
@@ -274,10 +285,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         // Embedding turns always fully redecode (see the "update past record"
         // comment near the end of this function), so start from a clean KV
         // cache rather than continuing from whatever a prior turn left behind.
-        llama_memory_seq_rm(mem, 0, 0, -1);
-        this->n_past        = 0;
-        this->n_past_global = 0;
-        this->past_prompt_tokens.clear();
+        this->reset();
     }
 
     // Encode the full prompt (from input_embd, input_ids, or prompt_utf8)
@@ -327,18 +335,17 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
         if (match_len < (int)this->past_prompt_tokens.size()) {
             if (match_len < this->n_past_global - this->n_past) {
-                // match out of kvcache, need reset
-                llama_memory_seq_rm(mem, 0, 0, this->n_past);
-                this->n_past        = 0;
-                this->n_past_global = prompt_len > n_ctx - 4 ? n_ctx - 4 : 0;
-                GENIEX_LOG_INFO("prefix match: n_past_global rollback to: {}", this->n_past_global);
+                GENIEX_LOG_WARN("prefix match: matched prefix is outside the cache; resetting state");
+                this->reset();
+            } else if (!llama_memory_seq_rm(mem, 0, match_len, -1) ||
+                       (this->draft_ctx && !llama_memory_seq_rm(llama_get_memory(this->draft_ctx), 0, match_len, -1))) {
+                GENIEX_LOG_WARN("prefix match: rollback to token {} failed; resetting state", match_len);
+                this->reset();
             } else {
-                // match in kvcache, need rollback
-                llama_memory_seq_rm(mem, 0, match_len, -1);
                 this->n_past        = match_len;
                 this->n_past_global = match_len;
-                GENIEX_LOG_INFO("prefix match: n_past_global rollback to: {}", this->n_past_global);
             }
+            GENIEX_LOG_INFO("prefix match: n_past_global rollback to: {}", this->n_past_global);
             this->past_prompt_tokens.assign(prompt_ids.begin(), prompt_ids.begin() + this->n_past_global);
         }
     }
@@ -365,7 +372,10 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
             return 0;
         }
 
-        llama_memory_seq_rm(mem, 0, n_keep, n_keep + n_discard);
+        if (!llama_memory_seq_rm(mem, 0, n_keep, n_keep + n_discard)) {
+            GENIEX_LOG_WARN("Context shifting: failed to discard {} tokens; keeping state", n_discard);
+            return 0;
+        }
         llama_memory_seq_add(mem, 0, n_keep + n_discard, this->n_past, -n_discard);
         this->n_past -= n_discard;
 
@@ -473,6 +483,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
 
     profiler.prompt_end();
     profiler.update_prompt_tokens(prompt_len - this->n_past_global);
+    profiler.update_total_prompt_tokens(prompt_len);
     profiler.decode_start();
 
     // Process output
@@ -556,10 +567,7 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         // isn't representable as past_prompt_tokens, so the KV cache is dropped
         // entirely after an embedding turn: the next call (text, input_ids, or
         // another input_embd) always starts a full redecode from position 0.
-        llama_memory_seq_rm(mem, 0, 0, -1);
-        this->n_past        = 0;
-        this->n_past_global = 0;
-        this->past_prompt_tokens.clear();
+        this->reset();
     } else {
         this->n_past_global = prompt_len + generated_tokens.size();
         this->past_prompt_tokens.insert(this->past_prompt_tokens.end(), embd_inp.begin(), embd_inp.end());
@@ -585,6 +593,8 @@ int32_t LlamaLlm::forward_logits(const geniex_LlmForwardLogitsInput* input, geni
     if (!this->ctx || !this->model) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
     if (!input->input_ids || input->input_ids_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
+    const bool cacheless = !llama_get_memory(this->ctx);
+    if (cacheless && input->all_positions) return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
 
     const llama_vocab* vocab   = llama_model_get_vocab(this->model);
     const int          n_vocab = llama_vocab_n_tokens(vocab);
@@ -601,6 +611,11 @@ int32_t LlamaLlm::forward_logits(const geniex_LlmForwardLogitsInput* input, geni
     if (n_tok > n_ctx) {
         GENIEX_LOG_WARN("forward_logits: input ({}) exceeds context length ({})", n_tok, n_ctx);
         return GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
+    }
+
+    if (cacheless && (n_tok > n_batch || n_tok > static_cast<int>(llama_n_ubatch(this->ctx)))) {
+        GENIEX_LOG_WARN("forward_logits: cache-less input must fit one physical batch; try --compute cpu");
+        return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
     }
 
     // Fresh KV in, clean KV out: result depends only on input_ids and
@@ -669,6 +684,14 @@ int32_t LlamaLlm::decide(const geniex_DecideInput* input, geniex_DecideOutput* o
     DecisionPrepared prepared;
     int32_t          rc = prepare_decision(this->model, input, &prepared);
     if (rc != GENIEX_SUCCESS) return rc;
+    if (is_liquid_decision(prepared.type)) {
+        this->reset();
+        struct ResetGuard {
+            LlamaLlm* self;
+            ~ResetGuard() { self->reset(); }
+        } reset_guard{this};
+        return evaluate_liquid_decision(this->ctx, prepared, output);
+    }
     const llama_vocab* vocab = llama_model_get_vocab(this->model);
 
     // Decision codes must map to distinct single tokens in the model vocabulary.
@@ -839,6 +862,12 @@ int32_t LlamaLlm::decode_speculative(const geniex_GenerationConfig& cfg, const s
         common_speculative_draft(this->spec);
         draft_n_total += (int64_t)draft.size();
 
+        // Drafting wrote unverified positions into the drafter's KV. Replay
+        // the verification batch from the same committed prefix as the target.
+        if (mem_dft) {
+            llama_memory_seq_rm(mem_dft, seq_id, this->n_past, -1);
+        }
+
         // Verification batch: [id_last, draft0, draft1, ...], all needing logits.
         batch.clear();
         llama_pos pos = this->n_past;
@@ -947,8 +976,9 @@ int32_t LlamaLlm::setup_speculative(
             return GENIEX_ERROR_COMMON_INVALID_INPUT;
         }
 
-        llama_model_params dmpar     = build_model_params(config, device);
-        auto               selection = resolve_devices(device_id);
+        llama_model_params dmpar = build_model_params(config, device);
+        dmpar.load_mtp           = is_mtp;
+        auto selection           = resolve_devices(device_id);
         if (selection) {
             apply_device_selection(dmpar, *selection, device);
         }
@@ -983,6 +1013,13 @@ int32_t LlamaLlm::setup_speculative(
     if (!this->spec) {
         GENIEX_LOG_ERROR("failed to initialize speculative context");
         return GENIEX_ERROR_COMMON_MODEL_LOAD;
+    }
+
+    // Probe the draft context like llama-server does. Must run after common_speculative_init, which
+    // changes the draft graph shape (MTP nextn embeddings); otherwise the first draft step pays the
+    // HTP graph rebuild (~2 s on gemma-4-26B) inside the decode window.
+    if (this->draft_ctx) {
+        common_context_can_seq_rm(this->draft_ctx);
     }
 
     GENIEX_LOG_INFO("speculative decoding enabled: type={}, n_max={}", config.spec_type, this->spec_n_max);

@@ -230,6 +230,8 @@ finish_reason: stop
 usage: CompletionUsage(completion_tokens=58, prompt_tokens=19, total_tokens=77, ...)
 ```
 
+`usage.prompt_tokens` 为完整 prompt 长度，包含从 KV cache 复用的 tokens；`usage.prompt_tokens_details.cached_tokens` 为其中复用的部分（未命中时为 0），`timings.prompt_n` 为实际计算的 tokens。QAIRT 模型暂不统计复用，其 `prompt_tokens` 只包含实际计算的 tokens。
+
 ### **分离推理内容（reasoning_content）**
 
 思考模型默认会把思维链放入 OpenAI 标准的 `message.reasoning_content` 字段，让 `content` 只保留干净的回复。仅在需要把原始推理保留在 `message.content` 时，才需在请求体中传入 `reasoning_format="none"`。

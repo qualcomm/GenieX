@@ -15,7 +15,6 @@ Linux Docker 路径通过 Linux ARM64 容器镜像运行，并支持 NPU 访问�
 
 - 安装了 Docker 的 Linux ARM64 主机——若尚未安装 Docker，请参照 [Docker 的 Ubuntu 安装指南](https://docs.docker.com/engine/install/ubuntu/)。
 - 跃龙 IoT 芯片——详见[支持的平台](/cn/get-started/platforms)。
-- 拥有以下任一镜像仓库读权限的凭据。
 
 ### **安装宿主机依赖**
 
@@ -23,21 +22,16 @@ Linux Docker 路径通过 Linux ARM64 容器镜像运行，并支持 NPU 访问�
 
 ### **拉取镜像**
 
-镜像同时发布到两个仓库——选择你有权限的一个，设置 `IMAGE` 后再拉取：
+镜像发布在 Docker Hub（公开，无需登录）：
 
 ```bash bash
-# Option A — Docker Hub (公开，无需登录):
 IMAGE=docker.io/qualcomm/geniex:latest
-
-# Option B — Qualcomm Container Registry:
-docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
-IMAGE=docker-registry.qualcomm.com/qcom-ai-hub/geniex-cli:latest
 
 docker pull "$IMAGE"
 ```
 
 <Note>
-  若 `docker login` 失败或 `docker pull` 返回 `permission denied ... /var/run/docker.sock`，参见[故障排查 → Linux](/cn/resources/troubleshooting#linux) 了解凭据与 `docker` 组的修复方法。
+  若 `docker pull` 返回 `permission denied ... /var/run/docker.sock`，参见[故障排查 → Linux](/cn/resources/troubleshooting#linux) 了解 `docker` 组的修复方法。
 </Note>
 
 <Note>

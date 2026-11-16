@@ -36,6 +36,7 @@ class geniex_ProfileData(Structure):
         ('prompt_time', c_int64),
         ('decode_time', c_int64),
         ('prompt_tokens', c_int64),
+        ('total_prompt_tokens', c_int64),
         ('generated_tokens', c_int64),
         ('prefill_speed', c_double),
         ('decoding_speed', c_double),

@@ -55,6 +55,8 @@ void Profiler::record_ttft() {
 
 void Profiler::update_prompt_tokens(uint32_t count) { prompt_tokens = count; }
 
+void Profiler::update_total_prompt_tokens(uint32_t count) { total_prompt_tokens = count; }
+
 void Profiler::update_generated_tokens(uint32_t count) { generated_tokens = count; }
 
 void Profiler::set_draft_stats(int64_t n_total, int64_t n_accepted) {
@@ -82,11 +84,12 @@ void Profiler::to_profile_data(ProfileData& pd) {
         pd.decode_time = to_us(decode_end_time - decode_start_time);
     }
 
-    pd.prompt_tokens    = prompt_tokens;
-    pd.generated_tokens = generated_tokens;
-    pd.draft_n_total    = draft_n_total;
-    pd.draft_n_accepted = draft_n_accepted;
-    pd.stop_reason      = stop_reason_to_string(stop_reason);
+    pd.prompt_tokens       = prompt_tokens;
+    pd.total_prompt_tokens = total_prompt_tokens;
+    pd.generated_tokens    = generated_tokens;
+    pd.draft_n_total       = draft_n_total;
+    pd.draft_n_accepted    = draft_n_accepted;
+    pd.stop_reason         = stop_reason_to_string(stop_reason);
 }
 
 int64_t Profiler::to_us(std::chrono::nanoseconds ns) {

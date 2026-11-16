@@ -155,7 +155,7 @@ curl http://127.0.0.1:18181/v1/chat/completions \
 
 ```kotlin
 dependencies {
-    implementation("com.qualcomm.qti:geniex-android:0.4.0")
+    implementation("com.qualcomm.qti:geniex-android:0.10.0")
 }
 ```
 
@@ -240,6 +240,26 @@ GenieX 拥有两套运行时，让你在同一技术栈中既能获得**广泛�
 </a>
 
 ---
+
+## 📑 引用
+
+如果 GenieX 对你的研究或产品工作有帮助，请按如下方式引用：
+
+```bibtex
+@software{qualcomm_geniex,
+    title = {GenieX},
+    url = {https://github.com/qualcomm/GenieX},
+    publisher = {Qualcomm AI Hub},
+    author = {Chen, Wei and Li, Zhiyuan and Zhu, Lingyue and Chen, Hongzhi and
+              Wu, Mengsheng and Qian, Yichen and Zhu, Zhenxuan and
+              Cheng, Zhiyuan and Zhang, Dengchuan and Li, Yin and
+              Dong, Likuan and Cao, Wenwen},
+    year = {2026},
+}
+```
+
+\* Wei Chen 与 Zhiyuan Li 为同等贡献作者。
+
 
 ## 📄 许可证
 

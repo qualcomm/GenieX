@@ -26,6 +26,7 @@ import (
 	"github.com/qualcomm/GenieX/cli/internal/record"
 	"github.com/qualcomm/GenieX/cli/internal/render"
 	"github.com/qualcomm/GenieX/cli/internal/store"
+	"github.com/qualcomm/GenieX/cli/internal/thinkfsm"
 )
 
 var (
@@ -547,7 +548,7 @@ func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths, resolvedPowerMo
 
 				res, err = p.Generate(geniex_sdk.LlmGenerateInput{
 					PromptUTF8: templateOutput.FormattedText,
-					OnToken:    onToken,
+					OnToken:    thinkfsm.RestoreOpener(templateOutput.FormattedText, onToken),
 					Config: &geniex_sdk.GenerationConfig{
 						MaxTokens:     maxTokens,
 						Stop:          stopSequences,
@@ -704,7 +705,7 @@ func inferVLM(paths *geniex_sdk.ModelPaths, resolvedPowerMode geniex_sdk.PowerMo
 
 			res, err := p.Generate(geniex_sdk.VlmGenerateInput{
 				PromptUTF8: tmplOut.FormattedText,
-				OnToken:    onToken,
+				OnToken:    thinkfsm.RestoreOpener(tmplOut.FormattedText, onToken),
 				Config: &geniex_sdk.GenerationConfig{
 					MaxTokens:     maxTokens,
 					Stop:          stopSequences,

@@ -2,7 +2,7 @@ diff --git a/ggml/src/ggml-hexagon/ggml-hexagon.cpp b/ggml/src/ggml-hexagon/ggml
 index 3f1495645..972f627d3 100644
 --- a/ggml/src/ggml-hexagon/ggml-hexagon.cpp
 +++ b/ggml/src/ggml-hexagon/ggml-hexagon.cpp
-@@ -7038,6 +7109,24 @@ static bool ggml_backend_hexagon_comm_allreduce_tensor(void * comm_ctx_v, struct
+@@ -7038,6 +7109,28 @@ static bool ggml_backend_hexagon_comm_allreduce_tensor(void * comm_ctx_v, struct
      return true;
  }
  
@@ -20,14 +20,18 @@ index 3f1495645..972f627d3 100644
 +        return;
 +    }
 +    opt_power_mode = (int) mode;
-+    GGML_LOG_INFO("ggml-hex: geniex: power mode set to %s (applies to sessions created from now on)\n",
-+                   htp_power_mode_to_str(opt_power_mode));
++    // Busy-poll op completions only in burst; an explicit GGML_HEXAGON_OPPOLL wins.
++    if (!getenv("GGML_HEXAGON_OPPOLL")) {
++        opt_oppoll = mode == HTP_POWER_MODE_BURST;
++    }
++    GGML_LOG_INFO("ggml-hex: geniex: power mode set to %s, oppoll %d (applies to sessions created from now on)\n",
++                   htp_power_mode_to_str(opt_power_mode), opt_oppoll);
 +}
 +
  static ggml_backend_buffer_type_t ggml_backend_hexagon_split_buffer_type(int main_device, const float * tensor_split) {
      GGML_UNUSED(tensor_split);
      auto reg = ggml_backend_hexagon_reg();
-@@ -7052,6 +7141,9 @@ static ggml_backend_buffer_type_t ggml_backend_hexagon_split_buffer_type(int mai
+@@ -7052,6 +7145,9 @@ static ggml_backend_buffer_type_t ggml_backend_hexagon_split_buffer_type(int mai
  
  static void * ggml_backend_hexagon_get_proc_address(ggml_backend_reg_t reg, const char * name) {
      GGML_UNUSED(reg);

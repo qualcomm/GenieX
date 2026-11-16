@@ -129,6 +129,27 @@ ENTRY = {
 Row = tuple[str, str, str, str]
 
 _STATUS_RE = re.compile(r'^(?:\[[^\]]+\]\s*)?(\S+\.py::.+?)\s+(PASSED|FAILED|SKIPPED|ERROR)\b(.*)$')
+_TS_RE = re.compile(r'^\[[^\]]+\] ?')
+_BANNER_RE = re.compile(r'^={3,} (.+?) ={3,}$')
+_CASE_RE = re.compile(r'^_{3,} (?:ERROR at (?:setup|teardown) of )?(.+?) _{3,}$')
+
+
+def _failure_bodies(text: str) -> dict[str, str]:
+    # Map `name[params]` to its block in pytest's FAILURES / ERRORS section, minus DEBUG log lines.
+    bodies: dict[str, list[str]] = {}
+    in_failures = False
+    current: str | None = None
+    for raw in text.splitlines():
+        line = _TS_RE.sub('', raw.rstrip(), count=1)
+        if m := _BANNER_RE.match(line):
+            in_failures = m.group(1) in ('FAILURES', 'ERRORS')
+            current = None
+        elif in_failures and (m := _CASE_RE.match(line)):
+            current = m.group(1)
+            bodies.setdefault(current, [])
+        elif current and not line.startswith('DEBUG '):
+            bodies[current].append(line)
+    return {name: '\n'.join(lines).strip() for name, lines in bodies.items()}
 
 
 def _rows_from_stdout(text: str) -> list[Row]:
@@ -164,7 +185,13 @@ def _rows_from_stdout(text: str) -> list[Row]:
             crash_marker = crash_marker or line
     if last_incomplete and crash_marker:
         rows.append(('FAIL', last_incomplete, crash_marker[:200], ''))
-    return rows
+    bodies = _failure_bodies(text)
+    return [
+        (status, name, msg, body or bodies.get(name.split('::', 1)[-1].replace('::', '.'), ''))
+        if status == 'FAIL'
+        else (status, name, msg, body)
+        for status, name, msg, body in rows
+    ]
 
 
 def _rows_from_junit(xml: bytes) -> list[Row]:

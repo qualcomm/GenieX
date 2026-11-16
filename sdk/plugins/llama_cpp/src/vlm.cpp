@@ -12,6 +12,7 @@
 #include "common.h"
 #include "geniex.h"
 #include "htp_session.h"
+#include "liquid-decision.h"
 #include "llama.h"
 #include "logging.h"
 #include "mtmd-helper.h"
@@ -67,6 +68,7 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
     if (!selection) {
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
+    select_iq9_npu_devices(*selection, input->model_path);
 
     // Pick the mmproj device from the caller's explicit selection, before apply_device_selection fills in defaults.
     const bool explicit_selection = !selection->empty();
@@ -101,6 +103,8 @@ int32_t LlamaVlm::create(const geniex_VlmCreateInput* input) {
     const int32_t        n_ctx_default = device == Device::NPU ? 4096 : 16384;
     llama_context_params cpar =
         build_context_params(config, n_ctx_default, device, nullptr, OutputReservation::LastPerSequence);
+    // Preserve accelerator microbatch safety limits as in the LLM path.
+    configure_decision_context(this->model, cpar, config.n_batch <= 0, config.n_ubatch <= 0 && device == Device::CPU);
     this->ctx = llama_init_from_model(this->model, cpar);
     if (!this->ctx) {
         llama_model_free(this->model);
@@ -178,6 +182,14 @@ int32_t LlamaVlm::decide(const geniex_DecideInput* input, geniex_DecideOutput* o
     DecisionPrepared prepared;
     int32_t          rc = prepare_decision(this->model, input, &prepared);
     if (rc != GENIEX_SUCCESS) return rc;
+    if (is_liquid_decision(prepared.type)) {
+        this->reset();
+        struct ResetGuard {
+            LlamaVlm* self;
+            ~ResetGuard() { self->reset(); }
+        } reset_guard{this};
+        return evaluate_liquid_decision(this->ctx, prepared, output);
+    }
     if (prepared.type == "lev") return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
     const std::string&              prompt     = prepared.prompt;
     const std::vector<std::string>& candidates = prepared.candidates;
@@ -359,7 +371,8 @@ int32_t LlamaVlm::reset() {
     // leave cache state inconsistent with n_past. Keep this aligned with LlamaLlm::reset().
     llama_memory_clear(llama_get_memory(this->ctx), /*clear data=*/true);
 
-    this->n_past = 0;
+    this->n_past      = 0;
+    this->past_tokens = 0;
     this->past_prompt.clear();
     this->past_gen.clear();
 
@@ -447,6 +460,9 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
         return GENIEX_ERROR_COMMON_INVALID_INPUT;
     }
 
+    // Autoregressive sampling requires persistent sequence state.
+    if (!llama_get_memory(this->ctx)) return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
+
     common::Profiler profiler;
 
     int32_t res = GENIEX_SUCCESS;
@@ -520,6 +536,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
     const std::string full_prompt(input->prompt_utf8);
 
     std::string new_text_portion;
+    uint32_t    kv_tokens = 0;  // tokens in the reused prefix, then everything this request leaves behind
     if (this->n_past == 0 || this->past_prompt.empty()) {
         new_text_portion = full_prompt;
     } else {
@@ -539,6 +556,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             return GENIEX_ERROR_VLM_PREFIX_REUSE_FAILED;
         }
 
+        kv_tokens        = this->past_tokens;
         new_text_portion = full_prompt.substr(reuse_end);
         GENIEX_LOG_DEBUG(
             "prefix reuse: |A|={}, |G|={}, increment={} bytes", lcp, this->past_gen.size(), new_text_portion.size());
@@ -634,6 +652,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             }
             if (res == GENIEX_SUCCESS) {
                 profiler.update_prompt_tokens(prompt_tokens);
+                kv_tokens += prompt_tokens;
                 this->n_past = n_past_cur;
             }
             mtmd_input_chunks_free(chunks);
@@ -659,7 +678,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             if (needed == 0) return GENIEX_ERROR_LLM_TOKENIZATION_FAILED;
 
             // Allocate and tokenize
-            int32_t* prompt_tokens = (int32_t*)malloc(sizeof(int32_t) * needed);
+            int32_t* prompt_tokens = (int32_t*)calloc(needed, sizeof(int32_t));
             if (!prompt_tokens) return GENIEX_ERROR_COMMON_MEMORY_ALLOCATION;
 
             int32_t prompt_len = llama_tokenize(
@@ -689,6 +708,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             switch (decode_ret) {
                 case 0:
                     this->n_past += prompt_len;
+                    kv_tokens += prompt_len;
                     break;
                 case 1:
                     res = GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG;
@@ -702,6 +722,8 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
             GENIEX_LOG_DEBUG("no new text content, skipping direct llama processing");
         }
     }
+
+    profiler.update_total_prompt_tokens(kv_tokens);
 
     // Generate tokens (common for both multimodal and text-only)
     GENIEX_LOG_DEBUG("starting token generation loop");
@@ -764,6 +786,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
         batch.add(token, this->n_past++, /*seq_id=*/0, /*output=*/true);
         switch (llama_process(this->ctx, LLAMA_PROCESS_TYPE_DECODE, batch.get())) {
             case 0:
+                ++kv_tokens;
                 break;
             case 1:
                 res = GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH;
@@ -793,6 +816,7 @@ int32_t LlamaVlm::generate(const geniex_VlmGenerateInput* input, geniex_VlmGener
         // Record this turn so the next can reuse A+T+G (see vlm.h).
         this->past_prompt = full_prompt;
         this->past_gen    = full_text_str;
+        this->past_tokens = kv_tokens;
     }
 
     GENIEX_LOG_DEBUG("completed generation with {} tokens", generated_token_count);

@@ -5,7 +5,8 @@ data class ProfilingData(
     val mediaMs: Double,  /* Image/audio encoder time (ms); 0 for text-only runs */
     val promptTimeMs: Double,  /* Prefill time (ms); includes media-token prefill, excludes encoder */
     val decodeTimeMs: Double,   /* Token generation time (ms) */
-    val promptTokens: Long,    /* Number of prompt tokens (text + media tokens) */
+    val promptTokens: Long,    /* Prompt tokens evaluated in prefill (text + media tokens) */
+    val totalPromptTokens: Long,  /* Full requested prompt tokens, including those reused from the KV cache */
     val generatedTokens: Long,  /* Number of generated tokens */
     val prefillSpeed: Double,   /* Prefill speed (tokens/sec) */
     val decodingSpeed: Double,  /* Decoding speed (tokens/sec) */

@@ -87,7 +87,7 @@ The minimum required flags are `--plugin`, `--device`, and `-m`. The model argum
     Output:
 
     ```text
-    [ok  ] cell  plugin=llama_cpp  device=npu  ngl=999  ttft=349.2ms  prefill=60.2tps  decode=21.8tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=npu  ngl=-1  ttft=349.2ms  prefill=60.2tps  decode=21.8tps  gen=128 tok
     ```
   </Tab>
   <Tab title="Linux ARM64">
@@ -100,7 +100,7 @@ The minimum required flags are `--plugin`, `--device`, and `-m`. The model argum
     Output:
 
     ```text
-    [ok  ] cell  plugin=llama_cpp  device=npu  ngl=999  ttft=358.4ms  prefill=58.7tps  decode=20.1tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=npu  ngl=-1  ttft=358.4ms  prefill=58.7tps  decode=20.1tps  gen=128 tok
     ```
   </Tab>
 </Tabs>
@@ -126,8 +126,8 @@ Run the same model with `--device cpu`, `--device npu`, and `--device hybrid` to
 
     ```text
     [ok  ] cell  plugin=llama_cpp  device=cpu     ngl=0    ttft=476.2ms  prefill=25.3tps  decode=18.5tps  gen=128 tok
-    [ok  ] cell  plugin=llama_cpp  device=npu     ngl=999  ttft=340.1ms  prefill=62.8tps  decode=23.1tps  gen=128 tok
-    [ok  ] cell  plugin=llama_cpp  device=hybrid  ngl=999  ttft=198.4ms  prefill=91.5tps  decode=27.4tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=npu     ngl=-1  ttft=340.1ms  prefill=62.8tps  decode=23.1tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=hybrid  ngl=-1  ttft=198.4ms  prefill=91.5tps  decode=27.4tps  gen=128 tok
     ```
   </Tab>
   <Tab title="Linux ARM64">
@@ -143,8 +143,8 @@ Run the same model with `--device cpu`, `--device npu`, and `--device hybrid` to
 
     ```text
     [ok  ] cell  plugin=llama_cpp  device=cpu     ngl=0    ttft=512.3ms  prefill=21.4tps  decode=15.2tps  gen=128 tok
-    [ok  ] cell  plugin=llama_cpp  device=npu     ngl=999  ttft=395.1ms  prefill=53.2tps  decode=18.8tps  gen=128 tok
-    [ok  ] cell  plugin=llama_cpp  device=hybrid  ngl=999  ttft=241.7ms  prefill=78.3tps  decode=22.6tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=npu     ngl=-1  ttft=395.1ms  prefill=53.2tps  decode=18.8tps  gen=128 tok
+    [ok  ] cell  plugin=llama_cpp  device=hybrid  ngl=-1  ttft=241.7ms  prefill=78.3tps  decode=22.6tps  gen=128 tok
     ```
   </Tab>
 </Tabs>
@@ -180,7 +180,8 @@ Hold these variables constant when comparing two models or configs:
 
 | What to fix | Flag | Default |
 |---|---|---|
-| Context size | `-c` / `--ctx-size` | 512 random tokens |
+| Prompt length | `-p` / `--n-prompt` | 512 random tokens |
+| Context size | `-c` / `--ctx-size` | 0 (from the model) |
 | Generated tokens | `-n` / `--n-gen` | 128 |
 | Sampling temperature | `--temperature` | 0.0 |
 | Random seed | `--seed` | 42 |
@@ -210,7 +211,7 @@ The JSON includes per-run timing and aggregated stats (median / min / max / mean
 
 ```json
 {
-  "schema_version": "2",
+  "schema_version": "7",
   "cell_id": "Qwen3-1.7B-llama_cpp-hybrid",
   "plugin": "llama_cpp",
   "device": "hybrid",

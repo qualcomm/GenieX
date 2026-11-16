@@ -153,7 +153,7 @@ Point any OpenAI client at `http://127.0.0.1:18181/v1` — no code changes.
 
 ```kotlin
 dependencies {
-    implementation("com.qualcomm.qti:geniex-android:0.4.0")
+    implementation("com.qualcomm.qti:geniex-android:0.10.0")
 }
 ```
 
@@ -238,6 +238,26 @@ Thanks to everyone building GenieX 💙
 </a>
 
 ---
+
+## 📑 Citation
+
+If you use GenieX in your research or product work, please cite it:
+
+```bibtex
+@software{qualcomm_geniex,
+    title = {GenieX},
+    url = {https://github.com/qualcomm/GenieX},
+    publisher = {Qualcomm AI Hub},
+    author = {Chen, Wei and Li, Zhiyuan and Zhu, Lingyue and Chen, Hongzhi and
+              Wu, Mengsheng and Qian, Yichen and Zhu, Zhenxuan and
+              Cheng, Zhiyuan and Zhang, Dengchuan and Li, Yin and
+              Dong, Likuan and Cao, Wenwen},
+    year = {2026},
+}
+```
+
+\* Wei Chen and Zhiyuan Li contributed equally to this work.
+
 
 ## 📄 License
 

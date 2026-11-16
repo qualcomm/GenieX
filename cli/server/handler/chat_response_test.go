@@ -8,13 +8,35 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/openai/openai-go/v3"
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 	"github.com/qualcomm/GenieX/cli/internal/thinkfsm"
+	"github.com/qualcomm/GenieX/cli/server/types"
 )
+
+func TestProfile2UsageCachedTokens(t *testing.T) {
+	u := profile2Usage(geniex_sdk.ProfileData{PromptTokens: 1, TotalPromptTokens: 51, GeneratedTokens: 5})
+	if u.PromptTokens != 51 || u.PromptTokensDetails.CachedTokens != 50 || u.TotalTokens != 56 {
+		t.Errorf("usage=%+v", u)
+	}
+}
+
+func checkResponseMetadata(t *testing.T, body []byte, prefix, model string) types.ResponseMetadata {
+	t.Helper()
+	var meta types.ResponseMetadata
+	if err := json.Unmarshal(body, &meta); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().Unix()
+	if !strings.HasPrefix(meta.ID, prefix+"-") || meta.Model != model || meta.Created <= 0 || meta.Created > now || now-meta.Created > 5 {
+		t.Fatalf("incomplete response metadata: %s", body)
+	}
+	return meta
+}
 
 type blockingBody struct {
 	Choices []struct {

@@ -19,6 +19,7 @@ import (
 
 	geniex_sdk "github.com/qualcomm/GenieX/bindings/go"
 	"github.com/qualcomm/GenieX/cli/internal/config"
+	"github.com/qualcomm/GenieX/cli/internal/thinkfsm"
 	"github.com/qualcomm/GenieX/cli/server/service"
 	"github.com/qualcomm/GenieX/cli/server/types"
 	"github.com/qualcomm/GenieX/cli/server/utils"
@@ -54,7 +55,7 @@ type ChatCompletionRequest struct {
 }
 
 func defaultChatCompletionRequest() ChatCompletionRequest {
-	// Prefill model-load knobs with server defaults. ShouldBindJSON overwrites
+	// Prefill model-load and think knobs with server defaults. ShouldBindJSON overwrites
 	// fields present in the body, including explicit empty strings and zeros.
 	cfg := config.Get()
 	return ChatCompletionRequest{
@@ -66,7 +67,7 @@ func defaultChatCompletionRequest() ChatCompletionRequest {
 		},
 		Stream: false,
 
-		EnableThink:       true,
+		EnableThink:       cfg.Think,
 		NCtx:              cfg.NCtx,
 		Ngl:               cfg.Ngl,
 		Compute:           cfg.Compute,
@@ -270,6 +271,7 @@ func prepareVLM(p *geniex_sdk.VLM, input prepareInput[[]geniex_sdk.VlmChatMessag
 // generateWithRetry retries a VLM prefix reuse failure once after resetting
 // the model and rebuilding the full conversation.
 func generateWithRetry[T, M any](model *T, prompt string, gen generateFn, input prepareInput[M], prepare prepareFn[T, M], onToken func(string) bool) (geniex_sdk.ProfileData, string, error) {
+	onToken = thinkfsm.RestoreOpener(prompt, onToken)
 	profile, fullText, err := gen(prompt, onToken)
 	if !errors.Is(err, geniex_sdk.ErrVlmPrefixReuseFailed) {
 		return profile, fullText, err

@@ -164,8 +164,8 @@ func scoreConfidence(probabilities []float64) float64 {
 	return max(0, 1-distance/uniformDistance)
 }
 
-// Answer applies the temperature read from the model's GGUF metadata and the
-// confidence formulas used by llama.cpp's systemone implementation.
+// Answer applies the temperature read from the model's GGUF metadata and
+// GenieX's model-independent TypeSafe confidence formulas.
 func Answer(question Question, logits []float32, temperature float64) (Result, error) {
 	count, err := candidateCount(question)
 	if err != nil {

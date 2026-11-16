@@ -5,6 +5,8 @@
 // accumulate text; callers must preserve token boundaries.
 package thinkfsm
 
+import "strings"
+
 type state int
 
 const (
@@ -280,4 +282,28 @@ func (s *Splitter) Feed(token string) Event {
 	}
 	s.state = t.next
 	return t.Event
+}
+
+// RestoreOpener wraps onToken so that a <think> already opened by the prompt
+// (LFM3, MiniCPM5, ...) is replayed, with the whitespace the template left
+// after it, before the first generated token. The model cannot emit it, and
+// the Splitter needs it to enter thinking.
+func RestoreOpener(prompt string, onToken func(string) bool) func(string) bool {
+	trimmed := strings.TrimRight(prompt, " \t\r\n")
+	if !strings.HasSuffix(trimmed, "<think>") {
+		return onToken
+	}
+	replay := []string{"<think>"}
+	if tail := prompt[len(trimmed):]; tail != "" {
+		replay = append(replay, tail)
+	}
+	return func(token string) bool {
+		for _, piece := range replay {
+			if !onToken(piece) {
+				return false
+			}
+		}
+		replay = nil
+		return onToken(token)
+	}
 }

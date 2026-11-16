@@ -478,8 +478,8 @@ jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data) {
     jclass cls = env->FindClass("com/geniex/sdk/bean/ProfilingData");
     if (!cls) return nullptr;
 
-    // (DDDDJJDDJJLjava/lang/String;)V
-    jmethodID ctor = env->GetMethodID(cls, "<init>", "(DDDDJJDDJJLjava/lang/String;)V");
+    // (DDDDJJJDDJJLjava/lang/String;)V
+    jmethodID ctor = env->GetMethodID(cls, "<init>", "(DDDDJJJDDJJLjava/lang/String;)V");
     if (!ctor) return nullptr;
 
     const jdouble ttft_ms   = static_cast<jdouble>(data.ttft / 1000.0);
@@ -488,6 +488,7 @@ jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data) {
     const jdouble decode_ms = static_cast<jdouble>(data.decode_time / 1000.0);
 
     const jlong prompt_tokens = static_cast<jlong>(data.prompt_tokens);
+    const jlong total_tokens  = static_cast<jlong>(data.total_prompt_tokens);
     const jlong gen_tokens    = static_cast<jlong>(data.generated_tokens);
 
     // ---- compute speeds locally (tokens/sec) ----
@@ -513,7 +514,8 @@ jobject extract_profiling_data(JNIEnv* env, const geniex_ProfileData& data) {
         prompt_ms,
         decode_ms,  // D D D D
         prompt_tokens,
-        gen_tokens,  // J J
+        total_tokens,
+        gen_tokens,  // J J J
         prefill_speed,
         decoding_speed,  // D D
         draft_n_total,

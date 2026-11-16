@@ -441,8 +441,9 @@ typedef struct {
     int64_t prompt_time; /* Prefill time (us); includes media-token prefill, excludes encoder */
     int64_t decode_time; /* Token generation time (us) */
 
-    int64_t prompt_tokens;    /* Number of prompt tokens (text + media tokens) */
-    int64_t generated_tokens; /* Number of generated tokens */
+    int64_t prompt_tokens;       /* Prompt tokens evaluated in prefill (text + media tokens) */
+    int64_t total_prompt_tokens; /* Full requested prompt tokens, including those reused from the KV cache */
+    int64_t generated_tokens;    /* Number of generated tokens */
 
     double prefill_speed;  /* Prefill speed (tokens/sec) */
     double decoding_speed; /* Decoding speed (tokens/sec) */

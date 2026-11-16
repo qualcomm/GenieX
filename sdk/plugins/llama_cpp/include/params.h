@@ -24,6 +24,15 @@ enum class Device { CPU, GPU, NPU };
 
 std::optional<std::vector<ggml_backend_dev_t>> resolve_devices(const char* device_id);
 
+// Default GGML_HEXAGON_DEVICES on Linux (non-Android) hosts. Dual-NPU targets get two devices that each row-split
+// across both NPUs; IQ9 (QCS9075) additionally exposes single sessions for select_iq9_npu_devices.
+const char* linux_hexagon_devices();
+
+// IQ9: an HTP session maps only ~1 GiB, so a >= 2 GiB model on the default HTP0 fails to load. When the caller asked
+// for plain `npu` (selection is just HTP0) and the IQ9 default layout is in effect, replace the selection with a
+// layer split over the single sessions sized to the model file. Leaves explicit device lists alone.
+void select_iq9_npu_devices(std::vector<ggml_backend_dev_t>& selection, const char* model_path);
+
 // Set mpar.devices from a resolve_devices() result. selection may be filled in place and must outlive the load,
 // since mpar.devices points into it.
 // - CPU load, no explicit device: empty (null-terminated) list. Left unset, llama.cpp enumerates every GPU-type
@@ -53,9 +62,9 @@ Device classify_device(const char* device_id, int n_gpu_layers);
 // Map a caller's config to llama params, filling each unset (0) field from the
 // plugin defaults. build_context_params resolves n_ctx (default differs between
 // LLM at 4096 and VLM at 16384) plus n_batch / n_ubatch / n_seq_max, and defaults
-// n_threads / n_threads_batch to common_cpu_get_num_math() regardless of device —
-// matching upstream llama-bench/llama-cli, which never vary thread count by
-// backend. Callers may still override via ModelConfig's n_threads/n_threads_batch.
+// n_threads / n_threads_batch to common_cpu_get_num_math() — matching upstream
+// llama-bench/llama-cli — except that Windows NPU caps decode n_threads at 4.
+// Callers may still override via ModelConfig's n_threads/n_threads_batch.
 // build_model_params only reads n_gpu_layers. Device selection and tensor-buffer
 // overrides stay at the call site.
 //

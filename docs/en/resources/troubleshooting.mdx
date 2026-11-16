@@ -66,14 +66,7 @@ import Feedback from "/snippets/page-feedback.mdx";
   <Accordion title="`docker pull` fails with permission / unauthorized">
     Two separate things have to be right:
 
-    1. **Registry login.** Docker Hub (`docker.io/qualcomm/geniex`) is public and needs no login. For the Qualcomm Container Registry, log in first:
-
-       ```bash bash
-       # Qualcomm Container Registry:
-       docker login docker-registry.qualcomm.com -u '$app' -p GB2S6KXMJXTPV8VHNFNS7Q6LVH75LOOBTLT8D723WUX6PSFZMTX95GIQG4EFWH5C021ONZ5763VI9IDHU96Q7VAZJ2830CLX3NPI6STQOJWRYXLLA2ZYTL1S
-       ```
-
-       You should see `Login Succeeded`.
+    1. **Registry.** Pull from Docker Hub (`docker.io/qualcomm/geniex`), which is public and needs no login. If you see `unauthorized`, check the image name and tag against [CLI install (Docker)](/en/run/cli/install).
 
     2. **Docker group membership.** If `docker pull` returns `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`, your user isn't in the `docker` group:
 
@@ -93,7 +86,7 @@ import Feedback from "/snippets/page-feedback.mdx";
     By default the vision encoder (mmproj) shares the single HTP session with the language model, and on some devices (e.g. QCS9075) the two don't fit together. Give the vision encoder its own HTP session:
 
     ```bash bash
-    GGML_HEXAGON_NDEV=2 geniex infer unsloth/Qwen3-VL-2B-Instruct-GGUF:Q4_0 --compute HTP0 --vit-compute HTP1
+    GGML_HEXAGON_DEVICES=2 geniex infer unsloth/Qwen3-VL-2B-Instruct-GGUF:Q4_0 --compute HTP0 --vit-compute HTP1
     ```
 
     Use `--vit-compute CPU` instead if you'd rather keep the vision encoder off the NPU. `GGML_HEXAGON_DEVICES=2` is the non-deprecated spelling of the variable; it must be set in the shell that launches `geniex` (or `geniex serve`).

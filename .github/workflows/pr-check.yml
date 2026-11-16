@@ -37,14 +37,14 @@ jobs:
   lint:
     name: lint
     uses: ./.github/workflows/_lint.yml
-    secrets: inherit
 
   build-sdk:
     name: build-sdk
     needs: [lint]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_build-sdk.yml
-    secrets: inherit
+    secrets:
+      HEXAGON_HTP_CERT_PFX: ${{ secrets.HEXAGON_HTP_CERT_PFX }}
     with:
       upload_artifact: true
 
@@ -53,22 +53,58 @@ jobs:
     needs: [lint]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_build-python-sdist.yml
-    secrets: inherit
     with:
       upload_artifact: true
+
+  test-decision-protocols:
+    name: test-decision-protocols
+    needs: [lint]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          submodules: false
+      - name: Resolve changed files
+        id: files
+        uses: ./.github/actions/changed-files
+        with:
+          include: '^(sdk|third-party|tests|\.github)/'
+      - name: Install build tools
+        if: steps.files.outputs.any == 'true'
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build ccache
+      - name: Cache compiler outputs
+        if: steps.files.outputs.any == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ccache
+          key: decision-ccache-${{ runner.os }}-${{ hashFiles('tests/decision/**', 'sdk/plugins/llama_cpp/**') }}
+          restore-keys: |
+            decision-ccache-${{ runner.os }}-
+      - name: Run model-free decision tests
+        if: steps.files.outputs.any == 'true'
+        run: |
+          git submodule update --init --depth 1 third-party/llama.cpp
+          cmake -S tests/decision -B build-decision-tests -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DGENIEX_DECISION_REFERENCE_TESTS=OFF -DGGML_NATIVE=OFF \
+            -DGGML_OPENCL=OFF -DGGML_HEXAGON=OFF -DGGML_CUDA=OFF \
+            -DGGML_VULKAN=OFF -DGGML_METAL=OFF -DGGML_BLAS=OFF -DGGML_OPENMP=OFF
+          cmake --build build-decision-tests --target decision-tests --parallel "$(nproc)"
+          ctest --test-dir build-decision-tests --output-on-failure
 
   test-rust:
     name: test-rust
     needs: [lint]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_test-rust.yml
-    secrets: inherit
 
   build-cli:
     name: build-cli
     needs: [build-sdk]
     uses: ./.github/workflows/_build-cli.yml
-    secrets: inherit
     with:
       upload_artifact: true
 
@@ -76,7 +112,6 @@ jobs:
     name: build-android-aar
     needs: [build-sdk]
     uses: ./.github/workflows/_build-android-aar.yml
-    secrets: inherit
     with:
       upload_artifact: true
 
@@ -84,7 +119,6 @@ jobs:
     name: build-docker
     needs: [build-sdk]
     uses: ./.github/workflows/_build-docker.yml
-    secrets: inherit
     with:
       push: false
 
@@ -93,7 +127,6 @@ jobs:
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_unit-test.yml
-    secrets: inherit
     with:
       language: go
       gate_on_changed_files: true
@@ -103,7 +136,6 @@ jobs:
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_unit-test.yml
-    secrets: inherit
     with:
       language: python
       gate_on_changed_files: true
@@ -113,7 +145,6 @@ jobs:
     needs: [build-sdk]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     uses: ./.github/workflows/_unit-test.yml
-    secrets: inherit
     with:
       language: sdk
       # Linux currently can't run the llama_cpp plugin tests (libOpenCL.so.1
@@ -128,7 +159,8 @@ jobs:
     needs: [build-sdk]
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
     uses: ./.github/workflows/_qdc-test.yml
-    secrets: inherit
+    secrets:
+      QDC_API_KEY: ${{ secrets.QDC_API_KEY }}
     with:
       gate_on_changed_files: true
       tier: pr

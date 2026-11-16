@@ -28,6 +28,7 @@ class ProfileData:
     prompt_time: int = 0
     decode_time: int = 0
     prompt_tokens: int = 0
+    total_prompt_tokens: int = 0
     generated_tokens: int = 0
     prefill_speed: float = 0.0
     decode_speed: float = 0.0
@@ -48,6 +49,7 @@ class ProfileData:
             prompt_time=c.prompt_time,
             decode_time=c.decode_time,
             prompt_tokens=c.prompt_tokens,
+            total_prompt_tokens=c.total_prompt_tokens,
             generated_tokens=c.generated_tokens,
             prefill_speed=c.prefill_speed,
             decode_speed=c.decoding_speed,
@@ -64,6 +66,7 @@ class ProfileData:
             f'prompt_time={_format_us(self.prompt_time)}, '
             f'decode_time={_format_us(self.decode_time)}, '
             f'prompt_tokens={self.prompt_tokens} tok, '
+            f'total_prompt_tokens={self.total_prompt_tokens} tok, '
             f'generated_tokens={self.generated_tokens} tok, '
             f'prefill_speed={self.prefill_speed:.1f} tok/s, '
             f'decode_speed={self.decode_speed:.1f} tok/s, '

@@ -194,7 +194,8 @@ prompt = model.tokenizer.apply_chat_template(
 | 属性 | 类型 | 说明 |
 |---|---|---|
 | `ttft` | `int` | 首 token 时延（ms）。 |
-| `prompt_tokens` | `int` | prompt token 数。 |
+| `prompt_tokens` | `int` | prefill 实际计算的 prompt token 数。 |
+| `total_prompt_tokens` | `int` | 完整 prompt token 数，包含从 KV cache 复用的部分。 |
 | `generated_tokens` | `int` | 生成 token 数。 |
 | `prefill_speed` | `float` | Prefill 速度（tokens/s）。 |
 | `decode_speed` | `float` | Decode 速度（tokens/s）。 |

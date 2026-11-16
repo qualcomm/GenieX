@@ -81,9 +81,6 @@ def pytest_runtest_setup(item):
             pytest.skip('set GENIEX_DEVICE_TEST=1 to run device-gated tests')
         if not _is_snapdragon_host():
             pytest.skip('device-gated tests require a Snapdragon host')
-    device_map = item.callspec.params.get('device_map') if hasattr(item, 'callspec') else None
-    if device_map == 'gpu' and hasattr(sys, 'getandroidapilevel'):
-        pytest.skip('llama_cpp opencl backend aborts on Adreno / Android')
 
 
 @pytest.fixture(scope='session')

@@ -160,6 +160,9 @@ static void usage(const char* argv0) {
         "\n"
         "Optional (output):\n"
         "  --output-json PATH     (single-cell) write per-cell JSON report\n"
+        "  --output-logits PATH   (single-cell) write the full-vocabulary logits to PATH as\n"
+        "                         raw float32 [n_rows, vocab], row-major (np.fromfile).\n"
+        "                         Implies --logits; replaces --output-json and --logits-top-n\n"
         "  --output-md PATH       (single-cell) write per-cell Markdown row\n"
         "  --output-json-dir DIR  (matrix) write <DIR>/<cell_id>.json per cell\n"
         "  --cell-id ID           (single-cell) cell label used in reports\n"
@@ -329,6 +332,7 @@ void parse_args(int argc, char** argv, options_t* o) {
     o->log_level               = "error";
     o->qairt_lib               = NULL;
     o->output_json             = NULL;
+    o->output_logits           = NULL;
     o->output_md               = NULL;
     o->cell_id                 = NULL;
     o->matrix_file             = NULL;
@@ -437,6 +441,9 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->power_mode = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--output-json") == 0) {
             o->output_json = arg_value(argc, argv, &i, a);
+        } else if (strcmp(a, "--output-logits") == 0) {
+            o->output_logits = arg_value(argc, argv, &i, a);
+            o->logits_mode   = true;
         } else if (strcmp(a, "--output-md") == 0) {
             o->output_md = arg_value(argc, argv, &i, a);
         } else if (strcmp(a, "--cell-id") == 0) {
@@ -480,6 +487,10 @@ void parse_args(int argc, char** argv, options_t* o) {
             exit(2);
         }
         require_min(o->logits_top_n, 1, "--logits-top-n");
+        if (o->output_logits && (o->output_json || o->matrix_file)) {
+            fprintf(stderr, "ERROR: --output-logits cannot be combined with --output-json or --matrix-file\n");
+            exit(2);
+        }
     }
 
     /* Resolve the prompt list once, here, rather than in each run loop.

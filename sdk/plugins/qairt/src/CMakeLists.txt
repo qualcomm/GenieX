@@ -19,6 +19,13 @@ target_include_directories(geniex_qairt
 target_link_libraries(geniex_qairt
     PRIVATE geniex geniex_core geniex-proc geniex_vlm)
 
+# libQnnHtp is never unloaded, and its htp_ssr thread keeps calling the log
+# callback registered through geniex_core into this plugin. Pin the plugin (and
+# with it geniex_core) so Registry::clear()'s dlclose can't unmap that callback.
+if(NOT WIN32)
+    target_link_options(geniex_qairt PRIVATE -Wl,-z,nodelete)
+endif()
+
 install(TARGETS geniex_qairt
     LIBRARY DESTINATION lib/qairt
     RUNTIME DESTINATION lib/qairt)

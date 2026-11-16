@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//scripts:cgo_test.bzl", "go_cgo_test")
 
 go_library(
     name = "types",
@@ -9,4 +10,10 @@ go_library(
     importpath = "github.com/qualcomm/GenieX/cli/server/types",
     visibility = ["//cli:__subpackages__"],
     deps = ["//bindings/go:geniex_sdk_go"],
+)
+
+go_cgo_test(
+    name = "types_test",
+    srcs = ["response_metadata_test.go"],
+    embed = [":types"],
 )

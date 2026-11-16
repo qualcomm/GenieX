@@ -17,9 +17,11 @@ import (
 // place of the raw error message. Keep the list short — only well-
 // understood, user-actionable cases belong here.
 const (
-	hintParamNotSupported = `⚠️ A flag you passed is not supported by the runtime.
+	hintParamNotSupported = `⚠️ The requested operation or parameter is not supported by the runtime.
 
-👉 Run 'geniex infer -h' to see which flags are runtime-specific.`
+👉 For decision-only models, use 'geniex decide' or /v1/decisions instead of text generation.
+👉 On GPU/NPU, d1-2B and d1-omni read each question in one batch: retry long inputs with --compute cpu.
+👉 For unsupported flags, run 'geniex infer -h' to see which are runtime-specific.`
 
 	hintNotSupport = `⚠️ Oops. This model type is not supported yet.
 

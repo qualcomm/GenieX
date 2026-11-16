@@ -2,18 +2,23 @@
 
 ## Project
 
-Multi-platform AI inference runtime (Snapdragon / Hexagon focus).
-Languages: C/C++ (SDK), Go (CLI), Python (bindings), Java/JNI (Android).
-Build systems: Bazel (CLI) + CMake (SDK).
+On-device AI inference runtime for Snapdragon (CPU / Adreno GPU / Hexagon NPU).
+Languages: C/C++ (SDK, plugins), Rust (model manager), Go (CLI), Python (bindings), Kotlin/Java (Android).
+Build: CMake (SDK) → Bazel (CLI); Gradle for Android.
 
 ## Hard constraints
 
-- **Never move or reuse a published git tag.** If the wrong tag shipped, cut a higher one.
-- Do not modify third-party code.
-- **Follow [CONTRIBUTING.md](CONTRIBUTING.md)** for branch naming, commit / PR title format, pre-commit checks, and the FFI-update rule when changing public SDK headers.
+- Never move or reuse a published git tag. If the wrong tag shipped, cut a higher one.
+- Do not modify code under `third-party/`; patch it via `sdk/patches/`.
+- Follow [CONTRIBUTING.md](CONTRIBUTING.md) for branches, commits (signed off), PR titles, and the FFI-update rule.
+- `qualcomm/GenieX` is public: no credentials, internal hostnames, or customer names in code, docs, or PR text.
 
-## Workflows
+## Where things are
 
-- Build anything (CLI / SDK bridge / release installer) → run `/build`.
-- Cut a release / bump the version → run `/release`.
-- Onboarding the AI setup itself → see [notes/AI.md](notes/AI.md).
+| Need | Go to |
+|---|---|
+| Build / package / coverage | `/build` → [notes/build.md](notes/build.md) |
+| Run the CLI, flags, debugging | `geniex` skill → [docs/en/run/cli/reference.mdx](docs/en/run/cli/reference.mdx) |
+| Release a tag | `/release` (manual only) → [notes/release.md](notes/release.md) |
+| Runtime internals (compute units, power mode, QAIRT, HTP signing) | [notes/run.md](notes/run.md) |
+| QDC benchmark / accuracy CI | [notes/bench.md](notes/bench.md) |

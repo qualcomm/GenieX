@@ -11,6 +11,9 @@ namespace geniex {
 // - TODO: add the current profiling metrics design reference.
 // - TODO: add the current ASR and TTS profiling reference.
 inline void calculate_profile_data(geniex_ProfileData &pd) {
+    // Plugins that cannot see KV reuse (e.g. QAIRT) report evaluated tokens only.
+    if (pd.total_prompt_tokens < pd.prompt_tokens) pd.total_prompt_tokens = pd.prompt_tokens;
+
     pd.prefill_speed =
         pd.prompt_time > 0 ? static_cast<double>(pd.prompt_tokens) / (static_cast<double>(pd.prompt_time) / 1e6) : 0.0;
 

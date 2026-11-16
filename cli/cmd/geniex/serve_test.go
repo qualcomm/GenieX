@@ -49,7 +49,7 @@ func TestServeFlagGroups(t *testing.T) {
 			t.Errorf("--%s must appear only in Server Flags", flag)
 		}
 	}
-	for _, flag := range []string{"model", "nctx", "ngl", "compute", "vit-compute", "power-mode", "spec-type", "draft-model", "draft-tokens", "draft-min", "draft-p-min"} {
+	for _, flag := range []string{"model", "nctx", "ngl", "compute", "vit-compute", "power-mode", "spec-type", "draft-model", "draft-tokens", "draft-min", "draft-p-min", "think"} {
 		if !strings.Contains(defaultFlags, "--"+flag) || strings.Contains(serverFlags, "--"+flag) {
 			t.Errorf("--%s must appear only in Model Default Flags", flag)
 		}
@@ -81,6 +81,28 @@ func TestServeModelDefault(t *testing.T) {
 	}
 	if got := config.Get().Model; got != "local/flag:Q4_0" {
 		t.Errorf("--model must override GENIEX_MODEL, got %q", got)
+	}
+}
+
+func TestServeThinkDefault(t *testing.T) {
+	resetServeTestViper(t)
+	t.Setenv("GENIEX_THINK", "")
+	cmd := serve()
+	if flag := cmd.Flags().Lookup("think"); flag == nil || flag.DefValue != "true" {
+		t.Fatalf("serve --think should default to true: %v", flag)
+	}
+	if !config.Get().Think {
+		t.Error("unconfigured think = false, want true")
+	}
+	t.Setenv("GENIEX_THINK", "false")
+	if config.Get().Think {
+		t.Error("GENIEX_THINK=false should disable thinking")
+	}
+	if err := cmd.Flags().Set("think", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if !config.Get().Think {
+		t.Error("--think must override GENIEX_THINK")
 	}
 }
 

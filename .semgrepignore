@@ -1,0 +1,18 @@
+# Semgrep's built-in defaults, which a repo-level file replaces.
+node_modules/
+build/
+dist/
+vendor/
+.env/
+.venv/
+.tox/
+*.min.js
+.npm/
+.yarn/
+test/
+tests/
+*_test.go
+.semgrep
+.semgrep_logs/
+
+sdk/include/external/

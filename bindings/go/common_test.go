@@ -29,6 +29,16 @@ func TestCStringIfSet(t *testing.T) {
 	}
 }
 
+func TestProfileDataPromptTokens(t *testing.T) {
+	p := ProfileData{PromptTokens: 1, TotalPromptTokens: 51}
+	if got := p.CachedPromptTokens(); got != 50 {
+		t.Errorf("cached=%d, want 50", got)
+	}
+	if got := (ProfileData{PromptTokens: 5}).CachedPromptTokens(); got != 0 {
+		t.Errorf("unreported total: cached=%d, want 0", got)
+	}
+}
+
 func TestParallelToolCallsFFI(t *testing.T) {
 	for _, parallel := range []bool{false, true} {
 		llm := (LlmApplyChatTemplateInput{ParallelToolCalls: parallel}).toCPtr()
