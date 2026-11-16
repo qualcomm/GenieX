@@ -573,16 +573,7 @@ def ensure_cached(
     """Resolve alias, :func:`pull` if missing, and return :class:`ModelPaths`."""
     _ensure_init()
 
-    name_part = model_name_or_alias
-    if ':' in model_name_or_alias:
-        name_part, parsed_precision = model_name_or_alias.rsplit(':', 1)
-        if precision is None and parsed_precision:
-            precision = parsed_precision
-
-    try:
-        full_name = resolve_alias(name_part)
-    except GenieXError:
-        full_name = name_part
+    full_name, precision = _maybe_resolve_alias(model_name_or_alias, precision)
 
     # No precision + remote source: pick the head of the SDK's priority-
     # sorted candidate list so only one variant is downloaded instead of

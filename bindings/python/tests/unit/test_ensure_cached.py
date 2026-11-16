@@ -9,6 +9,8 @@ priority-sorted head precision to pull() so only one variant is downloaded.
 
 from __future__ import annotations
 
+import pytest
+
 import geniex.model_manager as mm
 from geniex._ffi._api import GenieXError
 from geniex.model_manager import ModelPaths, ModelQuery, PrecisionCandidate
@@ -76,3 +78,42 @@ def test_ensure_cached_query_failure_falls_through(monkeypatch):
     mm.ensure_cached('org/repo')
 
     assert pulled['precision'] is None
+
+
+@pytest.mark.parametrize(
+    ('model_name', 'precision', 'expected_precision'),
+    [
+        ('qwen3', None, 'Q4_K_M'),
+        ('qwen3', 'Q8_0', 'Q8_0'),
+        ('qwen3:Q5_K_M', None, 'Q5_K_M'),
+        ('qwen3:Q5_K_M', 'Q8_0', 'Q8_0'),
+    ],
+)
+def test_ensure_cached_preserves_alias_precision(monkeypatch, model_name, precision, expected_precision):
+    # The SDK's model_ref::resolve_alias maps qwen3 to this precision-qualified name.
+    repo = 'ggml-org/Qwen3-1.7B-GGUF'
+    observed = {}
+    queried = []
+
+    def _resolve_alias(name):
+        assert name == 'qwen3'
+        return f'{repo}:Q4_K_M'
+
+    def _pull(name, *, precision=None, **_kw):
+        observed['pull'] = (name, precision)
+
+    def _get_paths(key):
+        observed['key'] = key
+        return _fake_paths()
+
+    monkeypatch.setattr(mm, 'resolve_alias', _resolve_alias)
+    monkeypatch.setattr(mm, '_ensure_init', lambda: None)
+    monkeypatch.setattr(mm, 'query', lambda name, **_kw: queried.append(name) or _make_query('Q4_0'))
+    monkeypatch.setattr(mm, 'pull', _pull)
+    monkeypatch.setattr(mm, 'get_paths', _get_paths)
+
+    mm.ensure_cached(model_name, precision=precision)
+
+    assert observed['key'] == f'{repo}:{expected_precision}'
+    assert observed['pull'] == (repo, expected_precision)
+    assert queried == [], 'An alias or caller-supplied precision must bypass default selection'
