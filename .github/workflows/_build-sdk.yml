@@ -60,6 +60,9 @@ jobs:
             container_image: docker.io/qualcomm/geniex-toolchain-android:v0.2.0
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
+    env:
+      # Short on Windows: tokenizers-cpp's nested cargo output under build-<preset> exceeds MAX_PATH.
+      BUILD_DIR: ${{ matrix.platform == 'windows-arm64' && 'sdk/b' || format('sdk/build-{0}', matrix.preset) }}
 
     steps:
       - name: Configure Windows Git
@@ -147,7 +150,7 @@ jobs:
         id: cmake-build
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: sdk/build-${{ matrix.preset }}
+          path: ${{ env.BUILD_DIR }}
           key: cmake-build-${{ matrix.platform }}-${{ steps.tc.outputs.tag }}-${{ hashFiles('sdk/CMakeLists.txt', 'sdk/**/CMakeLists.txt', 'sdk/CMakePresets.json', 'sdk/cmake/**', 'sdk/patches/**', '.gitmodules', 'third-party/**/CMakeLists.txt', 'third-party/**/*.cmake', 'third-party/**/cmake/**') }}-${{ github.sha }}
           restore-keys: cmake-build-${{ matrix.platform }}-${{ steps.tc.outputs.tag }}-${{ hashFiles('sdk/CMakeLists.txt', 'sdk/**/CMakeLists.txt', 'sdk/CMakePresets.json', 'sdk/cmake/**', 'sdk/patches/**', '.gitmodules', 'third-party/**/CMakeLists.txt', 'third-party/**/*.cmake', 'third-party/**/cmake/**') }}-
 
@@ -160,7 +163,7 @@ jobs:
         shell: bash
         run: |
           set -eu
-          dir="sdk/build-${{ matrix.preset }}"
+          dir="$BUILD_DIR"
           if [ -d "$dir" ]; then
             find "$dir" -type d -name "*-subbuild" -prune -print -exec rm -rf {} +
           fi
@@ -263,7 +266,7 @@ jobs:
           PRESET: ${{ matrix.preset }}
         run: |
           $ErrorActionPreference = "Stop"
-          $BuildDir = "sdk/build-$env:PRESET"
+          $BuildDir = $env:BUILD_DIR
 
           # Source vcvars into this process so cmake's child processes
           # (clang, ninja, inf2cat.exe) inherit PATH/INCLUDE/LIB for the
@@ -316,7 +319,7 @@ jobs:
         if: github.ref == 'refs/heads/main' && steps.cmake-build.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: sdk/build-${{ matrix.preset }}
+          path: ${{ env.BUILD_DIR }}
           key: ${{ steps.cmake-build.outputs.cache-primary-key }}
 
       - name: Upload SDK artifact
