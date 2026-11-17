@@ -207,6 +207,7 @@ int32_t LlamaLlm::apply_chat_template(
         msg.role = src.role;
         // An assistant turn that only issues tool calls carries no content.
         if (src.content) msg.content = src.content;
+        if (src.reasoning_content) msg.reasoning_content = src.reasoning_content;
         apply_tool_fields(msg, src.tool_calls, src.tool_call_count, src.tool_call_id, src.tool_name);
         common_messages.push_back(std::move(msg));
     }

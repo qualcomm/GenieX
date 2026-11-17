@@ -91,8 +91,18 @@ func HashMessages[M any](msgs []M, fields func(M) []string) SessionKey {
 // the plugin, keyed stably regardless of the request's raw JSON formatting.
 func SessionKeyOf(messages []geniex_sdk.LlmChatMessage) SessionKey {
 	return HashMessages(messages, func(m geniex_sdk.LlmChatMessage) []string {
-		return append([]string{string(m.Role), m.Content, m.ToolCallID, m.ToolName}, ToolCallFields(m.ToolCalls)...)
+		return append([]string{string(m.Role), m.Content, m.ReasoningContent, m.ToolCallID, m.ToolName}, ToolCallFields(m.ToolCalls)...)
 	})
+}
+
+// AssistantReasoningContent reads the request extension retained by the server;
+// openai-go does not define this field on assistant message parameters.
+func AssistantReasoningContent(msg openai.ChatCompletionMessageParamUnion) string {
+	if msg.OfAssistant == nil {
+		return ""
+	}
+	reasoning, _ := msg.OfAssistant.ExtraFields()["reasoning_content"].(string)
+	return reasoning
 }
 
 // SessionKeyOfVLMRequest hashes the raw request messages, not the model-ready
@@ -104,6 +114,7 @@ func SessionKeyOfVLMRequest(msgs []openai.ChatCompletionMessageParamUnion) Sessi
 		if role := msg.GetRole(); role != nil {
 			fields = append(fields, *role)
 		}
+		fields = append(fields, AssistantReasoningContent(msg))
 		switch content := msg.GetContent().AsAny().(type) {
 		case *string:
 			fields = append(fields, "text", *content)

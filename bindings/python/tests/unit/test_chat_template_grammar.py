@@ -160,7 +160,9 @@ class _FakeLibrary:
         setattr(self, self.apply_name, self._apply)
 
     def _apply(self, _handle, _input, output_ptr):
-        self.parallel_tool_calls = cast(_input, POINTER(self.input_type)).contents.parallel_tool_calls
+        inp = cast(_input, POINTER(self.input_type)).contents
+        self.parallel_tool_calls = inp.parallel_tool_calls
+        self.messages = [(inp.messages[i].role, inp.messages[i].reasoning_content) for i in range(inp.message_count)]
         output = cast(output_ptr, POINTER(self.output_type)).contents
         text = create_string_buffer(b'formatted prompt')
         grammar, metadata_buffers = _make_grammar_buffers()
@@ -228,6 +230,30 @@ def test_parallel_tool_calls_reaches_ffi(monkeypatch, model_type, output_type, k
     model._apply_chat_template([{'role': 'user', 'content': 'hello'}], True, True, None, **kwargs)
     model._handle = None
     assert library.parallel_tool_calls is kwargs.get('parallel_tool_calls', True)
+
+
+@pytest.mark.parametrize(
+    ('model_type', 'output_type'),
+    [(GenieXLLM, geniex_LlmApplyChatTemplateOutput), (GenieXVLM, geniex_VlmApplyChatTemplateOutput)],
+)
+def test_reasoning_content_reaches_ffi(monkeypatch, model_type, output_type):
+    from geniex import modeling
+
+    library = _FakeLibrary(output_type)
+    monkeypatch.setattr(modeling, 'load_library', lambda: library)
+    model = object.__new__(model_type)
+    model._handle = 1
+    model._meta = None
+    messages = [
+        {'role': 'user', 'content': 'weather?'},
+        {'role': 'assistant', 'content': None, 'reasoning_content': '考える\nthen act'},
+        {'role': 'tool', 'content': 'sunny'},
+    ]
+    try:
+        model._apply_chat_template(messages, True, True, None)
+    finally:
+        model._handle = None
+    assert library.messages == [(b'user', None), (b'assistant', '考える\nthen act'.encode()), (b'tool', None)]
 
 
 def test_apply_template_default_still_returns_text_and_frees_grammar(monkeypatch):

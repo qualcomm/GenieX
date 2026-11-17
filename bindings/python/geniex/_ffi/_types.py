@@ -289,6 +289,7 @@ class geniex_LlmChatMessage(Structure):
         ('tool_call_count', c_int32),
         ('tool_call_id', c_char_p),
         ('tool_name', c_char_p),
+        ('reasoning_content', c_char_p),
     ]
 
 
@@ -331,6 +332,7 @@ class geniex_VlmChatMessage(Structure):
         ('tool_call_count', c_int32),
         ('tool_call_id', c_char_p),
         ('tool_name', c_char_p),
+        ('reasoning_content', c_char_p),
     ]
 
 

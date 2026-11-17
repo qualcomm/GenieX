@@ -7,5 +7,6 @@ data class ChatMessage(
     // toolCallId and toolName. All unset for a plain chat turn.
     var toolCalls: List<ToolCall> = emptyList(),
     var toolCallId: String? = null,
-    var toolName: String? = null
+    var toolName: String? = null,
+    var reasoningContent: String? = null
 )
