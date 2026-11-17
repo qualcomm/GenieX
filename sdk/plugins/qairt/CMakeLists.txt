@@ -14,6 +14,11 @@ add_subdirectory(
     ${CMAKE_BINARY_DIR}/third-party/geniex-qairt
     EXCLUDE_FROM_ALL)
 
+# Rust 1.100 std imports WaitOnAddress; tokenizers-cpp's Windows link list lacks it.
+if(WIN32 AND TARGET tokenizers_c)
+    target_link_libraries(tokenizers_c INTERFACE synchronization)
+endif()
+
 # setup plugin
 
 add_subdirectory(./src)
