@@ -466,9 +466,10 @@ GENIEX_API void geniex_model_list_chipsets_free(geniex_ChipsetList* out);
  *
  * When `offline` is 0, the raw id is then resolved to the AI Hub reference
  * device name (e.g. "Snapdragon X Elite CRD") — the same name
- * geniex_model_list_chipsets surfaces and the picker stores — by reading
- * platform.json (24h on-disk cache), so that call may hit the network; it falls
- * back to the raw id when the catalogue is unavailable or has no entry for it.
+ * geniex_model_list_chipsets surfaces and the picker stores — from the cached
+ * platform.json at any age. Only when no cache exists does it fetch the file,
+ * bounded to 8 s; it falls back to the raw id when the catalogue is unavailable
+ * or has no entry for it.
  * Pass a non-zero `offline` to skip that translation entirely and return the
  * raw canonical id from a purely local probe (never touches the network).
  *
