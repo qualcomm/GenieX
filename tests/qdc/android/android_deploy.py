@@ -22,9 +22,10 @@ DEV_TESTS = f'{DEV_ROOT}/tests'
 
 TERMUX_REPO = 'https://packages.termux.dev/apt/termux-main'
 TERMUX_PREFIX = '/data/data/com.termux/files/usr/'
+# No liblzma: on LD_LIBRARY_PATH it shadows the system one the Adreno OpenCL driver loads.
 TERMUX_DEPS = (
     'python python-pip ca-certificates gdbm libandroid-posix-semaphore libandroid-support libbz2 '
-    'libcrypt libexpat libffi liblzma libsqlite ncurses ncurses-ui-libs openssl '
+    'libcrypt libexpat libffi libsqlite ncurses ncurses-ui-libs openssl '
     'readline zlib'
 ).split()
 
