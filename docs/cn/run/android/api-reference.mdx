@@ -82,7 +82,7 @@ ModelManagerWrapper.clean()            // wipe all cached models
 
 ```kotlin
 data class ModelPullInput(
-    val model_name:   String,                     // "org/repo" or alias
+    val model_name:   String,                     // "org/repo"
     val precision:    String? = null,             // precision (quantization) e.g. "Q4_0", "Q4_K_M"
     val hub:          HubSource = HubSource.AUTO, // AUTO routes by model_name
     val local_path:   String? = null,             // only when hub == LOCALFS

@@ -40,7 +40,6 @@ def test_ensure_cached_pulls_head_precision(monkeypatch):
     monkeypatch.setattr(mm, 'query', lambda name, **_kw: _make_query('Q4_0', 'Q4_K_M', 'Q8_0'))
     monkeypatch.setattr(mm, 'pull', lambda name, *, precision=None, **_kw: pulled.update(precision=precision))
     monkeypatch.setattr(mm, 'get_paths', lambda _key: _fake_paths())
-    monkeypatch.setattr(mm, 'resolve_alias', lambda name: name)
     monkeypatch.setattr(mm, '_ensure_init', lambda: None)
 
     mm.ensure_cached('org/repo')
@@ -55,7 +54,6 @@ def test_ensure_cached_explicit_precision_skips_query(monkeypatch):
     monkeypatch.setattr(mm, 'query', lambda *_a, **_kw: queried.append(True) or _make_query('Q4_0'))
     monkeypatch.setattr(mm, 'pull', lambda *_a, **_kw: None)
     monkeypatch.setattr(mm, 'get_paths', lambda _key: _fake_paths())
-    monkeypatch.setattr(mm, 'resolve_alias', lambda name: name)
     monkeypatch.setattr(mm, '_ensure_init', lambda: None)
 
     mm.ensure_cached('org/repo', precision='Q8_0')
@@ -70,7 +68,6 @@ def test_ensure_cached_query_failure_falls_through(monkeypatch):
     monkeypatch.setattr(mm, 'query', lambda *_a, **_kw: (_ for _ in ()).throw(GenieXError(-1, 'offline')))
     monkeypatch.setattr(mm, 'pull', lambda name, *, precision=None, **_kw: pulled.update(precision=precision))
     monkeypatch.setattr(mm, 'get_paths', lambda _key: _fake_paths())
-    monkeypatch.setattr(mm, 'resolve_alias', lambda name: name)
     monkeypatch.setattr(mm, '_ensure_init', lambda: None)
 
     mm.ensure_cached('org/repo')

@@ -275,7 +275,7 @@ typedef struct {
      * or not a recognised version.
      */
     uint32_t    struct_size;
-    const char* model_name; /**< "org/repo" or short alias                    */
+    const char* model_name; /**< "org/repo"                                   */
     /**
      * Quantization filter for HuggingFace / AI Hub pulls. When set only
      * that quant is fetched; NULL pulls every quant the repo publishes.
@@ -386,20 +386,8 @@ GENIEX_API int32_t geniex_model_query(const geniex_ModelPullInput* input, geniex
 GENIEX_API void geniex_model_query_free(geniex_ModelQueryOutput* out);
 
 /* ============================================================
- *  Platform alias resolution
+ *  Hub resolution
  * ============================================================ */
-
-/**
- * @brief Resolve a short alias to its canonical "org/repo[:quant]" name.
- *
- * Example: "qwen3" → "ggml-org/Qwen3-1.7B-GGUF:Q4_K_M"
- *
- * @param alias         Short model name.
- * @param out_full_name Set to a heap-allocated string on success.
- *                      Free with geniex_free().
- * @return GENIEX_SUCCESS if resolved, GENIEX_ERROR_COMMON_INVALID_INPUT if unknown alias.
- */
-GENIEX_API int32_t geniex_model_resolve_alias(const char* alias, char** out_full_name);
 
 /**
  * @brief Resolve the hub a pull/query would actually use for @p model_name.
@@ -414,7 +402,7 @@ GENIEX_API int32_t geniex_model_resolve_alias(const char* alias, char** out_full
  * picker for Docker Hub, whose `:<tag>` is a registry reference, not a quant —
  * without duplicating the routing tables the SDK owns. No network I/O.
  *
- * @param model_name  "org/repo", a short alias, or a prefixed reference.
+ * @param model_name  "org/repo" or a prefixed reference.
  * @param hub_in      The caller's requested hub (GENIEX_HUB_AUTO to auto-detect).
  * @param out_hub     Set to the effective hub on success.
  * @return GENIEX_SUCCESS, or GENIEX_ERROR_COMMON_INVALID_INPUT if

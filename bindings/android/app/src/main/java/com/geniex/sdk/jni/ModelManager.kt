@@ -78,8 +78,6 @@ internal class ModelManager {
      */
     external fun setType(modelName: String, modelType: Int): Int
 
-    external fun resolveAlias(alias: String): String?
-
     /** Chipsets Qualcomm AI Hub supports, with aliases (sourced from platform.json). */
     external fun listChipsets(): Array<ChipsetInfo>
 

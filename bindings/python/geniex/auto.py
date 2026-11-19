@@ -397,7 +397,7 @@ class AutoModelForCausalLM:
         progress: ProgressCallback | bool | None = None,
         **kwargs,
     ) -> GenieXLLM | GenieXVLM:
-        """Load a causal LM or VLM by HF repo id, alias, or local path.
+        """Load a causal LM or VLM by HF repo id or local path.
 
         ``model_name`` is **optional**. The QAIRT plugin no longer needs it —
         it dispatches by reading ``metadata.json`` from the bundle. Pass it
@@ -490,7 +490,7 @@ class AutoModelForVision2Seq:
         progress: ProgressCallback | bool | None = None,
         **kwargs,
     ) -> GenieXVLM:
-        """Load a VLM by HF repo id, alias, or local path.
+        """Load a VLM by HF repo id or local path.
 
         See :class:`AutoModelForCausalLM.from_pretrained` for shared parameters.
         ``model_name`` is optional — the QAIRT plugin reads metadata.json from

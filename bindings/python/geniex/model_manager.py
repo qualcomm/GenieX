@@ -49,7 +49,6 @@ __all__ = [
     'get_paths',
     'get_type',
     'set_type',
-    'resolve_alias',
     'ensure_cached',
     'ChipsetInfo',
     'list_chipsets',
@@ -199,29 +198,12 @@ def _ensure_init() -> None:
         init()
 
 
-def _maybe_resolve_alias(model_name: str, quant: str | None) -> tuple[str, str | None]:
-    # Split a trailing :quant, try resolve_alias() for bare names, leave org/repo alone.
-    # Unknown bare names pass through — the SDK canonicalises them to aihub/<name>.
-    name_part = model_name
+def _split_precision(model_name: str, quant: str | None) -> tuple[str, str | None]:
     if ':' in model_name:
-        name_part, parsed_quant = model_name.rsplit(':', 1)
+        model_name, parsed_quant = model_name.rsplit(':', 1)
         if quant is None and parsed_quant:
             quant = parsed_quant
-
-    if '/' in name_part:
-        return name_part, quant
-
-    try:
-        resolved = resolve_alias(name_part)
-    except GenieXError:
-        return name_part, quant
-
-    if ':' in resolved:
-        resolved_name, resolved_quant = resolved.rsplit(':', 1)
-        if quant is None and resolved_quant:
-            quant = resolved_quant
-        return resolved_name, quant
-    return resolved, quant
+    return model_name, quant
 
 
 def pull(
@@ -239,7 +221,7 @@ def pull(
     """Download a model into the local cache (blocking, resumable).
 
     Args:
-        model_name: ``org/repo``, ``org/repo:precision``, or a short alias.
+        model_name: ``org/repo`` or ``org/repo:precision``.
         precision: Optional precision hint (e.g. ``"Q4_K_M"``).
         hub: ``"auto" | "hf" | "aihub" | "docker" | "localfs"`` or a raw enum int.
         local_path: Required when ``hub == "localfs"``.
@@ -255,7 +237,7 @@ def pull(
     _ensure_init()
     lib = load_library()
 
-    model_name, precision = _maybe_resolve_alias(model_name, precision)
+    model_name, precision = _split_precision(model_name, precision)
     hub_val = _resolve_hub(hub)
 
     if model_type is None:
@@ -372,7 +354,7 @@ def query(
     _ensure_init()
     lib = load_library()
 
-    name, _ = _maybe_resolve_alias(model_name, None)
+    name, _ = _split_precision(model_name, None)
     inp = geniex_ModelPullInput(
         struct_size=sizeof(geniex_ModelPullInput),
         model_name=name.encode(),
@@ -423,10 +405,10 @@ def clean() -> int:
 
 
 def get_paths(model_name: str) -> ModelPaths:
-    """Resolve ``org/repo[:precision]`` (or alias) to absolute on-disk paths."""
+    """Resolve ``org/repo[:precision]`` to absolute on-disk paths."""
     _ensure_init()
     lib = load_library()
-    base, precision = _maybe_resolve_alias(model_name, None)
+    base, precision = _split_precision(model_name, None)
     key = f'{base}:{precision}' if precision else base
     out = geniex_ModelPaths()
     _check(lib.geniex_model_get_paths(key.encode(), byref(out)))
@@ -465,18 +447,6 @@ def set_type(model_name: str, model_type: str) -> None:
     else:
         raise ValueError(f"Unknown model type: {model_type!r} (expected 'llm' or 'vlm')")
     _check(lib.geniex_model_set_type(model_name.encode(), value))
-
-
-def resolve_alias(alias: str) -> str:
-    """Expand a short alias (e.g. ``"qwen3"``) to ``"org/repo"``."""
-    _ensure_init()
-    lib = load_library()
-    out = c_char_p()
-    _check(lib.geniex_model_resolve_alias(alias.encode(), byref(out)))
-    try:
-        return out.value.decode() if out.value else ''
-    finally:
-        lib.geniex_free(out)
 
 
 def resolve_effective_hub(model_name: str, hub: str | int = 'auto') -> int:
@@ -563,7 +533,7 @@ def list_hub_models(chipset: str | None = None) -> list[HubModel]:
 
 
 def ensure_cached(
-    model_name_or_alias: str,
+    model_name: str,
     *,
     precision: str | None = None,
     hub: str | int = 'auto',
@@ -571,19 +541,10 @@ def ensure_cached(
     hf_token: str | None = None,
     on_progress: ProgressCallback | None = None,
 ) -> ModelPaths:
-    """Resolve alias, :func:`pull` if missing, and return :class:`ModelPaths`."""
+    """Pull the model if missing and return its :class:`ModelPaths`."""
     _ensure_init()
 
-    name_part = model_name_or_alias
-    if ':' in model_name_or_alias:
-        name_part, parsed_precision = model_name_or_alias.rsplit(':', 1)
-        if precision is None and parsed_precision:
-            precision = parsed_precision
-
-    try:
-        full_name = resolve_alias(name_part)
-    except GenieXError:
-        full_name = name_part
+    full_name, precision = _split_precision(model_name, precision)
 
     # No precision + remote source: pick the head of the SDK's priority-
     # sorted candidate list so only one variant is downloaded instead of

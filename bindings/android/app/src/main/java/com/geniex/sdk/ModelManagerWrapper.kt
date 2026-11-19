@@ -109,10 +109,6 @@ object ModelManagerWrapper {
         if (v < 0) null else ModelType.fromValue(v)
     }
 
-    suspend fun resolveAlias(alias: String): String? = withContext(Dispatchers.IO) {
-        native.resolveAlias(alias)
-    }
-
     suspend fun listChipsets(): List<ChipsetInfo> = withContext(Dispatchers.IO) {
         native.listChipsets().toList()
     }

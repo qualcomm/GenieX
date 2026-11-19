@@ -537,18 +537,6 @@ extern "C" JNIEXPORT jobject JNICALL Java_com_geniex_sdk_jni_ModelManager_query(
     return obj;
 }
 
-extern "C" JNIEXPORT jstring JNICALL Java_com_geniex_sdk_jni_ModelManager_resolveAlias(
-    JNIEnv* env, jobject /*thiz*/, jstring jAlias) {
-    std::string alias = jstring2str(env, jAlias);
-    if (alias.empty()) return nullptr;
-    char*   out = nullptr;
-    int32_t rc  = geniex_model_resolve_alias(alias.c_str(), &out);
-    if (rc != GENIEX_SUCCESS || !out) return nullptr;
-    jstring result = env->NewStringUTF(out);
-    geniex_free(out);
-    return result;
-}
-
 extern "C" JNIEXPORT jobjectArray JNICALL Java_com_geniex_sdk_jni_ModelManager_listChipsets(
     JNIEnv* env, jobject /*thiz*/) {
     jclass chipsetCls = env->FindClass("com/geniex/sdk/bean/ChipsetInfo");

@@ -8,7 +8,7 @@ package com.geniex.sdk.bean
  * with the C struct makes the bridge easy to audit.
  */
 data class ModelPullInput(
-    /** "org/repo" or a short alias (see [resolveAlias]). */
+    /** "org/repo". */
     val model_name: String,
     /** Precision hint (e.g. "Q4_K_M"). `null` lets the SDK pick. */
     val precision: String? = null,
