@@ -219,8 +219,8 @@ typedef enum {
      * Docker Registry HTTP API V2 — e.g. models published under
      * https://hub.docker.com/u/ai (`ai/gemma3`, `ai/smollm2`, ...).
      * GENIEX_HUB_AUTO also resolves here when `model_name` carries an
-     * explicit `docker.io/`, `index.docker.io/`, or
-     * `https://hub.docker.com/r/` prefix.
+     * explicit `docker.io/`, `index.docker.io/`, or `registry-1.docker.io/`
+     * prefix.
      */
     GENIEX_HUB_DOCKER = 5,
     /**
@@ -406,8 +406,8 @@ GENIEX_API int32_t geniex_model_resolve_alias(const char* alias, char** out_full
  *
  * An explicit @p hub_in other than GENIEX_HUB_AUTO is returned unchanged.
  * GENIEX_HUB_AUTO resolves to GENIEX_HUB_DOCKER when @p model_name carries a
- * Docker Hub prefix (`docker.io/`, `index.docker.io/`,
- * `https://hub.docker.com/r/`, …); otherwise it stays GENIEX_HUB_AUTO.
+ * Docker Hub prefix (`docker.io/`, `index.docker.io/`, `registry-1.docker.io/`);
+ * otherwise it stays GENIEX_HUB_AUTO.
  *
  * Lets a binding branch on the effective hub — e.g. skip the GGUF precision
  * picker for Docker Hub, whose `:<tag>` is a registry reference, not a quant —

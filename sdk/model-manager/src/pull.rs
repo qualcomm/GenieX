@@ -15,7 +15,7 @@ use crate::executor::{Executor, ProgressCallback};
 use crate::manifest::infer::ManifestHint;
 use crate::model_ref::{
     aihub_display_name_from_repo, canonicalize_model_name, docker_hub_repo_from_name,
-    is_docker_hub_reference, is_modelscope_reference, validate_name,
+    is_docker_hub_reference, validate_name,
 };
 use crate::source::ai_hub::{AiHubConfig, AiHubSource};
 use crate::source::dockerhub::DockerHubSource;
@@ -83,7 +83,7 @@ impl Hub {
     /// Route `raw` to a canonical model name and the [`PullIntent`] that fetches it.
     pub fn resolve(self, raw: &str, target: PullTarget) -> Result<(String, PullIntent)> {
         let invalid = |why: &str| Error::InvalidModelName(format!("{raw}: {why}"));
-        // Docker and ModelScope URLs are recognisable only before canonicalisation.
+        // A Docker reference is recognisable only before canonicalisation.
         if self == Hub::DockerHub || (self == Hub::Auto && is_docker_hub_reference(raw)) {
             let repo = canonicalize_model_name(&docker_hub_repo_from_name(raw));
             validate_name(&repo)?;
@@ -94,11 +94,6 @@ impl Hub {
             };
             return Ok((repo.clone(), PullIntent::DockerHub { repo, reference }));
         }
-        let hub = if self == Hub::Auto && is_modelscope_reference(raw) {
-            Hub::ModelScope
-        } else {
-            self
-        };
         let name = canonicalize_model_name(raw);
         validate_name(&name)?;
         let ai_hub_name = || {
@@ -108,7 +103,7 @@ impl Hub {
                 .or_else(|| aihub_display_name_from_repo(&name).map(str::to_string))
         };
         let token = target.token.clone();
-        let intent = match hub {
+        let intent = match self {
             Hub::Auto if aihub_display_name_from_repo(&name).is_some() => PullIntent::AiHub {
                 display_name: ai_hub_name().unwrap_or_default(),
                 chipset: target.chipset,
@@ -331,20 +326,6 @@ mod tests {
                 named(),
                 "qualcomm/Qwen3-4B",
                 "aihub Explicit",
-            ),
-            (
-                Auto,
-                "https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF",
-                none(),
-                "Qwen/Qwen3-0.6B-GGUF",
-                "ms Qwen/Qwen3-0.6B-GGUF",
-            ),
-            (
-                Auto,
-                "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF",
-                none(),
-                "Qwen/Qwen3-0.6B-GGUF",
-                "hf Qwen/Qwen3-0.6B-GGUF",
             ),
             (
                 Auto,

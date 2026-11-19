@@ -15,7 +15,7 @@ User reference: [docs/en/run/cli/reference.mdx](../../../docs/en/run/cli/referen
 |---|---|
 | `org/repo` | Hugging Face |
 | bare name, `qualcomm/*`, `ai-hub-models/*` | Qualcomm AI Hub (qairt bundles) |
-| `https://modelscope.cn/models/...` | ModelScope (bare `org/repo` is never ModelScope; use `--model-hub modelscope`) |
+| `org/repo` + `--model-hub modelscope` on `pull` | ModelScope (never auto-detected) |
 | `docker.io/...` | Docker Hub |
 | `--local-path <dir or .zip>` | local import |
 

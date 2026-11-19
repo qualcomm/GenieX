@@ -58,9 +58,8 @@ func ParseModelType(s string) (ModelType, bool) {
 }
 
 // SplitNamePrecision splits "name[:precision]" into (name, precision). A
-// pasted model-page URL keeps its scheme, which is held back from the ':'
-// split so the scheme colon isn't mistaken for the precision separator — the
-// SDK needs the surviving host to route the hub (e.g. modelscope.cn). Name
+// pasted URL keeps its scheme out of the ':' split so the SDK rejects it
+// whole instead of as a bare name "https". Name
 // canonicalization, precision case-folding (GGUF quant labels are matched
 // upper-cased), and hub routing all happen in the SDK across the FFI boundary
 // — including Docker Hub, where the suffix is a case-sensitive registry tag

@@ -13,9 +13,8 @@ pub struct ModelRef {
 }
 
 impl ModelRef {
-    /// Accepts a bare name, `org/repo[:quant]`, a `docker.io/` reference, or a
-    /// pasted HF / ModelScope URL. A `://` is never a quant cut, and the quant is upper-cased to
-    /// match manifest keys.
+    /// Accepts a bare name, `org/repo[:quant]`, or a `docker.io/` reference. A `://` is never a
+    /// quant cut, so a pasted URL is rejected whole; the quant is upper-cased to match manifest keys.
     pub fn parse(s: &str) -> Result<Self> {
         let canonical = canonicalize_model_name(&docker_hub_repo_from_name(s));
         let (name, quant) = match canonical.rsplit_once(':') {
@@ -57,11 +56,6 @@ const AI_HUB_ORGS: &[&str] = &["qualcomm", "ai-hub-models"];
 
 /// Bare names land under `qualcomm/`, so every alias maps to one cache entry.
 pub(crate) fn canonicalize_model_name(name: &str) -> String {
-    let name = name
-        .strip_prefix("https://huggingface.co/")
-        .or_else(|| name.strip_prefix("http://huggingface.co/"))
-        .or_else(|| strip_modelscope_url_prefix(name))
-        .unwrap_or(name);
     match name.split_once('/') {
         None => format!("qualcomm/{name}"),
         Some((org, repo)) if org.eq_ignore_ascii_case("ai-hub-models") => {
@@ -87,29 +81,7 @@ pub(crate) fn aihub_display_name_from_repo(model_name: &str) -> Option<&str> {
 }
 
 /// A bare "ai/x" is never treated as Docker Hub: an HF org could be named `ai`.
-const DOCKER_HUB_PREFIXES: &[&str] = &[
-    "docker.io/",
-    "index.docker.io/",
-    "registry-1.docker.io/",
-    "https://hub.docker.com/r/",
-    "http://hub.docker.com/r/",
-    "hub.docker.com/r/",
-];
-
-const MODELSCOPE_URL_PREFIXES: &[&str] = &[
-    "https://modelscope.cn/models/",
-    "http://modelscope.cn/models/",
-];
-
-fn strip_modelscope_url_prefix(name: &str) -> Option<&str> {
-    MODELSCOPE_URL_PREFIXES
-        .iter()
-        .find_map(|p| name.strip_prefix(p))
-}
-
-pub(crate) fn is_modelscope_reference(name: &str) -> bool {
-    strip_modelscope_url_prefix(name).is_some()
-}
+const DOCKER_HUB_PREFIXES: &[&str] = &["docker.io/", "index.docker.io/", "registry-1.docker.io/"];
 
 pub fn is_docker_hub_reference(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
@@ -172,19 +144,6 @@ mod tests {
             ("qualcomm/Qwen3-4B", "qualcomm/Qwen3-4B"),
             ("ggml-org/Qwen3-1.7B-GGUF", "ggml-org/Qwen3-1.7B-GGUF"),
             (
-                "https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF",
-                "ggml-org/Qwen3-1.7B-GGUF",
-            ),
-            ("http://huggingface.co/bartowski/Foo", "bartowski/Foo"),
-            (
-                "https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF",
-                "Qwen/Qwen3-0.6B-GGUF",
-            ),
-            (
-                "http://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF",
-                "Qwen/Qwen3-0.6B-GGUF",
-            ),
-            (
                 "ai-hub-models/Llama-v3.2-3B-Chat",
                 "qualcomm/Llama-v3.2-3B-Chat",
             ),
@@ -196,33 +155,16 @@ mod tests {
     }
 
     #[test]
-    fn hub_reference_detection_needs_an_explicit_prefix() {
-        for (name, modelscope, docker) in [
-            (
-                "https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF",
-                true,
-                false,
-            ),
-            (
-                "http://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF",
-                true,
-                false,
-            ),
-            ("https://huggingface.co/Qwen/Qwen3-0.6B-GGUF", false, false),
-            ("Qwen/Qwen3-0.6B-GGUF", false, false),
-            ("docker.io/ai/gemma3", false, true),
-            ("DOCKER.IO/ai/gemma3", false, true),
-            ("index.docker.io/ai/gemma3", false, true),
-            ("https://hub.docker.com/r/ai/gemma3", false, true),
-            ("ai/gemma3", false, false),
-            ("ggml-org/Qwen3-1.7B-GGUF", false, false),
+    fn docker_hub_reference_needs_an_explicit_prefix() {
+        for (name, docker) in [
+            ("docker.io/ai/gemma3", true),
+            ("DOCKER.IO/ai/gemma3", true),
+            ("index.docker.io/ai/gemma3", true),
+            ("https://hub.docker.com/r/ai/gemma3", false),
+            ("ai/gemma3", false),
+            ("ggml-org/Qwen3-1.7B-GGUF", false),
         ] {
-            assert_eq!(
-                is_modelscope_reference(name),
-                modelscope,
-                "modelscope {name}"
-            );
-            assert_eq!(is_docker_hub_reference(name), docker, "docker {name}");
+            assert_eq!(is_docker_hub_reference(name), docker, "{name}");
         }
     }
 
@@ -231,7 +173,6 @@ mod tests {
         for name in [
             "docker.io/ai/gemma3",
             "index.docker.io/ai/gemma3",
-            "https://hub.docker.com/r/ai/gemma3",
             "ai/gemma3",
         ] {
             assert_eq!(docker_hub_repo_from_name(name), "ai/gemma3", "{name}");
@@ -240,13 +181,10 @@ mod tests {
 
     #[test]
     fn parse_cases() {
-        let url = "https://huggingface.co/ggml-org/Qwen3";
         for (input, name, quant) in [
             ("Bare", "qualcomm/Bare", None),
             ("Bare:q4_k_m", "qualcomm/Bare", Some("Q4_K_M")),
             ("Org/Repo:", "Org/Repo", None),
-            (url, "ggml-org/Qwen3", None),
-            (&format!("{url}:Q8_0"), "ggml-org/Qwen3", Some("Q8_0")),
             ("ai-hub-models/X:w4a16", "qualcomm/X", Some("W4A16")),
             ("docker.io/ai/smollm2", "ai/smollm2", None),
         ] {
@@ -263,6 +201,10 @@ mod tests {
             "a/..",
             "a\\b/c",
             "https://example.com/x/y",
+            "https://huggingface.co/ggml-org/Qwen3",
+            "https://huggingface.co/ggml-org/Qwen3:Q8_0",
+            "https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF",
+            "https://hub.docker.com/r/ai/gemma3",
         ] {
             assert!(ModelRef::parse(bad).is_err(), "{bad}");
         }

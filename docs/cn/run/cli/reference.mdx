@@ -17,7 +17,7 @@ geniex pull <model-name>[:<precision>]
 
 | 标志 | 说明 |
 |---|---|
-| `--model-hub` | 模型来源：`aihub` \| `hf` \| `localfs`。省略时自动检测。 |
+| `--model-hub` | 模型来源：`aihub` \| `hf` \| `modelscope` \| `docker` \| `localfs`。省略时自动检测；ModelScope 需显式指定。 |
 | `--local-path` | 本地目录或 AI Hub `.zip` 文件的路径。隐含 `--model-hub localfs`。 |
 | `--model-type` | 模型类型：`llm` \| `vlm`。省略时自动检测。 |
 
