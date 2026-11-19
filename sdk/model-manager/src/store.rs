@@ -368,11 +368,7 @@ mod tests {
     #[test]
     fn resolve_manifest_accepts_loose_names() {
         let (store, _tmp) = stored(&["qualcomm/Bare", "ggml-org/Qwen3"]);
-        for (input, want) in [
-            ("Bare", "qualcomm/Bare"),
-            ("Bare:Q4_K_M", "qualcomm/Bare"),
-            ("https://huggingface.co/ggml-org/Qwen3", "ggml-org/Qwen3"),
-        ] {
+        for (input, want) in [("Bare", "qualcomm/Bare"), ("Bare:Q4_K_M", "qualcomm/Bare")] {
             assert_eq!(store.resolve_manifest(input).unwrap().name, want, "{input}");
         }
         assert!(store.resolve_manifest("Org/Missing").is_err());
@@ -382,8 +378,7 @@ mod tests {
     #[test]
     fn every_operation_accepts_loose_names() {
         let (store, _tmp) = stored(&["qualcomm/Bare", "ggml-org/Qwen3"]);
-        let url = "https://huggingface.co/ggml-org/Qwen3";
-        for input in [url, &format!("{url}:Q4_K_M")] {
+        for input in ["ggml-org/Qwen3", "ggml-org/Qwen3:q4_k_m"] {
             let (quant, paths) = store.get_paths(input).unwrap();
             assert_eq!(
                 (quant.as_str(), paths.model_name.as_str()),

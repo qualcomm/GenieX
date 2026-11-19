@@ -61,7 +61,7 @@ Pull from a specific model hub:
 
 ```bash
 geniex pull <model>
-geniex pull <model> --model-hub aihub   # options: aihub, hf, localfs
+geniex pull <model> --model-hub aihub   # options: aihub, hf, modelscope, docker, localfs
 ```
 
 Import a model from the local filesystem:

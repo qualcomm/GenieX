@@ -66,7 +66,8 @@ GenieX **仅在高通骁龙（Qualcomm Snapdragon）上运行**。找到你的�
 geniex infer google/gemma-4-E4B-it-qat-q4_0-gguf
 
 # 来自 ModelScope 的 GGUF → llama.cpp（NPU / GPU / CPU）
-geniex infer https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF
+geniex pull Qwen/Qwen3-0.6B-GGUF --model-hub modelscope
+geniex infer Qwen/Qwen3-0.6B-GGUF
 
 # 来自 Qualcomm AI Hub 的预编译模型包 → Qualcomm AI Engine Direct（NPU）
 geniex infer ai-hub-models/Qwen2.5-VL-7B-Instruct

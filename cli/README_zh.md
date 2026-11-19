@@ -56,7 +56,7 @@ geniex pull <model>[:<precision>] --model-type <model-type>
 
 ```bash
 geniex pull <model>
-geniex pull <model> --model-hub aihub   # 可选：aihub、hf、localfs
+geniex pull <model> --model-hub aihub   # 可选：aihub、hf、modelscope、docker、localfs
 ```
 
 从本地文件系统导入模型：

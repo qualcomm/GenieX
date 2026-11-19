@@ -64,7 +64,8 @@ Pick your interface below. Each one follows the same three steps: **Install**, *
 geniex infer google/gemma-4-E4B-it-qat-q4_0-gguf
 
 # GGUF from ModelScope → llama.cpp (NPU / GPU / CPU)
-geniex infer https://modelscope.cn/models/Qwen/Qwen3-0.6B-GGUF
+geniex pull Qwen/Qwen3-0.6B-GGUF --model-hub modelscope
+geniex infer Qwen/Qwen3-0.6B-GGUF
 
 # Pre-compiled bundle from Qualcomm AI Hub → Qualcomm AI Engine Direct (NPU)
 geniex infer ai-hub-models/Qwen2.5-VL-7B-Instruct
