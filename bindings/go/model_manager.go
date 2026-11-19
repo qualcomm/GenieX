@@ -101,8 +101,9 @@ const (
 
 // ResolveHub reports the hub a pull/query will actually use for name given the
 // requested hub. HubAuto resolves to HubDocker when name carries a Docker Hub
-// prefix (docker.io/…); every other input is returned unchanged. The prefix
-// table lives in the SDK, so callers must not re-derive it. No network I/O.
+// prefix (docker.io/…) and to HubAIHub when it names an AI Hub org; every other
+// input is returned unchanged. The routing tables live in the SDK, so callers
+// must not re-derive them. No network I/O.
 func ResolveHub(name string, hub HubSource) (HubSource, error) {
 	cName := cStringIfSet(name)
 	defer cFreeIfSet(unsafe.Pointer(cName))

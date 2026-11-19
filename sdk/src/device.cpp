@@ -118,7 +118,11 @@ int32_t geniex_resolve_device(const geniex_ResolveDeviceInput* input, geniex_Res
     // Empty / "auto" → plugin default. Both qairt and llama_cpp default to
     // the pinned-NPU path.
     if (alias.empty() || alias == kAliasAuto) {
+#ifdef GENIEX_CPU_ONLY
+        alias = kAliasCPU;
+#else
         alias = kAliasNPU;
+#endif
     }
 
     // QAIRT is NPU-only and rejects any non-zero n_gpu_layers, so force
