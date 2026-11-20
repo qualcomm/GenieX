@@ -161,7 +161,7 @@ func Completions(c *gin.Context) {
 		MaxTokens: int32(req.MaxTokens.Value),
 		Stop:      completionStop(req.Stop),
 		SamplerConfig: &geniex_sdk.SamplerConfig{
-			Temperature:       float32(req.Temperature.Value),
+			Temperature:       samplerTemperature(req.Temperature),
 			TopP:              float32(req.TopP.Value),
 			TopK:              req.TopK,
 			MinP:              req.MinP,

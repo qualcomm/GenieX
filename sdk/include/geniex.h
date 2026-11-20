@@ -506,7 +506,7 @@ typedef struct {
 
 /** Text generation sampling parameters */
 typedef struct {
-    float                      temperature;        /* Sampling temperature (0.0-2.0) */
+    float                      temperature;        /* Sampling temperature; 0 = plugin default, < 0 = greedy */
     float                      top_p;              /* Nucleus sampling parameter (0.0-1.0) */
     int32_t                    top_k;              /* Top-k sampling parameter */
     float                      min_p;              /* Minimum probability for nucleus sampling */

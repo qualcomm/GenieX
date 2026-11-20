@@ -319,6 +319,14 @@ func generateWithRetry[T, M any](model *T, prompt string, gen generateFn, input 
 	return gen(prompt, onToken)
 }
 
+// samplerTemperature maps an explicit 0 to the SDK's negative greedy sentinel; the SDK reads 0 as "use the default".
+func samplerTemperature(t param.Opt[float64]) float32 {
+	if t.Valid() && t.Value == 0 {
+		return -1
+	}
+	return float32(t.Value)
+}
+
 // runChat is the shared flow wrapping the type-specific prepareFn. session
 // identifies the conversation for the keepalive cache's reset decision.
 func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam types.ModelParam, messages M, session utils.SessionKey, prepare prepareFn[T, M]) {
@@ -349,7 +357,7 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 	}
 
 	sampler := geniex_sdk.SamplerConfig{
-		Temperature:       float32(param.Temperature.Value),
+		Temperature:       samplerTemperature(param.Temperature),
 		TopP:              float32(param.TopP.Value),
 		TopK:              param.TopK,
 		MinP:              param.MinP,

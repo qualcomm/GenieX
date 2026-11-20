@@ -144,6 +144,9 @@ func infer() *cobra.Command {
 	inferCmd.SetUsageFunc(flagGroupedUsage)
 
 	inferCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if cmd.Flags().Changed("temperature") && temperature == 0 {
+			temperature = -1
+		}
 		name, precision := geniex_sdk.SplitNamePrecision(args[0])
 
 		if precision == "" {

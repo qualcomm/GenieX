@@ -14,6 +14,7 @@ import (
 	"github.com/bytedance/sonic"
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/packages/ssestream"
 	"github.com/spf13/cobra"
 
@@ -90,7 +91,11 @@ func run() *cobra.Command {
 			return fmt.Errorf("server reported an unsupported model type %q for %s", model.ModelType, fullName)
 		}
 
-		return runCompletions(ctx, fullName, modelType)
+		var temp param.Opt[float64]
+		if cmd.Flags().Changed("temperature") {
+			temp = openai.Float(float64(temperature))
+		}
+		return runCompletions(ctx, fullName, modelType, temp)
 	}
 	return runCmd
 }
@@ -106,7 +111,7 @@ func grammarForRun(path, inline string) (string, error) {
 	return string(data), nil
 }
 
-func runCompletions(ctx context.Context, name string, modelType geniex_sdk.ModelType) error {
+func runCompletions(ctx context.Context, name string, modelType geniex_sdk.ModelType, temp param.Opt[float64]) error {
 	grammar, err := grammarForRun(grammarPath, grammarString)
 	if err != nil {
 		return err
@@ -197,7 +202,7 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 				Messages:            history,
 				Model:               name,
 				StreamOptions:       openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Opt(true)},
-				Temperature:         openai.Float(float64(temperature)),
+				Temperature:         temp,
 				TopP:                openai.Float(float64(topP)),
 				PresencePenalty:     openai.Float(float64(presencePenalty)),
 				FrequencyPenalty:    openai.Float(float64(frequencyPenalty)),

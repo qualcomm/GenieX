@@ -291,3 +291,19 @@ func TestChatGenerationConfigForwardsFields(t *testing.T) {
 		t.Errorf("config = %+v", got)
 	}
 }
+
+func TestSamplerTemperatureExplicitZeroIsGreedy(t *testing.T) {
+	for body, want := range map[string]float32{`{}`: 0, `{"temperature":0}`: -1, `{"temperature":0.5}`: 0.5} {
+		_, chat := bindRequest(t, body)
+		if got := samplerTemperature(chat.Temperature); got != want {
+			t.Errorf("chat %s: temperature = %v, want %v", body, got, want)
+		}
+		completion := defaultCompletionRequest()
+		if err := json.Unmarshal([]byte(body), &completion); err != nil {
+			t.Fatal(err)
+		}
+		if got := samplerTemperature(completion.Temperature); got != want {
+			t.Errorf("completion %s: temperature = %v, want %v", body, got, want)
+		}
+	}
+}

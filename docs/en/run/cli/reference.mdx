@@ -240,7 +240,7 @@ Control how the model selects tokens during generation.
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--temperature` | float | — | Sampling temperature. Higher values increase randomness. |
+| `--temperature` | float | — | Sampling temperature. Higher values increase randomness; `0` decodes greedily. |
 | `--top-p` | float | — | Top-p (nucleus) sampling threshold. |
 | `--top-k` | int | — | Top-k sampling. Only consider the top-k most likely tokens. |
 | `--min-p` | float | — | Min-p sampling threshold. |
