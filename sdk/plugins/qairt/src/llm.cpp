@@ -363,13 +363,17 @@ int32_t QairtLlm::get_model_info(geniex_LlmModelInfo* output) {
 int32_t QairtLlm::forward_logits(const geniex_LlmForwardLogitsInput* input, geniex_LlmForwardLogitsOutput* output) {
     if (!pipeline_) return GENIEX_ERROR_COMMON_NOT_INITIALIZED;
     if (!input || !output) return GENIEX_ERROR_COMMON_INVALID_INPUT;
-    if (!input->input_ids || input->input_ids_count <= 0) return GENIEX_ERROR_COMMON_INVALID_INPUT;
-
-    std::vector<int32_t> input_ids(input->input_ids, input->input_ids + input->input_ids_count);
+    const bool has_input_ids = input->input_ids && input->input_ids_count > 0;
+    if (!has_input_ids && !input->prompt_utf8) return GENIEX_ERROR_COMMON_INVALID_INPUT;
 
     std::vector<float> logits;
     try {
-        logits = pipeline_->forwardLogits(input_ids, input->all_positions);
+        if (has_input_ids) {
+            std::vector<int32_t> input_ids(input->input_ids, input->input_ids + input->input_ids_count);
+            logits = pipeline_->forwardLogits(input_ids, input->all_positions);
+        } else {
+            logits = pipeline_->forwardLogitsFromText(input->prompt_utf8, input->all_positions);
+        }
     } catch (const UnsupportedOperationError& e) {
         GENIEX_LOG_ERROR("QAIRT forward_logits: {}", e.what());
         return GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED;
