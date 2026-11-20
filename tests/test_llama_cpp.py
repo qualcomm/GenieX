@@ -65,7 +65,7 @@ def _run_multi_turn(llm) -> list[str]:
     history: list[dict] = [{'role': 'system', 'content': 'Answer in one short sentence.'}]
     replies: list[str] = []
     for user in [
-        'My name is Alice and I am 30 years old. Just acknowledge.',
+        'My name is Alice and I am 30 years old. Remember it and reply with just OK.',
         'What is my name?',
     ]:
         history.append({'role': 'user', 'content': user})
