@@ -163,7 +163,7 @@ Run `geniex-bench --help` for the full flag list.
 
 ## Defaults
 
-- `n_gen=128`, `temperature=0.0`, `seed=42`
+- `n_gen=128`, temperature = plugin default (`--temperature 0` = greedy), `seed=42`
 - `--warmup 1`, `-r 5` (5 measured runs after 1 warmup; pass `--no-warmup`
   to skip warmup)
 - `--accuracy` pins a single run (`--warmup 0 -r 1`) and prints the generated

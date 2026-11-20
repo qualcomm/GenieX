@@ -22,10 +22,6 @@ Thinking is disabled for the keyword cells. With it on, Qwen3 spends most of
 and the binding strips the trace — leaving a stub that looks like a missing
 keyword (qcom-ai-hub/geniex#1460).
 
-Sampling diverges from upstream in one place: both plugins read
-`temperature == 0.0` as "unset" and substitute 0.8, so `GREEDY_TEMPERATURE`
-uses the negative argmax sentinel both plugins accept instead.
-
 One intentional delta vs. upstream: VLM only ships the dog photo + first
 keyword set. Upstream also iterates a Qualcomm AIHub product image with
 vocabulary like person/phone/text; that second image is deferred to keep
@@ -36,7 +32,7 @@ from __future__ import annotations
 
 import math
 
-GREEDY_TEMPERATURE = -1.0
+GREEDY_TEMPERATURE = 0.0
 
 # (prompt, expected_substring). Matched case-insensitively against `out.text`.
 LLM_QUALITY_PROMPTS: list[tuple[str, str]] = [

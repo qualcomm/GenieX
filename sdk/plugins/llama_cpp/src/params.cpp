@@ -224,14 +224,17 @@ common_params_sampling build_sampling_params(const geniex_SamplerConfig* cfg) {
     common_params_sampling s;
     if (!cfg) return s;  // null cfg -> upstream defaults
 
-    s.seed            = (cfg->seed != 0) ? cfg->seed : LLAMA_DEFAULT_SEED;
-    s.top_k           = (cfg->top_k != 0) ? cfg->top_k : 40;
-    s.top_p           = (cfg->top_p != 0.0f) ? cfg->top_p : 0.95f;
-    s.min_p           = (cfg->min_p != 0.0f) ? cfg->min_p : 0.05f;
-    s.temp            = (cfg->temperature != 0.0f) ? cfg->temperature : 0.8f;
-    s.penalty_repeat  = (cfg->repetition_penalty != 0.0f) ? cfg->repetition_penalty : 1.0f;
-    s.penalty_present = (cfg->presence_penalty != 0.0f) ? cfg->presence_penalty : 0.0f;
-    s.penalty_freq    = (cfg->frequency_penalty != 0.0f) ? cfg->frequency_penalty : 0.0f;
+    auto pick = [cfg](uint32_t field, auto value, auto fallback) {
+        return (value != 0 || (cfg->set_fields & field) != 0) ? value : fallback;
+    };
+    s.seed            = pick(GENIEX_SAMPLER_FIELD_SEED, static_cast<uint32_t>(cfg->seed), LLAMA_DEFAULT_SEED);
+    s.top_k           = pick(GENIEX_SAMPLER_FIELD_TOP_K, cfg->top_k, 40);
+    s.top_p           = pick(GENIEX_SAMPLER_FIELD_TOP_P, cfg->top_p, 0.95f);
+    s.min_p           = pick(GENIEX_SAMPLER_FIELD_MIN_P, cfg->min_p, 0.05f);
+    s.temp            = pick(GENIEX_SAMPLER_FIELD_TEMPERATURE, cfg->temperature, 0.8f);
+    s.penalty_repeat  = pick(GENIEX_SAMPLER_FIELD_REPETITION_PENALTY, cfg->repetition_penalty, 1.0f);
+    s.penalty_present = pick(GENIEX_SAMPLER_FIELD_PRESENCE_PENALTY, cfg->presence_penalty, 0.0f);
+    s.penalty_freq    = pick(GENIEX_SAMPLER_FIELD_FREQUENCY_PENALTY, cfg->frequency_penalty, 0.0f);
 
     // Grammar: prefer an inline string, otherwise read it from the grammar file.
     if (cfg->grammar_string && strlen(cfg->grammar_string) > 0) {

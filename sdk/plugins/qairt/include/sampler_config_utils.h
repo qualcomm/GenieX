@@ -35,18 +35,8 @@ inline void apply_sampler_config(
     const geniex_SamplerConfig* cfg, GenerationConfig& out, const ParsedSamplerConfig& bundle = {}) {
     constexpr DefaultSamplerParams kDefaults{};
 
-    auto pick_uint = [](uint32_t user_val, const std::optional<uint32_t>& bundle_val, uint32_t fallback) {
-        if (user_val != 0) return user_val;
-        if (bundle_val) return *bundle_val;
-        return fallback;
-    };
-    auto pick_int = [](int32_t user_val, const std::optional<int32_t>& bundle_val, int32_t fallback) {
-        if (user_val != 0) return user_val;
-        if (bundle_val) return *bundle_val;
-        return fallback;
-    };
-    auto pick_float = [](float user_val, const std::optional<float>& bundle_val, float fallback) {
-        if (user_val != 0.0f) return user_val;
+    auto pick = [cfg](uint32_t field, auto user_val, const auto& bundle_val, auto fallback) {
+        if (user_val != 0 || (cfg->set_fields & field) != 0) return user_val;
         if (bundle_val) return *bundle_val;
         return fallback;
     };
@@ -67,21 +57,26 @@ inline void apply_sampler_config(
         return;
     }
 
-    // Zero-sentinel on cfg: 0 means "defer to lower tiers".
-    out.seed  = pick_uint(static_cast<uint32_t>(cfg->seed), bundle.seed, kDefaults.seed);
-    out.top_k = pick_int(cfg->top_k, bundle.top_k, kDefaults.top_k);
-    out.top_p = pick_float(cfg->top_p, bundle.top_p, kDefaults.top_p);
-    out.min_p = (cfg->min_p != 0.0f) ? cfg->min_p : kDefaults.min_p;
-    out.repetition_penalty =
-        pick_float(cfg->repetition_penalty, bundle.repetition_penalty, kDefaults.repetition_penalty);
-    out.presence_penalty  = pick_float(cfg->presence_penalty, bundle.presence_penalty, kDefaults.presence_penalty);
-    out.frequency_penalty = pick_float(cfg->frequency_penalty, bundle.frequency_penalty, kDefaults.frequency_penalty);
+    // A zero field without its set_fields bit defers to the bundle, then the plugin default.
+    out.seed  = pick(GENIEX_SAMPLER_FIELD_SEED, static_cast<uint32_t>(cfg->seed), bundle.seed, kDefaults.seed);
+    out.top_k = pick(GENIEX_SAMPLER_FIELD_TOP_K, cfg->top_k, bundle.top_k, kDefaults.top_k);
+    out.top_p = pick(GENIEX_SAMPLER_FIELD_TOP_P, cfg->top_p, bundle.top_p, kDefaults.top_p);
+    out.min_p = pick(GENIEX_SAMPLER_FIELD_MIN_P, cfg->min_p, std::optional<float>{}, kDefaults.min_p);
+    out.repetition_penalty = pick(GENIEX_SAMPLER_FIELD_REPETITION_PENALTY,
+        cfg->repetition_penalty,
+        bundle.repetition_penalty,
+        kDefaults.repetition_penalty);
+    out.presence_penalty   = pick(GENIEX_SAMPLER_FIELD_PRESENCE_PENALTY,
+        cfg->presence_penalty,
+        bundle.presence_penalty,
+        kDefaults.presence_penalty);
+    out.frequency_penalty  = pick(GENIEX_SAMPLER_FIELD_FREQUENCY_PENALTY,
+        cfg->frequency_penalty,
+        bundle.frequency_penalty,
+        kDefaults.frequency_penalty);
     if (bundle.penalty_last_n) out.penalty_last_n = *bundle.penalty_last_n;
-
-    // Temperature is special: 0 means "defer", a NEGATIVE value is the
-    // greedy/argmax sentinel, positive is the literal temp.
     out.temperature =
-        (cfg->temperature == 0.0f) ? bundle.temperature.value_or(kDefaults.temperature) : cfg->temperature;
+        pick(GENIEX_SAMPLER_FIELD_TEMPERATURE, cfg->temperature, bundle.temperature, kDefaults.temperature);
 
     // Grammar — string takes priority over path (matches llama_cpp plugin).
     if (cfg->grammar_string && cfg->grammar_string[0] != '\0') {

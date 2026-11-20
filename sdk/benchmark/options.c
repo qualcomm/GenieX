@@ -75,7 +75,7 @@ static void usage(const char* argv0) {
         "  --log LEVEL            none, error, warn (default: error), info, debug, trace. For qairt\n"
         "                         this also sets the QNN backend's log level; debug/trace\n"
         "                         slow decode by ~15%% or more, so don't time with them\n"
-        "  --temperature F        default 0.0\n"
+        "  --temperature F        default: plugin default; 0 = greedy\n"
         "  --top-p F              default 0.0 (defers to the bundle's dialog.sampler.top-p,\n"
         "                         then the plugin default, e.g. 0.95 for qairt/llama_cpp)\n"
         "  --seed N               default 42; also seeds rand() for prompt ids\n"
@@ -304,6 +304,7 @@ void parse_args(int argc, char** argv, options_t* o) {
     o->temperature             = 0.0f;
     o->top_p                   = 0.0f;
     o->seed                    = 42;
+    o->sampler_set_fields      = 0;
     o->warmup                  = 1;
     o->repeat                  = 5;
     o->reset_between_runs      = true;
@@ -382,10 +383,13 @@ void parse_args(int argc, char** argv, options_t* o) {
             o->max_new_tokens = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--temperature") == 0) {
             o->temperature = (float)atof(arg_value(argc, argv, &i, a));
+            o->sampler_set_fields |= GENIEX_SAMPLER_FIELD_TEMPERATURE;
         } else if (strcmp(a, "--top-p") == 0) {
             o->top_p = (float)atof(arg_value(argc, argv, &i, a));
+            o->sampler_set_fields |= GENIEX_SAMPLER_FIELD_TOP_P;
         } else if (strcmp(a, "--seed") == 0) {
             o->seed = atoi(arg_value(argc, argv, &i, a));
+            o->sampler_set_fields |= GENIEX_SAMPLER_FIELD_SEED;
         } else if (strcmp(a, "--warmup") == 0) {
             o->warmup = atoi(arg_value(argc, argv, &i, a));
         } else if (strcmp(a, "--no-warmup") == 0) {

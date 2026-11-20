@@ -10,18 +10,18 @@ from dataclasses import dataclass, field
 class GenerationConfig:
     """Transformers-compatible generation parameters.
 
-    Numeric sampler fields default to 0 (= defer to bundle/plugin default).
+    Numeric sampler fields default to None (= bundle/plugin default); 0 is used as given.
     """
 
     max_new_tokens: int = 512
-    temperature: float = 0.0
-    top_p: float = 0.0
-    top_k: int = 0
-    min_p: float = 0.0
-    repetition_penalty: float = 0.0
-    presence_penalty: float = 0.0
-    frequency_penalty: float = 0.0
-    seed: int = 0
+    temperature: float | None = None
+    top_p: float | None = None
+    top_k: int | None = None
+    min_p: float | None = None
+    repetition_penalty: float | None = None
+    presence_penalty: float | None = None
+    frequency_penalty: float | None = None
+    seed: int | None = None
     stop: list[str] = field(default_factory=list)
     grammar: str | None = None
     images: list[str] = field(default_factory=list)

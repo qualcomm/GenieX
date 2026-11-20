@@ -182,7 +182,7 @@ struct fmt::formatter<geniex_SamplerConfig> {
         return fmt::format_to(ctx.out(),
             "SamplerConfig(temperature: {}, top_p: {}, top_k: {}, min_p: {}, repetition_penalty: {}, "
                       "presence_penalty: {}, frequency_penalty: {}, seed: {}, grammar_path: {}, grammar_string: {}, "
-                      "chat_template_grammar: {})",
+                      "chat_template_grammar: {}, set_fields: {:#x})",
             lp(p.temperature),
             lp(p.top_p),
             lp(p.top_k),
@@ -193,7 +193,8 @@ struct fmt::formatter<geniex_SamplerConfig> {
             lp(p.seed),
             lp(p.grammar_path),
             lp(p.grammar_string),
-            p.chat_template_grammar.grammar_type != GENIEX_GRAMMAR_TYPE_NONE);
+            p.chat_template_grammar.grammar_type != GENIEX_GRAMMAR_TYPE_NONE,
+            p.set_fields);
     }
 };
 

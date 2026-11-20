@@ -637,7 +637,7 @@ components:
           format: float
           minimum: 0
           maximum: 2
-          description: What sampling temperature to use, between 0 and 2
+          description: What sampling temperature to use, between 0 and 2. Omit for the plugin default; 0 decodes greedily
         top_p:
           type: number
           format: float
@@ -767,7 +767,7 @@ components:
           minimum: 0
           maximum: 2
           default: 0.8
-          description: What sampling temperature to use, between 0 and 2
+          description: What sampling temperature to use, between 0 and 2. Omit for the plugin default; 0 decodes greedily
         top_p:
           type: number
           format: float

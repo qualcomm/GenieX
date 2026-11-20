@@ -34,9 +34,9 @@ type CompletionRequest struct {
 	VitCompute string `json:"vit_compute"`
 	PowerMode  string `json:"power_mode"`
 
-	TopK              int32   `json:"top_k"`
-	MinP              float32 `json:"min_p"`
-	RepetitionPenalty float32 `json:"repetition_penalty"`
+	TopK              param.Opt[int64]   `json:"top_k"`
+	MinP              param.Opt[float64] `json:"min_p"`
+	RepetitionPenalty param.Opt[float64] `json:"repetition_penalty"`
 }
 
 func defaultCompletionRequest() CompletionRequest {
@@ -52,7 +52,7 @@ func defaultCompletionRequest() CompletionRequest {
 		Compute:           cfg.Compute,
 		VitCompute:        cfg.VitCompute,
 		PowerMode:         cfg.PowerMode,
-		RepetitionPenalty: 1.0,
+		RepetitionPenalty: param.NewOpt(1.0),
 	}
 }
 
@@ -157,19 +157,20 @@ func Completions(c *gin.Context) {
 	}
 	p := acquired.Model
 
+	sampler := samplerOptions{
+		Temperature:       req.Temperature,
+		TopP:              req.TopP,
+		TopK:              req.TopK,
+		MinP:              req.MinP,
+		RepetitionPenalty: req.RepetitionPenalty,
+		PresencePenalty:   req.PresencePenalty,
+		FrequencyPenalty:  req.FrequencyPenalty,
+		Seed:              req.Seed,
+	}.config()
 	genConfig := &geniex_sdk.GenerationConfig{
-		MaxTokens: int32(req.MaxTokens.Value),
-		Stop:      completionStop(req.Stop),
-		SamplerConfig: &geniex_sdk.SamplerConfig{
-			Temperature:       float32(req.Temperature.Value),
-			TopP:              float32(req.TopP.Value),
-			TopK:              req.TopK,
-			MinP:              req.MinP,
-			RepetitionPenalty: req.RepetitionPenalty,
-			PresencePenalty:   float32(req.PresencePenalty.Value),
-			FrequencyPenalty:  float32(req.FrequencyPenalty.Value),
-			Seed:              int32(req.Seed.Value),
-		},
+		MaxTokens:     int32(req.MaxTokens.Value),
+		Stop:          completionStop(req.Stop),
+		SamplerConfig: &sampler,
 	}
 	echo := ""
 	if req.Echo.Valid() && req.Echo.Value {

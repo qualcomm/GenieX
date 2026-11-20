@@ -292,18 +292,33 @@ static void extract_sampler_config(
 
     jclass cls = env->GetObjectClass(configObj);
 
-    // Scalars
-    cfg.temperature = env->GetFloatField(configObj, env->GetFieldID(cls, "temperature", "F"));
-    cfg.top_p       = env->GetFloatField(configObj, env->GetFieldID(cls, "topP", "F"));
-    cfg.top_k       = env->GetIntField(configObj, env->GetFieldID(cls, "topK", "I"));
-
-    // NEW: min_p
-    cfg.min_p = env->GetFloatField(configObj, env->GetFieldID(cls, "minP", "F"));
-
-    cfg.repetition_penalty = env->GetFloatField(configObj, env->GetFieldID(cls, "repetitionPenalty", "F"));
-    cfg.presence_penalty   = env->GetFloatField(configObj, env->GetFieldID(cls, "presencePenalty", "F"));
-    cfg.frequency_penalty  = env->GetFloatField(configObj, env->GetFieldID(cls, "frequencyPenalty", "F"));
-    cfg.seed               = env->GetIntField(configObj, env->GetFieldID(cls, "seed", "I"));
+    // Nullable scalars: null defers to the plugin default, any other value is marked set.
+    auto read_float = [&](const char* name, float& dst, uint32_t field) {
+        jobject boxed = env->GetObjectField(configObj, env->GetFieldID(cls, name, "Ljava/lang/Float;"));
+        if (!boxed) return;
+        jclass box_cls = env->GetObjectClass(boxed);
+        dst            = env->CallFloatMethod(boxed, env->GetMethodID(box_cls, "floatValue", "()F"));
+        cfg.set_fields |= field;
+        env->DeleteLocalRef(box_cls);
+        env->DeleteLocalRef(boxed);
+    };
+    auto read_int = [&](const char* name, int32_t& dst, uint32_t field) {
+        jobject boxed = env->GetObjectField(configObj, env->GetFieldID(cls, name, "Ljava/lang/Integer;"));
+        if (!boxed) return;
+        jclass box_cls = env->GetObjectClass(boxed);
+        dst            = env->CallIntMethod(boxed, env->GetMethodID(box_cls, "intValue", "()I"));
+        cfg.set_fields |= field;
+        env->DeleteLocalRef(box_cls);
+        env->DeleteLocalRef(boxed);
+    };
+    read_float("temperature", cfg.temperature, GENIEX_SAMPLER_FIELD_TEMPERATURE);
+    read_float("topP", cfg.top_p, GENIEX_SAMPLER_FIELD_TOP_P);
+    read_int("topK", cfg.top_k, GENIEX_SAMPLER_FIELD_TOP_K);
+    read_float("minP", cfg.min_p, GENIEX_SAMPLER_FIELD_MIN_P);
+    read_float("repetitionPenalty", cfg.repetition_penalty, GENIEX_SAMPLER_FIELD_REPETITION_PENALTY);
+    read_float("presencePenalty", cfg.presence_penalty, GENIEX_SAMPLER_FIELD_PRESENCE_PENALTY);
+    read_float("frequencyPenalty", cfg.frequency_penalty, GENIEX_SAMPLER_FIELD_FREQUENCY_PENALTY);
+    read_int("seed", cfg.seed, GENIEX_SAMPLER_FIELD_SEED);
 
     // Strings / paths use thread_local buffer to ensure pointer lifetime
     static thread_local std::string grammar_path_storage;

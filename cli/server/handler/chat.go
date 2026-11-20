@@ -42,10 +42,10 @@ type ChatCompletionRequest struct {
 	// "deepseek-legacy", and "auto" move it to reasoning_content.
 	ReasoningFormat string `json:"reasoning_format"`
 
-	TopK              int32   `json:"top_k"`
-	MinP              float32 `json:"min_p"`
-	RepetitionPenalty float32 `json:"repetition_penalty"`
-	GrammarString     string  `json:"grammar_string"`
+	TopK              param.Opt[int64]   `json:"top_k"`
+	MinP              param.Opt[float64] `json:"min_p"`
+	RepetitionPenalty param.Opt[float64] `json:"repetition_penalty"`
+	GrammarString     string             `json:"grammar_string"`
 
 	SpecType       string  `json:"spec_type"`
 	SpecDraftModel string  `json:"spec_draft_model"`
@@ -98,9 +98,7 @@ func defaultChatCompletionRequest() ChatCompletionRequest {
 		VitCompute:        cfg.VitCompute,
 		PowerMode:         cfg.PowerMode,
 		ReasoningFormat:   "deepseek",
-		TopK:              0,
-		MinP:              0.0,
-		RepetitionPenalty: 1.0,
+		RepetitionPenalty: param.NewOpt(1.0),
 		GrammarString:     "",
 		SpecType:          cfg.SpecType,
 		SpecDraftModel:    cfg.DraftModel,
@@ -319,6 +317,32 @@ func generateWithRetry[T, M any](model *T, prompt string, gen generateFn, input 
 	return gen(prompt, onToken)
 }
 
+type samplerOptions struct {
+	Temperature, TopP, MinP, RepetitionPenalty, PresencePenalty, FrequencyPenalty param.Opt[float64]
+	TopK, Seed                                                                    param.Opt[int64]
+}
+
+// config marks every field present in the request as set, so an explicit 0 reaches the plugin as 0.
+func (o samplerOptions) config() geniex_sdk.SamplerConfig {
+	var s geniex_sdk.SamplerConfig
+	setSampler(&s, &s.Temperature, geniex_sdk.SamplerTemperature, o.Temperature)
+	setSampler(&s, &s.TopP, geniex_sdk.SamplerTopP, o.TopP)
+	setSampler(&s, &s.TopK, geniex_sdk.SamplerTopK, o.TopK)
+	setSampler(&s, &s.MinP, geniex_sdk.SamplerMinP, o.MinP)
+	setSampler(&s, &s.RepetitionPenalty, geniex_sdk.SamplerRepetitionPenalty, o.RepetitionPenalty)
+	setSampler(&s, &s.PresencePenalty, geniex_sdk.SamplerPresencePenalty, o.PresencePenalty)
+	setSampler(&s, &s.FrequencyPenalty, geniex_sdk.SamplerFrequencyPenalty, o.FrequencyPenalty)
+	setSampler(&s, &s.Seed, geniex_sdk.SamplerSeed, o.Seed)
+	return s
+}
+
+func setSampler[V int32 | float32, T int64 | float64](s *geniex_sdk.SamplerConfig, dst *V, field geniex_sdk.SamplerField, opt param.Opt[T]) {
+	if opt.Valid() {
+		*dst = V(opt.Value)
+		s.SetFields |= field
+	}
+}
+
 // runChat is the shared flow wrapping the type-specific prepareFn. session
 // identifies the conversation for the keepalive cache's reset decision.
 func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam types.ModelParam, messages M, session utils.SessionKey, prepare prepareFn[T, M]) {
@@ -348,17 +372,17 @@ func runChat[T, M any](c *gin.Context, param ChatCompletionRequest, modelParam t
 		return
 	}
 
-	sampler := geniex_sdk.SamplerConfig{
-		Temperature:       float32(param.Temperature.Value),
-		TopP:              float32(param.TopP.Value),
+	sampler := samplerOptions{
+		Temperature:       param.Temperature,
+		TopP:              param.TopP,
 		TopK:              param.TopK,
 		MinP:              param.MinP,
 		RepetitionPenalty: param.RepetitionPenalty,
-		PresencePenalty:   float32(param.PresencePenalty.Value),
-		FrequencyPenalty:  float32(param.FrequencyPenalty.Value),
-		Seed:              int32(param.Seed.Value),
-		GrammarString:     param.GrammarString,
-	}
+		PresencePenalty:   param.PresencePenalty,
+		FrequencyPenalty:  param.FrequencyPenalty,
+		Seed:              param.Seed,
+	}.config()
+	sampler.GrammarString = param.GrammarString
 	prompt, gen, err := prepare(acquired.Model, prepareInput[M]{
 		Messages: messages,
 		Param:    param,

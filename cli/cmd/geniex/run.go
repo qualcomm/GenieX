@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/bytedance/sonic"
@@ -111,6 +112,12 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 	if err != nil {
 		return err
 	}
+	var samplerOptions []option.RequestOption
+	for _, f := range samplerFlagFields {
+		if samplerFlags.Changed(f.name) {
+			samplerOptions = append(samplerOptions, option.WithJSONSet(strings.ReplaceAll(f.name, "-", "_"), f.value))
+		}
+	}
 
 	// warm up
 	spin := render.NewSpinner("loading model...")
@@ -197,18 +204,9 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 				Messages:            history,
 				Model:               name,
 				StreamOptions:       openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Opt(true)},
-				Temperature:         openai.Float(float64(temperature)),
-				TopP:                openai.Float(float64(topP)),
-				PresencePenalty:     openai.Float(float64(presencePenalty)),
-				FrequencyPenalty:    openai.Float(float64(frequencyPenalty)),
-				Seed:                openai.Int(int64(seed)),
 				MaxCompletionTokens: openai.Int(int64(maxTokens)),
-			},
-
+			}, append(samplerOptions,
 				option.WithJSONSet("enable_think", enableThink),
-				option.WithJSONSet("top_k", topK),
-				option.WithJSONSet("min_p", minP),
-				option.WithJSONSet("repetition_penalty", repetitionPenalty),
 				option.WithJSONSet("grammar_string", grammar),
 				option.WithJSONSet("ngl", ngl),
 				option.WithJSONSet("nctx", nctx),
@@ -221,7 +219,7 @@ func runCompletions(ctx context.Context, name string, modelType geniex_sdk.Model
 				option.WithJSONSet("spec_p_min", draftPMin),
 				option.WithJSONSet("power_mode", powerMode),
 				option.WithJSONSet("reasoning_format", "none"),
-			)
+			)...)
 
 			var firstToken time.Time
 			var profileData geniex_sdk.ProfileData
