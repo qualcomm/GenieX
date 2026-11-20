@@ -26,7 +26,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `model_name_or_path` | `str` | *required* | HuggingFace repo id, short alias (e.g. `"qwen3"`), or local path. |
+| `model_name_or_path` | `str` | *required* | HuggingFace repo id or local path. |
 | `device_map` | `str` | `"auto"` | `"auto"` picks the first available runtime + compute unit. Also accepts `"<runtime>"` (runtime) or `"<runtime>:<compute_unit>"` (runtime + compute unit). |
 | `precision` | `str \| None` | `None` | Precision (quantization) variant (e.g. `"Q4_K_M"`). Filters files when downloading from Hub. |
 | `mmproj_path` | `str \| None` | `None` | Path to the multimodal projector file. Auto-resolved from Hub; pass explicitly to force VLM mode. |
@@ -129,7 +129,7 @@ Save or load the key-value cache to/from a file path (`str`).
 Releases the model handle and frees resources. Also supports context-manager usage:
 
 ```python
-with AutoModelForCausalLM.from_pretrained("qwen3") as model:
+with AutoModelForCausalLM.from_pretrained("unsloth/Qwen3-4B-GGUF") as model:
     output = model.generate(prompt)
 ```
 
@@ -278,11 +278,10 @@ print(f"model removed: {MODEL}")
 
 | Function | Description |
 |---|---|
-| `pull(model_name, ...)` | Download a model by alias or `org/repo[:precision]`. |
+| `pull(model_name, ...)` | Download a model by `org/repo[:precision]`. |
 | `list_models()` | Returns `list[str]` of cached model names. |
 | `get_paths(model_name)` | Returns `ModelPaths` with resolved local file paths. |
 | `get_type(model_name)` | Returns `"llm"` or `"vlm"`. |
-| `resolve_alias(alias)` | Resolves a short alias to canonical `org/repo`. |
 | `remove(model_name)` | Delete a cached model from disk. |
 | `clean()` | Remove all cached models. Returns count removed. |
 
@@ -290,7 +289,7 @@ print(f"model removed: {MODEL}")
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `model_name` | `str` | *required* | `org/repo` or a short alias. |
+| `model_name` | `str` | *required* | `org/repo` or `org/repo:precision`. |
 | `precision` | `str \| None` | `None` | Precision (quantization) hint (e.g. `"Q4_K_M"`). |
 | `hub` | `str` | `"auto"` | `"auto"` \| `"hf"` \| `"localfs"`. |
 | `local_path` | `str \| None` | `None` | Source directory (required when `hub="localfs"`). |

@@ -43,14 +43,6 @@ pub fn validate_name(name: &str) -> Result<()> {
     }
 }
 
-/// `qwen3` stays so the Python bindings and CLI smoke tests have an alias that resolves.
-pub fn resolve_alias(alias: &str) -> Option<String> {
-    match alias {
-        "qwen3" => Some("ggml-org/Qwen3-1.7B-GGUF:Q4_K_M".to_string()),
-        _ => None,
-    }
-}
-
 /// Lowercased AI Hub orgs; `ai-hub-models` is an alias for `qualcomm`.
 const AI_HUB_ORGS: &[&str] = &["qualcomm", "ai-hub-models"];
 
@@ -101,15 +93,6 @@ pub(crate) fn docker_hub_repo_from_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn resolves_aliases() {
-        assert_eq!(
-            resolve_alias("qwen3").as_deref(),
-            Some("ggml-org/Qwen3-1.7B-GGUF:Q4_K_M")
-        );
-        assert!(resolve_alias("nonexistent_model_xyz").is_none());
-    }
 
     #[test]
     fn aihub_display_name_from_repo_cases() {

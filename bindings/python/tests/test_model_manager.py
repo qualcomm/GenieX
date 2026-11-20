@@ -7,9 +7,6 @@ from __future__ import annotations
 
 import os
 
-import pytest
-
-import geniex
 from geniex import model_manager as _mm
 
 from .conftest import LLAMA_CPP_MODEL, LLAMA_CPP_QUANT
@@ -38,11 +35,6 @@ def test_ensure_cached_idempotent(llama_cpp_paths):
     assert paths.model_path == llama_cpp_paths.model_path
     # No in-flight progress ticks expected on a warm cache.
     assert all(n >= 0 for n in calls)
-
-
-def test_resolve_alias_unknown_raises(geniex_session):
-    with pytest.raises(geniex.GenieXError):
-        _mm.resolve_alias('definitely-not-a-real-alias-xyz')
 
 
 def test_get_type_for_llm(llama_cpp_paths):

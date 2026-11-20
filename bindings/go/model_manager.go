@@ -114,19 +114,6 @@ func ResolveHub(name string, hub HubSource) (HubSource, error) {
 	return HubSource(out), nil
 }
 
-// ResolveAlias expands a short alias (e.g. "qwen3") to "org/repo[:precision]".
-// pull / get_paths never consult the table, so resolve first to let an alias win.
-func ResolveAlias(alias string) (string, bool) {
-	cAlias := C.CString(alias)
-	defer C.free(unsafe.Pointer(cAlias))
-	var out *C.char
-	if res := C.geniex_model_resolve_alias(cAlias, &out); res != C.GENIEX_SUCCESS {
-		return "", false
-	}
-	defer free(unsafe.Pointer(out))
-	return C.GoString(out), true
-}
-
 // FileProgress mirrors geniex_FileProgress.
 type FileProgress struct {
 	FileName        string
@@ -429,7 +416,7 @@ type ModelPaths struct {
 	ModelType     ModelType
 }
 
-// ModelGetPaths resolves "org/repo[:precision]" (or alias) to absolute on-disk paths.
+// ModelGetPaths resolves "org/repo[:precision]" to absolute on-disk paths.
 func ModelGetPaths(name string) (*ModelPaths, error) {
 	cName := C.CString(name)
 	defer C.free(unsafe.Pointer(cName))

@@ -52,7 +52,7 @@ Python 3.10+ required.
 from geniex import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained(
-    "qwen3",               # short alias, HF repo id, or local GGUF path
+    "unsloth/Qwen3-4B-GGUF",  # HF repo id or local GGUF path
     device_map="auto",     # "auto" | "cpu" | "gpu" | "npu" | "hybrid"
                            # | "<plugin>" | "<plugin>:<device>"
 )
@@ -76,9 +76,9 @@ for chunk in streamer:
 model.close()
 ```
 
-`from_pretrained` accepts any of: a short alias (resolved via the bundled
-registry), a HuggingFace `org/repo` (optionally `org/repo:precision`), or a
-local path to a `.gguf` file or a pre-downloaded directory.
+`from_pretrained` accepts a HuggingFace `org/repo` (optionally
+`org/repo:precision`), or a local path to a `.gguf` file or a pre-downloaded
+directory.
 
 ### VLM
 
@@ -108,10 +108,10 @@ The same model manager the CLI uses is available programmatically:
 ```python
 from geniex import model_manager as mm
 
-mm.pull("qwen3")                      # alias or "org/repo[:precision]"
-paths = mm.get_paths("qwen3")         # resolved local paths
-mm.list_models()                      # cached models
-mm.remove("qwen3")
+mm.pull("unsloth/Qwen3-4B-GGUF:Q4_K_M")                 # "org/repo[:precision]"
+paths = mm.get_paths("unsloth/Qwen3-4B-GGUF:Q4_K_M")    # resolved local paths
+mm.list_models()                                        # cached models
+mm.remove("unsloth/Qwen3-4B-GGUF:Q4_K_M")
 ```
 
 ### Plugin / device enumeration
@@ -149,14 +149,14 @@ name avoids clashing with the Go `geniex` binary when both are
 installed):
 
 ```bash
-geniex-py chat qwen3                       # interactive chat (auto-downloads)
+geniex-py chat unsloth/Qwen3-4B-GGUF       # interactive chat (auto-downloads)
 geniex-py chat unsloth/Qwen3-4B-GGUF --quant Q4_K_M
 geniex-py chat /path/to/model.gguf --system "You are a concise assistant."
 
-geniex-py pull qwen3                       # download into the cache only
+geniex-py pull unsloth/Qwen3-4B-GGUF       # download into the cache only
 geniex-py ls                               # list cached models (table)
-geniex-py ls qwen3                         # show one model's geniex.json
-geniex-py rm qwen3                         # remove from cache
+geniex-py ls unsloth/Qwen3-4B-GGUF         # show one model's geniex.json
+geniex-py rm unsloth/Qwen3-4B-GGUF         # remove from cache
 geniex-py devices                          # list plugins and their devices
 ```
 

@@ -545,7 +545,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest='cmd', required=True)
 
     chat = sub.add_parser('chat', help='Interactive chat with a model')
-    chat.add_argument('model', help='Alias (e.g. qwen3), HF repo id, or local path')
+    chat.add_argument('model', help='HF repo id or local path')
     chat.add_argument('--quant', default=None, help='Quantization variant (e.g. Q4_K_M)')
     chat.add_argument('--system', default=None, help='Optional system prompt')
     chat.add_argument(
@@ -570,7 +570,7 @@ def _build_parser() -> argparse.ArgumentParser:
     chat.set_defaults(func=_cmd_chat)
 
     pull = sub.add_parser('pull', help='Download a model into the local cache')
-    pull.add_argument('model', help='Alias or HF repo id (supports org/repo:precision)')
+    pull.add_argument('model', help='HF repo id (supports org/repo:precision)')
     pull.add_argument('--quant', default=None, help='Quantization variant (e.g. Q4_K_M)')
     _add_hub_args(pull)
     pull.set_defaults(func=_cmd_pull)

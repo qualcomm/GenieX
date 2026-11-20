@@ -329,9 +329,6 @@ def _bind_all() -> None:
     lib.geniex_model_query_free.argtypes = [POINTER(geniex_ModelQueryOutput)]
     lib.geniex_model_query_free.restype = None
 
-    lib.geniex_model_resolve_alias.argtypes = [c_char_p, POINTER(c_char_p)]
-    lib.geniex_model_resolve_alias.restype = c_int32
-
     lib.geniex_model_resolve_hub.argtypes = [c_char_p, c_int32, POINTER(c_int32)]
     lib.geniex_model_resolve_hub.restype = c_int32
 

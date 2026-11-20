@@ -4,7 +4,7 @@
 use std::os::raw::c_char;
 
 use crate::model_ref::{
-    aihub_display_name_from_repo, canonicalize_model_name, is_docker_hub_reference, resolve_alias,
+    aihub_display_name_from_repo, canonicalize_model_name, is_docker_hub_reference,
 };
 
 use crate::ffi::pull::GenieXHubSource;
@@ -29,20 +29,6 @@ pub extern "C" fn geniex_model_resolve_hub(
             }
             other => other,
         };
-        Ok(GENIEX_SUCCESS)
-    })
-}
-
-#[no_mangle]
-pub extern "C" fn geniex_model_resolve_alias(
-    alias: *const c_char,
-    out_full_name: *mut *mut c_char,
-) -> i32 {
-    ffi_guard(|| {
-        let out = out_mut(out_full_name)?;
-        let alias_str = unsafe { cstr_to_str(alias) }?;
-        let full = resolve_alias(alias_str).ok_or(GENIEX_ERROR_COMMON_INVALID_INPUT)?;
-        *out = str_to_cptr(&full);
         Ok(GENIEX_SUCCESS)
     })
 }
