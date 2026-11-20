@@ -406,12 +406,13 @@ GENIEX_API int32_t geniex_model_resolve_alias(const char* alias, char** out_full
  *
  * An explicit @p hub_in other than GENIEX_HUB_AUTO is returned unchanged.
  * GENIEX_HUB_AUTO resolves to GENIEX_HUB_DOCKER when @p model_name carries a
- * Docker Hub prefix (`docker.io/`, `index.docker.io/`, `registry-1.docker.io/`);
- * otherwise it stays GENIEX_HUB_AUTO.
+ * Docker Hub prefix (`docker.io/`, `index.docker.io/`, `registry-1.docker.io/`)
+ * and to GENIEX_HUB_AIHUB when it names an AI Hub org (`qualcomm/…`,
+ * `ai-hub-models/…`, or a bare model name); otherwise it stays GENIEX_HUB_AUTO.
  *
  * Lets a binding branch on the effective hub — e.g. skip the GGUF precision
  * picker for Docker Hub, whose `:<tag>` is a registry reference, not a quant —
- * without duplicating the prefix table the SDK owns. No network I/O.
+ * without duplicating the routing tables the SDK owns. No network I/O.
  *
  * @param model_name  "org/repo", a short alias, or a prefixed reference.
  * @param hub_in      The caller's requested hub (GENIEX_HUB_AUTO to auto-detect).

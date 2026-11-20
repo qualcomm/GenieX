@@ -452,8 +452,10 @@ func pullModel(ctx context.Context, name, quant string) error {
 	}
 
 	// Resolve before the spinner — the picker can't share the terminal with one.
-	if in.Chipset, err = ensureChipset(); err != nil {
-		return err
+	if effectiveHub == geniex_sdk.HubAIHub {
+		if in.Chipset, err = ensureChipset(); err != nil {
+			return err
+		}
 	}
 
 	// Validate --model-type early so we fail before downloading anything, and

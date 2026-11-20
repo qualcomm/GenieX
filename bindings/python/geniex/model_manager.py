@@ -483,8 +483,9 @@ def resolve_effective_hub(model_name: str, hub: str | int = 'auto') -> int:
     """Return the hub enum a pull/query will actually use for ``model_name``.
 
     ``"auto"`` resolves to Docker Hub when the name carries a Docker Hub prefix
-    (``docker.io/…``); every other hub is returned unchanged. The prefix table
-    lives in the SDK, so callers must not re-derive it. No network I/O.
+    (``docker.io/…``) and to AI Hub when it names an AI Hub org; every other hub
+    is returned unchanged. The routing tables live in the SDK, so callers must
+    not re-derive them. No network I/O.
     """
     _ensure_init()
     lib = load_library()

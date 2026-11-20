@@ -35,7 +35,7 @@ docker pull "$IMAGE"
 </Note>
 
 <Note>
-  **基线 ARMv8.0 板子** —— 部分无 NPU 的 Dragonwing IoT SoC 跑不了默认的 ARMv8.2 镜像，这类板子请在 tag 后加上 `-cpu`：`docker.io/qualcomm/geniex:latest-cpu`。该镜像仅支持 CPU 推理，既不需要 `--privileged`，也不需要下面的 `/usr/lib` 挂载。
+  **基线 ARMv8.0 板子** —— 部分无 NPU 的 Dragonwing IoT SoC 跑不了默认的 ARMv8.2 镜像，这类板子请在 tag 后加上 `-cpu`：`docker.io/qualcomm/geniex:latest-cpu`。该镜像仅支持 CPU 推理，既不需要 `--privileged`，也不需要下面的 `/usr/lib` 挂载。它也可在其他 arm64 主机（例如 Docker Desktop 下的 Apple Silicon）上用于开发，但这些主机不在支持范围内。
 </Note>
 
 ### **交互式运行**

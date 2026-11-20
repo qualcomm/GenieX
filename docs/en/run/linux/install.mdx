@@ -35,7 +35,7 @@ docker pull "$IMAGE"
 </Note>
 
 <Note>
-  **Baseline ARMv8.0 boards** — some NPU-less Dragonwing IoT SoCs cannot run the default ARMv8.2 image; append `-cpu` to the tag for those: `docker.io/qualcomm/geniex:latest-cpu`. That image is CPU-only and needs neither `--privileged` nor the `/usr/lib` mount below.
+  **Baseline ARMv8.0 boards** — some NPU-less Dragonwing IoT SoCs cannot run the default ARMv8.2 image; append `-cpu` to the tag for those: `docker.io/qualcomm/geniex:latest-cpu`. That image is CPU-only and needs neither `--privileged` nor the `/usr/lib` mount below. It also runs on other arm64 hosts (for example Apple Silicon under Docker Desktop) for development; those hosts are not supported.
 </Note>
 
 ### **Run interactively**
