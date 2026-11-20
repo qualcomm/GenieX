@@ -69,7 +69,7 @@ def test_build_sampler_retains_chat_grammar_buffers():
         triggers=(GrammarTrigger(2, 'to=functions', 0),),
         preserved_tokens=(200005,),
     )
-    sampler = _build_sampler(0, 0, 0, 0, 0, 0, 0, 0, None, metadata)
+    sampler = _build_sampler(None, None, None, None, None, None, None, None, None, metadata)
     grammar = sampler.chat_template_grammar
 
     assert grammar.grammar_type == 3
@@ -135,7 +135,7 @@ def test_generate_forwards_template_grammar_to_sampler(monkeypatch, model_type):
 
 
 def test_default_sampler_has_no_template_grammar():
-    sampler = _build_sampler(0, 0, 0, 0, 0, 0, 0, 0, None)
+    sampler = _build_sampler(None, None, None, None, None, None, None, None, None)
     assert sampler.chat_template_grammar.grammar_type == 0
     assert not sampler.chat_template_grammar.grammar
     assert not sampler.chat_template_grammar.triggers

@@ -182,11 +182,11 @@ geniex --log debug list
 
 ### 采样器标志
 
-控制模型在生成时如何选择 token。
+控制模型在生成时如何选择 token。未指定的标志使用 plugin 默认值；显式传入的值（包括 `0`）按原值生效。
 
 | 标志 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `--temperature` | float | — | 采样温度。值越高随机性越大。 |
+| `--temperature` | float | — | 采样温度。值越高随机性越大；`0` 为贪心解码。 |
 | `--top-p` | float | — | Top-p（核采样）阈值。 |
 | `--top-k` | int | — | Top-k 采样。仅考虑概率最高的 k 个 token。 |
 | `--min-p` | float | — | Min-p 采样阈值。 |

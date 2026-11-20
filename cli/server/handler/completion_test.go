@@ -114,7 +114,7 @@ func TestCompletionRequestFieldsAfterSDKUpgrade(t *testing.T) {
 	if req.Model != "local/example:Q4_K_M" || req.MaxTokens.Value != 12 || req.Suffix.Value != "" || !req.Echo.Value || !req.Stream || !req.StreamOptions.IncludeUsage.Value {
 		t.Fatalf("core completion fields changed: %+v", req)
 	}
-	if req.Temperature.Value != 0.3 || req.TopP.Value != 0.9 || req.Seed.Value != 31 || req.PresencePenalty.Value != 0.4 || req.FrequencyPenalty.Value != 0.5 || req.TopK != 7 || req.MinP != 0.1 || req.RepetitionPenalty != 1.2 {
+	if req.Temperature.Value != 0.3 || req.TopP.Value != 0.9 || req.Seed.Value != 31 || req.PresencePenalty.Value != 0.4 || req.FrequencyPenalty.Value != 0.5 || req.TopK.Value != 7 || req.MinP.Value != 0.1 || req.RepetitionPenalty.Value != 1.2 {
 		t.Fatalf("sampler fields changed: %+v", req)
 	}
 	if req.NCtx != 2048 || req.Ngl != -1 || req.Compute != "hybrid" || req.VitCompute != "CPU" || req.PowerMode != "burst" {

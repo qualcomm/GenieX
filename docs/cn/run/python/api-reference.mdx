@@ -80,24 +80,26 @@ output = model.generate(prompt, max_new_tokens=256)
 print(output.text)
 ```
 
+采样参数为 `None` 时使用 plugin 默认值；显式传入的值（包括 `0`）按原值生效。
+
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `prompt` | `str` | *必填* | 格式化的 prompt 字符串（用 `model.tokenizer.apply_chat_template()` 构造）。 |
 | `max_new_tokens` | `int` | `512` | 生成的最大 token 数。 |
-| `temperature` | `float` | `0.7` | 采样温度。 |
-| `top_p` | `float` | `0.9` | 核采样阈值。 |
-| `top_k` | `int` | `40` | Top-k 采样。 |
-| `min_p` | `float` | `0.0` | 最小概率阈值。 |
+| `temperature` | `float \| None` | `None` | 采样温度；`0` 为贪心解码。 |
+| `top_p` | `float \| None` | `None` | 核采样阈值。 |
+| `top_k` | `int \| None` | `None` | Top-k 采样。 |
+| `min_p` | `float \| None` | `None` | 最小概率阈值。 |
 | `stream` | `bool` | `False` | 为 `True` 时返回 [`TextIteratorStreamer`](#textiteratorstreamer)。 |
 
 <Expandable title="惩罚与高级参数">
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `repetition_penalty` | `float` | `1.1` | 重复惩罚。 |
-| `presence_penalty` | `float` | `0.0` | 出现惩罚。 |
-| `frequency_penalty` | `float` | `0.0` | 频率惩罚。 |
-| `seed` | `int` | `-1` | 随机种子（`-1` 表示随机）。 |
+| `repetition_penalty` | `float \| None` | `None` | 重复惩罚。 |
+| `presence_penalty` | `float \| None` | `None` | 出现惩罚。 |
+| `frequency_penalty` | `float \| None` | `None` | 频率惩罚。 |
+| `seed` | `int \| None` | `None` | 随机种子。 |
 | `stop` | `list[str] \| None` | `None` | 停止序列。 |
 | `grammar` | `str \| None` | `None` | 用于约束生成的 GBNF 语法字符串。 |
 

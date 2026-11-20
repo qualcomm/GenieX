@@ -105,7 +105,7 @@ The minimum required flags are `--plugin`, `--device`, and `-m`. The model argum
   </Tab>
 </Tabs>
 
-By default `geniex-bench` runs **1 warmup + 5 measured repetitions** with 512 random input tokens and generates 128 tokens at temperature 0.0 (deterministic). Numbers are aggregated as median ± stdev across the 5 runs. Like `llama-bench`, timing runs never stop early on an end-of-sequence token, so every run generates exactly `-n` tokens (`llama_cpp` plugin; `--accuracy` runs still stop on EOS).
+By default `geniex-bench` runs **1 warmup + 5 measured repetitions** with 512 random input tokens and generates 128 tokens with seed 42 (reproducible). Numbers are aggregated as median ± stdev across the 5 runs. Like `llama-bench`, timing runs never stop early on an end-of-sequence token, so every run generates exactly `-n` tokens (`llama_cpp` plugin; `--accuracy` runs still stop on EOS).
 
 ## **Step 3: Compare compute backends**
 
@@ -183,12 +183,12 @@ Hold these variables constant when comparing two models or configs:
 | Prompt length | `-p` / `--n-prompt` | 512 random tokens |
 | Context size | `-c` / `--ctx-size` | 0 (from the model) |
 | Generated tokens | `-n` / `--n-gen` | 128 |
-| Sampling temperature | `--temperature` | 0.0 |
+| Sampling temperature | `--temperature` | plugin default |
 | Random seed | `--seed` | 42 |
 | Repetitions | `-r` | 5 |
 | Warmup runs | `--warmup` | 1 |
 
-The defaults are already set for reproducible comparisons (temperature 0.0, seed 42, 5 measured repetitions). Change any of them with care — a higher `-n` captures more of the decode curve, while a higher `-c` tests the model under a longer context.
+The defaults are already set for reproducible comparisons (seed 42, 5 measured repetitions). Change any of them with care — a higher `-n` captures more of the decode curve, while a higher `-c` tests the model under a longer context.
 
 **Common mistakes:**
 

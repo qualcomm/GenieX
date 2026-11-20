@@ -359,8 +359,24 @@ func resolveModelParams(runtimeID, modelName string) (deviceID string, resolvedN
 	return
 }
 
-func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths, resolvedPowerMode geniex_sdk.PowerMode) error {
-	samplerConfig := &geniex_sdk.SamplerConfig{
+var samplerFlagFields = []struct {
+	name  string
+	field geniex_sdk.SamplerField
+	value any
+}{
+	{"temperature", geniex_sdk.SamplerTemperature, &temperature},
+	{"top-p", geniex_sdk.SamplerTopP, &topP},
+	{"top-k", geniex_sdk.SamplerTopK, &topK},
+	{"min-p", geniex_sdk.SamplerMinP, &minP},
+	{"repetition-penalty", geniex_sdk.SamplerRepetitionPenalty, &repetitionPenalty},
+	{"presence-penalty", geniex_sdk.SamplerPresencePenalty, &presencePenalty},
+	{"frequency-penalty", geniex_sdk.SamplerFrequencyPenalty, &frequencyPenalty},
+	{"seed", geniex_sdk.SamplerSeed, &seed},
+}
+
+// newSamplerConfig marks the sampler flags given on the command line as set, so an explicit 0 is used as given.
+func newSamplerConfig() *geniex_sdk.SamplerConfig {
+	s := &geniex_sdk.SamplerConfig{
 		Temperature:       temperature,
 		TopP:              topP,
 		TopK:              topK,
@@ -372,6 +388,16 @@ func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths, resolvedPowerMo
 		GrammarPath:       grammarPath,
 		GrammarString:     grammarString,
 	}
+	for _, f := range samplerFlagFields {
+		if samplerFlags.Changed(f.name) {
+			s.SetFields |= f.field
+		}
+	}
+	return s
+}
+
+func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths, resolvedPowerMode geniex_sdk.PowerMode) error {
+	samplerConfig := newSamplerConfig()
 	stopSequences, err := loadStopSequences()
 	if err != nil {
 		return err
@@ -592,18 +618,7 @@ func inferLLM(ctx context.Context, paths *geniex_sdk.ModelPaths, resolvedPowerMo
 }
 
 func inferVLM(paths *geniex_sdk.ModelPaths, resolvedPowerMode geniex_sdk.PowerMode) error {
-	samplerConfig := &geniex_sdk.SamplerConfig{
-		Temperature:       temperature,
-		TopP:              topP,
-		TopK:              topK,
-		MinP:              minP,
-		RepetitionPenalty: repetitionPenalty,
-		PresencePenalty:   presencePenalty,
-		FrequencyPenalty:  frequencyPenalty,
-		Seed:              seed,
-		GrammarPath:       grammarPath,
-		GrammarString:     grammarString,
-	}
+	samplerConfig := newSamplerConfig()
 	stopSequences, err := loadStopSequences()
 	if err != nil {
 		return err

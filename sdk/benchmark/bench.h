@@ -87,6 +87,7 @@ typedef struct {
     float        temperature;
     float        top_p;
     int32_t      seed;
+    uint32_t     sampler_set_fields; /* geniex_SamplerField bits for sampler flags given on the command line */
     int32_t      warmup;
     int32_t      repeat;
     bool         reset_between_runs; /* true => geniex_llm_reset() before each run, freeing KV */

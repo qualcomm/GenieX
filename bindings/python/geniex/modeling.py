@@ -8,6 +8,7 @@ from ctypes import POINTER, byref, c_char_p, c_float, c_int32, c_void_p, cast, c
 
 from ._ffi._api import GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH, _check, _str_list_to_c, load_library
 from ._ffi._types import (
+    GENIEX_SAMPLER_FIELDS,
     geniex_ChatTemplateGrammar,
     geniex_GenerationConfig,
     geniex_GrammarTrigger,
@@ -128,14 +129,14 @@ def _free_chat_template_grammar(lib, grammar: geniex_ChatTemplateGrammar) -> Non
 
 
 def _build_sampler(
-    temperature: float,
-    top_p: float,
-    top_k: int,
-    min_p: float,
-    repetition_penalty: float,
-    presence_penalty: float,
-    frequency_penalty: float,
-    seed: int,
+    temperature: float | None,
+    top_p: float | None,
+    top_k: int | None,
+    min_p: float | None,
+    repetition_penalty: float | None,
+    presence_penalty: float | None,
+    frequency_penalty: float | None,
+    seed: int | None,
     grammar: str | None,
     chat_template_grammar: ChatTemplateGrammar | None = None,
 ) -> geniex_SamplerConfig:
@@ -172,17 +173,21 @@ def _build_sampler(
             c_grammar.preserved_token_count = len(chat_template_grammar.preserved_tokens)
             keepalive.append(preserved_array)
 
+    values = {
+        'temperature': temperature,
+        'top_p': top_p,
+        'top_k': top_k,
+        'min_p': min_p,
+        'repetition_penalty': repetition_penalty,
+        'presence_penalty': presence_penalty,
+        'frequency_penalty': frequency_penalty,
+        'seed': seed,
+    }
     sampler = geniex_SamplerConfig(
-        temperature=temperature,
-        top_p=top_p,
-        top_k=top_k,
-        min_p=min_p,
-        repetition_penalty=repetition_penalty,
-        presence_penalty=presence_penalty,
-        frequency_penalty=frequency_penalty,
-        seed=seed,
+        **{name: value or 0 for name, value in values.items()},
         grammar_string=_enc(grammar),
         chat_template_grammar=c_grammar,
+        set_fields=sum(GENIEX_SAMPLER_FIELDS[name] for name, value in values.items() if value is not None),
     )
     sampler._chat_template_grammar_keepalive = keepalive
     return sampler
@@ -326,15 +331,15 @@ class GenieXLLM:
         prompt: str | None = None,
         *,
         max_new_tokens: int = 512,
-        # 0 = defer to bundle/plugin default. Pass non-zero to override.
-        temperature: float = 0.0,
-        top_p: float = 0.0,
-        top_k: int = 0,
-        min_p: float = 0.0,
-        repetition_penalty: float = 0.0,
-        presence_penalty: float = 0.0,
-        frequency_penalty: float = 0.0,
-        seed: int = 0,
+        # None = bundle/plugin default; 0 is used as given (temperature 0 = greedy).
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        min_p: float | None = None,
+        repetition_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        frequency_penalty: float | None = None,
+        seed: int | None = None,
         stop: list[str] | None = None,
         grammar: str | None = None,
         chat_template_grammar: ChatTemplateGrammar | None = None,
@@ -661,15 +666,15 @@ class GenieXVLM:
         prompt: str,
         *,
         max_new_tokens: int = 512,
-        # 0 = defer to bundle/plugin default. Pass non-zero to override.
-        temperature: float = 0.0,
-        top_p: float = 0.0,
-        top_k: int = 0,
-        min_p: float = 0.0,
-        repetition_penalty: float = 0.0,
-        presence_penalty: float = 0.0,
-        frequency_penalty: float = 0.0,
-        seed: int = 0,
+        # None = bundle/plugin default; 0 is used as given (temperature 0 = greedy).
+        temperature: float | None = None,
+        top_p: float | None = None,
+        top_k: int | None = None,
+        min_p: float | None = None,
+        repetition_penalty: float | None = None,
+        presence_penalty: float | None = None,
+        frequency_penalty: float | None = None,
+        seed: int | None = None,
         stop: list[str] | None = None,
         grammar: str | None = None,
         chat_template_grammar: ChatTemplateGrammar | None = None,

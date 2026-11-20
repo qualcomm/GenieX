@@ -90,24 +90,26 @@ output = model.generate(
 )
 ```
 
+Sampler parameters left at `None` use the plugin default; any value you pass, `0` included, is used as given.
+
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `prompt` | `str` | *required* | The formatted prompt string (use `model.tokenizer.apply_chat_template()` to build it). |
 | `max_new_tokens` | `int` | `512` | Maximum number of tokens to generate. |
-| `temperature` | `float` | `0.7` | Sampling temperature. |
-| `top_p` | `float` | `0.9` | Nucleus sampling threshold. |
-| `top_k` | `int` | `40` | Top-k sampling. |
-| `min_p` | `float` | `0.0` | Minimum probability threshold. |
+| `temperature` | `float \| None` | `None` | Sampling temperature; `0` decodes greedily. |
+| `top_p` | `float \| None` | `None` | Nucleus sampling threshold. |
+| `top_k` | `int \| None` | `None` | Top-k sampling. |
+| `min_p` | `float \| None` | `None` | Minimum probability threshold. |
 | `stream` | `bool` | `False` | If `True`, returns a [`TextIteratorStreamer`](#textiteratorstreamer) instead. |
 
 <Expandable title="Penalty and advanced parameters">
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `repetition_penalty` | `float` | `1.1` | Repetition penalty. |
-| `presence_penalty` | `float` | `0.0` | Presence penalty. |
-| `frequency_penalty` | `float` | `0.0` | Frequency penalty. |
-| `seed` | `int` | `-1` | Random seed (`-1` = random). |
+| `repetition_penalty` | `float \| None` | `None` | Repetition penalty. |
+| `presence_penalty` | `float \| None` | `None` | Presence penalty. |
+| `frequency_penalty` | `float \| None` | `None` | Frequency penalty. |
+| `seed` | `int \| None` | `None` | Random seed. |
 | `stop` | `list[str] \| None` | `None` | Stop sequences. |
 | `grammar` | `str \| None` | `None` | GBNF grammar string for constrained generation. |
 | `chat_template_grammar` | `ChatTemplateGrammar \| None` | `None` | Grammar metadata returned by `apply_chat_template(include_grammar=True)`. |

@@ -504,7 +504,23 @@ typedef struct {
     int32_t                preserved_token_count;
 } geniex_ChatTemplateGrammar;
 
-/** Text generation sampling parameters */
+/** Bits for geniex_SamplerConfig.set_fields */
+typedef enum {
+    GENIEX_SAMPLER_FIELD_TEMPERATURE        = 1u << 0,
+    GENIEX_SAMPLER_FIELD_TOP_P              = 1u << 1,
+    GENIEX_SAMPLER_FIELD_TOP_K              = 1u << 2,
+    GENIEX_SAMPLER_FIELD_MIN_P              = 1u << 3,
+    GENIEX_SAMPLER_FIELD_REPETITION_PENALTY = 1u << 4,
+    GENIEX_SAMPLER_FIELD_PRESENCE_PENALTY   = 1u << 5,
+    GENIEX_SAMPLER_FIELD_FREQUENCY_PENALTY  = 1u << 6,
+    GENIEX_SAMPLER_FIELD_SEED               = 1u << 7,
+} geniex_SamplerField;
+
+/**
+ * Text generation sampling parameters.
+ * A numeric field is used as given when it is non-zero or its geniex_SamplerField bit is in set_fields;
+ * otherwise the plugin default applies. Set the bit to pass a literal 0 (temperature 0 = greedy).
+ */
 typedef struct {
     float                      temperature;        /* Sampling temperature (0.0-2.0) */
     float                      top_p;              /* Nucleus sampling parameter (0.0-1.0) */
@@ -518,6 +534,7 @@ typedef struct {
     const char*                grammar_string;     /* Optional grammar string (BNF-like format) */
     bool                       ignore_eos; /* Never sample EOS/EOG, so generation runs to max_tokens (llama_cpp only) */
     geniex_ChatTemplateGrammar chat_template_grammar; /* Optional auto-generated tool grammar */
+    uint32_t                   set_fields; /* geniex_SamplerField bits for fields set explicitly, 0 included */
 } geniex_SamplerConfig;
 
 /** LLM / VLM generation configuration (IMPROVED: support multiple images and audios) */

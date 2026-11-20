@@ -236,11 +236,11 @@ These flags can be passed to `geniex infer` to control model loading and generat
 
 ### Sampler flags
 
-Control how the model selects tokens during generation.
+Control how the model selects tokens during generation. An omitted flag uses the plugin default; a flag you pass, `0` included, is used as given.
 
 | Flag | Type | Default | Description |
 |---|---|---|---|
-| `--temperature` | float | — | Sampling temperature. Higher values increase randomness. |
+| `--temperature` | float | — | Sampling temperature. Higher values increase randomness; `0` decodes greedily. |
 | `--top-p` | float | — | Top-p (nucleus) sampling threshold. |
 | `--top-k` | int | — | Top-k sampling. Only consider the top-k most likely tokens. |
 | `--min-p` | float | — | Min-p sampling threshold. |
@@ -296,7 +296,7 @@ See the [Benchmarking tutorial](/en/tutorials/benchmarking) for download instruc
 | `-n` / `--n-gen` | `128` | Tokens to generate per run. |
 | `-r` | `5` | Measured repetitions. |
 | `--warmup` | `1` | Warmup runs (not counted in stats). |
-| `--temperature` | `0.0` | Sampling temperature. `0.0` = deterministic (greedy). |
+| `--temperature` | plugin default | Sampling temperature. `0` = greedy. |
 | `--seed` | `42` | Random seed for prefill token generation. |
 | `--power-mode` | `burst` | HTP power/clock-management mode, shared by `qairt` and `llama_cpp`. |
 | `--output-json` | — | Write per-cell JSON with aggregated stats to this path. |

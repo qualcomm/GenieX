@@ -238,6 +238,20 @@ type ChatTemplateGrammar struct {
 	PreservedTokens  []int32
 }
 
+// SamplerField marks a SamplerConfig numeric field as set, so a zero value is used as given.
+type SamplerField uint32
+
+const (
+	SamplerTemperature SamplerField = 1 << iota
+	SamplerTopP
+	SamplerTopK
+	SamplerMinP
+	SamplerRepetitionPenalty
+	SamplerPresencePenalty
+	SamplerFrequencyPenalty
+	SamplerSeed
+)
+
 type SamplerConfig struct {
 	Temperature         float32
 	TopP                float32
@@ -250,6 +264,7 @@ type SamplerConfig struct {
 	GrammarPath         string
 	GrammarString       string
 	ChatTemplateGrammar ChatTemplateGrammar
+	SetFields           SamplerField
 }
 
 func chatTemplateGrammarFromCPtr(src *C.geniex_ChatTemplateGrammar) ChatTemplateGrammar {
@@ -361,6 +376,7 @@ func (sc SamplerConfig) toCPtr() *C.geniex_SamplerConfig {
 		seed:               C.int32_t(sc.Seed),
 		grammar_path:       cStringIfSet(sc.GrammarPath),
 		grammar_string:     cStringIfSet(sc.GrammarString),
+		set_fields:         C.uint32_t(sc.SetFields),
 	}
 	fillChatTemplateGrammar(&cPtr.chat_template_grammar, sc.ChatTemplateGrammar)
 	return cPtr

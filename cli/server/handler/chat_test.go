@@ -291,3 +291,28 @@ func TestChatGenerationConfigForwardsFields(t *testing.T) {
 		t.Errorf("config = %+v", got)
 	}
 }
+
+func TestSamplerOptionsMarkRequestFields(t *testing.T) {
+	const temp, topP, topK, rp, seed = geniex_sdk.SamplerTemperature, geniex_sdk.SamplerTopP, geniex_sdk.SamplerTopK, geniex_sdk.SamplerRepetitionPenalty, geniex_sdk.SamplerSeed
+	for body, want := range map[string]geniex_sdk.SamplerConfig{
+		`{}`: {RepetitionPenalty: 1, SetFields: rp},
+		`{"temperature":null,"repetition_penalty":null}`: {},
+		`{"temperature":0,"top_k":0,"seed":7}`:           {RepetitionPenalty: 1, Seed: 7, SetFields: temp | topK | seed | rp},
+		`{"top_p":0.5,"repetition_penalty":0}`:           {TopP: 0.5, SetFields: topP | rp},
+	} {
+		_, req := bindRequest(t, body)
+		got := samplerOptions{
+			Temperature:       req.Temperature,
+			TopP:              req.TopP,
+			TopK:              req.TopK,
+			MinP:              req.MinP,
+			RepetitionPenalty: req.RepetitionPenalty,
+			PresencePenalty:   req.PresencePenalty,
+			FrequencyPenalty:  req.FrequencyPenalty,
+			Seed:              req.Seed,
+		}.config()
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: sampler = %+v, want %+v", body, got, want)
+		}
+	}
+}

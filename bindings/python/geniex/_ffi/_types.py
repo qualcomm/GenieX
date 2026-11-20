@@ -104,7 +104,21 @@ class geniex_SamplerConfig(Structure):
         ('grammar_string', c_char_p),
         ('ignore_eos', c_bool),
         ('chat_template_grammar', geniex_ChatTemplateGrammar),
+        ('set_fields', c_uint32),
     ]
+
+
+# geniex_SamplerField bits, keyed by geniex_SamplerConfig field name.
+GENIEX_SAMPLER_FIELDS = {
+    'temperature': 1 << 0,
+    'top_p': 1 << 1,
+    'top_k': 1 << 2,
+    'min_p': 1 << 3,
+    'repetition_penalty': 1 << 4,
+    'presence_penalty': 1 << 5,
+    'frequency_penalty': 1 << 6,
+    'seed': 1 << 7,
+}
 
 
 # ---------------------------------------------------------------------------
