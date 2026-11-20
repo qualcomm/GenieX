@@ -849,7 +849,7 @@ typedef struct {
  * @return geniex_ErrorCode:
  *   - GENIEX_SUCCESS                              on success.
  *   - GENIEX_ERROR_COMMON_NOT_INITIALIZED         when handle is NULL / model not ready.
- *   - GENIEX_ERROR_COMMON_INVALID_INPUT           when input/output is NULL or neither input_ids nor prompt_utf8 is given.
+ *   - GENIEX_ERROR_COMMON_INVALID_INPUT           when input/output is NULL or no input_ids / prompt_utf8 is set.
  *   - GENIEX_ERROR_LLM_TOKENIZATION_FAILED        when prompt_utf8 cannot be tokenized or yields no tokens.
  *   - GENIEX_ERROR_COMMON_PARAM_NOT_SUPPORTED     when the plugin cannot produce logits.
  *   - GENIEX_ERROR_LLM_TOKENIZATION_CONTEXT_LENGTH when input_ids exceeds the max context length.

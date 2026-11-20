@@ -473,8 +473,7 @@ class GenieXLLM:
 
         Pass either pre-tokenized ``input_ids`` or a ``prompt`` string; when both
         are given ``input_ids`` wins. A ``prompt`` is tokenized by the plugin the
-        same way ``generate`` does, including the model's special tokens (the
-        qairt plugin does not support it).
+        same way ``generate`` does, including the model's special tokens.
 
         With ``all_positions=False`` (default) there is one row (the last
         token's logits); with ``all_positions=True`` there is one row per input

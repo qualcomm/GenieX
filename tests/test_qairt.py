@@ -225,6 +225,22 @@ def test_llm_generate_input_embd_not_supported(qairt_llm_paths, device_map):
 
 @pytest.mark.llm
 @pytest.mark.parametrize('device_map', ['npu'])
+def test_llm_forward_logits_prompt(qairt_llm_paths, device_map):
+    prompt = 'The capital of France is'
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        _LLM.id,
+        device_map=device_map,
+    ) as llm:
+        n_prompt = llm.generate(prompt, max_new_tokens=1, temperature=GREEDY_TEMPERATURE, seed=0).profile.prompt_tokens
+        rows = llm.forward_logits(prompt=prompt, all_positions=True, top_n=1)
+        last = llm.forward_logits(prompt=prompt)
+    assert len(rows) == n_prompt
+    assert len(last) == 1
+    assert max(range(len(last[0])), key=last[0].__getitem__) == rows[-1][0][0]
+
+
+@pytest.mark.llm
+@pytest.mark.parametrize('device_map', ['npu'])
 def test_chat_template(qairt_llm_paths, device_map):
     tool = {
         'type': 'function',
