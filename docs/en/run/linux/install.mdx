@@ -61,6 +61,39 @@ geniex --help
 
 For server mode, see [Local server](/en/run/cli/local-server).
 
+### **Structured decisions (JEV)**
+
+Docker images built from a GenieX revision with structured decisions include `geniex decide` and the `/v1/decisions` local-server endpoint. Confirm that the selected image contains the command before pulling a model:
+
+```bash bash
+geniex decide --help
+```
+
+<Note>The floating `latest` tag can lag the documentation release. If this prints `unknown command "decide"`, use a newer image tag that includes structured decisions; that image also lacks the `/v1/decisions` route.</Note>
+
+Then pull a compatible GGUF model and run a decision:
+
+```bash bash
+geniex pull <model-name>
+geniex decide <model-name> --kind predicate \
+  --input "The battery will not charge" \
+  --question "Is this likely a hardware issue?" --json
+```
+
+Models with a `systemone` template use their OpenJEV, LEV, or Nimble path; other `llama_cpp` models use the generic logits-based decision path. See [`geniex decide`](/en/run/cli/reference#geniex-decide) for choice, score, image, and audio examples.
+
+To expose the decisions endpoint to the Docker host, publish port `18181` and bind the server to all container interfaces:
+
+```bash bash
+docker run -it --rm --privileged \
+  -p 18181:18181 \
+  -v "$PWD/data:/data" \
+  -v /usr/lib:/opt/qcom-lib:ro \
+  "$IMAGE" geniex serve --host 0.0.0.0:18181
+```
+
+Then send `POST http://127.0.0.1:18181/v1/decisions` from the host. The model must already be present in the container's GenieX cache; see [Local server → POST /v1/decisions](/en/run/cli/local-server#post-v1decisions) for the request shape.
+
 ## **CLI**
 
 For the full CLI Docker install guide, see [CLI Install — Linux ARM64 (Docker)](/en/run/cli/install).

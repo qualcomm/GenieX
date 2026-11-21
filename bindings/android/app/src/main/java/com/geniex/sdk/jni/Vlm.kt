@@ -1,6 +1,8 @@
 package com.geniex.sdk.jni
 
 import com.geniex.sdk.bean.GenerationConfig
+import com.geniex.sdk.bean.DecideInput
+import com.geniex.sdk.bean.DecideOutput
 import com.geniex.sdk.bean.LLMTokenCallback
 import com.geniex.sdk.bean.LlmApplyChatTemplateOutput
 import com.geniex.sdk.bean.LlmGenerateResult
@@ -13,6 +15,7 @@ internal class Vlm {
 
     external fun destroy(handle: Long): Int
     external fun reset(handle: Long): Int
+    external fun decide(handle: Long, input: DecideInput): DecideOutput
 
     external fun getCapabilities(handle: Long): VlmCapabilities
 
