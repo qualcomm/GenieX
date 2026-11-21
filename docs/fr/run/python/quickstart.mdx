@@ -1,0 +1,190 @@
+---
+title: "Démarrage rapide"
+description: "Exécutez votre premier modèle depuis le SDK Python GenieX sur Windows ARM64."
+---
+
+import Feedback from "/snippets/page-feedback.mdx";
+
+## **Prérequis**
+
+- Le SDK Python installé - voir [Installation](/fr/run/python/install).
+- Connaissance du [choix du runtime](/fr/get-started/platforms#geniex-runtimes). `qairt` pour les modèles Qualcomm AI Hub, `llama_cpp` pour tout modèle GGUF.
+
+Le SDK suit les mêmes principes de conception que `transformers` de Hugging Face. Chargez le modèle avec `AutoModelForCausalLM.from_pretrained()`, puis appelez `.generate()`.
+
+## **Inférence LLM (GGUF)**
+
+Tout modèle GGUF de Hugging Face s'exécute via `llama_cpp`. Les poids du modèle sont téléchargés lors de la première utilisation.
+
+```python
+from geniex import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-0.6B-GGUF",     # identifiant de repo HF d'un modèle GGUF, ou chemin local .gguf
+    device_map="auto",          # "auto" | "cpu" | "gpu" | "npu" | "hybrid"
+                                # | "<runtime>" | "<runtime>:<compute-unit>"
+                                # auto -> npu à la fois pour llama_cpp et qairt
+)
+
+messages = [{"role": "user", "content": "Combien font 2+2 ?"}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, add_generation_prompt=True,
+)
+
+# En une fois (One-shot)
+output = model.generate(prompt, max_new_tokens=256)
+print(output.text)
+print(f"[{output.profile.generated_tokens} tok, "
+      f"{output.profile.decode_speed:.1f} tok/s, stop={output.profile.stop_reason}]")
+
+# En streaming
+streamer = model.generate(prompt, max_new_tokens=256, stream=True)
+for chunk in streamer:
+    print(chunk, end="", flush=True)
+
+model.close()
+```
+
+## **Inférence LLM (QAIRT)**
+
+Les bundles précompilés issus de [Qualcomm AI Hub](https://aihub.qualcomm.com/models/) s'exécutent entièrement sur le NPU Hexagon via le runtime `qairt`. Spécifiez `device_map="qairt"` (ou `"npu"`). Les poids du modèle sont téléchargés lors de la première utilisation.
+
+```python
+from geniex import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained(
+    "ai-hub-models/Qwen3-4B",   # identifiant de modèle Qualcomm AI Hub
+    device_map="qairt",         # NPU uniquement
+)
+
+messages = [{"role": "user", "content": "Combien font 2+2 ?"}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, add_generation_prompt=True,
+)
+
+# En une fois (One-shot)
+output = model.generate(prompt, max_new_tokens=256)
+print(output.text)
+print(f"[{output.profile.generated_tokens} tok, "
+      f"{output.profile.decode_speed:.1f} tok/s, stop={output.profile.stop_reason}]")
+
+# En streaming
+streamer = model.generate(prompt, max_new_tokens=256, stream=True)
+for chunk in streamer:
+    print(chunk, end="", flush=True)
+
+model.close()
+```
+
+## **Inférence VLM (QAIRT)**
+
+Téléchargez d'abord une image d'exemple :
+
+```bash
+curl -o demo.jpg https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-geniex/demo.jpg
+```
+
+Puis exécutez l'inférence :
+
+```python
+import os
+from geniex import AutoModelForCausalLM
+
+image_path = os.path.abspath("demo.jpg")
+
+model = AutoModelForCausalLM.from_pretrained(
+    "ai-hub-models/Qwen2.5-VL-7B-Instruct",  # bundle VLM de Qualcomm AI Hub
+    device_map="qairt",
+)
+messages = [{
+    "role": "user",
+    "content": [
+        {"type": "image", "image": image_path},
+        {"type": "text", "text": "Décrivez l'image."},
+    ],
+}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
+
+streamer = model.generate(prompt, images=[image_path], max_new_tokens=256, stream=True)
+for chunk in streamer:
+    print(chunk, end="", flush=True)
+
+model.close()
+```
+
+## **Inférence audio (GGUF)**
+
+L'entrée audio fonctionne sur le backend **llama.cpp** avec un modèle compatible audio. Son mmproj doit intégrer un encodeur conformer. `google/gemma-4-E2B-it-qat-q4_0-gguf` est l'un de ces modèles. Chargez-le avec `AutoModelForVision2Seq`, puis transmettez les chemins de fichiers à `generate(images=[...], audios=[...])` - un seul appel peut inclure les deux.
+
+<Warning>L'entrée audio fonctionne uniquement sur le backend **llama.cpp**. Les bundles QAIRT signalent `capabilities()['audio'] == False` et lèvent une exception `GenieXError(-201201): Multimodal generation failed` si de l'audio leur est fourni.</Warning>
+
+Téléchargez un extrait audio et une photo d'exemple :
+
+```bash
+curl -L -o jfk.wav https://github.com/ggml-org/whisper.cpp/raw/master/samples/jfk.wav
+curl -L -o landmark.jpg "https://images.pexels.com/photos/402028/pexels-photo-402028.jpeg?w=1024"
+```
+
+Puis lancez l'inférence :
+
+```python
+import os
+from geniex import AutoModelForVision2Seq
+
+image_path = os.path.abspath("landmark.jpg")
+audio_path = os.path.abspath("jfk.wav")
+
+model = AutoModelForVision2Seq.from_pretrained(
+    "google/gemma-4-E2B-it-qat-q4_0-gguf",  # VLM GGUF avec un mmproj audio
+    device_map="npu",                       # l'audio fonctionne sur npu / gpu / cpu, pas qairt
+)
+# capabilities() confirme que le mmproj chargé prend en charge l'audio.
+print(model.capabilities())  # -> {'vision': True, 'audio': True}
+
+messages = [{
+    "role": "user",
+    "content": [
+        {"type": "image", "image": image_path},
+        {"type": "audio", "audio": audio_path},
+        {"type": "text", "text": "Décrivez l'image, puis transcrivez l'audio."},
+    ],
+}]
+prompt = model.tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True,
+)
+
+output = model.generate(prompt, images=[image_path], audios=[audio_path], max_new_tokens=256)
+print(output.text)
+
+model.close()
+```
+
+Sortie (vérifiée avec `device_map="npu"`, Snapdragon X Elite) :
+
+```text
+Une photographie dévoile un paysage grandiose mettant en valeur un temple japonais traditionnel ... entouré de montagnes douces aux reflets bleus et verts sous un ciel clair.
+
+**Transcription audio :**
+"And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+```
+
+## **Exemple pas à pas en Jupyter Notebook**
+
+Pour les utilisateurs sur PC portable, suivez le notebook Jupyter disponible dans [examples/python/windows.ipynb](https://github.com/qualcomm/GenieX/blob/main/examples/python/windows.ipynb) - il détaille la configuration de l'environnement et l'inférence de bout en bout.
+
+## **Étapes suivantes**
+
+<CardGroup cols={2}>
+  <Card title="Référence de l'API" href="/fr/run/python/api-reference" icon="book">
+    Toutes les classes, méthodes et paramètres du SDK Python.
+  </Card>
+  <Card title="Modèles" href="/fr/models/supported" icon="cube">
+    Modèles pris en charge, GGUF sur Hugging Face et bundles Qualcomm AI Engine Direct convertis.
+  </Card>
+</CardGroup>
+
+<br />
+
+<Feedback/>
