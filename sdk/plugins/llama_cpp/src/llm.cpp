@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <vector>
 
@@ -20,6 +21,35 @@
 #include "profiler.h"
 
 namespace geniex {
+
+namespace {
+
+// A template that renders an earlier turn again can leave out the opener its generation prompt ended with,
+// such as Qwen3.5's "<think>\n", so the next prompt departs from the cache that many tokens before the
+// earlier prompt's end. A checkpoint this many tokens before each prompt's end still lies before that point,
+// as in llama.cpp's server.
+constexpr int32_t kCheckpointTail = 4;
+
+// Qwen3.5 4B's state takes about 50 MiB, however long the prompt.
+constexpr size_t kMaxCheckpoints = 4;
+
+bool needs_checkpoints(const llama_model* model) {
+    return model && (llama_model_is_recurrent(model) || llama_model_is_hybrid(model));
+}
+
+// The state seq_rm can't cut back: a recurrent state, or a sliding-window cache; nothing for full attention.
+bool save_partial_state(llama_context* ctx, common_state_data& out) {
+    const size_t size = llama_state_seq_get_size_ext(ctx, 0, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY);
+    if (size == 0) return false;
+    out.resize(size);
+    return llama_state_seq_get_data_ext(ctx, out.data(), out.size(), 0, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY) == size;
+}
+
+bool load_partial_state(llama_context* ctx, const common_state_data& in) {
+    return llama_state_seq_set_data_ext(ctx, in.data(), in.size(), 0, LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY) == in.size();
+}
+
+}  // namespace
 
 LlamaLlm::~LlamaLlm() {
     if (spec) common_speculative_free(spec);
@@ -122,6 +152,12 @@ int32_t LlamaLlm::create(const geniex_LlmCreateInput* input) {
         }
     }
 
+    this->use_checkpoints = needs_checkpoints(this->model) || needs_checkpoints(this->draft_model);
+    if (this->use_checkpoints) {
+        GENIEX_LOG_INFO(
+            "context checkpoints: up to {}, each {} tokens before a prompt's end", kMaxCheckpoints, kCheckpointTail);
+    }
+
     // Load chat template if path is provided
     if (config.chat_template_content) {
         try {
@@ -149,6 +185,7 @@ int32_t LlamaLlm::reset() {
     this->n_past_global = 0;
     this->n_past        = 0;
     this->past_prompt_tokens.clear();
+    this->checkpoints.clear();
 
     llama_memory_clear(llama_get_memory(this->ctx), /*clear data=*/true);
     if (this->draft_ctx) {
@@ -179,6 +216,7 @@ int32_t LlamaLlm::load_kv_cache(const geniex_KvCacheLoadInput* input, geniex_KvC
     this->n_past        = n_past;
     this->n_past_global = 0;
     this->past_prompt_tokens.clear();
+    this->checkpoints.clear();
 
     return ret ? GENIEX_SUCCESS : GENIEX_ERROR_COMMON_UNKNOWN;
 }
@@ -343,12 +381,23 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
                 this->reset();
             } else if (!llama_memory_seq_rm(mem, 0, match_len, -1) ||
                        (this->draft_ctx && !llama_memory_seq_rm(llama_get_memory(this->draft_ctx), 0, match_len, -1))) {
-                GENIEX_LOG_WARN("prefix match: rollback to token {} failed; resetting state", match_len);
-                this->reset();
+                const int32_t restored = this->restore_checkpoint(match_len);
+                if (restored < 0) {
+                    GENIEX_LOG_WARN("prefix match: rollback to token {} failed; resetting state", match_len);
+                    this->reset();
+                } else {
+                    GENIEX_LOG_INFO("prefix match: rollback to token {} failed; restored the checkpoint at token {}",
+                        match_len,
+                        restored);
+                    this->n_past        = restored;
+                    this->n_past_global = restored;
+                }
             } else {
                 this->n_past        = match_len;
                 this->n_past_global = match_len;
             }
+            // Checkpoints past the shared prefix hold tokens this prompt doesn't repeat.
+            this->drop_checkpoints_after(match_len);
             GENIEX_LOG_INFO("prefix match: n_past_global rollback to: {}", this->n_past_global);
             this->past_prompt_tokens.assign(prompt_ids.begin(), prompt_ids.begin() + this->n_past_global);
         }
@@ -382,6 +431,8 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         }
         llama_memory_seq_add(mem, 0, n_keep + n_discard, this->n_past, -n_discard);
         this->n_past -= n_discard;
+        // The positions moved, so no checkpoint matches the cache any more.
+        this->checkpoints.clear();
 
         GENIEX_LOG_INFO(
             "Context shifting - discarding {} tokens, n_keep: {}, "
@@ -479,9 +530,20 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
         // even after any context shift (or the model can't shift at all); during
         // decode it means the window filled up mid-generation. Distinct causes, so
         // process() reports the one matching the phase.
-        for (int i = 0; i < (int)embd_inp.size() && res == GENIEX_SUCCESS; i += n_batch) {
+        // A model that needs checkpoints stops kCheckpointTail tokens short of the
+        // end to save one; after a context shift, positions no longer count tokens,
+        // so none is saved until the next reset.
+        const int ckpt_at = this->use_checkpoints ? (int)embd_inp.size() - kCheckpointTail : -1;
+        for (int i = 0; i < (int)embd_inp.size() && res == GENIEX_SUCCESS;) {
+            if (i == ckpt_at && this->n_past == this->n_past_global + i) {
+                this->save_checkpoint();
+            }
             int n_eval = std::min(n_batch, (int)embd_inp.size() - i);
-            res        = process(embd_inp.data() + i, n_eval, GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG);
+            if (i < ckpt_at) {
+                n_eval = std::min(n_eval, ckpt_at - i);
+            }
+            res = process(embd_inp.data() + i, n_eval, GENIEX_ERROR_LLM_GENERATION_PROMPT_TOO_LONG);
+            i += n_eval;
         }
     }
 
@@ -927,6 +989,76 @@ int32_t LlamaLlm::decode_speculative(const geniex_GenerationConfig& cfg, const s
 
     profiler.set_draft_stats(draft_n_total, draft_n_accepted);
     return res;
+}
+
+// Saves the state seq_rm can't cut back, at this->n_past. When full, it drops the checkpoint closest to the
+// one before it: restoring that earlier one instead costs the fewest extra tokens. The new one always stays,
+// since a retry, or a client that leaves out the reply's thinking, departs just before its own prompt's end.
+void LlamaLlm::save_checkpoint() {
+    const int32_t n_tokens = this->n_past;
+    if (n_tokens <= 0 || (!this->checkpoints.empty() && this->checkpoints.back().n_tokens >= n_tokens)) {
+        return;
+    }
+    if (this->checkpoints.size() >= kMaxCheckpoints) {
+        size_t  drop = 0;
+        int32_t gap  = std::numeric_limits<int32_t>::max();
+        for (size_t i = 0; i < this->checkpoints.size(); ++i) {
+            const int32_t g = this->checkpoints[i].n_tokens - (i > 0 ? this->checkpoints[i - 1].n_tokens : 0);
+            if (g < gap) {
+                gap  = g;
+                drop = i;
+            }
+        }
+        GENIEX_LOG_DEBUG("context checkpoint at token {} dropped, {} tokens after the one before it",
+            this->checkpoints[drop].n_tokens,
+            gap);
+        this->checkpoints.erase(this->checkpoints.begin() + drop);
+    }
+
+    ContextCheckpoint ckpt;
+    ckpt.n_tokens = n_tokens;
+    if (!save_partial_state(this->ctx, ckpt.tgt) ||
+        (this->draft_ctx && !save_partial_state(this->draft_ctx, ckpt.dft))) {
+        GENIEX_LOG_WARN("context checkpoint at token {} couldn't be saved", n_tokens);
+        return;
+    }
+    common_speculative_get_state(this->spec, 0, ckpt.spec);
+    const size_t size = ckpt.tgt.size() + ckpt.dft.size() + ckpt.spec.size();
+    this->checkpoints.push_back(std::move(ckpt));
+    GENIEX_LOG_DEBUG("context checkpoint saved at token {}: {} bytes, {} of {}",
+        n_tokens,
+        size,
+        this->checkpoints.size(),
+        kMaxCheckpoints);
+}
+
+// Restores the newest checkpoint at or before match_len and cuts the cache back to it. Returns its token
+// count, or -1 when none fits or it can't be loaded, which leaves the state to reset().
+int32_t LlamaLlm::restore_checkpoint(int32_t match_len) {
+    const auto it = std::find_if(this->checkpoints.rbegin(),
+        this->checkpoints.rend(),
+        [match_len](const ContextCheckpoint& c) { return c.n_tokens <= match_len; });
+    if (it == this->checkpoints.rend()) {
+        return -1;
+    }
+    // The loaded recurrent state ends at token n_tokens - 1, so seq_rm from n_tokens cuts only the
+    // attention cache.
+    if (!load_partial_state(this->ctx, it->tgt) || (this->draft_ctx && !load_partial_state(this->draft_ctx, it->dft)) ||
+        !llama_memory_seq_rm(llama_get_memory(this->ctx), 0, it->n_tokens, -1) ||
+        (this->draft_ctx && !llama_memory_seq_rm(llama_get_memory(this->draft_ctx), 0, it->n_tokens, -1))) {
+        GENIEX_LOG_WARN("context checkpoint at token {} couldn't be restored", it->n_tokens);
+        return -1;
+    }
+    if (!it->spec.empty()) {
+        common_speculative_set_state(this->spec, 0, it->spec);
+    }
+    return it->n_tokens;
+}
+
+void LlamaLlm::drop_checkpoints_after(int32_t n_tokens) {
+    while (!this->checkpoints.empty() && this->checkpoints.back().n_tokens > n_tokens) {
+        this->checkpoints.pop_back();
+    }
 }
 
 void LlamaLlm::set_sampler(const geniex_SamplerConfig* cfg) {

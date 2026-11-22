@@ -153,12 +153,89 @@ def test_llm_prefix_cache_fallback(geniex_session, device_map):
             return llm.generate(prompt, max_new_tokens=8, temperature=GREEDY_TEMPERATURE, seed=LLM_QUALITY_SEED)
 
         generate(prompts[0])
+        runs = []
         for prompt in prompts:
             reused = generate(prompt)
             llm.reset()
             fresh = generate(prompt)
             assert reused.text == fresh.text
-            assert reused.profile.prompt_tokens == fresh.profile.prompt_tokens > 1
+            runs.append((reused.profile.prompt_tokens, fresh.profile.prompt_tokens))
+
+    # LFM3's convolution state can't be rolled back. Repeating the cached prompt restores the checkpoint saved
+    # shortly before its end; the other prompts depart before any checkpoint, so they're read in full.
+    (same_reused, same_fresh), *others = runs
+    assert 0 < same_reused < same_fresh, runs
+    assert all(reused == fresh > 1 for reused, fresh in others), runs
+
+
+@pytest.mark.llm
+@pytest.mark.parametrize('device_map', ['cpu'])
+def test_llm_hybrid_checkpoint_after_user_message(geniex_session, cached, device_map):
+    # Qwen3.5's template drops the thinking of turns before the last user message, so the next user message
+    # departs from the cache where the turn's first reply began. Its linear-attention state can't be rolled
+    # back there, so the checkpoint saved near the end of that first prompt has to outlast the turn's tool steps.
+    model_path = os.environ.get('GENIEX_TEST_MTP_MODEL') or cached(_MTP_QWEN35).model_path
+    notes = '\n'.join(f'Note {i}: the harbour log records calm seas.' for i in range(1, 11))
+    cities = ['Paris', 'London', 'Rome', 'Oslo', 'Lima']
+    history = [
+        {'role': 'system', 'content': f'Use the tools when they help. Notes:\n{notes}'},
+        {'role': 'user', 'content': f'What is the weather in {", ".join(cities)}?'},
+    ]
+    with geniex.AutoModelForCausalLM.from_pretrained(
+        # The model ships an mmproj; spec_type keeps it on the LLM path.
+        model_path,
+        model_name=_MTP_QWEN35.id,
+        device_map=f'llama_cpp:{device_map}',
+        spec_type='none',
+        # One-token ubatches make a restored prefill do the same arithmetic as a fresh one wherever the prompt
+        # is split, so their replies must match exactly. Other sizes can flip a near-tie within 32 tokens.
+        n_ubatch=1,
+    ) as llm:
+
+        def generate(messages):
+            prompt = llm.tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True, enable_thinking=True, tools=[_WEATHER_TOOL]
+            )
+            # Long enough for the thinking to reach the turn's details, which a wrong state changes.
+            return llm.generate(prompt, max_new_tokens=32, temperature=GREEDY_TEMPERATURE, seed=LLM_QUALITY_SEED)
+
+        first = generate(history)
+        # More tool steps than the plugin keeps checkpoints. Each departs from the cache where the model's own
+        # reply began, since the history carries a different one.
+        for index, city in enumerate(cities, start=1):
+            call = {
+                'id': f'call_{index}',
+                'type': 'function',
+                'function': {'name': 'get_weather', 'arguments': json.dumps({'city': city})},
+            }
+            history += [
+                {
+                    'role': 'assistant',
+                    'content': '',
+                    'reasoning_content': f'Next I need the weather in {city}.',
+                    'tool_calls': [call],
+                },
+                {'role': 'tool', 'tool_call_id': call['id'], 'content': f'{city}: {10 + index} C, clear.'},
+            ]
+            step = generate(history)
+        last_step = list(history)
+        history += [
+            {'role': 'assistant', 'content': 'All five are clear.'},
+            {'role': 'user', 'content': 'Which city was the warmest?'},
+        ]
+        reused = generate(history)
+        llm.reset()
+        step_fresh = generate(last_step)
+        llm.reset()
+        fresh = generate(history)
+
+    assert step.text == step_fresh.text
+    assert reused.text == fresh.text
+    turn = fresh.profile.prompt_tokens - first.profile.prompt_tokens
+    assert reused.profile.prompt_tokens < turn + 16, (
+        'expected to read only the turn since the first request, not the system message before it; '
+        f'prompt_tokens={reused.profile.prompt_tokens}, turn={turn}, first={first.profile.prompt_tokens}'
+    )
 
 
 def _quality_misses(llm, budget: int) -> list[str]:
