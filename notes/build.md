@@ -200,7 +200,7 @@ The Android demo app is no longer hosted in this repo — it lives in [`qualcomm
 
 ### Building against a different QAIRT SDK's headers
 
-The `qairt` plugin currently compiles against QAIRT 2.50.40.260831 QNN C API 2.39 headers vendored in `third-party/geniex-qairt/qnn-api/include/`; its independent runtime floor remains QNN C API 2.27 (`kMinApiMinor = 27`). Provider-query checks do not establish end-to-end compatibility with every runtime version. To use another set (e.g. an internal QAIRT checkout), pass `-DQAIRT_QNN_HEADERS=...` to any preset above:
+The `qairt` plugin currently compiles against QAIRT 2.51.0.260929 QNN C API 2.40 headers vendored in `third-party/geniex-qairt/qnn-api/include/`; its independent runtime floor remains QNN C API 2.27 (`kMinApiMinor = 27`). Provider-query checks do not establish end-to-end compatibility with every runtime version. To use another set (e.g. an internal QAIRT checkout), pass `-DQAIRT_QNN_HEADERS=...` to any preset above:
 
 ```powershell
 cmake --preset arm64-windows-snapdragon-release -B build -DQAIRT_QNN_HEADERS=C:\path\to\qairt\include\QNN
