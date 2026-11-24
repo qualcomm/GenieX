@@ -338,12 +338,28 @@ int32_t LlamaLlm::generate(const geniex_LlmGenerateInput* input, geniex_LlmGener
             match_len);
 
         if (match_len < (int)this->past_prompt_tokens.size()) {
+            // A sliding-window cache keeps only its newest positions (swa_full is off), so a rollback
+            // far behind them can leave it short of the window, or empty. seq_rm still succeeds, and
+            // llama.cpp would then number the next tokens from that cache's end: from 0 once it's
+            // empty (#1675). The first re-decoded token, at match_len, attends back to
+            // match_len - n_swa + 1.
+            auto keeps_swa_window = [match_len](llama_context* c) {
+                const int32_t n_swa = llama_model_n_swa(llama_get_model(c));
+                if (n_swa <= 0 || match_len <= 0) return true;
+                const llama_pos pos_min = llama_memory_seq_pos_min(llama_get_memory(c), 0);
+                return pos_min >= 0 && pos_min <= std::max(0, match_len - n_swa + 1);
+            };
             if (match_len < this->n_past_global - this->n_past) {
                 GENIEX_LOG_WARN("prefix match: matched prefix is outside the cache; resetting state");
                 this->reset();
             } else if (!llama_memory_seq_rm(mem, 0, match_len, -1) ||
                        (this->draft_ctx && !llama_memory_seq_rm(llama_get_memory(this->draft_ctx), 0, match_len, -1))) {
                 GENIEX_LOG_WARN("prefix match: rollback to token {} failed; resetting state", match_len);
+                this->reset();
+            } else if (!keeps_swa_window(this->ctx) || (this->draft_ctx && !keeps_swa_window(this->draft_ctx))) {
+                GENIEX_LOG_WARN(
+                    "prefix match: sliding-window cache doesn't reach back to token {}'s window; resetting state",
+                    match_len);
                 this->reset();
             } else {
                 this->n_past        = match_len;
