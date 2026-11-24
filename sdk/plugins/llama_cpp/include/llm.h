@@ -3,10 +3,12 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <vector>
 
+#include "common.h"
 #include "decision.h"
 #include "htp_session.h"
 #include "llama.h"
@@ -37,6 +39,19 @@ class LlamaLlm : public ILlm {
     int                      n_past        = 0;   // for context shifting
     std::vector<llama_token> past_prompt_tokens;  // for prefix match
 
+    // Context checkpoints. A hybrid or recurrent model's state can't be cut back to an earlier token, so a
+    // prompt that departs from the cache would otherwise be read again from the start. Prefill saves that
+    // state shortly before each prompt's end, and a departing prompt restores the newest checkpoint at or
+    // before the point where it departs.
+    struct ContextCheckpoint {
+        int32_t              n_tokens = 0;  // prompt tokens the saved state covers
+        common_state_data    tgt;           // ctx's state that seq_rm can't cut back
+        common_state_data    dft;           // the same for draft_ctx, when drafting
+        std::vector<uint8_t> spec;          // the speculator's own state, if it keeps any
+    };
+    bool                           use_checkpoints = false;
+    std::vector<ContextCheckpoint> checkpoints;  // in ascending n_tokens
+
     // Tracks whether this instance pinned an HTP session; releases on last handoff.
     htp::SessionGuard htp_guard_;
 
@@ -63,6 +78,10 @@ class LlamaLlm : public ILlm {
 
    private:
     void set_sampler(const geniex_SamplerConfig* cfg);
+
+    void    save_checkpoint();
+    int32_t restore_checkpoint(int32_t match_len);
+    void    drop_checkpoints_after(int32_t n_tokens);
 
     int32_t setup_speculative(
         const geniex_ModelConfig& config, Device device, const char* device_id, common_params_speculative& spar);
