@@ -1102,18 +1102,22 @@ func TestGPTOSSAwaitingEqualsEndsAbandonedRecipient(t *testing.T) {
 }
 
 func TestRestoreOpener(t *testing.T) {
-	tokens := []string{"reason", "</think>", "answer"}
+	think := []string{"reason", "</think>", "answer"}
+	gemma := []string{"reason", "<channel|>", "answer"}
 	for _, tc := range []struct {
-		name, prompt string
-		pieces       []string
-		kinds        []EventKind
+		name, prompt   string
+		tokens, pieces []string
+		kinds          []EventKind
 	}{
-		{"open", "assistant\n<think>", []string{"<think>", "reason", "</think>", "answer"},
+		{"open", "assistant\n<think>", think, []string{"<think>", "reason", "</think>", "answer"},
 			[]EventKind{EnterThinking, Thinking, LeaveThinking, Content}},
-		{"open with newline", "assistant\n<think>\n", []string{"<think>", "\n", "reason", "</think>", "answer"},
+		{"open with newline", "assistant\n<think>\n", think, []string{"<think>", "\n", "reason", "</think>", "answer"},
 			[]EventKind{EnterThinking, Thinking, Thinking, LeaveThinking, Content}},
-		{"closed", "assistant\n<think>\n\n</think>\n\n", tokens, []EventKind{Content, Content, Content}},
-		{"no thinking", "assistant\n", tokens, []EventKind{Content, Content, Content}},
+		{"closed", "assistant\n<think>\n\n</think>\n\n", think, think, []EventKind{Content, Content, Content}},
+		{"no thinking", "assistant\n", think, think, []EventKind{Content, Content, Content}},
+		{"Gemma 4 after tool response", "<tool_response|><|channel>thought\n", gemma,
+			[]string{"<|channel>", "thought", "\n", "reason", "<channel|>", "answer"},
+			[]EventKind{Consume, Consume, EnterThinking, Thinking, LeaveThinking, Content}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := New()
@@ -1124,7 +1128,7 @@ func TestRestoreOpener(t *testing.T) {
 				kinds = append(kinds, s.Feed(piece).Kind)
 				return true
 			})
-			for _, token := range tokens {
+			for _, token := range tc.tokens {
 				onToken(token)
 			}
 			if !slices.Equal(pieces, tc.pieces) {
