@@ -65,7 +65,8 @@
       },
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/cmake/arm64-windows-llvm.cmake",
-        "PREBUILT_LIB_DIR": "windows_aarch64"
+        "PREBUILT_LIB_DIR": "windows_aarch64",
+        "GGML_OPENCL_USE_ADRENO_BIN_KERNELS": "ON"
       }
     },
     {
