@@ -1,0 +1,167 @@
+diff --git a/ggml/src/ggml-opencl/ggml-opencl.cpp b/ggml/src/ggml-opencl/ggml-opencl.cpp
+--- a/ggml/src/ggml-opencl/ggml-opencl.cpp
++++ b/ggml/src/ggml-opencl/ggml-opencl.cpp
+@@ -701,6 +701,7 @@
+     bool adreno_use_bin_kernels;
+     get_adreno_bin_kernel_func_t get_adreno_bin_kernel_func = nullptr;
+     ggml_cl_compiler_version adreno_cl_compiler_version;
++    bool f16_kernel_fallback = false;
+     // The q6_K flat mul_mat codegen workarounds are needed by old E031 compilers only.
+     bool q6_k_flat_old_compiler;
+
+@@ -930,8 +931,8 @@
+     cl_kernel kernel_mul_mat_f16_f32;
+     cl_kernel kernel_mul_mat_f16_f32_l4;
+     cl_kernel kernel_mul_mat_f16_f32_l4_dr;
+-    cl_kernel kernel_mul_mat_f16_f32_l4_dr_ls;
+-    cl_kernel kernel_mul_mat_f16_f32_l4_dr_lq;
++    cl_kernel kernel_mul_mat_f16_f32_l4_dr_ls = nullptr;
++    cl_kernel kernel_mul_mat_f16_f32_l4_dr_lq = nullptr;
+     cl_kernel kernel_mul_mat_f16_f32_l4_x8 = nullptr;
+     cl_kernel kernel_mul_mat_f16_f32_l4_x8_pair = nullptr;
+     cl_kernel kernel_mul_mat_f16_f32_l4_x8_gqa4 = nullptr;
+@@ -946,8 +947,8 @@
+     cl_kernel kernel_adreno_xmem_prepack_weight_f16;
+     cl_kernel kernel_gemm_xmem_f16_f32_os8;
+     cl_kernel kernel_adreno_xmem_store_dst_f32;
+-    cl_kernel kernel_mul_mm_f16_f32_kqv;
+-    cl_kernel kernel_mul_mm_f16_f32_kq;
++    cl_kernel kernel_mul_mm_f16_f32_kqv = nullptr;
++    cl_kernel kernel_mul_mm_f16_f32_kq = nullptr;
+     cl_kernel kernel_mul_mat_q4_0_f32, kernel_mul_mat_q4_0_f32_v;
+     cl_kernel kernel_convert_block_q1_0, kernel_restore_block_q1_0;
+     cl_kernel kernel_convert_block_q4_0, kernel_restore_block_q4_0;
+@@ -3598,11 +3599,12 @@
+         const std::string kernel_src = read_file("mul_mv_f16_f32_l4.cl");
+ #endif
+         backend_ctx->program_mul_mv_f16_f32_l4 =
+-            build_program_from_source(backend_ctx, kernel_src.c_str(), compile_opts);
++            build_program_from_source(backend_ctx, kernel_src.c_str(),
++                compile_opts + (backend_ctx->f16_kernel_fallback ? " -DGGML_CL_F16_KERNEL_FALLBACK" : ""));
+
+         CL_CHECK((backend_ctx->kernel_mul_mat_f16_f32_l4   = clCreateKernel(backend_ctx->program_mul_mv_f16_f32_l4, "kernel_mul_mat_f16_f32_l4", &err), err));
+         CL_CHECK((backend_ctx->kernel_mul_mat_f16_f32_l4_dr = clCreateKernel(backend_ctx->program_mul_mv_f16_f32_l4, "kernel_mul_mat_f16_f32_l4_dr", &err), err));
+-        if (backend_ctx->gpu_family == ADRENO) {
++        if (backend_ctx->gpu_family == ADRENO && !backend_ctx->f16_kernel_fallback) {
+             CL_CHECK((backend_ctx->kernel_mul_mat_f16_f32_l4_dr_ls = clCreateKernel(backend_ctx->program_mul_mv_f16_f32_l4, "kernel_mul_mat_f16_f32_l4_dr_ls", &err), err));
+             CL_CHECK((backend_ctx->kernel_mul_mat_f16_f32_l4_dr_lq = clCreateKernel(backend_ctx->program_mul_mv_f16_f32_l4, "kernel_mul_mat_f16_f32_l4_dr_lq", &err), err));
+         }
+@@ -3986,7 +3988,7 @@
+     }
+
+     // mul_mm_f16_f32_kq_kqv
+-    {
++    if (!backend_ctx->f16_kernel_fallback) {
+ #ifdef GGML_OPENCL_EMBED_KERNELS
+         const std::string kernel_src {
+             #include "mul_mm_f16_f32_kq_kqv.cl.h"
+@@ -9212,6 +9214,11 @@
+     backend_ctx->driver_version = driver_version.data();
+
+     backend_ctx->adreno_cl_compiler_version = get_adreno_cl_compiler_version(driver_version.data());
++    backend_ctx->f16_kernel_fallback = backend_ctx->gpu_family == ADRENO &&
++        backend_ctx->adreno_cl_compiler_version.same(E031, 42, 2, 0);
++    if (backend_ctx->f16_kernel_fallback) {
++        GGML_LOG_INFO("ggml_opencl: using fallback F16 attention kernels for compiler %s\n", driver_version.data());
++    }
+     backend_ctx->has_vector_subgroup_broadcast =
+         (backend_ctx->adreno_cl_compiler_version.type == E031 && backend_ctx->adreno_cl_compiler_version.major >= 47) ||
+         (backend_ctx->adreno_cl_compiler_version.type == DX   && backend_ctx->adreno_cl_compiler_version.major >= 17) ||
+@@ -12306,7 +12313,7 @@
+             }
+ #endif
+             // The E17 compilers segfault while building FA kernels, skip E17 for now
+-            if (adreno_e17_compiler_quirks(backend_ctx)) {
++            if (backend_ctx->f16_kernel_fallback || adreno_e17_compiler_quirks(backend_ctx)) {
+                 return false;
+             }
+             const ggml_tensor * q = op->src[0];
+@@ -31519,7 +31526,8 @@
+             static const char * kq_nhkv1_env = getenv("GGML_OPENCL_KQ_NHEAD_KV1");
+             static const bool   kq_nhkv1_on  =
+                 (kq_nhkv1_env == nullptr || kq_nhkv1_env[0] != '0');
+-            if ((ggml_is_permuted(src0) || (ne02 == 1 && kq_nhkv1_on)) && ggml_is_permuted(src1) &&
++            if (backend_ctx->kernel_mul_mm_f16_f32_kq != nullptr &&
++                (ggml_is_permuted(src0) || (ne02 == 1 && kq_nhkv1_on)) && ggml_is_permuted(src1) &&
+                 kq_packed_a && kq_packed_b &&
+                 ((nb01 * ne01 / 4)/4 <= backend_ctx->image_max_buffer_size) &&
+                 nb00 <= nb02 &&
+@@ -31534,7 +31542,8 @@
+             // For KQV. Reaching this arm is what makes the op a KQV; the callee
+             // is told so explicitly rather than re-deriving it from the strides
+             // the arm above has already ruled on.
+-            if (!ggml_is_contiguous(src0) && ggml_is_contiguous(src1) &&
++            if (backend_ctx->kernel_mul_mm_f16_f32_kqv != nullptr &&
++                !ggml_is_contiguous(src0) && ggml_is_contiguous(src1) &&
+                 ((nb02 * ne02 / 4)/4 <= backend_ctx->image_max_buffer_size)) {
+                 ggml_cl_mul_mat_kq_kqv_adreno(backend, src0, src1, dst, /*is_kq =*/ false);
+                 return;
+@@ -33162,6 +33171,8 @@
+                 // heuristic for packing more work for Adreno
+                 const bool adreno_use_lane_split =
+                     backend_ctx->gpu_family == ADRENO &&
++                    backend_ctx->kernel_mul_mat_f16_f32_l4_dr_ls != nullptr &&
++                    backend_ctx->kernel_mul_mat_f16_f32_l4_dr_lq != nullptr &&
+                     ne11 == 1 &&
+                     ne01 >= 8 &&
+                     ne00 % 4 == 0 &&
+diff --git a/ggml/src/ggml-opencl/kernels/mul_mv_f16_f32_l4.cl b/ggml/src/ggml-opencl/kernels/mul_mv_f16_f32_l4.cl
+--- a/ggml/src/ggml-opencl/kernels/mul_mv_f16_f32_l4.cl
++++ b/ggml/src/ggml-opencl/kernels/mul_mv_f16_f32_l4.cl
+@@ -184,7 +184,7 @@
+ // Kernels for decoding, Adreno only for now
+ #define MUL_MAT_F16_F32_L4_DR_LS_R2_MAX 8
+
+-#ifdef ADRENO_GPU
++#if defined(ADRENO_GPU) && !defined(GGML_CL_F16_KERNEL_FALLBACK)
+ #pragma OPENCL EXTENSION cl_qcom_subgroup_shuffle : enable
+ #define sub_group_shuffle_xor(val, mask) qcom_sub_group_shuffle_xor((val), (mask), CLK_SUB_GROUP_SHUFFLE_WIDTH_WAVE_SIZE_QCOM, 0.0f)
+
+@@ -470,6 +470,7 @@
+     }
+ }
+
++#ifndef GGML_CL_F16_KERNEL_FALLBACK
+ #ifdef ADRENO_GPU
+ REQD_SUBGROUP_SIZE_64
+ #endif
+@@ -547,6 +548,7 @@
+         }
+     }
+ }
++#endif
+
+ #define N_OUTS_PAIR  8
+ #define N_PAIRS_PAIR (N_OUTS_PAIR / 2)
+@@ -732,6 +734,7 @@
+ #define N_DV_ROWS_Y8GQA  8
+ #define GQA_RATIO_Y8GQA  8
+
++#ifndef GGML_CL_F16_KERNEL_FALLBACK
+ #ifdef ADRENO_GPU
+ REQD_SUBGROUP_SIZE_64
+ #endif
+@@ -839,6 +842,7 @@
+         }
+     }
+ }
++#endif
+
+ #ifdef ADRENO_GPU
+ REQD_SUBGROUP_SIZE_64
+@@ -933,6 +937,7 @@
+     }
+ }
+
++#ifndef GGML_CL_F16_KERNEL_FALLBACK
+ #ifdef ADRENO_GPU
+ REQD_SUBGROUP_SIZE_64
+ #endif
+@@ -1042,6 +1047,7 @@
+         }
+     }
+ }
++#endif
+
+ #define N_K_ROWS_GQA_R4   16
+ #define GQA_RATIO_R4      4

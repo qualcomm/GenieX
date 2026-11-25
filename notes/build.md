@@ -90,6 +90,12 @@ cmd /c '"C:\Program Files\Microsoft Visual Studio\<edition>\Common7\Tools\VsDevC
 
 Build the SDK inside the derived Snapdragon Linux toolchain container — it extends [ghcr.io/snapdragon-toolchain/arm64-linux](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/linux.md#snapdragon-based-linux-devices) with `build-essential`, `ccache`, `rustup`, the `aarch64-unknown-linux-gnu` Rust target, and the cc-rs cross-compiler symlinks baked in (see [`.github/docker/toolchain-linux.Dockerfile`](../.github/docker/toolchain-linux.Dockerfile)). Run from the repo root.
 
+The proposed next Linux toolchain image is `docker.io/qualcomm/geniex-toolchain-linux:v0.2.1`. Its Dockerfile extends the digest-pinned published `v0.2.0` image and adds GCC/G++ 11 ARM64 cross compilers from Debian Bookworm. The build preserves and verifies the existing GLIBC 2.41 ARM64 headers/libraries and target libstdc++ runtime, then compiles and links C and C++/OpenMP smoke programs. The Hexagon SDK and Rust toolchain are inherited from `v0.2.0`.
+
+After review, publish through **Build Toolchain Docker** (`_build-toolchain-docker.yml`) with `version=v0.2.1` and `platforms=linux` from this branch's reviewed revision. These are the workflow defaults. The SDK matrix and commands below remain pinned to published `v0.2.0` until `v0.2.1` is published and verified; stock `v0.2.0` does not include the GCC 11 compilers required by this branch.
+
+This image retains the GLIBC 2.41 target sysroot requested for this version. GCC 11 alone does not give generated binaries a GLIBC 2.35 compatibility baseline; deployment depends on their actual symbol requirements and the target device's runtime libraries.
+
 One-shot:
 
 ```bash
@@ -118,6 +124,8 @@ cmake --preset arm64-linux-snapdragon-debug -B build-linux .
 cmake --build build-linux -j
 cmake --install build-linux --prefix pkg-geniex
 ```
+
+CI runs `python3 scripts/check_linux_abi.py sdk/pkg-geniex` after installation to reject newer GLIBC, GLIBCXX, or CXXABI requirements. The check includes `bin/geniex-bench`, the bridge, both plugins, and their bundled host libraries; Hexagon skels are excluded because they run on the DSP.
 
 #### CPU-only variant (baseline armv8.0-a)
 

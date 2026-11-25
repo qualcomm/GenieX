@@ -90,12 +90,10 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux"
     # Pin the linker to the aarch64 cross-gcc; rustc otherwise links via
     # rust-lld pointed at the host (x86_64) gcc-ld, which breaks once a
     # dependency is emitted as a shared object.
-    # gcc-13 matches the on-device libstdc++ ABI (#458); the *-unknown-* names
-    # are symlinks from the toolchain image.
     set(RUST_CARGO_ENV
         CARGO_TARGET_DIR=${RUST_TARGET_ROOT}
-        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc-13
-        CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc-13
+        CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc-11
+        CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc-11
         AR_aarch64_unknown_linux_gnu=aarch64-linux-gnu-ar)
     set(RUST_CARGO_TARGET_FLAGS --target aarch64-unknown-linux-gnu)
     set(RUST_TARGET_DIR "${RUST_TARGET_ROOT}/aarch64-unknown-linux-gnu/${RUST_PROFILE}")
@@ -180,13 +178,15 @@ if(GENIEX_PLUGIN_LLAMA_CPP)
     if(GGML_HEXAGON)
         list(APPEND _LLAMA_PATCHES
             "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-release-sessions.patch"
-            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode-setter.patch")
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-power-mode-setter.patch"
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-hexagon-gcc11-f16-size.patch")
     endif()
     if(GGML_OPENCL)
         list(APPEND _LLAMA_PATCHES
             "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-opencl-adreno-cpy-constreg.patch"
             "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-opencl-adreno-xmem-gemm-off.patch"
-            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-opencl-adreno-f16-mrow-wgsize.patch")
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-opencl-adreno-f16-mrow-wgsize.patch"
+            "${CMAKE_CURRENT_SOURCE_DIR}/patches/llama-opencl-f16-compiler-fallback.patch")
     endif()
     find_package(Git QUIET REQUIRED)
     foreach(_LLAMA_PATCH ${_LLAMA_PATCHES})

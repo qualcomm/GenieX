@@ -23,14 +23,15 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Image tag to publish, e.g. v0.1.0. Must start with v."
+        description: "Image tag to publish, e.g. v0.2.1. Must start with v."
         required: true
         type: string
+        default: v0.2.1
       platforms:
         description: "Which platforms to publish."
         required: false
         type: choice
-        default: both
+        default: linux
         options:
           - both
           - linux

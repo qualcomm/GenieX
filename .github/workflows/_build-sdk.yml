@@ -250,6 +250,9 @@ jobs:
                 $EXTRA_CMAKE_FLAGS
               cmake --build "sdk/build-$PRESET" -j "$(nproc)"
               cmake --install "sdk/build-$PRESET" --prefix sdk/pkg-geniex
+              case "$PRESET" in
+                arm64-linux-*) python3 scripts/check_linux_abi.py sdk/pkg-geniex ;;
+              esac
               ccache -s -v || true
               chown -R "$HOST_UID:$HOST_GID" sdk .ccache || true
             '
