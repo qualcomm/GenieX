@@ -2,6 +2,8 @@ package com.geniex.sdk
 
 import android.util.Log
 import com.geniex.sdk.bean.ChatMessage
+import com.geniex.sdk.bean.DecideInput
+import com.geniex.sdk.bean.DecideOutput
 import com.geniex.sdk.bean.GenerationConfig
 import com.geniex.sdk.bean.LLMTokenCallback
 import com.geniex.sdk.bean.LlmApplyChatTemplateOutput
@@ -122,6 +124,15 @@ class LlmWrapper private constructor(
 
     /** Resets the LLM state. */
     suspend fun reset(): Int = withContext(dispatcher) { llm.reset(handle) }
+
+    /** Runs one SDK logits-based decision over the selected question. */
+    suspend fun decide(input: DecideInput): Result<DecideOutput> = withContext(dispatcher) {
+        if (handle == 0L) {
+            Result.failure(IllegalStateException("Llm not initialized"))
+        } else {
+            runCatching { llm.decide(handle, input) }
+        }
+    }
 
     // Stop streaming generation
     suspend fun stopStream() = withContext(dispatcher) {
