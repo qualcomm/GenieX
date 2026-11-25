@@ -72,6 +72,41 @@ geniex --help
 
 Python SDK 既可安装在 Docker 容器内，也可直接安装在 Linux ARM64 主机上。原生安装指南请参见 [Linux ARM64 标签页](/cn/run/python/install)。
 
+## **非骁龙 ARM64 主机**
+
+若要在没有骁龙芯片的 ARM64 机器上试用 GenieX CLI（例如运行 Docker Desktop 的 Apple Silicon Mac），请使用 [`.github/docker/cpu-host.Dockerfile`](https://github.com/qualcomm/GenieX/blob/main/.github/docker/cpu-host.Dockerfile) 构建仅 CPU 镜像。该镜像基于 `docker.io/qualcomm/geniex:latest-cpu`，既不需要 `--privileged`，也不需要 `/usr/lib` 挂载；首次启动时会自动设置芯片，因此 `geniex pull` 不会提示选择芯片，`geniex infer` 也会默认使用 `--compute cpu`。
+
+<Warning>
+  此路径仅用于开发和测试。它只在 CPU 上运行，因此速度不代表骁龙平台的性能。请在 `llama_cpp` 运行环境上使用 GGUF 模型：Qualcomm AI Hub 模型包需要 NPU。
+</Warning>
+
+该镜像未发布到 Docker Hub，请从本仓库的克隆构建：
+
+```bash bash
+git clone --depth 1 https://github.com/qualcomm/GenieX.git
+cd GenieX
+docker build -f .github/docker/cpu-host.Dockerfile -t geniex-cpu-host .
+```
+
+启动容器，并将模型保存在 `./data` 中：
+
+```bash bash
+docker run -it --rm -v "$PWD/data:/data" geniex-cpu-host
+```
+
+然后在容器 shell 中拉取并运行模型：
+
+```bash bash
+geniex pull unsloth/Qwen3-VL-2B-Instruct-GGUF:Q4_0 --model-type vlm
+geniex infer unsloth/Qwen3-VL-2B-Instruct-GGUF:Q4_0 -p "Describe this image: /data/image.jpg"
+```
+
+图片路径必须是容器内的绝对路径，因此请将图片放在宿主机的 `./data` 目录中。
+
+<Note>
+  已在 Apple M1 Max、Docker Desktop 和 GenieX CLI v0.10.0 上测试。`--compute cpu` 默认值来自该镜像设置的 `qualcomm-qcs6490` 芯片。如果将 `GENIEX_CHIPSET` 设为其他芯片，或 `/data` 中已配置其他芯片（已有配置不会被更改），请为 `geniex infer` 传入 `--compute cpu`。
+</Note>
+
 <br />
 
 <Feedback/>
