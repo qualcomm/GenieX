@@ -35,7 +35,7 @@ on:
         description: "Which platforms to publish."
         required: false
         type: choice
-        default: linux
+        default: both
         options:
           - both
           - linux

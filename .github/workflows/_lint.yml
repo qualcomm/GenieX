@@ -68,7 +68,7 @@ jobs:
         id: files
         uses: ./.github/actions/changed-files
         with:
-          include: '^(bindings/python|tests)/.*\.py$|^scripts/(check_linux_abi\.py|tests/.*\.py)$'
+          include: '^(bindings/python|tests)/.*\.py$|^scripts/check_linux_abi\.py$'
 
       - name: Ruff check
         if: steps.files.outputs.any == 'true'
@@ -91,7 +91,7 @@ jobs:
           done <<< "$FILES"
 
       - name: Test Linux ABI audit
-        run: python -m unittest discover -s scripts/tests -p 'test_*.py'
+        run: python -m unittest discover -s tests -p 'test_check_linux_abi.py'
 
   go-lint:
     name: go-lint
