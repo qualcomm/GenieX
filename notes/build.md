@@ -90,6 +90,12 @@ cmd /c '"C:\Program Files\Microsoft Visual Studio\<edition>\Common7\Tools\VsDevC
 
 Build the SDK inside the derived Snapdragon Linux toolchain container — it extends [ghcr.io/snapdragon-toolchain/arm64-linux](https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/linux.md#snapdragon-based-linux-devices) with `build-essential`, `ccache`, `rustup`, the `aarch64-unknown-linux-gnu` Rust target, and the cc-rs cross-compiler symlinks baked in (see [`.github/docker/toolchain-linux.Dockerfile`](../.github/docker/toolchain-linux.Dockerfile)). Run from the repo root.
 
+The proposed next Linux toolchain image is `docker.io/qualcomm/geniex-toolchain-linux:v0.2.1`. Its Dockerfile requires a `BASE_IMAGE` build argument and adds GCC/G++ 11 ARM64 cross compilers from Debian Bookworm. The workflow's Linux matrix defaults to the published `v0.2.0` image; manual builds can override it with `linux_base_image`, and local Docker builds must pass `--build-arg BASE_IMAGE=<image>`. The build preserves and verifies the base image's GLIBC 2.41 ARM64 headers/libraries and target libstdc++ runtime, then compiles and links C and C++/OpenMP smoke programs. The Hexagon SDK and Rust toolchain are inherited from the selected base image.
+
+After review, publish through **Build Toolchain Docker** (`_build-toolchain-docker.yml`) from this branch's reviewed revision. The workflow defaults to `version=v0.2.1` and `platforms=both`; select `platforms=linux` to publish only the Linux image. The SDK matrix and commands below remain pinned to published `v0.2.0` until `v0.2.1` is published and verified; stock `v0.2.0` does not include the GCC 11 compilers required by this branch.
+
+This image retains the GLIBC 2.41 target sysroot requested for this version. GCC 11 alone does not give generated binaries a GLIBC 2.35 compatibility baseline; deployment depends on their actual symbol requirements and the target device's runtime libraries.
+
 One-shot:
 
 ```bash
@@ -118,6 +124,8 @@ cmake --preset arm64-linux-snapdragon-debug -B build-linux .
 cmake --build build-linux -j
 cmake --install build-linux --prefix pkg-geniex
 ```
+
+CI runs `python3 scripts/check_linux_abi.py sdk/pkg-geniex` after installation to reject newer GLIBC, GLIBCXX, or CXXABI requirements. The check includes `bin/geniex-bench`, the bridge, both plugins, and their bundled host libraries; Hexagon skels are excluded because they run on the DSP.
 
 #### CPU-only variant (baseline armv8.0-a)
 

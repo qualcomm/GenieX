@@ -1,0 +1,10 @@
+diff --git a/ggml/src/ggml-hexagon/htp/unary-ops.h b/ggml/src/ggml-hexagon/htp/unary-ops.h
+--- a/ggml/src/ggml-hexagon/htp/unary-ops.h
++++ b/ggml/src/ggml-hexagon/htp/unary-ops.h
+@@ -211,5 +211,5 @@ static inline void htp_unary_solve_layout(
+     // budget), execute_op_unary() will see BLOCK == 0 and skip computation for that op
+     // (logged via FARF(ERROR, ...)) since there is no F16 tiled fallback. This is a known
+     // limitation; supporting it would require adding F16 tiled kernels.
+-    const bool is_f16 = (elem_size == sizeof(_Float16));
++    const bool is_f16 = (elem_size == sizeof(uint16_t));
+     uint32_t col_tile = 0;

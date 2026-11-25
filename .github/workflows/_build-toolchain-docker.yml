@@ -23,8 +23,13 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Image tag to publish, e.g. v0.1.0. Must start with v."
+        description: "Image tag to publish, e.g. v0.2.1. Must start with v."
         required: true
+        type: string
+        default: v0.2.1
+      linux_base_image:
+        description: "Linux base image to extend; leave empty to use the matrix default."
+        required: false
         type: string
       platforms:
         description: "Which platforms to publish."
@@ -54,6 +59,7 @@ jobs:
           - platform: linux
             dockerfile: .github/docker/toolchain-linux.Dockerfile
             image: docker.io/qualcomm/geniex-toolchain-linux
+            base_image: docker.io/qualcomm/geniex-toolchain-linux:v0.2.0
           - platform: android
             dockerfile: .github/docker/toolchain-android.Dockerfile
             image: docker.io/qualcomm/geniex-toolchain-android
@@ -130,6 +136,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
+          build-args: ${{ matrix.platform == 'linux' && format('BASE_IMAGE={0}', inputs.linux_base_image || matrix.base_image) || '' }}
           platforms: linux/amd64
           push: false
           provenance: false
