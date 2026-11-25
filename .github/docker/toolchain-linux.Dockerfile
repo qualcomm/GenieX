@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-ARG BASE_IMAGE=docker.io/qualcomm/geniex-toolchain-linux:v0.2.0@sha256:ba89cde82441129dfae2f1dc6e379f10db1dc26a861e455eebc01f1052223937
+ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
 
 ARG QEMU_GUEST_BASE
